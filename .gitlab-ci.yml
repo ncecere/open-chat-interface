@@ -4,6 +4,12 @@
 # after a container build. Images are published only from the default branch and
 # tags, so merge requests still get a build check without polluting the registry.
 
+# GitLab's managed SAST template selects the analyzers that support this
+# TypeScript/JavaScript repository and publishes findings to merge requests and
+# the project's Security & Compliance views.
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+
 stages:
   - verify
   - test
