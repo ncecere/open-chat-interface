@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { UsageLimits } from '~/components/settings/usage-limits';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { useCurrentUser } from '~/hooks/use-current-user';
@@ -56,6 +57,8 @@ function IdentityRail() {
           {user.role}
         </Badge>
       </div>
+
+      <UsageLimits />
 
       <div className="w-full rounded-xl bg-[var(--bg-control)]/45 p-4">
         <p className="mb-3 text-sm font-semibold">Keyboard Shortcuts</p>

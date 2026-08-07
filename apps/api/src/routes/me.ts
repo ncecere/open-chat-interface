@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
+import { getUsageSummary } from '../services/quota.js';
 
 export const meRoutes = new Hono<AppBindings>();
 
@@ -55,6 +56,12 @@ meRoutes.get('/', async (c) => {
     },
     preferences,
   });
+});
+
+meRoutes.get('/usage', async (c) => {
+  const user = currentUser(c);
+  const usage = await getUsageSummary(user.id, user.role);
+  return c.json(usage);
 });
 
 meRoutes.patch('/preferences', async (c) => {
