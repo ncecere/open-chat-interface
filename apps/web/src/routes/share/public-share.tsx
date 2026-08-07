@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, Link2Off, LockKeyhole, MessageSquareText } from 'lucide-react';
 import { Wordmark } from '~/components/brand/wordmark';
+import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { Markdown } from '~/components/chat/markdown';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
@@ -119,17 +120,14 @@ function Sources({ parts }: { parts: PublicPart[] }) {
         }
 
         return (
-          <a
+          <SafeExternalLink
             key={source.sourceId}
             href={source.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            referrerPolicy="no-referrer"
             className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-control-hover)]"
           >
             <span className="truncate">{source.title || hostname}</span>
             <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
-          </a>
+          </SafeExternalLink>
         );
       })}
     </section>

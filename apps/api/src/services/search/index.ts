@@ -14,8 +14,12 @@ const adapters = {
   exa: searchExa,
 } satisfies Record<string, SearchAdapter>;
 
+export function normalizeSearchQuery(query: string): string {
+  return query.replace(/\s+/g, ' ').trim().slice(0, 2_000);
+}
+
 export async function searchWeb(query: string): Promise<SearchResult[]> {
-  const normalizedQuery = query.replace(/\s+/g, ' ').trim().slice(0, 2_000);
+  const normalizedQuery = normalizeSearchQuery(query);
   if (!normalizedQuery) throw validationFailed('A search query is required');
 
   const [features, settings] = await Promise.all([getSetting('features'), getSetting('search')]);

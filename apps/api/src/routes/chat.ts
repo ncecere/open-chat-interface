@@ -34,7 +34,11 @@ import {
   type UsageReservation,
 } from '../services/quota/index.js';
 import { assertReasoningEffortSupported, reasoningCallSettings } from '../services/reasoning.js';
-import { buildGroundingContext, searchWeb } from '../services/search/index.js';
+import {
+  buildGroundingContext,
+  normalizeSearchQuery,
+  searchWeb,
+} from '../services/search/index.js';
 import { buildSystemPrompt } from '../services/system-prompt.js';
 import {
   assertTemporaryChatAllowed,
@@ -141,9 +145,10 @@ chatRoutes.post('/', async (c) => {
     latest = { id: target.id, role: 'user', parts: textParts(target.parts) };
   }
 
+  const searchQuery = input.webSearch ? normalizeSearchQuery(textFromParts(latest.parts)) : null;
   const [attachments, searchResults] = await Promise.all([
     loadAttachmentsForMessage(input.attachmentIds, user.id, user.role),
-    input.webSearch ? searchWeb(textFromParts(latest.parts)) : Promise.resolve([]),
+    searchQuery ? searchWeb(searchQuery) : Promise.resolve([]),
   ]);
 
   // Never trust client-supplied history. Rebuild bounded text-only context from
@@ -260,6 +265,13 @@ chatRoutes.post('/', async (c) => {
     url: source.url,
     title: source.title,
   }));
+  const searchGroundingPart = searchQuery
+    ? {
+        type: 'data-search-grounding' as const,
+        id: `search-grounding-${crypto.randomUUID()}`,
+        data: { query: searchQuery, results: searchResults },
+      }
+    : null;
   const startedAt = Date.now();
   const runIdentity = {
     runId: crypto.randomUUID(),
@@ -389,6 +401,7 @@ chatRoutes.post('/', async (c) => {
         type: 'start',
         messageMetadata: { modelSlug: resolved.slug, effort: input.effort ?? null },
       });
+      if (searchGroundingPart) writer.write(searchGroundingPart);
       for (const source of sourceParts) writer.write(source);
       writer.merge(
         result.toUIMessageStream({

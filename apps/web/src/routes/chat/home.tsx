@@ -18,6 +18,7 @@ const MODEL_STORAGE_KEY = 'oci.model';
 const PENDING_KEY = 'oci.pendingPrompt';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 const PENDING_EFFORT_KEY = 'oci.pendingEffort';
+const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
 
 /**
  * Landing page. Sending here creates a thread first, then hands the prompt to
@@ -59,6 +60,8 @@ export function ChatHomePage() {
     const requestEffort = reasoningEffortForRequest(selectedModel, effort);
     if (requestEffort) sessionStorage.setItem(PENDING_EFFORT_KEY, requestEffort);
     else sessionStorage.removeItem(PENDING_EFFORT_KEY);
+    if (webSearch) sessionStorage.setItem(PENDING_SEARCH_KEY, 'true');
+    else sessionStorage.removeItem(PENDING_SEARCH_KEY);
 
     // Hand any uploads over to the thread view along with the prompt.
     const readyAttachments = attachments.items.flatMap((item) =>

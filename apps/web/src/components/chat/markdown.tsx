@@ -1,4 +1,5 @@
 import { type ComponentProps, lazy, Suspense } from 'react';
+import { MARKDOWN_LINK_SAFETY } from '~/components/chat/external-link-warning';
 import { cn } from '~/lib/utils';
 
 /**
@@ -19,6 +20,7 @@ const StreamdownMarkdown = lazy(() =>
             className={className}
             // The reference interface shows plain code without a gutter.
             lineNumbers={false}
+            linkSafety={MARKDOWN_LINK_SAFETY}
             {...(skipHtml ? { skipHtml } : {})}
             {...(urlTransform
               ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }

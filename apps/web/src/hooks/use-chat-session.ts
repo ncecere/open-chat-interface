@@ -21,6 +21,7 @@ export function useChatSession(options: {
   carriedAttachments?: Attachment[];
   initialModelSlug?: string | null;
   initialEffort?: ReasoningEffort;
+  initialWebSearch?: boolean;
   temporary?: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -29,7 +30,7 @@ export function useChatSession(options: {
 
   const [draft, setDraft] = useState('');
   const [effort, setEffort] = useState<ReasoningEffort>(options.initialEffort ?? 'instant');
-  const [webSearch, setWebSearch] = useState(false);
+  const [webSearch, setWebSearch] = useState(options.initialWebSearch ?? false);
   const [modelSlug, setModelSlug] = useState<string | null>(
     () => options.initialModelSlug ?? localStorage.getItem(MODEL_STORAGE_KEY),
   );

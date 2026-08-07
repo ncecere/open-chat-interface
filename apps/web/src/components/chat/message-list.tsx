@@ -4,9 +4,7 @@ import {
   Check,
   ChevronDown,
   Copy,
-  ExternalLink,
   FileText,
-  Globe2,
   Info,
   Pencil,
   RefreshCw,
@@ -14,6 +12,12 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
+import {
+  SearchGroundingDetails,
+  SearchLoading,
+  SearchSourcesPanel,
+  searchGroundingOf,
+} from '~/components/chat/search-grounding';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
@@ -95,79 +99,6 @@ function AttachmentCards({ cards }: { cards: AttachmentCard[] }) {
             </span>
           </a>
         ),
-      )}
-    </div>
-  );
-}
-
-interface MessageSource {
-  sourceId: string;
-  url: string;
-  title?: string;
-}
-
-function sourcesOf(message: UIMessage): MessageSource[] {
-  return message.parts.flatMap((part) => {
-    if (part.type !== 'source-url') return [];
-    const source = part as Partial<MessageSource>;
-    return source.sourceId && source.url ? [source as MessageSource] : [];
-  });
-}
-
-function SearchSourcesPanel({ sources }: { sources: MessageSource[] }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mb-6">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-fit items-center gap-2 text-[0.8125rem] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
-      >
-        <Globe2 className="size-4" />
-        <span>Searched the web</span>
-        <ChevronDown
-          className={cn(
-            'size-3.5 text-[var(--text-muted)] transition-transform',
-            open && 'rotate-180',
-          )}
-        />
-      </button>
-
-      {open && (
-        <div className="mt-3 grid gap-2 rounded-lg bg-black/15 p-3 sm:grid-cols-2">
-          {sources.map((source) => {
-            let hostname = source.url;
-            try {
-              hostname = new URL(source.url).hostname.replace(/^www\./, '');
-            } catch {
-              // The API already validates source URLs; retain the URL as fallback.
-            }
-
-            return (
-              <a
-                key={source.sourceId}
-                href={source.url}
-                target="_blank"
-                rel="noreferrer"
-                className="group min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/45 p-3 transition-colors hover:bg-[var(--bg-control-hover)]"
-              >
-                <span className="flex items-start gap-2">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-[var(--text-primary)]">
-                      {source.title || hostname}
-                    </span>
-                    <span className="mt-1 block truncate text-[0.6875rem] text-[var(--text-muted)]">
-                      {hostname}
-                    </span>
-                  </span>
-                  <ExternalLink className="size-3.5 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]" />
-                </span>
-              </a>
-            );
-          })}
-        </div>
       )}
     </div>
   );
@@ -275,10 +206,12 @@ export function MessageList({
   streaming,
   onRetry,
   onEdit,
+  searching = false,
 }: {
   messages: UIMessage[];
   streaming: boolean;
   onRetry: () => void;
+  searching?: boolean;
   onEdit?: (messageId: string, text: string) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -311,7 +244,7 @@ export function MessageList({
       {messages.map((message, index) => {
         const text = textOf(message);
         const reasoning = reasoningOf(message);
-        const sources = sourcesOf(message);
+        const grounding = searchGroundingOf(message);
         const isLast = index === messages.length - 1;
 
         if (message.role === 'user') {
@@ -379,12 +312,14 @@ export function MessageList({
         return (
           <div key={message.id} className="group flex flex-col">
             <ModelAttribution slug={modelSlugOf(message)} />
-            {sources.length > 0 && <SearchSourcesPanel sources={sources} />}
+            {grounding && <SearchSourcesPanel grounding={grounding} />}
             {reasoning && <ReasoningPanel text={reasoning} streaming={streaming && isLast} />}
 
             <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
               <Markdown className={MARKDOWN_PROSE}>{text}</Markdown>
             </div>
+
+            {grounding && <SearchGroundingDetails grounding={grounding} />}
 
             {!(streaming && isLast) && (
               <MessageActions text={text} onRetry={isLast ? onRetry : undefined} />
@@ -393,17 +328,21 @@ export function MessageList({
         );
       })}
 
-      {streaming && messages.at(-1)?.role === 'user' && (
-        <div className="flex gap-1.5 py-2">
-          {[0, 1, 2].map((dot) => (
-            <span
-              key={dot}
-              className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
-              style={{ animationDelay: `${dot * 0.15}s` }}
-            />
-          ))}
-        </div>
-      )}
+      {streaming &&
+        messages.at(-1)?.role === 'user' &&
+        (searching ? (
+          <SearchLoading />
+        ) : (
+          <div role="status" className="flex gap-1.5 py-2" aria-label="Generating response">
+            {[0, 1, 2].map((dot) => (
+              <span
+                key={dot}
+                className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
+                style={{ animationDelay: `${dot * 0.15}s` }}
+              />
+            ))}
+          </div>
+        ))}
     </div>
   );
 }

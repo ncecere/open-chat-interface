@@ -15,6 +15,17 @@ export const threadSummarySchema = z.object({
   updatedAt: z.string(),
 });
 
+export const searchGroundingDataSchema = z.object({
+  query: z.string(),
+  results: z.array(
+    z.object({
+      title: z.string(),
+      url: z.string(),
+      snippet: z.string(),
+    }),
+  ),
+});
+
 export const attachmentSchema = z.object({
   id: z.string(),
   filename: z.string(),
@@ -98,5 +109,6 @@ export const sendMessageSchema = z
 export type ThreadSummary = z.infer<typeof threadSummarySchema>;
 export type BranchMessageInput = z.infer<typeof branchMessageSchema>;
 export type ChatMessage = z.infer<typeof messageSchema>;
+export type SearchGroundingData = z.infer<typeof searchGroundingDataSchema>;
 export type Attachment = z.infer<typeof attachmentSchema>;
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;

@@ -14,6 +14,7 @@ import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 const PENDING_KEY = 'oci.pendingPrompt';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 const PENDING_EFFORT_KEY = 'oci.pendingEffort';
+const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
 const PENDING_BRANCH_KEY = 'oci.pendingBranchResponse';
 const MODEL_STORAGE_KEY = 'oci.model';
 
@@ -49,6 +50,10 @@ function peekPendingEffort(): ReasoningEffort | undefined {
   return REASONING_EFFORTS.find((effort) => effort === value);
 }
 
+function peekPendingSearch(): boolean {
+  return sessionStorage.getItem(PENDING_SEARCH_KEY) === 'true';
+}
+
 /** Reads uploads handed over by the landing page without mutating during render. */
 function peekPendingAttachments(): Attachment[] {
   const raw = sessionStorage.getItem(PENDING_ATTACHMENTS_KEY);
@@ -77,12 +82,14 @@ function ThreadConversation({
   initialMessages,
   carriedAttachments,
   carriedEffort,
+  carriedSearch,
   temporary,
 }: {
   threadId: string;
   initialMessages: UIMessage[];
   carriedAttachments: Attachment[];
   carriedEffort?: ReasoningEffort;
+  carriedSearch: boolean;
   temporary: boolean;
 }) {
   const pendingBranch = peekPendingBranch(threadId);
@@ -92,6 +99,7 @@ function ThreadConversation({
     carriedAttachments,
     initialModelSlug: pendingBranch?.modelSlug,
     initialEffort: pendingBranch?.effort ?? carriedEffort,
+    initialWebSearch: carriedSearch,
     temporary,
   });
   const navigate = useNavigate();
@@ -113,6 +121,7 @@ function ThreadConversation({
     sessionStorage.removeItem(PENDING_KEY);
     sessionStorage.removeItem(PENDING_ATTACHMENTS_KEY);
     sessionStorage.removeItem(PENDING_EFFORT_KEY);
+    sessionStorage.removeItem(PENDING_SEARCH_KEY);
     void session.send(pending);
   }, [session.selectedModel, session.send]);
 
@@ -164,6 +173,7 @@ function ThreadConversation({
         <MessageList
           messages={session.messages}
           streaming={session.streaming}
+          searching={session.webSearch}
           onRetry={() => session.regenerate()}
           onEdit={session.features?.branching ? editAndBranch : undefined}
         />
@@ -206,6 +216,7 @@ export function ChatThreadPage({ threadId }: { threadId: string }) {
   // Read once on mount so a re-render cannot lose the handover.
   const [carriedAttachments] = useState(peekPendingAttachments);
   const [carriedEffort] = useState(peekPendingEffort);
+  const [carriedSearch] = useState(peekPendingSearch);
   const { setTemporary } = useTemporaryChat();
 
   const { data, isLoading } = useQuery({
@@ -237,6 +248,7 @@ export function ChatThreadPage({ threadId }: { threadId: string }) {
       initialMessages={data.messages}
       carriedAttachments={carriedAttachments}
       carriedEffort={carriedEffort}
+      carriedSearch={carriedSearch}
       temporary={data.thread.temporary}
     />
   );
