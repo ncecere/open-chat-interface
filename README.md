@@ -71,6 +71,18 @@ Required environment: `POSTGRES_PASSWORD`, `AUTH_SECRET`, `ENCRYPTION_KEY`,
 Self-hosted OIDC/SAML identity providers on private networks must be listed in
 `AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
 
+## Coverage
+
+There is deliberately no repository-wide coverage threshold. Coverage counts
+lines executed rather than behaviour verified, so a global percentage mostly
+rewards tests written for the metric.
+
+`apps/api/vitest.config.ts` instead sets per-file floors on the modules where a
+regression is a security bug rather than a correctness one: authorization,
+credential handling, untrusted input validation, quota enforcement, and share
+sanitization. Each floor sits just below its measured value, so it catches
+erosion without inviting number-chasing.
+
 ## Continuous integration
 
 `.gitlab-ci.yml` runs lint, typecheck, and a production dependency audit, then
@@ -211,6 +223,7 @@ read: connection strings, secrets, and the initial administrator.
 | `pnpm typecheck` | TypeScript across the workspace |
 | `pnpm test` | Vitest unit and integration suites |
 | `pnpm test:live` | Integration tests against real Postgres, S3, and SMTP |
+| `pnpm test:coverage` | Test run with per-file coverage floors enforced |
 | `pnpm test:e2e` | Playwright desktop/mobile smoke suite against a running app |
 | `pnpm db:generate` | Generate a migration from schema changes |
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / seed defaults |

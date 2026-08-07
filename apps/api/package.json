@@ -12,7 +12,8 @@
     "test:unit": "vitest run src/__tests__/unit src/services/share-links.test.ts src/services/storage/config.test.ts",
     "test:integration": "vitest run src/__tests__/integration",
     "admin:promote": "tsx --env-file=../../.env src/scripts/promote-admin.ts",
-    "test:live": "vitest run src/__tests__/live"
+    "test:live": "vitest run src/__tests__/live",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.33",
@@ -39,6 +40,7 @@
     "@oci/config": "workspace:*",
     "@types/node": "22.20.0",
     "@types/nodemailer": "7.0.11",
+    "@vitest/coverage-v8": "3.2.6",
     "pino-pretty": "13.1.3",
     "postgres": "3.4.9",
     "tsx": "4.23.9",

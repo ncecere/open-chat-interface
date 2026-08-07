@@ -6,5 +6,32 @@ export default defineConfig({
     setupFiles: ['./test/setup.ts'],
     clearMocks: true,
     restoreMocks: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov', 'cobertura'],
+      // Only application code; entrypoints and generated output are noise here.
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.test.ts', 'src/scripts/**', 'src/server.ts'],
+      /**
+       * Deliberately no global threshold. Coverage counts lines executed, not
+       * behaviour verified, so a repository-wide percentage mostly rewards
+       * tests written for the metric.
+       *
+       * These per-file floors sit just below today's measured values and cover
+       * the modules where a regression is a security bug rather than a
+       * correctness one: authorization, credential handling, untrusted input
+       * validation, quota enforcement, and share sanitization. They are a
+       * ratchet against silent erosion, not a target to chase.
+       */
+      thresholds: {
+        'src/auth/permissions.ts': { statements: 100, branches: 100, functions: 100 },
+        'src/auth/policy.ts': { statements: 85, branches: 85, functions: 100 },
+        'src/lib/crypto.ts': { statements: 85, branches: 95, functions: 70 },
+        'src/services/attachments/validate.ts': { statements: 95, branches: 78, functions: 85 },
+        'src/services/quota/policy.ts': { statements: 90, branches: 78, functions: 100 },
+        'src/services/quota/windows.ts': { statements: 95, branches: 70, functions: 100 },
+        'src/services/share-links.ts': { statements: 55, branches: 70, functions: 80 },
+      },
+    },
   },
 });
