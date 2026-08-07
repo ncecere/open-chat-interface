@@ -24,7 +24,7 @@ cd docker
 docker compose pull api web migrate
 docker compose up -d --no-build
 docker compose ps
-curl --fail "${APP_URL%/}/api/health/ready"
+curl --fail "http://localhost:${OCI_PORT:-8080}/api/health/ready"
 ```
 
 Pin production to `vX.Y.Z`; use `latest` only for evaluation environments.
