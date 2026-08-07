@@ -177,8 +177,10 @@ a limit. Cancelled and failed runs still settle, which keeps a message quota
 meaningful for someone who repeatedly stops mid-generation. A reservation
 abandoned by a crashed process stops counting after 15 minutes and is swept.
 
-> Cost tracking depends on the provider reporting token usage. Gateways that
-> omit usage data record zero tokens, so budget policies cannot bill them.
+> Cost tracking depends on the provider reporting token usage. OCI requests it
+> explicitly, which OpenAI-compatible gateways such as LiteLLM only return when
+> asked. A provider that still omits usage records zero tokens, so budget
+> policies cannot bill it.
 
 ## Configuration model
 

@@ -51,6 +51,10 @@ export function createLanguageModel(
         name: credentials.label,
         baseURL: credentials.baseUrl,
         apiKey: credentials.apiKey ?? undefined,
+        // Streaming responses omit token counts unless the request opts in.
+        // Without this, gateways such as LiteLLM report zero usage and budget
+        // quotas can never bill a streamed generation.
+        includeUsage: true,
       });
       return compatible(upstreamModelId);
     }
