@@ -14,10 +14,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @oci/api...
 
 FROM deps AS build
-COPY tsconfig*.json ./
 COPY packages ./packages
 COPY apps/api ./apps/api
-RUN pnpm --filter @oci/api build
+RUN pnpm --filter @oci/api... build
 
 FROM base AS runtime
 ENV NODE_ENV=production

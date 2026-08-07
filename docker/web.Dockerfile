@@ -14,7 +14,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 COPY packages ./packages
 COPY apps/web ./apps/web
-RUN pnpm --filter @oci/web build
+RUN pnpm --filter @oci/web... build
 
 FROM caddy:2-alpine AS runtime
 COPY --from=build /app/apps/web/dist /srv

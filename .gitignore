@@ -14,9 +14,9 @@ coverage/
 npm-debug.log*
 pnpm-debug.log*
 
-# Local runtime data
-data/
-storage/
+# Local runtime data (storage is root-only so source directories remain trackable)
+**/data/
+/storage/
 playwright-report/
 test-results/
 

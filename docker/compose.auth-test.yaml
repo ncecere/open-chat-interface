@@ -1,0 +1,31 @@
+name: oci-auth-test
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.1
+    command: start-dev --import-realm
+    restart: unless-stopped
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-oci-keycloak-test-admin}
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      - '127.0.0.1:${KEYCLOAK_PORT:-8090}:8080'
+    volumes:
+      - ./keycloak/oci-test-realm.json:/opt/keycloak/data/import/oci-test-realm.json:ro
+      - keycloak_data:/opt/keycloak/data
+
+  # Captures outbound SMTP so invite, verification, and reset emails can be
+  # inspected without delivering to a real mail server.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    ports:
+      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+
+volumes:
+  keycloak_data:
