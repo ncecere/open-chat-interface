@@ -180,6 +180,11 @@ test:a11y:
 
 build:images:
   stage: build
+  # Build and publish containers only for semantic release tags. This keeps
+  # merge-request and default-branch pipelines focused on validation.
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
+    - when: never
   # This instance's untagged Kubernetes runner is intentionally unprivileged.
   # Container builds belong on the shared runner configured for Docker-in-Docker.
   tags:
@@ -200,18 +205,15 @@ build:images:
     - docker info >/dev/null
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
-    - docker build -f docker/api.Dockerfile -t "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA" .
-    - docker build -f docker/web.Dockerfile -t "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHORT_SHA" .
-    # Only publish from the default branch and tags; merge requests still get
-    # the build as a check without pushing anything.
     - |
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; then
-        TAG="${CI_COMMIT_TAG:-latest}"
-        for app in api web; do
-          docker tag "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/$app:$TAG"
-          docker push "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_SHORT_SHA"
-          docker push "$CI_REGISTRY_IMAGE/$app:$TAG"
-        done
-      else
-        echo "Merge request build only; images are not published."
-      fi
+      for app in api web; do
+        docker build \
+          -f "docker/$app.Dockerfile" \
+          -t "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_TAG" \
+          -t "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_SHORT_SHA" \
+          -t "$CI_REGISTRY_IMAGE/$app:latest" \
+          .
+        docker push "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_TAG"
+        docker push "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_SHORT_SHA"
+        docker push "$CI_REGISTRY_IMAGE/$app:latest"
+      done
