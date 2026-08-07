@@ -73,20 +73,19 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
  * is left untouched.
  */
 export async function seedDatabase(db: Database): Promise<void> {
-  const [existingOrg] = await db
+  // Insert first and ignore a conflict rather than checking then inserting:
+  // two replicas booting together would otherwise both see an empty table.
+  // organization.slug carries a unique index, so exactly one insert wins.
+  await db
+    .insert(organization)
+    .values({ slug: DEFAULT_ORGANIZATION_SLUG, name: 'Open Chat Interface' })
+    .onConflictDoNothing({ target: organization.slug });
+
+  const [org] = await db
     .select()
     .from(organization)
     .where(eq(organization.slug, DEFAULT_ORGANIZATION_SLUG))
     .limit(1);
-
-  const org =
-    existingOrg ??
-    (
-      await db
-        .insert(organization)
-        .values({ slug: DEFAULT_ORGANIZATION_SLUG, name: 'Open Chat Interface' })
-        .returning()
-    )[0];
 
   if (!org) {
     throw new Error('Failed to create default organization');

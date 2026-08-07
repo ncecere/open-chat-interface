@@ -27,14 +27,26 @@ export async function ensureInitialAdmin(): Promise<void> {
   const organizationId = await getDefaultOrganizationId();
   const password = env.INITIAL_ADMIN_PASSWORD ?? generateToken(24);
 
-  await auth.api.createUser({
-    body: {
-      email: env.INITIAL_ADMIN_EMAIL,
-      password,
-      name: 'Administrator',
-      role: 'admin',
-    },
-  });
+  try {
+    await auth.api.createUser({
+      body: {
+        email: env.INITIAL_ADMIN_EMAIL,
+        password,
+        name: 'Administrator',
+        role: 'admin',
+      },
+    });
+  } catch (error) {
+    // Replicas booting together can both observe an empty user table. The
+    // unique email index means only one insert wins; the loser simply stops
+    // rather than failing the whole startup.
+    const [recount] = await db.select({ value: count() }).from(schema.user);
+    if ((recount?.value ?? 0) > 0) {
+      logger.info('Initial administrator already created by another instance');
+      return;
+    }
+    throw error;
+  }
 
   await db
     .update(schema.user)

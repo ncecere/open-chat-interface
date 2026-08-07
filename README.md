@@ -80,6 +80,34 @@ Once running, sign in and add a provider under **Admin → Providers & Keys**,
 then curate models in **Admin → Model catalog**. No model is available to users
 until an administrator enables one.
 
+### Running more than one API replica
+
+Startup migrations are guarded by a Postgres advisory lock, so replicas can boot
+together safely. For a predictable rollout, give schema changes their own job
+instead:
+
+```bash
+docker compose run --rm migrate                       # once, before rollout
+RUN_MIGRATIONS=false docker compose up -d --scale api=3
+```
+
+A replica started with `RUN_MIGRATIONS=false` against a database with no schema
+refuses to start rather than failing later on an arbitrary query.
+
+Caddy re-resolves the API service name, so replicas are discovered as they
+scale. Sessions are cookie-signed and stream resume goes through Redis, so no
+sticky sessions are needed.
+
+Two constraints to know before scaling:
+
+- **Object storage is required.** The local filesystem driver writes to a
+  per-container volume, so an attachment uploaded through one replica is
+  invisible to the others unless every replica shares one host volume.
+  Configure S3 under **Admin → Storage**.
+- **Role and ban changes lag.** Sessions are cached for up to five minutes per
+  replica, so a revoked session may remain usable on other replicas until that
+  cache expires.
+
 Self-hosted OIDC/SAML identity providers on private networks must be listed in
 `AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
 

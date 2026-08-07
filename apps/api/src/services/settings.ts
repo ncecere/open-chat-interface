@@ -116,11 +116,19 @@ interface SettingsMap {
   chat: ChatSettings;
 }
 
-const cache = new Map<SettingKey, unknown>();
+/**
+ * Settings change rarely and are read on nearly every request, so they are
+ * cached. The TTL exists for multi-replica deployments: `invalidateSettingsCache`
+ * only clears the calling process, so without expiry an administrator's change
+ * would never reach the other replicas.
+ */
+const CACHE_TTL_MS = 30_000;
+
+const cache = new Map<SettingKey, { value: unknown; expiresAt: number }>();
 
 export async function getSetting<K extends SettingKey>(key: K): Promise<SettingsMap[K]> {
   const cached = cache.get(key);
-  if (cached) return cached as SettingsMap[K];
+  if (cached && Date.now() < cached.expiresAt) return cached.value as SettingsMap[K];
 
   const organizationId = await getDefaultOrganizationId();
   const [row] = await db
@@ -142,7 +150,7 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<Settings
         ? normalizeBrandingSettings(stored as BrandingSettings)
         : stored
   ) as SettingsMap[K];
-  cache.set(key, value);
+  cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
   return value;
 }
 
@@ -164,7 +172,7 @@ export async function updateSetting<K extends SettingKey>(
       set: { value: serialized },
     });
 
-  cache.set(key, next);
+  cache.set(key, { value: next, expiresAt: Date.now() + CACHE_TTL_MS });
   return next;
 }
 

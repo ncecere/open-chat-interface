@@ -1,4 +1,4 @@
-import { and, eq, gte, or, schema, sql } from '@oci/db';
+import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { quotaExceeded } from '../../lib/errors.js';
@@ -197,24 +197,81 @@ export async function releaseReservation(reservation: UsageReservation): Promise
 }
 
 /**
- * Settles reservations abandoned by a crashed process. They already stop
- * counting at the TTL; this keeps them from lingering as permanently pending
- * rows and records the message against the owner's history.
+ * Settles reservations abandoned by a crashed process.
+ *
+ * The rollup is written here as well as in `settleReservation`, because a run
+ * that outlives the TTL is swept while still streaming: its own settlement
+ * then finds the row no longer pending and records nothing. Without this the
+ * message and its spend would vanish from the daily totals.
+ *
+ * `skipLocked` lets several replicas sweep at once without contending or
+ * double-counting: each claims a disjoint set of rows.
  */
 export async function sweepAbandonedReservations(now: Date = new Date()): Promise<number> {
-  const rows = await db
-    .update(schema.usageEvent)
-    .set({ pending: false })
-    .where(
-      and(
-        eq(schema.usageEvent.pending, true),
-        sql`${schema.usageEvent.occurredAt} < ${livePendingCutoff(now)}`,
-      ),
-    )
-    .returning({ id: schema.usageEvent.id });
+  const swept = await db.transaction(async (tx) => {
+    const claimed = await tx.execute<{
+      id: string;
+      organization_id: string;
+      user_id: string;
+      model_slug: string;
+      occurred_at: Date;
+      message_count: number;
+      tokens_in: number;
+      tokens_out: number;
+      cost_micros: string;
+    }>(sql`
+      select id, organization_id, user_id, model_slug, occurred_at,
+             message_count, tokens_in, tokens_out, cost_micros
+      from usage_event
+      where pending = true and occurred_at < ${livePendingCutoff(now).toISOString()}::timestamptz
+      for update skip locked
+    `);
 
-  if (rows.length > 0) {
-    logger.warn({ count: rows.length }, 'Settled abandoned quota reservations');
+    if (claimed.length === 0) return [];
+
+    await tx
+      .update(schema.usageEvent)
+      .set({ pending: false })
+      .where(
+        inArray(
+          schema.usageEvent.id,
+          claimed.map((row) => row.id),
+        ),
+      );
+
+    return claimed;
+  });
+
+  // Reflect the swept events in the rollup that drives admin analytics.
+  for (const row of swept) {
+    await db
+      .insert(schema.usageRecord)
+      .values({
+        organizationId: row.organization_id,
+        userId: row.user_id,
+        modelSlug: row.model_slug,
+        day: new Date(row.occurred_at).toISOString().slice(0, 10),
+        messageCount: row.message_count,
+        tokensIn: row.tokens_in,
+        tokensOut: row.tokens_out,
+        costMicros: Number(row.cost_micros),
+      })
+      .onConflictDoUpdate({
+        target: [schema.usageRecord.userId, schema.usageRecord.modelSlug, schema.usageRecord.day],
+        set: {
+          messageCount: sql`${schema.usageRecord.messageCount} + ${row.message_count}`,
+          tokensIn: sql`${schema.usageRecord.tokensIn} + ${row.tokens_in}`,
+          tokensOut: sql`${schema.usageRecord.tokensOut} + ${row.tokens_out}`,
+          costMicros: sql`${schema.usageRecord.costMicros} + ${Number(row.cost_micros)}`,
+        },
+      })
+      .catch((error) =>
+        logger.error({ error, eventId: row.id }, 'Failed to roll up a swept reservation'),
+      );
   }
-  return rows.length;
+
+  if (swept.length > 0) {
+    logger.warn({ count: swept.length }, 'Settled abandoned quota reservations');
+  }
+  return swept.length;
 }

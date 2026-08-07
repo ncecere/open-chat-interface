@@ -36,6 +36,8 @@ export async function livePostgresAvailable(): Promise<boolean> {
 
 export interface LiveDatabase {
   db: Database;
+  /** Needed by suites that open their own connection, such as migration locks. */
+  connectionString: string;
   /** Drops the throwaway database. Always call from `afterAll`. */
   destroy: () => Promise<void>;
 }
@@ -68,6 +70,7 @@ export async function createLiveDatabase(label: string): Promise<LiveDatabase> {
 
   return {
     db,
+    connectionString: testUrl.toString(),
     destroy: async () => {
       await client.end({ timeout: 5 }).catch(() => {});
       const cleanup = postgres(adminUrl, { max: 1, onnotice: () => {} });

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, schema } from '@oci/db';
+import { and, eq, gte, inArray, isNull, schema } from '@oci/db';
 import { sendMessageSchema } from '@oci/shared';
 import {
   convertToModelMessages,
@@ -44,6 +44,13 @@ import {
   nextPosition,
   touchThread,
 } from '../services/threads.js';
+
+/**
+ * How long a streaming assistant message is treated as an in-flight run by the
+ * database fallback lock. A process killed mid-stream leaves the row streaming
+ * forever, so the thread must not stay locked indefinitely.
+ */
+const STALE_RUN_MS = 15 * 60 * 1000;
 
 export const chatRoutes = new Hono<AppBindings>();
 
@@ -282,7 +289,32 @@ chatRoutes.post('/', async (c) => {
     userId: user.id,
   };
   const persistence = await beginChatRun(runIdentity);
-  if (persistence === 'conflict') {
+
+  /**
+   * The per-thread lock normally lives in Redis. When Redis is unreachable
+   * `beginChatRun` reports 'unavailable', which would otherwise drop the lock
+   * entirely and let two replicas answer the same thread at once. Fall back to
+   * the database, where an in-flight run is already recorded as a streaming
+   * assistant message.
+   */
+  let databaseConflict = false;
+  if (persistence === 'unavailable') {
+    const [inFlight] = await db
+      .select({ id: schema.message.id })
+      .from(schema.message)
+      .where(
+        and(
+          eq(schema.message.threadId, thread.id),
+          eq(schema.message.role, 'assistant'),
+          eq(schema.message.status, 'streaming'),
+          gte(schema.message.createdAt, new Date(Date.now() - STALE_RUN_MS)),
+        ),
+      )
+      .limit(1);
+    databaseConflict = Boolean(inFlight);
+  }
+
+  if (persistence === 'conflict' || databaseConflict) {
     // The user turn was written before generation. Roll it back when another
     // run won the per-thread Redis lock so retrying cannot duplicate it.
     if (submittedMessageId) {

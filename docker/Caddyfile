@@ -10,7 +10,24 @@
 	# means session cookies need no CORS or SameSite=None handling.
 	handle /api/* {
 		reverse_proxy {$API_UPSTREAM:api:3000} {
+			# Compose assigns one DNS name to every API replica. Re-resolving it
+			# lets Caddy discover replicas as they scale; without this it pins to
+			# whichever address it saw first.
+			dynamic a {
+				name {$API_UPSTREAM_HOST:api}
+				port {$API_UPSTREAM_PORT:3000}
+				refresh 10s
+			}
+
+			# Streaming responses must not be buffered.
 			flush_interval -1
+
+			# Sessions are cookie-signed and stream resume goes through Redis, so
+			# no affinity is required; a failed replica is simply retried.
+			lb_policy least_conn
+			lb_try_duration 5s
+			health_uri /api/health/ready
+			health_interval 10s
 		}
 	}
 

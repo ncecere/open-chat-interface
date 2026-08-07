@@ -7,6 +7,15 @@ const envSchema = z.object({
   AUTH_TRUSTED_ORIGINS: z.string().optional(),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /**
+   * Whether this process applies migrations at startup. Set false when a
+   * separate migration job owns schema changes, which is the usual pattern
+   * once more than one API replica runs.
+   */
+  RUN_MIGRATIONS: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   REDIS_URL: z.string().optional(),
   CHAT_STREAM_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
 

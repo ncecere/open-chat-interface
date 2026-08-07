@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { runMigrations, seedDatabase } from '@oci/db';
+import { migrationsApplied, runMigrationsWithLock, seedDatabase } from '@oci/db';
 import { createApp } from './app.js';
 import { ensureInitialAdmin } from './bootstrap.js';
 import { loadEnv } from './config/env.js';
@@ -14,12 +14,22 @@ async function main() {
   /**
    * A container deployment has no separate migration step, so a fresh stack
    * would otherwise start against an empty database and crash-loop on the
-   * first query. Both operations are idempotent, so an existing deployment
-   * simply passes through.
+   * first query. The advisory lock makes this safe when several replicas boot
+   * together, and every operation here is idempotent.
+   *
+   * Operators running a dedicated migration job set RUN_MIGRATIONS=false, in
+   * which case the process refuses to serve against a schema that is missing
+   * rather than failing later on an arbitrary query.
    */
-  logger.info('Applying database migrations');
-  await runMigrations(db);
-  await seedDatabase(db);
+  if (env.RUN_MIGRATIONS) {
+    logger.info('Applying database migrations');
+    await runMigrationsWithLock(env.DATABASE_URL);
+    await seedDatabase(db);
+  } else if (!(await migrationsApplied(db))) {
+    throw new Error(
+      'RUN_MIGRATIONS is false but the database has no schema. Run `pnpm db:migrate` first.',
+    );
+  }
 
   await ensureInitialAdmin();
   await purgeExpiredTemporaryThreads();
@@ -64,6 +74,11 @@ async function main() {
 }
 
 main().catch((error) => {
-  logger.error({ error }, 'Failed to start API');
+  // Serialize the message explicitly: pino renders a bare Error as {} under
+  // the `error` key, which hides the reason an operator needs.
+  logger.error(
+    { err: error instanceof Error ? error.message : String(error) },
+    'Failed to start API',
+  );
   process.exit(1);
 });
