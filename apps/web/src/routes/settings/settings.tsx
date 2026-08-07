@@ -1,18 +1,38 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { Field } from '~/components/ui/field';
+import { Input, Textarea } from '~/components/ui/input';
 import { Switch } from '~/components/ui/switch';
 import { useCurrentUser } from '~/hooks/use-current-user';
+import { api } from '~/lib/api-client';
 import { useTheme } from '~/providers/theme-provider';
 
 export function SettingsPage() {
   const { data } = useCurrentUser();
   const { theme, setTheme, boringMode, setBoringMode } = useTheme();
+  const queryClient = useQueryClient();
+
+  const [displayName, setDisplayName] = useState(data?.preferences.displayName ?? '');
+  const [occupation, setOccupation] = useState(data?.preferences.occupation ?? '');
+  const [context, setContext] = useState(data?.preferences.additionalContext ?? '');
+  const [saved, setSaved] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (patch: Record<string, unknown>) => api.patch('/me/preferences', patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
+  });
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10">
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/">
             <ArrowLeft />
@@ -28,7 +48,7 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
-            <CardDescription>Choose how the interface looks on this device.</CardDescription>
+            <CardDescription>How the interface looks on this device.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
@@ -38,7 +58,7 @@ export function SettingsPage() {
                   <Button
                     key={option}
                     size="sm"
-                    variant={theme === option ? 'primary' : 'ghost'}
+                    variant={theme === option ? 'accent' : 'ghost'}
                     className="capitalize"
                     onClick={() => setTheme(option)}
                   >
@@ -62,8 +82,62 @@ export function SettingsPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Customization</CardTitle>
+            <CardDescription>
+              Included with every conversation so responses match your context.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Field label="What should the assistant call you?" htmlFor="displayName">
+              <Input
+                id="displayName"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder={data?.user.name}
+              />
+            </Field>
+
+            <Field label="What do you do?" htmlFor="occupation">
+              <Input
+                id="occupation"
+                value={occupation}
+                onChange={(event) => setOccupation(event.target.value)}
+                placeholder="Engineer, student, researcher..."
+              />
+            </Field>
+
+            <Field label="Anything else it should know?" htmlFor="context">
+              <Textarea
+                id="context"
+                rows={4}
+                value={context}
+                onChange={(event) => setContext(event.target.value)}
+                placeholder="Interests, values, or preferences to keep in mind."
+              />
+            </Field>
+
+            <div className="flex items-center gap-3">
+              <Button
+                variant="primary"
+                disabled={save.isPending}
+                onClick={() =>
+                  save.mutate({
+                    displayName: displayName.trim() || null,
+                    occupation: occupation.trim() || null,
+                    additionalContext: context.trim() || null,
+                  })
+                }
+              >
+                Save preferences
+              </Button>
+              {saved && <span className="text-xs text-[var(--success)]">Saved</span>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Account</CardTitle>
-            <CardDescription>Your profile information.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm">
             <div className="flex justify-between">

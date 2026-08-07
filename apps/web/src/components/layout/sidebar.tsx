@@ -1,8 +1,11 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { PanelLeft, Search, UserRoundPlus } from 'lucide-react';
+import { useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
+import { ThreadList } from '~/components/layout/thread-list';
 import { UserMenu } from '~/components/layout/user-menu';
 import { Button } from '~/components/ui/button';
+import { useCreateThread } from '~/hooks/use-threads';
 import { cn } from '~/lib/utils';
 
 interface SidebarProps {
@@ -12,6 +15,14 @@ interface SidebarProps {
 }
 
 export function Sidebar({ appName, open, onToggle }: SidebarProps) {
+  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
+  const createThread = useCreateThread();
+
+  async function handleNewChat() {
+    await navigate({ to: '/' });
+  }
+
   return (
     <aside
       className={cn(
@@ -31,7 +42,12 @@ export function Sidebar({ appName, open, onToggle }: SidebarProps) {
       </div>
 
       <div className="px-3 pb-2">
-        <Button variant="primary" className="h-9 w-full font-semibold">
+        <Button
+          variant="primary"
+          className="h-9 w-full font-semibold"
+          onClick={handleNewChat}
+          disabled={createThread.isPending}
+        >
           New Chat
         </Button>
       </div>
@@ -39,6 +55,8 @@ export function Sidebar({ appName, open, onToggle }: SidebarProps) {
       <div className="relative px-3">
         <Search className="pointer-events-none absolute left-6 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
         <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
           placeholder="Search your threads..."
           aria-label="Search your threads"
           className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
@@ -48,9 +66,7 @@ export function Sidebar({ appName, open, onToggle }: SidebarProps) {
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3">
-        <p className="px-2 py-8 text-center text-xs text-[var(--text-muted)]">
-          Your conversations will appear here.
-        </p>
+        <ThreadList search={search} />
       </nav>
 
       <div className="flex items-center gap-1 p-2">

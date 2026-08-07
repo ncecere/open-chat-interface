@@ -23,3 +23,5 @@ minimumReleaseAgeExclude:
   - '@tanstack/router-core@1.171.18'
   - lucide-react@1.29.0
   - vite@8.2.1
+  - '@ai-sdk/mcp@2.0.27'
+  - '@ai-sdk/react@4.0.58'

@@ -9,11 +9,14 @@ import { AdminLayout } from '~/components/admin/admin-layout';
 import { AppShell } from '~/components/layout/app-shell';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
+import { AdminModelsPage } from '~/routes/admin/models';
 import { AdminOverviewPage } from '~/routes/admin/overview';
 import { AdminPlaceholderPage } from '~/routes/admin/placeholder';
+import { AdminProvidersPage } from '~/routes/admin/providers';
 import { AdminUsersPage } from '~/routes/admin/users';
 import { LoginPage } from '~/routes/auth/login';
 import { ChatHomePage } from '~/routes/chat/home';
+import { ChatThreadPage } from '~/routes/chat/thread';
 import { SettingsPage } from '~/routes/settings/settings';
 
 interface SessionSnapshot {
@@ -66,6 +69,15 @@ const chatHomeRoute = createRoute({
   component: ChatHomePage,
 });
 
+const chatThreadRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/chat/$threadId',
+  component: function ChatThreadRoute() {
+    const { threadId } = chatThreadRoute.useParams();
+    return <ChatThreadPage threadId={threadId} />;
+  },
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/settings',
@@ -101,6 +113,18 @@ const adminUsersRoute = createRoute({
   component: AdminUsersPage,
 });
 
+const adminProvidersRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/providers',
+  component: AdminProvidersPage,
+});
+
+const adminModelsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/models',
+  component: AdminModelsPage,
+});
+
 const ADMIN_STUBS = [
   { path: '/admin/settings', title: 'Settings', description: 'Instance-wide configuration.' },
   { path: '/admin/branding', title: 'Branding', description: 'Name, logo, and accent color.' },
@@ -110,16 +134,6 @@ const ADMIN_STUBS = [
     description: 'Generate and revoke invite links.',
   },
   { path: '/admin/sso', title: 'Auth & SSO', description: 'Local auth, OIDC, and SAML providers.' },
-  {
-    path: '/admin/providers',
-    title: 'Providers & Keys',
-    description: 'Upstream credentials and model discovery.',
-  },
-  {
-    path: '/admin/models',
-    title: 'Model catalog',
-    description: 'Curate which models users can select.',
-  },
   { path: '/admin/quotas', title: 'Quotas & limits', description: 'Per-role usage limits.' },
   { path: '/admin/search', title: 'Search', description: 'Web search grounding provider.' },
   {
@@ -140,8 +154,14 @@ const adminStubRoutes = ADMIN_STUBS.map((stub) =>
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  authenticatedRoute.addChildren([chatHomeRoute, settingsRoute]),
-  adminRoute.addChildren([adminOverviewRoute, adminUsersRoute, ...adminStubRoutes]),
+  authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute, settingsRoute]),
+  adminRoute.addChildren([
+    adminOverviewRoute,
+    adminUsersRoute,
+    adminProvidersRoute,
+    adminModelsRoute,
+    ...adminStubRoutes,
+  ]),
 ]);
 
 export const router = createRouter({
