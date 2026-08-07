@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { AdminLayout } from '~/components/admin/admin-layout';
 import { AppShell } from '~/components/layout/app-shell';
+import { SettingsLayout } from '~/components/settings/settings-layout';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
 import { AdminModelsPage } from '~/routes/admin/models';
@@ -17,7 +18,15 @@ import { AdminUsersPage } from '~/routes/admin/users';
 import { LoginPage } from '~/routes/auth/login';
 import { ChatHomePage } from '~/routes/chat/home';
 import { ChatThreadPage } from '~/routes/chat/thread';
-import { SettingsPage } from '~/routes/settings/settings';
+import { SettingsAccountPage } from '~/routes/settings/account';
+import { SettingsCustomizationPage } from '~/routes/settings/customization';
+import { SettingsHistoryPage } from '~/routes/settings/history';
+import { SettingsModelsPage } from '~/routes/settings/models';
+import {
+  SettingsAttachmentsPage,
+  SettingsContactPage,
+  SettingsShortcutsPage,
+} from '~/routes/settings/simple-tabs';
 
 interface SessionSnapshot {
   user: { id: string; role: string };
@@ -78,11 +87,43 @@ const chatThreadRoute = createRoute({
   },
 });
 
+/**
+ * Settings is a full-page surface: it replaces the chat shell rather than
+ * rendering inside it, so the thread sidebar is hidden.
+ */
 const settingsRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: '/settings',
-  component: SettingsPage,
+  getParentRoute: () => rootRoute,
+  id: 'settings',
+  beforeLoad: async () => {
+    const session = await loadSession();
+    if (!session) throw redirect({ to: '/auth/login' });
+    return { session };
+  },
+  component: () => (
+    <SettingsLayout>
+      <Outlet />
+    </SettingsLayout>
+  ),
+  pendingComponent: FullPageSpinner,
 });
+
+const SETTINGS_TABS = [
+  { path: '/settings', component: SettingsAccountPage },
+  { path: '/settings/customization', component: SettingsCustomizationPage },
+  { path: '/settings/history', component: SettingsHistoryPage },
+  { path: '/settings/models', component: SettingsModelsPage },
+  { path: '/settings/attachments', component: SettingsAttachmentsPage },
+  { path: '/settings/shortcuts', component: SettingsShortcutsPage },
+  { path: '/settings/contact', component: SettingsContactPage },
+] as const;
+
+const settingsTabRoutes = SETTINGS_TABS.map((tab) =>
+  createRoute({
+    getParentRoute: () => settingsRoute,
+    path: tab.path,
+    component: tab.component,
+  }),
+);
 
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -154,7 +195,8 @@ const adminStubRoutes = ADMIN_STUBS.map((stub) =>
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute, settingsRoute]),
+  authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute]),
+  settingsRoute.addChildren(settingsTabRoutes),
   adminRoute.addChildren([
     adminOverviewRoute,
     adminUsersRoute,
