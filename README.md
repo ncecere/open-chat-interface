@@ -71,6 +71,26 @@ Required environment: `POSTGRES_PASSWORD`, `AUTH_SECRET`, `ENCRYPTION_KEY`,
 Self-hosted OIDC/SAML identity providers on private networks must be listed in
 `AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
 
+## Live integration tests
+
+`pnpm test` runs entirely against mocks, so it needs no services. `pnpm
+test:live` additionally exercises real infrastructure:
+
+```bash
+pnpm infra:up                                          # Postgres
+docker compose -f docker/compose.auth-test.yaml up -d  # MinIO, Mailpit, Keycloak
+pnpm test:live
+```
+
+Each suite skips rather than fails when its dependency is unreachable, so a
+partial stack still produces a green run. Postgres tests create a throwaway
+database, apply the committed migrations, and drop it afterwards, so
+development data is never touched.
+
+These cover what mocks cannot: that migrations apply cleanly, that constraints
+and cascades actually fire, that the S3 driver round-trips bytes, and that
+invite tokens really do travel in the URL fragment.
+
 ## Testing SSO and email locally
 
 `docker/compose.auth-test.yaml` starts a preconfigured Keycloak realm (OIDC and
@@ -178,6 +198,7 @@ read: connection strings, secrets, and the initial administrator.
 | `pnpm lint` / `pnpm lint:fix` | Biome check |
 | `pnpm typecheck` | TypeScript across the workspace |
 | `pnpm test` | Vitest unit and integration suites |
+| `pnpm test:live` | Integration tests against real Postgres, S3, and SMTP |
 | `pnpm test:e2e` | Playwright desktop/mobile smoke suite against a running app |
 | `pnpm db:generate` | Generate a migration from schema changes |
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / seed defaults |

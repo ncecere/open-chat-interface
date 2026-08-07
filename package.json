@@ -17,6 +17,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "pnpm --filter @oci/web e2e",
+    "test:live": "pnpm --filter @oci/api test:live",
     "db:generate": "pnpm --filter @oci/db generate",
     "db:migrate": "pnpm --filter @oci/db migrate",
     "db:seed": "pnpm --filter @oci/db seed",
