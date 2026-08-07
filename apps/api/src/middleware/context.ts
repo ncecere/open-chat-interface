@@ -1,4 +1,4 @@
-import type { UserRole } from '@oci/shared';
+import { USER_ROLES, type UserRole } from '@oci/shared';
 import { createMiddleware } from 'hono/factory';
 import { auth } from '../auth/index.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
@@ -20,6 +20,13 @@ export interface AppBindings {
   };
 }
 
+/** Fail closed for absent, corrupt, or unexpected persisted role values. */
+export function normalizeSessionRole(value: unknown): UserRole {
+  return typeof value === 'string' && USER_ROLES.some((role) => role === value)
+    ? (value as UserRole)
+    : 'restricted';
+}
+
 /** Resolves the session for every request without rejecting anonymous ones. */
 export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -36,7 +43,7 @@ export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) =
       email: raw.email,
       name: raw.name,
       image: raw.image ?? null,
-      role: (raw.role ?? 'user') as UserRole,
+      role: normalizeSessionRole(raw.role),
       emailVerified: raw.emailVerified,
       organizationId: raw.organizationId ?? '',
     });

@@ -1,25 +1,36 @@
 import { sso } from '@better-auth/sso';
-import { schema } from '@oci/db';
+import { eq, schema } from '@oci/db';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { createAuthMiddleware } from 'better-auth/api';
 import { admin as adminPlugin } from 'better-auth/plugins';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/email.js';
 import { getDefaultOrganizationId } from '../services/organization.js';
-import { getSetting } from '../services/settings.js';
 import { ac, roles } from './permissions.js';
+import { enforceAuthRequestPolicy, isEmailVerificationEnforced } from './policy.js';
 import { applySsoProvisioning } from './provisioning.js';
 
 const env = loadEnv();
+
+function configuredTrustedOrigins(): string[] {
+  const configured = env.AUTH_TRUSTED_ORIGINS?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return [...new Set([env.APP_URL, ...(configured ?? [])].map((origin) => new URL(origin).origin))];
+}
 
 export const auth = betterAuth({
   appName: 'Open Chat Interface',
   baseURL: env.APP_URL,
   basePath: '/api/auth',
   secret: env.AUTH_SECRET,
-  trustedOrigins: [env.APP_URL],
+  // Internal/self-hosted IdPs must be explicitly allowlisted to permit OIDC
+  // discovery while retaining Better Auth's private-network SSRF protection.
+  trustedOrigins: configuredTrustedOrigins(),
 
   database: drizzleAdapter(db, {
     provider: 'pg',
@@ -56,6 +67,7 @@ export const auth = betterAuth({
     minPasswordLength: 12,
     maxPasswordLength: 200,
     autoSignIn: true,
+    // This value is safely overridden on each request by the before hook.
     requireEmailVerification: false,
     sendResetPassword: async ({ user, url }) => {
       await sendPasswordResetEmail({ to: user.email, url });
@@ -64,11 +76,51 @@ export const auth = betterAuth({
 
   emailVerification: {
     autoSignInAfterVerification: true,
+    // Always enter this callback on sign-up. When verification is not viable,
+    // mark the account verified so enabling SMTP later does not lock it out.
+    sendOnSignUp: true,
+    sendOnSignIn: true,
     sendVerificationEmail: async ({ user, url }) => {
-      const { emailVerificationRequired } = await getSetting('auth');
-      if (!emailVerificationRequired) return;
-      await sendVerificationEmail({ to: user.email, url });
+      const enforced = await isEmailVerificationEnforced();
+      const result = enforced
+        ? await sendVerificationEmail({ to: user.email, url })
+        : { delivered: false };
+
+      if (!enforced || !result.delivered) {
+        await db
+          .update(schema.user)
+          .set({ emailVerified: true })
+          .where(eq(schema.user.id, user.id));
+        if (enforced) {
+          logger.warn({ userId: user.id }, 'Verification email failed; account left accessible');
+        }
+      }
     },
+  },
+
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      const policy = await enforceAuthRequestPolicy(
+        ctx.path,
+        ctx.body as Record<string, unknown> | undefined,
+      );
+      if (!policy) return;
+
+      // Better Auth options are otherwise static. Return a request-scoped copy
+      // instead of mutating the shared options object (which would race under
+      // concurrent sign-ins with different policy outcomes).
+      return {
+        context: {
+          options: {
+            ...ctx.context.options,
+            emailAndPassword: {
+              ...ctx.context.options.emailAndPassword,
+              requireEmailVerification: policy.requireEmailVerification,
+            },
+          },
+        },
+      };
+    }),
   },
 
   session: {

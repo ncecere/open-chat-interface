@@ -15,7 +15,8 @@ export const statement = {
   quota: ['read', 'manage'],
   audit: ['read'],
   analytics: ['read'],
-  thread: ['create', 'share'],
+  thread: ['create', 'share', 'temporary'],
+  persona: ['manage'],
   attachment: ['upload'],
 } as const;
 
@@ -32,12 +33,14 @@ export const roles = {
     quota: ['read', 'manage'],
     audit: ['read'],
     analytics: ['read'],
-    thread: ['create', 'share'],
+    thread: ['create', 'share', 'temporary'],
+    persona: ['manage'],
     attachment: ['upload'],
   }),
   user: ac.newRole({
     model: ['read'],
-    thread: ['create', 'share'],
+    thread: ['create', 'share', 'temporary'],
+    persona: ['manage'],
     attachment: ['upload'],
   }),
   restricted: ac.newRole({

@@ -26,7 +26,9 @@ async function main() {
 
   await db
     .update(schema.user)
-    .set({ role: 'admin', banned: false, banReason: null })
+    // Recovery administrators must remain able to use the break-glass local
+    // sign-in path even when local auth or email delivery is disabled.
+    .set({ role: 'admin', banned: false, banReason: null, emailVerified: true })
     .where(eq(schema.user.id, user.id));
 
   await recordAudit({
