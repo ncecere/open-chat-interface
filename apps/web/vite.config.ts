@@ -23,6 +23,16 @@ export default defineConfig({
       },
     },
   },
+  // CI exercises the production bundle with `vite preview`; keep its topology
+  // identical to development instead of letting /api requests hit static 404s.
+  preview: {
+    proxy: {
+      '/api': {
+        target: API_TARGET,
+        changeOrigin: false,
+      },
+    },
+  },
   build: {
     outDir: 'dist',
     sourcemap: true,

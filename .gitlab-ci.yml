@@ -84,8 +84,11 @@ test:live:
       command: ['server', '/data']
     - name: axllent/mailpit:latest
       alias: mailpit
+    - name: redis:7-alpine
+      alias: redis
   variables:
     DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+    TEST_REDIS_URL: redis://redis:6379
     TEST_DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
     MINIO_ROOT_USER: ocitest
     MINIO_ROOT_PASSWORD: ocitestsecret
@@ -93,6 +96,9 @@ test:live:
     SMTP_TEST_HOST: mailpit
     MAILPIT_API_URL: http://mailpit:8025
   script:
+    # Direct package tests resolve workspace exports from dist on a fresh clone.
+    - pnpm --filter @oci/shared build
+    - pnpm --filter @oci/db build
     # Coverage runs here because the per-file floors assume the live suites,
     # which exercise the attachment and share paths.
     - pnpm --filter @oci/api test:coverage
@@ -122,6 +128,7 @@ test:a11y:
     REDIS_URL: redis://redis:6379
     APP_URL: http://127.0.0.1:4173
     E2E_BASE_URL: http://127.0.0.1:4173
+    VITE_API_PROXY: http://127.0.0.1:3000
     INITIAL_ADMIN_EMAIL: admin@example.com
     INITIAL_ADMIN_PASSWORD: ci-admin-password-1234
     E2E_ADMIN_EMAIL: admin@example.com
@@ -131,6 +138,9 @@ test:a11y:
     - corepack prepare pnpm@11.18.0 --activate
     - pnpm config set store-dir "$PNPM_STORE"
     - pnpm install --frozen-lockfile
+    # Workspace package exports point at dist, which is absent in a clean job.
+    - pnpm --filter @oci/shared build
+    - pnpm --filter @oci/db build
     - pnpm db:migrate
     - pnpm db:seed
     - pnpm --filter @oci/api build && node apps/api/dist/server.js &
