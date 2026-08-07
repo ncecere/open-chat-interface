@@ -4,6 +4,14 @@
   "private": true,
   "description": "Open Chat Interface (OCI) \u2014 self-hostable multi-model chat application",
   "license": "MIT",
+  "homepage": "https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface",
+  "repository": {
+    "type": "git",
+    "url": "ssh://git@gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface.git"
+  },
+  "bugs": {
+    "url": "https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/issues"
+  },
   "packageManager": "pnpm@11.18.0",
   "engines": {
     "node": ">=22"
@@ -14,6 +22,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "licenses:check": "node scripts/check-licenses.mjs",
+    "release:check": "node scripts/prepare-release.mjs",
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

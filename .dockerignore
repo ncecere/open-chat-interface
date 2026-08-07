@@ -13,6 +13,7 @@ coverage
 **/data
 /storage
 screen_shots
+_TMP
 playwright-report
 test-results
 *.log

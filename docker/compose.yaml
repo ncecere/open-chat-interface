@@ -2,6 +2,7 @@ name: oci
 
 services:
   web:
+    image: ${OCI_WEB_IMAGE:-oci-web:local}
     build:
       context: ..
       dockerfile: docker/web.Dockerfile
@@ -15,6 +16,7 @@ services:
         condition: service_healthy
 
   api:
+    image: ${OCI_API_IMAGE:-oci-api:local}
     build:
       context: ..
       dockerfile: docker/api.Dockerfile
@@ -56,6 +58,7 @@ services:
   # before starting replicas that boot with RUN_MIGRATIONS=false:
   #   docker compose run --rm migrate
   migrate:
+    image: ${OCI_API_IMAGE:-oci-api:local}
     build:
       context: ..
       dockerfile: docker/api.Dockerfile
