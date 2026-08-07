@@ -1,0 +1,162 @@
+import { and, eq, schema } from '@oci/db';
+import {
+  branchMessageSchema,
+  createThreadSchema,
+  forkMessageSchema,
+  updateThreadSchema,
+} from '@oci/shared';
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { db } from '../db/index.js';
+import { forbidden } from '../lib/errors.js';
+import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
+import { parseBody, parseQuery } from '../middleware/validate.js';
+import { getSetting } from '../services/settings.js';
+import {
+  branchFromUserMessage,
+  createThread,
+  forkFromMessage,
+  getOwnedThread,
+  listMessages,
+  listThreads,
+} from '../services/threads.js';
+
+export const threadRoutes = new Hono<AppBindings>();
+
+threadRoutes.use('*', requireAuth);
+
+const listQuerySchema = z.object({
+  search: z.string().trim().max(200).optional(),
+  archived: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+});
+
+function serializeThread(thread: typeof schema.thread.$inferSelect) {
+  return {
+    id: thread.id,
+    title: thread.title,
+    pinned: thread.pinned,
+    archived: thread.archived,
+    temporary: thread.temporary,
+    expiresAt: thread.expiresAt?.toISOString() ?? null,
+    parentThreadId: thread.parentThreadId,
+    branchedFromMessageId: thread.branchedFromMessageId,
+    lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
+    createdAt: thread.createdAt.toISOString(),
+    updatedAt: thread.updatedAt.toISOString(),
+  };
+}
+
+threadRoutes.get('/', async (c) => {
+  const user = currentUser(c);
+  const { search, archived } = parseQuery(c, listQuerySchema);
+  const threads = await listThreads(user.id, { search, archived });
+  return c.json({ threads: threads.map(serializeThread) });
+});
+
+threadRoutes.post('/', async (c) => {
+  const user = currentUser(c);
+  const input = await parseBody(c, createThreadSchema);
+  const thread = await createThread({
+    userId: user.id,
+    organizationId: user.organizationId,
+    role: user.role,
+    title: input.title,
+    temporary: input.temporary,
+  });
+  return c.json({ thread: serializeThread(thread) }, 201);
+});
+
+threadRoutes.post('/:id/forks', async (c) => {
+  const user = currentUser(c);
+  await getOwnedThread(c.req.param('id'), user.id);
+
+  const features = await getSetting('features');
+  if (!features.branching) throw forbidden('Conversation branching is disabled');
+
+  const input = await parseBody(c, forkMessageSchema);
+  const fork = await forkFromMessage(c.req.param('id'), user.id, input);
+  return c.json({ thread: serializeThread(fork) }, 201);
+});
+
+threadRoutes.post('/:id/branches', async (c) => {
+  const user = currentUser(c);
+  await getOwnedThread(c.req.param('id'), user.id);
+
+  const features = await getSetting('features');
+  if (!features.branching) throw forbidden('Conversation branching is disabled');
+
+  const input = await parseBody(c, branchMessageSchema);
+  const result = await branchFromUserMessage(c.req.param('id'), user.id, input);
+
+  return c.json(
+    {
+      thread: serializeThread(result.thread),
+      message: {
+        id: result.message.id,
+        modelSlug: result.message.modelSlug,
+        effort: result.message.effort,
+      },
+    },
+    201,
+  );
+});
+
+threadRoutes.get('/:id', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  const messages = await listMessages(thread.id);
+
+  return c.json({
+    thread: serializeThread(thread),
+    messages: messages.map((message) => ({
+      id: message.id,
+      threadId: message.threadId,
+      role: message.role,
+      parts: message.parts,
+      modelSlug: message.modelSlug,
+      effort: message.effort,
+      parentMessageId: message.parentMessageId,
+      status: message.status,
+      errorMessage: message.errorMessage,
+      tokensIn: message.tokensIn,
+      tokensOut: message.tokensOut,
+      durationMs: message.durationMs,
+      createdAt: message.createdAt.toISOString(),
+    })),
+  });
+});
+
+threadRoutes.patch('/:id', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  const patch = await parseBody(c, updateThreadSchema);
+
+  const [updated] = await db
+    .update(schema.thread)
+    .set(patch)
+    .where(eq(schema.thread.id, thread.id))
+    .returning();
+
+  return c.json({ thread: updated ? serializeThread(updated) : null });
+});
+
+threadRoutes.delete('/:id', async (c) => {
+  const user = currentUser(c);
+  const threadId = c.req.param('id');
+  await db.transaction(async (tx) => {
+    // Children remain valid conversations after their parent is removed; only
+    // clear the now-stale navigation link.
+    await tx
+      .update(schema.thread)
+      .set({ parentThreadId: null })
+      .where(and(eq(schema.thread.parentThreadId, threadId), eq(schema.thread.userId, user.id)));
+    await tx
+      .delete(schema.thread)
+      .where(and(eq(schema.thread.id, threadId), eq(schema.thread.userId, user.id)));
+  });
+
+  return c.json({ ok: true });
+});

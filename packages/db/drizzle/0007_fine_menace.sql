@@ -1,0 +1,1 @@
+ALTER TABLE "usage_event" ADD COLUMN "pending" boolean DEFAULT false NOT NULL;

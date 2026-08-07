@@ -1,0 +1,37 @@
+{
+  "name": "open-chat-interface",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open Chat Interface (OCI) \u2014 self-hostable multi-model chat application",
+  "license": "MIT",
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "licenses:check": "node scripts/check-licenses.mjs",
+    "format": "biome format --write .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter @oci/web e2e",
+    "test:live": "pnpm --filter @oci/api test:live",
+    "test:coverage": "pnpm --filter @oci/api test:coverage",
+    "db:generate": "pnpm --filter @oci/db generate",
+    "db:migrate": "pnpm --filter @oci/db migrate",
+    "db:seed": "pnpm --filter @oci/db seed",
+    "db:studio": "pnpm --filter @oci/db studio",
+    "infra:up": "docker compose -f docker/compose.dev.yaml up -d",
+    "infra:down": "docker compose -f docker/compose.dev.yaml down",
+    "infra:reset": "docker compose -f docker/compose.dev.yaml down -v",
+    "logos:sync": "node scripts/sync-logos.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7",
+    "turbo": "2.10.8",
+    "typescript": "5.9.3"
+  }
+}

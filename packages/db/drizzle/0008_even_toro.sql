@@ -1,0 +1,1 @@
+ALTER TABLE "sso_provider" ADD COLUMN "trusted_for_linking" boolean DEFAULT false NOT NULL;

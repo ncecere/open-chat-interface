@@ -1,0 +1,27 @@
+node_modules/
+.pnpm-store/
+.pnpm-store-ci/
+dist/
+build/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local runtime data (storage is root-only so source directories remain trackable)
+**/data/
+/storage/
+playwright-report/
+test-results/
+_TMP/
+
+# Reference captures contain authenticated personal account data
+screen_shots/

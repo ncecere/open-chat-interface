@@ -1,0 +1,64 @@
+name: oci-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oci
+      POSTGRES_PASSWORD: oci_dev_password
+      POSTGRES_DB: oci
+    ports:
+      - '127.0.0.1:5439:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oci -d oci']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - '127.0.0.1:6389:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    profiles: ['s3']
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: oci
+      MINIO_ROOT_PASSWORD: oci_dev_password
+    ports:
+      - '127.0.0.1:9010:9000'
+      - '127.0.0.1:9011:9001'
+    volumes:
+      - minio_data:/data
+
+  searxng:
+    image: searxng/searxng:latest
+    profiles: ['search']
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8090:8080'
+    environment:
+      SEARXNG_BASE_URL: http://localhost:8090/
+    volumes:
+      - searxng_data:/etc/searxng
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  searxng_data:

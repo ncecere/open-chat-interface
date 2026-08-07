@@ -1,0 +1,109 @@
+import { Link, useNavigate } from '@tanstack/react-router';
+import { PanelLeft, Search, UserRoundPlus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Wordmark } from '~/components/brand/wordmark';
+import { ThreadList } from '~/components/layout/thread-list';
+import { UserMenu } from '~/components/layout/user-menu';
+import { Button } from '~/components/ui/button';
+import { useCreateThread } from '~/hooks/use-threads';
+import { cn } from '~/lib/utils';
+
+interface SidebarProps {
+  appName?: string;
+  open: boolean;
+  mobile: boolean;
+  onToggle: () => void;
+}
+
+export function Sidebar({ appName, open, mobile, onToggle }: SidebarProps) {
+  const [search, setSearch] = useState('');
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const navigate = useNavigate();
+  const createThread = useCreateThread();
+
+  useEffect(() => {
+    if (mobile && open) closeButtonRef.current?.focus();
+  }, [mobile, open]);
+
+  async function handleNewChat() {
+    await navigate({ to: '/' });
+    if (mobile) onToggle();
+  }
+
+  return (
+    // The role switches with the responsive layout; aria-modal applies only to the mobile dialog.
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: dynamic role and aria-modal are kept in sync
+    <aside
+      role={mobile ? 'dialog' : undefined}
+      aria-modal={mobile ? true : undefined}
+      aria-label={mobile ? 'Conversation sidebar' : undefined}
+      aria-hidden={!open ? true : undefined}
+      inert={!open ? true : undefined}
+      className={cn(
+        'fixed inset-y-0 left-0 z-50 flex h-dvh w-full shrink-0 flex-col bg-[var(--bg-app)] bg-[image:var(--sidebar-gradient)]',
+        'transition-transform duration-200 ease-out md:static md:z-auto md:w-64 md:transition-[margin]',
+        open ? 'translate-x-0 md:ml-0' : '-translate-x-full md:-ml-64 md:translate-x-0',
+      )}
+    >
+      <div className="flex h-14 items-center px-3">
+        <Button
+          ref={closeButtonRef}
+          variant="ghost"
+          size="icon-sm"
+          onClick={onToggle}
+          aria-label="Close sidebar"
+        >
+          <PanelLeft />
+        </Button>
+        <Link to="/" className="min-w-0 flex-1 px-1 text-center">
+          <Wordmark name={appName} className="block truncate" />
+        </Link>
+        <span className="size-8" />
+      </div>
+
+      <div className="hidden px-3 pb-2 md:block">
+        <Button
+          variant="primary"
+          className="h-9 w-full font-semibold"
+          onClick={handleNewChat}
+          disabled={createThread.isPending}
+        >
+          New Chat
+        </Button>
+      </div>
+
+      <div className="relative px-3">
+        <Search className="pointer-events-none absolute left-6 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search your threads..."
+          aria-label="Search your threads"
+          className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+        />
+      </div>
+
+      <div className="mx-3 h-px bg-[var(--border-subtle)]" />
+
+      <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3">
+        <ThreadList search={search} />
+      </nav>
+
+      <div className="hidden items-center gap-1 p-2 md:flex">
+        <div className="min-w-0 flex-1">
+          <UserMenu />
+        </div>
+        <Button variant="ghost" size="icon-sm" aria-label="New profile">
+          <UserRoundPlus />
+        </Button>
+      </div>
+
+      <div className="flex items-center justify-between px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:hidden">
+        <Button variant="accent" className="h-11 rounded-full px-5" onClick={handleNewChat}>
+          New Chat
+        </Button>
+        <UserMenu compact />
+      </div>
+    </aside>
+  );
+}

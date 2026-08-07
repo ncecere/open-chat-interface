@@ -1,0 +1,200 @@
+import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
+import type { UsageSummary, UserRole } from '@oci/shared';
+import { db } from '../../db/index.js';
+import { getDefaultOrganizationId } from '../organization.js';
+import {
+  buildAllowance,
+  calculateCostMicros,
+  type EvaluablePolicy,
+  type ModelPricing,
+  type WindowTotals,
+} from './policy.js';
+import { RESERVATION_TTL_MS, reserveQuota, type UsageReservation } from './reservation.js';
+import { resolveWindow } from './windows.js';
+
+export { calculateCostMicros, describeLimit, describeWindow, formatMicros } from './policy.js';
+export {
+  RESERVATION_TTL_MS,
+  releaseReservation,
+  reserveQuota,
+  settleReservation,
+  sweepAbandonedReservations,
+  type UsageReservation,
+} from './reservation.js';
+export { resolveWindow } from './windows.js';
+
+/** Every enabled policy applied to a role, ordered so messages are reported first. */
+async function loadPoliciesForRole(role: UserRole): Promise<EvaluablePolicy[]> {
+  const organizationId = await getDefaultOrganizationId();
+
+  return db
+    .select({
+      id: schema.quotaPolicy.id,
+      name: schema.quotaPolicy.name,
+      metric: schema.quotaPolicy.metric,
+      limitValue: schema.quotaPolicy.limitValue,
+      windowKind: schema.quotaPolicy.windowKind,
+      windowHours: schema.quotaPolicy.windowHours,
+      timezone: schema.quotaPolicy.timezone,
+    })
+    .from(schema.quotaPolicy)
+    .innerJoin(schema.quotaPolicyRole, eq(schema.quotaPolicyRole.policyId, schema.quotaPolicy.id))
+    .where(
+      and(
+        eq(schema.quotaPolicy.organizationId, organizationId),
+        eq(schema.quotaPolicy.enabled, true),
+        eq(schema.quotaPolicyRole.role, role),
+      ),
+    )
+    .orderBy(schema.quotaPolicy.name);
+}
+
+/**
+ * Sums a user's consumption from per-event rows. A daily rollup cannot answer
+ * a rolling or non-UTC calendar window, so events are the source of truth.
+ * In-flight reservations count so the meter reflects work already committed.
+ */
+async function windowTotals(userId: string, start: Date): Promise<WindowTotals> {
+  const liveCutoff = new Date(Date.now() - RESERVATION_TTL_MS);
+
+  const [totals] = await db
+    .select({
+      messages: sql<number>`coalesce(sum(${schema.usageEvent.messageCount}), 0)::bigint`,
+      tokens: sql<number>`coalesce(sum(${schema.usageEvent.tokensIn} + ${schema.usageEvent.tokensOut}), 0)::bigint`,
+      costMicros: sql<number>`coalesce(sum(${schema.usageEvent.costMicros}), 0)::bigint`,
+    })
+    .from(schema.usageEvent)
+    .where(
+      and(
+        eq(schema.usageEvent.userId, userId),
+        gte(schema.usageEvent.occurredAt, start),
+        // Abandoned reservations stop counting once they age past the TTL.
+        or(eq(schema.usageEvent.pending, false), gte(schema.usageEvent.occurredAt, liveCutoff)),
+      ),
+    );
+
+  // postgres returns bigint sums as strings; normalize before any arithmetic.
+  return {
+    messages: Number(totals?.messages ?? 0),
+    tokens: Number(totals?.tokens ?? 0),
+    costMicros: Number(totals?.costMicros ?? 0),
+  };
+}
+
+/**
+ * Reserves quota for a run, throwing when any applied policy is already spent.
+ * Returns null when no policy applies, so unlimited instances write no
+ * reservation row at all.
+ */
+export async function reserveQuotaForRun(params: {
+  userId: string;
+  role: UserRole;
+  modelSlug: string;
+}): Promise<UsageReservation | null> {
+  const policies = await loadPoliciesForRole(params.role);
+  if (policies.length === 0) return null;
+
+  return reserveQuota({ ...params, policies, pricing: await modelPricing(params.modelSlug) });
+}
+
+/** Per-policy consumption for the usage meter in settings. */
+export async function getUsageSummary(userId: string, role: UserRole): Promise<UsageSummary> {
+  const policies = await loadPoliciesForRole(role);
+
+  const allowances = await Promise.all(
+    policies.map(async (policy) => {
+      const { start, resetsAt } = resolveWindow(policy);
+      return buildAllowance(policy, await windowTotals(userId, start), resetsAt);
+    }),
+  );
+
+  const recent = await windowTotals(userId, new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+  return { allowances, recent };
+}
+
+/** Current catalog prices for a model, or nulls when it is unpriced. */
+async function modelPricing(modelSlug: string): Promise<ModelPricing> {
+  const organizationId = await getDefaultOrganizationId();
+
+  const [pricing] = await db
+    .select({
+      inputPriceMicros: schema.model.inputPriceMicros,
+      outputPriceMicros: schema.model.outputPriceMicros,
+    })
+    .from(schema.model)
+    .where(and(eq(schema.model.organizationId, organizationId), eq(schema.model.slug, modelSlug)))
+    .limit(1);
+
+  return {
+    inputPriceMicros: pricing?.inputPriceMicros ?? null,
+    outputPriceMicros: pricing?.outputPriceMicros ?? null,
+  };
+}
+
+export interface RecordUsageInput {
+  userId: string;
+  modelSlug: string;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+/**
+ * Records usage for a run that was never reserved, which happens only when no
+ * quota policy applies. Prices are snapshotted so later catalog edits never
+ * rewrite historical spend.
+ */
+export async function recordUsage(params: RecordUsageInput): Promise<void> {
+  const organizationId = await getDefaultOrganizationId();
+  const snapshot = await modelPricing(params.modelSlug);
+  const costMicros = calculateCostMicros(snapshot, params.tokensIn, params.tokensOut);
+  const occurredAt = new Date();
+
+  await db.insert(schema.usageEvent).values({
+    organizationId,
+    userId: params.userId,
+    modelSlug: params.modelSlug,
+    occurredAt,
+    messageCount: 1,
+    tokensIn: params.tokensIn,
+    tokensOut: params.tokensOut,
+    costMicros,
+    inputPriceMicros: snapshot.inputPriceMicros,
+    outputPriceMicros: snapshot.outputPriceMicros,
+    pending: false,
+  });
+
+  await db
+    .insert(schema.usageRecord)
+    .values({
+      organizationId,
+      userId: params.userId,
+      modelSlug: params.modelSlug,
+      day: occurredAt.toISOString().slice(0, 10),
+      messageCount: 1,
+      tokensIn: params.tokensIn,
+      tokensOut: params.tokensOut,
+      costMicros,
+    })
+    .onConflictDoUpdate({
+      target: [schema.usageRecord.userId, schema.usageRecord.modelSlug, schema.usageRecord.day],
+      set: {
+        messageCount: sql`${schema.usageRecord.messageCount} + 1`,
+        tokensIn: sql`${schema.usageRecord.tokensIn} + ${params.tokensIn}`,
+        tokensOut: sql`${schema.usageRecord.tokensOut} + ${params.tokensOut}`,
+        costMicros: sql`${schema.usageRecord.costMicros} + ${costMicros}`,
+      },
+    });
+}
+
+/** Roles that currently have at least one policy applied, for the admin list. */
+export async function rolesWithPolicies(roles: readonly UserRole[]): Promise<Set<UserRole>> {
+  if (roles.length === 0) return new Set();
+
+  const rows = await db
+    .select({ role: schema.quotaPolicyRole.role })
+    .from(schema.quotaPolicyRole)
+    .where(inArray(schema.quotaPolicyRole.role, [...roles]));
+
+  return new Set(rows.map((row) => row.role));
+}

@@ -1,0 +1,52 @@
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	encode gzip zstd
+
+	# API and auth traffic goes to the Hono service. Keeping this same-origin
+	# means session cookies need no CORS or SameSite=None handling.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:3000} {
+			# Compose assigns one DNS name to every API replica. Re-resolving it
+			# lets Caddy discover replicas as they scale; without this it pins to
+			# whichever address it saw first.
+			dynamic a {
+				name {$API_UPSTREAM_HOST:api}
+				port {$API_UPSTREAM_PORT:3000}
+				refresh 10s
+			}
+
+			# Streaming responses must not be buffered.
+			flush_interval -1
+
+			# Sessions are cookie-signed and stream resume goes through Redis, so
+			# no affinity is required; a failed replica is simply retried.
+			lb_policy least_conn
+			lb_try_duration 5s
+			health_uri /api/health/ready
+			health_interval 10s
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy same-origin
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}
