@@ -49,7 +49,15 @@ function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean 
         {thread.title}
       </Link>
 
-      <div className="absolute right-1 hidden items-center gap-0.5 rounded-lg bg-inherit pl-2 group-hover:flex">
+      <div
+        className={cn(
+          'pointer-events-none absolute right-1 flex translate-x-3 items-center gap-0.5 rounded-lg bg-inherit pl-2 opacity-0',
+          'transition-[transform,opacity] duration-200 ease-out',
+          'group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100',
+          'group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100',
+          'motion-reduce:transform-none motion-reduce:transition-none',
+        )}
+      >
         <button
           type="button"
           aria-label={thread.pinned ? 'Unpin thread' : 'Pin thread'}

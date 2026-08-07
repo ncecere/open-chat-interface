@@ -1,10 +1,14 @@
 /*
  * OCI design tokens.
  *
- * Values are sampled from the reference interface captures. Every surface
- * reads from these variables, so re-theming is a matter of editing this file
- * (or overriding the variables at runtime from admin branding) rather than
- * touching components.
+ * The surface palette is shadcn's neutral scale (Tailwind `neutral`, zero
+ * chroma) expressed in OKLCH. Every component reads these variables, so
+ * re-theming means editing this file rather than touching components.
+ *
+ * Layering:
+ *   1. `:root`/`.dark` and `.light` define the neutral surfaces and text.
+ *   2. `[data-color-theme]` blocks override only the accent family.
+ *   3. `.boring` forces the neutral accent regardless of the selected theme.
  */
 
 @theme {
@@ -22,209 +26,285 @@
   --settings-max-width: 53rem;
 }
 
+/* ---------------------------------------------------------------------------
+ * Neutral surfaces — dark
+ * ------------------------------------------------------------------------ */
+
 :root,
 .dark {
   color-scheme: dark;
 
-  /* Main canvas. Slightly lighter than the sidebar, with a faint plum lift. */
-  --bg-root: #201c24;
-  --bg-root-alt: #211d25;
+  /* Main canvas sits just above the app backdrop. */
+  --bg-root: oklch(17% 0 0);
+  --bg-root-alt: oklch(18.5% 0 0);
 
   /* Backdrop behind the sidebar and around the inset main panel. */
-  --bg-app: #191418;
+  --bg-app: oklch(14.5% 0 0);
 
   /* Floating control pills sit darker than the surface behind them. */
-  --bg-pill: #1a181c;
+  --bg-pill: oklch(15.5% 0 0);
 
-  /* Inset panels (settings rail cards) recede rather than lift. */
-  --bg-inset: #0e0c0e;
-  --border-inset: #241d24;
+  /* Inset panels (settings rail) recede rather than lift. */
+  --bg-inset: oklch(13% 0 0);
+  --border-inset: oklch(24% 0 0);
 
   /* Segmented tab strip: the track lifts, the active tab cuts back in. */
-  --bg-segment-track: #2f2836;
-  --bg-segment-active: #1e141c;
+  --bg-segment-track: oklch(23% 0 0);
+  --bg-segment-active: oklch(15.5% 0 0);
 
-  /* Settings surface is darker than the chat panel so rail cards read. */
-  --bg-settings: #150f13;
+  --bg-settings: oklch(15.5% 0 0);
 
-  /* Sidebar is markedly darker than the canvas and warms toward the bottom. */
-  --bg-sidebar: #161014;
-  --bg-sidebar-deep: #110b0e;
+  --bg-sidebar: oklch(15.5% 0 0);
+  --bg-sidebar-deep: oklch(14% 0 0);
 
-  --bg-elevated: #100b0f;
+  --bg-elevated: oklch(18% 0 0);
 
-  /* Composer card, pills, and inputs. */
-  --bg-control: #25212a;
-  --bg-control-alt: #242029;
-  --bg-control-hover: #2f2833;
+  --bg-control: oklch(20.5% 0 0);
+  --bg-control-alt: oklch(22% 0 0);
+  --bg-control-hover: oklch(26.9% 0 0);
 
-  --border-subtle: #2c2830;
-  --border-strong: #36303b;
-  /* Warm plum hairline separating the sidebar from the main panel. */
-  --border-panel: #2c1d24;
+  --bg-user-message: oklch(24% 0 0);
+  --border-user-message: oklch(32% 0 0);
 
-  /* The New Chat button is a deep muted plum, not the bright accent. */
-  --accent-button: #3c1226;
-  --accent-button-hover: #4b1730;
-  --accent-button-border: #5a1d3a;
-  --accent-button-foreground: #edb9d3;
+  --border-subtle: oklch(26.9% 0 0);
+  --border-strong: oklch(37.1% 0 0);
+  --border-panel: oklch(24% 0 0);
 
-  /* Selected states use the saturated magenta. */
-  --accent: #750d3d;
-  --accent-bright: #97124f;
-  --accent-soft: #351f2e;
-  --accent-foreground: #f8e8f0;
+  --text-primary: oklch(98.5% 0 0);
+  --text-secondary: oklch(80% 0 0);
+  --text-muted: oklch(63% 0 0);
+  --text-faint: oklch(50% 0 0);
 
-  /* Enabled send button sits between the button plum and the accent. */
-  --accent-send: #441c33;
-  --accent-send-hover: #55223f;
+  --success: oklch(69.6% 0.17 162.48);
+  --warning: oklch(76.9% 0.188 70.08);
+  --danger: oklch(63.7% 0.237 25.331);
+  --danger-foreground: oklch(97.1% 0.013 17.38);
 
-  --text-primary: #f8f7fa;
-  --text-secondary: #cfc6d3;
-  --text-muted: #877a86;
-  --text-faint: #5f5563;
-
-  --success: #00c990;
-  --warning: #ffb000;
-  --danger: #9b1527;
-  --danger-foreground: #ffe8ea;
-
-  --shadow-popover: 0 24px 48px -12px rgb(0 0 0 / 0.65);
-  --sidebar-gradient: linear-gradient(180deg, #191317 0%, #161014 42%, #110b0e 100%);
-  --root-gradient: radial-gradient(120% 70% at 50% 0%, #232029 0%, #201c24 55%);
+  --shadow-popover: 0 24px 48px -12px rgb(0 0 0 / 0.6);
+  --sidebar-gradient: none;
+  --root-gradient: none;
 }
+
+/* ---------------------------------------------------------------------------
+ * Neutral surfaces — light
+ * ------------------------------------------------------------------------ */
 
 .light {
   color-scheme: light;
 
-  --bg-root: #faf3fa;
-  --bg-root-alt: #f7eef7;
+  --bg-root: oklch(100% 0 0);
+  --bg-root-alt: oklch(98.5% 0 0);
 
-  --bg-app: #f3e3f4;
-  --bg-pill: #f7ecf7;
+  --bg-app: oklch(97% 0 0);
+  --bg-pill: oklch(98.5% 0 0);
 
-  --bg-inset: #fdf9fd;
-  --border-inset: #e8d2e8;
+  --bg-inset: oklch(98.5% 0 0);
+  --border-inset: oklch(92.2% 0 0);
 
-  --bg-segment-track: #ecd6ea;
-  --bg-segment-active: #fdfafd;
+  --bg-segment-track: oklch(95% 0 0);
+  --bg-segment-active: oklch(100% 0 0);
 
-  --bg-settings: #f7ecf6;
+  --bg-settings: oklch(98.5% 0 0);
 
-  --bg-sidebar: #f1def3;
-  --bg-sidebar-deep: #ecd6ef;
+  --bg-sidebar: oklch(98.5% 0 0);
+  --bg-sidebar-deep: oklch(97% 0 0);
 
-  --bg-elevated: #fefcfe;
+  --bg-elevated: oklch(100% 0 0);
 
-  --bg-control: #fdfafd;
-  --bg-control-alt: #f6e2f3;
-  --bg-control-hover: #f1d8ee;
+  --bg-control: oklch(100% 0 0);
+  --bg-control-alt: oklch(97% 0 0);
+  --bg-control-hover: oklch(94% 0 0);
 
-  --border-subtle: #ecd9ec;
-  --border-strong: #dcbedd;
-  --border-panel: #ecb4e8;
+  --bg-user-message: oklch(96% 0 0);
+  --border-user-message: oklch(90% 0 0);
 
-  --accent-button: #96355f;
-  --accent-button-hover: #83294f;
-  --accent-button-border: #b04d78;
-  --accent-button-foreground: #ffffff;
+  --border-subtle: oklch(92.2% 0 0);
+  --border-strong: oklch(87% 0 0);
+  --border-panel: oklch(92.2% 0 0);
 
-  --accent: #ca0277;
-  --accent-bright: #b00268;
-  --accent-soft: #f6dcec;
-  --accent-foreground: #ffffff;
+  --text-primary: oklch(14.5% 0 0);
+  --text-secondary: oklch(37.1% 0 0);
+  --text-muted: oklch(55.6% 0 0);
+  --text-faint: oklch(65% 0 0);
 
-  --accent-send: #c9538d;
-  --accent-send-hover: #b8437c;
+  --success: oklch(59.6% 0.145 163.225);
+  --warning: oklch(66.6% 0.179 58.318);
+  --danger: oklch(57.7% 0.245 27.325);
+  --danger-foreground: oklch(98.5% 0 0);
 
-  --text-primary: #2f1c2c;
-  --text-secondary: #5c4459;
-  --text-muted: #8a7686;
-  --text-faint: #a994a5;
-
-  --success: #00875f;
-  --warning: #b07500;
-  --danger: #a4133c;
-  --danger-foreground: #ffffff;
-
-  --shadow-popover: 0 20px 40px -16px rgb(80 20 64 / 0.24);
-  --sidebar-gradient: linear-gradient(180deg, #f5e6f6 0%, #f1def3 45%, #ecd6ef 100%);
-  --root-gradient: radial-gradient(120% 70% at 50% 0%, #fdf8fd 0%, #faf3fa 55%);
+  --shadow-popover: 0 20px 40px -16px rgb(0 0 0 / 0.16);
+  --sidebar-gradient: none;
+  --root-gradient: none;
 }
 
-/* Boring mode keeps the layout but strips the plum coloration. */
+/* ---------------------------------------------------------------------------
+ * Accent families
+ *
+ * Each block overrides only the accent tokens. `--accent` is the solid fill,
+ * `--accent-bright` carries text and focus rings, and `--accent-soft` is the
+ * low-contrast selected/hover wash.
+ * ------------------------------------------------------------------------ */
+
+/* Neutral (default): shadcn's monochrome primary. */
+:root,
+.dark {
+  --accent: oklch(92.2% 0 0);
+  --accent-bright: oklch(87% 0 0);
+  --accent-soft: oklch(26.9% 0 0);
+  --accent-foreground: oklch(20.5% 0 0);
+
+  --accent-button: oklch(92.2% 0 0);
+  --accent-button-hover: oklch(85% 0 0);
+  --accent-button-border: oklch(92.2% 0 0);
+  --accent-button-foreground: oklch(20.5% 0 0);
+
+  --accent-send: oklch(92.2% 0 0);
+  --accent-send-hover: oklch(85% 0 0);
+}
+
+.light {
+  --accent: oklch(20.5% 0 0);
+  --accent-bright: oklch(37.1% 0 0);
+  --accent-soft: oklch(94% 0 0);
+  --accent-foreground: oklch(98.5% 0 0);
+
+  --accent-button: oklch(20.5% 0 0);
+  --accent-button-hover: oklch(30% 0 0);
+  --accent-button-border: oklch(20.5% 0 0);
+  --accent-button-foreground: oklch(98.5% 0 0);
+
+  --accent-send: oklch(20.5% 0 0);
+  --accent-send-hover: oklch(30% 0 0);
+}
+
+/* Blue */
+[data-color-theme="blue"],
+[data-color-theme="blue"].dark {
+  --accent: oklch(54.6% 0.245 262.881);
+  --accent-bright: oklch(70.7% 0.165 254.624);
+  --accent-soft: oklch(30% 0.08 262.881);
+  --accent-foreground: oklch(98.5% 0 0);
+
+  --accent-button: oklch(54.6% 0.245 262.881);
+  --accent-button-hover: oklch(48.8% 0.243 264.376);
+  --accent-button-border: oklch(54.6% 0.245 262.881);
+  --accent-button-foreground: oklch(98.5% 0 0);
+
+  --accent-send: oklch(54.6% 0.245 262.881);
+  --accent-send-hover: oklch(48.8% 0.243 264.376);
+}
+
+[data-color-theme="blue"].light {
+  --accent: oklch(54.6% 0.245 262.881);
+  --accent-bright: oklch(48.8% 0.243 264.376);
+  --accent-soft: oklch(93.2% 0.032 255.585);
+  --accent-foreground: oklch(98.5% 0 0);
+
+  --accent-button: oklch(54.6% 0.245 262.881);
+  --accent-button-hover: oklch(48.8% 0.243 264.376);
+  --accent-button-border: oklch(54.6% 0.245 262.881);
+  --accent-button-foreground: oklch(98.5% 0 0);
+
+  --accent-send: oklch(54.6% 0.245 262.881);
+  --accent-send-hover: oklch(48.8% 0.243 264.376);
+}
+
+/* Violet */
+[data-color-theme="violet"],
+[data-color-theme="violet"].dark {
+  --accent: oklch(54.1% 0.281 293.009);
+  --accent-bright: oklch(70.2% 0.183 293.541);
+  --accent-soft: oklch(30% 0.09 293.009);
+  --accent-foreground: oklch(98.5% 0 0);
+
+  --accent-button: oklch(54.1% 0.281 293.009);
+  --accent-button-hover: oklch(49.1% 0.27 292.581);
+  --accent-button-border: oklch(54.1% 0.281 293.009);
+  --accent-button-foreground: oklch(98.5% 0 0);
+
+  --accent-send: oklch(54.1% 0.281 293.009);
+  --accent-send-hover: oklch(49.1% 0.27 292.581);
+}
+
+[data-color-theme="violet"].light {
+  --accent: oklch(54.1% 0.281 293.009);
+  --accent-bright: oklch(49.1% 0.27 292.581);
+  --accent-soft: oklch(94.3% 0.029 294.588);
+  --accent-foreground: oklch(98.5% 0 0);
+
+  --accent-button: oklch(54.1% 0.281 293.009);
+  --accent-button-hover: oklch(49.1% 0.27 292.581);
+  --accent-button-border: oklch(54.1% 0.281 293.009);
+  --accent-button-foreground: oklch(98.5% 0 0);
+
+  --accent-send: oklch(54.1% 0.281 293.009);
+  --accent-send-hover: oklch(49.1% 0.27 292.581);
+}
+
+/* Emerald */
+[data-color-theme="emerald"],
+[data-color-theme="emerald"].dark {
+  --accent: oklch(59.6% 0.145 163.225);
+  --accent-bright: oklch(76.5% 0.177 163.223);
+  --accent-soft: oklch(30% 0.06 163.225);
+  --accent-foreground: oklch(98.5% 0 0);
+
+  --accent-button: oklch(59.6% 0.145 163.225);
+  --accent-button-hover: oklch(50.8% 0.118 165.612);
+  --accent-button-border: oklch(59.6% 0.145 163.225);
+  --accent-button-foreground: oklch(98.5% 0 0);
+
+  --accent-send: oklch(59.6% 0.145 163.225);
+  --accent-send-hover: oklch(50.8% 0.118 165.612);
+}
+
+[data-color-theme="emerald"].light {
+  --accent: oklch(50.8% 0.118 165.612);
+  --accent-bright: oklch(43.2% 0.095 166.913);
+  --accent-soft: oklch(95% 0.052 163.051);
+  --accent-foreground: oklch(98.5% 0 0);
+
+  --accent-button: oklch(50.8% 0.118 165.612);
+  --accent-button-hover: oklch(43.2% 0.095 166.913);
+  --accent-button-border: oklch(50.8% 0.118 165.612);
+  --accent-button-foreground: oklch(98.5% 0 0);
+
+  --accent-send: oklch(50.8% 0.118 165.612);
+  --accent-send-hover: oklch(43.2% 0.095 166.913);
+}
+
+/*
+ * Boring mode is a per-user preference that strips accent color. It wins over
+ * the instance color theme, so it is declared last.
+ */
 .boring {
-  --bg-root: #202020;
-  --bg-root-alt: #212121;
+  --accent: oklch(92.2% 0 0);
+  --accent-bright: oklch(87% 0 0);
+  --accent-soft: oklch(26.9% 0 0);
+  --accent-foreground: oklch(20.5% 0 0);
 
-  --bg-app: #181818;
-  --bg-pill: #1a1a1a;
+  --accent-button: oklch(92.2% 0 0);
+  --accent-button-hover: oklch(85% 0 0);
+  --accent-button-border: oklch(92.2% 0 0);
+  --accent-button-foreground: oklch(20.5% 0 0);
 
-  --bg-inset: #0e0e0e;
-  --border-inset: #242424;
-
-  --bg-segment-track: #2c2c2c;
-  --bg-segment-active: #1a1a1a;
-
-  --bg-settings: #1a1a1a;
-
-  --bg-sidebar: #151515;
-  --bg-sidebar-deep: #111111;
-
-  --bg-elevated: #0f0f0f;
-
-  --bg-control: #252525;
-  --bg-control-alt: #242424;
-  --bg-control-hover: #303030;
-
-  --border-subtle: #2e2e2e;
-  --border-strong: #3a3a3a;
-  --border-panel: #262626;
-
-  --accent-button: #2f1c24;
-  --accent-button-hover: #3b232d;
-  --accent-button-border: #462a36;
-  --accent-button-foreground: #e8dde2;
-
-  --accent-soft: #2c2c2c;
-
-  --sidebar-gradient: linear-gradient(180deg, #191919 0%, #151515 45%, #111111 100%);
-  --root-gradient: none;
+  --accent-send: oklch(92.2% 0 0);
+  --accent-send-hover: oklch(85% 0 0);
 }
 
 .light.boring {
-  --bg-root: #f7f7f8;
-  --bg-root-alt: #f2f2f4;
+  --accent: oklch(20.5% 0 0);
+  --accent-bright: oklch(37.1% 0 0);
+  --accent-soft: oklch(94% 0 0);
+  --accent-foreground: oklch(98.5% 0 0);
 
-  --bg-app: #eeeef1;
-  --bg-pill: #f4f4f6;
+  --accent-button: oklch(20.5% 0 0);
+  --accent-button-hover: oklch(30% 0 0);
+  --accent-button-border: oklch(20.5% 0 0);
+  --accent-button-foreground: oklch(98.5% 0 0);
 
-  --bg-inset: #fbfbfc;
-  --border-inset: #e4e4e8;
-
-  --bg-segment-track: #e6e6ea;
-  --bg-segment-active: #fbfbfc;
-
-  --bg-settings: #f2f2f4;
-
-  --bg-sidebar: #ececef;
-  --bg-sidebar-deep: #e6e6ea;
-
-  --bg-elevated: #ffffff;
-
-  --bg-control: #ffffff;
-  --bg-control-alt: #f4f4f6;
-  --bg-control-hover: #ededf0;
-
-  --border-subtle: #e2e2e6;
-  --border-strong: #cfcfd6;
-  --border-panel: #dcdce1;
-
-  --accent-soft: #ebebee;
-  --accent-button-foreground: #ffffff;
-
-  --sidebar-gradient: linear-gradient(180deg, #f1f1f3 0%, #ececef 45%, #e6e6ea 100%);
-  --root-gradient: none;
+  --accent-send: oklch(20.5% 0 0);
+  --accent-send-hover: oklch(30% 0 0);
 }
 
 @theme inline {

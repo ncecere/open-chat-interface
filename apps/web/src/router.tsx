@@ -10,23 +10,31 @@ import { AppShell } from '~/components/layout/app-shell';
 import { SettingsLayout } from '~/components/settings/settings-layout';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
+import { AdminAuditPage } from '~/routes/admin/audit';
+import { AdminBrandingPage } from '~/routes/admin/branding';
+import { AdminInvitesPage } from '~/routes/admin/invites';
 import { AdminModelsPage } from '~/routes/admin/models';
 import { AdminOverviewPage } from '~/routes/admin/overview';
-import { AdminPlaceholderPage } from '~/routes/admin/placeholder';
 import { AdminProvidersPage } from '~/routes/admin/providers';
+import { AdminQuotasPage } from '~/routes/admin/quotas';
+import { AdminSearchPage } from '~/routes/admin/search';
+import { AdminSettingsPage } from '~/routes/admin/settings';
+import { AdminSsoPage } from '~/routes/admin/sso';
+import { AdminStoragePage } from '~/routes/admin/storage';
 import { AdminUsersPage } from '~/routes/admin/users';
+import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
+import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
+import { SignupPage } from '~/routes/auth/signup';
 import { ChatHomePage } from '~/routes/chat/home';
 import { ChatThreadPage } from '~/routes/chat/thread';
 import { SettingsAccountPage } from '~/routes/settings/account';
+import { SettingsAttachmentsPage } from '~/routes/settings/attachments';
 import { SettingsCustomizationPage } from '~/routes/settings/customization';
 import { SettingsHistoryPage } from '~/routes/settings/history';
 import { SettingsModelsPage } from '~/routes/settings/models';
-import {
-  SettingsAttachmentsPage,
-  SettingsContactPage,
-  SettingsShortcutsPage,
-} from '~/routes/settings/simple-tabs';
+import { SettingsContactPage, SettingsShortcutsPage } from '~/routes/settings/simple-tabs';
+import { PublicSharePage } from '~/routes/share/public-share';
 
 interface SessionSnapshot {
   user: { id: string; role: string };
@@ -46,6 +54,34 @@ const rootRoute = createRootRoute({
   component: Outlet,
 });
 
+const signupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/signup',
+  component: SignupPage,
+  beforeLoad: async () => {
+    const session = await loadSession();
+    if (session) throw redirect({ to: '/' });
+  },
+});
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/forgot-password',
+  component: ForgotPasswordPage,
+});
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/reset-password',
+  component: ResetPasswordPage,
+});
+
+const acceptInviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/accept-invite',
+  component: AcceptInvitePage,
+});
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth/login',
@@ -53,6 +89,15 @@ const loginRoute = createRoute({
   beforeLoad: async () => {
     const session = await loadSession();
     if (session) throw redirect({ to: '/' });
+  },
+});
+
+const publicShareRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/share/$slug',
+  component: function PublicShareRoute() {
+    const { slug } = publicShareRoute.useParams();
+    return <PublicSharePage slug={slug} />;
   },
 });
 
@@ -166,35 +211,61 @@ const adminModelsRoute = createRoute({
   component: AdminModelsPage,
 });
 
-const ADMIN_STUBS = [
-  { path: '/admin/settings', title: 'Settings', description: 'Instance-wide configuration.' },
-  { path: '/admin/branding', title: 'Branding', description: 'Name, logo, and accent color.' },
-  {
-    path: '/admin/invites',
-    title: 'Invitations',
-    description: 'Generate and revoke invite links.',
-  },
-  { path: '/admin/sso', title: 'Auth & SSO', description: 'Local auth, OIDC, and SAML providers.' },
-  { path: '/admin/quotas', title: 'Quotas & limits', description: 'Per-role usage limits.' },
-  { path: '/admin/search', title: 'Search', description: 'Web search grounding provider.' },
-  {
-    path: '/admin/storage',
-    title: 'Storage',
-    description: 'Attachment storage driver and limits.',
-  },
-  { path: '/admin/audit', title: 'Audit log', description: 'Administrative and security events.' },
-] as const;
+const adminSettingsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/settings',
+  component: AdminSettingsPage,
+});
 
-const adminStubRoutes = ADMIN_STUBS.map((stub) =>
-  createRoute({
-    getParentRoute: () => adminRoute,
-    path: stub.path,
-    component: () => <AdminPlaceholderPage title={stub.title} description={stub.description} />,
-  }),
-);
+const adminInvitesRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/invites',
+  component: AdminInvitesPage,
+});
+
+const adminBrandingRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/branding',
+  component: AdminBrandingPage,
+});
+
+const adminSsoRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/sso',
+  component: AdminSsoPage,
+});
+
+const adminQuotasRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/quotas',
+  component: AdminQuotasPage,
+});
+
+const adminSearchRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/search',
+  component: AdminSearchPage,
+});
+
+const adminStorageRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/storage',
+  component: AdminStoragePage,
+});
+
+const adminAuditRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/audit',
+  component: AdminAuditPage,
+});
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  signupRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
+  acceptInviteRoute,
+  publicShareRoute,
   authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute]),
   settingsRoute.addChildren(settingsTabRoutes),
   adminRoute.addChildren([
@@ -202,7 +273,14 @@ const routeTree = rootRoute.addChildren([
     adminUsersRoute,
     adminProvidersRoute,
     adminModelsRoute,
-    ...adminStubRoutes,
+    adminSettingsRoute,
+    adminInvitesRoute,
+    adminBrandingRoute,
+    adminSsoRoute,
+    adminQuotasRoute,
+    adminSearchRoute,
+    adminStorageRoute,
+    adminAuditRoute,
   ]),
 ]);
 

@@ -1,7 +1,10 @@
 import { type ReactNode, useState } from 'react';
+import { CommandPalette } from '~/components/command-palette/command-palette';
 import { Sidebar } from '~/components/layout/sidebar';
 import { TopBar } from '~/components/layout/top-bar';
 import { useAuthStatus } from '~/hooks/use-auth-status';
+import { useCommandPalette } from '~/hooks/use-command-palette';
+import { TemporaryChatProvider } from '~/providers/temporary-chat-provider';
 
 /**
  * Desktop shell: sidebar, a full-width top bar carrying the global controls,
@@ -9,23 +12,37 @@ import { useAuthStatus } from '~/hooks/use-auth-status';
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const commandPalette = useCommandPalette();
   const { data: status } = useAuthStatus();
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-[var(--bg-app)]">
-      <Sidebar
-        appName={status?.branding.appName}
-        open={sidebarOpen}
-        onToggle={() => setSidebarOpen(false)}
-      />
+    <TemporaryChatProvider>
+      <div className="flex h-dvh overflow-hidden bg-[var(--bg-app)]">
+        <Sidebar
+          appName={status?.branding.appName}
+          open={sidebarOpen}
+          onToggle={() => setSidebarOpen(false)}
+        />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar sidebarOpen={sidebarOpen} onOpenSidebar={() => setSidebarOpen(true)} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar
+            sidebarOpen={sidebarOpen}
+            onOpenSidebar={() => setSidebarOpen(true)}
+            onOpenCommandPalette={commandPalette.show}
+          />
 
-        <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
-          {children}
-        </main>
+          <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
+            {children}
+          </main>
+        </div>
+
+        <CommandPalette
+          open={commandPalette.open}
+          onOpenChange={commandPalette.setOpen}
+          sidebarOpen={sidebarOpen}
+          onSidebarOpenChange={setSidebarOpen}
+        />
       </div>
-    </div>
+    </TemporaryChatProvider>
   );
 }
