@@ -1,5 +1,3 @@
-import { code } from '@streamdown/code';
-import { createMathPlugin } from '@streamdown/math';
 import type { UIMessage } from 'ai';
 import {
   Brain,
@@ -15,17 +13,11 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Streamdown } from 'streamdown';
+import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
 import { cn } from '~/lib/utils';
-
-/**
- * Syntax highlighting and KaTeX are opt-in Streamdown plugins. Single-dollar
- * inline math is off by default, but models commonly emit it.
- */
-const PLUGINS = { code, math: createMathPlugin({ singleDollarTextMath: true }) };
 
 /** The responding model, sent as stream metadata and persisted per message. */
 function modelSlugOf(message: UIMessage): string | null {
@@ -212,8 +204,7 @@ function ReasoningPanel({ text, streaming }: { text: string; streaming: boolean 
       {open && (
         <>
           <div className="mt-4 rounded-lg bg-black/15 px-3 py-3 text-[0.9375rem] leading-7 text-[var(--text-secondary)]">
-            <Streamdown
-              plugins={PLUGINS}
+            <Markdown
               className={cn(
                 'prose-headings:font-semibold prose-headings:text-[var(--text-primary)]',
                 '[&_strong]:text-[var(--text-primary)]',
@@ -223,7 +214,7 @@ function ReasoningPanel({ text, streaming }: { text: string; streaming: boolean 
               )}
             >
               {text}
-            </Streamdown>
+            </Markdown>
           </div>
           <p className="mt-2 flex items-start gap-2 px-1 text-[0.6875rem] leading-4 text-[var(--text-muted)]">
             <Info className="mt-0.5 size-3 shrink-0" />
@@ -364,7 +355,7 @@ export function MessageList({
               ) : (
                 <>
                   <div className="max-w-[85%] rounded-2xl border border-[var(--border-user-message)] bg-[var(--bg-user-message)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)]">
-                    <Streamdown plugins={PLUGINS}>{text}</Streamdown>
+                    <Markdown>{text}</Markdown>
                     <AttachmentCards cards={attachmentsOf(message)} />
                   </div>
                   <MessageActions
@@ -392,20 +383,7 @@ export function MessageList({
             {reasoning && <ReasoningPanel text={reasoning} streaming={streaming && isLast} />}
 
             <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
-              <Streamdown
-                plugins={PLUGINS}
-                className={cn(
-                  'prose-headings:font-semibold prose-headings:text-[var(--text-primary)]',
-                  '[&_a]:text-[var(--accent-bright)] [&_a]:underline-offset-2',
-                  '[&_strong]:text-[var(--text-primary)]',
-                  '[&_code]:rounded [&_code]:bg-[var(--bg-control)] [&_code]:px-1 [&_code]:py-0.5',
-                  '[&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
-                  '[&_hr]:border-[var(--border-subtle)]',
-                  '[&_li::marker]:text-[var(--accent-bright)]',
-                )}
-              >
-                {text}
-              </Streamdown>
+              <Markdown className={MARKDOWN_PROSE}>{text}</Markdown>
             </div>
 
             {!(streaming && isLast) && (

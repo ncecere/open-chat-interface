@@ -1,15 +1,11 @@
-import { code } from '@streamdown/code';
-import { createMathPlugin } from '@streamdown/math';
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, Link2Off, LockKeyhole, MessageSquareText } from 'lucide-react';
-import { Streamdown } from 'streamdown';
 import { Wordmark } from '~/components/brand/wordmark';
+import { Markdown } from '~/components/chat/markdown';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
-
-const PLUGINS = { code, math: createMathPlugin({ singleDollarTextMath: true }) };
 
 interface PublicTextPart {
   type: 'text';
@@ -152,9 +148,9 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
     return (
       <article className="flex flex-col items-end" aria-label="User message">
         <div className="max-w-[90%] rounded-2xl border border-[var(--border-user-message)] bg-[var(--bg-user-message)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)] sm:max-w-[85%]">
-          <Streamdown plugins={PLUGINS} skipHtml urlTransform={publicMarkdownUrl}>
+          <Markdown skipHtml urlTransform={publicMarkdownUrl}>
             {text}
-          </Streamdown>
+          </Markdown>
         </div>
       </article>
     );
@@ -165,8 +161,7 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
       <Sources parts={message.parts} />
       {text && (
         <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
-          <Streamdown
-            plugins={PLUGINS}
+          <Markdown
             skipHtml
             urlTransform={publicMarkdownUrl}
             className={cn(
@@ -180,7 +175,7 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
             )}
           >
             {text}
-          </Streamdown>
+          </Markdown>
         </div>
       )}
     </article>
