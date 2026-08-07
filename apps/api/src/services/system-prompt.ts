@@ -6,7 +6,11 @@ import { getSetting } from './settings.js';
  * Composes the system prompt from the instance default plus the user's
  * customization settings.
  */
-export async function buildSystemPrompt(userId: string, userName: string): Promise<string> {
+export async function buildSystemPrompt(
+  userId: string,
+  userName: string,
+  selectedPersona?: typeof schema.persona.$inferSelect | null,
+): Promise<string> {
   const [chat, preference] = await Promise.all([
     getSetting('chat'),
     db
@@ -36,6 +40,17 @@ export async function buildSystemPrompt(userId: string, userName: string): Promi
 
   if (preference?.additionalContext?.trim()) {
     sections.push(preference.additionalContext.trim());
+  }
+
+  if (selectedPersona) {
+    const personaSections = [
+      selectedPersona.systemPrompt.trim(),
+      selectedPersona.traits.length ? `Persona traits: ${selectedPersona.traits.join(', ')}.` : '',
+    ].filter(Boolean);
+
+    if (personaSections.length > 0) {
+      sections.push(`Selected persona (${selectedPersona.name}):\n${personaSections.join('\n')}`);
+    }
   }
 
   if (sections.length === 0) {

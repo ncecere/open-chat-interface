@@ -1,11 +1,19 @@
 import { and, eq, schema } from '@oci/db';
-import { createThreadSchema, updateThreadSchema } from '@oci/shared';
+import { branchMessageSchema, createThreadSchema, updateThreadSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
+import { forbidden } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
-import { createThread, getOwnedThread, listMessages, listThreads } from '../services/threads.js';
+import { getSetting } from '../services/settings.js';
+import {
+  branchFromUserMessage,
+  createThread,
+  getOwnedThread,
+  listMessages,
+  listThreads,
+} from '../services/threads.js';
 
 export const threadRoutes = new Hono<AppBindings>();
 
@@ -25,6 +33,9 @@ function serializeThread(thread: typeof schema.thread.$inferSelect) {
     title: thread.title,
     pinned: thread.pinned,
     archived: thread.archived,
+    temporary: thread.temporary,
+    expiresAt: thread.expiresAt?.toISOString() ?? null,
+    personaId: thread.personaId,
     parentThreadId: thread.parentThreadId,
     branchedFromMessageId: thread.branchedFromMessageId,
     lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
@@ -43,8 +54,38 @@ threadRoutes.get('/', async (c) => {
 threadRoutes.post('/', async (c) => {
   const user = currentUser(c);
   const input = await parseBody(c, createThreadSchema);
-  const thread = await createThread(user.id, input.title);
+  const thread = await createThread({
+    userId: user.id,
+    organizationId: user.organizationId,
+    role: user.role,
+    title: input.title,
+    temporary: input.temporary,
+    personaId: input.personaId,
+  });
   return c.json({ thread: serializeThread(thread) }, 201);
+});
+
+threadRoutes.post('/:id/branches', async (c) => {
+  const user = currentUser(c);
+  await getOwnedThread(c.req.param('id'), user.id);
+
+  const features = await getSetting('features');
+  if (!features.branching) throw forbidden('Conversation branching is disabled');
+
+  const input = await parseBody(c, branchMessageSchema);
+  const result = await branchFromUserMessage(c.req.param('id'), user.id, input);
+
+  return c.json(
+    {
+      thread: serializeThread(result.thread),
+      message: {
+        id: result.message.id,
+        modelSlug: result.message.modelSlug,
+        effort: result.message.effort,
+      },
+    },
+    201,
+  );
 });
 
 threadRoutes.get('/:id', async (c) => {
@@ -61,6 +102,7 @@ threadRoutes.get('/:id', async (c) => {
       parts: message.parts,
       modelSlug: message.modelSlug,
       effort: message.effort,
+      parentMessageId: message.parentMessageId,
       status: message.status,
       errorMessage: message.errorMessage,
       tokensIn: message.tokensIn,

@@ -1,15 +1,46 @@
-import { and, asc, desc, eq, ilike, schema, sql } from '@oci/db';
+import { and, asc, desc, eq, ilike, lte, schema, sql } from '@oci/db';
+import type { BranchMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
-import { notFound } from '../lib/errors.js';
-import { getDefaultOrganizationId } from './organization.js';
+import { forbidden, notFound, validationFailed } from '../lib/errors.js';
+import { assertPersonasAllowed, getDefaultPersona, getOwnedPersona } from './personas.js';
+import { getSetting } from './settings.js';
+
+export const TEMPORARY_THREAD_TTL_MS = 24 * 60 * 60 * 1000;
+
+export async function assertTemporaryChatAllowed(role: UserRole): Promise<void> {
+  if (role === 'restricted') {
+    throw forbidden('Your role does not allow temporary chats');
+  }
+
+  const features = await getSetting('features');
+  if (!features.temporaryChat) {
+    throw validationFailed('Temporary chat is disabled on this instance');
+  }
+}
+
+/**
+ * PostgreSQL has no built-in row TTL. This bounded cleanup is run periodically
+ * by the API process and opportunistically by thread endpoints.
+ */
+export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<number> {
+  const expired = await db
+    .delete(schema.thread)
+    .where(and(eq(schema.thread.temporary, true), lte(schema.thread.expiresAt, now)))
+    .returning({ id: schema.thread.id });
+
+  return expired.length;
+}
 
 export async function listThreads(
   userId: string,
   options?: { search?: string; archived?: boolean },
 ) {
+  await purgeExpiredTemporaryThreads();
+
   const conditions = [
     eq(schema.thread.userId, userId),
     eq(schema.thread.archived, options?.archived ?? false),
+    eq(schema.thread.temporary, false),
   ];
 
   if (options?.search) {
@@ -24,12 +55,40 @@ export async function listThreads(
     .limit(200);
 }
 
-export async function createThread(userId: string, title?: string) {
-  const organizationId = await getDefaultOrganizationId();
+export async function createThread(options: {
+  userId: string;
+  organizationId: string;
+  role: UserRole;
+  title?: string;
+  temporary?: boolean;
+  personaId?: string | null;
+}) {
+  if (options.temporary) await assertTemporaryChatAllowed(options.role);
+
+  let selectedPersonaId: string | null = null;
+  if (options.personaId) {
+    await assertPersonasAllowed(options.role);
+    selectedPersonaId = (
+      await getOwnedPersona(options.personaId, options.userId, options.organizationId)
+    ).id;
+  } else if (options.personaId === undefined && options.role !== 'restricted') {
+    const features = await getSetting('features');
+    if (features.personas) {
+      selectedPersonaId =
+        (await getDefaultPersona(options.userId, options.organizationId))?.id ?? null;
+    }
+  }
 
   const [thread] = await db
     .insert(schema.thread)
-    .values({ organizationId, userId, title: title?.trim() || 'New Chat' })
+    .values({
+      organizationId: options.organizationId,
+      userId: options.userId,
+      title: options.title?.trim() || 'New Chat',
+      personaId: selectedPersonaId,
+      temporary: options.temporary ?? false,
+      expiresAt: options.temporary ? new Date(Date.now() + TEMPORARY_THREAD_TTL_MS) : null,
+    })
     .returning();
 
   if (!thread) throw new Error('Failed to create thread');
@@ -44,7 +103,105 @@ export async function getOwnedThread(threadId: string, userId: string) {
     .limit(1);
 
   if (!thread) throw notFound('Thread not found');
+
+  if (thread.temporary && (!thread.expiresAt || thread.expiresAt.getTime() <= Date.now())) {
+    await db.delete(schema.thread).where(eq(schema.thread.id, thread.id));
+    throw notFound('Temporary chat has expired');
+  }
+
   return thread;
+}
+
+/**
+ * Creates an immutable edit branch from a user turn. History is copied only
+ * from server-owned rows; the replacement is a single validated text part.
+ */
+export async function branchFromUserMessage(
+  threadId: string,
+  userId: string,
+  input: BranchMessageInput,
+) {
+  return db.transaction(async (tx) => {
+    const [sourceThread] = await tx
+      .select()
+      .from(schema.thread)
+      .where(and(eq(schema.thread.id, threadId), eq(schema.thread.userId, userId)))
+      .limit(1);
+
+    if (!sourceThread) throw notFound('Thread not found');
+
+    const sourceMessages = await tx
+      .select()
+      .from(schema.message)
+      .where(eq(schema.message.threadId, sourceThread.id))
+      .orderBy(asc(schema.message.position));
+    const selectedIndex = sourceMessages.findIndex((message) => message.id === input.messageId);
+    const selected = sourceMessages[selectedIndex];
+
+    if (!selected) throw notFound('Message not found');
+    if (selected.role !== 'user') {
+      throw validationFailed('Only user messages can be edited');
+    }
+
+    const [branch] = await tx
+      .insert(schema.thread)
+      .values({
+        organizationId: sourceThread.organizationId,
+        userId,
+        title: selectedIndex === 0 ? deriveTitle(input.text) : sourceThread.title,
+        parentThreadId: sourceThread.id,
+        branchedFromMessageId: selected.id,
+        personaId: sourceThread.personaId,
+        temporary: sourceThread.temporary,
+        expiresAt: sourceThread.expiresAt,
+        lastMessageAt: new Date(),
+      })
+      .returning();
+
+    if (!branch) throw new Error('Failed to create branch');
+
+    const priorMessages = sourceMessages.slice(0, selectedIndex);
+    if (priorMessages.length > 0) {
+      await tx.insert(schema.message).values(
+        priorMessages.map((message) => ({
+          threadId: branch.id,
+          userId,
+          role: message.role,
+          parts: message.parts,
+          position: message.position,
+          parentMessageId: message.id,
+          modelSlug: message.modelSlug,
+          effort: message.effort,
+          webSearchUsed: message.webSearchUsed,
+          status: message.status,
+          errorMessage: message.errorMessage,
+          tokensIn: message.tokensIn,
+          tokensOut: message.tokensOut,
+          durationMs: message.durationMs,
+          createdAt: message.createdAt,
+          updatedAt: message.updatedAt,
+        })),
+      );
+    }
+
+    const [replacement] = await tx
+      .insert(schema.message)
+      .values({
+        threadId: branch.id,
+        userId,
+        role: 'user',
+        parts: [{ type: 'text', text: input.text }],
+        position: selected.position,
+        parentMessageId: selected.id,
+        modelSlug: selected.modelSlug,
+        effort: selected.effort,
+        status: 'complete',
+      })
+      .returning();
+
+    if (!replacement) throw new Error('Failed to create edited message');
+    return { thread: branch, message: replacement };
+  });
 }
 
 export async function listMessages(threadId: string) {
