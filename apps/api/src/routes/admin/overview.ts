@@ -3,6 +3,7 @@ import type { AdminOverview } from '@oci/shared';
 import { Hono } from 'hono';
 import { db, sql as sqlClient } from '../../db/index.js';
 import type { AppBindings } from '../../middleware/context.js';
+import { chatStreamRedisStatus } from '../../services/chat-streams.js';
 
 export const overviewRoutes = new Hono<AppBindings>();
 
@@ -69,7 +70,7 @@ overviewRoutes.get('/', async (c) => {
       fileCount: storageTotals[0]?.files ?? 0,
       totalBytes: Number(storageTotals[0]?.bytes ?? 0),
     },
-    system: { version: APP_VERSION, database, redis: 'disabled' },
+    system: { version: APP_VERSION, database, redis: await chatStreamRedisStatus() },
   };
 
   return c.json(payload);

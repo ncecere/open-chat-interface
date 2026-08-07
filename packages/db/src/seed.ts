@@ -4,7 +4,7 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from '@oci/shared';
 import { eq } from 'drizzle-orm';
-import { createDatabase } from './client.js';
+import { createDatabase, type Database } from './client.js';
 import { instanceSetting, organization } from './schema/index.js';
 
 export const DEFAULT_ORGANIZATION_SLUG = 'default';
@@ -67,14 +67,12 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
   },
 };
 
-async function main() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is required to seed');
-  }
-
-  const { db, sql } = createDatabase(connectionString, { max: 1 });
-
+/**
+ * Creates the default organization and instance settings. Idempotent, so it is
+ * safe to run on every boot: a fresh deployment needs it, and an existing one
+ * is left untouched.
+ */
+export async function seedDatabase(db: Database): Promise<void> {
   const [existingOrg] = await db
     .select()
     .from(organization)
@@ -94,24 +92,34 @@ async function main() {
     throw new Error('Failed to create default organization');
   }
 
-  console.log(`Organization ready: ${org.id}`);
-
   for (const [key, value] of Object.entries(defaultSettings)) {
     await db
       .insert(instanceSetting)
       .values({ organizationId: org.id, key, value })
       .onConflictDoNothing({ target: [instanceSetting.organizationId, instanceSetting.key] });
   }
-  console.log(`Seeded ${Object.keys(defaultSettings).length} setting groups.`);
 
   // Quota policies are created by administrators; none are seeded so a fresh
   // instance is unlimited until an operator opts in.
+}
 
+/** CLI entry point for `pnpm db:seed`. */
+async function main() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is required to seed');
+  }
+
+  const { db, sql } = createDatabase(connectionString, { max: 1 });
+  await seedDatabase(db);
   await sql.end();
   console.log('Seed complete.');
 }
 
-main().catch((error) => {
-  console.error('Seed failed:', error);
-  process.exit(1);
-});
+// Only run when invoked directly, not when imported by the server.
+if (process.argv[1]?.includes('seed')) {
+  main().catch((error) => {
+    console.error('Seed failed:', error);
+    process.exit(1);
+  });
+}

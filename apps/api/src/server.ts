@@ -1,13 +1,25 @@
 import { serve } from '@hono/node-server';
+import { runMigrations, seedDatabase } from '@oci/db';
 import { createApp } from './app.js';
 import { ensureInitialAdmin } from './bootstrap.js';
 import { loadEnv } from './config/env.js';
+import { db } from './db/index.js';
 import { logger } from './lib/logger.js';
 import { sweepAbandonedReservations } from './services/quota/index.js';
 import { purgeExpiredTemporaryThreads } from './services/threads.js';
 
 async function main() {
   const env = loadEnv();
+
+  /**
+   * A container deployment has no separate migration step, so a fresh stack
+   * would otherwise start against an empty database and crash-loop on the
+   * first query. Both operations are idempotent, so an existing deployment
+   * simply passes through.
+   */
+  logger.info('Applying database migrations');
+  await runMigrations(db);
+  await seedDatabase(db);
 
   await ensureInitialAdmin();
   await purgeExpiredTemporaryThreads();

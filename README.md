@@ -68,6 +68,18 @@ Optional profiles: `--profile s3` (MinIO), `--profile search` (SearXNG).
 Required environment: `POSTGRES_PASSWORD`, `AUTH_SECRET`, `ENCRYPTION_KEY`,
 `APP_URL`. Generate secrets with `openssl rand -base64 48`.
 
+The API applies migrations and seeds default settings on boot, so a fresh stack
+comes up without a separate migration step. Both operations are idempotent and
+an existing deployment passes straight through.
+
+Set `INITIAL_ADMIN_EMAIL` to create the first administrator. Leaving
+`INITIAL_ADMIN_PASSWORD` unset prints a one-time password to the API logs
+instead of baking a credential into the environment.
+
+Once running, sign in and add a provider under **Admin → Providers & Keys**,
+then curate models in **Admin → Model catalog**. No model is available to users
+until an administrator enables one.
+
 Self-hosted OIDC/SAML identity providers on private networks must be listed in
 `AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
 

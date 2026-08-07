@@ -239,6 +239,17 @@ async function withStore<T>(operation: (store: ChatStreamStore) => Promise<T>): 
 
 const localRuns = new Map<string, { identity: ChatRunIdentity; abort: AbortController }>();
 
+/**
+ * Reports whether resumable streams are actually working, reusing the shared
+ * connection rather than opening a second one. `disabled` means no REDIS_URL is
+ * configured; `error` means one is configured but unreachable, which is worth
+ * surfacing because streams silently fall back to non-resumable.
+ */
+export async function chatStreamRedisStatus(): Promise<'ok' | 'error' | 'disabled'> {
+  if (!loadEnv().REDIS_URL) return 'disabled';
+  return (await runtimeChatStreamStore()) ? 'ok' : 'error';
+}
+
 export async function beginChatRun(identity: ChatRunIdentity): Promise<BeginChatRunResult> {
   const result = await withStore((store) => store.begin(identity));
   return result ?? 'unavailable';
