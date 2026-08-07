@@ -7,7 +7,7 @@ import { Composer } from '~/components/chat/composer';
 import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { useChatSession } from '~/hooks/use-chat-session';
-import { useBranchMessage } from '~/hooks/use-threads';
+import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { api } from '~/lib/api-client';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -104,6 +104,7 @@ function ThreadConversation({
   });
   const navigate = useNavigate();
   const branchMessage = useBranchMessage();
+  const forkMessage = useForkMessage();
   const bottomRef = useRef<HTMLDivElement>(null);
   const sentPending = useRef(false);
   const continuedBranch = useRef(false);
@@ -144,6 +145,11 @@ function ThreadConversation({
     void session.regenerate({ messageId: pendingBranch.messageId });
   }, [pendingBranch, pendingModelAvailable, session.regenerate, session.selectedModel]);
 
+  async function forkAtMessage(messageId: string) {
+    const result = await forkMessage.mutateAsync({ threadId, messageId });
+    await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
+  }
+
   async function editAndBranch(messageId: string, text: string) {
     const result = await branchMessage.mutateAsync({ threadId, messageId, text });
     const modelSlug = result.message.modelSlug ?? session.selectedModel?.slug ?? null;
@@ -175,6 +181,7 @@ function ThreadConversation({
           streaming={session.streaming}
           searching={session.webSearch}
           onRetry={() => session.regenerate()}
+          onFork={session.features?.branching ? forkAtMessage : undefined}
           onEdit={session.features?.branching ? editAndBranch : undefined}
         />
 

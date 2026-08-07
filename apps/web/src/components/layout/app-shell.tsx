@@ -1,4 +1,5 @@
-import { type ReactNode, useState } from 'react';
+import { useRouterState } from '@tanstack/react-router';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { CommandPalette } from '~/components/command-palette/command-palette';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
@@ -12,9 +13,51 @@ import { TemporaryChatProvider } from '~/providers/temporary-chat-provider';
  * and an inset rounded main panel below it.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobile, setMobile] = useState(() => !window.matchMedia('(min-width: 768px)').matches);
+  const [sidebarOpen, setSidebarOpen] = useState(() => !mobile);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const previousPathname = useRef(pathname);
   const commandPalette = useCommandPalette();
   const { data: status } = useAuthStatus();
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 768px)');
+    const onChange = (event: MediaQueryListEvent) => {
+      setMobile(!event.matches);
+      setSidebarOpen(event.matches);
+    };
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  // The mobile drawer closes after any successful navigation.
+  useEffect(() => {
+    const navigated = previousPathname.current !== pathname;
+    previousPathname.current = pathname;
+    if (mobile && navigated) setSidebarOpen(false);
+  }, [mobile, pathname]);
+
+  useEffect(() => {
+    if (!mobile || !sidebarOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setSidebarOpen(false);
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('[aria-label="Open sidebar"]')?.focus();
+      });
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobile, sidebarOpen]);
+
+  function closeSidebar() {
+    setSidebarOpen(false);
+    if (mobile) {
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('[aria-label="Open sidebar"]')?.focus();
+      });
+    }
+  }
 
   return (
     <TemporaryChatProvider>
@@ -23,10 +66,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar
           appName={status?.branding.appName}
           open={sidebarOpen}
-          onToggle={() => setSidebarOpen(false)}
+          mobile={mobile}
+          onToggle={closeSidebar}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div
+          className="flex min-w-0 flex-1 flex-col"
+          inert={mobile && sidebarOpen ? true : undefined}
+        >
           <TopBar
             sidebarOpen={sidebarOpen}
             onOpenSidebar={() => setSidebarOpen(true)}

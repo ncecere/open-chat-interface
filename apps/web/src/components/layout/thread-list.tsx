@@ -1,28 +1,29 @@
 import type { ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
-import { Archive, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, GitFork, Pin, PinOff } from 'lucide-react';
+import { useState } from 'react';
 import { Spinner } from '~/components/ui/spinner';
-import { useDeleteThread, useThreads, useUpdateThread } from '~/hooks/use-threads';
+import { useThreads, useUpdateThread } from '~/hooks/use-threads';
 import { cn } from '~/lib/utils';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Groups threads the way the reference sidebar does. */
+/** Groups by local calendar date, matching the reference's Today/Yesterday buckets. */
 function groupThreads(threads: ThreadSummary[]) {
-  const now = Date.now();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
   const groups: { label: string; threads: ThreadSummary[] }[] = [
     { label: 'Pinned', threads: [] },
     { label: 'Today', threads: [] },
-    { label: 'Last 7 days', threads: [] },
+    { label: 'Yesterday', threads: [] },
     { label: 'Older', threads: [] },
   ];
 
   for (const thread of threads) {
-    const age = now - new Date(thread.lastMessageAt ?? thread.updatedAt).getTime();
-
+    const activity = new Date(thread.lastMessageAt ?? thread.updatedAt);
     if (thread.pinned) groups[0]?.threads.push(thread);
-    else if (age < DAY_MS) groups[1]?.threads.push(thread);
-    else if (age < 7 * DAY_MS) groups[2]?.threads.push(thread);
+    else if (activity >= today) groups[1]?.threads.push(thread);
+    else if (activity >= yesterday) groups[2]?.threads.push(thread);
     else groups[3]?.threads.push(thread);
   }
 
@@ -31,7 +32,6 @@ function groupThreads(threads: ThreadSummary[]) {
 
 function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean }) {
   const update = useUpdateThread();
-  const remove = useDeleteThread();
 
   return (
     <div
@@ -40,6 +40,17 @@ function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean 
         active ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--bg-control)]',
       )}
     >
+      {thread.parentThreadId && (
+        <Link
+          to="/chat/$threadId"
+          params={{ threadId: thread.parentThreadId }}
+          aria-label="Go to parent thread"
+          title="Go to parent thread"
+          className="ml-2 rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+        >
+          <GitFork className="size-3.5" aria-hidden="true" />
+        </Link>
+      )}
       <Link
         to="/chat/$threadId"
         params={{ threadId: thread.id }}
@@ -74,14 +85,6 @@ function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean 
         >
           <Archive className="size-3.5" />
         </button>
-        <button
-          type="button"
-          aria-label="Delete thread"
-          onClick={() => remove.mutate(thread.id)}
-          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--danger-foreground)]"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
       </div>
     </div>
   );
@@ -90,6 +93,7 @@ function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean 
 export function ThreadList({ search }: { search: string }) {
   const { data: threads, isLoading } = useThreads(search || undefined);
   const params = useParams({ strict: false }) as { threadId?: string };
+  const [pinnedOpen, setPinnedOpen] = useState(true);
 
   if (isLoading) {
     return (
@@ -109,18 +113,48 @@ export function ThreadList({ search }: { search: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {groupThreads(threads).map((group) => (
-        <div key={group.label}>
-          <p className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]">
-            {group.label}
-          </p>
-          <div className="flex flex-col gap-0.5">
-            {group.threads.map((thread) => (
-              <ThreadRow key={thread.id} thread={thread} active={params.threadId === thread.id} />
-            ))}
+      {groupThreads(threads).map((group) => {
+        const isPinned = group.label === 'Pinned';
+        const visible = !isPinned || pinnedOpen;
+
+        return (
+          <div key={group.label}>
+            {isPinned ? (
+              <button
+                type="button"
+                aria-expanded={pinnedOpen}
+                aria-controls="pinned-thread-list"
+                onClick={() => setPinnedOpen((open) => !open)}
+                className="flex w-full items-center gap-1 rounded px-2.5 pb-1 text-left text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
+              >
+                <ChevronDown
+                  className={cn('size-3 transition-transform', !pinnedOpen && '-rotate-90')}
+                  aria-hidden="true"
+                />
+                Pinned
+              </button>
+            ) : (
+              <p className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]">
+                {group.label}
+              </p>
+            )}
+            {visible && (
+              <div
+                id={isPinned ? 'pinned-thread-list' : undefined}
+                className="flex flex-col gap-0.5"
+              >
+                {group.threads.map((thread) => (
+                  <ThreadRow
+                    key={thread.id}
+                    thread={thread}
+                    active={params.threadId === thread.id}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

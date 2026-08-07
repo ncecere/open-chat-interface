@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, ilike, lte, schema, sql } from '@oci/db';
-import type { BranchMessageInput, UserRole } from '@oci/shared';
+import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
 import { getSetting } from './settings.js';
@@ -93,6 +93,73 @@ export async function getOwnedThread(threadId: string, userId: string) {
   }
 
   return thread;
+}
+
+/**
+ * Forks an owned conversation through one selected user or assistant message.
+ * The source remains immutable; copied rows retain their source IDs as lineage
+ * metadata while receiving new primary keys in the child thread.
+ */
+export async function forkFromMessage(threadId: string, userId: string, input: ForkMessageInput) {
+  return db.transaction(async (tx) => {
+    const [sourceThread] = await tx
+      .select()
+      .from(schema.thread)
+      .where(and(eq(schema.thread.id, threadId), eq(schema.thread.userId, userId)))
+      .limit(1);
+    if (!sourceThread) throw notFound('Thread not found');
+
+    const sourceMessages = await tx
+      .select()
+      .from(schema.message)
+      .where(eq(schema.message.threadId, sourceThread.id))
+      .orderBy(asc(schema.message.position));
+    const selectedIndex = sourceMessages.findIndex((message) => message.id === input.messageId);
+    const selected = sourceMessages[selectedIndex];
+    if (!selected) throw notFound('Message not found');
+    if (selected.status === 'streaming') {
+      throw validationFailed('A response cannot be forked while it is still streaming');
+    }
+
+    const [fork] = await tx
+      .insert(schema.thread)
+      .values({
+        organizationId: sourceThread.organizationId,
+        userId,
+        title: sourceThread.title,
+        parentThreadId: sourceThread.id,
+        branchedFromMessageId: selected.id,
+        temporary: sourceThread.temporary,
+        expiresAt: sourceThread.expiresAt,
+        lastMessageAt: new Date(),
+      })
+      .returning();
+    if (!fork) throw new Error('Failed to create fork');
+
+    const copiedMessages = sourceMessages.slice(0, selectedIndex + 1);
+    await tx.insert(schema.message).values(
+      copiedMessages.map((message) => ({
+        threadId: fork.id,
+        userId,
+        role: message.role,
+        parts: message.parts,
+        position: message.position,
+        parentMessageId: message.id,
+        modelSlug: message.modelSlug,
+        effort: message.effort,
+        webSearchUsed: message.webSearchUsed,
+        status: message.status,
+        errorMessage: message.errorMessage,
+        tokensIn: message.tokensIn,
+        tokensOut: message.tokensOut,
+        durationMs: message.durationMs,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+      })),
+    );
+
+    return fork;
+  });
 }
 
 /**

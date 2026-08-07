@@ -66,6 +66,8 @@ export const updateThreadSchema = z.object({
   archived: z.boolean().optional(),
 });
 
+export const forkMessageSchema = z.object({ messageId: z.string().min(1).max(200) }).strict();
+
 /** Editing a historical turn always creates a branch; no history is rewritten. */
 export const branchMessageSchema = z
   .object({
@@ -107,6 +109,7 @@ export const sendMessageSchema = z
   .strict();
 
 export type ThreadSummary = z.infer<typeof threadSummarySchema>;
+export type ForkMessageInput = z.infer<typeof forkMessageSchema>;
 export type BranchMessageInput = z.infer<typeof branchMessageSchema>;
 export type ChatMessage = z.infer<typeof messageSchema>;
 export type SearchGroundingData = z.infer<typeof searchGroundingDataSchema>;

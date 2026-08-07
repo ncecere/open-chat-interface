@@ -1,5 +1,10 @@
 import { and, eq, schema } from '@oci/db';
-import { branchMessageSchema, createThreadSchema, updateThreadSchema } from '@oci/shared';
+import {
+  branchMessageSchema,
+  createThreadSchema,
+  forkMessageSchema,
+  updateThreadSchema,
+} from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
@@ -10,6 +15,7 @@ import { getSetting } from '../services/settings.js';
 import {
   branchFromUserMessage,
   createThread,
+  forkFromMessage,
   getOwnedThread,
   listMessages,
   listThreads,
@@ -61,6 +67,18 @@ threadRoutes.post('/', async (c) => {
     temporary: input.temporary,
   });
   return c.json({ thread: serializeThread(thread) }, 201);
+});
+
+threadRoutes.post('/:id/forks', async (c) => {
+  const user = currentUser(c);
+  await getOwnedThread(c.req.param('id'), user.id);
+
+  const features = await getSetting('features');
+  if (!features.branching) throw forbidden('Conversation branching is disabled');
+
+  const input = await parseBody(c, forkMessageSchema);
+  const fork = await forkFromMessage(c.req.param('id'), user.id, input);
+  return c.json({ thread: serializeThread(fork) }, 201);
 });
 
 threadRoutes.post('/:id/branches', async (c) => {
@@ -127,9 +145,18 @@ threadRoutes.patch('/:id', async (c) => {
 
 threadRoutes.delete('/:id', async (c) => {
   const user = currentUser(c);
-  await db
-    .delete(schema.thread)
-    .where(and(eq(schema.thread.id, c.req.param('id')), eq(schema.thread.userId, user.id)));
+  const threadId = c.req.param('id');
+  await db.transaction(async (tx) => {
+    // Children remain valid conversations after their parent is removed; only
+    // clear the now-stale navigation link.
+    await tx
+      .update(schema.thread)
+      .set({ parentThreadId: null })
+      .where(and(eq(schema.thread.parentThreadId, threadId), eq(schema.thread.userId, user.id)));
+    await tx
+      .delete(schema.thread)
+      .where(and(eq(schema.thread.id, threadId), eq(schema.thread.userId, user.id)));
+  });
 
   return c.json({ ok: true });
 });

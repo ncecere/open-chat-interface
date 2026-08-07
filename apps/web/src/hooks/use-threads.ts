@@ -34,6 +34,16 @@ export interface BranchMessageResult {
   };
 }
 
+export function useForkMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ threadId, messageId }: { threadId: string; messageId: string }) =>
+      api.post<{ thread: ThreadSummary }>(`/threads/${threadId}/forks`, { messageId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
+  });
+}
+
 export function useBranchMessage() {
   const queryClient = useQueryClient();
 

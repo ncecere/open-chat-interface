@@ -79,23 +79,33 @@ export function ChatHomePage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Landing content sits in the upper-middle region, not vertically centered. */}
-      <div className="flex-1 overflow-y-auto px-4 pt-[18vh]">
+    <div className="flex h-full flex-col justify-center md:justify-normal">
+      {/* Desktop uses the upper-middle region; mobile centers the compact prompt. */}
+      <div className="flex-none px-4 md:flex-1 md:overflow-y-auto md:pt-[18vh]">
         <div className="mx-auto w-full max-w-[41.75rem]">
-          <h1 className="flex items-center gap-3 text-[1.875rem] font-bold leading-tight tracking-tight">
+          <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-left md:text-[1.875rem]">
             {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}
-            {temporary
-              ? 'Temporary chat'
-              : `How can I help you${firstName ? `, ${firstName}` : ''}?`}
+            {temporary ? (
+              'Temporary chat'
+            ) : (
+              <>
+                How can I help you{firstName ? ',' : '?'}
+                {firstName && (
+                  <>
+                    <span className="block md:hidden">{firstName}?</span>
+                    <span className="hidden md:inline"> {firstName}?</span>
+                  </>
+                )}
+              </>
+            )}
           </h1>
           {temporary && (
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
+            <p className="mt-2 text-center text-sm text-[var(--text-muted)] md:text-left">
               This conversation stays out of history and expires automatically after 24 hours.
             </p>
           )}
 
-          <div className="mt-7 flex flex-wrap gap-2.5">
+          <div className="mt-7 hidden flex-wrap gap-2.5 md:flex">
             {SUGGESTION_CATEGORIES.map((category) => {
               const active = activeCategory === category.id;
               return (
@@ -118,7 +128,7 @@ export function ChatHomePage() {
             })}
           </div>
 
-          <div className="mt-9">
+          <div className="mt-9 hidden md:block">
             {prompts.map((prompt, index) => (
               <button
                 key={prompt}

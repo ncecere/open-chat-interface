@@ -5,6 +5,8 @@ import {
   ChevronDown,
   Copy,
   FileText,
+  GitFork,
+  Globe2,
   Info,
   Pencil,
   RefreshCw,
@@ -18,32 +20,36 @@ import {
   SearchSourcesPanel,
   searchGroundingOf,
 } from '~/components/chat/search-grounding';
-import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
 import { cn } from '~/lib/utils';
 
-/** The responding model, sent as stream metadata and persisted per message. */
-function modelSlugOf(message: UIMessage): string | null {
-  const metadata = message.metadata as { modelSlug?: unknown } | undefined;
-  return typeof metadata?.modelSlug === 'string' ? metadata.modelSlug : null;
+/** The responding model and effort, sent as stream metadata and persisted per message. */
+function metadataOf(message: UIMessage): {
+  modelSlug: string | null;
+  effort: string | null;
+  status: string | null;
+} {
+  const metadata = message.metadata as
+    | { modelSlug?: unknown; effort?: unknown; status?: unknown }
+    | undefined;
+  return {
+    modelSlug: typeof metadata?.modelSlug === 'string' ? metadata.modelSlug : null,
+    effort: typeof metadata?.effort === 'string' ? metadata.effort : null,
+    status: typeof metadata?.status === 'string' ? metadata.status : null,
+  };
 }
 
-/**
- * Attributes a reply to the model that produced it. Threads can switch models
- * partway through, so without this every response looks identical.
- */
-function ModelAttribution({ slug }: { slug: string | null }) {
+function ModelAttribution({ slug, effort }: { slug: string | null; effort: string | null }) {
   const { data: models } = useModels();
   if (!slug) return null;
-
   const model = models?.find((entry) => entry.slug === slug);
 
   return (
-    <div className="mb-1.5 flex items-center gap-1.5 text-[0.6875rem] text-[var(--text-muted)]">
-      <LabLogo labId={model?.labId} className="size-3.5" />
-      <span className="truncate">{model?.displayName ?? slug}</span>
-    </div>
+    <span className="ml-1 inline-flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-[var(--text-muted)]">
+      <span className="max-w-52 truncate">{model?.displayName ?? slug}</span>
+      {effort && <span className="capitalize">({effort})</span>}
+    </span>
   );
 }
 
@@ -164,15 +170,23 @@ function MessageActions({
   text,
   onRetry,
   onEdit,
+  onFork,
+  modelSlug,
+  effort,
+  searched,
 }: {
   text: string;
   onRetry?: () => void;
   onEdit?: () => void;
+  onFork?: () => Promise<void>;
+  modelSlug?: string | null;
+  effort?: string | null;
+  searched?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
   return (
-    <div className="mt-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+    <div className="mt-2 flex min-h-8 flex-wrap items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
       <Button
         variant="ghost"
         size="icon-sm"
@@ -186,6 +200,17 @@ function MessageActions({
         {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
       </Button>
 
+      {onFork && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Fork conversation here"
+          onClick={() => void onFork()}
+        >
+          <GitFork />
+        </Button>
+      )}
+
       {onEdit && (
         <Button variant="ghost" size="icon-sm" aria-label="Edit message" onClick={onEdit}>
           <Pencil />
@@ -197,6 +222,11 @@ function MessageActions({
           <RefreshCw />
         </Button>
       )}
+
+      <ModelAttribution slug={modelSlug ?? null} effort={effort ?? null} />
+      {searched && (
+        <Globe2 className="ml-0.5 size-3.5 text-[var(--text-muted)]" aria-label="Web search used" />
+      )}
     </div>
   );
 }
@@ -206,6 +236,7 @@ export function MessageList({
   streaming,
   onRetry,
   onEdit,
+  onFork,
   searching = false,
 }: {
   messages: UIMessage[];
@@ -213,6 +244,7 @@ export function MessageList({
   onRetry: () => void;
   searching?: boolean;
   onEdit?: (messageId: string, text: string) => Promise<void>;
+  onFork?: (messageId: string) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
@@ -240,18 +272,23 @@ export function MessageList({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[42rem] flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-8">
       {messages.map((message, index) => {
         const text = textOf(message);
         const reasoning = reasoningOf(message);
         const grounding = searchGroundingOf(message);
+        const metadata = metadataOf(message);
         const isLast = index === messages.length - 1;
 
         if (message.role === 'user') {
           const editing = editingId === message.id;
 
           return (
-            <div key={message.id} className="group flex flex-col items-end">
+            <article
+              key={message.id}
+              className="group flex flex-col items-end"
+              aria-label="Your message"
+            >
               {editing ? (
                 <div className="w-full max-w-[85%] rounded-2xl border border-[var(--accent)]/60 bg-[var(--bg-user-message)] p-3">
                   <textarea
@@ -293,6 +330,7 @@ export function MessageList({
                   </div>
                   <MessageActions
                     text={text}
+                    onFork={onFork && !streaming ? () => onFork(message.id) : undefined}
                     onEdit={
                       onEdit && !streaming
                         ? () => {
@@ -305,13 +343,12 @@ export function MessageList({
                   />
                 </>
               )}
-            </div>
+            </article>
           );
         }
 
         return (
-          <div key={message.id} className="group flex flex-col">
-            <ModelAttribution slug={modelSlugOf(message)} />
+          <article key={message.id} className="group flex flex-col" aria-label="Assistant message">
             {grounding && <SearchSourcesPanel grounding={grounding} />}
             {reasoning && <ReasoningPanel text={reasoning} streaming={streaming && isLast} />}
 
@@ -322,9 +359,18 @@ export function MessageList({
             {grounding && <SearchGroundingDetails grounding={grounding} />}
 
             {!(streaming && isLast) && (
-              <MessageActions text={text} onRetry={isLast ? onRetry : undefined} />
+              <MessageActions
+                text={text}
+                onFork={
+                  onFork && metadata.status !== 'streaming' ? () => onFork(message.id) : undefined
+                }
+                onRetry={isLast ? onRetry : undefined}
+                modelSlug={metadata.modelSlug}
+                effort={metadata.effort}
+                searched={Boolean(grounding)}
+              />
             )}
-          </div>
+          </article>
         );
       })}
 

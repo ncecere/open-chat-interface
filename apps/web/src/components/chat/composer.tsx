@@ -1,5 +1,15 @@
 import { type CatalogModel, effectiveSupportedEfforts, type ReasoningEffort } from '@oci/shared';
-import { ArrowUp, Globe, Paperclip, Square, Zap } from 'lucide-react';
+import {
+  ArrowUp,
+  Brain,
+  Check,
+  ChevronRight,
+  Globe,
+  Paperclip,
+  Plus,
+  Square,
+  Zap,
+} from 'lucide-react';
 import {
   type ChangeEvent,
   type ComponentPropsWithoutRef,
@@ -14,6 +24,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
 import type { PendingAttachment } from '~/hooks/use-attachments';
@@ -135,8 +148,8 @@ export function Composer({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[47rem] px-3">
-      <div className="rounded-t-[1.25rem] border border-b-0 border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent-bright)]">
+    <div className="mx-auto w-full max-w-[47rem] px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-3 md:pb-0">
+      <div className="rounded-[1.25rem] border border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent-bright)] md:rounded-b-none md:border-b-0">
         <AttachmentChips items={attachments} onRemove={(id) => onRemoveAttachment?.(id)} />
 
         <textarea
@@ -155,27 +168,76 @@ export function Composer({
         />
 
         <div className="mt-5 flex items-center gap-2">
-          <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
-
           <DropdownMenu>
-            {/* Pill renders a real button, so the trigger's ARIA belongs on it
-                directly; a wrapping span would receive button semantics it
-                cannot legally carry. */}
-            <DropdownMenuTrigger asChild disabled={!supportsEffort}>
-              <Pill icon={Zap} label={effort} disabled={!supportsEffort} className="capitalize" />
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="More composer options"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-[var(--accent-button-border)] bg-[var(--accent-soft)] text-[var(--text-primary)] md:hidden"
+              >
+                <Plus className="size-4" />
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="top">
-              {availableEfforts.map((option) => (
-                <DropdownMenuItem
-                  key={option}
-                  onSelect={() => onEffortChange(option)}
-                  className="capitalize"
-                >
-                  {option}
-                </DropdownMenuItem>
-              ))}
+            <DropdownMenuContent align="start" side="top" className="min-w-56 md:hidden">
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={!supportsEffort}>
+                  <Brain />
+                  <span className="flex-1 capitalize">Reasoning: {effort}</span>
+                  <ChevronRight className="ml-auto" />
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {availableEfforts.map((option) => (
+                    <DropdownMenuItem
+                      key={option}
+                      onSelect={() => onEffortChange(option)}
+                      className="capitalize"
+                    >
+                      <span className="w-4">{option === effort && <Check />}</span>
+                      {option}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem
+                disabled={!supportsSearch}
+                onSelect={() => onWebSearchChange(!webSearch)}
+              >
+                <Globe />
+                Search {webSearch ? 'enabled' : 'disabled'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!attachmentsAvailable || !onAttachFiles}
+                onSelect={() => fileInputRef.current?.click()}
+              >
+                <Paperclip />
+                Attach
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
+
+          <div className="hidden md:block">
+            <DropdownMenu>
+              {/* Pill renders a real button, so the trigger's ARIA belongs on it
+                directly; a wrapping span would receive button semantics it
+                cannot legally carry. */}
+              <DropdownMenuTrigger asChild disabled={!supportsEffort}>
+                <Pill icon={Zap} label={effort} disabled={!supportsEffort} className="capitalize" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top">
+                {availableEfforts.map((option) => (
+                  <DropdownMenuItem
+                    key={option}
+                    onSelect={() => onEffortChange(option)}
+                    className="capitalize"
+                  >
+                    {option}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
           <Pill
             icon={Globe}
@@ -183,6 +245,7 @@ export function Composer({
             active={webSearch}
             disabled={!supportsSearch}
             onClick={() => onWebSearchChange(!webSearch)}
+            className="hidden md:inline-flex"
           />
 
           <input
@@ -198,6 +261,7 @@ export function Composer({
             label="Attach"
             disabled={!attachmentsAvailable || !onAttachFiles}
             onClick={() => fileInputRef.current?.click()}
+            className="hidden md:inline-flex"
           />
 
           {streaming ? (
