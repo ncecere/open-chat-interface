@@ -271,7 +271,7 @@ release:gitlab:
     assets:
       links:
         - name: Container registry
-          url: '$CI_PROJECT_URL/container_registry'
+          url: '$CI_PROJECT_URL/-/container_registry'
           link_type: package
         - name: Release pipeline
           url: '$CI_PIPELINE_URL'
