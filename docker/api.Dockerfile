@@ -19,12 +19,25 @@ COPY apps/api ./apps/api
 RUN pnpm --filter @oci/api... build
 
 FROM base AS runtime
+ARG OCI_VERSION=dev
+ARG OCI_REVISION=unknown
+ARG OCI_SOURCE=https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
+ARG OCI_CREATED=unknown
 ENV NODE_ENV=production
+ENV OCI_VERSION=$OCI_VERSION
+LABEL org.opencontainers.image.title="Open Chat Interface API" \
+      org.opencontainers.image.description="API service for Open Chat Interface" \
+      org.opencontainers.image.version=$OCI_VERSION \
+      org.opencontainers.image.revision=$OCI_REVISION \
+      org.opencontainers.image.source=$OCI_SOURCE \
+      org.opencontainers.image.created=$OCI_CREATED \
+      org.opencontainers.image.licenses="MIT"
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
+COPY LICENSE /licenses/LICENSE
 
 RUN addgroup -S oci && adduser -S oci -G oci && mkdir -p /data/storage && chown -R oci:oci /data
 USER oci

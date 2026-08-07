@@ -13,6 +13,7 @@ coverage/
 
 .DS_Store
 *.log
+release-notes.md
 npm-debug.log*
 pnpm-debug.log*
 

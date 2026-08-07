@@ -1,0 +1,73 @@
+# Contributing to Open Chat Interface
+
+Thank you for improving OCI. Contributions must preserve the project's
+self-hosted architecture, security boundaries, accessibility, and MIT license.
+
+## Before opening a change
+
+- Use an issue for substantial features or architectural changes so the design
+  can be agreed before implementation.
+- Report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+- Keep modules focused; avoid combining unrelated behavior into large files.
+- Do not commit credentials, production data, authenticated screenshots, or
+  generated runtime data.
+
+## Development setup
+
+OCI requires Node 22+, pnpm 11+, and Docker.
+
+```bash
+pnpm install
+cp .env.example .env
+pnpm infra:up
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
+```
+
+See [README.md](README.md) for service URLs and optional test infrastructure.
+
+## Required checks
+
+Run the checks relevant to your change before opening a merge request:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm licenses:check
+```
+
+For behavior involving PostgreSQL, S3, SMTP, authentication, replication, or
+browser interaction, also run the corresponding live or Playwright suites:
+
+```bash
+pnpm test:live
+pnpm test:e2e
+```
+
+Database schema changes must include generated Drizzle SQL and metadata. New or
+changed security boundaries require focused tests rather than relying only on a
+repository-wide coverage number.
+
+## Merge requests
+
+- Explain the user-visible change, security implications, and deployment or
+  migration requirements.
+- Include tests and documentation with the implementation.
+- Keep commits reviewable and use imperative commit subjects.
+- Do not reduce keyboard access, visible focus, contrast, or semantic labeling.
+- Do not bypass the curated model catalog, attachment ownership checks, or
+  server-side reconstruction of trusted chat history.
+
+All CI jobs must pass before merge. A successful security scanner means the scan
+completed; findings still require review and disposition.
+
+## Releases
+
+Only maintainers create releases. Stable `vX.Y.Z` tags must point to a validated
+commit on `main`, match all package versions, and have a dated entry in
+[CHANGELOG.md](CHANGELOG.md). See [docs/RELEASING.md](docs/RELEASING.md).
+
+By contributing, you agree that your contribution is licensed under the
+project's [MIT License](LICENSE).

@@ -4,10 +4,9 @@ import { Hono } from 'hono';
 import { db, sql as sqlClient } from '../../db/index.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { chatStreamRedisStatus } from '../../services/chat-streams.js';
+import { APP_VERSION } from '../../version.js';
 
 export const overviewRoutes = new Hono<AppBindings>();
-
-const APP_VERSION = '0.1.0';
 
 overviewRoutes.get('/', async (c) => {
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);

@@ -5,6 +5,7 @@ import { loadEnv } from './config/env.js';
 import { type AppBindings, sessionMiddleware } from './middleware/context.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createApiRoutes } from './routes/index.js';
+import { APP_VERSION } from './version.js';
 
 export function createApp() {
   const env = loadEnv();
@@ -20,7 +21,7 @@ export function createApp() {
   app.route('/api', createApiRoutes());
 
   if (env.NODE_ENV === 'development') {
-    app.get('/', (c) => c.json({ name: 'Open Chat Interface API', version: '0.1.0' }));
+    app.get('/', (c) => c.json({ name: 'Open Chat Interface API', version: APP_VERSION }));
   }
 
   return app;

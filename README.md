@@ -5,6 +5,10 @@ authentication and a first-class administration dashboard. OCI includes streamin
 chat and reasoning, resumable Redis-backed generations, attachments, grounded web
 search, branching, temporary chats, and privacy-filtered share links.
 
+[Changelog](CHANGELOG.md) · [Security policy](SECURITY.md) ·
+[Contributing](CONTRIBUTING.md) · [Release process](docs/RELEASING.md) ·
+[Production operations](docs/OPERATIONS.md)
+
 ## Stack
 
 | Layer | Choice |
@@ -58,15 +62,35 @@ Locked out? `pnpm --filter @oci/api admin:promote you@example.com`.
 
 ## Production
 
+### Build from source
+
 ```bash
 cd docker
 docker compose up -d --build
 ```
 
+### Deploy a released version
+
+Release deployments should pin both application images to the same immutable
+version instead of tracking `latest`:
+
+```bash
+export OCI_VERSION=v0.1.0
+export OCI_REGISTRY=registry.gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
+export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
+export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
+docker login registry.gitlab.it.ufl.edu
+cd docker
+docker compose pull api web migrate
+docker compose up -d --no-build
+```
+
 Optional profiles: `--profile s3` (MinIO), `--profile search` (SearXNG).
 
 Required environment: `POSTGRES_PASSWORD`, `AUTH_SECRET`, `ENCRYPTION_KEY`,
-`APP_URL`. Generate secrets with `openssl rand -base64 48`.
+`APP_URL`. Generate secrets with `openssl rand -base64 48`. See
+[Production operations](docs/OPERATIONS.md) for backups, upgrades, health
+verification, and rollback constraints.
 
 The API applies migrations and seeds default settings on boot, so a fresh stack
 comes up without a separate migration step. Both operations are idempotent and
@@ -141,13 +165,15 @@ erosion without inviting number-chasing.
 
 ## Continuous integration
 
-`.gitlab-ci.yml` runs lint, typecheck, and a production dependency audit, then
-the mock and live test suites, then builds both container images.
+`.gitlab-ci.yml` runs lint, type checking, license policy and dependency audits,
+mock/live/browser tests, SAST, dependency scanning, SBOM generation, and Code
+Quality reporting.
 
-Live tests get Postgres, MinIO, and Mailpit as GitLab services, so CI exercises
-real migrations and storage rather than only mocks. Images build on every
-pipeline as a check but are published to the project registry only from the
-default branch and tags.
+Live tests get Postgres, Redis, MinIO, and Mailpit as GitLab services, so CI
+exercises real migrations, resumable streams, and storage rather than only
+mocks. Branch and default-branch pipelines validate without building images. A
+stable `vX.Y.Z` tag on `main` must match package metadata and the changelog; only
+then does CI build and publish API/web images and create a GitLab Release.
 
 ## Live integration tests
 
@@ -287,4 +313,5 @@ read: connection strings, secrets, and the initial administrator.
 
 ## Licence
 
-MIT
+Open Chat Interface is available under the [MIT License](LICENSE). Third-party
+model logos retain their upstream notices in `apps/web/public/logos/`.

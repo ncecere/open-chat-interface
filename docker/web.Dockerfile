@@ -17,6 +17,18 @@ COPY apps/web ./apps/web
 RUN pnpm --filter @oci/web... build
 
 FROM caddy:2-alpine AS runtime
+ARG OCI_VERSION=dev
+ARG OCI_REVISION=unknown
+ARG OCI_SOURCE=https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
+ARG OCI_CREATED=unknown
+LABEL org.opencontainers.image.title="Open Chat Interface Web" \
+      org.opencontainers.image.description="Web application and same-origin proxy for Open Chat Interface" \
+      org.opencontainers.image.version=$OCI_VERSION \
+      org.opencontainers.image.revision=$OCI_REVISION \
+      org.opencontainers.image.source=$OCI_SOURCE \
+      org.opencontainers.image.created=$OCI_CREATED \
+      org.opencontainers.image.licenses="MIT"
 COPY --from=build /app/apps/web/dist /srv
 COPY docker/Caddyfile /etc/caddy/Caddyfile
+COPY LICENSE /licenses/LICENSE
 EXPOSE 8080
