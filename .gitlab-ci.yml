@@ -165,6 +165,10 @@ test:a11y:
 
 build:images:
   stage: build
+  # This instance's untagged Kubernetes runner is intentionally unprivileged.
+  # Container builds belong on the shared runner configured for Docker-in-Docker.
+  tags:
+    - linux-docker
   image: docker:27-cli
   services:
     - name: docker:27-dind
