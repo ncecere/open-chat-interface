@@ -13,6 +13,53 @@ async function signIn(page: import('@playwright/test').Page) {
 }
 
 test('model picker keeps its size while filtering and is keyboard reachable', async ({ page }) => {
+  // The picker contract should not depend on an administrator having configured
+  // paid providers in the CI database. Keep this UI test deterministic.
+  await page.route('**/api/models', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        models: [
+          {
+            id: 'model-openai',
+            slug: 'test-reasoner',
+            displayName: 'Test Reasoner',
+            description: 'Strong at planning',
+            providerId: 'provider-test',
+            providerKind: 'openai-compatible',
+            providerLabel: 'Test Gateway',
+            upstreamModelId: 'test-reasoner',
+            capabilities: ['reasoning', 'tool_calling'],
+            labId: 'openai',
+            costTier: 'medium',
+            contextWindow: 128000,
+            maxOutputTokens: 8192,
+            supportedEfforts: ['instant', 'high'],
+            isDefault: true,
+            sortOrder: 0,
+          },
+          {
+            id: 'model-nvidia',
+            slug: 'test-vision',
+            displayName: 'Test Vision',
+            description: 'Understands images',
+            providerId: 'provider-test',
+            providerKind: 'openai-compatible',
+            providerLabel: 'Test Gateway',
+            upstreamModelId: 'test-vision',
+            capabilities: ['vision'],
+            labId: 'nvidia',
+            costTier: 'low',
+            contextWindow: 32000,
+            maxOutputTokens: 4096,
+            supportedEfforts: [],
+            isDefault: false,
+            sortOrder: 1,
+          },
+        ],
+      }),
+    }),
+  );
   await signIn(page);
 
   const trigger = page.getByRole('combobox', { name: /Select model/ });
