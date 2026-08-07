@@ -106,7 +106,12 @@ ssoRoutes.post('/providers', async (c) => {
           idpMetadata: {
             entityID: input.issuer,
             cert: input.idpCertificate,
-            singleSignOnService: [{ Location: input.entryPoint, Binding: 'redirect' }],
+            singleSignOnService: [
+              {
+                Location: input.entryPoint,
+                Binding: 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect',
+              },
+            ],
           },
           spMetadata: {
             entityID: input.audience ?? env.APP_URL,

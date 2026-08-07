@@ -26,6 +26,7 @@ export async function listAvailableModels(role: UserRole): Promise<CatalogModel[
       providerLabel: provider.label,
       upstreamModelId: model.upstreamModelId,
       capabilities: model.capabilities,
+      labId: model.labId,
       costTier: model.costTier,
       contextWindow: model.contextWindow,
       maxOutputTokens: model.maxOutputTokens,

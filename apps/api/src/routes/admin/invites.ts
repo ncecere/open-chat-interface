@@ -17,7 +17,9 @@ export const inviteRoutes = new Hono<AppBindings>();
 const env = loadEnv();
 
 function inviteUrl(token: string): string {
-  return `${env.APP_URL}/auth/accept-invite?token=${encodeURIComponent(token)}`;
+  // Keep the bearer token in the URL fragment so it is not sent in HTTP
+  // request targets, referrers, reverse-proxy logs, or server access logs.
+  return `${env.APP_URL}/auth/accept-invite#token=${encodeURIComponent(token)}`;
 }
 
 inviteRoutes.get('/', async (c) => {

@@ -4,7 +4,9 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
-import { getUsageSummary } from '../services/quota.js';
+import { getUsageSummary } from '../services/quota/index.js';
+import { getSetting } from '../services/settings.js';
+import { personaRoutes } from './personas.js';
 
 export const meRoutes = new Hono<AppBindings>();
 
@@ -43,7 +45,10 @@ async function loadPreferences(userId: string) {
 
 meRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const preferences = await loadPreferences(user.id);
+  const [preferences, features] = await Promise.all([
+    loadPreferences(user.id),
+    getSetting('features'),
+  ]);
 
   return c.json({
     user: {
@@ -55,6 +60,13 @@ meRoutes.get('/', async (c) => {
       emailVerified: user.emailVerified,
     },
     preferences,
+    features: {
+      ...features,
+      attachments: features.attachments && user.role !== 'restricted',
+      shareLinks: features.shareLinks && user.role !== 'restricted',
+      personas: features.personas && user.role !== 'restricted',
+      temporaryChat: features.temporaryChat && user.role !== 'restricted',
+    },
   });
 });
 
@@ -78,3 +90,6 @@ meRoutes.patch('/preferences', async (c) => {
 
   return c.json({ preferences: updated });
 });
+
+// Owner-scoped persona CRUD lives under /me, avoiding another top-level route.
+meRoutes.route('/personas', personaRoutes);

@@ -3,6 +3,7 @@ import { type AdminUser, createUserSchema, updateUserSchema } from '@oci/shared'
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { auth } from '../../auth/index.js';
+import { isEmailVerificationEnforced } from '../../auth/policy.js';
 import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
@@ -105,6 +106,25 @@ userRoutes.post('/', async (c) => {
     await db
       .update(schema.user)
       .set({ role: 'restricted' })
+      .where(eq(schema.user.id, created.user.id));
+  }
+
+  if (await isEmailVerificationEnforced()) {
+    try {
+      await auth.api.sendVerificationEmail({
+        body: { email: input.email, callbackURL: '/' },
+      });
+    } catch {
+      // Email delivery must never create an unusable administrator-created account.
+      await db
+        .update(schema.user)
+        .set({ emailVerified: true })
+        .where(eq(schema.user.id, created.user.id));
+    }
+  } else {
+    await db
+      .update(schema.user)
+      .set({ emailVerified: true })
       .where(eq(schema.user.id, created.user.id));
   }
 

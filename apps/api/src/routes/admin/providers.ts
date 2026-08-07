@@ -1,5 +1,5 @@
 import { count, desc, eq, schema } from '@oci/db';
-import { type Provider, upsertProviderSchema } from '@oci/shared';
+import { type Provider, updateProviderSchema, upsertProviderSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { credentialHint, decryptSecret, encryptSecret } from '../../lib/crypto.js';
@@ -8,6 +8,10 @@ import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
+import {
+  applyProviderPatch,
+  getProviderConfigurationIssues,
+} from '../../services/providers/config.js';
 import { discoverModels } from '../../services/providers/registry.js';
 
 export const providerRoutes = new Hono<AppBindings>();
@@ -62,8 +66,19 @@ providerRoutes.post('/', async (c) => {
   const input = await parseBody(c, upsertProviderSchema);
   const organizationId = await getDefaultOrganizationId();
 
-  if (input.kind === 'openai-compatible' && !input.baseUrl) {
-    throw validationFailed('OpenAI-compatible providers require a base URL');
+  const issues = getProviderConfigurationIssues({
+    kind: input.kind,
+    label: input.label,
+    baseUrl: input.baseUrl ?? null,
+    enabled: input.enabled,
+    encryptedApiKey: null,
+    credentialHint: null,
+  });
+  if (issues.length > 0) {
+    throw validationFailed(
+      'Complete the required provider settings.',
+      issues.map((issue) => ({ path: [issue.field], message: issue.message })),
+    );
   }
 
   const [created] = await db
@@ -94,20 +109,43 @@ providerRoutes.post('/', async (c) => {
 providerRoutes.patch('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
-  await loadProviderOrThrow(id);
+  const existing = await loadProviderOrThrow(id);
 
-  const input = await parseBody(c, upsertProviderSchema.partial());
+  const input = await parseBody(c, updateProviderSchema);
+  const next = applyProviderPatch(existing, input, encryptSecret, credentialHint);
+
+  // Catalog entries are bound to a provider's wire protocol, so switching kind
+  // underneath them would silently break every model that already resolves here.
+  if (next.kind !== existing.kind) {
+    const [models] = await db
+      .select({ value: count() })
+      .from(schema.model)
+      .where(eq(schema.model.providerId, id));
+
+    if ((models?.value ?? 0) > 0) {
+      throw validationFailed(
+        'Remove this provider’s catalog models before changing its provider type.',
+      );
+    }
+  }
+
+  const issues = getProviderConfigurationIssues(next);
+  if (issues.length > 0) {
+    throw validationFailed(
+      'Complete the required provider settings.',
+      issues.map((issue) => ({ path: [issue.field], message: issue.message })),
+    );
+  }
 
   const [updated] = await db
     .update(schema.provider)
     .set({
-      ...(input.label !== undefined && { label: input.label }),
-      ...(input.baseUrl !== undefined && { baseUrl: input.baseUrl ?? null }),
-      ...(input.enabled !== undefined && { enabled: input.enabled }),
-      ...(input.apiKey !== undefined && {
-        encryptedApiKey: encryptSecret(input.apiKey),
-        credentialHint: credentialHint(input.apiKey),
-      }),
+      kind: next.kind,
+      label: next.label,
+      baseUrl: next.baseUrl,
+      enabled: next.enabled,
+      encryptedApiKey: next.encryptedApiKey,
+      credentialHint: next.credentialHint,
     })
     .where(eq(schema.provider.id, id))
     .returning({ id: schema.provider.id });
@@ -118,7 +156,12 @@ providerRoutes.patch('/:id', async (c) => {
     action: 'provider.update',
     targetType: 'provider',
     targetId: id,
-    metadata: { fields: Object.keys(input).filter((key) => key !== 'apiKey') },
+    // Record which fields changed, never the credential itself.
+    metadata: {
+      fields: Object.keys(input).filter((key) => key !== 'apiKey'),
+      credential:
+        input.apiKey === null ? 'cleared' : input.apiKey?.trim() ? 'replaced' : 'unchanged',
+    },
   });
 
   return c.json({ id: updated?.id });

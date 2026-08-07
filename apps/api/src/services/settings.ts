@@ -1,4 +1,5 @@
 import { and, eq, schema } from '@oci/db';
+import { COLOR_THEMES, type ColorTheme } from '@oci/shared';
 import { db } from '../db/index.js';
 import { getDefaultOrganizationId } from './organization.js';
 
@@ -10,6 +11,17 @@ export interface BrandingSettings {
   accentColor: string | null;
   loginMessage: string | null;
   defaultTheme: 'light' | 'dark' | 'system';
+  colorTheme: ColorTheme;
+}
+
+/** Supplies a color theme for settings written before themes were selectable. */
+export function normalizeBrandingSettings(value: BrandingSettings): BrandingSettings {
+  return {
+    ...value,
+    colorTheme: COLOR_THEMES.includes(value?.colorTheme as ColorTheme)
+      ? value.colorTheme
+      : 'neutral',
+  };
 }
 
 export interface AuthSettings {
@@ -29,11 +41,48 @@ export interface FeatureSettings {
   branching: boolean;
 }
 
+export interface S3StorageSettings {
+  bucket: string;
+  region: string;
+  endpoint: string | null;
+  accessKeyId: string;
+  encryptedSecretAccessKey: string | null;
+  forcePathStyle: boolean;
+}
+
 export interface StorageSettings {
   driver: 'local' | 's3';
   maxFileBytes: number;
   maxFilesPerMessage: number;
   allowedMimeTypes: string[];
+  s3: S3StorageSettings;
+}
+
+export const DEFAULT_S3_STORAGE_SETTINGS: S3StorageSettings = {
+  bucket: '',
+  region: 'us-east-1',
+  endpoint: null,
+  accessKeyId: '',
+  encryptedSecretAccessKey: null,
+  forcePathStyle: false,
+};
+
+/** Adds S3 defaults to settings written before object storage was publicly configurable. */
+export function normalizeStorageSettings(value: StorageSettings): StorageSettings {
+  const legacy = value as StorageSettings & {
+    s3?: Partial<S3StorageSettings> & { encryptedSecretKey?: string | null };
+  };
+  const s3 = legacy.s3;
+  const { encryptedSecretKey, ...currentS3 } = s3 ?? {};
+
+  return {
+    ...value,
+    s3: {
+      ...DEFAULT_S3_STORAGE_SETTINGS,
+      ...currentS3,
+      encryptedSecretAccessKey: s3?.encryptedSecretAccessKey ?? encryptedSecretKey ?? null,
+    },
+  };
 }
 
 export interface SearchSettings {
@@ -85,7 +134,14 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<Settings
     )
     .limit(1);
 
-  const value = (row?.value ?? {}) as unknown as SettingsMap[K];
+  const stored = (row?.value ?? {}) as unknown as SettingsMap[K];
+  const value = (
+    key === 'storage'
+      ? normalizeStorageSettings(stored as StorageSettings)
+      : key === 'branding'
+        ? normalizeBrandingSettings(stored as BrandingSettings)
+        : stored
+  ) as SettingsMap[K];
   cache.set(key, value);
   return value;
 }

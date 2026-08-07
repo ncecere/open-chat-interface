@@ -1,4 +1,4 @@
-import { asc, eq, ne, schema } from '@oci/db';
+import { and, asc, eq, ne, schema } from '@oci/db';
 import { type AdminModel, upsertModelSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
@@ -29,12 +29,15 @@ modelRoutes.get('/', async (c) => {
     providerId: model.providerId,
     providerKind,
     providerLabel,
+    labId: model.labId,
     upstreamModelId: model.upstreamModelId,
     capabilities: model.capabilities,
     costTier: model.costTier,
     contextWindow: model.contextWindow,
     maxOutputTokens: model.maxOutputTokens,
     supportedEfforts: model.supportedEfforts,
+    inputPriceMicros: model.inputPriceMicros === null ? null : Number(model.inputPriceMicros),
+    outputPriceMicros: model.outputPriceMicros === null ? null : Number(model.outputPriceMicros),
     isDefault: model.isDefault,
     sortOrder: model.sortOrder,
     enabled: model.enabled,
@@ -48,16 +51,29 @@ modelRoutes.get('/', async (c) => {
 
 async function clearOtherDefaults(organizationId: string, keepId?: string) {
   const condition = keepId
-    ? ne(schema.model.id, keepId)
+    ? and(eq(schema.model.organizationId, organizationId), ne(schema.model.id, keepId))
     : eq(schema.model.organizationId, organizationId);
 
   await db.update(schema.model).set({ isDefault: false }).where(condition);
+}
+
+async function requireProvider(providerId: string, organizationId: string) {
+  const [provider] = await db
+    .select({ id: schema.provider.id })
+    .from(schema.provider)
+    .where(
+      and(eq(schema.provider.id, providerId), eq(schema.provider.organizationId, organizationId)),
+    )
+    .limit(1);
+
+  if (!provider) throw notFound('Provider not found');
 }
 
 modelRoutes.post('/', async (c) => {
   const actor = currentUser(c);
   const input = await parseBody(c, upsertModelSchema);
   const organizationId = await getDefaultOrganizationId();
+  await requireProvider(input.providerId, organizationId);
 
   const [existing] = await db
     .select({ id: schema.model.id })
@@ -73,6 +89,7 @@ modelRoutes.post('/', async (c) => {
       organizationId,
       providerId: input.providerId,
       slug: input.slug,
+      labId: input.labId ?? null,
       upstreamModelId: input.upstreamModelId,
       displayName: input.displayName,
       description: input.description ?? null,
@@ -81,6 +98,8 @@ modelRoutes.post('/', async (c) => {
       contextWindow: input.contextWindow ?? null,
       maxOutputTokens: input.maxOutputTokens ?? null,
       supportedEfforts: input.supportedEfforts,
+      inputPriceMicros: input.inputPriceMicros ?? null,
+      outputPriceMicros: input.outputPriceMicros ?? null,
       visibleToRoles: input.visibleToRoles,
       enabled: input.enabled,
       isDefault: input.isDefault,
@@ -109,7 +128,7 @@ modelRoutes.patch('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [existing] = await db
-    .select({ id: schema.model.id })
+    .select({ id: schema.model.id, organizationId: schema.model.organizationId })
     .from(schema.model)
     .where(eq(schema.model.id, id))
     .limit(1);
@@ -119,10 +138,28 @@ modelRoutes.patch('/:id', async (c) => {
   const input = await parseBody(c, upsertModelSchema.partial());
   const organizationId = await getDefaultOrganizationId();
 
+  if (input.providerId !== undefined) await requireProvider(input.providerId, organizationId);
+  if (input.slug !== undefined) {
+    const [slugOwner] = await db
+      .select({ id: schema.model.id })
+      .from(schema.model)
+      .where(
+        and(
+          eq(schema.model.organizationId, organizationId),
+          eq(schema.model.slug, input.slug),
+          ne(schema.model.id, id),
+        ),
+      )
+      .limit(1);
+    if (slugOwner) throw conflict('A model with that slug already exists');
+  }
+
   const [updated] = await db
     .update(schema.model)
     .set({
+      ...(input.providerId !== undefined && { providerId: input.providerId }),
       ...(input.slug !== undefined && { slug: input.slug }),
+      ...(input.labId !== undefined && { labId: input.labId ?? null }),
       ...(input.upstreamModelId !== undefined && { upstreamModelId: input.upstreamModelId }),
       ...(input.displayName !== undefined && { displayName: input.displayName }),
       ...(input.description !== undefined && { description: input.description ?? null }),
@@ -133,6 +170,12 @@ modelRoutes.patch('/:id', async (c) => {
         maxOutputTokens: input.maxOutputTokens ?? null,
       }),
       ...(input.supportedEfforts !== undefined && { supportedEfforts: input.supportedEfforts }),
+      ...(input.inputPriceMicros !== undefined && {
+        inputPriceMicros: input.inputPriceMicros ?? null,
+      }),
+      ...(input.outputPriceMicros !== undefined && {
+        outputPriceMicros: input.outputPriceMicros ?? null,
+      }),
       ...(input.visibleToRoles !== undefined && { visibleToRoles: input.visibleToRoles }),
       ...(input.enabled !== undefined && { enabled: input.enabled }),
       ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
