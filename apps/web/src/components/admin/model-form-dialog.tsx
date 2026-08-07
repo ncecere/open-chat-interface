@@ -1,0 +1,477 @@
+import {
+  type AdminModel,
+  COST_TIERS,
+  type CostTier,
+  MICROS_PER_DOLLAR,
+  MODEL_CAPABILITIES,
+  MODEL_LABS,
+  type ModelCapability,
+  type Provider,
+  REASONING_EFFORTS,
+  type ReasoningEffort,
+  USER_ROLES,
+  type UserRole,
+  upsertModelSchema,
+} from '@oci/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type FormEvent, useState } from 'react';
+import { LabLogo } from '~/components/model/lab-logo';
+import { Button } from '~/components/ui/button';
+import {
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
+import { Field } from '~/components/ui/field';
+import { Input, Textarea } from '~/components/ui/input';
+import { Select } from '~/components/ui/select';
+import { Spinner } from '~/components/ui/spinner';
+import { Switch } from '~/components/ui/switch';
+import { ApiError, api } from '~/lib/api-client';
+import { cn } from '~/lib/utils';
+
+interface ModelDraft {
+  providerId: string;
+  labId: string;
+  upstreamModelId: string;
+  slug: string;
+  displayName: string;
+  description: string;
+  costTier: CostTier;
+  contextWindow: string;
+  maxOutputTokens: string;
+  sortOrder: string;
+  /** Dollars per million tokens, converted to micro-dollars on submit. */
+  inputPrice: string;
+  outputPrice: string;
+  capabilities: ModelCapability[];
+  supportedEfforts: ReasoningEffort[];
+  visibleToRoles: UserRole[];
+  enabled: boolean;
+  isDefault: boolean;
+}
+
+/** Prices are stored as micro-dollars per million tokens but edited in dollars. */
+function toPriceInput(micros: number | null): string {
+  return micros === null ? '' : (micros / MICROS_PER_DOLLAR).toString();
+}
+
+function toPriceMicros(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? Math.round(parsed * MICROS_PER_DOLLAR) : null;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+}
+
+function initialDraft(model: AdminModel | null, providers: Provider[]): ModelDraft {
+  return model
+    ? {
+        providerId: model.providerId,
+        labId: model.labId ?? '',
+        upstreamModelId: model.upstreamModelId,
+        slug: model.slug,
+        displayName: model.displayName,
+        description: model.description ?? '',
+        costTier: model.costTier,
+        contextWindow: model.contextWindow?.toString() ?? '',
+        maxOutputTokens: model.maxOutputTokens?.toString() ?? '',
+        sortOrder: model.sortOrder.toString(),
+        inputPrice: toPriceInput(model.inputPriceMicros),
+        outputPrice: toPriceInput(model.outputPriceMicros),
+        capabilities: model.capabilities,
+        supportedEfforts: model.supportedEfforts,
+        visibleToRoles: model.visibleToRoles,
+        enabled: model.enabled,
+        isDefault: model.isDefault,
+      }
+    : {
+        providerId: providers.find((provider) => provider.enabled)?.id ?? providers[0]?.id ?? '',
+        labId: '',
+        upstreamModelId: '',
+        slug: '',
+        displayName: '',
+        description: '',
+        costTier: 'medium',
+        contextWindow: '',
+        maxOutputTokens: '',
+        sortOrder: '0',
+        inputPrice: '',
+        outputPrice: '',
+        capabilities: [],
+        supportedEfforts: [],
+        visibleToRoles: [...USER_ROLES],
+        enabled: true,
+        isDefault: false,
+      };
+}
+
+function toggleValue<Value extends string>(values: Value[], value: Value): Value[] {
+  return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
+}
+
+function ChoicePills<Value extends string>({
+  values,
+  options,
+  onChange,
+}: {
+  values: Value[];
+  options: readonly Value[];
+  onChange: (values: Value[]) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((option) => {
+        const selected = values.includes(option);
+        return (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(toggleValue(values, option))}
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors',
+              selected
+                ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                : 'bg-[var(--bg-control-alt)] text-[var(--text-muted)] hover:text-[var(--text-primary)]',
+            )}
+          >
+            {option.replaceAll('_', ' ')}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ModelFormDialog({
+  model,
+  providers,
+  onClose,
+}: {
+  model: AdminModel | null;
+  providers: Provider[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState(() => initialDraft(model, providers));
+  const [slugTouched, setSlugTouched] = useState(Boolean(model));
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      model ? api.patch(`/admin/models/${model.id}`, body) : api.post('/admin/models', body),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
+        queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+      ]);
+      onClose();
+    },
+    onError: (cause) =>
+      setError(cause instanceof ApiError ? cause.message : 'The model could not be saved.'),
+  });
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+
+    const parsed = upsertModelSchema.safeParse({
+      ...draft,
+      labId: draft.labId || null,
+      description: draft.description.trim() || null,
+      contextWindow: draft.contextWindow ? Number(draft.contextWindow) : null,
+      maxOutputTokens: draft.maxOutputTokens ? Number(draft.maxOutputTokens) : null,
+      sortOrder: Number(draft.sortOrder || 0),
+      inputPriceMicros: toPriceMicros(draft.inputPrice),
+      outputPriceMicros: toPriceMicros(draft.outputPrice),
+    });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Check the model fields.');
+      return;
+    }
+    save.mutate(parsed.data);
+  }
+
+  return (
+    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>{model ? 'Edit model' : 'Add model'}</DialogTitle>
+        <DialogDescription>
+          Map an upstream model from a configured provider into OCI’s curated catalog.
+        </DialogDescription>
+      </DialogHeader>
+
+      <form onSubmit={submit} className="flex flex-col gap-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Provider" htmlFor="model-provider">
+            <Select
+              id="model-provider"
+              value={draft.providerId}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, providerId: event.target.value }))
+              }
+            >
+              {providers.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label}
+                  {provider.enabled ? '' : ' (disabled)'}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field
+            label="Lab"
+            htmlFor="model-lab"
+            hint="Who created the model. Supplies the logo shown next to it."
+          >
+            <div className="flex items-center gap-2">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]">
+                <LabLogo labId={draft.labId} className="size-5" />
+              </span>
+              <Select
+                id="model-lab"
+                className="min-w-0 flex-1"
+                value={draft.labId}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, labId: event.target.value }))
+                }
+              >
+                <option value="">No lab</option>
+                {MODEL_LABS.map((lab) => (
+                  <option key={lab.id} value={lab.id}>
+                    {lab.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </Field>
+
+          <Field label="Upstream model ID" htmlFor="upstream-model-id">
+            <Input
+              id="upstream-model-id"
+              value={draft.upstreamModelId}
+              placeholder="gpt-4o-mini"
+              onChange={(event) => {
+                const upstreamModelId = event.target.value;
+                setDraft((current) => ({
+                  ...current,
+                  upstreamModelId,
+                  ...(!slugTouched ? { slug: slugify(upstreamModelId) } : {}),
+                }));
+              }}
+            />
+          </Field>
+
+          <Field label="Display name" htmlFor="model-display-name">
+            <Input
+              id="model-display-name"
+              value={draft.displayName}
+              placeholder="GPT-4o Mini"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, displayName: event.target.value }))
+              }
+            />
+          </Field>
+
+          <Field
+            label="OCI slug"
+            htmlFor="model-slug"
+            hint="Lowercase letters, numbers, and dashes."
+          >
+            <Input
+              id="model-slug"
+              value={draft.slug}
+              placeholder="gpt-4o-mini"
+              onChange={(event) => {
+                setSlugTouched(true);
+                setDraft((current) => ({ ...current, slug: event.target.value }));
+              }}
+            />
+          </Field>
+        </div>
+
+        <Field label="Description" htmlFor="model-description">
+          <Textarea
+            id="model-description"
+            rows={3}
+            value={draft.description}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, description: event.target.value }))
+            }
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Field label="Cost tier" htmlFor="model-cost-tier">
+            <Select
+              id="model-cost-tier"
+              value={draft.costTier}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, costTier: event.target.value as CostTier }))
+              }
+            >
+              {COST_TIERS.map((tier) => (
+                <option key={tier} value={tier}>
+                  {tier}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Context window" htmlFor="model-context-window">
+            <Input
+              id="model-context-window"
+              type="number"
+              min={1}
+              value={draft.contextWindow}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, contextWindow: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Max output" htmlFor="model-max-output">
+            <Input
+              id="model-max-output"
+              type="number"
+              min={1}
+              value={draft.maxOutputTokens}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, maxOutputTokens: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Sort order" htmlFor="model-sort-order">
+            <Input
+              id="model-sort-order"
+              type="number"
+              value={draft.sortOrder}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, sortOrder: event.target.value }))
+              }
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Input price"
+            htmlFor="model-input-price"
+            hint="US dollars per million input tokens. Leave blank if unpriced."
+          >
+            <Input
+              id="model-input-price"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="3.00"
+              value={draft.inputPrice}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, inputPrice: event.target.value }))
+              }
+            />
+          </Field>
+          <Field
+            label="Output price"
+            htmlFor="model-output-price"
+            hint="US dollars per million output tokens."
+          >
+            <Input
+              id="model-output-price"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="15.00"
+              value={draft.outputPrice}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, outputPrice: event.target.value }))
+              }
+            />
+          </Field>
+        </div>
+
+        <Field label="Capabilities">
+          <ChoicePills
+            values={draft.capabilities}
+            options={MODEL_CAPABILITIES}
+            onChange={(capabilities) => setDraft((current) => ({ ...current, capabilities }))}
+          />
+        </Field>
+        <Field label="Reasoning efforts">
+          <ChoicePills
+            values={draft.supportedEfforts}
+            options={REASONING_EFFORTS}
+            onChange={(supportedEfforts) =>
+              setDraft((current) => ({ ...current, supportedEfforts }))
+            }
+          />
+        </Field>
+        <Field label="Visible to roles">
+          <ChoicePills
+            values={draft.visibleToRoles}
+            options={USER_ROLES}
+            onChange={(visibleToRoles) => setDraft((current) => ({ ...current, visibleToRoles }))}
+          />
+        </Field>
+
+        <div className="grid gap-3 rounded-xl border border-[var(--border-subtle)] p-4 sm:grid-cols-2">
+          <label
+            htmlFor="model-enabled"
+            className="flex items-center justify-between gap-3 text-sm"
+          >
+            Enabled in catalog
+            <Switch
+              id="model-enabled"
+              checked={draft.enabled}
+              onCheckedChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
+            />
+          </label>
+          <label
+            htmlFor="model-default"
+            className="flex items-center justify-between gap-3 text-sm"
+          >
+            Default model
+            <Switch
+              id="model-default"
+              checked={draft.isDefault}
+              onCheckedChange={(isDefault) => setDraft((current) => ({ ...current, isDefault }))}
+            />
+          </label>
+        </div>
+
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-sm text-[var(--danger-foreground)]"
+          >
+            {error}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={save.isPending || providers.length === 0}
+          >
+            {save.isPending && <Spinner />}
+            {model ? 'Save model' : 'Add model'}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}

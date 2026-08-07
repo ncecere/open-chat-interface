@@ -1,9 +1,9 @@
 import type { AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { AdminPageHeader } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Card } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -40,12 +40,14 @@ export function AdminUsersPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Users</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        {data ? `${data.total} account${data.total === 1 ? '' : 's'}` : 'Loading accounts...'}
-      </p>
+      <AdminPageHeader
+        title="Users"
+        description={
+          data ? `${data.total} account${data.total === 1 ? '' : 's'}` : 'Loading accounts...'
+        }
+      />
 
-      <div className="mt-6 max-w-sm">
+      <div className="max-w-sm">
         <Input
           placeholder="Search by name or email..."
           value={search}
@@ -58,7 +60,7 @@ export function AdminUsersPage() {
           <FullPageSpinner />
         </div>
       ) : (
-        <Card className="mt-6 overflow-hidden">
+        <div className="mt-6 overflow-hidden rounded-xl border border-[var(--border-subtle)]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
@@ -109,7 +111,7 @@ export function AdminUsersPage() {
               ))}
             </tbody>
           </table>
-        </Card>
+        </div>
       )}
     </div>
   );

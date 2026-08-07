@@ -1,22 +1,20 @@
 import type { AdminOverview } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
+import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
 import { formatBytes } from '~/lib/utils';
 
-function StatCard({ title, value, hint }: { title: string; value: string; hint?: string }) {
+function Stat({ title, value, hint }: { title: string; value: string; hint?: string }) {
   return (
-    <Card>
-      <CardContent className="p-5">
-        <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
-          {title}
-        </p>
-        <p className="mt-2 text-2xl font-semibold">{value}</p>
-        {hint && <p className="mt-1 text-xs text-[var(--text-muted)]">{hint}</p>}
-      </CardContent>
-    </Card>
+    <div className="min-w-0 p-5">
+      <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+        {title}
+      </p>
+      <p className="mt-2 truncate text-2xl font-semibold">{value}</p>
+      {hint && <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{hint}</p>}
+    </div>
   );
 }
 
@@ -30,40 +28,34 @@ export function AdminOverviewPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Overview</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Instance health and activity at a glance.
-      </p>
+      <AdminPageHeader title="Overview" description="Instance health and activity at a glance." />
 
-      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
+      <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border-subtle)] overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 lg:divide-y-0">
+        <Stat
           title="Users"
           value={String(data.users.total)}
           hint={`${data.users.admins} admin${data.users.admins === 1 ? '' : 's'}`}
         />
-        <StatCard
+        <Stat
           title="Threads"
           value={String(data.threads.total)}
           hint={`${data.threads.last24h} in last 24h`}
         />
-        <StatCard
+        <Stat
           title="Messages"
           value={String(data.messages.total)}
           hint={`${data.messages.last24h} in last 24h`}
         />
-        <StatCard
+        <Stat
           title="Storage"
           value={formatBytes(data.storage.totalBytes)}
           hint={`${data.storage.fileCount} file${data.storage.fileCount === 1 ? '' : 's'}`}
         />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Models</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm">
+      <div className="mt-8 flex flex-col gap-8">
+        <SettingsSection title="Models">
+          <div className="flex flex-col gap-3 text-sm">
             <div className="flex justify-between">
               <span className="text-[var(--text-muted)]">Providers configured</span>
               <span>{data.providers.configured}</span>
@@ -82,14 +74,11 @@ export function AdminOverviewPage() {
                 select.
               </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SettingsSection>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>System</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm">
+        <SettingsSection title="System">
+          <div className="flex flex-col gap-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-[var(--text-muted)]">Version</span>
               <span>{data.system.version}</span>
@@ -106,8 +95,8 @@ export function AdminOverviewPage() {
                 {data.system.redis}
               </Badge>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </SettingsSection>
       </div>
     </div>
   );
