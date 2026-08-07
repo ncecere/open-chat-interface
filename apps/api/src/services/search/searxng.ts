@@ -16,7 +16,7 @@ export const searchSearxng: SearchAdapter = async ({ query, maxResults, baseUrl,
   endpoint.searchParams.set('format', 'json');
   endpoint.searchParams.set('language', 'en');
 
-  const payload = (await searchFetch(endpoint.toString(), {
+  const payload = (await searchFetch(endpoint, {
     headers: { accept: 'application/json' },
     signal,
   })) as {

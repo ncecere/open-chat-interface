@@ -9,6 +9,9 @@
 # the project's Security & Compliance views.
 include:
   - template: Jobs/SAST.gitlab-ci.yml
+  # Produces dependency and CycloneDX SBOM reports used by GitLab's dependency
+  # and license-compliance views. pnpm-lock.yaml is the source of truth.
+  - template: Jobs/Dependency-Scanning.gitlab-ci.yml
 
 stages:
   - verify
@@ -48,7 +51,13 @@ lint:
   stage: verify
   extends: .node
   script:
-    - pnpm lint
+    # Biome's GitLab reporter uses the Code Quality artifact schema directly.
+    - pnpm exec biome check . --reporter=gitlab --reporter-file=gl-code-quality-report.json
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      codequality: gl-code-quality-report.json
 
 typecheck:
   stage: verify
@@ -63,6 +72,12 @@ audit:
     # Production dependencies only; dev tooling is not shipped.
     - pnpm audit --prod
   allow_failure: true
+
+licenses:
+  stage: verify
+  extends: .node
+  script:
+    - pnpm licenses:check
 
 test:
   stage: test

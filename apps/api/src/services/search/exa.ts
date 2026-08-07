@@ -3,7 +3,7 @@ import type { SearchAdapter } from './types.js';
 
 export const searchExa: SearchAdapter = async ({ query, maxResults, apiKey, signal }) => {
   const credential = requiredApiKey(apiKey, 'Exa');
-  const payload = (await searchFetch('https://api.exa.ai/search', {
+  const payload = (await searchFetch(new URL('https://api.exa.ai/search'), {
     method: 'POST',
     headers: {
       accept: 'application/json',

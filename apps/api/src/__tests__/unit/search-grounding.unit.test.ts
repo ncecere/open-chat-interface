@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { validateSearchEndpoint } from '../../services/search/http.js';
 import { buildGroundingContext, normalizeSearchQuery } from '../../services/search/index.js';
 
 describe('web search grounding', () => {
@@ -8,6 +9,22 @@ describe('web search grounding', () => {
 
   it('bounds retained and upstream queries', () => {
     expect(normalizeSearchQuery('x'.repeat(2_500))).toHaveLength(2_000);
+  });
+
+  it('accepts HTTP(S) provider endpoints, including self-hosted SearXNG', () => {
+    expect(validateSearchEndpoint(new URL('https://api.tavily.com/search')).hostname).toBe(
+      'api.tavily.com',
+    );
+    expect(validateSearchEndpoint(new URL('http://searxng:8080/search')).hostname).toBe('searxng');
+  });
+
+  it('rejects non-HTTP provider URLs and embedded credentials', () => {
+    expect(() => validateSearchEndpoint(new URL('file:///etc/passwd'))).toThrow(
+      'must use HTTP or HTTPS',
+    );
+    expect(() => validateSearchEndpoint(new URL('https://user:secret@example.com/search'))).toThrow(
+      'cannot contain credentials',
+    );
   });
 
   it('builds numbered context with titles, URLs, and snippets', () => {

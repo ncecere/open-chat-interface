@@ -8,7 +8,7 @@ export const searchBrave: SearchAdapter = async ({ query, maxResults, apiKey, si
   endpoint.searchParams.set('count', String(maxResults));
   endpoint.searchParams.set('safesearch', 'moderate');
 
-  const payload = (await searchFetch(endpoint.toString(), {
+  const payload = (await searchFetch(endpoint, {
     headers: {
       accept: 'application/json',
       'x-subscription-token': credential,

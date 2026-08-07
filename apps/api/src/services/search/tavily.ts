@@ -3,7 +3,7 @@ import type { SearchAdapter } from './types.js';
 
 export const searchTavily: SearchAdapter = async ({ query, maxResults, apiKey, signal }) => {
   const credential = requiredApiKey(apiKey, 'Tavily');
-  const payload = (await searchFetch('https://api.tavily.com/search', {
+  const payload = (await searchFetch(new URL('https://api.tavily.com/search'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

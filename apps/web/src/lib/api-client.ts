@@ -12,8 +12,22 @@ export class ApiError extends Error {
   }
 }
 
+export function sameOriginApiUrl(path: string, origin: string): string {
+  if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\') || path.includes('#')) {
+    throw new TypeError('API path must be a same-origin absolute path');
+  }
+
+  const url = new URL(`/api${path}`, origin);
+  if (url.origin !== origin) throw new TypeError('API path must remain same-origin');
+  return `${url.pathname}${url.search}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const url = sameOriginApiUrl(path, window.location.origin);
+  // This executes in the browser and sameOriginApiUrl returns only a path on
+  // window.location.origin; it cannot initiate a server-side request.
+  // nosemgrep: nodejs_scan.javascript-ssrf-rule-node_ssrf
+  const response = await fetch(url, {
     ...init,
     credentials: 'same-origin',
     headers: {

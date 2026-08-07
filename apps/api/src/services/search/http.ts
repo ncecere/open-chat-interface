@@ -1,10 +1,24 @@
 import { providerError } from '../../lib/errors.js';
 
-export async function searchFetch(url: string, init: RequestInit): Promise<unknown> {
+export function validateSearchEndpoint(endpoint: URL): URL {
+  if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') {
+    throw providerError('Web search provider URL must use HTTP or HTTPS');
+  }
+  if (endpoint.username || endpoint.password) {
+    throw providerError('Web search provider URL cannot contain credentials');
+  }
+  return endpoint;
+}
+
+export async function searchFetch(endpoint: URL, init: RequestInit): Promise<unknown> {
+  const trustedEndpoint = validateSearchEndpoint(endpoint);
   let response: Response;
 
   try {
-    response = await fetch(url, init);
+    // Endpoints are fixed provider URLs or an administrator-managed SearXNG
+    // origin. User input is confined to URLSearchParams and cannot set origin.
+    // nosemgrep: nodejs_scan.javascript-ssrf-rule-node_ssrf
+    response = await fetch(trustedEndpoint, init);
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw providerError('Web search timed out');
