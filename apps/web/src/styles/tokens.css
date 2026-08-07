@@ -36,6 +36,17 @@
   /* Floating control pills sit darker than the surface behind them. */
   --bg-pill: #1a181c;
 
+  /* Inset panels (settings rail cards) recede rather than lift. */
+  --bg-inset: #0e0c0e;
+  --border-inset: #241d24;
+
+  /* Segmented tab strip: the track lifts, the active tab cuts back in. */
+  --bg-segment-track: #2f2836;
+  --bg-segment-active: #1e141c;
+
+  /* Settings surface is darker than the chat panel so rail cards read. */
+  --bg-settings: #150f13;
+
   /* Sidebar is markedly darker than the canvas and warms toward the bottom. */
   --bg-sidebar: #161014;
   --bg-sidebar-deep: #110b0e;
@@ -92,6 +103,14 @@
   --bg-app: #f3e3f4;
   --bg-pill: #f7ecf7;
 
+  --bg-inset: #fdf9fd;
+  --border-inset: #e8d2e8;
+
+  --bg-segment-track: #ecd6ea;
+  --bg-segment-active: #fdfafd;
+
+  --bg-settings: #f7ecf6;
+
   --bg-sidebar: #f1def3;
   --bg-sidebar-deep: #ecd6ef;
 
@@ -141,6 +160,14 @@
   --bg-app: #181818;
   --bg-pill: #1a1a1a;
 
+  --bg-inset: #0e0e0e;
+  --border-inset: #242424;
+
+  --bg-segment-track: #2c2c2c;
+  --bg-segment-active: #1a1a1a;
+
+  --bg-settings: #1a1a1a;
+
   --bg-sidebar: #151515;
   --bg-sidebar-deep: #111111;
 
@@ -171,6 +198,14 @@
 
   --bg-app: #eeeef1;
   --bg-pill: #f4f4f6;
+
+  --bg-inset: #fbfbfc;
+  --border-inset: #e4e4e8;
+
+  --bg-segment-track: #e6e6ea;
+  --bg-segment-active: #fbfbfc;
+
+  --bg-settings: #f2f2f4;
 
   --bg-sidebar: #ececef;
   --bg-sidebar-deep: #e6e6ea;

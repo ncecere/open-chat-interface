@@ -60,7 +60,7 @@ function IdentityRail() {
 
       <UsageLimits />
 
-      <div className="w-full rounded-xl bg-[var(--bg-control)]/45 p-4">
+      <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
         <p className="mb-3 text-sm font-semibold">Keyboard Shortcuts</p>
         <div className="flex flex-col gap-3">
           {SHORTCUTS.map((shortcut) => (
@@ -97,7 +97,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
+    <div className="min-h-dvh bg-[var(--bg-settings)]">
       <div className="mx-auto w-full max-w-[75rem] px-6 py-6">
         <header className="flex items-center justify-between">
           <Button variant="ghost" size="sm" asChild>
@@ -126,7 +126,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
           <IdentityRail />
 
           <div className="min-w-0 flex-1">
-            <nav className="inline-flex flex-wrap gap-1 rounded-xl bg-[var(--bg-control)]/45 p-1">
+            <nav className="inline-flex flex-wrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1">
               {TABS.map((tab) => {
                 const active =
                   'exact' in tab && tab.exact ? pathname === tab.to : pathname.startsWith(tab.to);
@@ -138,7 +138,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-sm transition-colors',
                       active
-                        ? 'bg-[var(--bg-control-hover)] font-medium text-[var(--text-primary)]'
+                        ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
                         : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
                     )}
                   >

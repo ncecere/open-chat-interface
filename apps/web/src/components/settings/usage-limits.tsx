@@ -43,7 +43,7 @@ function Meter({ label, used, limit }: { label: string; used: number; limit: num
             : `${remaining.toLocaleString()} left`}
         </span>
       </div>
-      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--bg-control-hover)]">
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--bg-segment-track)]">
         <div
           className={cn(
             'h-full rounded-full transition-[width]',
@@ -78,7 +78,7 @@ export function UsageLimits() {
   const countdown = formatCountdown(data.resetsAt);
 
   return (
-    <div className="w-full rounded-xl bg-[var(--bg-control)]/45 p-4">
+    <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
       <div className="mb-3 flex items-center gap-1.5">
         <p className="text-sm font-semibold">Usage Limits</p>
         <Info
