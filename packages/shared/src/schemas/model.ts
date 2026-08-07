@@ -17,6 +17,8 @@ export const catalogModelSchema = z.object({
   providerId: z.string(),
   providerKind: z.enum(PROVIDER_KINDS),
   providerLabel: z.string(),
+  /** Lab that created the model; see MODEL_LABS. Null when unattributed. */
+  labId: z.string().nullable(),
   upstreamModelId: z.string(),
   capabilities: z.array(modelCapabilitySchema),
   costTier: z.enum(COST_TIERS),
@@ -27,7 +29,15 @@ export const catalogModelSchema = z.object({
   sortOrder: z.number().int(),
 });
 
+/**
+ * Prices are integer micro-dollars per million tokens, so cost arithmetic never
+ * touches a float. Null means "unpriced": cost policies cannot bill the model.
+ */
+const tokenPriceSchema = z.number().int().nonnegative().max(1_000_000_000).nullable().optional();
+
 export const adminModelSchema = catalogModelSchema.extend({
+  inputPriceMicros: z.number().int().nonnegative().nullable(),
+  outputPriceMicros: z.number().int().nonnegative().nullable(),
   enabled: z.boolean(),
   visibleToRoles: z.array(z.enum(USER_ROLES)),
   createdAt: z.string(),
@@ -36,6 +46,7 @@ export const adminModelSchema = catalogModelSchema.extend({
 
 export const upsertModelSchema = z.object({
   providerId: z.string().min(1),
+  labId: z.string().trim().max(60).nullable().optional(),
   upstreamModelId: z.string().trim().min(1).max(200),
   slug: z
     .string()
@@ -50,6 +61,8 @@ export const upsertModelSchema = z.object({
   contextWindow: z.number().int().positive().max(10_000_000).nullable().optional(),
   maxOutputTokens: z.number().int().positive().max(1_000_000).nullable().optional(),
   supportedEfforts: z.array(z.enum(REASONING_EFFORTS)).default([]),
+  inputPriceMicros: tokenPriceSchema,
+  outputPriceMicros: tokenPriceSchema,
   enabled: z.boolean().default(true),
   visibleToRoles: z.array(z.enum(USER_ROLES)).default(['admin', 'user', 'restricted']),
   isDefault: z.boolean().default(false),
@@ -77,6 +90,17 @@ export const upsertProviderSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+export const updateProviderSchema = z
+  .object({
+    kind: z.enum(PROVIDER_KINDS).optional(),
+    label: z.string().trim().min(1).max(80).optional(),
+    baseUrl: z.string().trim().url().max(500).nullable().optional(),
+    /** Omit or send an empty string to keep, send a value to replace, or null to clear. */
+    apiKey: z.string().max(500).nullable().optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+
 export const discoveredModelSchema = z.object({
   upstreamModelId: z.string(),
   displayName: z.string(),
@@ -88,4 +112,5 @@ export type AdminModel = z.infer<typeof adminModelSchema>;
 export type UpsertModelInput = z.infer<typeof upsertModelSchema>;
 export type Provider = z.infer<typeof providerSchema>;
 export type UpsertProviderInput = z.infer<typeof upsertProviderSchema>;
+export type UpdateProviderInput = z.infer<typeof updateProviderSchema>;
 export type DiscoveredModel = z.infer<typeof discoveredModelSchema>;

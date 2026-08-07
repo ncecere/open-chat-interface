@@ -2,7 +2,7 @@
   "name": "open-chat-interface",
   "version": "0.1.0",
   "private": true,
-  "description": "Open Chat Interface (OCI) — self-hostable multi-model chat application",
+  "description": "Open Chat Interface (OCI) \u2014 self-hostable multi-model chat application",
   "license": "MIT",
   "packageManager": "pnpm@11.18.0",
   "engines": {
@@ -16,13 +16,15 @@
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter @oci/web e2e",
     "db:generate": "pnpm --filter @oci/db generate",
     "db:migrate": "pnpm --filter @oci/db migrate",
     "db:seed": "pnpm --filter @oci/db seed",
     "db:studio": "pnpm --filter @oci/db studio",
     "infra:up": "docker compose -f docker/compose.dev.yaml up -d",
     "infra:down": "docker compose -f docker/compose.dev.yaml down",
-    "infra:reset": "docker compose -f docker/compose.dev.yaml down -v"
+    "infra:reset": "docker compose -f docker/compose.dev.yaml down -v",
+    "logos:sync": "node scripts/sync-logos.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",

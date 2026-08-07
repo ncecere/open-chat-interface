@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import {
+  COLOR_THEMES,
+  QUOTA_METRICS,
+  QUOTA_WINDOW_KINDS,
   REGISTRATION_MODES,
   SEARCH_PROVIDER_KINDS,
   STORAGE_DRIVERS,
@@ -53,12 +56,43 @@ export const createInviteSchema = z.object({
   expiresInDays: z.number().int().min(1).max(365).nullable().optional(),
 });
 
+const s3EndpointSchema = z
+  .string()
+  .trim()
+  .max(2_048)
+  .url()
+  .refine((value) => /^https?:\/\//i.test(value), {
+    message: 'Endpoint must use HTTP or HTTPS',
+  })
+  .refine((value) => !/^https?:\/\/[^/]*@/i.test(value), {
+    message: 'Endpoint must not include credentials',
+  });
+
+const s3SettingsSchema = z.object({
+  bucket: z.string().trim().max(255),
+  region: z.string().trim().max(100),
+  endpoint: s3EndpointSchema.nullable(),
+  accessKeyId: z.string().trim().max(255),
+  forcePathStyle: z.boolean(),
+  hasCredential: z.boolean(),
+});
+
+const updateS3SettingsSchema = s3SettingsSchema
+  .omit({ hasCredential: true })
+  .partial()
+  .extend({
+    /** Omit or send an empty string to keep, send a value to replace, or null to clear. */
+    secretAccessKey: z.string().max(2_048).nullable().optional(),
+  })
+  .strict();
+
 export const instanceSettingsSchema = z.object({
   appName: z.string(),
   logoUrl: z.string().nullable(),
   accentColor: z.string().nullable(),
   loginMessage: z.string().nullable(),
   defaultTheme: z.enum(THEME_MODES),
+  colorTheme: z.enum(COLOR_THEMES),
   registrationMode: z.enum(REGISTRATION_MODES),
   emailVerificationRequired: z.boolean(),
   localAuthEnabled: z.boolean(),
@@ -78,6 +112,7 @@ export const instanceSettingsSchema = z.object({
     maxFileBytes: z.number().int().positive(),
     maxFilesPerMessage: z.number().int().positive(),
     allowedMimeTypes: z.array(z.string()),
+    s3: s3SettingsSchema,
   }),
   search: z.object({
     enabled: z.boolean(),
@@ -99,7 +134,11 @@ export const updateInstanceSettingsSchema = instanceSettingsSchema
   .partial()
   .omit({ smtp: true, search: true, storage: true })
   .extend({
-    storage: instanceSettingsSchema.shape.storage.partial().optional(),
+    storage: instanceSettingsSchema.shape.storage
+      .omit({ s3: true })
+      .partial()
+      .extend({ s3: updateS3SettingsSchema.optional() })
+      .optional(),
     search: instanceSettingsSchema.shape.search
       .partial()
       .extend({ apiKey: z.string().max(500).nullable().optional() })
@@ -113,13 +152,49 @@ export const updateInstanceSettingsSchema = instanceSettingsSchema
       .optional(),
   });
 
-export const roleQuotaSchema = z.object({
-  role: z.enum(USER_ROLES),
+/**
+ * A named limit an admin can apply to any number of roles. `limitValue` is
+ * expressed in the metric's own unit: messages, tokens, or micro-dollars.
+ */
+export const quotaPolicySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  metric: z.enum(QUOTA_METRICS),
+  limitValue: z.number().int().positive(),
+  windowKind: z.enum(QUOTA_WINDOW_KINDS),
+  windowHours: z.number().int().positive().nullable(),
+  timezone: z.string(),
   enabled: z.boolean(),
-  maxMessagesPerWindow: z.number().int().positive().nullable(),
-  maxTokensPerWindow: z.number().int().positive().nullable(),
-  windowHours: z.number().int().positive(),
+  roles: z.array(z.enum(USER_ROLES)),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
+
+export const upsertQuotaPolicySchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    description: z.string().trim().max(300).nullable().optional(),
+    metric: z.enum(QUOTA_METRICS),
+    limitValue: z.number().int().positive().max(1_000_000_000_000),
+    windowKind: z.enum(QUOTA_WINDOW_KINDS),
+    /** Required for rolling windows and ignored by calendar windows. */
+    windowHours: z.number().int().positive().max(8_760).nullable().optional(),
+    /** IANA zone; only meaningful for calendar windows. */
+    timezone: z.string().trim().min(1).max(64).default('UTC'),
+    enabled: z.boolean().default(true),
+    roles: z.array(z.enum(USER_ROLES)).max(USER_ROLES.length).default([]),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.windowKind === 'rolling' && !value.windowHours) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['windowHours'],
+        message: 'Rolling windows require a length in hours.',
+      });
+    }
+  });
 
 export const auditLogEntrySchema = z.object({
   id: z.string(),
@@ -131,6 +206,30 @@ export const auditLogEntrySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).nullable(),
   ipAddress: z.string().nullable(),
   createdAt: z.string(),
+});
+
+/** One policy's consumption, as shown in the user-facing usage meter. */
+export const usageAllowanceSchema = z.object({
+  policyId: z.string(),
+  name: z.string(),
+  metric: z.enum(QUOTA_METRICS),
+  windowKind: z.enum(QUOTA_WINDOW_KINDS),
+  windowHours: z.number().int().positive().nullable(),
+  used: z.number().int().nonnegative(),
+  limitValue: z.number().int().positive(),
+  remaining: z.number().int().nonnegative(),
+  exceeded: z.boolean(),
+  resetsAt: z.string().nullable(),
+});
+
+export const usageSummarySchema = z.object({
+  allowances: z.array(usageAllowanceSchema),
+  /** Raw consumption over the trailing 24 hours, shown when no policy applies. */
+  recent: z.object({
+    messages: z.number().int().nonnegative(),
+    tokens: z.number().int().nonnegative(),
+    costMicros: z.number().int().nonnegative(),
+  }),
 });
 
 export const adminOverviewSchema = z.object({
@@ -150,6 +249,10 @@ export const adminOverviewSchema = z.object({
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type Invite = z.infer<typeof inviteSchema>;
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>;
-export type RoleQuota = z.infer<typeof roleQuotaSchema>;
+export type UpdateInstanceSettings = z.infer<typeof updateInstanceSettingsSchema>;
+export type QuotaPolicy = z.infer<typeof quotaPolicySchema>;
+export type UpsertQuotaPolicyInput = z.infer<typeof upsertQuotaPolicySchema>;
+export type UsageAllowance = z.infer<typeof usageAllowanceSchema>;
+export type UsageSummary = z.infer<typeof usageSummarySchema>;
 export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
 export type AdminOverview = z.infer<typeof adminOverviewSchema>;

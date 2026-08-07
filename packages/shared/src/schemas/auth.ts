@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REGISTRATION_MODES, USER_ROLES } from '../constants.js';
+import { COLOR_THEMES, REGISTRATION_MODES, THEME_MODES, USER_ROLES } from '../constants.js';
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(320);
 
@@ -30,6 +30,19 @@ export const resetPasswordSchema = z.object({
   password: passwordSchema,
 });
 
+export const inviteTokenSchema = z.string().trim().min(32).max(200);
+
+export const validateInviteSchema = z.object({
+  token: inviteTokenSchema,
+});
+
+export const acceptInviteSchema = z.object({
+  token: inviteTokenSchema,
+  email: emailSchema,
+  password: passwordSchema,
+  name: z.string().trim().min(1).max(120),
+});
+
 export const authStatusSchema = z.object({
   registrationMode: z.enum(REGISTRATION_MODES),
   emailVerificationRequired: z.boolean(),
@@ -47,6 +60,8 @@ export const authStatusSchema = z.object({
     appName: z.string(),
     logoUrl: z.string().nullable(),
     loginMessage: z.string().nullable(),
+    colorTheme: z.enum(COLOR_THEMES),
+    defaultTheme: z.enum(THEME_MODES),
   }),
 });
 
@@ -62,5 +77,6 @@ export const sessionUserSchema = z.object({
 
 export type SignInInput = z.infer<typeof signInSchema>;
 export type SignUpInput = z.infer<typeof signUpSchema>;
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
 export type AuthStatus = z.infer<typeof authStatusSchema>;
 export type SessionUser = z.infer<typeof sessionUserSchema>;

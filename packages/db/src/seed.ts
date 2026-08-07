@@ -2,11 +2,10 @@ import {
   DEFAULT_ALLOWED_MIME_TYPES,
   DEFAULT_MAX_FILE_BYTES,
   DEFAULT_MAX_FILES_PER_MESSAGE,
-  USER_ROLES,
 } from '@oci/shared';
 import { eq } from 'drizzle-orm';
 import { createDatabase } from './client.js';
-import { instanceSetting, organization, roleQuota } from './schema/index.js';
+import { instanceSetting, organization } from './schema/index.js';
 
 export const DEFAULT_ORGANIZATION_SLUG = 'default';
 
@@ -17,6 +16,7 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
     accentColor: null,
     loginMessage: null,
     defaultTheme: 'dark',
+    colorTheme: 'neutral',
   },
   auth: {
     registrationMode: 'invite_only',
@@ -38,6 +38,14 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
     maxFileBytes: DEFAULT_MAX_FILE_BYTES,
     maxFilesPerMessage: DEFAULT_MAX_FILES_PER_MESSAGE,
     allowedMimeTypes: [...DEFAULT_ALLOWED_MIME_TYPES],
+    s3: {
+      bucket: '',
+      region: 'us-east-1',
+      endpoint: null,
+      accessKeyId: '',
+      encryptedSecretAccessKey: null,
+      forcePathStyle: false,
+    },
   },
   search: {
     enabled: false,
@@ -96,13 +104,8 @@ async function main() {
   }
   console.log(`Seeded ${Object.keys(defaultSettings).length} setting groups.`);
 
-  for (const role of USER_ROLES) {
-    await db
-      .insert(roleQuota)
-      .values({ organizationId: org.id, role, enabled: false, windowHours: 24 })
-      .onConflictDoNothing();
-  }
-  console.log('Seeded role quotas (disabled by default).');
+  // Quota policies are created by administrators; none are seeded so a fresh
+  // instance is unlimited until an operator opts in.
 
   await sql.end();
   console.log('Seed complete.');

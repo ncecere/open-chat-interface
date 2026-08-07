@@ -8,6 +8,7 @@
     "REDIS_URL",
     "APP_URL",
     "API_URL",
+    "AUTH_TRUSTED_ORIGINS",
     "AUTH_SECRET",
     "ENCRYPTION_KEY",
     "INITIAL_ADMIN_EMAIL",

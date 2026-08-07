@@ -5,7 +5,7 @@ import type {
   ReasoningEffort,
   UserRole,
 } from '@oci/shared';
-import { boolean, index, integer, jsonb, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, jsonb, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
 import { organization } from './organization.js';
@@ -46,6 +46,8 @@ export const model = pgTable(
       .notNull()
       .references(() => provider.id, { onDelete: 'cascade' }),
     slug: text('slug').notNull(),
+    /** Lab slug from the shared MODEL_LABS catalog; drives the displayed logo. */
+    labId: text('lab_id'),
     upstreamModelId: text('upstream_model_id').notNull(),
     displayName: text('display_name').notNull(),
     description: text('description'),
@@ -54,6 +56,9 @@ export const model = pgTable(
     contextWindow: integer('context_window'),
     maxOutputTokens: integer('max_output_tokens'),
     supportedEfforts: jsonb('supported_efforts').$type<ReasoningEffort[]>().notNull().default([]),
+    /** Micro-dollars per million tokens; null means the model is unpriced. */
+    inputPriceMicros: bigint('input_price_micros', { mode: 'number' }),
+    outputPriceMicros: bigint('output_price_micros', { mode: 'number' }),
     visibleToRoles: jsonb('visible_to_roles')
       .$type<UserRole[]>()
       .notNull()

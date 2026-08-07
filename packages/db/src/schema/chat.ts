@@ -1,4 +1,5 @@
 import type { ReasoningEffort } from '@oci/shared';
+import { sql } from 'drizzle-orm';
 import { boolean, index, integer, jsonb, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
@@ -22,7 +23,10 @@ export const persona = pgTable(
     isDefault: boolean('is_default').notNull().default(false),
     ...timestamps(),
   },
-  (t) => [index('persona_user_idx').on(t.userId)],
+  (t) => [
+    index('persona_user_idx').on(t.userId),
+    uniqueIndex('persona_user_default_unique').on(t.userId).where(sql`${t.isDefault}`),
+  ],
 );
 
 export const thread = pgTable(
@@ -42,12 +46,15 @@ export const thread = pgTable(
     parentThreadId: text('parent_thread_id'),
     branchedFromMessageId: text('branched_from_message_id'),
     personaId: text('persona_id').references(() => persona.id, { onDelete: 'set null' }),
+    temporary: boolean('temporary').notNull().default(false),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [
     index('thread_user_updated_idx').on(t.userId, t.updatedAt),
     index('thread_parent_idx').on(t.parentThreadId),
+    index('thread_temporary_expiry_idx').on(t.temporary, t.expiresAt),
   ],
 );
 
