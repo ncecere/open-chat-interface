@@ -105,6 +105,17 @@ export const ssoProvider = pgTable(
     kind: text('kind').notNull().default('oidc'),
     enabled: boolean('enabled').notNull().default(true),
     jitProvisioning: boolean('jit_provisioning').notNull().default(true),
+    /**
+     * Whether this IdP's asserted email is trusted enough to attach its login
+     * to an existing account with the same address. Off by default: a provider
+     * that does not truly verify ownership could otherwise take over accounts.
+     */
+    trustedForLinking: boolean('trusted_for_linking').notNull().default(false),
+    /**
+     * Read by the SSO plugin's linking check. Kept in sync with
+     * `trustedForLinking`, which is the administrator-facing control.
+     */
+    domainVerified: boolean('domain_verified').notNull().default(false),
     allowedDomains: jsonb('allowed_domains').$type<string[]>().notNull().default([]),
     defaultRole: text('default_role').notNull().default('user'),
     claimRoleMappings: jsonb('claim_role_mappings')

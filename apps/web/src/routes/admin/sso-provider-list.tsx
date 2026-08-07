@@ -151,6 +151,12 @@ function ProviderRow({
           </dd>
         </div>
         <div>
+          <dt className="text-xs text-[var(--text-muted)]">Account linking</dt>
+          <dd className="mt-0.5 text-xs font-medium text-[var(--text-secondary)]">
+            {provider.trustedForLinking ? 'Trusted' : 'Not trusted'}
+          </dd>
+        </div>
+        <div>
           <dt className="text-xs text-[var(--text-muted)]">Default role</dt>
           <dd className="mt-0.5 text-xs font-medium capitalize text-[var(--text-secondary)]">
             {provider.defaultRole}

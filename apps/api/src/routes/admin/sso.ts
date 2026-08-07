@@ -42,6 +42,7 @@ ssoRoutes.get('/providers', async (c) => {
       kind,
       enabled: row.enabled,
       jitProvisioning: row.jitProvisioning,
+      trustedForLinking: row.trustedForLinking,
       allowedDomains: row.allowedDomains,
       defaultRole: row.defaultRole as SsoProviderSummary['defaultRole'],
       claimRoleMappings: row.claimRoleMappings,
@@ -132,6 +133,9 @@ ssoRoutes.post('/providers', async (c) => {
       kind: input.kind,
       enabled: input.enabled,
       jitProvisioning: input.jitProvisioning,
+      trustedForLinking: input.trustedForLinking,
+      // The plugin reads domainVerified; trustedForLinking is the admin control.
+      domainVerified: input.trustedForLinking,
       allowedDomains: input.allowedDomains,
       defaultRole: input.defaultRole,
       claimRoleMappings: input.claimRoleMappings,
@@ -154,6 +158,7 @@ const policyPatchSchema = z.object({
   label: z.string().trim().min(1).max(80).optional(),
   enabled: z.boolean().optional(),
   jitProvisioning: z.boolean().optional(),
+  trustedForLinking: z.boolean().optional(),
   allowedDomains: z.array(z.string().trim().toLowerCase().max(253)).optional(),
   defaultRole: z.enum(['admin', 'user', 'restricted']).optional(),
   claimRoleMappings: z
@@ -182,7 +187,10 @@ ssoRoutes.patch('/providers/:providerId', async (c) => {
 
   await db
     .update(schema.ssoProvider)
-    .set(patch)
+    .set({
+      ...patch,
+      ...(patch.trustedForLinking !== undefined && { domainVerified: patch.trustedForLinking }),
+    })
     .where(eq(schema.ssoProvider.providerId, providerId));
 
   await recordAudit({

@@ -29,6 +29,7 @@ const policySchema = z.object({
   label: z.string().trim().min(1, 'Enter a display name.').max(80),
   enabled: z.boolean(),
   jitProvisioning: z.boolean(),
+  trustedForLinking: z.boolean(),
   allowedDomains: z.array(z.string().trim().toLowerCase().min(1).max(253)),
   defaultRole: z.enum(USER_ROLES),
   claimRoleMappings: z.array(
@@ -50,6 +51,7 @@ interface PolicyDraft {
   label: string;
   enabled: boolean;
   jitProvisioning: boolean;
+  trustedForLinking: boolean;
   allowedDomains: string;
   defaultRole: UserRole;
   claimRoleMappings: DraftClaimRoleMapping[];
@@ -76,6 +78,7 @@ const EMPTY_POLICY: PolicyDraft = {
   label: '',
   enabled: true,
   jitProvisioning: true,
+  trustedForLinking: false,
   allowedDomains: '',
   defaultRole: 'user',
   claimRoleMappings: [],
@@ -320,6 +323,14 @@ function PolicyFields({
           disabled={disabled}
           onCheckedChange={(checked) => set('jitProvisioning', checked)}
         />
+        <ToggleField
+          id="sso-trusted-linking"
+          label="Trust for account linking"
+          description="Attach this provider to an existing account with the same email. Enable only if this provider verifies email ownership, since otherwise it could be used to take over an account."
+          checked={policy.trustedForLinking}
+          disabled={disabled}
+          onCheckedChange={(checked) => set('trustedForLinking', checked)}
+        />
       </div>
       <RoleMappings
         mappings={policy.claimRoleMappings}
@@ -551,6 +562,7 @@ export function SsoProviderForm({
           label: provider.label,
           enabled: provider.enabled,
           jitProvisioning: provider.jitProvisioning,
+          trustedForLinking: provider.trustedForLinking,
           allowedDomains: provider.allowedDomains.join(', '),
           defaultRole: provider.defaultRole,
           claimRoleMappings: provider.claimRoleMappings.map((mapping) => ({

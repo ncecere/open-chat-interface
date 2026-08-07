@@ -17,6 +17,8 @@ const baseProviderFields = {
   label: z.string().trim().min(1).max(80),
   enabled: z.boolean().default(true),
   jitProvisioning: z.boolean().default(true),
+  /** Only enable for an IdP that genuinely verifies email ownership. */
+  trustedForLinking: z.boolean().default(false),
   allowedDomains: z.array(z.string().trim().toLowerCase().max(253)).default([]),
   defaultRole: z.enum(USER_ROLES).default('user'),
   claimRoleMappings: z.array(claimRoleMappingSchema).default([]),
@@ -57,6 +59,7 @@ export const ssoProviderSummarySchema = z.object({
   kind: z.enum(['oidc', 'saml']),
   enabled: z.boolean(),
   jitProvisioning: z.boolean(),
+  trustedForLinking: z.boolean(),
   allowedDomains: z.array(z.string()),
   defaultRole: z.enum(USER_ROLES),
   claimRoleMappings: z.array(claimRoleMappingSchema),

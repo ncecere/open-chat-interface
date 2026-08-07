@@ -88,6 +88,17 @@ providers in **Admin → Auth & SSO** using provider IDs `oci-oidc` and `oci-sam
 so the callback URLs match the imported realm. The credentials in this realm are
 test-only and must never be reused.
 
+### Account linking
+
+When two providers assert the same email, the second sign-in is refused unless
+that provider is marked **Trust for account linking**. The toggle is off by
+default and, once enabled, linking still requires the email domain to match the
+provider's allowed domains.
+
+Enable it only for an identity provider that genuinely verifies email
+ownership. One that does not could assert an existing user's address and take
+over the account.
+
 > `ENCRYPTION_KEY` encrypts provider credentials at rest. Rotating it
 > invalidates every stored credential.
 

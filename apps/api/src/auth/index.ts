@@ -142,6 +142,13 @@ export const auth = betterAuth({
       adminRoles: ['admin'],
     }),
     sso({
+      /**
+       * The SSO plugin links a login to an existing account only when the
+       * provider is domain-verified and the email domain matches. OCI drives
+       * `domainVerified` from the administrator's "trust for account linking"
+       * toggle, so linking stays off until an operator vouches for the IdP.
+       */
+      domainVerification: { enabled: true },
       provisionUser: async ({ user, token, provider }) => {
         try {
           await applySsoProvisioning({
