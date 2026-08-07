@@ -1,5 +1,4 @@
-import type { CatalogModel, ReasoningEffort } from '@oci/shared';
-import { REASONING_EFFORTS } from '@oci/shared';
+import { type CatalogModel, effectiveSupportedEfforts, type ReasoningEffort } from '@oci/shared';
 import { ArrowUp, Globe, Paperclip, Square, Zap } from 'lucide-react';
 import {
   type ChangeEvent,
@@ -123,7 +122,8 @@ export function Composer({
 
   const uploading = attachments.some((item) => item.status === 'uploading');
   const canSubmit = value.trim().length > 0 && Boolean(selectedModel) && !streaming && !uploading;
-  const supportsEffort = selectedModel?.capabilities.includes('effort_control') ?? false;
+  const availableEfforts = selectedModel ? effectiveSupportedEfforts(selectedModel) : [];
+  const supportsEffort = availableEfforts.length > 0;
   // OCI search grounding is provider-independent, so every chat model can use it.
   const supportsSearch = webSearchAvailable;
 
@@ -177,10 +177,10 @@ export function Composer({
                 directly; a wrapping span would receive button semantics it
                 cannot legally carry. */}
             <DropdownMenuTrigger asChild disabled={!supportsEffort}>
-              <Pill icon={Zap} label={effort} disabled={!supportsEffort} />
+              <Pill icon={Zap} label={effort} disabled={!supportsEffort} className="capitalize" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top">
-              {REASONING_EFFORTS.map((option) => (
+              {availableEfforts.map((option) => (
                 <DropdownMenuItem
                   key={option}
                   onSelect={() => onEffortChange(option)}

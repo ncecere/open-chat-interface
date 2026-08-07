@@ -1,4 +1,4 @@
-import type { Attachment, ReasoningEffort } from '@oci/shared';
+import { type Attachment, REASONING_EFFORTS, type ReasoningEffort } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
@@ -13,6 +13,7 @@ import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 const PENDING_KEY = 'oci.pendingPrompt';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
+const PENDING_EFFORT_KEY = 'oci.pendingEffort';
 const PENDING_BRANCH_KEY = 'oci.pendingBranchResponse';
 const MODEL_STORAGE_KEY = 'oci.model';
 
@@ -43,6 +44,11 @@ function peekPendingBranch(threadId: string): PendingBranchResponse | null {
   }
 }
 
+function peekPendingEffort(): ReasoningEffort | undefined {
+  const value = sessionStorage.getItem(PENDING_EFFORT_KEY);
+  return REASONING_EFFORTS.find((effort) => effort === value);
+}
+
 /** Reads uploads handed over by the landing page without mutating during render. */
 function peekPendingAttachments(): Attachment[] {
   const raw = sessionStorage.getItem(PENDING_ATTACHMENTS_KEY);
@@ -70,12 +76,14 @@ function ThreadConversation({
   threadId,
   initialMessages,
   carriedAttachments,
+  carriedEffort,
   personaId,
   temporary,
 }: {
   threadId: string;
   initialMessages: UIMessage[];
   carriedAttachments: Attachment[];
+  carriedEffort?: ReasoningEffort;
   personaId: string | null;
   temporary: boolean;
 }) {
@@ -85,7 +93,7 @@ function ThreadConversation({
     initialMessages,
     carriedAttachments,
     initialModelSlug: pendingBranch?.modelSlug,
-    initialEffort: pendingBranch?.effort,
+    initialEffort: pendingBranch?.effort ?? carriedEffort,
     initialPersonaId: personaId,
     temporary,
   });
@@ -107,6 +115,7 @@ function ThreadConversation({
     sentPending.current = true;
     sessionStorage.removeItem(PENDING_KEY);
     sessionStorage.removeItem(PENDING_ATTACHMENTS_KEY);
+    sessionStorage.removeItem(PENDING_EFFORT_KEY);
     void session.send(pending);
   }, [session.selectedModel, session.send]);
 
@@ -202,6 +211,7 @@ function ThreadConversation({
 export function ChatThreadPage({ threadId }: { threadId: string }) {
   // Read once on mount so a re-render cannot lose the handover.
   const [carriedAttachments] = useState(peekPendingAttachments);
+  const [carriedEffort] = useState(peekPendingEffort);
   const { setTemporary } = useTemporaryChat();
 
   const { data, isLoading } = useQuery({
@@ -233,6 +243,7 @@ export function ChatThreadPage({ threadId }: { threadId: string }) {
       threadId={threadId}
       initialMessages={data.messages}
       carriedAttachments={carriedAttachments}
+      carriedEffort={carriedEffort}
       personaId={data.thread.personaId}
       temporary={data.thread.temporary}
     />

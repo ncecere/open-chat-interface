@@ -34,6 +34,7 @@ import {
   settleReservation,
   type UsageReservation,
 } from '../services/quota/index.js';
+import { assertReasoningEffortSupported, reasoningCallSettings } from '../services/reasoning.js';
 import { buildGroundingContext, searchWeb } from '../services/search/index.js';
 import { buildSystemPrompt } from '../services/system-prompt.js';
 import {
@@ -55,13 +56,6 @@ const STALE_RUN_MS = 15 * 60 * 1000;
 export const chatRoutes = new Hono<AppBindings>();
 
 chatRoutes.use('*', requireAuth);
-
-/** Reasoning effort maps to provider-specific options at call time. */
-const EFFORT_BUDGETS: Record<string, number> = {
-  low: 2048,
-  medium: 8192,
-  high: 24576,
-};
 
 /**
  * Records a finished run. Reserved runs settle their placeholder row; runs on
@@ -127,6 +121,7 @@ chatRoutes.post('/', async (c) => {
   }
 
   const resolved = await resolveModelForRole(input.modelSlug, user.role);
+  assertReasoningEffortSupported(input.effort, resolved.supportedEfforts);
   const latestInput = input.messages[0];
   if (!latestInput) throw validationFailed('A user message is required');
 
@@ -378,23 +373,13 @@ chatRoutes.post('/', async (c) => {
   let outcome: { status: Exclude<ChatRunStatus, 'active'>; error?: string } = {
     status: 'complete',
   };
-  const budget = input.effort ? EFFORT_BUDGETS[input.effort] : undefined;
-
   const result = streamText({
     model: resolved.languageModel,
     system,
     messages: await convertToModelMessages(uiMessages),
     abortSignal: abortController.signal,
     ...(resolved.maxOutputTokens ? { maxOutputTokens: resolved.maxOutputTokens } : {}),
-    ...(budget
-      ? {
-          providerOptions: {
-            anthropic: { thinking: { type: 'enabled', budgetTokens: budget } },
-            openai: { reasoningEffort: input.effort },
-            google: { thinkingConfig: { thinkingBudget: budget } },
-          },
-        }
-      : {}),
+    ...reasoningCallSettings(input.effort, resolved.providerKind),
     onChunk: async () => {
       if (Date.now() - lastCancellationCheck < 500) return;
       lastCancellationCheck = Date.now();

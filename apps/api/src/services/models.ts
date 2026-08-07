@@ -1,5 +1,11 @@
 import { and, asc, eq, schema } from '@oci/db';
-import type { CatalogModel, UserRole } from '@oci/shared';
+import {
+  type CatalogModel,
+  effectiveSupportedEfforts,
+  type ProviderKind,
+  type ReasoningEffort,
+  type UserRole,
+} from '@oci/shared';
 import { db } from '../db/index.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { forbidden, notFound, providerError } from '../lib/errors.js';
@@ -30,7 +36,7 @@ export async function listAvailableModels(role: UserRole): Promise<CatalogModel[
       costTier: model.costTier,
       contextWindow: model.contextWindow,
       maxOutputTokens: model.maxOutputTokens,
-      supportedEfforts: model.supportedEfforts,
+      supportedEfforts: effectiveSupportedEfforts(model),
       isDefault: model.isDefault,
       sortOrder: model.sortOrder,
     }));
@@ -42,6 +48,8 @@ interface ResolvedModel {
   displayName: string;
   maxOutputTokens: number | null;
   capabilities: string[];
+  providerKind: ProviderKind;
+  supportedEfforts: ReasoningEffort[];
 }
 
 /**
@@ -82,5 +90,7 @@ export async function resolveModelForRole(slug: string, role: UserRole): Promise
     displayName: row.model.displayName,
     maxOutputTokens: row.model.maxOutputTokens,
     capabilities: row.model.capabilities,
+    providerKind: row.provider.kind,
+    supportedEfforts: effectiveSupportedEfforts(row.model),
   };
 }

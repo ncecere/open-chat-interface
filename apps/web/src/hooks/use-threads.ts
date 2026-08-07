@@ -1,4 +1,4 @@
-import type { ThreadSummary } from '@oci/shared';
+import type { ReasoningEffort, ThreadSummary } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '~/lib/api-client';
 
@@ -31,7 +31,7 @@ export interface BranchMessageResult {
   message: {
     id: string;
     modelSlug: string | null;
-    effort: 'low' | 'medium' | 'high' | null;
+    effort: ReasoningEffort | null;
   };
 }
 

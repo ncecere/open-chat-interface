@@ -1,3 +1,4 @@
+import type { ReasoningEffort } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -8,6 +9,7 @@ import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { usePersonas } from '~/hooks/use-personas';
 import { useCreateThread } from '~/hooks/use-threads';
+import { coerceReasoningEffort, reasoningEffortForRequest } from '~/lib/reasoning';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -16,6 +18,7 @@ type CategoryId = (typeof SUGGESTION_CATEGORIES)[number]['id'];
 const MODEL_STORAGE_KEY = 'oci.model';
 const PENDING_KEY = 'oci.pendingPrompt';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
+const PENDING_EFFORT_KEY = 'oci.pendingEffort';
 
 /**
  * Landing page. Sending here creates a thread first, then hands the prompt to
@@ -32,7 +35,7 @@ export function ChatHomePage() {
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraft] = useState('');
-  const [effort, setEffort] = useState<'instant' | 'low' | 'medium' | 'high'>('instant');
+  const [effort, setEffort] = useState<ReasoningEffort>('instant');
   const [webSearch, setWebSearch] = useState(false);
   const [modelSlug, setModelSlug] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
@@ -66,6 +69,9 @@ export function ChatHomePage() {
       personaId,
     });
     sessionStorage.setItem(PENDING_KEY, content);
+    const requestEffort = reasoningEffortForRequest(selectedModel, effort);
+    if (requestEffort) sessionStorage.setItem(PENDING_EFFORT_KEY, requestEffort);
+    else sessionStorage.removeItem(PENDING_EFFORT_KEY);
 
     // Hand any uploads over to the thread view along with the prompt.
     const readyAttachments = attachments.items.flatMap((item) =>
@@ -156,6 +162,7 @@ export function ChatHomePage() {
         selectedModel={selectedModel}
         onSelectModel={(model) => {
           setModelSlug(model.slug);
+          setEffort((current) => coerceReasoningEffort(model, current));
           localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
         }}
         effort={effort}

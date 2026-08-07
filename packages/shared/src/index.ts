@@ -1,6 +1,7 @@
 export * from './constants.js';
 export * from './errors.js';
 export * from './model-labs.js';
+export * from './reasoning.js';
 export * from './schemas/admin.js';
 export * from './schemas/auth.js';
 export * from './schemas/chat.js';

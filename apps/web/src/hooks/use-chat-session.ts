@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
+import { coerceReasoningEffort, reasoningEffortForRequest } from '~/lib/reasoning';
 
 const MODEL_STORAGE_KEY = 'oci.model';
 
@@ -51,6 +52,13 @@ export function useChatSession(options: {
     [models, modelSlug],
   );
 
+  // A model switch must not retain a level the new model cannot accept.
+  useEffect(() => {
+    if (!selectedModel) return;
+    const validEffort = coerceReasoningEffort(selectedModel, effort);
+    if (validEffort !== effort) setEffort(validEffort);
+  }, [selectedModel, effort]);
+
   // Uploads started on the landing page are carried over on first send.
   const [carriedAttachments, setCarriedAttachments] = useState<Attachment[]>(
     options.carriedAttachments ?? [],
@@ -80,7 +88,7 @@ export function useChatSession(options: {
                 : [],
               threadId: options.threadId,
               modelSlug,
-              effort: effort === 'instant' ? undefined : effort,
+              effort: reasoningEffortForRequest(selectedModel, effort),
               webSearch,
               personaId,
               temporary: options.temporary ?? false,
@@ -90,7 +98,16 @@ export function useChatSession(options: {
           };
         },
       }),
-    [options.threadId, options.temporary, modelSlug, effort, webSearch, personaId, attachmentKey],
+    [
+      options.threadId,
+      options.temporary,
+      modelSlug,
+      selectedModel,
+      effort,
+      webSearch,
+      personaId,
+      attachmentKey,
+    ],
   );
 
   const chat = useChat({
@@ -117,6 +134,7 @@ export function useChatSession(options: {
 
   function selectModel(model: CatalogModel) {
     setModelSlug(model.slug);
+    setEffort((current) => coerceReasoningEffort(model, current));
     localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
   }
 

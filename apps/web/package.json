@@ -9,7 +9,7 @@
     "e2e": "playwright test",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run tests/unit"
   },
   "dependencies": {
     "@ai-sdk/react": "4.0.58",

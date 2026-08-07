@@ -21,6 +21,7 @@ pnpm-debug.log*
 /storage/
 playwright-report/
 test-results/
+_TMP/
 
 # Reference captures contain authenticated personal account data
 screen_shots/
