@@ -1,0 +1,32 @@
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	encode gzip zstd
+
+	# API and auth traffic goes to the Hono service. Keeping this same-origin
+	# means session cookies need no CORS or SameSite=None handling.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:3000} {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}

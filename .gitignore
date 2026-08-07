@@ -1,0 +1,24 @@
+node_modules/
+dist/
+build/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local runtime data
+data/
+storage/
+playwright-report/
+test-results/
+
+# Reference captures contain authenticated personal account data
+screen_shots/

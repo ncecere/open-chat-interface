@@ -1,0 +1,25 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  '@biomejs/biome': true
+  '@tailwindcss/oxide': true
+  sharp: true
+
+minimumReleaseAgeExclude:
+  - tsx@4.23.9
+  - '@ai-sdk/anthropic@4.0.33'
+  - '@ai-sdk/gateway@4.0.43'
+  - '@ai-sdk/google@4.0.36'
+  - '@ai-sdk/openai-compatible@3.0.25'
+  - '@ai-sdk/openai@4.0.33'
+  - '@ai-sdk/provider-utils@5.0.23'
+  - '@ai-sdk/provider@4.0.6'
+  - ai@7.0.55
+  - '@tanstack/history@1.162.1'
+  - '@tanstack/react-router@1.170.21'
+  - '@tanstack/router-core@1.171.18'
+  - lucide-react@1.29.0
+  - vite@8.2.1

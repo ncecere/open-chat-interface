@@ -1,0 +1,175 @@
+import { asc, eq, ne, schema } from '@oci/db';
+import { type AdminModel, upsertModelSchema } from '@oci/shared';
+import { Hono } from 'hono';
+import { db } from '../../db/index.js';
+import { conflict, notFound } from '../../lib/errors.js';
+import { type AppBindings, currentUser } from '../../middleware/context.js';
+import { parseBody } from '../../middleware/validate.js';
+import { recordAudit } from '../../services/audit.js';
+import { getDefaultOrganizationId } from '../../services/organization.js';
+
+export const modelRoutes = new Hono<AppBindings>();
+
+modelRoutes.get('/', async (c) => {
+  const rows = await db
+    .select({
+      model: schema.model,
+      providerKind: schema.provider.kind,
+      providerLabel: schema.provider.label,
+    })
+    .from(schema.model)
+    .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id))
+    .orderBy(asc(schema.model.sortOrder), asc(schema.model.displayName));
+
+  const models: AdminModel[] = rows.map(({ model, providerKind, providerLabel }) => ({
+    id: model.id,
+    slug: model.slug,
+    displayName: model.displayName,
+    description: model.description,
+    providerId: model.providerId,
+    providerKind,
+    providerLabel,
+    upstreamModelId: model.upstreamModelId,
+    capabilities: model.capabilities,
+    costTier: model.costTier,
+    contextWindow: model.contextWindow,
+    maxOutputTokens: model.maxOutputTokens,
+    supportedEfforts: model.supportedEfforts,
+    isDefault: model.isDefault,
+    sortOrder: model.sortOrder,
+    enabled: model.enabled,
+    visibleToRoles: model.visibleToRoles,
+    createdAt: model.createdAt.toISOString(),
+    updatedAt: model.updatedAt.toISOString(),
+  }));
+
+  return c.json({ models });
+});
+
+async function clearOtherDefaults(organizationId: string, keepId?: string) {
+  const condition = keepId
+    ? ne(schema.model.id, keepId)
+    : eq(schema.model.organizationId, organizationId);
+
+  await db.update(schema.model).set({ isDefault: false }).where(condition);
+}
+
+modelRoutes.post('/', async (c) => {
+  const actor = currentUser(c);
+  const input = await parseBody(c, upsertModelSchema);
+  const organizationId = await getDefaultOrganizationId();
+
+  const [existing] = await db
+    .select({ id: schema.model.id })
+    .from(schema.model)
+    .where(eq(schema.model.slug, input.slug))
+    .limit(1);
+
+  if (existing) throw conflict('A model with that slug already exists');
+
+  const [created] = await db
+    .insert(schema.model)
+    .values({
+      organizationId,
+      providerId: input.providerId,
+      slug: input.slug,
+      upstreamModelId: input.upstreamModelId,
+      displayName: input.displayName,
+      description: input.description ?? null,
+      capabilities: input.capabilities,
+      costTier: input.costTier,
+      contextWindow: input.contextWindow ?? null,
+      maxOutputTokens: input.maxOutputTokens ?? null,
+      supportedEfforts: input.supportedEfforts,
+      visibleToRoles: input.visibleToRoles,
+      enabled: input.enabled,
+      isDefault: input.isDefault,
+      sortOrder: input.sortOrder,
+    })
+    .returning({ id: schema.model.id });
+
+  if (input.isDefault && created) {
+    await clearOtherDefaults(organizationId, created.id);
+  }
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'model.create',
+    targetType: 'model',
+    targetId: created?.id ?? null,
+    metadata: { slug: input.slug, upstreamModelId: input.upstreamModelId },
+  });
+
+  return c.json({ id: created?.id }, 201);
+});
+
+modelRoutes.patch('/:id', async (c) => {
+  const actor = currentUser(c);
+  const id = c.req.param('id');
+
+  const [existing] = await db
+    .select({ id: schema.model.id })
+    .from(schema.model)
+    .where(eq(schema.model.id, id))
+    .limit(1);
+
+  if (!existing) throw notFound('Model not found');
+
+  const input = await parseBody(c, upsertModelSchema.partial());
+  const organizationId = await getDefaultOrganizationId();
+
+  const [updated] = await db
+    .update(schema.model)
+    .set({
+      ...(input.slug !== undefined && { slug: input.slug }),
+      ...(input.upstreamModelId !== undefined && { upstreamModelId: input.upstreamModelId }),
+      ...(input.displayName !== undefined && { displayName: input.displayName }),
+      ...(input.description !== undefined && { description: input.description ?? null }),
+      ...(input.capabilities !== undefined && { capabilities: input.capabilities }),
+      ...(input.costTier !== undefined && { costTier: input.costTier }),
+      ...(input.contextWindow !== undefined && { contextWindow: input.contextWindow ?? null }),
+      ...(input.maxOutputTokens !== undefined && {
+        maxOutputTokens: input.maxOutputTokens ?? null,
+      }),
+      ...(input.supportedEfforts !== undefined && { supportedEfforts: input.supportedEfforts }),
+      ...(input.visibleToRoles !== undefined && { visibleToRoles: input.visibleToRoles }),
+      ...(input.enabled !== undefined && { enabled: input.enabled }),
+      ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
+      ...(input.sortOrder !== undefined && { sortOrder: input.sortOrder }),
+    })
+    .where(eq(schema.model.id, id))
+    .returning({ id: schema.model.id });
+
+  if (input.isDefault) {
+    await clearOtherDefaults(organizationId, id);
+  }
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'model.update',
+    targetType: 'model',
+    targetId: id,
+    metadata: { fields: Object.keys(input) },
+  });
+
+  return c.json({ id: updated?.id });
+});
+
+modelRoutes.delete('/:id', async (c) => {
+  const actor = currentUser(c);
+  const id = c.req.param('id');
+
+  await db.delete(schema.model).where(eq(schema.model.id, id));
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'model.delete',
+    targetType: 'model',
+    targetId: id,
+  });
+
+  return c.json({ ok: true });
+});
