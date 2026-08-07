@@ -1,24 +1,26 @@
-import { and, eq, gte, inArray, schema, sql } from '@oci/db';
+import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
 import type { UsageSummary, UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { quotaExceeded } from '../../lib/errors.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import {
   buildAllowance,
   calculateCostMicros,
   type EvaluablePolicy,
-  limitMessage,
-  usedForMetric,
+  type ModelPricing,
   type WindowTotals,
 } from './policy.js';
+import { RESERVATION_TTL_MS, reserveQuota, type UsageReservation } from './reservation.js';
 import { resolveWindow } from './windows.js';
 
+export { calculateCostMicros, describeLimit, describeWindow, formatMicros } from './policy.js';
 export {
-  calculateCostMicros,
-  describeLimit,
-  describeWindow,
-  formatMicros,
-} from './policy.js';
+  RESERVATION_TTL_MS,
+  releaseReservation,
+  reserveQuota,
+  settleReservation,
+  sweepAbandonedReservations,
+  type UsageReservation,
+} from './reservation.js';
 export { resolveWindow } from './windows.js';
 
 /** Every enabled policy applied to a role, ordered so messages are reported first. */
@@ -50,8 +52,11 @@ async function loadPoliciesForRole(role: UserRole): Promise<EvaluablePolicy[]> {
 /**
  * Sums a user's consumption from per-event rows. A daily rollup cannot answer
  * a rolling or non-UTC calendar window, so events are the source of truth.
+ * In-flight reservations count so the meter reflects work already committed.
  */
 async function windowTotals(userId: string, start: Date): Promise<WindowTotals> {
+  const liveCutoff = new Date(Date.now() - RESERVATION_TTL_MS);
+
   const [totals] = await db
     .select({
       messages: sql<number>`coalesce(sum(${schema.usageEvent.messageCount}), 0)::bigint`,
@@ -59,7 +64,14 @@ async function windowTotals(userId: string, start: Date): Promise<WindowTotals> 
       costMicros: sql<number>`coalesce(sum(${schema.usageEvent.costMicros}), 0)::bigint`,
     })
     .from(schema.usageEvent)
-    .where(and(eq(schema.usageEvent.userId, userId), gte(schema.usageEvent.occurredAt, start)));
+    .where(
+      and(
+        eq(schema.usageEvent.userId, userId),
+        gte(schema.usageEvent.occurredAt, start),
+        // Abandoned reservations stop counting once they age past the TTL.
+        or(eq(schema.usageEvent.pending, false), gte(schema.usageEvent.occurredAt, liveCutoff)),
+      ),
+    );
 
   // postgres returns bigint sums as strings; normalize before any arithmetic.
   return {
@@ -69,18 +81,20 @@ async function windowTotals(userId: string, start: Date): Promise<WindowTotals> 
   };
 }
 
-/** Throws when any policy applied to the caller's role is already spent. */
-export async function checkQuota(userId: string, role: UserRole): Promise<void> {
-  const policies = await loadPoliciesForRole(role);
+/**
+ * Reserves quota for a run, throwing when any applied policy is already spent.
+ * Returns null when no policy applies, so unlimited instances write no
+ * reservation row at all.
+ */
+export async function reserveQuotaForRun(params: {
+  userId: string;
+  role: UserRole;
+  modelSlug: string;
+}): Promise<UsageReservation | null> {
+  const policies = await loadPoliciesForRole(params.role);
+  if (policies.length === 0) return null;
 
-  for (const policy of policies) {
-    const { start } = resolveWindow(policy);
-    const totals = await windowTotals(userId, start);
-
-    if (usedForMetric(policy.metric, totals) >= policy.limitValue) {
-      throw quotaExceeded(limitMessage(policy));
-    }
-  }
+  return reserveQuota({ ...params, policies, pricing: await modelPricing(params.modelSlug) });
 }
 
 /** Per-policy consumption for the usage meter in settings. */
@@ -99,18 +113,8 @@ export async function getUsageSummary(userId: string, role: UserRole): Promise<U
   return { allowances, recent };
 }
 
-export interface RecordUsageInput {
-  userId: string;
-  modelSlug: string;
-  tokensIn: number;
-  tokensOut: number;
-}
-
-/**
- * Writes one usage event plus the daily rollup used by admin analytics. Prices
- * are snapshotted so later catalog edits never rewrite historical spend.
- */
-export async function recordUsage(params: RecordUsageInput): Promise<void> {
+/** Current catalog prices for a model, or nulls when it is unpriced. */
+async function modelPricing(modelSlug: string): Promise<ModelPricing> {
   const organizationId = await getDefaultOrganizationId();
 
   const [pricing] = await db
@@ -119,15 +123,30 @@ export async function recordUsage(params: RecordUsageInput): Promise<void> {
       outputPriceMicros: schema.model.outputPriceMicros,
     })
     .from(schema.model)
-    .where(
-      and(eq(schema.model.organizationId, organizationId), eq(schema.model.slug, params.modelSlug)),
-    )
+    .where(and(eq(schema.model.organizationId, organizationId), eq(schema.model.slug, modelSlug)))
     .limit(1);
 
-  const snapshot = {
+  return {
     inputPriceMicros: pricing?.inputPriceMicros ?? null,
     outputPriceMicros: pricing?.outputPriceMicros ?? null,
   };
+}
+
+export interface RecordUsageInput {
+  userId: string;
+  modelSlug: string;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+/**
+ * Records usage for a run that was never reserved, which happens only when no
+ * quota policy applies. Prices are snapshotted so later catalog edits never
+ * rewrite historical spend.
+ */
+export async function recordUsage(params: RecordUsageInput): Promise<void> {
+  const organizationId = await getDefaultOrganizationId();
+  const snapshot = await modelPricing(params.modelSlug);
   const costMicros = calculateCostMicros(snapshot, params.tokensIn, params.tokensOut);
   const occurredAt = new Date();
 
@@ -142,6 +161,7 @@ export async function recordUsage(params: RecordUsageInput): Promise<void> {
     costMicros,
     inputPriceMicros: snapshot.inputPriceMicros,
     outputPriceMicros: snapshot.outputPriceMicros,
+    pending: false,
   });
 
   await db

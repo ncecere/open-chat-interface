@@ -82,6 +82,12 @@ export const usageEvent = pgTable(
     costMicros: bigint('cost_micros', { mode: 'number' }).notNull().default(0),
     inputPriceMicros: bigint('input_price_micros', { mode: 'number' }),
     outputPriceMicros: bigint('output_price_micros', { mode: 'number' }),
+    /**
+     * A reservation written before generation so concurrent requests see each
+     * other. Settled once the run finishes; a row left pending by a crashed
+     * process stops counting after the reservation TTL.
+     */
+    pending: boolean('pending').notNull().default(false),
   },
   (t) => [index('usage_event_user_occurred_idx').on(t.userId, t.occurredAt)],
 );

@@ -140,6 +140,12 @@ million input and output tokens. Money is stored as integer micro-dollars, and
 prices are snapshotted onto each usage event so later catalog edits never
 rewrite historical spend. Models left unpriced contribute zero cost.
 
+Enforcement reserves the run before generation and settles it afterwards, so
+concurrent requests are visible to each other and cannot collectively overshoot
+a limit. Cancelled and failed runs still settle, which keeps a message quota
+meaningful for someone who repeatedly stops mid-generation. A reservation
+abandoned by a crashed process stops counting after 15 minutes and is swept.
+
 > Cost tracking depends on the provider reporting token usage. Gateways that
 > omit usage data record zero tokens, so budget policies cannot bill them.
 

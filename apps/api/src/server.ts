@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { ensureInitialAdmin } from './bootstrap.js';
 import { loadEnv } from './config/env.js';
 import { logger } from './lib/logger.js';
+import { sweepAbandonedReservations } from './services/quota/index.js';
 import { purgeExpiredTemporaryThreads } from './services/threads.js';
 
 async function main() {
@@ -22,6 +23,18 @@ async function main() {
     60 * 60 * 1000,
   );
   temporaryCleanup.unref();
+
+  // A process that dies mid-stream never settles its quota reservation. Those
+  // rows already stop counting at the TTL; this keeps them from lingering.
+  const reservationSweep = setInterval(
+    () => {
+      void sweepAbandonedReservations().catch((error) =>
+        logger.error({ error }, 'Failed to sweep abandoned quota reservations'),
+      );
+    },
+    5 * 60 * 1000,
+  );
+  reservationSweep.unref();
 
   const app = createApp();
 

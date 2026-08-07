@@ -50,6 +50,13 @@
       "when": 1786106232851,
       "tag": "0006_spicy_blacklash",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786109404915,
+      "tag": "0007_fine_menace",
+      "breakpoints": true
     }
   ]
 }

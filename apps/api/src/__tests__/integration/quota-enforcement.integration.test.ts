@@ -3,15 +3,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn(),
+  insert: vi.fn(),
+  transaction: vi.fn(),
+  execute: vi.fn().mockResolvedValue(undefined),
   getDefaultOrganizationId: vi.fn().mockResolvedValue('organization-1'),
 }));
 
-vi.mock('../../db/index.js', () => ({ db: { select: mocks.select } }));
+vi.mock('../../db/index.js', () => ({
+  db: {
+    select: mocks.select,
+    insert: mocks.insert,
+    transaction: mocks.transaction,
+    execute: mocks.execute,
+  },
+}));
 vi.mock('../../services/organization.js', () => ({
   getDefaultOrganizationId: mocks.getDefaultOrganizationId,
 }));
+vi.mock('../../lib/logger.js', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}));
 
-import { checkQuota, getUsageSummary } from '../../services/quota/index.js';
+import { getUsageSummary, reserveQuotaForRun } from '../../services/quota/index.js';
 
 /** Mirrors the policy lookup: select().from().innerJoin().where().orderBy() */
 function policyQuery(rows: unknown[]) {
@@ -24,11 +37,11 @@ function policyQuery(rows: unknown[]) {
   return chain;
 }
 
-/** Mirrors the usage aggregate: select().from().where() */
-function totalsQuery(rows: unknown[]) {
+/** Mirrors both the usage aggregate and the model-pricing lookup. */
+function tableQuery(rows: unknown[]) {
   const chain = {
     from: () => chain,
-    where: () => Promise.resolve(rows),
+    where: () => Object.assign(Promise.resolve(rows), { limit: () => Promise.resolve(rows) }),
   };
   return chain;
 }
@@ -53,74 +66,134 @@ const budgetPolicy = {
   timezone: 'UTC',
 };
 
-describe('integration with mocked DB: quota policy enforcement', () => {
+const unpriced = { inputPriceMicros: null, outputPriceMicros: null };
+
+/** Runs the reservation transaction against the mocked query chain. */
+function runTransaction() {
+  mocks.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+    fn({
+      execute: mocks.execute,
+      select: mocks.select,
+      insert: () => ({
+        values: () => ({ returning: () => Promise.resolve([{ id: 'reservation-1' }]) }),
+      }),
+    }),
+  );
+}
+
+describe('integration with mocked DB: quota reservation', () => {
   beforeEach(() => {
     mocks.select.mockReset();
+    mocks.transaction.mockReset();
+    runTransaction();
   });
 
-  it('does not query usage when no policy applies to the role', async () => {
+  it('writes no reservation when no policy applies to the role', async () => {
     mocks.select.mockReturnValueOnce(policyQuery([]));
 
-    await expect(checkQuota('user-1', 'user')).resolves.toBeUndefined();
-    expect(mocks.select).toHaveBeenCalledTimes(1);
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).resolves.toBeNull();
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it('allows usage strictly below the limit', async () => {
+  it('reserves when usage is strictly below the limit', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
-      .mockReturnValueOnce(totalsQuery([{ messages: 4, tokens: 0, costMicros: 0 }]));
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 4, tokens: 0, costMicros: 0 }]));
 
-    await expect(checkQuota('user-1', 'user')).resolves.toBeUndefined();
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).resolves.toMatchObject({ id: 'reservation-1' });
   });
 
-  it('blocks when usage exactly reaches the limit', async () => {
+  it('refuses when usage exactly reaches the limit', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
-      .mockReturnValueOnce(totalsQuery([{ messages: 5, tokens: 0, costMicros: 0 }]));
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 5, tokens: 0, costMicros: 0 }]));
 
-    await expect(checkQuota('user-1', 'user')).rejects.toMatchObject({
-      code: 'QUOTA_EXCEEDED',
-      status: 429,
-    });
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED', status: 429 });
   });
 
-  it('blocks on a budget policy once spend reaches the dollar limit', async () => {
+  it('counts an in-flight reservation, so a concurrent run cannot overshoot', async () => {
+    // The second request sees the first request's pending row in the total.
+    mocks.select
+      .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 5, tokens: 0, costMicros: 0 }]));
+
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+  });
+
+  it('serializes reservations per user with an advisory lock', async () => {
+    mocks.select
+      .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 0, tokens: 0, costMicros: 0 }]));
+
+    await reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' });
+
+    expect(mocks.execute).toHaveBeenCalled();
+  });
+
+  it('refuses on a budget policy once spend reaches the dollar limit', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
+      .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(
-        totalsQuery([{ messages: 1, tokens: 10, costMicros: 5 * MICROS_PER_DOLLAR }]),
+        tableQuery([{ messages: 1, tokens: 10, costMicros: 5 * MICROS_PER_DOLLAR }]),
       );
 
-    await expect(checkQuota('user-1', 'user')).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
   });
 
   it('enforces every policy applied to the role, not just the first', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy, budgetPolicy]))
-      .mockReturnValueOnce(totalsQuery([{ messages: 1, tokens: 0, costMicros: 0 }]))
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 1, tokens: 0, costMicros: 0 }]))
       .mockReturnValueOnce(
-        totalsQuery([{ messages: 1, tokens: 0, costMicros: 6 * MICROS_PER_DOLLAR }]),
+        tableQuery([{ messages: 1, tokens: 0, costMicros: 6 * MICROS_PER_DOLLAR }]),
       );
 
-    await expect(checkQuota('user-1', 'user')).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
   });
 
   it('normalizes bigint sums returned as strings by postgres', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
-      .mockReturnValueOnce(totalsQuery([{ messages: '1', tokens: '10', costMicros: '5000000' }]));
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: '1', tokens: '10', costMicros: '5000000' }]));
 
-    await expect(checkQuota('user-1', 'user')).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+  });
+});
+
+describe('integration with mocked DB: usage summary', () => {
+  beforeEach(() => {
+    mocks.select.mockReset();
   });
 
   it('summarizes each applied policy separately', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy, budgetPolicy]))
-      .mockReturnValueOnce(totalsQuery([{ messages: 2, tokens: 0, costMicros: 0 }]))
+      .mockReturnValueOnce(tableQuery([{ messages: 2, tokens: 0, costMicros: 0 }]))
       .mockReturnValueOnce(
-        totalsQuery([{ messages: 2, tokens: 0, costMicros: 1 * MICROS_PER_DOLLAR }]),
+        tableQuery([{ messages: 2, tokens: 0, costMicros: 1 * MICROS_PER_DOLLAR }]),
       )
-      .mockReturnValueOnce(totalsQuery([{ messages: 2, tokens: 40, costMicros: 1_000_000 }]));
+      .mockReturnValueOnce(tableQuery([{ messages: 2, tokens: 40, costMicros: 1_000_000 }]));
 
     const summary = await getUsageSummary('user-1', 'user');
 

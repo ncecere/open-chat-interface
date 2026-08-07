@@ -28,7 +28,12 @@ import {
 } from '../services/chat-streams.js';
 import { resolveModelForRole } from '../services/models.js';
 import { assertPersonasAllowed, getOwnedPersona } from '../services/personas.js';
-import { checkQuota, recordUsage } from '../services/quota/index.js';
+import {
+  recordUsage,
+  reserveQuotaForRun,
+  settleReservation,
+  type UsageReservation,
+} from '../services/quota/index.js';
 import { buildGroundingContext, searchWeb } from '../services/search/index.js';
 import { buildSystemPrompt } from '../services/system-prompt.js';
 import {
@@ -50,6 +55,25 @@ const EFFORT_BUDGETS: Record<string, number> = {
   medium: 8192,
   high: 24576,
 };
+
+/**
+ * Records a finished run. Reserved runs settle their placeholder row; runs on
+ * instances with no quota policy have no reservation and write usage directly.
+ */
+async function settleUsage(
+  reservation: UsageReservation | null,
+  usage: { inputTokens?: number | null; outputTokens?: number | null } | null,
+  fallback: { userId: string; modelSlug: string },
+): Promise<void> {
+  const tokensIn = usage?.inputTokens ?? 0;
+  const tokensOut = usage?.outputTokens ?? 0;
+
+  if (reservation) {
+    await settleReservation(reservation, { tokensIn, tokensOut });
+    return;
+  }
+  if (usage) await recordUsage({ ...fallback, tokensIn, tokensOut });
+}
 
 function textParts(parts: unknown): Array<{ type: 'text'; text: string }> {
   if (!Array.isArray(parts)) return [];
@@ -94,8 +118,6 @@ chatRoutes.post('/', async (c) => {
       .set({ personaId: selectedPersona?.id ?? null })
       .where(and(eq(schema.thread.id, thread.id), eq(schema.thread.userId, user.id)));
   }
-
-  await checkQuota(user.id, user.role);
 
   const resolved = await resolveModelForRole(input.modelSlug, user.role);
   const latestInput = input.messages[0];
@@ -302,6 +324,21 @@ chatRoutes.post('/', async (c) => {
     throw error;
   }
 
+  // Reserved last, after every validation has passed, so a rejected request
+  // never consumes allowance. Holding a reservation across the stream is what
+  // makes concurrent requests visible to each other.
+  let reservation: UsageReservation | null;
+  try {
+    reservation = await reserveQuotaForRun({
+      userId: user.id,
+      role: user.role,
+      modelSlug: resolved.slug,
+    });
+  } catch (error) {
+    if (persistence === 'available') await abandonChatRun(runIdentity);
+    throw error;
+  }
+
   const abortController = new AbortController();
   registerLocalChatRun(runIdentity, abortController);
   let modelFailed = false;
@@ -389,14 +426,12 @@ chatRoutes.post('/', async (c) => {
           );
 
         await touchThread(thread.id);
-        if (usage) {
-          await recordUsage({
-            userId: user.id,
-            modelSlug: resolved.slug,
-            tokensIn: usage.inputTokens ?? 0,
-            tokensOut: usage.outputTokens ?? 0,
-          });
-        }
+        // Settle even when the provider reported no usage, so cancelled and
+        // failed runs still count against a message quota.
+        await settleUsage(reservation, usage ?? null, {
+          userId: user.id,
+          modelSlug: resolved.slug,
+        });
       } catch (error) {
         outcome = { status: 'error', error: 'Assistant message persistence failed' };
         logger.error(
