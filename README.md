@@ -71,6 +71,16 @@ Required environment: `POSTGRES_PASSWORD`, `AUTH_SECRET`, `ENCRYPTION_KEY`,
 Self-hosted OIDC/SAML identity providers on private networks must be listed in
 `AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
 
+## Continuous integration
+
+`.gitlab-ci.yml` runs lint, typecheck, and a production dependency audit, then
+the mock and live test suites, then builds both container images.
+
+Live tests get Postgres, MinIO, and Mailpit as GitLab services, so CI exercises
+real migrations and storage rather than only mocks. Images build on every
+pipeline as a check but are published to the project registry only from the
+default branch and tags.
+
 ## Live integration tests
 
 `pnpm test` runs entirely against mocks, so it needs no services. `pnpm

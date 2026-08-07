@@ -11,6 +11,8 @@ import type { SmtpSettings } from '../../services/settings.js';
  *   docker compose -f docker/compose.auth-test.yaml up -d mailpit
  */
 const MAILPIT_API = process.env.MAILPIT_API_URL ?? 'http://127.0.0.1:8025';
+/** CI reaches Mailpit by service alias; locally it is published on localhost. */
+const MAILPIT_SMTP_HOST = process.env.SMTP_TEST_HOST ?? '127.0.0.1';
 const MAILPIT_SMTP_PORT = Number(process.env.MAILPIT_SMTP_PORT ?? 1025);
 
 /** Only the SMTP settings are stubbed; nodemailer stays real. */
@@ -103,7 +105,7 @@ describe.skipIf(!available)('live SMTP: outbound email', () => {
   beforeEach(async () => {
     log.entries.length = 0;
     stub.smtp = {
-      host: '127.0.0.1',
+      host: MAILPIT_SMTP_HOST,
       port: MAILPIT_SMTP_PORT,
       secure: false,
       fromAddress: 'no-reply@oci.test',
@@ -164,7 +166,7 @@ describe.skipIf(!available)('live SMTP: outbound email', () => {
     stub.smtp = { ...stub.smtp, host: null, port: null, fromAddress: null };
     expect(await isSmtpUsable()).toBe(false);
 
-    stub.smtp = { ...stub.smtp, host: '127.0.0.1', port: MAILPIT_SMTP_PORT };
+    stub.smtp = { ...stub.smtp, host: MAILPIT_SMTP_HOST, port: MAILPIT_SMTP_PORT };
     // Still missing a from address, so auth flows must not depend on it.
     expect(await isSmtpUsable()).toBe(false);
   });

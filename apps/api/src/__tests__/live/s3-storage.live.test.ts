@@ -13,9 +13,12 @@ import { S3StorageDriver } from '../../services/storage/s3-driver.js';
 const config = {
   bucket: process.env.MINIO_TEST_BUCKET ?? 'oci-test-attachments',
   region: 'us-east-1',
-  endpoint: `http://127.0.0.1:${process.env.MINIO_TEST_PORT ?? '9020'}`,
-  accessKeyId: process.env.MINIO_TEST_ROOT_USER ?? 'oci_test',
-  secretAccessKey: process.env.MINIO_TEST_ROOT_PASSWORD ?? 'oci_test_password',
+  // CI reaches MinIO by service alias; locally it is published on a host port.
+  endpoint:
+    process.env.S3_TEST_ENDPOINT ?? `http://127.0.0.1:${process.env.MINIO_TEST_PORT ?? '9020'}`,
+  accessKeyId: process.env.MINIO_ROOT_USER ?? process.env.MINIO_TEST_ROOT_USER ?? 'oci_test',
+  secretAccessKey:
+    process.env.MINIO_ROOT_PASSWORD ?? process.env.MINIO_TEST_ROOT_PASSWORD ?? 'oci_test_password',
   forcePathStyle: true,
 };
 
@@ -25,13 +28,39 @@ const config = {
  * container check short circuits the slower network probe.
  */
 async function liveS3Available(): Promise<boolean> {
-  if (!containerRunning('oci-auth-test-minio')) return false;
+  // CI supplies MinIO as a service rather than a named container, so the fast
+  // local check only short circuits when no endpoint was configured for it.
+  if (!process.env.S3_TEST_ENDPOINT && !containerRunning('oci-auth-test-minio')) return false;
+
   try {
     await new S3StorageDriver(config).checkReadAccess();
     return true;
   } catch {
-    return false;
+    // The bucket may simply not exist yet, which is the normal state for a
+    // freshly started CI service. Create it, then re-check.
+    try {
+      await createTestBucket();
+      await new S3StorageDriver(config).checkReadAccess();
+      return true;
+    } catch {
+      return false;
+    }
   }
+}
+
+/** Creates the test bucket so CI needs no separate provisioning step. */
+async function createTestBucket(): Promise<void> {
+  const { CreateBucketCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const client = new S3Client({
+    region: config.region,
+    endpoint: config.endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+  await client.send(new CreateBucketCommand({ Bucket: config.bucket }));
 }
 
 const available = await liveS3Available();

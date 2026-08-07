@@ -1,0 +1,126 @@
+# GitLab CI for Open Chat Interface.
+#
+# Stages run cheapest-first so a formatting slip fails in seconds rather than
+# after a container build. Images are published only from the default branch and
+# tags, so merge requests still get a build check without polluting the registry.
+
+stages:
+  - verify
+  - test
+  - build
+
+default:
+  image: node:22-alpine
+  interruptible: true
+
+variables:
+  # Keeps the pnpm store inside the project so it can be cached between jobs.
+  PNPM_STORE: .pnpm-store
+  # Test-only values. Real deployments supply their own secrets.
+  POSTGRES_DB: oci_ci
+  POSTGRES_USER: oci
+  POSTGRES_PASSWORD: oci_ci_password
+  AUTH_SECRET: ci_auth_secret_with_at_least_32_characters
+  ENCRYPTION_KEY: ci_encryption_key_with_at_least_32_chars
+
+.node:
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.18.0 --activate
+    - pnpm config set store-dir "$PNPM_STORE"
+    - pnpm install --frozen-lockfile
+  cache:
+    # Keyed on the lockfile so a dependency change invalidates the store.
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - $PNPM_STORE
+    policy: pull-push
+
+lint:
+  stage: verify
+  extends: .node
+  script:
+    - pnpm lint
+
+typecheck:
+  stage: verify
+  extends: .node
+  script:
+    - pnpm typecheck
+
+audit:
+  stage: verify
+  extends: .node
+  script:
+    # Production dependencies only; dev tooling is not shipped.
+    - pnpm audit --prod
+  allow_failure: true
+
+test:
+  stage: test
+  extends: .node
+  services:
+    # The resumable-stream suite skips without Redis; provide it so it runs.
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    TEST_REDIS_URL: redis://redis:6379
+  script:
+    - pnpm test
+
+# Exercises real migrations, object storage, and SMTP. Suites skip themselves
+# when a service is unreachable, so this cannot fail for infrastructure reasons
+# alone, but the services below mean it should not have to.
+test:live:
+  stage: test
+  extends: .node
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+    - name: minio/minio:RELEASE.2025-09-07T16-13-09Z
+      alias: minio
+      command: ['server', '/data']
+    - name: axllent/mailpit:latest
+      alias: mailpit
+  variables:
+    DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+    TEST_DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+    MINIO_ROOT_USER: ocitest
+    MINIO_ROOT_PASSWORD: ocitestsecret
+    S3_TEST_ENDPOINT: http://minio:9000
+    SMTP_TEST_HOST: mailpit
+    MAILPIT_API_URL: http://mailpit:8025
+  script:
+    - pnpm test:live
+
+build:images:
+  stage: build
+  image: docker:27-cli
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: '/certs'
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: '1'
+    DOCKER_CERT_PATH: '/certs/client'
+  before_script:
+    - docker info >/dev/null
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - docker build -f docker/api.Dockerfile -t "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA" .
+    - docker build -f docker/web.Dockerfile -t "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHORT_SHA" .
+    # Only publish from the default branch and tags; merge requests still get
+    # the build as a check without pushing anything.
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; then
+        TAG="${CI_COMMIT_TAG:-latest}"
+        for app in api web; do
+          docker tag "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/$app:$TAG"
+          docker push "$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_SHORT_SHA"
+          docker push "$CI_REGISTRY_IMAGE/$app:$TAG"
+        done
+      else
+        echo "Merge request build only; images are not published."
+      fi

@@ -4,7 +4,31 @@ import { ChatStreamStore } from '../../services/chat-streams.js';
 
 const redisUrl = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6389';
 
-describe('integration: Redis resumable chat streams', () => {
+/**
+ * Redis is optional, so this suite skips rather than fails when it is absent.
+ * Otherwise a machine or CI job without Redis reports a false failure.
+ */
+async function redisAvailable(): Promise<boolean> {
+  const probe = new Redis(redisUrl, {
+    lazyConnect: true,
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null,
+  });
+  try {
+    await probe.connect();
+    await probe.ping();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    probe.disconnect();
+  }
+}
+
+const available = await redisAvailable();
+
+describe.skipIf(!available)('integration: Redis resumable chat streams', () => {
   const redis = new Redis(redisUrl, {
     lazyConnect: true,
     enableOfflineQueue: false,
