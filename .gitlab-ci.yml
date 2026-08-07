@@ -107,6 +107,46 @@ test:live:
         coverage_format: cobertura
         path: apps/api/coverage/cobertura-coverage.xml
 
+# WCAG 2.2 AA scan plus the keyboard checks automation can cover. Needs a
+# running app, so it starts the API and web preview against live services.
+test:a11y:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.62.1-noble
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+    REDIS_URL: redis://redis:6379
+    APP_URL: http://127.0.0.1:4173
+    E2E_BASE_URL: http://127.0.0.1:4173
+    INITIAL_ADMIN_EMAIL: admin@example.com
+    INITIAL_ADMIN_PASSWORD: ci-admin-password-1234
+    E2E_ADMIN_EMAIL: admin@example.com
+    E2E_ADMIN_PASSWORD: ci-admin-password-1234
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.18.0 --activate
+    - pnpm config set store-dir "$PNPM_STORE"
+    - pnpm install --frozen-lockfile
+    - pnpm db:migrate
+    - pnpm db:seed
+    - pnpm --filter @oci/api build && node apps/api/dist/server.js &
+    - pnpm --filter @oci/web build
+    - pnpm --filter @oci/web exec vite preview --port 4173 --host 127.0.0.1 &
+    # Wait for both services rather than racing them.
+    - npx --yes wait-on http://127.0.0.1:3000/api/health/ready http://127.0.0.1:4173
+  script:
+    - pnpm test:e2e
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths:
+      - apps/web/test-results
+      - apps/web/playwright-report
+
 build:images:
   stage: build
   image: docker:27-cli

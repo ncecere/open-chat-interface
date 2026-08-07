@@ -20,7 +20,7 @@ const buttonVariants = cva(
           'text-[var(--text-secondary)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]',
         outline:
           'border border-[var(--border-strong)] text-[var(--text-secondary)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]',
-        danger: 'bg-[var(--danger)] text-[var(--danger-foreground)] hover:opacity-90',
+        danger: 'bg-[var(--danger-solid)] text-[var(--danger-foreground)] hover:opacity-90',
         link: 'text-[var(--accent-bright)] underline-offset-4 hover:underline',
       },
       size: {

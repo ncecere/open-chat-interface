@@ -15,6 +15,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { SkipLink } from '~/components/layout/skip-link';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
@@ -58,6 +59,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-dvh overflow-hidden">
+      <SkipLink />
       <aside className="flex w-60 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] bg-[image:var(--sidebar-gradient)]">
         <div className="flex h-14 items-center px-3">
           <Button variant="ghost" size="sm" asChild>
@@ -104,9 +106,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           ))}
         </nav>
       </aside>
-
-      <main className="scrollbar-thin min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl px-8 py-10">{children}</div>
+      <main className="min-w-0 flex-1">
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
+            keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}
+        <div id="main-content" tabIndex={0} className="scrollbar-thin h-full overflow-y-auto">
+          <div className="mx-auto w-full max-w-5xl px-8 py-10">{children}</div>
+        </div>
       </main>
     </div>
   );

@@ -71,6 +71,22 @@ Required environment: `POSTGRES_PASSWORD`, `AUTH_SECRET`, `ENCRYPTION_KEY`,
 Self-hosted OIDC/SAML identity providers on private networks must be listed in
 `AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
 
+## Accessibility
+
+The interface targets **WCAG 2.2 Level AA**. `pnpm test:e2e` runs an axe scan
+tagged for 2.2 AA across the sign-in, chat, settings, admin, share, and dialog
+surfaces, on desktop and mobile viewports.
+
+Automation covers roughly a third of the success criteria, so the suite also
+encodes checks from a manual keyboard pass: a skip link as the first tab stop,
+a visible focus indicator on every control reached by Tab, and dialogs that
+return focus to whatever opened them.
+
+Colour choices are constrained by contrast rather than taste. Destructive
+buttons use a dedicated `--danger-solid` fill because the lighter `--danger`,
+which has to stay readable as text on dark surfaces, only reaches 3.5:1 behind
+white.
+
 ## Coverage
 
 There is deliberately no repository-wide coverage threshold. Coverage counts

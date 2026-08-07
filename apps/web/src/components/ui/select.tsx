@@ -7,7 +7,7 @@ export function Select({ className, ...props }: ComponentProps<'select'>) {
       className={cn(
         'h-9 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-3 text-sm',
         'text-[var(--text-primary)] transition-colors',
-        'focus:border-[var(--border-strong)] focus:outline-none',
+        'focus:border-[var(--border-strong)]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}

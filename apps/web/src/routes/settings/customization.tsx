@@ -40,7 +40,7 @@ function CountedInput({
   const shared = cn(
     'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/60 px-3 text-sm',
     'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
-    'transition-colors focus:border-[var(--border-strong)] focus:outline-none',
+    'transition-colors focus:border-[var(--border-strong)]',
   );
 
   return (

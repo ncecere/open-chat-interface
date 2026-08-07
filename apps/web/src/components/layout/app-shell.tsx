@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react';
 import { CommandPalette } from '~/components/command-palette/command-palette';
 import { Sidebar } from '~/components/layout/sidebar';
+import { SkipLink } from '~/components/layout/skip-link';
 import { TopBar } from '~/components/layout/top-bar';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCommandPalette } from '~/hooks/use-command-palette';
@@ -18,6 +19,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <TemporaryChatProvider>
       <div className="flex h-dvh overflow-hidden bg-[var(--bg-app)]">
+        <SkipLink />
         <Sidebar
           appName={status?.branding.appName}
           open={sidebarOpen}
@@ -30,9 +32,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenCommandPalette={commandPalette.show}
           />
-
-          <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
-            {children}
+          <main className="min-h-0 flex-1 rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
+            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
+                keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}
+            <div id="main-content" tabIndex={0} className="scrollbar-thin h-full overflow-y-auto">
+              {children}
+            </div>
           </main>
         </div>
 

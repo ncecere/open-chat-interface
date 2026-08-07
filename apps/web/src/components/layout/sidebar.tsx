@@ -59,7 +59,7 @@ export function Sidebar({ appName, open, onToggle }: SidebarProps) {
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search your threads..."
           aria-label="Search your threads"
-          className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+          className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
         />
       </div>
 

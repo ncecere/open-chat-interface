@@ -1,7 +1,14 @@
 import type { CatalogModel, ReasoningEffort } from '@oci/shared';
 import { REASONING_EFFORTS } from '@oci/shared';
 import { ArrowUp, Globe, Paperclip, Square, Zap } from 'lucide-react';
-import { type ChangeEvent, type KeyboardEvent, useLayoutEffect, useRef } from 'react';
+import {
+  type ChangeEvent,
+  type ComponentPropsWithoutRef,
+  forwardRef,
+  type KeyboardEvent,
+  useLayoutEffect,
+  useRef,
+} from 'react';
 import { AttachmentChips } from '~/components/chat/attachment-chips';
 import { ModelPicker } from '~/components/chat/model-picker';
 import { PersonaPicker } from '~/components/chat/persona-picker';
@@ -38,21 +45,23 @@ interface ComposerProps {
   placeholder?: string;
 }
 
-function Pill({
-  icon: Icon,
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  icon: typeof Zap;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-}) {
+/**
+ * Forwards its ref and remaining props so it can serve as a Radix `asChild`
+ * trigger. Wrapping it in a span instead would put button semantics on an
+ * element that cannot carry them.
+ */
+const Pill = forwardRef<
+  HTMLButtonElement,
+  ComponentPropsWithoutRef<'button'> & {
+    icon: typeof Zap;
+    label: string;
+    active?: boolean;
+  }
+>(({ icon: Icon, label, active, disabled, onClick, className, ...props }, ref) => {
   return (
     <button
+      {...props}
+      ref={ref}
       type="button"
       aria-label={label}
       disabled={disabled}
@@ -63,13 +72,15 @@ function Pill({
         active
           ? 'border-[var(--accent-button-border)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
           : 'border-[var(--border-strong)] text-[var(--text-secondary)] hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)]',
+        className,
       )}
     >
       <Icon className="size-4" />
       <span className="hidden sm:inline">{label}</span>
     </button>
   );
-}
+});
+Pill.displayName = 'Pill';
 
 /**
  * Bottom-anchored composer. The card is flush with the bottom edge and only
@@ -132,7 +143,7 @@ export function Composer({
 
   return (
     <div className="mx-auto w-full max-w-[47rem] px-3">
-      <div className="rounded-t-[1.25rem] border border-b-0 border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5">
+      <div className="rounded-t-[1.25rem] border border-b-0 border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent-bright)]">
         <AttachmentChips items={attachments} onRemove={(id) => onRemoveAttachment?.(id)} />
 
         <textarea
@@ -162,10 +173,11 @@ export function Composer({
           )}
 
           <DropdownMenu>
+            {/* Pill renders a real button, so the trigger's ARIA belongs on it
+                directly; a wrapping span would receive button semantics it
+                cannot legally carry. */}
             <DropdownMenuTrigger asChild disabled={!supportsEffort}>
-              <span>
-                <Pill icon={Zap} label={effort} disabled={!supportsEffort} />
-              </span>
+              <Pill icon={Zap} label={effort} disabled={!supportsEffort} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top">
               {REASONING_EFFORTS.map((option) => (

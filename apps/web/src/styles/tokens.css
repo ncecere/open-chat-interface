@@ -77,7 +77,13 @@
 
   --success: oklch(69.6% 0.17 162.48);
   --warning: oklch(76.9% 0.188 70.08);
+  /* Reads as text on dark surfaces, where a darker red would fail. */
   --danger: oklch(63.7% 0.237 25.331);
+  /*
+   * Solid fill behind --danger-foreground. Kept darker than --danger so a
+   * destructive button clears 4.5:1; the lighter --danger cannot.
+   */
+  --danger-solid: oklch(50.5% 0.213 27.325);
   --danger-foreground: oklch(97.1% 0.013 17.38);
 
   --shadow-popover: 0 24px 48px -12px rgb(0 0 0 / 0.6);
@@ -130,6 +136,7 @@
   --success: oklch(59.6% 0.145 163.225);
   --warning: oklch(66.6% 0.179 58.318);
   --danger: oklch(57.7% 0.245 27.325);
+  --danger-solid: oklch(57.7% 0.245 27.325);
   --danger-foreground: oklch(98.5% 0 0);
 
   --shadow-popover: 0 20px 40px -16px rgb(0 0 0 / 0.16);
@@ -331,5 +338,6 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-danger-solid: var(--danger-solid);
   --color-danger-foreground: var(--danger-foreground);
 }

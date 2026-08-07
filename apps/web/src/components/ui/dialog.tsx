@@ -1,6 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import type { ComponentProps } from 'react';
+import { type ComponentProps, useEffect, useRef } from 'react';
 import { cn } from '~/lib/utils';
 
 export const Dialog = DialogPrimitive.Root;
@@ -10,8 +10,23 @@ export const DialogClose = DialogPrimitive.Close;
 export function DialogContent({
   className,
   children,
+  onCloseAutoFocus,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content>) {
+  /**
+   * WCAG 2.4.3 Focus Order.
+   *
+   * These dialogs open from component state rather than a DialogTrigger, so
+   * Radix has no trigger to hand focus back to and it falls to the body.
+   * Remembering the element that was focused at open time and restoring it
+   * keeps a keyboard user where they were.
+   */
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    openerRef.current = document.activeElement as HTMLElement | null;
+  }, []);
+
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
@@ -22,6 +37,16 @@ export function DialogContent({
           'shadow-[var(--shadow-popover)]',
           className,
         )}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (event.defaultPrevented) return;
+
+          const opener = openerRef.current;
+          if (opener?.isConnected) {
+            event.preventDefault();
+            opener.focus();
+          }
+        }}
         {...props}
       >
         {children}
