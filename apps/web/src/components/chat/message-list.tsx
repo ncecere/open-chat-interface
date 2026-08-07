@@ -16,7 +16,9 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Streamdown } from 'streamdown';
+import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
+import { useModels } from '~/hooks/use-models';
 import { cn } from '~/lib/utils';
 
 /**
@@ -24,6 +26,30 @@ import { cn } from '~/lib/utils';
  * inline math is off by default, but models commonly emit it.
  */
 const PLUGINS = { code, math: createMathPlugin({ singleDollarTextMath: true }) };
+
+/** The responding model, sent as stream metadata and persisted per message. */
+function modelSlugOf(message: UIMessage): string | null {
+  const metadata = message.metadata as { modelSlug?: unknown } | undefined;
+  return typeof metadata?.modelSlug === 'string' ? metadata.modelSlug : null;
+}
+
+/**
+ * Attributes a reply to the model that produced it. Threads can switch models
+ * partway through, so without this every response looks identical.
+ */
+function ModelAttribution({ slug }: { slug: string | null }) {
+  const { data: models } = useModels();
+  if (!slug) return null;
+
+  const model = models?.find((entry) => entry.slug === slug);
+
+  return (
+    <div className="mb-1.5 flex items-center gap-1.5 text-[0.6875rem] text-[var(--text-muted)]">
+      <LabLogo labId={model?.labId} className="size-3.5" />
+      <span className="truncate">{model?.displayName ?? slug}</span>
+    </div>
+  );
+}
 
 function textOf(message: UIMessage): string {
   return message.parts
@@ -361,6 +387,7 @@ export function MessageList({
 
         return (
           <div key={message.id} className="group flex flex-col">
+            <ModelAttribution slug={modelSlugOf(message)} />
             {sources.length > 0 && <SearchSourcesPanel sources={sources} />}
             {reasoning && <ReasoningPanel text={reasoning} streaming={streaming && isLast} />}
 

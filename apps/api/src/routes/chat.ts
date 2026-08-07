@@ -383,7 +383,12 @@ chatRoutes.post('/', async (c) => {
     originalMessages: uiMessages,
     generateId: () => assistantMessage.id,
     execute: ({ writer }) => {
-      writer.write({ type: 'start' });
+      // Identify the responding model up front so the reply is attributed while
+      // it streams, not only after the thread is reloaded from storage.
+      writer.write({
+        type: 'start',
+        messageMetadata: { modelSlug: resolved.slug, effort: input.effort ?? null },
+      });
       for (const source of sourceParts) writer.write(source);
       writer.merge(
         result.toUIMessageStream({
