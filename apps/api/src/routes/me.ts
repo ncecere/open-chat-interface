@@ -6,7 +6,6 @@ import { type AppBindings, currentUser, requireAuth } from '../middleware/contex
 import { parseBody } from '../middleware/validate.js';
 import { getUsageSummary } from '../services/quota/index.js';
 import { getSetting } from '../services/settings.js';
-import { personaRoutes } from './personas.js';
 
 export const meRoutes = new Hono<AppBindings>();
 
@@ -64,7 +63,6 @@ meRoutes.get('/', async (c) => {
       ...features,
       attachments: features.attachments && user.role !== 'restricted',
       shareLinks: features.shareLinks && user.role !== 'restricted',
-      personas: features.personas && user.role !== 'restricted',
       temporaryChat: features.temporaryChat && user.role !== 'restricted',
     },
   });
@@ -90,6 +88,3 @@ meRoutes.patch('/preferences', async (c) => {
 
   return c.json({ preferences: updated });
 });
-
-// Owner-scoped persona CRUD lives under /me, avoiding another top-level route.
-meRoutes.route('/personas', personaRoutes);

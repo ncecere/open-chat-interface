@@ -35,7 +35,6 @@ function serializeThread(thread: typeof schema.thread.$inferSelect) {
     archived: thread.archived,
     temporary: thread.temporary,
     expiresAt: thread.expiresAt?.toISOString() ?? null,
-    personaId: thread.personaId,
     parentThreadId: thread.parentThreadId,
     branchedFromMessageId: thread.branchedFromMessageId,
     lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
@@ -60,7 +59,6 @@ threadRoutes.post('/', async (c) => {
     role: user.role,
     title: input.title,
     temporary: input.temporary,
-    personaId: input.personaId,
   });
   return c.json({ thread: serializeThread(thread) }, 201);
 });

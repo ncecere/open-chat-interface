@@ -2,7 +2,6 @@ import { and, asc, desc, eq, ilike, lte, schema, sql } from '@oci/db';
 import type { BranchMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
-import { assertPersonasAllowed, getDefaultPersona, getOwnedPersona } from './personas.js';
 import { getSetting } from './settings.js';
 
 export const TEMPORARY_THREAD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -61,23 +60,8 @@ export async function createThread(options: {
   role: UserRole;
   title?: string;
   temporary?: boolean;
-  personaId?: string | null;
 }) {
   if (options.temporary) await assertTemporaryChatAllowed(options.role);
-
-  let selectedPersonaId: string | null = null;
-  if (options.personaId) {
-    await assertPersonasAllowed(options.role);
-    selectedPersonaId = (
-      await getOwnedPersona(options.personaId, options.userId, options.organizationId)
-    ).id;
-  } else if (options.personaId === undefined && options.role !== 'restricted') {
-    const features = await getSetting('features');
-    if (features.personas) {
-      selectedPersonaId =
-        (await getDefaultPersona(options.userId, options.organizationId))?.id ?? null;
-    }
-  }
 
   const [thread] = await db
     .insert(schema.thread)
@@ -85,7 +69,6 @@ export async function createThread(options: {
       organizationId: options.organizationId,
       userId: options.userId,
       title: options.title?.trim() || 'New Chat',
-      personaId: selectedPersonaId,
       temporary: options.temporary ?? false,
       expiresAt: options.temporary ? new Date(Date.now() + TEMPORARY_THREAD_TTL_MS) : null,
     })
@@ -151,7 +134,6 @@ export async function branchFromUserMessage(
         title: selectedIndex === 0 ? deriveTitle(input.text) : sourceThread.title,
         parentThreadId: sourceThread.id,
         branchedFromMessageId: selected.id,
-        personaId: sourceThread.personaId,
         temporary: sourceThread.temporary,
         expiresAt: sourceThread.expiresAt,
         lastMessageAt: new Date(),

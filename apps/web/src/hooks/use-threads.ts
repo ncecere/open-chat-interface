@@ -17,10 +17,9 @@ export function useCreateThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (options?: { temporary?: boolean; personaId?: string | null }) =>
+    mutationFn: (options?: { temporary?: boolean }) =>
       api.post<{ thread: ThreadSummary }>('/threads', {
         temporary: options?.temporary ?? false,
-        personaId: options?.personaId,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
   });

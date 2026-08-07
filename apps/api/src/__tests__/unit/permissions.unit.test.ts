@@ -17,7 +17,7 @@ describe('unit: role normalization and permission statements', () => {
     },
   );
 
-  it('does not grant restricted users sharing, temporary-chat, persona, or upload rights', () => {
+  it('does not grant restricted users sharing, temporary-chat, or upload rights', () => {
     expect(roles.restricted.statements).toEqual({ model: ['read'], thread: ['create'] });
   });
 

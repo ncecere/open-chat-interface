@@ -30,7 +30,6 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
     mcp: false,
     webSearch: false,
     attachments: true,
-    personas: true,
     branching: true,
   },
   storage: {

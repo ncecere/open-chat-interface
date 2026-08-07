@@ -21,7 +21,6 @@ export function useChatSession(options: {
   carriedAttachments?: Attachment[];
   initialModelSlug?: string | null;
   initialEffort?: ReasoningEffort;
-  initialPersonaId?: string | null;
   temporary?: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -31,7 +30,6 @@ export function useChatSession(options: {
   const [draft, setDraft] = useState('');
   const [effort, setEffort] = useState<ReasoningEffort>(options.initialEffort ?? 'instant');
   const [webSearch, setWebSearch] = useState(false);
-  const [personaId, setPersonaId] = useState<string | null>(options.initialPersonaId ?? null);
   const [modelSlug, setModelSlug] = useState<string | null>(
     () => options.initialModelSlug ?? localStorage.getItem(MODEL_STORAGE_KEY),
   );
@@ -90,7 +88,6 @@ export function useChatSession(options: {
               modelSlug,
               effort: reasoningEffortForRequest(selectedModel, effort),
               webSearch,
-              personaId,
               temporary: options.temporary ?? false,
               attachmentIds: attachmentKey ? attachmentKey.split(',') : [],
               trigger,
@@ -105,7 +102,6 @@ export function useChatSession(options: {
       selectedModel,
       effort,
       webSearch,
-      personaId,
       attachmentKey,
     ],
   );
@@ -177,8 +173,6 @@ export function useChatSession(options: {
     setEffort,
     webSearch,
     setWebSearch,
-    personaId,
-    setPersonaId,
     models,
     selectedModel,
     selectModel,

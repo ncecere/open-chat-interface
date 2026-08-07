@@ -31,7 +31,6 @@ export interface CurrentFeatures {
   mcp: boolean;
   webSearch: boolean;
   attachments: boolean;
-  personas: boolean;
   branching: boolean;
 }
 

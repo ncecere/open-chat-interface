@@ -1,33 +1,9 @@
 import type { ReasoningEffort } from '@oci/shared';
-import { sql } from 'drizzle-orm';
 import { boolean, index, integer, jsonb, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
 import { user } from './auth.js';
 import { organization } from './organization.js';
-
-export const persona = pgTable(
-  'persona',
-  {
-    id: primaryId(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    icon: text('icon'),
-    systemPrompt: text('system_prompt').notNull().default(''),
-    traits: jsonb('traits').$type<string[]>().notNull().default([]),
-    isDefault: boolean('is_default').notNull().default(false),
-    ...timestamps(),
-  },
-  (t) => [
-    index('persona_user_idx').on(t.userId),
-    uniqueIndex('persona_user_default_unique').on(t.userId).where(sql`${t.isDefault}`),
-  ],
-);
 
 export const thread = pgTable(
   'thread',
@@ -45,7 +21,6 @@ export const thread = pgTable(
     /** Set when this thread was created by branching an existing message. */
     parentThreadId: text('parent_thread_id'),
     branchedFromMessageId: text('branched_from_message_id'),
-    personaId: text('persona_id').references(() => persona.id, { onDelete: 'set null' }),
     temporary: boolean('temporary').notNull().default(false),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),

@@ -77,14 +77,12 @@ function ThreadConversation({
   initialMessages,
   carriedAttachments,
   carriedEffort,
-  personaId,
   temporary,
 }: {
   threadId: string;
   initialMessages: UIMessage[];
   carriedAttachments: Attachment[];
   carriedEffort?: ReasoningEffort;
-  personaId: string | null;
   temporary: boolean;
 }) {
   const pendingBranch = peekPendingBranch(threadId);
@@ -94,7 +92,6 @@ function ThreadConversation({
     carriedAttachments,
     initialModelSlug: pendingBranch?.modelSlug,
     initialEffort: pendingBranch?.effort ?? carriedEffort,
-    initialPersonaId: personaId,
     temporary,
   });
   const navigate = useNavigate();
@@ -195,9 +192,6 @@ function ThreadConversation({
         onEffortChange={session.setEffort}
         webSearch={session.webSearch}
         onWebSearchChange={session.setWebSearch}
-        personaId={session.personaId}
-        onPersonaChange={session.setPersonaId}
-        personasAvailable={session.features?.personas ?? false}
         webSearchAvailable={session.features?.webSearch ?? false}
         attachmentsAvailable={session.features?.attachments ?? false}
         attachments={session.attachments.items}
@@ -222,7 +216,6 @@ export function ChatThreadPage({ threadId }: { threadId: string }) {
           id: string;
           temporary: boolean;
           expiresAt: string | null;
-          personaId: string | null;
         };
         messages: UIMessage[];
       }>(`/chat/${threadId}/messages`),
@@ -244,7 +237,6 @@ export function ChatThreadPage({ threadId }: { threadId: string }) {
       initialMessages={data.messages}
       carriedAttachments={carriedAttachments}
       carriedEffort={carriedEffort}
-      personaId={data.thread.personaId}
       temporary={data.thread.temporary}
     />
   );

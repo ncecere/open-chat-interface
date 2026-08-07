@@ -33,11 +33,6 @@ const FEATURE_SECTIONS: Array<{
         description: 'Allow conversations intended not to appear in persistent chat history.',
       },
       {
-        key: 'personas',
-        label: 'Personas',
-        description: 'Allow people to use saved assistant personas where supported.',
-      },
-      {
         key: 'branching',
         label: 'Conversation branching',
         description: 'Allow supported clients to branch a conversation from an earlier message.',

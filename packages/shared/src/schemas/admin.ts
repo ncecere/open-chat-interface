@@ -104,7 +104,6 @@ export const instanceSettingsSchema = z.object({
     mcp: z.boolean(),
     webSearch: z.boolean(),
     attachments: z.boolean(),
-    personas: z.boolean(),
     branching: z.boolean(),
   }),
   storage: z.object({

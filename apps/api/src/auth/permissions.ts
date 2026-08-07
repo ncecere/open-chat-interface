@@ -16,7 +16,6 @@ export const statement = {
   audit: ['read'],
   analytics: ['read'],
   thread: ['create', 'share', 'temporary'],
-  persona: ['manage'],
   attachment: ['upload'],
 } as const;
 
@@ -34,13 +33,11 @@ export const roles = {
     audit: ['read'],
     analytics: ['read'],
     thread: ['create', 'share', 'temporary'],
-    persona: ['manage'],
     attachment: ['upload'],
   }),
   user: ac.newRole({
     model: ['read'],
     thread: ['create', 'share', 'temporary'],
-    persona: ['manage'],
     attachment: ['upload'],
   }),
   restricted: ac.newRole({

@@ -10,7 +10,6 @@ import {
 } from 'react';
 import { AttachmentChips } from '~/components/chat/attachment-chips';
 import { ModelPicker } from '~/components/chat/model-picker';
-import { PersonaPicker } from '~/components/chat/persona-picker';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,9 +32,6 @@ interface ComposerProps {
   onEffortChange: (effort: ReasoningEffort) => void;
   webSearch: boolean;
   onWebSearchChange: (enabled: boolean) => void;
-  personaId?: string | null;
-  onPersonaChange?: (personaId: string | null) => void;
-  personasAvailable?: boolean;
   webSearchAvailable?: boolean;
   attachmentsAvailable?: boolean;
   attachments?: PendingAttachment[];
@@ -98,9 +94,6 @@ export function Composer({
   onEffortChange,
   webSearch,
   onWebSearchChange,
-  personaId = null,
-  onPersonaChange,
-  personasAvailable = false,
   webSearchAvailable = true,
   attachmentsAvailable = true,
   attachments = [],
@@ -163,14 +156,6 @@ export function Composer({
 
         <div className="mt-5 flex items-center gap-2">
           <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
-
-          {onPersonaChange && (
-            <PersonaPicker
-              selectedId={personaId}
-              onSelect={onPersonaChange}
-              available={personasAvailable}
-            />
-          )}
 
           <DropdownMenu>
             {/* Pill renders a real button, so the trigger's ARIA belongs on it

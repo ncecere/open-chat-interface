@@ -3,7 +3,7 @@
 A self-hostable, multi-model chat application with local, OIDC, and SAML
 authentication and a first-class administration dashboard. OCI includes streaming
 chat and reasoning, resumable Redis-backed generations, attachments, grounded web
-search, personas, branching, temporary chats, and privacy-filtered share links.
+search, branching, temporary chats, and privacy-filtered share links.
 
 ## Stack
 

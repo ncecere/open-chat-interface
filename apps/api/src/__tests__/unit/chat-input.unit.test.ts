@@ -58,6 +58,7 @@ describe('unit: strict inbound chat messages', () => {
 
   it.each([
     { ...validInput, unexpected: true },
+    { ...validInput, personaId: 'retired-persona' },
     {
       ...validInput,
       messages: [{ ...validInput.messages[0], unexpected: true }],

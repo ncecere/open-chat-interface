@@ -37,8 +37,14 @@ export interface FeatureSettings {
   mcp: boolean;
   webSearch: boolean;
   attachments: boolean;
-  personas: boolean;
   branching: boolean;
+}
+
+/** Drops the retired persona flag from settings written by older releases. */
+export function normalizeFeatureSettings(value: FeatureSettings): FeatureSettings {
+  const normalized = { ...value } as FeatureSettings & { personas?: boolean };
+  delete normalized.personas;
+  return normalized;
 }
 
 export interface S3StorageSettings {
@@ -148,7 +154,9 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<Settings
       ? normalizeStorageSettings(stored as StorageSettings)
       : key === 'branding'
         ? normalizeBrandingSettings(stored as BrandingSettings)
-        : stored
+        : key === 'features'
+          ? normalizeFeatureSettings(stored as FeatureSettings)
+          : stored
   ) as SettingsMap[K];
   cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
   return value;

@@ -1,13 +1,12 @@
 import type { ReasoningEffort } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
-import { usePersonas } from '~/hooks/use-personas';
 import { useCreateThread } from '~/hooks/use-threads';
 import { coerceReasoningEffort, reasoningEffortForRequest } from '~/lib/reasoning';
 import { cn } from '~/lib/utils';
@@ -30,8 +29,6 @@ export function ChatHomePage() {
   const navigate = useNavigate();
   const createThread = useCreateThread();
   const { temporary } = useTemporaryChat();
-  const personasAvailable = data?.features.personas ?? false;
-  const { data: personas } = usePersonas(personasAvailable);
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraft] = useState('');
@@ -40,14 +37,7 @@ export function ChatHomePage() {
   const [modelSlug, setModelSlug] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
   );
-  const [personaId, setPersonaId] = useState<string | null | undefined>(undefined);
   const attachments = useAttachments();
-
-  useEffect(() => {
-    if (personaId === undefined && personasAvailable && personas) {
-      setPersonaId(personas.find((persona) => persona.isDefault)?.id ?? null);
-    }
-  }, [personaId, personas, personasAvailable]);
 
   const selectedModel =
     models.find((model) => model.slug === modelSlug) ??
@@ -64,10 +54,7 @@ export function ChatHomePage() {
     const content = text.trim();
     if (!content || !selectedModel) return;
 
-    const { thread } = await createThread.mutateAsync({
-      temporary,
-      personaId,
-    });
+    const { thread } = await createThread.mutateAsync({ temporary });
     sessionStorage.setItem(PENDING_KEY, content);
     const requestEffort = reasoningEffortForRequest(selectedModel, effort);
     if (requestEffort) sessionStorage.setItem(PENDING_EFFORT_KEY, requestEffort);
@@ -169,9 +156,6 @@ export function ChatHomePage() {
         onEffortChange={setEffort}
         webSearch={webSearch}
         onWebSearchChange={setWebSearch}
-        personaId={personaId ?? null}
-        onPersonaChange={setPersonaId}
-        personasAvailable={personasAvailable}
         webSearchAvailable={data?.features.webSearch ?? false}
         attachmentsAvailable={data?.features.attachments ?? false}
         attachments={attachments.items}

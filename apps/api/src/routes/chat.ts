@@ -27,7 +27,6 @@ import {
   unregisterLocalChatRun,
 } from '../services/chat-streams.js';
 import { resolveModelForRole } from '../services/models.js';
-import { assertPersonasAllowed, getOwnedPersona } from '../services/personas.js';
 import {
   recordUsage,
   reserveQuotaForRun,
@@ -104,21 +103,6 @@ chatRoutes.post('/', async (c) => {
     throw validationFailed('Temporary mode must be selected when the thread is created');
   }
   if (thread.temporary) await assertTemporaryChatAllowed(user.role);
-
-  const requestedPersonaId = input.personaId === undefined ? thread.personaId : input.personaId;
-  const selectedPersona = requestedPersonaId
-    ? await (async () => {
-        await assertPersonasAllowed(user.role);
-        return getOwnedPersona(requestedPersonaId, user.id, user.organizationId);
-      })()
-    : null;
-
-  if (input.personaId !== undefined && input.personaId !== thread.personaId) {
-    await db
-      .update(schema.thread)
-      .set({ personaId: selectedPersona?.id ?? null })
-      .where(and(eq(schema.thread.id, thread.id), eq(schema.thread.userId, user.id)));
-  }
 
   const resolved = await resolveModelForRole(input.modelSlug, user.role);
   assertReasoningEffortSupported(input.effort, resolved.supportedEfforts);
@@ -269,8 +253,7 @@ chatRoutes.post('/', async (c) => {
     uiMessages[uiMessages.length - 1] = latest;
   }
 
-  // The persona reaches the prompt builder only after an owner-scoped lookup.
-  const system = await buildSystemPrompt(user.id, user.name, selectedPersona);
+  const system = await buildSystemPrompt(user.id, user.name);
   const sourceParts = searchResults.map((source, index) => ({
     type: 'source-url' as const,
     sourceId: `search-${index + 1}`,
@@ -515,7 +498,6 @@ chatRoutes.get('/:threadId/messages', async (c) => {
       id: thread.id,
       temporary: thread.temporary,
       expiresAt: thread.expiresAt?.toISOString() ?? null,
-      personaId: thread.personaId,
     },
     messages: messages.map((message) => ({
       id: message.id,
