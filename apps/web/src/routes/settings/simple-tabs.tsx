@@ -1,5 +1,3 @@
-import { Paperclip } from 'lucide-react';
-
 const SHORTCUT_GROUPS = [
   {
     title: 'Navigation',
@@ -18,25 +16,6 @@ const SHORTCUT_GROUPS = [
     ],
   },
 ];
-
-export function SettingsAttachmentsPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold">Attachments</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Manage files you have uploaded. Deleting a file removes it from the threads that use it.
-      </p>
-
-      <div className="mt-10 flex flex-col items-center gap-3 py-16 text-center">
-        <Paperclip className="size-8 text-[var(--text-muted)]" />
-        <p className="text-sm text-[var(--text-secondary)]">No attachments yet.</p>
-        <p className="max-w-md text-xs text-[var(--text-muted)]">
-          File uploads are not enabled on this instance yet.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 export function SettingsShortcutsPage() {
   return (

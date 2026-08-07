@@ -1,5 +1,6 @@
 import type { CatalogModel, CostTier, ModelCapability } from '@oci/shared';
 import { Brain, ChevronDown, Eye, FileText, Image, Wrench, Zap } from 'lucide-react';
+import { LabLogo } from '~/components/model/lab-logo';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,7 @@ export function ModelPicker({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]">
+        {selected && <LabLogo labId={selected.labId} className="size-3.5" />}
         {selected?.displayName ?? 'Select model'}
         {selected && (
           <span className="text-[0.6875rem] font-bold text-[var(--success)]">
@@ -63,6 +65,7 @@ export function ModelPicker({
             )}
           >
             <span className="flex w-full items-center gap-2">
+              <LabLogo labId={model.labId} className="size-3.5" />
               <span className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">
                 {model.displayName}
               </span>

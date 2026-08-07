@@ -24,9 +24,21 @@ export interface UserPreferences {
   defaultModelSlug: string | null;
 }
 
+export interface CurrentFeatures {
+  shareLinks: boolean;
+  temporaryChat: boolean;
+  canvas: boolean;
+  mcp: boolean;
+  webSearch: boolean;
+  attachments: boolean;
+  personas: boolean;
+  branching: boolean;
+}
+
 interface MeResponse {
   user: CurrentUser;
   preferences: UserPreferences;
+  features: CurrentFeatures;
 }
 
 export function useCurrentUser() {

@@ -1,16 +1,21 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
+import { useAttachments } from '~/hooks/use-attachments';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
+import { usePersonas } from '~/hooks/use-personas';
 import { useCreateThread } from '~/hooks/use-threads';
 import { cn } from '~/lib/utils';
+import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 type CategoryId = (typeof SUGGESTION_CATEGORIES)[number]['id'];
 
 const MODEL_STORAGE_KEY = 'oci.model';
 const PENDING_KEY = 'oci.pendingPrompt';
+const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 
 /**
  * Landing page. Sending here creates a thread first, then hands the prompt to
@@ -21,6 +26,9 @@ export function ChatHomePage() {
   const { data: models = [] } = useModels();
   const navigate = useNavigate();
   const createThread = useCreateThread();
+  const { temporary } = useTemporaryChat();
+  const personasAvailable = data?.features.personas ?? false;
+  const { data: personas } = usePersonas(personasAvailable);
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraft] = useState('');
@@ -29,6 +37,14 @@ export function ChatHomePage() {
   const [modelSlug, setModelSlug] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
   );
+  const [personaId, setPersonaId] = useState<string | null | undefined>(undefined);
+  const attachments = useAttachments();
+
+  useEffect(() => {
+    if (personaId === undefined && personasAvailable && personas) {
+      setPersonaId(personas.find((persona) => persona.isDefault)?.id ?? null);
+    }
+  }, [personaId, personas, personasAvailable]);
 
   const selectedModel =
     models.find((model) => model.slug === modelSlug) ??
@@ -45,8 +61,24 @@ export function ChatHomePage() {
     const content = text.trim();
     if (!content || !selectedModel) return;
 
-    const { thread } = await createThread.mutateAsync();
+    const { thread } = await createThread.mutateAsync({
+      temporary,
+      personaId,
+    });
     sessionStorage.setItem(PENDING_KEY, content);
+
+    // Hand any uploads over to the thread view along with the prompt.
+    const readyAttachments = attachments.items.flatMap((item) =>
+      item.attachment ? [item.attachment] : [],
+    );
+    if (readyAttachments.length > 0) {
+      // Carry display metadata as well as IDs so the first sent bubble can
+      // render its attachment cards immediately.
+      sessionStorage.setItem(PENDING_ATTACHMENTS_KEY, JSON.stringify(readyAttachments));
+    } else {
+      sessionStorage.removeItem(PENDING_ATTACHMENTS_KEY);
+    }
+
     await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
   }
 
@@ -55,9 +87,17 @@ export function ChatHomePage() {
       {/* Landing content sits in the upper-middle region, not vertically centered. */}
       <div className="flex-1 overflow-y-auto px-4 pt-[18vh]">
         <div className="mx-auto w-full max-w-[41.75rem]">
-          <h1 className="text-[1.875rem] font-bold leading-tight tracking-tight">
-            How can I help you{firstName ? `, ${firstName}` : ''}?
+          <h1 className="flex items-center gap-3 text-[1.875rem] font-bold leading-tight tracking-tight">
+            {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}
+            {temporary
+              ? 'Temporary chat'
+              : `How can I help you${firstName ? `, ${firstName}` : ''}?`}
           </h1>
+          {temporary && (
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              This conversation stays out of history and expires automatically after 24 hours.
+            </p>
+          )}
 
           <div className="mt-7 flex flex-wrap gap-2.5">
             {SUGGESTION_CATEGORIES.map((category) => {
@@ -122,6 +162,14 @@ export function ChatHomePage() {
         onEffortChange={setEffort}
         webSearch={webSearch}
         onWebSearchChange={setWebSearch}
+        personaId={personaId ?? null}
+        onPersonaChange={setPersonaId}
+        personasAvailable={personasAvailable}
+        webSearchAvailable={data?.features.webSearch ?? false}
+        attachmentsAvailable={data?.features.attachments ?? false}
+        attachments={attachments.items}
+        onAttachFiles={attachments.upload}
+        onRemoveAttachment={attachments.remove}
       />
     </div>
   );

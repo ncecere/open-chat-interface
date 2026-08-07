@@ -1,14 +1,17 @@
 import type { CatalogModel, ReasoningEffort } from '@oci/shared';
 import { REASONING_EFFORTS } from '@oci/shared';
 import { ArrowUp, Globe, Paperclip, Square, Zap } from 'lucide-react';
-import { type KeyboardEvent, useLayoutEffect, useRef } from 'react';
+import { type ChangeEvent, type KeyboardEvent, useLayoutEffect, useRef } from 'react';
+import { AttachmentChips } from '~/components/chat/attachment-chips';
 import { ModelPicker } from '~/components/chat/model-picker';
+import { PersonaPicker } from '~/components/chat/persona-picker';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
+import type { PendingAttachment } from '~/hooks/use-attachments';
 import { cn } from '~/lib/utils';
 
 interface ComposerProps {
@@ -24,6 +27,14 @@ interface ComposerProps {
   onEffortChange: (effort: ReasoningEffort) => void;
   webSearch: boolean;
   onWebSearchChange: (enabled: boolean) => void;
+  personaId?: string | null;
+  onPersonaChange?: (personaId: string | null) => void;
+  personasAvailable?: boolean;
+  webSearchAvailable?: boolean;
+  attachmentsAvailable?: boolean;
+  attachments?: PendingAttachment[];
+  onAttachFiles?: (files: File[]) => void;
+  onRemoveAttachment?: (localId: string) => void;
   placeholder?: string;
 }
 
@@ -77,9 +88,18 @@ export function Composer({
   onEffortChange,
   webSearch,
   onWebSearchChange,
+  personaId = null,
+  onPersonaChange,
+  personasAvailable = false,
+  webSearchAvailable = true,
+  attachmentsAvailable = true,
+  attachments = [],
+  onAttachFiles,
+  onRemoveAttachment,
   placeholder = 'Type your message here...',
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Re-measure whenever the text changes so the field grows with its content.
   // biome-ignore lint/correctness/useExhaustiveDependencies: value drives the resize
@@ -90,9 +110,18 @@ export function Composer({
     node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
   }, [value]);
 
-  const canSubmit = value.trim().length > 0 && Boolean(selectedModel) && !streaming;
+  const uploading = attachments.some((item) => item.status === 'uploading');
+  const canSubmit = value.trim().length > 0 && Boolean(selectedModel) && !streaming && !uploading;
   const supportsEffort = selectedModel?.capabilities.includes('effort_control') ?? false;
-  const supportsSearch = selectedModel?.capabilities.includes('web_search') ?? true;
+  // OCI search grounding is provider-independent, so every chat model can use it.
+  const supportsSearch = webSearchAvailable;
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length > 0) onAttachFiles?.(files);
+    // Reset so selecting the same file again still fires a change event.
+    event.target.value = '';
+  }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -104,6 +133,8 @@ export function Composer({
   return (
     <div className="mx-auto w-full max-w-[47rem] px-3">
       <div className="rounded-t-[1.25rem] border border-b-0 border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5">
+        <AttachmentChips items={attachments} onRemove={(id) => onRemoveAttachment?.(id)} />
+
         <textarea
           ref={textareaRef}
           rows={1}
@@ -121,6 +152,14 @@ export function Composer({
 
         <div className="mt-5 flex items-center gap-2">
           <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
+
+          {onPersonaChange && (
+            <PersonaPicker
+              selectedId={personaId}
+              onSelect={onPersonaChange}
+              available={personasAvailable}
+            />
+          )}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild disabled={!supportsEffort}>
@@ -149,7 +188,20 @@ export function Composer({
             onClick={() => onWebSearchChange(!webSearch)}
           />
 
-          <Pill icon={Paperclip} label="Attach" disabled />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            aria-label="Attach a file"
+            onChange={handleFileChange}
+          />
+          <Pill
+            icon={Paperclip}
+            label="Attach"
+            disabled={!attachmentsAvailable || !onAttachFiles}
+            onClick={() => fileInputRef.current?.click()}
+          />
 
           {streaming ? (
             <button

@@ -1,0 +1,251 @@
+import type { Attachment } from '@oci/shared';
+import {
+  ArrowDown,
+  ArrowUp,
+  ExternalLink,
+  File,
+  FileText,
+  ImageIcon,
+  Paperclip,
+  Trash2,
+} from 'lucide-react';
+import { useState } from 'react';
+import { Button } from '~/components/ui/button';
+import { Spinner } from '~/components/ui/spinner';
+import { cn, formatBytes } from '~/lib/utils';
+
+interface SelectionCheckboxProps {
+  checked: boolean;
+  indeterminate?: boolean;
+  label: string;
+  onChange: () => void;
+  disabled?: boolean;
+}
+
+function SelectionCheckbox({
+  checked,
+  indeterminate = false,
+  label,
+  onChange,
+  disabled,
+}: SelectionCheckboxProps) {
+  return (
+    <input
+      ref={(node) => {
+        if (node) node.indeterminate = indeterminate;
+      }}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      aria-label={label}
+      className="size-4 shrink-0 cursor-pointer accent-[var(--accent-bright)] disabled:cursor-not-allowed disabled:opacity-50"
+    />
+  );
+}
+
+function AttachmentPreview({ attachment }: { attachment: Attachment }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const isImage = attachment.mimeType.startsWith('image/');
+  const isPdf = attachment.mimeType === 'application/pdf';
+
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[var(--bg-control-hover)] text-[var(--text-secondary)]">
+      {isImage && !imageFailed ? (
+        <img
+          src={attachment.thumbnailUrl ?? attachment.url}
+          alt=""
+          loading="lazy"
+          className="size-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : isPdf ? (
+        <span className="relative flex size-full items-center justify-center">
+          <FileText className="size-5" />
+          <span className="absolute bottom-0.5 text-[0.4rem] font-bold leading-none">PDF</span>
+        </span>
+      ) : attachment.mimeType.startsWith('text/') || attachment.mimeType === 'application/json' ? (
+        <FileText className="size-5" />
+      ) : isImage ? (
+        <ImageIcon className="size-5" />
+      ) : (
+        <File className="size-5" />
+      )}
+    </span>
+  );
+}
+
+function formatCreatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown date';
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+}
+
+interface AttachmentListProps {
+  attachments: Attachment[];
+  totalCount: number;
+  selected: Set<string>;
+  deletingIds: Set<string>;
+  isLoading: boolean;
+  isError: boolean;
+  sortDirection: 'asc' | 'desc';
+  onRetry: () => void;
+  onSort: () => void;
+  onToggle: (id: string) => void;
+  onToggleAll: () => void;
+  onDelete: (ids: string[]) => void;
+}
+
+export function AttachmentList({
+  attachments,
+  totalCount,
+  selected,
+  deletingIds,
+  isLoading,
+  isError,
+  sortDirection,
+  onRetry,
+  onSort,
+  onToggle,
+  onToggleAll,
+  onDelete,
+}: AttachmentListProps) {
+  const selectedVisibleCount = attachments.filter((file) => selected.has(file.id)).length;
+  const allVisibleSelected = attachments.length > 0 && selectedVisibleCount === attachments.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  return (
+    <div className="mt-4 min-h-72 overflow-hidden rounded-lg border border-[var(--border-subtle)] sm:min-h-[32rem]">
+      <div className="grid h-10 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] px-4 text-xs font-semibold text-[var(--text-secondary)] sm:grid-cols-[1.25rem_minmax(0,1fr)_8rem_2rem]">
+        <SelectionCheckbox
+          checked={allVisibleSelected}
+          indeterminate={someVisibleSelected}
+          disabled={attachments.length === 0}
+          label={
+            allVisibleSelected
+              ? 'Deselect all visible attachments'
+              : 'Select all visible attachments'
+          }
+          onChange={onToggleAll}
+        />
+        <span>Name</span>
+        <button
+          type="button"
+          className="hidden items-center justify-end gap-1 text-right transition-colors hover:text-[var(--text-primary)] sm:flex"
+          aria-label={`Sort by date ${sortDirection === 'asc' ? 'newest first' : 'oldest first'}`}
+          onClick={onSort}
+        >
+          Created
+          {sortDirection === 'asc' ? (
+            <ArrowUp className="size-3.5" />
+          ) : (
+            <ArrowDown className="size-3.5" />
+          )}
+        </button>
+        <span className="sr-only">Actions</span>
+      </div>
+
+      {isLoading ? (
+        <div
+          className="flex min-h-56 items-center justify-center"
+          role="status"
+          aria-label="Loading attachments"
+        >
+          <Spinner className="size-6" />
+        </div>
+      ) : isError ? (
+        <div className="flex min-h-56 flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-sm text-[var(--text-secondary)]">Attachments could not be loaded.</p>
+          <Button variant="secondary" size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : attachments.length === 0 ? (
+        <div className="flex min-h-56 flex-col items-center justify-center gap-3 px-6 text-center">
+          <span className="flex size-11 items-center justify-center rounded-full bg-[var(--bg-control)]">
+            <Paperclip className="size-5 text-[var(--text-muted)]" />
+          </span>
+          <div>
+            <p className="text-sm font-medium text-[var(--text-secondary)]">
+              {totalCount === 0 ? 'No attachments yet' : 'No files match this filter'}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+              {totalCount === 0
+                ? 'Files uploaded in chat will appear here.'
+                : 'Choose another file type to see your uploads.'}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div>
+          {attachments.map((attachment) => {
+            const isSelected = selected.has(attachment.id);
+            const isDeleting = deletingIds.has(attachment.id);
+
+            return (
+              <div
+                key={attachment.id}
+                className={cn(
+                  'grid min-h-14 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] px-4 py-2 last:border-b-0 sm:grid-cols-[1.25rem_minmax(0,1fr)_8rem_2rem]',
+                  isSelected && 'bg-[var(--accent-soft)]/45',
+                  isDeleting && 'opacity-55',
+                )}
+              >
+                <SelectionCheckbox
+                  checked={isSelected}
+                  disabled={isDeleting}
+                  label={`Select ${attachment.filename}`}
+                  onChange={() => onToggle(attachment.id)}
+                />
+
+                <div className="flex min-w-0 items-center gap-3">
+                  <AttachmentPreview attachment={attachment} />
+                  <div className="min-w-0">
+                    <a
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={attachment.filename}
+                      className="group flex min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--text-primary)] hover:underline"
+                    >
+                      <span className="truncate">{attachment.filename}</span>
+                      <ExternalLink className="size-3 shrink-0 text-[var(--text-secondary)]" />
+                    </a>
+                    <p className="truncate text-xs leading-4 text-[var(--text-muted)]">
+                      {attachment.mimeType} · {formatBytes(attachment.sizeBytes)}
+                      <span className="sm:hidden"> · {formatCreatedAt(attachment.createdAt)}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <time
+                  dateTime={attachment.createdAt}
+                  className="hidden text-right text-xs text-[var(--text-secondary)] sm:block"
+                >
+                  {formatCreatedAt(attachment.createdAt)}
+                </time>
+
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={isDeleting}
+                  aria-label={`Delete ${attachment.filename}`}
+                  title={`Delete ${attachment.filename}`}
+                  className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-foreground)] hover:bg-[var(--danger)]/30"
+                  onClick={() => onDelete([attachment.id])}
+                >
+                  {isDeleting ? <Spinner className="size-3.5" /> : <Trash2 />}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

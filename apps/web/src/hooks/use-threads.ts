@@ -17,7 +17,37 @@ export function useCreateThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => api.post<{ thread: ThreadSummary }>('/threads', { temporary: false }),
+    mutationFn: (options?: { temporary?: boolean; personaId?: string | null }) =>
+      api.post<{ thread: ThreadSummary }>('/threads', {
+        temporary: options?.temporary ?? false,
+        personaId: options?.personaId,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
+  });
+}
+
+export interface BranchMessageResult {
+  thread: ThreadSummary;
+  message: {
+    id: string;
+    modelSlug: string | null;
+    effort: 'low' | 'medium' | 'high' | null;
+  };
+}
+
+export function useBranchMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      messageId,
+      text,
+    }: {
+      threadId: string;
+      messageId: string;
+      text: string;
+    }) => api.post<BranchMessageResult>(`/threads/${threadId}/branches`, { messageId, text }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
   });
 }

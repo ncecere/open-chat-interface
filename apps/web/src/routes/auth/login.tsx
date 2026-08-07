@@ -1,4 +1,4 @@
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
@@ -57,63 +57,67 @@ export function LoginPage() {
           </div>
         ) : (
           <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
-            {status?.localAuthEnabled && (
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {!status?.localAuthEnabled && (
+                <p className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                  Password sign-in is disabled except for administrator recovery.
+                </p>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                />
+              </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="••••••••••••"
-                  />
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="••••••••••••"
+                />
+              </div>
 
-                {error && (
-                  <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]">
-                    {error}
-                  </p>
-                )}
+              {error && (
+                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]">
+                  {error}
+                </p>
+              )}
 
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={submitting}
-                  className="mt-1 w-full"
+              <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
+                {submitting ? <Spinner className="text-white" /> : <KeyRound />}
+                Sign in
+              </Button>
+              {status?.localAuthEnabled && status.smtpConfigured && (
+                <Link
+                  to="/auth/forgot-password"
+                  className="text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
-                  {submitting ? <Spinner className="text-white" /> : <KeyRound />}
-                  Sign in
-                </Button>
-              </form>
-            )}
+                  Forgot your password?
+                </Link>
+              )}
+            </form>
 
             {status && status.ssoProviders.length > 0 && (
               <>
-                {status.localAuthEnabled && (
-                  <div className="my-5 flex items-center gap-3">
-                    <span className="h-px flex-1 bg-[var(--border-subtle)]" />
-                    <span className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)]">
-                      or
-                    </span>
-                    <span className="h-px flex-1 bg-[var(--border-subtle)]" />
-                  </div>
-                )}
+                <div className="my-5 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-[var(--border-subtle)]" />
+                  <span className="text-[0.6875rem] uppercase tracking-wider text-[var(--text-muted)]">
+                    or
+                  </span>
+                  <span className="h-px flex-1 bg-[var(--border-subtle)]" />
+                </div>
 
                 <div className="flex flex-col gap-2">
                   {status.ssoProviders.map((provider) => (
@@ -131,9 +135,15 @@ export function LoginPage() {
               </>
             )}
 
-            {status?.registrationMode === 'open' && (
+            {status?.registrationMode === 'open' && status.localAuthEnabled && (
               <p className="mt-5 text-center text-xs text-[var(--text-muted)]">
-                Registration is open. Account creation is added with the sign-up flow.
+                New here?{' '}
+                <Link
+                  to="/auth/signup"
+                  className="font-medium text-[var(--accent-bright)] hover:underline"
+                >
+                  Create an account
+                </Link>
               </p>
             )}
 
