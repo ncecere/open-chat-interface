@@ -37,7 +37,31 @@ export function ModelPicker({
    * the screen as the pointer moves between them.
    */
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  const [detailsOnLeft, setDetailsOnLeft] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Chooses the side with room, measured when the card opens.
+   *
+   * Deciding once rather than per render keeps the card still: re-measuring as
+   * the contents change could flip it mid-read.
+   */
+  function showDetails(modelId: string) {
+    setDetailsFor((current) => {
+      if (current === modelId) return null;
+
+      const panel = panelRef.current?.getBoundingClientRect();
+      if (panel) {
+        // Mirrors the card's own `w-[min(32rem,32vw)]` plus its gutter, so the
+        // measurement matches what will actually render.
+        const width = Math.min(512, window.innerWidth * 0.32) + 8;
+        const fitsRight = panel.right + width <= window.innerWidth;
+        setDetailsOnLeft(!fitsRight && panel.left - width >= 0);
+      }
+      return modelId;
+    });
+  }
 
   const labs = useMemo(() => labsFrom(models), [models]);
   const visible = useMemo(
@@ -91,6 +115,7 @@ export function ModelPicker({
           searchRef.current?.focus();
         }}
         aria-label="Choose a model"
+        ref={panelRef}
         className="relative w-[min(29rem,calc(100vw-1rem))] p-0"
       >
         <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5">
@@ -214,9 +239,7 @@ export function ModelPicker({
                       type="button"
                       aria-label={`Details for ${model.displayName}`}
                       aria-expanded={detailsFor === model.id}
-                      onClick={() =>
-                        setDetailsFor((current) => (current === model.id ? null : model.id))
-                      }
+                      onClick={() => showDetails(model.id)}
                       className={cn(
                         'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
                         detailsFor === model.id
@@ -236,13 +259,22 @@ export function ModelPicker({
         {/*
          * One card for the whole panel, in a fixed position beside it.
          *
-         * Sitting to the left keeps it clear of the list: the picker opens from
-         * the composer at the bottom-left, so the space on that side is free
-         * while the right may be occupied by the viewport edge.
+         * Prefers the right, and falls back to the left only when the panel is
+         * too near the viewport edge for the card to fit. Whichever side wins,
+         * it stays there for as long as the picker is open, so moving between
+         * models changes the contents and nothing else.
+         *
+         * Aligned to the panel's top rather than centred, so the heading sits
+         * at a predictable height however much detail a model carries.
          */}
         {detailsModel && (
-          <div className="pointer-events-none absolute top-0 right-full bottom-0 hidden items-center pr-2 md:flex">
-            <div className="pointer-events-auto flex h-[26rem] max-h-full w-[min(32rem,32vw)] flex-col overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-popover)]">
+          <div
+            className={cn(
+              'pointer-events-none absolute top-0 hidden md:block',
+              detailsOnLeft ? 'right-full pr-2' : 'left-full pl-2',
+            )}
+          >
+            <div className="pointer-events-auto flex h-[26rem] w-[min(32rem,32vw)] flex-col overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-popover)]">
               <ModelInfoCard model={detailsModel} />
             </div>
           </div>
