@@ -58,6 +58,7 @@ export const authStatusSchema = z.object({
   ),
   branding: z.object({
     appName: z.string(),
+    shortName: z.string().nullable(),
     logoUrl: z.string().nullable(),
     loginMessage: z.string().nullable(),
     colorTheme: z.enum(COLOR_THEMES),

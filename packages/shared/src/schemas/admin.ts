@@ -88,6 +88,8 @@ const updateS3SettingsSchema = s3SettingsSchema
 
 export const instanceSettingsSchema = z.object({
   appName: z.string(),
+  /** Compact mark for the sidebar. Falls back to initials of the full name. */
+  shortName: z.string().nullable(),
   logoUrl: z.string().nullable(),
   accentColor: z.string().nullable(),
   loginMessage: z.string().nullable(),

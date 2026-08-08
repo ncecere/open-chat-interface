@@ -15,7 +15,12 @@ function AuthCard({ children }: { children: React.ReactNode }) {
     <main className="flex min-h-dvh items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Wordmark name={status?.branding.appName} className="text-2xl" />
+          <Wordmark
+            name={status?.branding.appName}
+            shortName={status?.branding?.shortName}
+            logoUrl={status?.branding?.logoUrl}
+            className="text-2xl"
+          />
         </div>
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
           {children}

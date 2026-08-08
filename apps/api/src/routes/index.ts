@@ -4,6 +4,7 @@ import type { AppBindings } from '../middleware/context.js';
 import { adminRoutes } from './admin/index.js';
 import { attachmentRoutes } from './attachments.js';
 import { authStatusRoutes } from './auth-status.js';
+import { brandingRoutes } from './branding.js';
 import { chatRoutes } from './chat.js';
 import { healthRoutes } from './health.js';
 import { meRoutes } from './me.js';
@@ -16,6 +17,8 @@ export function createApiRoutes() {
 
   api.route('/health', healthRoutes);
   api.route('/auth', authStatusRoutes);
+  // Unauthenticated: the sign-in page renders the logo before anyone signs in.
+  api.route('/branding', brandingRoutes);
 
   // Better Auth owns every other /api/auth/* path.
   api.on(['GET', 'POST'], '/auth/*', (c) => auth.handler(c.req.raw));

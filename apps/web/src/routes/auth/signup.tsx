@@ -45,7 +45,12 @@ export function SignupPage() {
     <main className="flex min-h-dvh items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Wordmark name={status?.branding.appName} className="text-2xl" />
+          <Wordmark
+            name={status?.branding.appName}
+            shortName={status?.branding?.shortName}
+            logoUrl={status?.branding?.logoUrl}
+            className="text-2xl"
+          />
           <p className="text-sm text-[var(--text-muted)]">Create your account.</p>
         </div>
 

@@ -5,17 +5,21 @@ import { Wordmark } from '~/components/brand/wordmark';
 import { ThreadList } from '~/components/layout/thread-list';
 import { UserMenu } from '~/components/layout/user-menu';
 import { Button } from '~/components/ui/button';
+import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
 import { cn } from '~/lib/utils';
 
 interface SidebarProps {
-  appName?: string;
   open: boolean;
   mobile: boolean;
   onToggle: () => void;
 }
 
-export function Sidebar({ appName, open, mobile, onToggle }: SidebarProps) {
+export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
+  // Read here rather than threaded through the shell: the header needs the
+  // logo and short name too, and the status query is already cached.
+  const { data: status } = useAuthStatus();
+  const branding = status?.branding;
   const [search, setSearch] = useState('');
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
@@ -56,7 +60,13 @@ export function Sidebar({ appName, open, mobile, onToggle }: SidebarProps) {
           <PanelLeft />
         </Button>
         <Link to="/" className="min-w-0 flex-1 px-1 text-center">
-          <Wordmark name={appName} className="block truncate" />
+          <Wordmark
+            name={branding?.appName}
+            shortName={branding?.shortName}
+            logoUrl={branding?.logoUrl}
+            compact
+            className="mx-auto block truncate"
+          />
         </Link>
         <span className="size-8" />
       </div>

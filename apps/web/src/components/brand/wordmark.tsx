@@ -2,18 +2,49 @@ import { cn } from '~/lib/utils';
 
 const DEFAULT_NAME = 'Open Chat Interface';
 
+/** Initials, used when no short name is configured. */
+function initialsOf(label: string): string {
+  const words = label.split(/\s+/).filter(Boolean);
+  if (words.length < 3) return label;
+  return words.map((word) => word[0]?.toUpperCase() ?? '').join('');
+}
+
 /**
- * Instance wordmark. Long names collapse to their initials so admin branding
- * changes never break the sidebar header.
+ * Instance wordmark.
+ *
+ * A configured logo replaces the text entirely, since an instance that has
+ * uploaded a mark generally wants that rather than its name repeated beside it.
+ * Without one, a short name is used if set, and otherwise a long name collapses
+ * to initials so branding changes cannot break the sidebar header.
  */
-export function Wordmark({ name, className }: { name?: string; className?: string }) {
+export function Wordmark({
+  name,
+  shortName,
+  logoUrl,
+  compact = false,
+  className,
+}: {
+  name?: string;
+  shortName?: string | null;
+  logoUrl?: string | null;
+  /** Prefers the short form, for the narrow sidebar header. */
+  compact?: boolean;
+  className?: string;
+}) {
   const label = name?.trim() || DEFAULT_NAME;
-  const words = label.split(/\s+/);
 
-  // Three or more words render as an acronym, matching the compact header.
-  const display =
-    words.length >= 3 ? words.map((word) => word[0]?.toUpperCase() ?? '').join('') : label;
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={label}
+        title={label}
+        className={cn('h-8 w-auto max-w-full object-contain', className)}
+      />
+    );
+  }
 
+  const display = compact ? shortName?.trim() || initialsOf(label) : label;
   const [first, ...rest] = display.split(' ');
 
   return (

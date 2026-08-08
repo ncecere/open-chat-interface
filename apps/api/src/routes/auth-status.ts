@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { db } from '../db/index.js';
 import type { AppBindings } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
+import { publicLogoUrl } from '../services/branding-assets.js';
 import { isSmtpUsable } from '../services/email.js';
 import { acceptInvitation, validateInvitation } from '../services/invitations.js';
 import { getSetting } from '../services/settings.js';
@@ -52,7 +53,8 @@ authStatusRoutes.get('/status', async (c) => {
     })),
     branding: {
       appName: branding.appName,
-      logoUrl: branding.logoUrl,
+      shortName: branding.shortName,
+      logoUrl: publicLogoUrl(branding.logoUrl),
       loginMessage: branding.loginMessage,
       colorTheme: branding.colorTheme,
       defaultTheme: branding.defaultTheme,
