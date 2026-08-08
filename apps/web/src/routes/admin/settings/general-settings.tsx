@@ -1,10 +1,12 @@
-import { COLOR_THEMES, type ColorTheme, type InstanceSettings } from '@oci/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type AdminModel, COLOR_THEMES, type ColorTheme, type InstanceSettings } from '@oci/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { Field } from '~/components/ui/field';
 import { Textarea } from '~/components/ui/input';
+import { Select } from '~/components/ui/select';
+import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
@@ -372,6 +374,93 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
   );
 }
 
+/**
+ * Chooses the model a new conversation starts on.
+ *
+ * The flag still lives on the model row, which keeps one source of truth, but
+ * the decision belongs with the other instance-wide defaults rather than
+ * buried in a per-model form where it reads as a property of that one model.
+ */
+function DefaultModelForm() {
+  const queryClient = useQueryClient();
+  const [successMessage, setSuccessMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin', 'models'],
+    queryFn: () => api.get<{ models: AdminModel[] }>('/admin/models'),
+  });
+
+  const models = data?.models ?? [];
+  const enabled = models.filter((model) => model.enabled);
+  const current = models.find((model) => model.isDefault);
+
+  const save = useMutation({
+    mutationFn: (id: string) => api.patch(`/admin/models/${id}`, { isDefault: true }),
+    onSuccess: async () => {
+      setErrorMessage(null);
+      setSuccessMessage(true);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
+        queryClient.invalidateQueries({ queryKey: ['models'] }),
+      ]);
+    },
+    onError: (error) => {
+      setSuccessMessage(false);
+      setErrorMessage(
+        error instanceof ApiError ? error.message : 'Unable to save the default model.',
+      );
+    },
+  });
+
+  if (isLoading) return <Spinner className="size-5" />;
+
+  if (enabled.length === 0) {
+    return (
+      <p className="text-[var(--text-muted)] text-sm">
+        No models are enabled yet. Enable one in the model catalog first.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Field
+        label="Default model"
+        htmlFor="default-model"
+        hint="Used when someone starts a conversation without choosing a model."
+      >
+        <Select
+          id="default-model"
+          value={current?.id ?? ''}
+          disabled={save.isPending}
+          placeholder="Select a model"
+          onChange={(id) => {
+            setSuccessMessage(false);
+            save.mutate(id);
+          }}
+          options={enabled.map((model) => ({ value: model.id, label: model.displayName }))}
+          className="sm:max-w-96"
+        />
+      </Field>
+
+      <div aria-live="polite" className="min-h-5">
+        {errorMessage && (
+          <p role="alert" className="text-[var(--danger)] text-sm">
+            {errorMessage}
+          </p>
+        )}
+        {successMessage && (
+          <p className="flex items-center gap-1.5 text-[var(--success)] text-sm">
+            <Check className="size-4" aria-hidden="true" />
+            Default model saved.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
   return (
     <div className="flex flex-col gap-8">
@@ -386,7 +475,10 @@ export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
         title="Model behavior"
         description="Define the instance default applied to model conversations."
       >
-        <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
+        <div className="flex flex-col gap-8">
+          <DefaultModelForm />
+          <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
+        </div>
       </SettingsSection>
 
       <SettingsSection

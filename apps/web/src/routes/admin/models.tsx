@@ -9,7 +9,7 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cpu, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { Cpu, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { AdminPageHeader, EmptyState, Row, RowList } from '~/components/admin/admin-ui';
 import { ModelFormDialog } from '~/components/admin/model-form-dialog';
@@ -119,15 +119,6 @@ function ModelRow({ model, onEdit }: { model: AdminModel; onEdit: () => void }) 
           onClick={onEdit}
         >
           <Pencil />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={model.isDefault ? 'Default model' : 'Make default'}
-          onClick={() => update.mutate({ isDefault: true })}
-        >
-          <Star className={cn(model.isDefault && 'fill-[var(--accent)] text-[var(--accent)]')} />
         </Button>
 
         <Button
