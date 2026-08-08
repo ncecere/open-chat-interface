@@ -25,6 +25,26 @@ function describeViolations(results: Awaited<ReturnType<typeof scan>>): string {
     .join('\n');
 }
 
+/**
+ * Clears the new-user introduction when it appears.
+ *
+ * A fresh account is greeted by the wizard, so every signed-in test would
+ * otherwise stall waiting for a composer that is not on screen yet. Skipping
+ * is the same choice a user has, so this exercises a real path.
+ */
+async function dismissIntroduction(page: Page) {
+  const skip = page.getByRole('button', { name: 'Skip for now' });
+
+  // The gate resolves after its own request, so an immediate visibility check
+  // races it and reports "not present" while it is still loading. Wait for it
+  // to settle either way before deciding.
+  await skip.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
+  if (await skip.isVisible().catch(() => false)) {
+    await skip.click();
+    await expect(skip).toBeHidden();
+  }
+}
+
 async function signIn(page: Page) {
   const email = process.env.E2E_ADMIN_EMAIL;
   const password = process.env.E2E_ADMIN_PASSWORD;
@@ -34,6 +54,7 @@ async function signIn(page: Page) {
   await page.getByLabel('Email').fill(email!);
   await page.getByLabel('Password').fill(password!);
   await page.getByRole('button', { name: 'Sign in' }).click();
+  await dismissIntroduction(page);
   await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
 }
 
@@ -56,6 +77,27 @@ test.describe('WCAG 2.2 AA: anonymous surfaces', () => {
 });
 
 test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
+  test('new-user introduction has no violations', async ({ page }) => {
+    // Scanned before it is dismissed, since for a new account this is the
+    // first screen they meet.
+    const email = process.env.E2E_ADMIN_EMAIL;
+    const password = process.env.E2E_ADMIN_PASSWORD;
+    test.skip(!email || !password, 'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD');
+
+    await page.goto('/auth/login');
+    await page.getByLabel('Email').fill(email!);
+    await page.getByLabel('Password').fill(password!);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    const skip = page.getByRole('button', { name: 'Skip for now' });
+    // Only meaningful while the introduction is outstanding; an instance whose
+    // account has already completed it has nothing to scan.
+    test.skip(!(await skip.isVisible().catch(() => false)), 'Introduction already completed');
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('chat home has no violations', async ({ page }) => {
     await signIn(page);
 

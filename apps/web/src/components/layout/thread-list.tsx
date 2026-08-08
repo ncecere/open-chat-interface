@@ -125,7 +125,9 @@ export function ThreadList({ search }: { search: string }) {
                 aria-expanded={pinnedOpen}
                 aria-controls="pinned-thread-list"
                 onClick={() => setPinnedOpen((open) => !open)}
-                className="flex w-full items-center gap-1 rounded px-2.5 pb-1 text-left text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
+                // min-h keeps the target at the 24px WCAG 2.2 floor; the label
+                // itself is deliberately small, so padding carries the height.
+                className="flex min-h-6 w-full items-center gap-1 rounded px-2.5 pb-1 text-left text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
               >
                 <ChevronDown
                   className={cn('size-3 transition-transform', !pinnedOpen && '-rotate-90')}

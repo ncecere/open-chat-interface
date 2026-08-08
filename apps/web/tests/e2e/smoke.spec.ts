@@ -1,4 +1,23 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+
+/**
+ * Clears the new-user introduction when it appears.
+ *
+ * A fresh account is greeted by the wizard, so a signed-in test would
+ * otherwise stall waiting for a composer that is not on screen yet.
+ */
+async function dismissIntroduction(page: Page) {
+  const skip = page.getByRole('button', { name: 'Skip for now' });
+
+  // The gate resolves after its own request, so an immediate visibility check
+  // races it and reports "not present" while it is still loading. Wait for it
+  // to settle either way before deciding.
+  await skip.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
+  if (await skip.isVisible().catch(() => false)) {
+    await skip.click();
+    await expect(skip).toBeHidden();
+  }
+}
 
 test('anonymous users are redirected to sign in', async ({ page }) => {
   await page.goto('/');
@@ -24,6 +43,7 @@ test('administrator can reach the chat composer', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   await expect(page).toHaveURL(/\/$/);
+  await dismissIntroduction(page);
   await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
 });
 
@@ -38,6 +58,7 @@ test('mobile shell uses an accessible full-screen sidebar drawer', async ({ page
   await page.getByLabel('Password').fill(password!);
   await page.getByRole('button', { name: 'Sign in' }).click();
 
+  await dismissIntroduction(page);
   await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'More composer options' })).toBeVisible();
   await expect(page.locator('aside')).toHaveAttribute('aria-hidden', 'true');
