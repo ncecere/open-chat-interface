@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, lte, schema, sql } from '@oci/db';
+import { and, asc, desc, eq, ilike, isNull, lte, schema, sql } from '@oci/db';
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
@@ -18,8 +18,10 @@ export async function assertTemporaryChatAllowed(role: UserRole): Promise<void> 
 }
 
 /**
- * PostgreSQL has no built-in row TTL. This bounded cleanup is run periodically
- * by the API process and opportunistically by thread endpoints.
+ * Hard-deletes expired temporary chats.
+ *
+ * These deliberately skip the trash. A conversation the user was told would
+ * vanish in 24 hours must not linger for another month in a recovery bin.
  */
 export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<number> {
   const expired = await db
@@ -34,12 +36,14 @@ export async function listThreads(
   userId: string,
   options?: { search?: string; archived?: boolean },
 ) {
-  await purgeExpiredTemporaryThreads();
-
+  // Expiry cleanup belongs to the background job runner. Doing it here made an
+  // ordinary read perform unbounded deletion work on someone else's rows.
   const conditions = [
     eq(schema.thread.userId, userId),
     eq(schema.thread.archived, options?.archived ?? false),
     eq(schema.thread.temporary, false),
+    // Trashed conversations are invisible everywhere a live one would appear.
+    isNull(schema.thread.deletedAt),
   ];
 
   if (options?.search) {
@@ -82,7 +86,13 @@ export async function getOwnedThread(threadId: string, userId: string) {
   const [thread] = await db
     .select()
     .from(schema.thread)
-    .where(and(eq(schema.thread.id, threadId), eq(schema.thread.userId, userId)))
+    .where(
+      and(
+        eq(schema.thread.id, threadId),
+        eq(schema.thread.userId, userId),
+        isNull(schema.thread.deletedAt),
+      ),
+    )
     .limit(1);
 
   if (!thread) throw notFound('Thread not found');

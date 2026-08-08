@@ -43,7 +43,9 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
   // The bar depletes as the allowance is consumed, so a full bar means a full
   // allowance remaining.
   const percentRemaining = Math.max(0, 100 - (allowance.used / allowance.limitValue) * 100);
-  const low = percentRemaining <= 10;
+  // Severity comes from the server so the meter and the composer banner cannot
+  // disagree about when a user is close to their limit.
+  const low = allowance.severity === 'critical' || allowance.severity === 'exceeded';
   const countdown = formatCountdown(allowance.resetsAt);
 
   return (
@@ -73,6 +75,12 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
         {formatAmount(allowance.limitValue, allowance.metric)} · {windowLabel(allowance)}
         {countdown ? ` · resets in ${countdown}` : ''}
       </p>
+      {allowance.modelSlugs.length > 0 && (
+        <p className="mt-0.5 text-[0.6875rem] text-[var(--text-muted)]">
+          Applies to {allowance.modelSlugs.length} model
+          {allowance.modelSlugs.length === 1 ? '' : 's'}
+        </p>
+      )}
     </div>
   );
 }

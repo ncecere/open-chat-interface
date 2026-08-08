@@ -46,6 +46,14 @@ function tableQuery(rows: unknown[]) {
   return chain;
 }
 
+/**
+ * The model-scope lookup that follows every policy query. Returning no rows
+ * leaves each policy unscoped, which is how a policy applies to every model.
+ */
+function scopeQuery(rows: unknown[] = []) {
+  return tableQuery(rows);
+}
+
 const messagePolicy = {
   id: 'policy-messages',
   name: 'Daily messages',
@@ -100,6 +108,7 @@ describe('integration with mocked DB: quota reservation', () => {
   it('reserves when usage is strictly below the limit', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 4, tokens: 0, costMicros: 0 }]));
 
@@ -111,6 +120,7 @@ describe('integration with mocked DB: quota reservation', () => {
   it('refuses when usage exactly reaches the limit', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 5, tokens: 0, costMicros: 0 }]));
 
@@ -123,6 +133,7 @@ describe('integration with mocked DB: quota reservation', () => {
     // The second request sees the first request's pending row in the total.
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 5, tokens: 0, costMicros: 0 }]));
 
@@ -134,6 +145,7 @@ describe('integration with mocked DB: quota reservation', () => {
   it('serializes reservations per user with an advisory lock', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 0, tokens: 0, costMicros: 0 }]));
 
@@ -145,6 +157,7 @@ describe('integration with mocked DB: quota reservation', () => {
   it('refuses on a budget policy once spend reaches the dollar limit', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(
         tableQuery([{ messages: 1, tokens: 10, costMicros: 5 * MICROS_PER_DOLLAR }]),
@@ -158,6 +171,7 @@ describe('integration with mocked DB: quota reservation', () => {
   it('enforces every policy applied to the role, not just the first', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy, budgetPolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 1, tokens: 0, costMicros: 0 }]))
       .mockReturnValueOnce(
@@ -172,6 +186,7 @@ describe('integration with mocked DB: quota reservation', () => {
   it('normalizes bigint sums returned as strings by postgres', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: '1', tokens: '10', costMicros: '5000000' }]));
 
@@ -189,6 +204,7 @@ describe('integration with mocked DB: usage summary', () => {
   it('summarizes each applied policy separately', async () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy, budgetPolicy]))
+      .mockReturnValueOnce(scopeQuery())
       .mockReturnValueOnce(tableQuery([{ messages: 2, tokens: 0, costMicros: 0 }]))
       .mockReturnValueOnce(
         tableQuery([{ messages: 2, tokens: 0, costMicros: 1 * MICROS_PER_DOLLAR }]),

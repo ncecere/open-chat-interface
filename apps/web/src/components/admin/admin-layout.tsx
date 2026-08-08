@@ -4,6 +4,7 @@ import {
   Boxes,
   Cpu,
   Gauge,
+  HardDrive,
   KeyRound,
   LayoutDashboard,
   Mail,
@@ -49,6 +50,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/admin/search', label: 'Search', icon: Search },
       { to: '/admin/storage', label: 'Storage', icon: Boxes },
+      { to: '/admin/lifecycle', label: 'Storage & retention', icon: HardDrive },
       { to: '/admin/audit', label: 'Audit log', icon: ScrollText },
     ],
   },

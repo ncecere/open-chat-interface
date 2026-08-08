@@ -1,7 +1,7 @@
 import { DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_FILES_PER_MESSAGE } from '@oci/shared';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { validationFailed } from '../lib/errors.js';
+import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import {
   assertAttachmentUseAllowed,
@@ -10,8 +10,10 @@ import {
   listAttachments,
   uploadAttachment,
 } from '../services/attachments/index.js';
+import { uploadRateLimit } from '../services/limits/rate-limit.js';
 import { getSetting } from '../services/settings.js';
 import { getStorageDriver } from '../services/storage/index.js';
+import { getStorageUsage } from '../services/storage/quota.js';
 
 export const attachmentRoutes = new Hono<AppBindings>();
 
@@ -20,6 +22,12 @@ const HARD_UPLOAD_REQUEST_LIMIT =
   DEFAULT_MAX_FILE_BYTES * DEFAULT_MAX_FILES_PER_MESSAGE + MULTIPART_OVERHEAD_BYTES;
 
 attachmentRoutes.use('*', requireAuth);
+
+/** Consumption and the role's allowance, for the storage meter in settings. */
+attachmentRoutes.get('/usage', async (c) => {
+  const user = currentUser(c);
+  return c.json(await getStorageUsage(user.id, user.role));
+});
 
 attachmentRoutes.get('/', async (c) => {
   const user = currentUser(c);
@@ -48,6 +56,16 @@ attachmentRoutes.post(
   async (c) => {
     const user = currentUser(c);
     await assertAttachmentUseAllowed(user.role);
+
+    // Uploads are the fastest way to consume storage, so they carry their own
+    // limit rather than sharing the chat budget.
+    const limit = await uploadRateLimit(user.id, user.role);
+    if (!limit.allowed) {
+      throw rateLimited(
+        'You are uploading too quickly. Try again in a moment.',
+        limit.retryAfterSeconds,
+      );
+    }
 
     const storage = await getSetting('storage');
     const configuredRequestLimit =
@@ -84,6 +102,7 @@ attachmentRoutes.post(
       uploaded.push(
         await uploadAttachment({
           userId: user.id,
+          role: user.role,
           filename: file.name ?? 'file',
           declaredMimeType: file.type ?? 'application/octet-stream',
           bytes: Buffer.from(await file.arrayBuffer()),

@@ -218,6 +218,18 @@ async function runtimeChatStreamStore(): Promise<ChatStreamStore | null> {
   }
 }
 
+/**
+ * The shared Redis connection, or null when Redis is unconfigured or down.
+ *
+ * Rate limiting and concurrency caps reuse this rather than opening a second
+ * connection: they need the same availability signal, and a limiter that
+ * silently used a different client could disagree about whether Redis works.
+ */
+export async function sharedRedis(): Promise<Redis | null> {
+  await runtimeChatStreamStore();
+  return redisClient;
+}
+
 async function withStore<T>(operation: (store: ChatStreamStore) => Promise<T>): Promise<T | null> {
   const store = await runtimeChatStreamStore();
   if (!store) return null;

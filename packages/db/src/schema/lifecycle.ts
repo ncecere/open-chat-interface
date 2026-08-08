@@ -1,0 +1,120 @@
+import type { UserRole } from '@oci/shared';
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+import { primaryId, timestamps } from './_shared.js';
+import { pgTable } from './_table.js';
+import { user } from './auth.js';
+import { organization } from './organization.js';
+
+/**
+ * Objects awaiting deletion from the storage backend.
+ *
+ * A database trigger writes here whenever an attachment row disappears, which
+ * is the only reliable way to catch `ON DELETE CASCADE`: PostgreSQL removes
+ * the row without ever calling the application's storage service. Explicit
+ * deletes land here through the same trigger, so there is exactly one path.
+ *
+ * A worker drains the queue. Failures stay queued with a growing attempt count
+ * instead of becoming a log line nobody reads.
+ */
+export const deletedObject = pgTable(
+  'deleted_object',
+  {
+    id: primaryId(),
+    storageKey: text('storage_key').notNull(),
+    /** Retained for reporting; the row it came from is already gone. */
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull().default(0),
+    userId: text('user_id'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    /** Backoff gate; the worker ignores rows until this time passes. */
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('deleted_object_pending_idx').on(t.deletedAt, t.nextAttemptAt),
+    index('deleted_object_key_idx').on(t.storageKey),
+  ],
+);
+
+/**
+ * Bookkeeping for the background job runner. Answers the first question an
+ * operator asks after enabling retention: did it actually run, and what did
+ * it touch?
+ */
+export const jobRun = pgTable(
+  'job_run',
+  {
+    id: primaryId(),
+    jobName: text('job_name').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    durationMs: integer('duration_ms'),
+    itemsProcessed: integer('items_processed').notNull().default(0),
+    status: text('status').$type<'running' | 'success' | 'error'>().notNull().default('running'),
+    errorMessage: text('error_message'),
+    details: jsonb('details').$type<Record<string, unknown>>(),
+  },
+  (t) => [index('job_run_name_started_idx').on(t.jobName, t.startedAt)],
+);
+
+/**
+ * A live byte and file counter per user, maintained transactionally alongside
+ * attachment writes. Summing `size_bytes` on every upload is correct but scans
+ * more rows as history grows, and quota checks sit on the upload hot path.
+ *
+ * Soft-deleted bytes are tracked separately: they stop counting against the
+ * user's allowance immediately so cleaning up frees space at once, while the
+ * operator still sees real disk consumption.
+ */
+export const storageUsage = pgTable(
+  'storage_usage',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' })
+      .unique(),
+    liveBytes: bigint('live_bytes', { mode: 'number' }).notNull().default(0),
+    liveFileCount: integer('live_file_count').notNull().default(0),
+    pendingBytes: bigint('pending_bytes', { mode: 'number' }).notNull().default(0),
+    pendingFileCount: integer('pending_file_count').notNull().default(0),
+    ...timestamps(),
+  },
+  (t) => [index('storage_usage_user_idx').on(t.userId)],
+);
+
+/**
+ * Per-role storage allowance. Unlike a quota, storage is a gauge rather than a
+ * flow: it asks how much a user holds right now, so it needs no window,
+ * reservation, or settlement.
+ */
+export const storagePolicy = pgTable(
+  'storage_policy',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    role: text('role').$type<UserRole>().notNull(),
+    /** Null means unlimited for that dimension. */
+    maxTotalBytes: bigint('max_total_bytes', { mode: 'number' }),
+    maxFileCount: integer('max_file_count'),
+    maxFileBytes: bigint('max_file_bytes', { mode: 'number' }),
+    enabled: boolean('enabled').notNull().default(true),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex('storage_policy_org_role_unique').on(t.organizationId, t.role)],
+);

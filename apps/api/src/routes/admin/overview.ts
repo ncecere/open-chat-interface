@@ -39,8 +39,12 @@ overviewRoutes.get('/', async (c) => {
     db.select({ value: count() }).from(schema.provider).where(eq(schema.provider.enabled, true)),
     db
       .select({
-        files: count(),
-        bytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}), 0)`,
+        files: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is null)::int`,
+        bytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}) filter (where ${schema.attachment.deletedAt} is null), 0)`,
+        // Soft-deleted files still occupy disk, so an operator planning
+        // capacity needs to see them even though users no longer do.
+        pendingFiles: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is not null)::int`,
+        pendingBytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}) filter (where ${schema.attachment.deletedAt} is not null), 0)`,
       })
       .from(schema.attachment),
   ]);
@@ -66,8 +70,10 @@ overviewRoutes.get('/', async (c) => {
       enabled: enabledProviders[0]?.value ?? 0,
     },
     storage: {
-      fileCount: storageTotals[0]?.files ?? 0,
+      fileCount: Number(storageTotals[0]?.files ?? 0),
       totalBytes: Number(storageTotals[0]?.bytes ?? 0),
+      pendingFileCount: Number(storageTotals[0]?.pendingFiles ?? 0),
+      pendingBytes: Number(storageTotals[0]?.pendingBytes ?? 0),
     },
     system: { version: APP_VERSION, database, redis: await chatStreamRedisStatus() },
   };

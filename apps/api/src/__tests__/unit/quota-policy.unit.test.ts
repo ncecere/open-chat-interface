@@ -17,6 +17,7 @@ const policy = (overrides: Partial<EvaluablePolicy> = {}): EvaluablePolicy => ({
   windowKind: 'daily',
   windowHours: null,
   timezone: 'UTC',
+  modelSlugs: [],
   ...overrides,
 });
 

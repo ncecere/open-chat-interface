@@ -27,6 +27,19 @@ const envSchema = z.object({
 
   STORAGE_LOCAL_PATH: z.string().default('./data/storage'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  /**
+   * Retention and rate-limit defaults. These seed the values an administrator
+   * sees; anything saved in the admin dashboard takes precedence.
+   */
+  RETENTION_TRASH_DAYS: z.string().optional(),
+  RETENTION_THREAD_DAYS: z.string().optional(),
+  RETENTION_USAGE_EVENT_DAYS: z.string().optional(),
+  RETENTION_AUDIT_LOG_DAYS: z.string().optional(),
+  RATE_LIMIT_MAX_CONCURRENT_STREAMS: z.string().optional(),
+  RATE_LIMIT_CHAT_PER_MINUTE: z.string().optional(),
+  RATE_LIMIT_UPLOAD_PER_MINUTE: z.string().optional(),
+  RATE_LIMIT_AUTH_PER_MINUTE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

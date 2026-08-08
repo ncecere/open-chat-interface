@@ -13,6 +13,7 @@ import { ApiError, api } from '~/lib/api-client';
 import { AdminAuditPage } from '~/routes/admin/audit';
 import { AdminBrandingPage } from '~/routes/admin/branding';
 import { AdminInvitesPage } from '~/routes/admin/invites';
+import { AdminLifecyclePage } from '~/routes/admin/lifecycle';
 import { AdminModelsPage } from '~/routes/admin/models';
 import { AdminOverviewPage } from '~/routes/admin/overview';
 import { AdminProvidersPage } from '~/routes/admin/providers';
@@ -253,6 +254,12 @@ const adminStorageRoute = createRoute({
   component: AdminStoragePage,
 });
 
+const adminLifecycleRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/lifecycle',
+  component: AdminLifecyclePage,
+});
+
 const adminAuditRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/audit',
@@ -280,6 +287,7 @@ const routeTree = rootRoute.addChildren([
     adminQuotasRoute,
     adminSearchRoute,
     adminStorageRoute,
+    adminLifecycleRoute,
     adminAuditRoute,
   ]),
 ]);

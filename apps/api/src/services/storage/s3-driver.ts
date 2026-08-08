@@ -3,11 +3,12 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { notFound } from '../../lib/errors.js';
-import type { StorageDriver, StoredObject } from './driver.js';
+import type { ListPage, StorageDriver, StoredObject } from './driver.js';
 
 export interface S3DriverConfig {
   bucket: string;
@@ -40,6 +41,15 @@ export class S3StorageDriver implements StorageDriver {
   /** Checks bucket access without listing or returning object metadata. */
   async checkReadAccess(): Promise<void> {
     await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+  }
+
+  /**
+   * Verifies `s3:ListBucket`, which reconciliation needs and which a
+   * write-only credential will not have. Checked separately so the admin
+   * storage test can say precisely which permission is missing.
+   */
+  async checkListAccess(): Promise<void> {
+    await this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, MaxKeys: 1 }));
   }
 
   async put(key: string, body: Buffer, contentType: string): Promise<StoredObject> {
@@ -78,5 +88,34 @@ export class S3StorageDriver implements StorageDriver {
     } catch {
       return false;
     }
+  }
+
+  async list(options?: { cursor?: string; limit?: number }): Promise<ListPage> {
+    const result = await this.client.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucket,
+        MaxKeys: Math.max(1, Math.min(options?.limit ?? 1_000, 1_000)),
+        ...(options?.cursor ? { ContinuationToken: options.cursor } : {}),
+      }),
+    );
+
+    const objects = (result.Contents ?? []).flatMap((entry) =>
+      entry.Key
+        ? [
+            {
+              key: entry.Key,
+              sizeBytes: entry.Size ?? 0,
+              lastModified: entry.LastModified ?? new Date(0),
+            },
+          ]
+        : [],
+    );
+
+    return {
+      objects,
+      ...(result.IsTruncated && result.NextContinuationToken
+        ? { cursor: result.NextContinuationToken }
+        : {}),
+    };
   }
 }

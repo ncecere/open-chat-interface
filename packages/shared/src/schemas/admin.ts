@@ -166,6 +166,8 @@ export const quotaPolicySchema = z.object({
   timezone: z.string(),
   enabled: z.boolean(),
   roles: z.array(z.enum(USER_ROLES)),
+  /** Empty means the policy applies to every model. */
+  modelSlugs: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -183,6 +185,8 @@ export const upsertQuotaPolicySchema = z
     timezone: z.string().trim().min(1).max(64).default('UTC'),
     enabled: z.boolean().default(true),
     roles: z.array(z.enum(USER_ROLES)).max(USER_ROLES.length).default([]),
+    /** Empty applies the policy to every model; models are chosen explicitly. */
+    modelSlugs: z.array(z.string().trim().min(1).max(120)).max(500).default([]),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -219,6 +223,10 @@ export const usageAllowanceSchema = z.object({
   remaining: z.number().int().nonnegative(),
   exceeded: z.boolean(),
   resetsAt: z.string().nullable(),
+  /** Empty means the policy covers every model. */
+  modelSlugs: z.array(z.string()),
+  /** Drives the in-app warning before a user is cut off. */
+  severity: z.enum(['ok', 'warning', 'critical', 'exceeded']),
 });
 
 export const usageSummarySchema = z.object({
@@ -237,7 +245,13 @@ export const adminOverviewSchema = z.object({
   messages: z.object({ total: z.number(), last24h: z.number() }),
   models: z.object({ enabled: z.number(), total: z.number() }),
   providers: z.object({ configured: z.number(), enabled: z.number() }),
-  storage: z.object({ fileCount: z.number(), totalBytes: z.number() }),
+  storage: z.object({
+    fileCount: z.number(),
+    totalBytes: z.number(),
+    /** Soft-deleted but still occupying disk until the trash window elapses. */
+    pendingFileCount: z.number(),
+    pendingBytes: z.number(),
+  }),
   system: z.object({
     version: z.string(),
     database: z.enum(['ok', 'error']),

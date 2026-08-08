@@ -10,7 +10,11 @@ export function errorHandler(error: Error, c: Context): Response {
     const body: ApiErrorBody = {
       error: { code: error.code, message: error.message, details: error.details },
     };
-    return c.json(body, error.status);
+    return c.json(
+      body,
+      error.status,
+      error.retryAfterSeconds ? { 'retry-after': String(error.retryAfterSeconds) } : undefined,
+    );
   }
 
   if (error instanceof ZodError) {

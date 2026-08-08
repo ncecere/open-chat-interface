@@ -1,9 +1,18 @@
 import { and, eq, schema } from '@oci/db';
-import { COLOR_THEMES, type ColorTheme } from '@oci/shared';
+import { COLOR_THEMES, type ColorTheme, type UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { getDefaultOrganizationId } from './organization.js';
 
-export type SettingKey = 'branding' | 'auth' | 'features' | 'storage' | 'search' | 'smtp' | 'chat';
+export type SettingKey =
+  | 'branding'
+  | 'auth'
+  | 'features'
+  | 'storage'
+  | 'search'
+  | 'smtp'
+  | 'chat'
+  | 'retention'
+  | 'rateLimits';
 
 export interface BrandingSettings {
   appName: string;
@@ -112,6 +121,32 @@ export interface ChatSettings {
   defaultSystemPrompt: string | null;
 }
 
+/**
+ * Stored retention overrides. Every field is optional: an absent value falls
+ * back to the environment default rather than being written on first read.
+ */
+export interface StoredRetentionSettings {
+  trashRetentionDays?: number;
+  threadRetentionDays?: number | null;
+  exemptPinnedThreads?: boolean;
+  usageEventRetentionDays?: number;
+  auditLogRetentionDays?: number;
+}
+
+export interface StoredRateLimitSettings {
+  roles?: Partial<
+    Record<
+      UserRole,
+      {
+        maxConcurrentStreams?: number;
+        chatRequestsPerMinute?: number;
+        uploadRequestsPerMinute?: number;
+      }
+    >
+  >;
+  authAttemptsPerMinute?: number;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -120,6 +155,8 @@ interface SettingsMap {
   search: SearchSettings;
   smtp: SmtpSettings;
   chat: ChatSettings;
+  retention: StoredRetentionSettings;
+  rateLimits: StoredRateLimitSettings;
 }
 
 /**

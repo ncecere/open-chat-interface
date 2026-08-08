@@ -27,21 +27,34 @@ async function loadPolicies(organizationId: string, ids?: string[]): Promise<Quo
 
   if (rows.length === 0) return [];
 
-  const assignments = await db
-    .select({ policyId: schema.quotaPolicyRole.policyId, role: schema.quotaPolicyRole.role })
-    .from(schema.quotaPolicyRole)
-    .where(
-      inArray(
-        schema.quotaPolicyRole.policyId,
-        rows.map((row) => row.id),
-      ),
-    );
+  const policyIds = rows.map((row) => row.id);
+
+  const [assignments, scopes] = await Promise.all([
+    db
+      .select({ policyId: schema.quotaPolicyRole.policyId, role: schema.quotaPolicyRole.role })
+      .from(schema.quotaPolicyRole)
+      .where(inArray(schema.quotaPolicyRole.policyId, policyIds)),
+    db
+      .select({
+        policyId: schema.quotaPolicyModel.policyId,
+        modelSlug: schema.quotaPolicyModel.modelSlug,
+      })
+      .from(schema.quotaPolicyModel)
+      .where(inArray(schema.quotaPolicyModel.policyId, policyIds)),
+  ]);
 
   const rolesByPolicy = new Map<string, QuotaPolicy['roles']>();
   for (const assignment of assignments) {
     const existing = rolesByPolicy.get(assignment.policyId) ?? [];
     existing.push(assignment.role);
     rolesByPolicy.set(assignment.policyId, existing);
+  }
+
+  const modelsByPolicy = new Map<string, string[]>();
+  for (const scope of scopes) {
+    const existing = modelsByPolicy.get(scope.policyId) ?? [];
+    existing.push(scope.modelSlug);
+    modelsByPolicy.set(scope.policyId, existing);
   }
 
   return rows.map((row) => ({
@@ -55,6 +68,7 @@ async function loadPolicies(organizationId: string, ids?: string[]): Promise<Quo
     timezone: row.timezone,
     enabled: row.enabled,
     roles: rolesByPolicy.get(row.id) ?? [],
+    modelSlugs: (modelsByPolicy.get(row.id) ?? []).sort(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }));
@@ -72,6 +86,40 @@ async function replaceRoles(policyId: string, roles: QuotaPolicy['roles']): Prom
   await db
     .insert(schema.quotaPolicyRole)
     .values(roles.map((role) => ({ policyId, role })))
+    .onConflictDoNothing();
+}
+
+/**
+ * Replaces a policy's model scope. Slugs are validated against the catalog so
+ * a typo becomes an error rather than a policy that silently governs nothing.
+ */
+async function replaceModels(
+  policyId: string,
+  organizationId: string,
+  modelSlugs: string[],
+): Promise<void> {
+  await db.delete(schema.quotaPolicyModel).where(eq(schema.quotaPolicyModel.policyId, policyId));
+  if (modelSlugs.length === 0) return;
+
+  const unique = [...new Set(modelSlugs)];
+  const known = await db
+    .select({ slug: schema.model.slug })
+    .from(schema.model)
+    .where(
+      and(eq(schema.model.organizationId, organizationId), inArray(schema.model.slug, unique)),
+    );
+
+  const knownSlugs = new Set(known.map((row) => row.slug));
+  const unknown = unique.filter((slug) => !knownSlugs.has(slug));
+  if (unknown.length > 0) {
+    throw validationFailed('Unknown models in the policy scope.', [
+      { path: ['modelSlugs'], message: `Not in the catalog: ${unknown.join(', ')}` },
+    ]);
+  }
+
+  await db
+    .insert(schema.quotaPolicyModel)
+    .values(unique.map((modelSlug) => ({ policyId, modelSlug })))
     .onConflictDoNothing();
 }
 
@@ -120,6 +168,7 @@ quotaRoutes.post('/', async (c) => {
 
   if (!created) throw validationFailed('The policy could not be created.');
   await replaceRoles(created.id, input.roles);
+  await replaceModels(created.id, organizationId, input.modelSlugs);
 
   await recordAudit({
     actorUserId: actor.id,
@@ -127,7 +176,12 @@ quotaRoutes.post('/', async (c) => {
     action: 'quota.policy.create',
     targetType: 'quota_policy',
     targetId: created.id,
-    metadata: { name: input.name, metric: input.metric, roles: input.roles },
+    metadata: {
+      name: input.name,
+      metric: input.metric,
+      roles: input.roles,
+      modelSlugs: input.modelSlugs,
+    },
   });
 
   return c.json({ id: created.id }, 201);
@@ -183,6 +237,7 @@ quotaRoutes.put('/:id', async (c) => {
     .where(eq(schema.quotaPolicy.id, id));
 
   await replaceRoles(id, input.roles);
+  await replaceModels(id, organizationId, input.modelSlugs);
 
   await recordAudit({
     actorUserId: actor.id,
@@ -190,7 +245,12 @@ quotaRoutes.put('/:id', async (c) => {
     action: 'quota.policy.update',
     targetType: 'quota_policy',
     targetId: id,
-    metadata: { name: input.name, metric: input.metric, roles: input.roles },
+    metadata: {
+      name: input.name,
+      metric: input.metric,
+      roles: input.roles,
+      modelSlugs: input.modelSlugs,
+    },
   });
 
   return c.json({ id });

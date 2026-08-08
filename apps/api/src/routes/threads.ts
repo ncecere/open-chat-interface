@@ -1,4 +1,4 @@
-import { and, eq, schema } from '@oci/db';
+import { eq, schema } from '@oci/db';
 import {
   branchMessageSchema,
   createThreadSchema,
@@ -11,6 +11,13 @@ import { db } from '../db/index.js';
 import { forbidden } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import {
+  emptyTrash,
+  listTrashedThreads,
+  purgeTrashedThread,
+  restoreThread,
+  softDeleteThread,
+} from '../services/lifecycle/trash.js';
 import { getSetting } from '../services/settings.js';
 import {
   branchFromUserMessage,
@@ -67,6 +74,31 @@ threadRoutes.post('/', async (c) => {
     temporary: input.temporary,
   });
   return c.json({ thread: serializeThread(thread) }, 201);
+});
+
+/** Trash listing is a fixed path, so it must be declared before `/:id`. */
+threadRoutes.get('/trash', async (c) => {
+  const user = currentUser(c);
+  return c.json({ threads: await listTrashedThreads(user.id) });
+});
+
+threadRoutes.delete('/trash', async (c) => {
+  const user = currentUser(c);
+  const purged = await emptyTrash(user.id);
+  return c.json({ purged });
+});
+
+threadRoutes.post('/:id/restore', async (c) => {
+  const user = currentUser(c);
+  await restoreThread(c.req.param('id'), user.id);
+  return c.json({ ok: true });
+});
+
+/** Destroys a trashed thread now, without waiting out the grace window. */
+threadRoutes.delete('/:id/permanent', async (c) => {
+  const user = currentUser(c);
+  await purgeTrashedThread(c.req.param('id'), user.id);
+  return c.json({ ok: true });
 });
 
 threadRoutes.post('/:id/forks', async (c) => {
@@ -143,20 +175,12 @@ threadRoutes.patch('/:id', async (c) => {
   return c.json({ thread: updated ? serializeThread(updated) : null });
 });
 
+/**
+ * Moves the thread to the trash rather than destroying it. Automatic retention
+ * uses the same path, so one recovery story covers both.
+ */
 threadRoutes.delete('/:id', async (c) => {
   const user = currentUser(c);
-  const threadId = c.req.param('id');
-  await db.transaction(async (tx) => {
-    // Children remain valid conversations after their parent is removed; only
-    // clear the now-stale navigation link.
-    await tx
-      .update(schema.thread)
-      .set({ parentThreadId: null })
-      .where(and(eq(schema.thread.parentThreadId, threadId), eq(schema.thread.userId, user.id)));
-    await tx
-      .delete(schema.thread)
-      .where(and(eq(schema.thread.id, threadId), eq(schema.thread.userId, user.id)));
-  });
-
+  await softDeleteThread(c.req.param('id'), user.id, 'user');
   return c.json({ ok: true });
 });

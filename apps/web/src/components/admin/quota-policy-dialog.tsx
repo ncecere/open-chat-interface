@@ -11,6 +11,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
+import { ModelScopePicker } from '~/components/admin/model-scope-picker';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -70,6 +71,8 @@ interface PolicyDraft {
   timezone: string;
   enabled: boolean;
   roles: UserRole[];
+  /** Empty applies the policy to every model. */
+  modelSlugs: string[];
 }
 
 function initialDraft(policy: QuotaPolicy | null): PolicyDraft {
@@ -84,6 +87,7 @@ function initialDraft(policy: QuotaPolicy | null): PolicyDraft {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       enabled: true,
       roles: ['user'],
+      modelSlugs: [],
     };
   }
 
@@ -100,6 +104,7 @@ function initialDraft(policy: QuotaPolicy | null): PolicyDraft {
     timezone: policy.timezone,
     enabled: policy.enabled,
     roles: policy.roles,
+    modelSlugs: policy.modelSlugs,
   };
 }
 
@@ -151,6 +156,7 @@ export function QuotaPolicyDialog({
       timezone: draft.timezone,
       enabled: draft.enabled,
       roles: draft.roles,
+      modelSlugs: draft.modelSlugs,
     });
 
     if (!parsed.success) {
@@ -165,7 +171,8 @@ export function QuotaPolicyDialog({
       <DialogHeader>
         <DialogTitle>{policy ? 'Edit policy' : 'New policy'}</DialogTitle>
         <DialogDescription>
-          A policy sets one limit over one window. Apply it to any roles that should share it.
+          A policy sets one limit over one window. Apply it to the roles that should share it, and
+          optionally to specific models so a family such as Anthropic carries its own budget.
         </DialogDescription>
       </DialogHeader>
 
@@ -317,6 +324,13 @@ export function QuotaPolicyDialog({
               );
             })}
           </div>
+        </Field>
+
+        <Field label="Applies to models">
+          <ModelScopePicker
+            selected={draft.modelSlugs}
+            onChange={(modelSlugs) => setDraft((current) => ({ ...current, modelSlugs }))}
+          />
         </Field>
 
         <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">

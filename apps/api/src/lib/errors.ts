@@ -7,6 +7,8 @@ export class AppError extends Error {
     message: string,
     readonly status: ContentfulStatusCode,
     readonly details?: unknown,
+    /** Seconds to advertise in Retry-After for throttled responses. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'AppError';
@@ -29,6 +31,13 @@ export const validationFailed = (message: string, details?: unknown) =>
 
 export const quotaExceeded = (message: string) =>
   new AppError(ERROR_CODES.QUOTA_EXCEEDED, message, 429);
+
+/**
+ * Distinct from quotaExceeded: this means too fast, not too much. The client
+ * should retry, whereas an exceeded quota needs the window to roll over.
+ */
+export const rateLimited = (message: string, retryAfterSeconds?: number) =>
+  new AppError(ERROR_CODES.RATE_LIMITED, message, 429, undefined, retryAfterSeconds);
 
 export const providerError = (message: string) =>
   new AppError(ERROR_CODES.PROVIDER_ERROR, message, 502);

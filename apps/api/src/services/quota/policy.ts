@@ -3,6 +3,8 @@ import {
   type QuotaMetric,
   type QuotaWindowKind,
   TOKENS_PER_PRICE_UNIT,
+  USAGE_CRITICAL_THRESHOLD,
+  USAGE_WARNING_THRESHOLD,
   type UsageAllowance,
 } from '@oci/shared';
 
@@ -14,6 +16,17 @@ export interface EvaluablePolicy {
   windowKind: QuotaWindowKind;
   windowHours: number | null;
   timezone: string;
+  /** Empty means the policy applies to every model. */
+  modelSlugs: string[];
+}
+
+/**
+ * Whether a policy governs a given model. An empty scope is deliberately
+ * "everything": it keeps instance-wide budgets expressible and means a policy
+ * written before model scoping existed keeps its original reach.
+ */
+export function policyCoversModel(policy: EvaluablePolicy, modelSlug: string): boolean {
+  return policy.modelSlugs.length === 0 || policy.modelSlugs.includes(modelSlug);
 }
 
 export interface WindowTotals {
@@ -92,6 +105,15 @@ export function describeLimit(policy: EvaluablePolicy): string {
   }
 }
 
+/** Drives the in-app warning so a user is told before they are cut off. */
+export function allowanceSeverity(used: number, limitValue: number): UsageAllowance['severity'] {
+  if (used >= limitValue) return 'exceeded';
+  const fraction = limitValue > 0 ? used / limitValue : 0;
+  if (fraction >= USAGE_CRITICAL_THRESHOLD) return 'critical';
+  if (fraction >= USAGE_WARNING_THRESHOLD) return 'warning';
+  return 'ok';
+}
+
 export function buildAllowance(
   policy: EvaluablePolicy,
   totals: WindowTotals,
@@ -109,9 +131,17 @@ export function buildAllowance(
     remaining: Math.max(0, policy.limitValue - used),
     exceeded: used >= policy.limitValue,
     resetsAt: resetsAt?.toISOString() ?? null,
+    modelSlugs: policy.modelSlugs,
+    severity: allowanceSeverity(used, policy.limitValue),
   };
 }
 
+/**
+ * A model-scoped policy names the models it covers, so a user who hits one
+ * budget can tell that other models remain available.
+ */
 export function limitMessage(policy: EvaluablePolicy): string {
-  return `You have reached the ${policy.name} limit of ${describeLimit(policy)} for ${describeWindow(policy)}.`;
+  const base = `You have reached the ${policy.name} limit of ${describeLimit(policy)} for ${describeWindow(policy)}.`;
+  if (policy.modelSlugs.length === 0) return base;
+  return `${base} Other models are still available.`;
 }

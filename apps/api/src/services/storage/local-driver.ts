@@ -1,7 +1,7 @@
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { notFound } from '../../lib/errors.js';
-import type { StorageDriver, StoredObject } from './driver.js';
+import type { ListPage, StorageDriver, StoredObject } from './driver.js';
 
 /**
  * Filesystem driver. Every resolved path is checked to stay inside the root so
@@ -49,6 +49,54 @@ export class LocalStorageDriver implements StorageDriver {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Walks the storage tree in sorted order so the cursor can simply be the
+   * last key returned: the filesystem has no native pagination, and a stable
+   * ordering is what makes resuming correct.
+   */
+  async list(options?: { cursor?: string; limit?: number }): Promise<ListPage> {
+    const limit = Math.max(1, Math.min(options?.limit ?? 1_000, 10_000));
+    const collected: ListPage['objects'] = [];
+    let truncated = false;
+
+    const walk = async (directory: string): Promise<void> => {
+      if (truncated) return;
+
+      const entries = await readdir(directory, { withFileTypes: true }).catch(() => null);
+      if (!entries) return;
+
+      for (const entry of [...entries].sort((a, b) =>
+        String(a.name).localeCompare(String(b.name)),
+      )) {
+        if (truncated) return;
+        const absolute = join(directory, String(entry.name));
+
+        if (entry.isDirectory()) {
+          await walk(absolute);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+
+        const key = relative(this.root, absolute).split(sep).join('/');
+        if (options?.cursor && key <= options.cursor) continue;
+
+        if (collected.length >= limit) {
+          truncated = true;
+          return;
+        }
+
+        const info = await stat(absolute).catch(() => null);
+        if (!info) continue;
+        collected.push({ key, sizeBytes: info.size, lastModified: info.mtime });
+      }
+    };
+
+    await walk(this.root);
+
+    const last = collected.at(-1);
+    return { objects: collected, ...(truncated && last ? { cursor: last.key } : {}) };
   }
 
   static async ensureRoot(rootPath: string): Promise<void> {
