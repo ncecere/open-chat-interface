@@ -1,5 +1,5 @@
-import { count, desc, eq, ilike, or, schema, sql } from '@oci/db';
-import { type AdminUser, createUserSchema, updateUserSchema } from '@oci/shared';
+import { and, asc, count, desc, eq, ilike, or, schema, sql } from '@oci/db';
+import { type AdminUser, createUserSchema, USER_ROLES, updateUserSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { auth } from '../../auth/index.js';
@@ -12,8 +12,18 @@ import { recordAudit } from '../../services/audit.js';
 
 export const userRoutes = new Hono<AppBindings>();
 
+/**
+ * Sorting and filtering happen in the query rather than on the loaded page, so
+ * they describe the whole user base instead of whichever fifty rows arrived.
+ */
 const listQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
+  role: z.enum(USER_ROLES).optional(),
+  status: z.enum(['active', 'banned', 'unverified']).optional(),
+  sort: z
+    .enum(['created', 'name', 'email', 'role', 'lastSeen', 'threads', 'messages'])
+    .default('created'),
+  direction: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -49,11 +59,36 @@ function toAdminUser(row: {
 }
 
 userRoutes.get('/', async (c) => {
-  const { search, limit, offset } = parseQuery(c, listQuerySchema);
+  const { search, role, status, sort, direction, limit, offset } = parseQuery(c, listQuerySchema);
 
-  const where = search
-    ? or(ilike(schema.user.email, `%${search}%`), ilike(schema.user.name, `%${search}%`))
-    : undefined;
+  const filters = [
+    search
+      ? or(ilike(schema.user.email, `%${search}%`), ilike(schema.user.name, `%${search}%`))
+      : undefined,
+    role ? eq(schema.user.role, role) : undefined,
+    status === 'banned' ? eq(schema.user.banned, true) : undefined,
+    // "Active" means not banned, rather than recently seen: a ban is the thing
+    // an administrator is usually filtering for.
+    status === 'active' ? eq(schema.user.banned, false) : undefined,
+    status === 'unverified' ? eq(schema.user.emailVerified, false) : undefined,
+  ].filter((clause) => clause !== undefined);
+
+  const where = filters.length > 0 ? and(...filters) : undefined;
+
+  const threadCountSql = sql<number>`(select count(*) from ${schema.thread} where ${schema.thread.userId} = ${schema.user.id})::int`;
+  const messageCountSql = sql<number>`(select count(*) from ${schema.message} where ${schema.message.userId} = ${schema.user.id})::int`;
+
+  const sortColumn = {
+    created: schema.user.createdAt,
+    name: schema.user.name,
+    email: schema.user.email,
+    role: schema.user.role,
+    lastSeen: schema.user.lastSeenAt,
+    threads: threadCountSql,
+    messages: messageCountSql,
+  }[sort];
+
+  const order = direction === 'asc' ? asc(sortColumn) : desc(sortColumn);
 
   const rows = await db
     .select({
@@ -67,12 +102,14 @@ userRoutes.get('/', async (c) => {
       banReason: schema.user.banReason,
       lastSeenAt: schema.user.lastSeenAt,
       createdAt: schema.user.createdAt,
-      threadCount: sql<number>`(select count(*) from ${schema.thread} where ${schema.thread.userId} = ${schema.user.id})::int`,
-      messageCount: sql<number>`(select count(*) from ${schema.message} where ${schema.message.userId} = ${schema.user.id})::int`,
+      threadCount: threadCountSql,
+      messageCount: messageCountSql,
     })
     .from(schema.user)
     .where(where)
-    .orderBy(desc(schema.user.createdAt))
+    // A stable tiebreak keeps pagination from repeating or dropping a row when
+    // the sort column has duplicates.
+    .orderBy(order, desc(schema.user.id))
     .limit(limit)
     .offset(offset);
 
