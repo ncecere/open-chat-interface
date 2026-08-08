@@ -12,6 +12,7 @@ import { FullPageSpinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
 import { AdminAuditPage } from '~/routes/admin/audit';
 import { AdminBrandingPage } from '~/routes/admin/branding';
+import { AdminBroadcastsPage } from '~/routes/admin/broadcasts';
 import { AdminInvitesPage } from '~/routes/admin/invites';
 import { AdminMaintenancePage } from '~/routes/admin/maintenance';
 import { AdminModelsPage } from '~/routes/admin/models';
@@ -276,6 +277,12 @@ const adminRetentionRoute = createRoute({
   component: AdminRetentionPage,
 });
 
+const adminBroadcastsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/broadcasts',
+  component: AdminBroadcastsPage,
+});
+
 const adminUsageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/usage',
@@ -318,6 +325,7 @@ const routeTree = rootRoute.addChildren([
     adminStorageLimitsRoute,
     adminRateLimitsRoute,
     adminRetentionRoute,
+    adminBroadcastsRoute,
     adminUsageRoute,
     adminMaintenanceRoute,
     adminAuditRoute,

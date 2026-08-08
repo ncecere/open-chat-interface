@@ -2,6 +2,7 @@ import { useRouterState } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
+import { BroadcastBanner } from '~/components/layout/broadcast-banner';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
 import { TopBar } from '~/components/layout/top-bar';
@@ -73,6 +74,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenCommandPalette={commandPalette.show}
           />
+          {/* Above the panel rather than inside it, so an announcement is not
+              lost when the conversation scrolls. */}
+          <BroadcastBanner />
           <main className="min-h-0 flex-1 rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
             {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
                 keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}

@@ -10,6 +10,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Mail,
+  Megaphone,
   Palette,
   ScrollText,
   Search,
@@ -31,6 +32,7 @@ const NAV_SECTIONS = [
       { to: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
       { to: '/admin/settings', label: 'Settings', icon: Settings },
       { to: '/admin/branding', label: 'Branding', icon: Palette },
+      { to: '/admin/broadcasts', label: 'Announcements', icon: Megaphone },
     ],
   },
   {

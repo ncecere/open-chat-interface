@@ -4,6 +4,7 @@ export * from './model-labs.js';
 export * from './reasoning.js';
 export * from './schemas/admin.js';
 export * from './schemas/auth.js';
+export * from './schemas/broadcast.js';
 export * from './schemas/chat.js';
 export * from './schemas/lifecycle.js';
 export * from './schemas/model.js';

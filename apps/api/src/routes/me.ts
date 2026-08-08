@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
+import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
 import { getUsageSummary } from '../services/quota/index.js';
 import { getSetting } from '../services/settings.js';
 
@@ -87,4 +88,16 @@ meRoutes.patch('/preferences', async (c) => {
     .returning();
 
   return c.json({ preferences: updated });
+});
+
+/** Announcements this person should currently see. */
+meRoutes.get('/broadcasts', async (c) => {
+  const user = currentUser(c);
+  return c.json({ broadcasts: await activeBroadcastsFor(user.id, user.role) });
+});
+
+meRoutes.post('/broadcasts/:id/dismiss', async (c) => {
+  const user = currentUser(c);
+  const dismissed = await dismissBroadcast(c.req.param('id'), user.id);
+  return c.json({ ok: dismissed });
 });
