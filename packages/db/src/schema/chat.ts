@@ -24,12 +24,21 @@ export const thread = pgTable(
     temporary: boolean('temporary').notNull().default(false),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
+    /**
+     * Trash state. A soft-deleted thread is invisible everywhere a live thread
+     * would appear and its share links are revoked, but it stays restorable
+     * until the grace window elapses and the purge job removes it for good.
+     */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    /** Why it was deleted, so the trash UI can explain automatic removals. */
+    deletedReason: text('deleted_reason').$type<'user' | 'retention' | 'admin'>(),
     ...timestamps(),
   },
   (t) => [
     index('thread_user_updated_idx').on(t.userId, t.updatedAt),
     index('thread_parent_idx').on(t.parentThreadId),
     index('thread_temporary_expiry_idx').on(t.temporary, t.expiresAt),
+    index('thread_deleted_idx').on(t.deletedAt),
   ],
 );
 
@@ -79,7 +88,13 @@ export const attachment = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    messageId: text('message_id').references(() => message.id, { onDelete: 'set null' }),
+    /**
+     * Null while an upload is staged and not yet sent. Once attached, the file
+     * belongs to that message and dies with it: detaching instead would strand
+     * the row and its blob forever, and would make an already-sent attachment
+     * look unsent and therefore re-sendable.
+     */
+    messageId: text('message_id').references(() => message.id, { onDelete: 'cascade' }),
     filename: text('filename').notNull(),
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
@@ -87,11 +102,15 @@ export const attachment = pgTable(
     thumbnailKey: text('thumbnail_key'),
     /** Text extracted from PDFs and documents for model context. */
     extractedText: text('extracted_text'),
+    /** Trash state; mirrors `thread.deletedAt`. */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedReason: text('deleted_reason').$type<'user' | 'retention' | 'admin' | 'thread'>(),
     ...timestamps(),
   },
   (t) => [
     index('attachment_user_idx').on(t.userId),
     index('attachment_message_idx').on(t.messageId),
+    index('attachment_deleted_idx').on(t.deletedAt),
   ],
 );
 

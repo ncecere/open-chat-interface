@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
-import type { UserRole } from '@oci/shared';
+import { DEFAULT_RESERVED_COST_MICROS, DEFAULT_RESERVED_TOKENS, type UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { quotaExceeded } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -21,11 +21,7 @@ import { resolveWindow } from './windows.js';
  */
 export const RESERVATION_TTL_MS = 15 * 60 * 1000;
 
-/**
- * What a reservation costs before real token counts exist. One message is
- * exact; tokens and spend are unknowable up front, so a reservation holds no
- * token weight and relies on settlement to record actuals.
- */
+/** One message is exact; spend and tokens are estimated then settled. */
 const RESERVED_MESSAGE_COUNT = 1;
 
 export interface UsageReservation {
@@ -33,6 +29,39 @@ export interface UsageReservation {
   userId: string;
   modelSlug: string;
   pricing: ModelPricing;
+}
+
+/**
+ * How much a reservation holds for the metrics that cannot be known up front.
+ *
+ * A reservation that held nothing let concurrent runs all observe the same
+ * pre-spend total and collectively overshoot a budget. Reserving a flat amount
+ * bounds that to roughly (concurrency cap x reserve).
+ *
+ * The reserve is clamped to what remains, so a user with a few cents left gets
+ * exactly one more generation instead of being locked out of the tail of their
+ * own allowance.
+ */
+function reservedAmounts(
+  policies: EvaluablePolicy[],
+  totals: Map<string, WindowTotals>,
+): { costMicros: number; tokens: number } {
+  let costMicros = DEFAULT_RESERVED_COST_MICROS;
+  let tokens = DEFAULT_RESERVED_TOKENS;
+
+  for (const policy of policies) {
+    const used = usedForMetric(policy.metric, totals.get(policy.id) ?? emptyTotals());
+    const remaining = Math.max(0, policy.limitValue - used);
+
+    if (policy.metric === 'cost') costMicros = Math.min(costMicros, remaining);
+    if (policy.metric === 'tokens') tokens = Math.min(tokens, remaining);
+  }
+
+  return { costMicros, tokens };
+}
+
+function emptyTotals(): WindowTotals {
+  return { messages: 0, tokens: 0, costMicros: 0 };
 }
 
 /** Reservations older than the TTL are ignored rather than blocking forever. */
@@ -49,25 +78,32 @@ async function windowTotalsIncludingPending(
   userId: string,
   start: Date,
   now: Date,
+  modelSlugs: string[],
 ): Promise<WindowTotals> {
+  const conditions = [
+    eq(schema.usageEvent.userId, userId),
+    gte(schema.usageEvent.occurredAt, start),
+    // Settled rows always count; pending rows only while still live.
+    or(
+      eq(schema.usageEvent.pending, false),
+      gte(schema.usageEvent.occurredAt, livePendingCutoff(now)),
+    ),
+  ];
+
+  // A model-scoped policy only sees consumption by the models it governs.
+  if (modelSlugs.length > 0) {
+    conditions.push(inArray(schema.usageEvent.modelSlug, modelSlugs));
+  }
+
   const [totals] = await tx
     .select({
       messages: sql<number>`coalesce(sum(${schema.usageEvent.messageCount}), 0)::bigint`,
-      tokens: sql<number>`coalesce(sum(${schema.usageEvent.tokensIn} + ${schema.usageEvent.tokensOut}), 0)::bigint`,
-      costMicros: sql<number>`coalesce(sum(${schema.usageEvent.costMicros}), 0)::bigint`,
+      // A pending row's reserved weight counts until settlement replaces it.
+      tokens: sql<number>`coalesce(sum(${schema.usageEvent.tokensIn} + ${schema.usageEvent.tokensOut} + ${schema.usageEvent.reservedTokens}), 0)::bigint`,
+      costMicros: sql<number>`coalesce(sum(${schema.usageEvent.costMicros} + ${schema.usageEvent.reservedCostMicros}), 0)::bigint`,
     })
     .from(schema.usageEvent)
-    .where(
-      and(
-        eq(schema.usageEvent.userId, userId),
-        gte(schema.usageEvent.occurredAt, start),
-        // Settled rows always count; pending rows only while still live.
-        or(
-          eq(schema.usageEvent.pending, false),
-          gte(schema.usageEvent.occurredAt, livePendingCutoff(now)),
-        ),
-      ),
-    );
+    .where(and(...conditions));
 
   return {
     messages: Number(totals?.messages ?? 0),
@@ -97,14 +133,25 @@ export async function reserveQuota(params: {
     // table for everyone else.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`quota:${params.userId}`}))`);
 
+    const totalsByPolicy = new Map<string, WindowTotals>();
+
     for (const policy of params.policies) {
       const { start } = resolveWindow(policy, now);
-      const totals = await windowTotalsIncludingPending(tx, params.userId, start, now);
+      const totals = await windowTotalsIncludingPending(
+        tx,
+        params.userId,
+        start,
+        now,
+        policy.modelSlugs,
+      );
+      totalsByPolicy.set(policy.id, totals);
 
       if (usedForMetric(policy.metric, totals) >= policy.limitValue) {
         throw quotaExceeded(limitMessage(policy));
       }
     }
+
+    const reserved = reservedAmounts(params.policies, totalsByPolicy);
 
     const [created] = await tx
       .insert(schema.usageEvent)
@@ -117,6 +164,8 @@ export async function reserveQuota(params: {
         tokensIn: 0,
         tokensOut: 0,
         costMicros: 0,
+        reservedCostMicros: reserved.costMicros,
+        reservedTokens: reserved.tokens,
         inputPriceMicros: params.pricing.inputPriceMicros,
         outputPriceMicros: params.pricing.outputPriceMicros,
         pending: true,
@@ -150,7 +199,16 @@ export async function settleReservation(
 
   const [settled] = await db
     .update(schema.usageEvent)
-    .set({ tokensIn, tokensOut, costMicros, pending: false })
+    // Clearing the reserve as the actuals land is what releases any
+    // over-reservation back to the user.
+    .set({
+      tokensIn,
+      tokensOut,
+      costMicros,
+      reservedCostMicros: 0,
+      reservedTokens: 0,
+      pending: false,
+    })
     .where(and(eq(schema.usageEvent.id, reservation.id), eq(schema.usageEvent.pending, true)))
     .returning({
       organizationId: schema.usageEvent.organizationId,
@@ -231,7 +289,8 @@ export async function sweepAbandonedReservations(now: Date = new Date()): Promis
 
     await tx
       .update(schema.usageEvent)
-      .set({ pending: false })
+      // Drop the reserve too: an abandoned run never spent it.
+      .set({ pending: false, reservedCostMicros: 0, reservedTokens: 0 })
       .where(
         inArray(
           schema.usageEvent.id,

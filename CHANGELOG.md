@@ -7,6 +7,45 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Quota policies can be scoped to specific models, so a family such as Anthropic
+  or OpenAI carries its own independent budget. An unscoped policy still applies
+  to every model, and a model in no policy remains unlimited.
+- Per-role storage allowances covering total bytes, stored file count, and
+  maximum file size, enforced per user before an upload is written.
+- Trash for deleted conversations, restorable until a configurable grace period
+  elapses, with immediate permanent deletion and empty-trash actions.
+- Optional retention for inactive conversations, usage history, audit entries,
+  share links, and expired authentication artifacts.
+- Per-role concurrency caps and rate limits for chat and uploads, plus per-IP
+  and per-account limits on authentication attempts.
+- In-app usage warnings before a limit is reached, and a storage meter in
+  attachment settings.
+- Administration for storage allowances, retention, rate limits, background job
+  health, and storage reconciliation.
+- Background job runner using per-job advisory locks so scheduled maintenance
+  runs once across replicas rather than once per replica.
+
+### Fixed
+
+- Attachment objects are no longer orphaned when a thread or user is deleted.
+  Cascading deletes bypass the application entirely, so a database trigger now
+  queues every removed blob for deletion with retries.
+- Attachments are removed with the message they were sent on instead of being
+  detached, which previously stranded both the row and its stored object and
+  made an already-sent attachment appear re-sendable.
+- Cost and token reservations now hold an estimated amount that settles to
+  actual, so concurrent expensive generations can no longer read the same
+  pre-spend total and collectively exceed a budget.
+- Listing conversations no longer performs expiry cleanup as a side effect of a
+  read.
+
+### Changed
+
+- Storage drivers can enumerate stored objects, which reconciliation needs to
+  detect blobs with no database row and rows with no object.
+
 ## [0.1.0] - 2026-08-07
 
 Initial release.

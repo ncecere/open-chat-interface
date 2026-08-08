@@ -10,7 +10,7 @@ import {
 } from 'ai';
 import { Hono } from 'hono';
 import { db } from '../db/index.js';
-import { conflict, validationFailed } from '../lib/errors.js';
+import { conflict, rateLimited, validationFailed } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
@@ -26,6 +26,8 @@ import {
   resumeActiveChatRun,
   unregisterLocalChatRun,
 } from '../services/chat-streams.js';
+import { acquireStreamSlot } from '../services/limits/concurrency.js';
+import { chatRateLimit } from '../services/limits/rate-limit.js';
 import { resolveModelForRole } from '../services/models.js';
 import {
   recordUsage,
@@ -100,6 +102,17 @@ function textFromParts(parts: unknown): string {
 
 chatRoutes.post('/', async (c) => {
   const user = currentUser(c);
+
+  // Checked before any work: a quota bounds how much is consumed over a window,
+  // this bounds how fast requests arrive.
+  const limit = await chatRateLimit(user.id, user.role);
+  if (!limit.allowed) {
+    throw rateLimited(
+      'You are sending messages too quickly. Try again in a moment.',
+      limit.retryAfterSeconds,
+    );
+  }
+
   const input = await parseBody(c, sendMessageSchema);
 
   const thread = await getOwnedThread(input.threadId, user.id);
@@ -278,7 +291,27 @@ chatRoutes.post('/', async (c) => {
     threadId: thread.id,
     userId: user.id,
   };
-  const persistence = await beginChatRun(runIdentity);
+  /**
+   * Held for the life of the stream. A quota bounds total consumption over a
+   * window but says nothing about simultaneity: without this cap one user can
+   * open many parallel generations, each holding a provider connection and a
+   * reservation, and exhaust the instance for everyone else. It also bounds
+   * how far concurrent runs can collectively overshoot a budget.
+   */
+  const streamSlot = await acquireStreamSlot(user.id, user.role, runIdentity.runId);
+  if (!streamSlot) {
+    throw rateLimited(
+      'You have too many responses generating at once. Wait for one to finish and try again.',
+    );
+  }
+
+  let persistence: Awaited<ReturnType<typeof beginChatRun>>;
+  try {
+    persistence = await beginChatRun(runIdentity);
+  } catch (error) {
+    await streamSlot.release();
+    throw error;
+  }
 
   /**
    * The per-thread lock normally lives in Redis. When Redis is unreachable
@@ -305,6 +338,7 @@ chatRoutes.post('/', async (c) => {
   }
 
   if (persistence === 'conflict' || databaseConflict) {
+    await streamSlot.release();
     // The user turn was written before generation. Roll it back when another
     // run won the per-thread Redis lock so retrying cannot duplicate it.
     if (submittedMessageId) {
@@ -342,6 +376,7 @@ chatRoutes.post('/', async (c) => {
     if (!inserted) throw new Error('Failed to create assistant message');
     assistantMessage = inserted;
   } catch (error) {
+    await streamSlot.release();
     if (persistence === 'available') await abandonChatRun(runIdentity);
     throw error;
   }
@@ -357,6 +392,7 @@ chatRoutes.post('/', async (c) => {
       modelSlug: resolved.slug,
     });
   } catch (error) {
+    await streamSlot.release();
     if (persistence === 'available') await abandonChatRun(runIdentity);
     throw error;
   }
@@ -457,6 +493,10 @@ chatRoutes.post('/', async (c) => {
           'Failed to persist assistant message',
         );
       } finally {
+        // Freed here rather than on response close: the slot must survive until
+        // the generation genuinely ends, including a client that disconnects
+        // and later resumes the same run.
+        await streamSlot.release();
         if (persistence !== 'available') unregisterLocalChatRun(runIdentity.runId);
       }
     },

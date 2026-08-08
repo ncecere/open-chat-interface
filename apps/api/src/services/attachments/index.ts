@@ -1,11 +1,11 @@
-import { and, desc, eq, schema } from '@oci/db';
+import { and, desc, eq, isNull, schema } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { forbidden, notFound, validationFailed } from '../../lib/errors.js';
-import { logger } from '../../lib/logger.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { getSetting } from '../settings.js';
 import { buildStorageKey, getStorageDriver } from '../storage/index.js';
+import { adjustStorageUsage, assertStorageAllowance } from '../storage/quota.js';
 import { extractText } from './extract.js';
 import { isImage, validateUpload } from './validate.js';
 
@@ -31,6 +31,7 @@ export interface UploadResult {
 
 export async function uploadAttachment(params: {
   userId: string;
+  role: UserRole;
   filename: string;
   declaredMimeType: string;
   bytes: Buffer;
@@ -43,6 +44,15 @@ export async function uploadAttachment(params: {
     bytes: params.bytes,
     allowedMimeTypes: storage.allowedMimeTypes,
     maxFileBytes: storage.maxFileBytes,
+  });
+
+  // Checked before the blob is written so a refused upload never occupies
+  // storage, even briefly.
+  await assertStorageAllowance({
+    userId: params.userId,
+    role: params.role,
+    incomingBytes: file.bytes.byteLength,
+    incomingFiles: 1,
   });
 
   const organizationId = await getDefaultOrganizationId();
@@ -71,10 +81,21 @@ export async function uploadAttachment(params: {
     objectStored = true;
 
     const extractedText = await extractText(file.mimeType, file.bytes);
-    await db
-      .update(schema.attachment)
-      .set({ storageKey, extractedText })
-      .where(eq(schema.attachment.id, row.id));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.attachment)
+        .set({ storageKey, extractedText })
+        .where(eq(schema.attachment.id, row.id));
+
+      // Counted in the same transaction as the row it summarizes, so the
+      // counter can only disagree through a crash, which reconciliation fixes.
+      await adjustStorageUsage(tx, {
+        organizationId,
+        userId: params.userId,
+        liveBytes: file.bytes.byteLength,
+        liveFiles: 1,
+      });
+    });
   } catch (error) {
     // Compensate best-effort so failed uploads do not leave pending rows or
     // unreferenced blobs behind.
@@ -111,17 +132,22 @@ export async function listAttachments(userId: string) {
   return db
     .select()
     .from(schema.attachment)
-    .where(eq(schema.attachment.userId, userId))
+    .where(and(eq(schema.attachment.userId, userId), isNull(schema.attachment.deletedAt)))
     .orderBy(desc(schema.attachment.createdAt))
     .limit(500);
 }
 
+/**
+ * Moves an attachment to the trash.
+ *
+ * The blob is not touched here. Hard deletion happens when the grace window
+ * elapses, at which point the delete trigger enqueues the object for the
+ * storage reaper, so there is exactly one path to object removal.
+ */
 export async function deleteAttachment(id: string, userId: string): Promise<void> {
   const row = await getOwnedAttachment(id, userId);
+  if (row.deletedAt) return;
 
-  // Keep message display metadata and the attachment row consistent. Storage
-  // cleanup follows the transaction; a failed object deletion can be retried
-  // without leaving a broken card in the conversation.
   await db.transaction(async (tx) => {
     if (row.messageId) {
       const [message] = await tx
@@ -143,15 +169,21 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
       }
     }
 
-    await tx.delete(schema.attachment).where(eq(schema.attachment.id, row.id));
-  });
+    await tx
+      .update(schema.attachment)
+      .set({ deletedAt: new Date(), deletedReason: 'user' })
+      .where(eq(schema.attachment.id, row.id));
 
-  const driver = await getStorageDriver();
-  await driver.delete(row.storageKey).catch((error) => {
-    logger.warn(
-      { error, attachmentId: row.id, storageKey: row.storageKey },
-      'Orphaned attachment blob',
-    );
+    // Freed immediately rather than at purge time: a user who deletes files to
+    // make room should get the space back now.
+    await adjustStorageUsage(tx, {
+      organizationId: row.organizationId,
+      userId,
+      liveBytes: -row.sizeBytes,
+      liveFiles: -1,
+      pendingBytes: row.sizeBytes,
+      pendingFiles: 1,
+    });
   });
 }
 
@@ -176,6 +208,9 @@ export async function loadAttachmentsForMessage(
   const rows = await Promise.all(uniqueIds.map((id) => getOwnedAttachment(id, userId)));
   if (rows.some((row) => row.messageId !== null)) {
     throw validationFailed('An attachment can only be sent once');
+  }
+  if (rows.some((row) => row.deletedAt !== null)) {
+    throw validationFailed('A deleted attachment cannot be sent');
   }
 
   const driver = await getStorageDriver();

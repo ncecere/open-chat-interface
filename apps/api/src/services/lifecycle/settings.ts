@@ -1,0 +1,124 @@
+import {
+  DEFAULT_AUDIT_LOG_RETENTION_DAYS,
+  DEFAULT_AUTH_ATTEMPTS_PER_MINUTE,
+  DEFAULT_CHAT_REQUESTS_PER_MINUTE,
+  DEFAULT_MAX_CONCURRENT_STREAMS,
+  DEFAULT_TRASH_RETENTION_DAYS,
+  DEFAULT_UPLOAD_REQUESTS_PER_MINUTE,
+  DEFAULT_USAGE_EVENT_RETENTION_DAYS,
+  MAX_TRASH_RETENTION_DAYS,
+  MIN_TRASH_RETENTION_DAYS,
+  type RateLimitSettings,
+  type RetentionSettings,
+  USER_ROLES,
+  type UserRole,
+} from '@oci/shared';
+import { loadEnv } from '../../config/env.js';
+import { getSetting, updateSetting } from '../settings.js';
+
+function positiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Retention configuration. Environment variables supply the starting values;
+ * an administrator's saved settings take precedence once written.
+ */
+export async function getRetentionSettings(): Promise<RetentionSettings> {
+  const env = loadEnv();
+  const stored = await getSetting('retention');
+
+  const trashDays =
+    stored.trashRetentionDays ??
+    positiveInt(env.RETENTION_TRASH_DAYS, DEFAULT_TRASH_RETENTION_DAYS);
+
+  return {
+    // A floor keeps deletion from being made instantaneous by accident, which
+    // would quietly remove the recovery path the trash exists to provide.
+    trashRetentionDays: Math.min(
+      MAX_TRASH_RETENTION_DAYS,
+      Math.max(MIN_TRASH_RETENTION_DAYS, trashDays),
+    ),
+    threadRetentionDays:
+      stored.threadRetentionDays === undefined
+        ? positiveInt(env.RETENTION_THREAD_DAYS, 0) || null
+        : stored.threadRetentionDays,
+    exemptPinnedThreads: stored.exemptPinnedThreads ?? true,
+    usageEventRetentionDays:
+      stored.usageEventRetentionDays ??
+      positiveInt(env.RETENTION_USAGE_EVENT_DAYS, DEFAULT_USAGE_EVENT_RETENTION_DAYS),
+    auditLogRetentionDays:
+      stored.auditLogRetentionDays ??
+      positiveInt(env.RETENTION_AUDIT_LOG_DAYS, DEFAULT_AUDIT_LOG_RETENTION_DAYS),
+  };
+}
+
+export async function updateRetentionSettings(
+  patch: Partial<RetentionSettings>,
+): Promise<RetentionSettings> {
+  await updateSetting('retention', patch);
+  return getRetentionSettings();
+}
+
+export interface RateLimitConfig {
+  roles: Record<UserRole, RateLimitSettings>;
+  authAttemptsPerMinute: number;
+}
+
+/** Per-role rate and concurrency limits, with environment-supplied defaults. */
+export async function getRateLimitSettings(): Promise<RateLimitConfig> {
+  const env = loadEnv();
+  const stored = await getSetting('rateLimits');
+
+  const roles = Object.fromEntries(
+    USER_ROLES.map((role) => {
+      const saved = stored.roles?.[role] ?? {};
+      return [
+        role,
+        {
+          maxConcurrentStreams:
+            saved.maxConcurrentStreams ??
+            positiveInt(
+              env.RATE_LIMIT_MAX_CONCURRENT_STREAMS,
+              DEFAULT_MAX_CONCURRENT_STREAMS[role],
+            ),
+          chatRequestsPerMinute:
+            saved.chatRequestsPerMinute ??
+            positiveInt(env.RATE_LIMIT_CHAT_PER_MINUTE, DEFAULT_CHAT_REQUESTS_PER_MINUTE[role]),
+          uploadRequestsPerMinute:
+            saved.uploadRequestsPerMinute ??
+            positiveInt(env.RATE_LIMIT_UPLOAD_PER_MINUTE, DEFAULT_UPLOAD_REQUESTS_PER_MINUTE[role]),
+        },
+      ];
+    }),
+  ) as Record<UserRole, RateLimitSettings>;
+
+  return {
+    roles,
+    authAttemptsPerMinute:
+      stored.authAttemptsPerMinute ??
+      positiveInt(env.RATE_LIMIT_AUTH_PER_MINUTE, DEFAULT_AUTH_ATTEMPTS_PER_MINUTE),
+  };
+}
+
+export async function updateRateLimitSettings(patch: {
+  roles?: Partial<Record<UserRole, Partial<RateLimitSettings>>>;
+  authAttemptsPerMinute?: number;
+}): Promise<RateLimitConfig> {
+  const current = await getSetting('rateLimits');
+  const roles = { ...current.roles };
+
+  for (const [role, values] of Object.entries(patch.roles ?? {})) {
+    roles[role as UserRole] = { ...roles[role as UserRole], ...values };
+  }
+
+  await updateSetting('rateLimits', {
+    roles,
+    ...(patch.authAttemptsPerMinute === undefined
+      ? {}
+      : { authAttemptsPerMinute: patch.authAttemptsPerMinute }),
+  });
+
+  return getRateLimitSettings();
+}

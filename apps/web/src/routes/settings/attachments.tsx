@@ -2,6 +2,7 @@ import type { Attachment } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Files, FileText, ImageIcon, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { StorageMeter } from '~/components/settings/storage-meter';
 import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
@@ -197,6 +198,8 @@ export function SettingsAttachmentsPage() {
         relevant threads, but does not delete those threads. This may cause unexpected behavior if
         the file is still in use.
       </p>
+
+      <StorageMeter />
 
       <div className="mt-5 flex min-h-9 flex-col gap-3 sm:flex-row sm:items-center">
         <FilterMenu value={filter} onChange={changeFilter} />

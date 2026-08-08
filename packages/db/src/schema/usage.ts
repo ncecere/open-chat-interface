@@ -42,6 +42,30 @@ export const quotaPolicy = pgTable(
   ],
 );
 
+/**
+ * Restricts a policy to specific catalog models. A policy with no rows here
+ * applies to every model, which is what existing policies do and what an
+ * instance-wide budget wants. Membership is an explicit list rather than a
+ * lab or provider rule, so curating a new model never silently enrolls it in
+ * someone else's budget.
+ */
+export const quotaPolicyModel = pgTable(
+  'quota_policy_model',
+  {
+    id: primaryId(),
+    policyId: text('policy_id')
+      .notNull()
+      .references(() => quotaPolicy.id, { onDelete: 'cascade' }),
+    /** Slug rather than a model FK so a policy survives a catalog removal. */
+    modelSlug: text('model_slug').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('quota_policy_model_unique').on(t.policyId, t.modelSlug),
+    index('quota_policy_model_slug_idx').on(t.modelSlug),
+  ],
+);
+
 /** Applies a policy to a role. A role may carry several policies at once. */
 export const quotaPolicyRole = pgTable(
   'quota_policy_role',
@@ -88,8 +112,19 @@ export const usageEvent = pgTable(
      * process stops counting after the reservation TTL.
      */
     pending: boolean('pending').notNull().default(false),
+    /**
+     * Spend held by a live reservation before real usage is known. Counted
+     * while pending and cleared at settlement, so concurrent expensive runs
+     * cannot all read the same pre-spend total and collectively overshoot.
+     */
+    reservedCostMicros: bigint('reserved_cost_micros', { mode: 'number' }).notNull().default(0),
+    reservedTokens: integer('reserved_tokens').notNull().default(0),
   },
-  (t) => [index('usage_event_user_occurred_idx').on(t.userId, t.occurredAt)],
+  (t) => [
+    index('usage_event_user_occurred_idx').on(t.userId, t.occurredAt),
+    index('usage_event_occurred_idx').on(t.occurredAt),
+    index('usage_event_model_idx').on(t.modelSlug),
+  ],
 );
 
 /** Daily rollup used by the usage meter and admin analytics. */

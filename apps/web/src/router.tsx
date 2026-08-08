@@ -13,14 +13,18 @@ import { ApiError, api } from '~/lib/api-client';
 import { AdminAuditPage } from '~/routes/admin/audit';
 import { AdminBrandingPage } from '~/routes/admin/branding';
 import { AdminInvitesPage } from '~/routes/admin/invites';
+import { AdminMaintenancePage } from '~/routes/admin/maintenance';
 import { AdminModelsPage } from '~/routes/admin/models';
 import { AdminOverviewPage } from '~/routes/admin/overview';
 import { AdminProvidersPage } from '~/routes/admin/providers';
 import { AdminQuotasPage } from '~/routes/admin/quotas';
+import { AdminRateLimitsPage } from '~/routes/admin/rate-limits';
+import { AdminRetentionPage } from '~/routes/admin/retention';
 import { AdminSearchPage } from '~/routes/admin/search';
 import { AdminSettingsPage } from '~/routes/admin/settings';
 import { AdminSsoPage } from '~/routes/admin/sso';
 import { AdminStoragePage } from '~/routes/admin/storage';
+import { AdminStorageLimitsPage } from '~/routes/admin/storage-limits';
 import { AdminUsersPage } from '~/routes/admin/users';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
@@ -253,6 +257,30 @@ const adminStorageRoute = createRoute({
   component: AdminStoragePage,
 });
 
+const adminStorageLimitsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/storage-limits',
+  component: AdminStorageLimitsPage,
+});
+
+const adminRateLimitsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/rate-limits',
+  component: AdminRateLimitsPage,
+});
+
+const adminRetentionRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/retention',
+  component: AdminRetentionPage,
+});
+
+const adminMaintenanceRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/maintenance',
+  component: AdminMaintenancePage,
+});
+
 const adminAuditRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/audit',
@@ -280,6 +308,10 @@ const routeTree = rootRoute.addChildren([
     adminQuotasRoute,
     adminSearchRoute,
     adminStorageRoute,
+    adminStorageLimitsRoute,
+    adminRateLimitsRoute,
+    adminRetentionRoute,
+    adminMaintenanceRoute,
     adminAuditRoute,
   ]),
 ]);

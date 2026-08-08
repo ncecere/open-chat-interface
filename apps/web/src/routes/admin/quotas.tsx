@@ -60,8 +60,8 @@ export function AdminQuotasPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Quotas & limits"
-        description="Create a policy, then apply it to the roles that should share it. A role can carry several policies at once, and every one of them is enforced."
+        title="Usage quotas"
+        description="Create a policy, then apply it to the roles that should share it. A role can carry several policies at once, and every one of them is enforced. Scope a policy to specific models to give a family such as Anthropic its own budget."
         actions={
           <Button variant="primary" onClick={() => setFormFor({ policy: null })}>
             <Plus />
@@ -88,6 +88,11 @@ export function AdminQuotasPage() {
                   <Badge variant="neutral">{formatLimit(policy)}</Badge>
                   {!policy.enabled && <Badge variant="warning">not enforced</Badge>}
                   {policy.roles.length === 0 && <Badge variant="warning">no roles</Badge>}
+                  <Badge variant="neutral">
+                    {policy.modelSlugs.length === 0
+                      ? 'all models'
+                      : `${policy.modelSlugs.length} model${policy.modelSlugs.length === 1 ? '' : 's'}`}
+                  </Badge>
                 </div>
                 <p className="truncate text-xs text-[var(--text-muted)]">
                   {formatWindow(policy)}

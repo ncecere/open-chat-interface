@@ -43,20 +43,29 @@ if (mismatches.length > 0) {
 }
 
 const changelog = await readFile('CHANGELOG.md', 'utf8');
-const escapedVersion = version.replaceAll('.', '\\.');
-const heading = new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`, 'm');
-const match = heading.exec(changelog);
-if (!match) {
+
+// Located by literal prefix rather than a regex built from the version. The
+// version is already constrained above, but a constructed pattern invites the
+// question every time this is read; a fixed date check answers it outright.
+const headingPrefix = `## [${version}] - `;
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const lines = changelog.split('\n');
+const headingIndex = lines.findIndex(
+  (line) => line.startsWith(headingPrefix) && datePattern.test(line.slice(headingPrefix.length)),
+);
+if (headingIndex === -1) {
   throw new Error(`CHANGELOG.md needs a dated "## [${version}] - YYYY-MM-DD" section`);
 }
 
-const sectionStart = match.index;
-const possibleEnds = [
-  changelog.indexOf('\n## [', sectionStart + match[0].length),
-  changelog.indexOf('\n[Unreleased]:', sectionStart + match[0].length),
-].filter((index) => index !== -1);
-const sectionEnd = possibleEnds.length > 0 ? Math.min(...possibleEnds) : undefined;
-let releaseNotes = changelog.slice(sectionStart, sectionEnd).trim();
+// The section runs to the next release heading, or to the link definitions.
+const restIndex = lines
+  .slice(headingIndex + 1)
+  .findIndex((line) => line.startsWith('## [') || line.startsWith('[Unreleased]:'));
+const sectionLines =
+  restIndex === -1
+    ? lines.slice(headingIndex)
+    : lines.slice(headingIndex, headingIndex + 1 + restIndex);
+let releaseNotes = sectionLines.join('\n').trim();
 
 const registry = process.env.CI_REGISTRY_IMAGE;
 if (registry) {

@@ -1,5 +1,6 @@
 import { useRouterState } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
@@ -87,6 +88,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </main>
         </div>
+
+        {/* Mounted on the shell rather than a page: the shell survives
+            navigation between chats, so a warning is announced once instead of
+            again on every route change. */}
+        <UsageWarning />
 
         <CommandPalette
           open={commandPalette.open}

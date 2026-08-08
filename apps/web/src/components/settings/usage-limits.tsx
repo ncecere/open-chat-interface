@@ -1,4 +1,4 @@
-import { MICROS_PER_DOLLAR, type UsageAllowance, type UsageSummary } from '@oci/shared';
+import type { UsageAllowance, UsageSummary } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Info } from 'lucide-react';
 import { api } from '~/lib/api-client';
@@ -13,15 +13,6 @@ function formatCountdown(iso: string | null): string | null {
   const minutes = Math.floor((remaining % 3_600_000) / 60_000);
   if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-}
-
-/** Cost is stored in micro-dollars; everything else is a plain count. */
-function formatAmount(value: number, metric: UsageAllowance['metric']): string {
-  if (metric !== 'cost') return value.toLocaleString();
-
-  const dollars = value / MICROS_PER_DOLLAR;
-  // Sub-cent amounts would otherwise all render as "$0.00".
-  return `$${dollars.toFixed(value > 0 && dollars < 0.01 ? 4 : 2)}`;
 }
 
 function windowLabel(allowance: UsageAllowance): string {
@@ -39,12 +30,27 @@ function windowLabel(allowance: UsageAllowance): string {
   }
 }
 
+/**
+ * Shows only how much of an allowance is left, as a percentage.
+ *
+ * Messages, tokens, and spend are three different units, and the raw numbers
+ * mean little to the person reading them. A percentage answers the only
+ * question they actually have, reads the same for every metric, and keeps
+ * instance cost out of the interface.
+ */
 function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
   // The bar depletes as the allowance is consumed, so a full bar means a full
   // allowance remaining.
-  const percentRemaining = Math.max(0, 100 - (allowance.used / allowance.limitValue) * 100);
-  const low = percentRemaining <= 10;
+  const fractionRemaining = Math.max(0, 1 - allowance.used / allowance.limitValue);
+  // Severity comes from the server so the meter and the toast cannot disagree
+  // about when a user is close to their limit.
+  const low = allowance.severity === 'critical' || allowance.severity === 'exceeded';
   const countdown = formatCountdown(allowance.resetsAt);
+
+  // Round toward zero so a nearly spent allowance never reads as a full 1%,
+  // but anything still usable stays visible rather than showing 0%.
+  const percentRemaining =
+    fractionRemaining > 0 ? Math.max(1, Math.floor(fractionRemaining * 100)) : 0;
 
   return (
     <div>
@@ -56,7 +62,7 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
             low ? 'text-[var(--danger-foreground)]' : 'text-[var(--text-muted)]',
           )}
         >
-          {formatAmount(allowance.remaining, allowance.metric)} left
+          {percentRemaining}% left
         </span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--bg-segment-track)]">
@@ -65,12 +71,11 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
             'h-full rounded-full transition-[width]',
             low ? 'bg-[var(--danger)]' : 'bg-[var(--accent)]',
           )}
-          style={{ width: `${percentRemaining}%` }}
+          style={{ width: `${fractionRemaining * 100}%` }}
         />
       </div>
       <p className="mt-1 text-[0.6875rem] text-[var(--text-muted)]">
-        {formatAmount(allowance.used, allowance.metric)} of{' '}
-        {formatAmount(allowance.limitValue, allowance.metric)} · {windowLabel(allowance)}
+        {windowLabel(allowance)}
         {countdown ? ` · resets in ${countdown}` : ''}
       </p>
     </div>
@@ -98,8 +103,8 @@ export function UsageLimits() {
           className="size-3.5 text-[var(--text-muted)]"
           aria-label={
             data.allowances.length > 0
-              ? 'Consumption against each quota policy applied to your role'
-              : 'Your usage over the last 24 hours'
+              ? 'How much of each limit applied to your role remains'
+              : 'No usage limits apply to your role'
           }
         />
       </div>
@@ -111,23 +116,7 @@ export function UsageLimits() {
           ))}
         </div>
       ) : (
-        <>
-          <div className="flex flex-col gap-1.5 text-sm text-[var(--text-secondary)]">
-            <div className="flex justify-between">
-              <span>Messages</span>
-              <span className="text-[var(--text-muted)]">
-                {data.recent.messages.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Tokens</span>
-              <span className="text-[var(--text-muted)]">
-                {data.recent.tokens.toLocaleString()}
-              </span>
-            </div>
-          </div>
-          <p className="mt-3 text-xs text-[var(--text-muted)]">No limits applied · last 24h</p>
-        </>
+        <p className="text-sm text-[var(--text-muted)]">No usage limits apply to your account.</p>
       )}
     </div>
   );

@@ -283,9 +283,43 @@ describe.skipIf(!available)('live: attachment upload route', () => {
     const byOwner = await appFor(userId).request(`/api/attachments/${id}`, { method: 'DELETE' });
     expect(byOwner.status).toBe(200);
 
-    const rows = await live.db.execute<{ count: string }>(
-      sql`select count(*)::bigint as count from attachment where id = ${id}`,
+    // Deletion is soft: the row survives so the file stays recoverable until
+    // the trash window elapses, but it must disappear from the user's list.
+    const rows = await live.db.execute<{ deleted_at: Date | null }>(
+      sql`select deleted_at from attachment where id = ${id}`,
     );
-    expect(Number(rows[0]?.count)).toBe(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.deleted_at).not.toBeNull();
+
+    const listed = await appFor(userId).request('/api/attachments');
+    const { attachments: remaining } = (await listed.json()) as {
+      attachments: Array<{ id: string }>;
+    };
+    expect(remaining.map((attachment) => attachment.id)).not.toContain(id);
+  });
+
+  it('frees storage allowance as soon as a file is deleted', async () => {
+    const created = await appFor(userId).request('/api/attachments', {
+      method: 'POST',
+      body: upload([{ name: 'pixel.png', type: 'image/png', body: PNG }]),
+    });
+    const { attachments } = (await created.json()) as {
+      attachments: Array<{ id: string; sizeBytes: number }>;
+    };
+    const attachment = attachments[0];
+    if (!attachment) throw new Error('Upload returned no attachment');
+
+    const before = await appFor(userId).request('/api/attachments/usage');
+    const usedBefore = (await before.json()) as { liveBytes: number; pendingBytes: number };
+
+    await appFor(userId).request(`/api/attachments/${attachment.id}`, { method: 'DELETE' });
+
+    const after = await appFor(userId).request('/api/attachments/usage');
+    const usedAfter = (await after.json()) as { liveBytes: number; pendingBytes: number };
+
+    // Space comes back immediately; waiting out the trash window would punish
+    // the user for cleaning up.
+    expect(usedAfter.liveBytes).toBe(usedBefore.liveBytes - attachment.sizeBytes);
+    expect(usedAfter.pendingBytes).toBe(usedBefore.pendingBytes + attachment.sizeBytes);
   });
 });

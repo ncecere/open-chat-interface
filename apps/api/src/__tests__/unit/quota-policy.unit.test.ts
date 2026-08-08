@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAllowance,
   calculateCostMicros,
+  describeLimit,
+  describeWindow,
   type EvaluablePolicy,
   formatMicros,
   limitMessage,
@@ -17,6 +19,7 @@ const policy = (overrides: Partial<EvaluablePolicy> = {}): EvaluablePolicy => ({
   windowKind: 'daily',
   windowHours: null,
   timezone: 'UTC',
+  modelSlugs: [],
   ...overrides,
 });
 
@@ -88,6 +91,42 @@ describe('metric selection', () => {
   });
 });
 
+/**
+ * These render the numbers an administrator sets a policy against. They are no
+ * longer reachable from a user-facing message, so they need their own coverage:
+ * a wrong figure here silently misstates what a limit actually is.
+ */
+describe('administrative limit descriptions', () => {
+  it('describes each metric in its own unit', () => {
+    expect(describeLimit(policy({ metric: 'messages', limitValue: 1_500 }))).toBe('1,500 messages');
+    expect(describeLimit(policy({ metric: 'tokens', limitValue: 40_000 }))).toBe('40,000 tokens');
+    expect(describeLimit(policy({ metric: 'cost', limitValue: 5 * MICROS_PER_DOLLAR }))).toBe(
+      '$5.00',
+    );
+  });
+
+  it('falls back to the raw value for an unrecognized metric', () => {
+    // Guards a metric added to the schema but not yet handled here.
+    expect(describeLimit(policy({ metric: 'requests' as never, limitValue: 42 }))).toBe('42');
+  });
+
+  it('describes every window kind', () => {
+    expect(describeWindow(policy({ windowKind: 'rolling', windowHours: 12 }))).toBe(
+      'the last 12 hours',
+    );
+    expect(describeWindow(policy({ windowKind: 'daily' }))).toBe('today');
+    expect(describeWindow(policy({ windowKind: 'weekly' }))).toBe('this week');
+    expect(describeWindow(policy({ windowKind: 'monthly' }))).toBe('this month');
+    expect(describeWindow(policy({ windowKind: 'yearly' as never }))).toBe('this window');
+  });
+
+  it('defaults a rolling window with no length to 24 hours', () => {
+    expect(describeWindow(policy({ windowKind: 'rolling', windowHours: null }))).toBe(
+      'the last 24 hours',
+    );
+  });
+});
+
 describe('allowance reporting', () => {
   it('reports remaining allowance and reset time', () => {
     const resetsAt = new Date('2026-06-16T00:00:00Z');
@@ -121,13 +160,28 @@ describe('allowance reporting', () => {
 });
 
 describe('limit messages', () => {
-  it('formats a cost limit in dollars', () => {
+  it('names the policy and window a user can act on', () => {
+    const message = limitMessage(
+      policy({ name: 'Anthropic models', metric: 'cost', windowKind: 'monthly' }),
+    );
+
+    expect(message).toContain('Anthropic models');
+    expect(message).toContain('this month');
+  });
+
+  it('never exposes the underlying spend figure to a user', () => {
     const message = limitMessage(
       policy({ metric: 'cost', limitValue: 5 * MICROS_PER_DOLLAR, windowKind: 'monthly' }),
     );
 
-    expect(message).toContain('$5.00');
-    expect(message).toContain('this month');
+    // Spend is instance cost, not something a user should be shown.
+    expect(message).not.toContain('$');
+    expect(message).not.toContain('5000000');
+  });
+
+  it('never exposes raw message or token counts to a user', () => {
+    expect(limitMessage(policy({ metric: 'messages', limitValue: 100 }))).not.toContain('100');
+    expect(limitMessage(policy({ metric: 'tokens', limitValue: 50_000 }))).not.toContain('50,000');
   });
 
   it('describes a rolling window by length', () => {

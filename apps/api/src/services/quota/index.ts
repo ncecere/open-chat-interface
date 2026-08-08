@@ -7,12 +7,20 @@ import {
   calculateCostMicros,
   type EvaluablePolicy,
   type ModelPricing,
+  policyCoversModel,
   type WindowTotals,
 } from './policy.js';
 import { RESERVATION_TTL_MS, reserveQuota, type UsageReservation } from './reservation.js';
 import { resolveWindow } from './windows.js';
 
-export { calculateCostMicros, describeLimit, describeWindow, formatMicros } from './policy.js';
+export {
+  allowanceSeverity,
+  calculateCostMicros,
+  describeLimit,
+  describeWindow,
+  formatMicros,
+  policyCoversModel,
+} from './policy.js';
 export {
   RESERVATION_TTL_MS,
   releaseReservation,
@@ -23,11 +31,11 @@ export {
 } from './reservation.js';
 export { resolveWindow } from './windows.js';
 
-/** Every enabled policy applied to a role, ordered so messages are reported first. */
+/** Every enabled policy applied to a role, with its model scope resolved. */
 async function loadPoliciesForRole(role: UserRole): Promise<EvaluablePolicy[]> {
   const organizationId = await getDefaultOrganizationId();
 
-  return db
+  const rows = await db
     .select({
       id: schema.quotaPolicy.id,
       name: schema.quotaPolicy.name,
@@ -47,6 +55,30 @@ async function loadPoliciesForRole(role: UserRole): Promise<EvaluablePolicy[]> {
       ),
     )
     .orderBy(schema.quotaPolicy.name);
+
+  if (rows.length === 0) return [];
+
+  const scopes = await db
+    .select({
+      policyId: schema.quotaPolicyModel.policyId,
+      modelSlug: schema.quotaPolicyModel.modelSlug,
+    })
+    .from(schema.quotaPolicyModel)
+    .where(
+      inArray(
+        schema.quotaPolicyModel.policyId,
+        rows.map((row) => row.id),
+      ),
+    );
+
+  const slugsByPolicy = new Map<string, string[]>();
+  for (const scope of scopes) {
+    const existing = slugsByPolicy.get(scope.policyId) ?? [];
+    existing.push(scope.modelSlug);
+    slugsByPolicy.set(scope.policyId, existing);
+  }
+
+  return rows.map((row) => ({ ...row, modelSlugs: slugsByPolicy.get(row.id) ?? [] }));
 }
 
 /**
@@ -54,24 +86,32 @@ async function loadPoliciesForRole(role: UserRole): Promise<EvaluablePolicy[]> {
  * a rolling or non-UTC calendar window, so events are the source of truth.
  * In-flight reservations count so the meter reflects work already committed.
  */
-async function windowTotals(userId: string, start: Date): Promise<WindowTotals> {
+async function windowTotals(
+  userId: string,
+  start: Date,
+  modelSlugs: string[] = [],
+): Promise<WindowTotals> {
   const liveCutoff = new Date(Date.now() - RESERVATION_TTL_MS);
+
+  const conditions = [
+    eq(schema.usageEvent.userId, userId),
+    gte(schema.usageEvent.occurredAt, start),
+    // Abandoned reservations stop counting once they age past the TTL.
+    or(eq(schema.usageEvent.pending, false), gte(schema.usageEvent.occurredAt, liveCutoff)),
+  ];
+
+  if (modelSlugs.length > 0) {
+    conditions.push(inArray(schema.usageEvent.modelSlug, modelSlugs));
+  }
 
   const [totals] = await db
     .select({
       messages: sql<number>`coalesce(sum(${schema.usageEvent.messageCount}), 0)::bigint`,
-      tokens: sql<number>`coalesce(sum(${schema.usageEvent.tokensIn} + ${schema.usageEvent.tokensOut}), 0)::bigint`,
-      costMicros: sql<number>`coalesce(sum(${schema.usageEvent.costMicros}), 0)::bigint`,
+      tokens: sql<number>`coalesce(sum(${schema.usageEvent.tokensIn} + ${schema.usageEvent.tokensOut} + ${schema.usageEvent.reservedTokens}), 0)::bigint`,
+      costMicros: sql<number>`coalesce(sum(${schema.usageEvent.costMicros} + ${schema.usageEvent.reservedCostMicros}), 0)::bigint`,
     })
     .from(schema.usageEvent)
-    .where(
-      and(
-        eq(schema.usageEvent.userId, userId),
-        gte(schema.usageEvent.occurredAt, start),
-        // Abandoned reservations stop counting once they age past the TTL.
-        or(eq(schema.usageEvent.pending, false), gte(schema.usageEvent.occurredAt, liveCutoff)),
-      ),
-    );
+    .where(and(...conditions));
 
   // postgres returns bigint sums as strings; normalize before any arithmetic.
   return {
@@ -91,7 +131,10 @@ export async function reserveQuotaForRun(params: {
   role: UserRole;
   modelSlug: string;
 }): Promise<UsageReservation | null> {
-  const policies = await loadPoliciesForRole(params.role);
+  const all = await loadPoliciesForRole(params.role);
+  // Only policies that govern this model constrain this run; a model in no
+  // policy is unlimited.
+  const policies = all.filter((policy) => policyCoversModel(policy, params.modelSlug));
   if (policies.length === 0) return null;
 
   return reserveQuota({ ...params, policies, pricing: await modelPricing(params.modelSlug) });
@@ -104,7 +147,8 @@ export async function getUsageSummary(userId: string, role: UserRole): Promise<U
   const allowances = await Promise.all(
     policies.map(async (policy) => {
       const { start, resetsAt } = resolveWindow(policy);
-      return buildAllowance(policy, await windowTotals(userId, start), resetsAt);
+      const totals = await windowTotals(userId, start, policy.modelSlugs);
+      return buildAllowance(policy, totals, resetsAt);
     }),
   );
 
