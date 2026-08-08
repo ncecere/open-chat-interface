@@ -12,6 +12,16 @@ import { expect, type Page, test } from '@playwright/test';
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 async function scan(page: Page) {
+  // The theme class is applied after mount, and `transition-colors` animates
+  // the change. Scanning mid-transition samples blended colours that are on
+  // screen for a fraction of a second and reports contrast failures against
+  // values no user ever sees, so wait for animations to settle first.
+  await page.waitForFunction(
+    () => document.getAnimations().every((animation) => animation.playState !== 'running'),
+    undefined,
+    { timeout: 5_000 },
+  );
+
   return new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 }
 
