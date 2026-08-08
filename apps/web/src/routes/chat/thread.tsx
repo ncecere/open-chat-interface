@@ -5,7 +5,6 @@ import type { UIMessage } from 'ai';
 import { useEffect, useRef, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { MessageList } from '~/components/chat/message-list';
-import { UsageWarning } from '~/components/chat/usage-warning';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
@@ -196,9 +195,6 @@ function ThreadConversation({
 
         <div ref={bottomRef} />
       </div>
-
-      {/* Renders no markup; raises a toast when an allowance runs low. */}
-      <UsageWarning />
 
       <Composer
         value={session.draft}

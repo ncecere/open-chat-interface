@@ -4,7 +4,6 @@ import { Clock } from 'lucide-react';
 import { useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
-import { UsageWarning } from '~/components/chat/usage-warning';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
@@ -154,9 +153,6 @@ export function ChatHomePage() {
           )}
         </div>
       </div>
-
-      {/* Renders no markup; raises a toast when an allowance runs low. */}
-      <UsageWarning />
 
       <Composer
         value={draft}

@@ -23,7 +23,7 @@ createRoot(container).render(
       <ThemeProvider>
         <InstanceThemeSync />
         <RouterProvider router={router} />
-        <Toaster theme="dark" position="bottom-right" />
+        <Toaster theme="dark" position="top-right" />
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>,
