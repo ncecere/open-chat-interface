@@ -38,7 +38,7 @@ export function ModelInfoCard({ model }: { model: CatalogModel }) {
   const description = model.description?.trim();
 
   return (
-    <div className="flex flex-col gap-6 text-left">
+    <div className="flex h-full flex-col gap-6 text-left">
       <div className="flex items-start gap-3">
         <LabLogo labId={model.labId} className="size-8 shrink-0" />
         <div className="min-w-0">
@@ -67,7 +67,12 @@ export function ModelInfoCard({ model }: { model: CatalogModel }) {
         </Section>
       )}
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
+      {/*
+       * `mb-auto` rather than `mt-auto`: the card is a fixed height so every
+       * one matches, and pushing the facts to the foot leaves a sparsely
+       * described model looking broken. Content stays together at the top.
+       */}
+      <dl className="mb-auto grid grid-cols-2 gap-x-6 gap-y-5">
         <Detail label="Provider" value={model.providerLabel} />
         {lab && <Detail label="Developer" value={lab.name} />}
         {model.contextWindow && (

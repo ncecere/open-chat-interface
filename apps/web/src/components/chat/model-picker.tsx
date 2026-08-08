@@ -29,6 +29,14 @@ export function ModelPicker({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [capabilityFilters, setCapabilityFilters] = useState<ModelCapability[]>([]);
   const [combineFilters, setCombineFilters] = useState(false);
+  /**
+   * Which model's details are showing.
+   *
+   * Held here rather than per row so the card occupies one fixed position
+   * beside the panel. A popover anchored to each row would jump up and down
+   * the screen as the pointer moves between them.
+   */
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const labs = useMemo(() => labsFrom(models), [models]);
@@ -43,6 +51,10 @@ export function ModelPicker({
     [models, query, labFilter, capabilityFilters, combineFilters],
   );
 
+  // A card left open for a model that filtering has just removed would describe
+  // something no longer on screen.
+  const detailsModel = visible.find((model) => model.id === detailsFor) ?? null;
+
   if (models.length === 0) {
     return (
       <span className="px-2 text-[0.8125rem] text-[var(--text-muted)]">No models available</span>
@@ -54,7 +66,10 @@ export function ModelPicker({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        if (!nextOpen) setFiltersOpen(false);
+        if (!nextOpen) {
+          setFiltersOpen(false);
+          setDetailsFor(null);
+        }
       }}
     >
       <PopoverTrigger
@@ -76,7 +91,7 @@ export function ModelPicker({
           searchRef.current?.focus();
         }}
         aria-label="Choose a model"
-        className="relative w-[min(29rem,calc(100vw-1rem))] overflow-hidden p-0"
+        className="relative w-[min(29rem,calc(100vw-1rem))] p-0"
       >
         <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5">
           <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
@@ -102,7 +117,7 @@ export function ModelPicker({
           />
         </div>
 
-        <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-64">
+        <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-64 overflow-hidden rounded-b-xl">
           {labs.length > 1 && (
             <fieldset className="scrollbar-thin m-0 flex shrink-0 flex-col items-center gap-1 overflow-y-auto border-0 border-r border-[var(--border-subtle)] p-2">
               <legend className="sr-only">Filter by lab</legend>
@@ -171,22 +186,13 @@ export function ModelPicker({
                       onSelect(model);
                       setOpen(false);
                     }}
-                    className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
+                    className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
                   >
                     <span className="flex w-full items-center gap-2">
                       <LabLogo labId={model.labId} className="size-4 shrink-0" />
                       <span className="min-w-0 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
                         {model.displayName}
                       </span>
-                      {/* Pushes the capabilities to the right edge of the row. */}
-                      <span className="flex-1" />
-                      {model.capabilities.length > 0 && (
-                        <span className="flex shrink-0 items-center gap-1">
-                          {model.capabilities.map((capability) => (
-                            <CapabilityIcon key={capability} capability={capability} />
-                          ))}
-                        </span>
-                      )}
                     </span>
 
                     <span className="w-full truncate pl-6 text-xs font-medium leading-4 text-[var(--text-muted)]">
@@ -195,31 +201,52 @@ export function ModelPicker({
                   </button>
 
                   {/*
-                   * A popover rather than a hover card: the panel carries real
-                   * detail, and content that vanishes when the pointer drifts
-                   * cannot be read at leisure or reached from a keyboard.
+                   * Capabilities and the details control share one right-hand
+                   * column, so both line up down the list however long a model
+                   * name happens to be.
                    */}
-                  <Popover>
-                    <PopoverTrigger
+                  <span className="flex shrink-0 items-center gap-1 pr-2">
+                    {model.capabilities.map((capability) => (
+                      <CapabilityIcon key={capability} capability={capability} />
+                    ))}
+
+                    <button
+                      type="button"
                       aria-label={`Details for ${model.displayName}`}
-                      className="mr-2 shrink-0 self-end rounded p-1.5 text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]"
+                      aria-expanded={detailsFor === model.id}
+                      onClick={() =>
+                        setDetailsFor((current) => (current === model.id ? null : model.id))
+                      }
+                      className={cn(
+                        'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
+                        detailsFor === model.id
+                          ? 'text-[var(--text-primary)]'
+                          : 'text-[var(--text-faint)]',
+                      )}
                     >
                       <Info className="size-3.5" />
-                    </PopoverTrigger>
-                    <PopoverContent
-                      side="right"
-                      align="end"
-                      collisionPadding={12}
-                      className="max-h-[min(28rem,calc(100vh-6rem))] min-h-56 w-[min(34rem,calc(100vw-2rem))] overflow-y-auto p-6"
-                    >
-                      <ModelInfoCard model={model} />
-                    </PopoverContent>
-                  </Popover>
+                    </button>
+                  </span>
                 </div>
               ))
             )}
           </div>
         </div>
+
+        {/*
+         * One card for the whole panel, in a fixed position beside it.
+         *
+         * Sitting to the left keeps it clear of the list: the picker opens from
+         * the composer at the bottom-left, so the space on that side is free
+         * while the right may be occupied by the viewport edge.
+         */}
+        {detailsModel && (
+          <div className="pointer-events-none absolute top-0 right-full bottom-0 hidden items-center pr-2 md:flex">
+            <div className="pointer-events-auto flex h-[26rem] max-h-full w-[min(32rem,32vw)] flex-col overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-popover)]">
+              <ModelInfoCard model={detailsModel} />
+            </div>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
