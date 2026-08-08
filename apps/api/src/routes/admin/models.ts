@@ -32,7 +32,6 @@ modelRoutes.get('/', async (c) => {
     labId: model.labId,
     upstreamModelId: model.upstreamModelId,
     capabilities: model.capabilities,
-    costTier: model.costTier,
     contextWindow: model.contextWindow,
     maxOutputTokens: model.maxOutputTokens,
     supportedEfforts: model.supportedEfforts,
@@ -94,7 +93,6 @@ modelRoutes.post('/', async (c) => {
       displayName: input.displayName,
       description: input.description ?? null,
       capabilities: input.capabilities,
-      costTier: input.costTier,
       contextWindow: input.contextWindow ?? null,
       maxOutputTokens: input.maxOutputTokens ?? null,
       supportedEfforts: input.supportedEfforts,
@@ -164,7 +162,6 @@ modelRoutes.patch('/:id', async (c) => {
       ...(input.displayName !== undefined && { displayName: input.displayName }),
       ...(input.description !== undefined && { description: input.description ?? null }),
       ...(input.capabilities !== undefined && { capabilities: input.capabilities }),
-      ...(input.costTier !== undefined && { costTier: input.costTier }),
       ...(input.contextWindow !== undefined && { contextWindow: input.contextWindow ?? null }),
       ...(input.maxOutputTokens !== undefined && {
         maxOutputTokens: input.maxOutputTokens ?? null,

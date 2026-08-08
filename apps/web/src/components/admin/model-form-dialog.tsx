@@ -1,6 +1,5 @@
 import {
   type AdminModel,
-  type CostTier,
   MICROS_PER_DOLLAR,
   MODEL_CAPABILITIES,
   MODEL_LABS,
@@ -38,7 +37,6 @@ interface ModelDraft {
   slug: string;
   displayName: string;
   description: string;
-  costTier: CostTier;
   contextWindow: string;
   maxOutputTokens: string;
   sortOrder: string;
@@ -81,7 +79,6 @@ function initialDraft(model: AdminModel | null, providers: Provider[]): ModelDra
         slug: model.slug,
         displayName: model.displayName,
         description: model.description ?? '',
-        costTier: model.costTier,
         contextWindow: model.contextWindow?.toString() ?? '',
         maxOutputTokens: model.maxOutputTokens?.toString() ?? '',
         sortOrder: model.sortOrder.toString(),
@@ -100,7 +97,6 @@ function initialDraft(model: AdminModel | null, providers: Provider[]): ModelDra
         slug: '',
         displayName: '',
         description: '',
-        costTier: 'medium',
         contextWindow: '',
         maxOutputTokens: '',
         sortOrder: '0',

@@ -1,4 +1,4 @@
-import type { CatalogModel, ModelCapability } from '@oci/shared';
+import type { ModelCapability } from '@oci/shared';
 import { Brain, Eye, FileText, Image, Wrench, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '~/components/ui/badge';
@@ -13,14 +13,6 @@ const CAPABILITY_META: Partial<Record<ModelCapability, { label: string; icon: ty
   fast: { label: 'Fast', icon: Zap },
   pdf_comprehension: { label: 'PDF', icon: FileText },
   image_generation: { label: 'Images', icon: Image },
-};
-
-const COST_LABELS: Record<CatalogModel['costTier'], string> = {
-  free: 'Free',
-  low: '$',
-  medium: '$$',
-  high: '$$$',
-  premium: '$$$$',
 };
 
 export function SettingsModelsPage() {
@@ -70,9 +62,6 @@ export function SettingsModelsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-[var(--text-primary)]">{model.displayName}</p>
-                  <span className="text-xs font-bold text-[var(--success)]">
-                    {COST_LABELS[model.costTier]}
-                  </span>
                   {model.isDefault && <Badge variant="accent">default</Badge>}
                 </div>
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">

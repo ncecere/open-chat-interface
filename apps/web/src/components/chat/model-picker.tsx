@@ -7,7 +7,6 @@ import { cn } from '~/lib/utils';
 import {
   CAPABILITY_ICONS,
   CAPABILITY_LABELS,
-  COST_LABELS,
   labsFrom,
   matchesCapabilities,
   matchesSearch,
@@ -66,11 +65,6 @@ export function ModelPicker({
       >
         {selected && <LabLogo labId={selected.labId} className="size-3.5" />}
         {selected?.displayName ?? 'Select model'}
-        {selected && (
-          <span className="text-[0.6875rem] font-bold text-[var(--success)]">
-            {COST_LABELS[selected.costTier]}
-          </span>
-        )}
         <ChevronDown className="size-4 text-[var(--text-muted)]" />
       </PopoverTrigger>
 
@@ -177,9 +171,6 @@ export function ModelPicker({
                     <LabLogo labId={model.labId} className="size-4" />
                     <span className="min-w-0 flex-1 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
                       {model.displayName}
-                    </span>
-                    <span className="text-[0.6875rem] font-bold text-[var(--success)]">
-                      {COST_LABELS[model.costTier]}
                     </span>
                   </span>
 

@@ -1,13 +1,5 @@
-import { type CatalogModel, type CostTier, findModelLab, type ModelCapability } from '@oci/shared';
+import { type CatalogModel, findModelLab, type ModelCapability } from '@oci/shared';
 import { Brain, Eye, FileText, Globe2, Image, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
-
-export const COST_LABELS: Record<CostTier, string> = {
-  free: 'Free',
-  low: '$',
-  medium: '$$',
-  high: '$$$',
-  premium: '$$$$',
-};
 
 export const CAPABILITY_ICONS: Partial<Record<ModelCapability, typeof Eye>> = {
   vision: Eye,

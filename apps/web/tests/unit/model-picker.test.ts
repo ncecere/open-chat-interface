@@ -19,7 +19,6 @@ function model(overrides: Partial<CatalogModel> = {}): CatalogModel {
     upstreamModelId: 'test-model',
     capabilities: ['reasoning', 'tool_calling'],
     labId: 'openai',
-    costTier: 'medium',
     contextWindow: null,
     maxOutputTokens: null,
     supportedEfforts: [],

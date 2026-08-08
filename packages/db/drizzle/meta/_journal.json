@@ -113,6 +113,13 @@
       "when": 1786201000000,
       "tag": "0015_usage_policy_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786287400000,
+      "tag": "0016_drop_cost_tier",
+      "breakpoints": true
     }
   ]
 }
