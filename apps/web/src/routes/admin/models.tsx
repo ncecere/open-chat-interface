@@ -1,7 +1,5 @@
 import {
   type AdminModel,
-  COST_TIERS,
-  type CostTier,
   MODEL_CAPABILITIES,
   type ModelCapability,
   type Provider,
@@ -19,7 +17,6 @@ import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
-import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api } from '~/lib/api-client';
@@ -34,14 +31,6 @@ const CAPABILITY_LABELS: Record<ModelCapability, string> = {
   pdf_comprehension: 'PDF',
   fast: 'Fast',
   web_search: 'Search',
-};
-
-const COST_LABELS: Record<CostTier, string> = {
-  free: 'Free',
-  low: '$',
-  medium: '$$',
-  high: '$$$',
-  premium: '$$$$',
 };
 
 function ModelRow({ model, onEdit }: { model: AdminModel; onEdit: () => void }) {
@@ -94,9 +83,6 @@ function ModelRow({ model, onEdit }: { model: AdminModel; onEdit: () => void }) 
           <div className="flex items-center gap-2">
             <LabLogo labId={model.labId} className="size-4" />
             <span className="truncate font-medium">{model.displayName}</span>
-            <span className="text-xs font-semibold text-[var(--success)]">
-              {COST_LABELS[model.costTier]}
-            </span>
             {model.isDefault && <Badge variant="accent">default</Badge>}
           </div>
           <p className="truncate text-xs text-[var(--text-muted)]">
@@ -144,15 +130,6 @@ function ModelRow({ model, onEdit }: { model: AdminModel; onEdit: () => void }) 
                     update.mutate({ displayName });
                   }
                 }}
-              />
-            </Field>
-
-            <Field label="Cost tier" htmlFor={`cost-${model.id}`}>
-              <Select
-                id={`cost-${model.id}`}
-                value={model.costTier}
-                onChange={(costTier) => update.mutate({ costTier })}
-                options={COST_TIERS.map((tier) => ({ value: tier, label: tier }))}
               />
             </Field>
           </div>

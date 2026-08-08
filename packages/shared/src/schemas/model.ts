@@ -1,11 +1,5 @@
 import { z } from 'zod';
-import {
-  COST_TIERS,
-  MODEL_CAPABILITIES,
-  PROVIDER_KINDS,
-  REASONING_EFFORTS,
-  USER_ROLES,
-} from '../constants.js';
+import { MODEL_CAPABILITIES, PROVIDER_KINDS, REASONING_EFFORTS, USER_ROLES } from '../constants.js';
 
 export const modelCapabilitySchema = z.enum(MODEL_CAPABILITIES);
 
@@ -21,7 +15,6 @@ export const catalogModelSchema = z.object({
   labId: z.string().nullable(),
   upstreamModelId: z.string(),
   capabilities: z.array(modelCapabilitySchema),
-  costTier: z.enum(COST_TIERS),
   contextWindow: z.number().int().positive().nullable(),
   maxOutputTokens: z.number().int().positive().nullable(),
   supportedEfforts: z.array(z.enum(REASONING_EFFORTS)),
@@ -57,7 +50,6 @@ export const upsertModelSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   description: z.string().trim().max(600).nullable().optional(),
   capabilities: z.array(modelCapabilitySchema).default([]),
-  costTier: z.enum(COST_TIERS).default('medium'),
   contextWindow: z.number().int().positive().max(10_000_000).nullable().optional(),
   maxOutputTokens: z.number().int().positive().max(1_000_000).nullable().optional(),
   supportedEfforts: z.array(z.enum(REASONING_EFFORTS)).default([]),

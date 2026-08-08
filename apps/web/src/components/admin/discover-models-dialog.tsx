@@ -74,7 +74,6 @@ export function DiscoverModelsDialog({
           slug: toSlug(upstreamModelId),
           displayName: upstreamModelId,
           capabilities: inferCapabilities(upstreamModelId),
-          costTier: 'medium',
           supportedEfforts: [],
           enabled: true,
           visibleToRoles: ['admin', 'user', 'restricted'],

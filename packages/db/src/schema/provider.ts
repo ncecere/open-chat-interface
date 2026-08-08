@@ -1,10 +1,4 @@
-import type {
-  CostTier,
-  ModelCapability,
-  ProviderKind,
-  ReasoningEffort,
-  UserRole,
-} from '@oci/shared';
+import type { ModelCapability, ProviderKind, ReasoningEffort, UserRole } from '@oci/shared';
 import { bigint, boolean, index, integer, jsonb, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
@@ -52,7 +46,6 @@ export const model = pgTable(
     displayName: text('display_name').notNull(),
     description: text('description'),
     capabilities: jsonb('capabilities').$type<ModelCapability[]>().notNull().default([]),
-    costTier: text('cost_tier').$type<CostTier>().notNull().default('medium'),
     contextWindow: integer('context_window'),
     maxOutputTokens: integer('max_output_tokens'),
     supportedEfforts: jsonb('supported_efforts').$type<ReasoningEffort[]>().notNull().default([]),

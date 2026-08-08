@@ -22,9 +22,6 @@ export const MODEL_CAPABILITIES = [
 ] as const;
 export type ModelCapability = (typeof MODEL_CAPABILITIES)[number];
 
-export const COST_TIERS = ['free', 'low', 'medium', 'high', 'premium'] as const;
-export type CostTier = (typeof COST_TIERS)[number];
-
 export const REASONING_EFFORTS = ['instant', 'low', 'medium', 'high'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
