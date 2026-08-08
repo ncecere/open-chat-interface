@@ -2,6 +2,7 @@ import type { InstanceSettings, StorageDriver, UpdateInstanceSettings } from '@o
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, HardDrive, KeyRound } from 'lucide-react';
 import { useState } from 'react';
+import { AdminTabs } from '~/components/admin/admin-tabs';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import {
@@ -221,8 +222,17 @@ function DriverWarning({ driver }: { driver: StorageDriver }) {
   );
 }
 
+const STORAGE_TABS = [
+  { id: 'driver', label: 'Storage driver' },
+  { id: 's3', label: 'S3 connection' },
+  { id: 'uploads', label: 'Upload policy' },
+] as const;
+
+type StorageTabId = (typeof STORAGE_TABS)[number]['id'];
+
 function StorageSettingsForm({ initialSettings }: { initialSettings: StorageSettings }) {
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<StorageTabId>('driver');
   const [saved, setSaved] = useState(initialSettings);
   const [draft, setDraft] = useState(() => makeDraft(initialSettings));
   const [credentialAction, setCredentialAction] = useState<CredentialAction>('keep');
@@ -330,378 +340,395 @@ function StorageSettingsForm({ initialSettings }: { initialSettings: StorageSett
           submitChanges();
         }}
       >
-        <SettingsSection
-          title="Storage driver"
-          description="Select where attachments are stored. Invalid S3 settings are never allowed to fall back silently to local storage."
-        >
-          <div className="flex flex-col gap-5">
-            <Field label="Driver" htmlFor="storage-driver">
-              <Select
-                id="storage-driver"
-                value={draft.driver}
-                disabled={save.isPending}
-                onChange={(event) => {
-                  beginEdit();
-                  setDraft((current) => ({
-                    ...current,
-                    driver: event.target.value as StorageDriver,
-                  }));
-                }}
+        <AdminTabs tabs={STORAGE_TABS} active={tab} onChange={setTab} label="Storage sections" />
+
+        {/*
+         * Panels are hidden rather than unmounted so a change made on one tab
+         * survives a switch to another: this is a single form with one save,
+         * and unmounting would silently discard edits.
+         */}
+        <div hidden={tab !== 'driver'} id="panel-driver" role="tabpanel">
+          <SettingsSection
+            title="Storage driver"
+            description="Select where attachments are stored. Invalid S3 settings are never allowed to fall back silently to local storage."
+          >
+            <div className="flex flex-col gap-5">
+              <Field label="Driver" htmlFor="storage-driver">
+                <Select
+                  id="storage-driver"
+                  value={draft.driver}
+                  disabled={save.isPending}
+                  onChange={(event) => {
+                    beginEdit();
+                    setDraft((current) => ({
+                      ...current,
+                      driver: event.target.value as StorageDriver,
+                    }));
+                  }}
+                >
+                  <option value="local">Local filesystem</option>
+                  <option value="s3">S3-compatible object storage</option>
+                </Select>
+              </Field>
+
+              {driverChanged && <DriverWarning driver={draft.driver} />}
+
+              {draft.driver === 'local' && (
+                <div className="flex gap-3 rounded-xl border border-[var(--border-subtle)] p-4 text-sm">
+                  <HardDrive className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]" />
+                  <div className="min-w-0">
+                    <p className="font-medium">Local filesystem path</p>
+                    <code className="mt-1 block break-all rounded bg-black/20 px-2 py-1 text-xs text-[var(--text-secondary)]">
+                      {initialSettings.localPath}
+                    </code>
+                    <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
+                      Set by the deployment, since the path has to exist inside the container.
+                      Change it with the STORAGE_LOCAL_PATH environment variable, and make sure the
+                      volume behind it is persistent and backed up.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </SettingsSection>
+        </div>
+
+        <div hidden={tab !== 's3'} id="panel-s3" role="tabpanel">
+          <SettingsSection
+            title="S3 connection"
+            description="Saved S3 settings can be prepared and tested while local storage remains active."
+          >
+            <div className="flex flex-col gap-5">
+              <div className="flex gap-3 rounded-xl border border-[var(--warning)]/40 bg-[var(--warning)]/5 p-4 text-sm">
+                <KeyRound className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" />
+                <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+                  The secret access key is encrypted by the server and is never returned. The
+                  bucket, endpoint, region, and access key ID are visible to administrators. Saving
+                  connection details does not migrate files.
+                </p>
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field
+                  label="Bucket"
+                  htmlFor="s3-bucket"
+                  hint={showValidation && validation.bucket ? validation.bucket : undefined}
+                >
+                  <Input
+                    id="s3-bucket"
+                    value={draft.bucket}
+                    maxLength={255}
+                    disabled={save.isPending}
+                    aria-invalid={showValidation && Boolean(validation.bucket)}
+                    onChange={(event) => {
+                      beginEdit();
+                      setDraft((current) => ({ ...current, bucket: event.target.value }));
+                    }}
+                  />
+                </Field>
+                <Field
+                  label="Region"
+                  htmlFor="s3-region"
+                  hint={showValidation && validation.region ? validation.region : undefined}
+                >
+                  <Input
+                    id="s3-region"
+                    value={draft.region}
+                    maxLength={100}
+                    placeholder="us-east-1"
+                    disabled={save.isPending}
+                    aria-invalid={showValidation && Boolean(validation.region)}
+                    onChange={(event) => {
+                      beginEdit();
+                      setDraft((current) => ({ ...current, region: event.target.value }));
+                    }}
+                  />
+                </Field>
+              </div>
+
+              <Field
+                label="Endpoint (optional)"
+                htmlFor="s3-endpoint"
+                hint={
+                  showValidation && validation.endpoint
+                    ? validation.endpoint
+                    : 'Leave blank for AWS S3. Use an absolute HTTP(S) URL for MinIO or another compatible service.'
+                }
               >
-                <option value="local">Local filesystem</option>
-                <option value="s3">S3-compatible object storage</option>
-              </Select>
-            </Field>
+                <Input
+                  id="s3-endpoint"
+                  type="url"
+                  value={draft.endpoint}
+                  maxLength={2_048}
+                  placeholder="https://s3.example.com"
+                  disabled={save.isPending}
+                  aria-invalid={showValidation && Boolean(validation.endpoint)}
+                  onChange={(event) => {
+                    beginEdit();
+                    setDraft((current) => ({ ...current, endpoint: event.target.value }));
+                  }}
+                />
+              </Field>
 
-            {driverChanged && <DriverWarning driver={draft.driver} />}
+              <Field
+                label="Access key ID"
+                htmlFor="s3-access-key-id"
+                hint={
+                  showValidation && validation.accessKeyId
+                    ? validation.accessKeyId
+                    : 'Stored as connection metadata; this is not the secret access key.'
+                }
+              >
+                <Input
+                  id="s3-access-key-id"
+                  value={draft.accessKeyId}
+                  maxLength={255}
+                  autoComplete="off"
+                  disabled={save.isPending}
+                  aria-invalid={showValidation && Boolean(validation.accessKeyId)}
+                  onChange={(event) => {
+                    beginEdit();
+                    setDraft((current) => ({ ...current, accessKeyId: event.target.value }));
+                  }}
+                />
+              </Field>
 
-            {draft.driver === 'local' && (
-              <div className="flex gap-3 rounded-xl border border-[var(--border-subtle)] p-4 text-sm">
-                <HardDrive className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]" />
-                <div className="min-w-0">
-                  <p className="font-medium">Local filesystem path</p>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-                    The path is deployment-managed and is not exposed by the admin API. Ensure its
-                    volume is persistent and backed up.
+              <div className="flex flex-col gap-3 rounded-lg border border-[var(--border-subtle)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium">
+                    {saved.s3.hasCredential
+                      ? 'Secret access key configured'
+                      : 'No secret access key configured'}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Blank input is never sent and keeps an existing credential unchanged.
                   </p>
                 </div>
+                {saved.s3.hasCredential && credentialAction === 'keep' && (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        beginEdit();
+                        setCredentialAction('replace');
+                      }}
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        beginEdit();
+                        setSecretAccessKey('');
+                        setCredentialAction('clear');
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </SettingsSection>
 
-        <SettingsSection
-          title="S3 connection"
-          description="Saved S3 settings can be prepared and tested while local storage remains active."
-        >
-          <div className="flex flex-col gap-5">
-            <div className="flex gap-3 rounded-xl border border-[var(--warning)]/40 bg-[var(--warning)]/5 p-4 text-sm">
-              <KeyRound className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" />
-              <p className="text-xs leading-relaxed text-[var(--text-muted)]">
-                The secret access key is encrypted by the server and is never returned. The bucket,
-                endpoint, region, and access key ID are visible to administrators. Saving connection
-                details does not migrate files.
-              </p>
-            </div>
+              {(credentialAction === 'replace' || !saved.s3.hasCredential) && (
+                <Field
+                  label={
+                    saved.s3.hasCredential ? 'Replacement secret access key' : 'Secret access key'
+                  }
+                  htmlFor="s3-secret-access-key"
+                  hint={
+                    showValidation && validation.secretAccessKey
+                      ? validation.secretAccessKey
+                      : 'Leave blank to keep the stored value. Use Clear for explicit removal.'
+                  }
+                >
+                  <Input
+                    id="s3-secret-access-key"
+                    type="password"
+                    value={secretAccessKey}
+                    maxLength={2_049}
+                    autoComplete="new-password"
+                    disabled={save.isPending}
+                    aria-invalid={showValidation && Boolean(validation.secretAccessKey)}
+                    onChange={(event) => {
+                      beginEdit();
+                      setSecretAccessKey(event.target.value);
+                      setCredentialAction('replace');
+                    }}
+                  />
+                </Field>
+              )}
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field
-                label="Bucket"
-                htmlFor="s3-bucket"
-                hint={showValidation && validation.bucket ? validation.bucket : undefined}
-              >
-                <Input
-                  id="s3-bucket"
-                  value={draft.bucket}
-                  maxLength={255}
+              {credentialAction === 'clear' && (
+                <div role="alert" className="rounded-lg bg-[var(--warning)]/10 p-3 text-sm">
+                  <p className="font-medium">The stored secret will be cleared when you save.</p>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="mt-1 h-auto p-0"
+                    onClick={() => {
+                      beginEdit();
+                      setCredentialAction('keep');
+                    }}
+                  >
+                    Keep existing secret
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex items-start justify-between gap-6 rounded-lg border border-[var(--border-subtle)] p-4">
+                <div>
+                  <label htmlFor="s3-force-path-style" className="text-sm font-medium">
+                    Force path-style addressing
+                  </label>
+                  <p
+                    id="s3-force-path-style-description"
+                    className="mt-1 text-xs text-[var(--text-muted)]"
+                  >
+                    Usually required by MinIO and self-hosted S3-compatible gateways.
+                  </p>
+                </div>
+                <Switch
+                  id="s3-force-path-style"
+                  checked={draft.forcePathStyle}
                   disabled={save.isPending}
-                  aria-invalid={showValidation && Boolean(validation.bucket)}
-                  onChange={(event) => {
+                  aria-describedby="s3-force-path-style-description"
+                  onCheckedChange={(forcePathStyle) => {
                     beginEdit();
-                    setDraft((current) => ({ ...current, bucket: event.target.value }));
+                    setDraft((current) => ({ ...current, forcePathStyle }));
                   }}
                 />
-              </Field>
-              <Field
-                label="Region"
-                htmlFor="s3-region"
-                hint={showValidation && validation.region ? validation.region : undefined}
-              >
-                <Input
-                  id="s3-region"
-                  value={draft.region}
-                  maxLength={100}
-                  placeholder="us-east-1"
-                  disabled={save.isPending}
-                  aria-invalid={showValidation && Boolean(validation.region)}
-                  onChange={(event) => {
-                    beginEdit();
-                    setDraft((current) => ({ ...current, region: event.target.value }));
-                  }}
-                />
-              </Field>
-            </div>
-
-            <Field
-              label="Endpoint (optional)"
-              htmlFor="s3-endpoint"
-              hint={
-                showValidation && validation.endpoint
-                  ? validation.endpoint
-                  : 'Leave blank for AWS S3. Use an absolute HTTP(S) URL for MinIO or another compatible service.'
-              }
-            >
-              <Input
-                id="s3-endpoint"
-                type="url"
-                value={draft.endpoint}
-                maxLength={2_048}
-                placeholder="https://s3.example.com"
-                disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(validation.endpoint)}
-                onChange={(event) => {
-                  beginEdit();
-                  setDraft((current) => ({ ...current, endpoint: event.target.value }));
-                }}
-              />
-            </Field>
-
-            <Field
-              label="Access key ID"
-              htmlFor="s3-access-key-id"
-              hint={
-                showValidation && validation.accessKeyId
-                  ? validation.accessKeyId
-                  : 'Stored as connection metadata; this is not the secret access key.'
-              }
-            >
-              <Input
-                id="s3-access-key-id"
-                value={draft.accessKeyId}
-                maxLength={255}
-                autoComplete="off"
-                disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(validation.accessKeyId)}
-                onChange={(event) => {
-                  beginEdit();
-                  setDraft((current) => ({ ...current, accessKeyId: event.target.value }));
-                }}
-              />
-            </Field>
-
-            <div className="flex flex-col gap-3 rounded-lg border border-[var(--border-subtle)] p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium">
-                  {saved.s3.hasCredential
-                    ? 'Secret access key configured'
-                    : 'No secret access key configured'}
-                </p>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Blank input is never sent and keeps an existing credential unchanged.
-                </p>
               </div>
-              {saved.s3.hasCredential && credentialAction === 'keep' && (
-                <div className="flex gap-2">
+
+              <div className="rounded-lg border border-[var(--border-subtle)] p-4">
+                <p className="text-sm font-medium">Test saved S3 settings</p>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+                  The read-only check requires bucket-level access. The write test creates a random
+                  object under <code>.oci-health-check/</code>, verifies it, and deletes it.
+                </p>
+                {hasChanges && (
+                  <p className="mt-2 text-xs text-[var(--warning)]">
+                    Save changes before testing them.
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => {
-                      beginEdit();
-                      setCredentialAction('replace');
-                    }}
+                    disabled={hasChanges || health.isPending || save.isPending}
+                    onClick={() => health.mutate('read')}
                   >
-                    Replace
+                    {health.isPending && health.variables === 'read' && <Spinner />}
+                    Check bucket access
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      beginEdit();
-                      setSecretAccessKey('');
-                      setCredentialAction('clear');
-                    }}
+                    disabled={hasChanges || health.isPending || save.isPending}
+                    onClick={() => health.mutate('write')}
                   >
-                    Clear
+                    {health.isPending && health.variables === 'write' && <Spinner />}
+                    Test put/read/delete
                   </Button>
                 </div>
-              )}
-            </div>
-
-            {(credentialAction === 'replace' || !saved.s3.hasCredential) && (
-              <Field
-                label={
-                  saved.s3.hasCredential ? 'Replacement secret access key' : 'Secret access key'
-                }
-                htmlFor="s3-secret-access-key"
-                hint={
-                  showValidation && validation.secretAccessKey
-                    ? validation.secretAccessKey
-                    : 'Leave blank to keep the stored value. Use Clear for explicit removal.'
-                }
-              >
-                <Input
-                  id="s3-secret-access-key"
-                  type="password"
-                  value={secretAccessKey}
-                  maxLength={2_049}
-                  autoComplete="new-password"
-                  disabled={save.isPending}
-                  aria-invalid={showValidation && Boolean(validation.secretAccessKey)}
-                  onChange={(event) => {
-                    beginEdit();
-                    setSecretAccessKey(event.target.value);
-                    setCredentialAction('replace');
-                  }}
-                />
-              </Field>
-            )}
-
-            {credentialAction === 'clear' && (
-              <div role="alert" className="rounded-lg bg-[var(--warning)]/10 p-3 text-sm">
-                <p className="font-medium">The stored secret will be cleared when you save.</p>
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  className="mt-1 h-auto p-0"
-                  onClick={() => {
-                    beginEdit();
-                    setCredentialAction('keep');
-                  }}
-                >
-                  Keep existing secret
-                </Button>
-              </div>
-            )}
-
-            <div className="flex items-start justify-between gap-6 rounded-lg border border-[var(--border-subtle)] p-4">
-              <div>
-                <label htmlFor="s3-force-path-style" className="text-sm font-medium">
-                  Force path-style addressing
-                </label>
-                <p
-                  id="s3-force-path-style-description"
-                  className="mt-1 text-xs text-[var(--text-muted)]"
-                >
-                  Usually required by MinIO and self-hosted S3-compatible gateways.
-                </p>
-              </div>
-              <Switch
-                id="s3-force-path-style"
-                checked={draft.forcePathStyle}
-                disabled={save.isPending}
-                aria-describedby="s3-force-path-style-description"
-                onCheckedChange={(forcePathStyle) => {
-                  beginEdit();
-                  setDraft((current) => ({ ...current, forcePathStyle }));
-                }}
-              />
-            </div>
-
-            <div className="rounded-lg border border-[var(--border-subtle)] p-4">
-              <p className="text-sm font-medium">Test saved S3 settings</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-                The read-only check requires bucket-level access. The write test creates a random
-                object under <code>.oci-health-check/</code>, verifies it, and deletes it.
-              </p>
-              {hasChanges && (
-                <p className="mt-2 text-xs text-[var(--warning)]">
-                  Save changes before testing them.
-                </p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={hasChanges || health.isPending || save.isPending}
-                  onClick={() => health.mutate('read')}
-                >
-                  {health.isPending && health.variables === 'read' && <Spinner />}
-                  Check bucket access
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={hasChanges || health.isPending || save.isPending}
-                  onClick={() => health.mutate('write')}
-                >
-                  {health.isPending && health.variables === 'write' && <Spinner />}
-                  Test put/read/delete
-                </Button>
               </div>
             </div>
-          </div>
-        </SettingsSection>
+          </SettingsSection>
+        </div>
 
-        <SettingsSection
-          title="Upload policy"
-          description="Limits are enforced by the attachment API for every uploaded file and message."
-        >
-          <div className="flex flex-col gap-5">
-            <div className="grid gap-5 sm:grid-cols-2">
+        <div hidden={tab !== 'uploads'} id="panel-uploads" role="tabpanel">
+          <SettingsSection
+            title="Upload policy"
+            description="Limits are enforced by the attachment API for every uploaded file and message."
+          >
+            <div className="flex flex-col gap-5">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field
+                  label="Maximum file size (bytes)"
+                  htmlFor="max-file-bytes"
+                  hint={
+                    showValidation && validation.maxFileBytes
+                      ? validation.maxFileBytes
+                      : Number.isSafeInteger(maxFileBytes) && maxFileBytes > 0
+                        ? `Currently ${formatBytes(maxFileBytes)} per file.`
+                        : 'Enter a positive whole number.'
+                  }
+                >
+                  <Input
+                    id="max-file-bytes"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    value={draft.maxFileBytes}
+                    disabled={save.isPending}
+                    aria-invalid={showValidation && Boolean(validation.maxFileBytes)}
+                    onChange={(event) => {
+                      beginEdit();
+                      setDraft((current) => ({ ...current, maxFileBytes: event.target.value }));
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label="Maximum files per message"
+                  htmlFor="max-files-per-message"
+                  hint={
+                    showValidation && validation.maxFilesPerMessage
+                      ? validation.maxFilesPerMessage
+                      : 'Maximum attachment count accepted on one message.'
+                  }
+                >
+                  <Input
+                    id="max-files-per-message"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    value={draft.maxFilesPerMessage}
+                    disabled={save.isPending}
+                    aria-invalid={showValidation && Boolean(validation.maxFilesPerMessage)}
+                    onChange={(event) => {
+                      beginEdit();
+                      setDraft((current) => ({
+                        ...current,
+                        maxFilesPerMessage: event.target.value,
+                      }));
+                    }}
+                  />
+                </Field>
+              </div>
+
               <Field
-                label="Maximum file size (bytes)"
-                htmlFor="max-file-bytes"
+                label="Allowed MIME types"
+                htmlFor="allowed-mime-types"
                 hint={
-                  showValidation && validation.maxFileBytes
-                    ? validation.maxFileBytes
-                    : Number.isSafeInteger(maxFileBytes) && maxFileBytes > 0
-                      ? `Currently ${formatBytes(maxFileBytes)} per file.`
-                      : 'Enter a positive whole number.'
+                  showValidation && validation.allowedMimeTypes
+                    ? validation.allowedMimeTypes
+                    : 'One MIME type per line (commas are accepted). An empty list blocks every file type.'
                 }
               >
-                <Input
-                  id="max-file-bytes"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  step={1}
-                  value={draft.maxFileBytes}
+                <Textarea
+                  id="allowed-mime-types"
+                  rows={8}
+                  value={draft.allowedMimeTypes}
                   disabled={save.isPending}
-                  aria-invalid={showValidation && Boolean(validation.maxFileBytes)}
+                  spellCheck={false}
+                  aria-invalid={showValidation && Boolean(validation.allowedMimeTypes)}
+                  placeholder={'image/png\napplication/pdf\ntext/plain'}
                   onChange={(event) => {
                     beginEdit();
-                    setDraft((current) => ({ ...current, maxFileBytes: event.target.value }));
-                  }}
-                />
-              </Field>
-
-              <Field
-                label="Maximum files per message"
-                htmlFor="max-files-per-message"
-                hint={
-                  showValidation && validation.maxFilesPerMessage
-                    ? validation.maxFilesPerMessage
-                    : 'Maximum attachment count accepted on one message.'
-                }
-              >
-                <Input
-                  id="max-files-per-message"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  step={1}
-                  value={draft.maxFilesPerMessage}
-                  disabled={save.isPending}
-                  aria-invalid={showValidation && Boolean(validation.maxFilesPerMessage)}
-                  onChange={(event) => {
-                    beginEdit();
-                    setDraft((current) => ({
-                      ...current,
-                      maxFilesPerMessage: event.target.value,
-                    }));
+                    setDraft((current) => ({ ...current, allowedMimeTypes: event.target.value }));
                   }}
                 />
               </Field>
             </div>
-
-            <Field
-              label="Allowed MIME types"
-              htmlFor="allowed-mime-types"
-              hint={
-                showValidation && validation.allowedMimeTypes
-                  ? validation.allowedMimeTypes
-                  : 'One MIME type per line (commas are accepted). An empty list blocks every file type.'
-              }
-            >
-              <Textarea
-                id="allowed-mime-types"
-                rows={8}
-                value={draft.allowedMimeTypes}
-                disabled={save.isPending}
-                spellCheck={false}
-                aria-invalid={showValidation && Boolean(validation.allowedMimeTypes)}
-                placeholder={'image/png\napplication/pdf\ntext/plain'}
-                onChange={(event) => {
-                  beginEdit();
-                  setDraft((current) => ({ ...current, allowedMimeTypes: event.target.value }));
-                }}
-              />
-            </Field>
-          </div>
-        </SettingsSection>
+          </SettingsSection>
+        </div>
 
         <div className="flex min-h-9 flex-col gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
           <div className="sm:mr-auto" aria-live="polite">

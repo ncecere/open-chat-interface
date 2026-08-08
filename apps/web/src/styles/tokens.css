@@ -152,9 +152,18 @@
  * low-contrast selected/hover wash.
  * ------------------------------------------------------------------------ */
 
-/* Neutral (default): shadcn's monochrome primary. */
+/*
+ * Neutral (default): shadcn's monochrome primary.
+ *
+ * Also declared under an explicit `[data-color-theme="neutral"]` selector, not
+ * only on the root. A preview swatch sets that attribute on itself to render
+ * the palette it advertises; without a matching block it would inherit the
+ * accent already in effect and show the wrong colour.
+ */
 :root,
-.dark {
+.dark,
+[data-color-theme="neutral"],
+[data-color-theme="neutral"].dark {
   --accent: oklch(92.2% 0 0);
   --accent-bright: oklch(87% 0 0);
   --accent-soft: oklch(26.9% 0 0);
@@ -169,7 +178,8 @@
   --accent-send-hover: oklch(85% 0 0);
 }
 
-.light {
+.light,
+[data-color-theme="neutral"].light {
   --accent: oklch(20.5% 0 0);
   --accent-bright: oklch(37.1% 0 0);
   --accent-soft: oklch(94% 0 0);

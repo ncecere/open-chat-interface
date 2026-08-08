@@ -95,7 +95,7 @@ const COLOR_THEME_LABELS: Record<ColorTheme, string> = {
  */
 function ColorThemeForm({ initialTheme }: { initialTheme: ColorTheme }) {
   const queryClient = useQueryClient();
-  const { setColorTheme } = useTheme();
+  const { setColorTheme, resolvedTheme } = useTheme();
   const [saved, setSaved] = useState(initialTheme);
   const [draft, setDraft] = useState(initialTheme);
   const [successMessage, setSuccessMessage] = useState(false);
@@ -141,6 +141,9 @@ function ColorThemeForm({ initialTheme }: { initialTheme: ColorTheme }) {
               data-color-theme={theme}
               className={cn(
                 'flex cursor-pointer items-center gap-2.5 rounded-xl border px-4 py-3 transition-colors',
+                // Accent tokens differ between light and dark, so a swatch has
+                // to carry the active mode to preview the right variant.
+                resolvedTheme,
                 selected
                   ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                   : 'border-[var(--border-subtle)] hover:bg-[var(--bg-control)]/50',
