@@ -47,6 +47,65 @@ export const deletedObject = pgTable(
 );
 
 /**
+ * An announcement shown to users in the application.
+ *
+ * Deliberately not email: this is for things people should see while using the
+ * instance, such as planned downtime, and it reaches everyone without needing
+ * SMTP configured.
+ */
+export const broadcast = pgTable(
+  'broadcast',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    level: text('level').$type<'info' | 'warning' | 'critical'>().notNull().default('info'),
+    /** Empty means everyone; otherwise only these roles see it. */
+    audienceRoles: jsonb('audience_roles').$type<UserRole[]>().notNull().default([]),
+    /**
+     * A critical announcement can be made non-dismissable, for something a
+     * user genuinely must not miss. Used sparingly: an undismissable banner is
+     * an imposition.
+     */
+    dismissable: boolean('dismissable').notNull().default(true),
+    published: boolean('published').notNull().default(false),
+    /** Null starts immediately on publish; null end never expires. */
+    startsAt: timestamp('starts_at', { withTimezone: true }),
+    endsAt: timestamp('ends_at', { withTimezone: true }),
+    createdByUserId: text('created_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    ...timestamps(),
+  },
+  (t) => [index('broadcast_active_idx').on(t.published, t.startsAt, t.endsAt)],
+);
+
+/**
+ * Which announcements a person has dismissed.
+ *
+ * A row per dismissal rather than a flag on the broadcast, because dismissal
+ * is per person: one user hiding an announcement must not hide it for anyone
+ * else.
+ */
+export const broadcastDismissal = pgTable(
+  'broadcast_dismissal',
+  {
+    id: primaryId(),
+    broadcastId: text('broadcast_id')
+      .notNull()
+      .references(() => broadcast.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    dismissedAt: timestamp('dismissed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('broadcast_dismissal_unique').on(t.broadcastId, t.userId)],
+);
+
+/**
  * Bookkeeping for the background job runner. Answers the first question an
  * operator asks after enabling retention: did it actually run, and what did
  * it touch?
