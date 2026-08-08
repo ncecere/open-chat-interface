@@ -5,6 +5,7 @@ import {
   Boxes,
   ChartColumn,
   Cpu,
+  FileText,
   Gauge,
   HardDrive,
   KeyRound,
@@ -41,6 +42,7 @@ const NAV_SECTIONS = [
       { to: '/admin/users', label: 'Users', icon: Users },
       { to: '/admin/invites', label: 'Invitations', icon: Mail },
       { to: '/admin/sso', label: 'Auth & SSO', icon: ShieldCheck },
+      { to: '/admin/policies', label: 'Acceptable use', icon: FileText },
     ],
   },
   {

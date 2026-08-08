@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { AdminLayout } from '~/components/admin/admin-layout';
 import { AppShell } from '~/components/layout/app-shell';
+import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
 import { SettingsLayout } from '~/components/settings/settings-layout';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
@@ -17,6 +18,7 @@ import { AdminInvitesPage } from '~/routes/admin/invites';
 import { AdminMaintenancePage } from '~/routes/admin/maintenance';
 import { AdminModelsPage } from '~/routes/admin/models';
 import { AdminOverviewPage } from '~/routes/admin/overview';
+import { AdminPoliciesPage } from '~/routes/admin/policies';
 import { AdminProvidersPage } from '~/routes/admin/providers';
 import { AdminQuotasPage } from '~/routes/admin/quotas';
 import { AdminRateLimitsPage } from '~/routes/admin/rate-limits';
@@ -116,9 +118,13 @@ const authenticatedRoute = createRoute({
     return { session };
   },
   component: () => (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    // Wraps the shell rather than sitting inside it, so a required policy is
+    // not shown alongside a usable application.
+    <OnboardingGate>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </OnboardingGate>
   ),
   pendingComponent: FullPageSpinner,
 });
@@ -277,6 +283,12 @@ const adminRetentionRoute = createRoute({
   component: AdminRetentionPage,
 });
 
+const adminPoliciesRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/policies',
+  component: AdminPoliciesPage,
+});
+
 const adminBroadcastsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/broadcasts',
@@ -325,6 +337,7 @@ const routeTree = rootRoute.addChildren([
     adminStorageLimitsRoute,
     adminRateLimitsRoute,
     adminRetentionRoute,
+    adminPoliciesRoute,
     adminBroadcastsRoute,
     adminUsageRoute,
     adminMaintenanceRoute,

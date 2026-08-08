@@ -265,6 +265,11 @@ export const userPreference = pgTable(
     traits: jsonb('traits').$type<string[]>().notNull().default([]),
     additionalContext: text('additional_context'),
     defaultModelSlug: text('default_model_slug'),
+    /**
+     * When the introduction was completed. Null means it has not been shown,
+     * so a returning user is never asked again after finishing it once.
+     */
+    onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [index('user_preference_user_idx').on(t.userId)],

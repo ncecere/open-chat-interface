@@ -47,6 +47,68 @@ export const deletedObject = pgTable(
 );
 
 /**
+ * A published acceptable use policy.
+ *
+ * Versioned rather than edited in place, because acceptance is a record of
+ * what a specific person agreed to at a specific time. Rewriting the text
+ * under an existing acceptance would make that record a lie.
+ */
+export const usagePolicy = pgTable(
+  'usage_policy',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    /** Increments on each publish; the highest is the one in force. */
+    version: integer('version').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    /** Null while a draft; set when it becomes the policy people must accept. */
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdByUserId: text('created_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex('usage_policy_org_version_unique').on(t.organizationId, t.version),
+    index('usage_policy_published_idx').on(t.publishedAt),
+  ],
+);
+
+/**
+ * A person's acceptance of one policy version.
+ *
+ * The compliance artifact: who agreed, to which version, when, and from where.
+ * Deliberately not a boolean on the user, which could not answer "what did
+ * they actually agree to?" after the text changed.
+ *
+ * `onDelete: 'restrict'` on the policy prevents deleting a version that
+ * somebody has accepted, since that would destroy the evidence.
+ */
+export const usagePolicyAcceptance = pgTable(
+  'usage_policy_acceptance',
+  {
+    id: primaryId(),
+    policyId: text('policy_id')
+      .notNull()
+      .references(() => usagePolicy.id, { onDelete: 'restrict' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** Snapshotted so the record survives any later renumbering. */
+    policyVersion: integer('policy_version').notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull().defaultNow(),
+    ipAddress: text('ip_address'),
+  },
+  (t) => [
+    uniqueIndex('usage_policy_acceptance_unique').on(t.policyId, t.userId),
+    index('usage_policy_acceptance_user_idx').on(t.userId),
+  ],
+);
+
+/**
  * An announcement shown to users in the application.
  *
  * Deliberately not email: this is for things people should see while using the

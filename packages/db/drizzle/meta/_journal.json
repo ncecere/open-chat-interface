@@ -106,6 +106,13 @@
       "when": 1786200000000,
       "tag": "0014_broadcasts",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786201000000,
+      "tag": "0015_usage_policy_onboarding",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,17 @@
 import { eq, schema } from '@oci/db';
+import { completeOnboardingSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
 import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
+import {
+  acceptPolicy,
+  completeIntroduction,
+  onboardingStateFor,
+  skipIntroduction,
+} from '../services/onboarding.js';
 import { getUsageSummary } from '../services/quota/index.js';
 import { getSetting } from '../services/settings.js';
 
@@ -100,4 +107,40 @@ meRoutes.post('/broadcasts/:id/dismiss', async (c) => {
   const user = currentUser(c);
   const dismissed = await dismissBroadcast(c.req.param('id'), user.id);
   return c.json({ ok: dismissed });
+});
+
+/** What must happen before this person can use the instance. */
+meRoutes.get('/onboarding', async (c) => {
+  const user = currentUser(c);
+  return c.json(await onboardingStateFor(user.id));
+});
+
+meRoutes.post('/onboarding/accept-policy', async (c) => {
+  const user = currentUser(c);
+  const { policyId } = await parseBody(c, z.object({ policyId: z.string().min(1) }));
+
+  await acceptPolicy({
+    userId: user.id,
+    policyId,
+    // Recorded alongside the acceptance because it is part of the evidence.
+    ipAddress:
+      c.req.header('cf-connecting-ip') ??
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
+      null,
+  });
+
+  return c.json({ ok: true });
+});
+
+meRoutes.post('/onboarding/complete', async (c) => {
+  const user = currentUser(c);
+  const input = await parseBody(c, completeOnboardingSchema);
+  await completeIntroduction({ userId: user.id, ...input });
+  return c.json({ ok: true });
+});
+
+meRoutes.post('/onboarding/skip', async (c) => {
+  const user = currentUser(c);
+  await skipIntroduction(user.id);
+  return c.json({ ok: true });
 });
