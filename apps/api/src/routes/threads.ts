@@ -11,6 +11,7 @@ import { db } from '../db/index.js';
 import { forbidden } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import { exportFilename, exportThreadMarkdown } from '../services/export.js';
 import {
   emptyTrash,
   listTrashedThreads,
@@ -99,6 +100,24 @@ threadRoutes.delete('/:id/permanent', async (c) => {
   const user = currentUser(c);
   await purgeTrashedThread(c.req.param('id'), user.id);
   return c.json({ ok: true });
+});
+
+/**
+ * Downloads one conversation as Markdown.
+ *
+ * The felt gap is at deletion: that is the moment someone wishes they had kept
+ * a copy. Ownership is checked the same way as any other read.
+ */
+threadRoutes.get('/:id/export', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  const markdown = await exportThreadMarkdown(thread.id);
+
+  return c.body(markdown, 200, {
+    'content-type': 'text/markdown; charset=utf-8',
+    'content-disposition': `attachment; filename="${exportFilename(thread.title)}"`,
+    'cache-control': 'no-store',
+  });
 });
 
 threadRoutes.post('/:id/forks', async (c) => {

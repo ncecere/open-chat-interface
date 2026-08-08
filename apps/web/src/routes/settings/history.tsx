@@ -68,6 +68,7 @@ function TrashList() {
       <div className="mt-6 flex items-center justify-between gap-4">
         <p className="text-xs text-[var(--text-muted)]">
           Deleted conversations stay here until their deletion date, then are removed permanently.
+          Deleting now cannot be undone, so download anything you want to keep first.
         </p>
         <Button
           variant="danger"

@@ -2,6 +2,7 @@ import {
   applyThreadRetention,
   pruneAuditLog,
   pruneAuthArtifacts,
+  pruneExpiredQuotaOverrides,
   pruneShareLinks,
   pruneUsageEvents,
 } from '../lifecycle/retention.js';
@@ -66,6 +67,13 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'retention.auth-artifacts',
       intervalMs: 24 * HOUR,
       run: () => pruneAuthArtifacts(),
+    },
+    {
+      // Housekeeping only: a lapsed override already stops applying when a
+      // limit is read, so this never decides enforcement.
+      name: 'retention.quota-overrides',
+      intervalMs: 24 * HOUR,
+      run: () => pruneExpiredQuotaOverrides(),
     },
     {
       name: 'storage.prune-drained-objects',

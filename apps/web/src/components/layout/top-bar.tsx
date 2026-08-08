@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
-import { History, PanelLeft, Plus, Search } from 'lucide-react';
+import { Download, History, PanelLeft, Plus, Search } from 'lucide-react';
 import { useEffect } from 'react';
 import { ShareThreadDialog } from '~/components/chat/share-thread-dialog';
 import { ThemeMenu } from '~/components/layout/theme-menu';
@@ -69,6 +69,21 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
       )}
 
       <div className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1">
+        {params.threadId && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            asChild
+            aria-label="Download this conversation"
+            title="Download as Markdown"
+          >
+            {/* A plain link so the browser handles the download; the response
+                carries its own filename. */}
+            <a href={`/api/threads/${params.threadId}/export`} download>
+              <Download />
+            </a>
+          </Button>
+        )}
         {params.threadId && data?.features.shareLinks && (
           <ShareThreadDialog threadId={params.threadId} />
         )}

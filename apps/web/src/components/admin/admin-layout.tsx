@@ -3,6 +3,7 @@ import {
   Archive,
   ArrowLeft,
   Boxes,
+  ChartColumn,
   Cpu,
   Gauge,
   HardDrive,
@@ -55,6 +56,7 @@ const NAV_SECTIONS = [
   {
     label: 'Governance',
     items: [
+      { to: '/admin/usage', label: 'Usage', icon: ChartColumn },
       { to: '/admin/quotas', label: 'Usage quotas', icon: Gauge },
       { to: '/admin/storage-limits', label: 'Storage limits', icon: HardDrive },
       { to: '/admin/rate-limits', label: 'Rate limits', icon: Timer },

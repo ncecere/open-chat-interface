@@ -127,6 +127,27 @@ export async function pruneAuditLog(now: Date = new Date()): Promise<number> {
   return removed.length;
 }
 
+/**
+ * Removes lapsed quota overrides.
+ *
+ * Purely housekeeping: enforcement already filters on the expiry when it reads
+ * a limit, so an override stops applying the moment it lapses rather than when
+ * this runs. Deleting only keeps the table from accumulating dead rows.
+ */
+export async function pruneExpiredQuotaOverrides(now: Date = new Date()): Promise<number> {
+  const removed = await db
+    .delete(schema.quotaPolicyOverride)
+    .where(
+      and(
+        sql`${schema.quotaPolicyOverride.expiresAt} is not null`,
+        lte(schema.quotaPolicyOverride.expiresAt, daysAgo(7, now)),
+      ),
+    )
+    .returning({ id: schema.quotaPolicyOverride.id });
+
+  return removed.length;
+}
+
 /** Removes expired and long-revoked share links. */
 export async function pruneShareLinks(now: Date = new Date()): Promise<number> {
   const cutoff = daysAgo(30, now);

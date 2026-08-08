@@ -131,6 +131,8 @@ export interface StoredRetentionSettings {
   exemptPinnedThreads?: boolean;
   usageEventRetentionDays?: number;
   auditLogRetentionDays?: number;
+  /** Presentation only; policy timezones govern when limits actually reset. */
+  displayTimezone?: string;
 }
 
 export interface StoredRateLimitSettings {
@@ -145,6 +147,7 @@ export interface StoredRateLimitSettings {
     >
   >;
   authAttemptsPerMinute?: number;
+  reserve?: { costMicros?: number; tokens?: number };
 }
 
 interface SettingsMap {

@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
-import { DEFAULT_RESERVED_COST_MICROS, DEFAULT_RESERVED_TOKENS, type UserRole } from '@oci/shared';
+import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { quotaExceeded } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -42,12 +42,18 @@ export interface UsageReservation {
  * exactly one more generation instead of being locked out of the tail of their
  * own allowance.
  */
+export interface ReserveAmounts {
+  costMicros: number;
+  tokens: number;
+}
+
 function reservedAmounts(
   policies: EvaluablePolicy[],
   totals: Map<string, WindowTotals>,
-): { costMicros: number; tokens: number } {
-  let costMicros = DEFAULT_RESERVED_COST_MICROS;
-  let tokens = DEFAULT_RESERVED_TOKENS;
+  configured: ReserveAmounts,
+): ReserveAmounts {
+  let costMicros = configured.costMicros;
+  let tokens = configured.tokens;
 
   for (const policy of policies) {
     const used = usedForMetric(policy.metric, totals.get(policy.id) ?? emptyTotals());
@@ -118,63 +124,134 @@ async function windowTotalsIncludingPending(
  * reservation is what closes the gap between checking before a stream and
  * recording after it.
  */
+/**
+ * Records that a limit refused a run.
+ *
+ * Written after the reservation transaction has already rolled back, never
+ * inside it: the transaction aborts by design, so an insert made within it
+ * would be discarded along with everything else. Failing to record a denial
+ * must not turn a clean rejection into a server error, so this only logs.
+ */
+async function recordDenial(params: {
+  organizationId: string;
+  userId: string;
+  modelSlug: string;
+  policy: EvaluablePolicy;
+  now: Date;
+}): Promise<void> {
+  try {
+    await db
+      .insert(schema.quotaDenial)
+      .values({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        policyId: params.policy.id,
+        policyName: params.policy.name,
+        modelSlug: params.modelSlug,
+        day: params.now.toISOString().slice(0, 10),
+        denialCount: 1,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.quotaDenial.userId,
+          schema.quotaDenial.policyId,
+          schema.quotaDenial.modelSlug,
+          schema.quotaDenial.day,
+        ],
+        set: {
+          denialCount: sql`${schema.quotaDenial.denialCount} + 1`,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    logger.error({ error, policyId: params.policy.id }, 'Failed to record a quota denial');
+  }
+}
+
+/** Carries the refusing policy out of the transaction so it can be recorded. */
+class QuotaDenied extends Error {
+  constructor(readonly policy: EvaluablePolicy) {
+    super('Quota denied');
+  }
+}
+
 export async function reserveQuota(params: {
   userId: string;
   role: UserRole;
   modelSlug: string;
   policies: EvaluablePolicy[];
   pricing: ModelPricing;
+  /** Read before the transaction so settings lookups never widen it. */
+  reserve: ReserveAmounts;
 }): Promise<UsageReservation> {
   const organizationId = await getDefaultOrganizationId();
   const now = new Date();
 
-  const reservationId = await db.transaction(async (tx) => {
-    // Serializes concurrent reservations for one user without locking the
-    // table for everyone else.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`quota:${params.userId}`}))`);
+  const reservationId = await db
+    .transaction(async (tx) => {
+      // Serializes concurrent reservations for one user without locking the
+      // table for everyone else.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`quota:${params.userId}`}))`);
 
-    const totalsByPolicy = new Map<string, WindowTotals>();
+      const totalsByPolicy = new Map<string, WindowTotals>();
 
-    for (const policy of params.policies) {
-      const { start } = resolveWindow(policy, now);
-      const totals = await windowTotalsIncludingPending(
-        tx,
-        params.userId,
-        start,
-        now,
-        policy.modelSlugs,
-      );
-      totalsByPolicy.set(policy.id, totals);
+      for (const policy of params.policies) {
+        const { start } = resolveWindow(policy, now);
+        const totals = await windowTotalsIncludingPending(
+          tx,
+          params.userId,
+          start,
+          now,
+          policy.modelSlugs,
+        );
+        totalsByPolicy.set(policy.id, totals);
 
-      if (usedForMetric(policy.metric, totals) >= policy.limitValue) {
-        throw quotaExceeded(limitMessage(policy));
+        if (usedForMetric(policy.metric, totals) >= policy.limitValue) {
+          // Carried out of the transaction so the denial can be recorded after
+          // the rollback rather than being discarded by it.
+          throw new QuotaDenied(policy);
+        }
       }
-    }
 
-    const reserved = reservedAmounts(params.policies, totalsByPolicy);
+      const reserved = reservedAmounts(params.policies, totalsByPolicy, params.reserve);
 
-    const [created] = await tx
-      .insert(schema.usageEvent)
-      .values({
-        organizationId,
-        userId: params.userId,
-        modelSlug: params.modelSlug,
-        occurredAt: now,
-        messageCount: RESERVED_MESSAGE_COUNT,
-        tokensIn: 0,
-        tokensOut: 0,
-        costMicros: 0,
-        reservedCostMicros: reserved.costMicros,
-        reservedTokens: reserved.tokens,
-        inputPriceMicros: params.pricing.inputPriceMicros,
-        outputPriceMicros: params.pricing.outputPriceMicros,
-        pending: true,
-      })
-      .returning({ id: schema.usageEvent.id });
+      const [created] = await tx
+        .insert(schema.usageEvent)
+        .values({
+          organizationId,
+          userId: params.userId,
+          modelSlug: params.modelSlug,
+          occurredAt: now,
+          messageCount: RESERVED_MESSAGE_COUNT,
+          tokensIn: 0,
+          tokensOut: 0,
+          costMicros: 0,
+          reservedCostMicros: reserved.costMicros,
+          reservedTokens: reserved.tokens,
+          inputPriceMicros: params.pricing.inputPriceMicros,
+          outputPriceMicros: params.pricing.outputPriceMicros,
+          pending: true,
+        })
+        .returning({ id: schema.usageEvent.id });
 
-    if (!created) throw new Error('Failed to reserve quota');
-    return created.id;
-  });
+      if (!created) throw new Error('Failed to reserve quota');
+      return created.id;
+    })
+    .catch(async (error) => {
+      // The transaction has fully rolled back by now, which is exactly why the
+      // denial is recorded here rather than beside the check that raised it.
+      if (error instanceof QuotaDenied) {
+        await recordDenial({
+          organizationId,
+          userId: params.userId,
+          modelSlug: params.modelSlug,
+          policy: error.policy,
+          now,
+        });
+        throw quotaExceeded(limitMessage(error.policy));
+      }
+      throw error;
+    });
 
   return {
     id: reservationId,

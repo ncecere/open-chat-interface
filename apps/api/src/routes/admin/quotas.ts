@@ -8,6 +8,7 @@ import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
 import { isValidTimezone } from '../../services/quota/windows.js';
+import { overrideCountsByPolicy } from './overrides.js';
 
 export const quotaRoutes = new Hono<AppBindings>();
 
@@ -29,7 +30,7 @@ async function loadPolicies(organizationId: string, ids?: string[]): Promise<Quo
 
   const policyIds = rows.map((row) => row.id);
 
-  const [assignments, scopes] = await Promise.all([
+  const [assignments, scopes, overrideCounts] = await Promise.all([
     db
       .select({ policyId: schema.quotaPolicyRole.policyId, role: schema.quotaPolicyRole.role })
       .from(schema.quotaPolicyRole)
@@ -41,6 +42,7 @@ async function loadPolicies(organizationId: string, ids?: string[]): Promise<Quo
       })
       .from(schema.quotaPolicyModel)
       .where(inArray(schema.quotaPolicyModel.policyId, policyIds)),
+    overrideCountsByPolicy(),
   ]);
 
   const rolesByPolicy = new Map<string, QuotaPolicy['roles']>();
@@ -69,6 +71,9 @@ async function loadPolicies(organizationId: string, ids?: string[]): Promise<Quo
     enabled: row.enabled,
     roles: rolesByPolicy.get(row.id) ?? [],
     modelSlugs: (modelsByPolicy.get(row.id) ?? []).sort(),
+    // Surfaced so an override is discoverable from the policy as well as from
+    // the person it was granted to.
+    overrideCount: overrideCounts.get(row.id) ?? 0,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }));

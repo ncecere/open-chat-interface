@@ -168,6 +168,8 @@ export const quotaPolicySchema = z.object({
   roles: z.array(z.enum(USER_ROLES)),
   /** Empty means the policy applies to every model. */
   modelSlugs: z.array(z.string()),
+  /** How many people hold a per-user override of this policy's limit. */
+  overrideCount: z.number().int().nonnegative(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
