@@ -108,6 +108,8 @@ export const instanceSettingsSchema = z.object({
   }),
   storage: z.object({
     driver: z.enum(STORAGE_DRIVERS),
+    /** Read-only; the path must exist in the container, so it is env-managed. */
+    localPath: z.string(),
     maxFileBytes: z.number().int().positive(),
     maxFilesPerMessage: z.number().int().positive(),
     allowedMimeTypes: z.array(z.string()),
@@ -134,7 +136,9 @@ export const updateInstanceSettingsSchema = instanceSettingsSchema
   .omit({ smtp: true, search: true, storage: true })
   .extend({
     storage: instanceSettingsSchema.shape.storage
-      .omit({ s3: true })
+      // localPath is reported for reference only; it is fixed by the
+      // deployment and must not be writable through the admin API.
+      .omit({ s3: true, localPath: true })
       .partial()
       .extend({ s3: updateS3SettingsSchema.optional() })
       .optional(),

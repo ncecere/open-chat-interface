@@ -1,6 +1,7 @@
 import { type InstanceSettings, updateInstanceSettingsSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { loadEnv } from '../../config/env.js';
 import { encryptSecret } from '../../lib/crypto.js';
 import { providerError, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -46,6 +47,10 @@ settingsRoutes.get('/', async (c) => {
     features,
     storage: {
       driver: storage.driver,
+      // Read-only: the path has to exist inside the container, so it stays
+      // deployment-managed. Showing it saves an administrator from guessing
+      // which volume to back up.
+      localPath: loadEnv().STORAGE_LOCAL_PATH,
       maxFileBytes: storage.maxFileBytes,
       maxFilesPerMessage: storage.maxFilesPerMessage,
       allowedMimeTypes: storage.allowedMimeTypes,

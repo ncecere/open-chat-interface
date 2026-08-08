@@ -59,8 +59,12 @@ export function LoginPage() {
           <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               {!status?.localAuthEnabled && (
+                // The form stays usable because administrators still need a way
+                // in when an identity provider is misconfigured. Saying so
+                // plainly avoids the form looking simply broken to everyone else.
                 <p className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-muted)]">
-                  Password sign-in is disabled except for administrator recovery.
+                  Use one of the sign-in options above. Password sign-in is turned off for this
+                  instance and is kept only so administrators can recover access.
                 </p>
               )}
               <div className="flex flex-col gap-1.5">

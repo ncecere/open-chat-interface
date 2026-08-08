@@ -1,6 +1,5 @@
 import {
   type AdminModel,
-  COST_TIERS,
   type CostTier,
   MICROS_PER_DOLLAR,
   MODEL_CAPABILITIES,
@@ -317,44 +316,13 @@ export function ModelFormDialog({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-4">
-          <Field label="Cost tier" htmlFor="model-cost-tier">
-            <Select
-              id="model-cost-tier"
-              value={draft.costTier}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, costTier: event.target.value as CostTier }))
-              }
-            >
-              {COST_TIERS.map((tier) => (
-                <option key={tier} value={tier}>
-                  {tier}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Context window" htmlFor="model-context-window">
-            <Input
-              id="model-context-window"
-              type="number"
-              min={1}
-              value={draft.contextWindow}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, contextWindow: event.target.value }))
-              }
-            />
-          </Field>
-          <Field label="Max output" htmlFor="model-max-output">
-            <Input
-              id="model-max-output"
-              type="number"
-              min={1}
-              value={draft.maxOutputTokens}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, maxOutputTokens: event.target.value }))
-              }
-            />
-          </Field>
+        {/*
+         * Cost tier, context window, and max output are no longer edited here.
+         * They are provider facts rather than decisions an administrator makes,
+         * and keeping them on the form invited stale values that disagreed with
+         * the model itself. Existing values are preserved on save.
+         */}
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Sort order" htmlFor="model-sort-order">
             <Input
               id="model-sort-order"

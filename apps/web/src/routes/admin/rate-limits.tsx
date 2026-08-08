@@ -8,12 +8,20 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { AdminTabs } from '~/components/admin/admin-tabs';
 import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
+
+const TABS = [
+  { id: 'roles', label: 'By role' },
+  { id: 'reservations', label: 'Reservations' },
+] as const;
+
+type TabId = (typeof TABS)[number]['id'];
 
 interface RateLimitConfig {
   roles: Record<UserRole, RateLimitSettings>;
@@ -44,146 +52,164 @@ function RateLimitForm({ settings }: { settings: RateLimitConfig }) {
     }));
   }
 
+  const [tab, setTab] = useState<TabId>('roles');
+
   return (
-    <div className="flex flex-col gap-10 pb-10">
-      <SettingsSection
-        title="By role"
-        description="Concurrency bounds how many generations one person may run at once. The per-minute limits bound how fast requests arrive."
+    <div className="flex flex-col gap-8 pb-10">
+      <AdminTabs tabs={TABS} active={tab} onChange={setTab} label="Rate limit sections" />
+
+      <div
+        hidden={tab !== 'roles'}
+        id="panel-roles"
+        role="tabpanel"
+        className="flex flex-col gap-10"
       >
-        <div className="flex flex-col gap-5">
-          {USER_ROLES.map((role) => (
-            <div key={role} className="border-[var(--border-subtle)] border-b pb-5 last:border-0">
-              <h3 className="font-medium text-sm capitalize">{role}</h3>
-              <div className="mt-3 grid gap-4 sm:grid-cols-3">
-                <Field
-                  label="Concurrent responses"
-                  htmlFor={`rate-${role}-concurrent`}
-                  hint="How many generations may run at once."
-                >
-                  <Input
-                    id={`rate-${role}-concurrent`}
-                    type="number"
-                    min="1"
-                    value={draft.roles[role].maxConcurrentStreams}
-                    onChange={(event) =>
-                      update(role, 'maxConcurrentStreams', Number(event.target.value))
-                    }
-                  />
-                </Field>
+        <SettingsSection
+          title="By role"
+          description="Concurrency bounds how many generations one person may run at once. The per-minute limits bound how fast requests arrive."
+        >
+          <div className="flex flex-col gap-5">
+            {USER_ROLES.map((role) => (
+              <div key={role} className="border-[var(--border-subtle)] border-b pb-5 last:border-0">
+                <h3 className="font-medium text-sm capitalize">{role}</h3>
+                <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                  <Field
+                    label="Concurrent responses"
+                    htmlFor={`rate-${role}-concurrent`}
+                    hint="How many generations may run at once."
+                  >
+                    <Input
+                      id={`rate-${role}-concurrent`}
+                      type="number"
+                      min="1"
+                      value={draft.roles[role].maxConcurrentStreams}
+                      onChange={(event) =>
+                        update(role, 'maxConcurrentStreams', Number(event.target.value))
+                      }
+                    />
+                  </Field>
 
-                <Field label="Messages per minute" htmlFor={`rate-${role}-chat`}>
-                  <Input
-                    id={`rate-${role}-chat`}
-                    type="number"
-                    min="1"
-                    value={draft.roles[role].chatRequestsPerMinute}
-                    onChange={(event) =>
-                      update(role, 'chatRequestsPerMinute', Number(event.target.value))
-                    }
-                  />
-                </Field>
+                  <Field label="Messages per minute" htmlFor={`rate-${role}-chat`}>
+                    <Input
+                      id={`rate-${role}-chat`}
+                      type="number"
+                      min="1"
+                      value={draft.roles[role].chatRequestsPerMinute}
+                      onChange={(event) =>
+                        update(role, 'chatRequestsPerMinute', Number(event.target.value))
+                      }
+                    />
+                  </Field>
 
-                <Field label="Uploads per minute" htmlFor={`rate-${role}-upload`}>
-                  <Input
-                    id={`rate-${role}-upload`}
-                    type="number"
-                    min="1"
-                    value={draft.roles[role].uploadRequestsPerMinute}
-                    onChange={(event) =>
-                      update(role, 'uploadRequestsPerMinute', Number(event.target.value))
-                    }
-                  />
-                </Field>
+                  <Field label="Uploads per minute" htmlFor={`rate-${role}-upload`}>
+                    <Input
+                      id={`rate-${role}-upload`}
+                      type="number"
+                      min="1"
+                      value={draft.roles[role].uploadRequestsPerMinute}
+                      onChange={(event) =>
+                        update(role, 'uploadRequestsPerMinute', Number(event.target.value))
+                      }
+                    />
+                  </Field>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </SettingsSection>
+            ))}
+          </div>
+        </SettingsSection>
 
-      <SettingsSection
-        title="Reservations"
-        description="Held while a response generates, then replaced by what was actually used. Without a reservation, simultaneous runs all measure the same starting point and can collectively pass a limit; the concurrency cap above bounds the rest."
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Budget held per response"
-            htmlFor="reserve-cost"
-            hint="In US dollars. Anything unused is released as soon as the response finishes."
-          >
+        <SettingsSection
+          title="Sign-in attempts"
+          description="Counted per IP address and per account, so neither can be varied to evade the limit."
+        >
+          <Field label="Attempts per minute" htmlFor="rate-auth">
             <Input
-              id="reserve-cost"
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={(draft.reserve.costMicros / MICROS_PER_DOLLAR).toFixed(2)}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  reserve: {
-                    ...current.reserve,
-                    // Dollars are converted to integer micro-dollars so no
-                    // amount is ever stored as a float.
-                    costMicros: Math.max(
-                      1,
-                      Math.round(Number(event.target.value || 0) * MICROS_PER_DOLLAR),
-                    ),
-                  },
-                }))
-              }
-            />
-          </Field>
-
-          <Field
-            label="Tokens held per response"
-            htmlFor="reserve-tokens"
-            hint="Used by token limits in the same way."
-          >
-            <Input
-              id="reserve-tokens"
+              id="rate-auth"
               type="number"
               min="1"
-              step="100"
-              value={draft.reserve.tokens}
+              className="sm:max-w-48"
+              value={draft.authAttemptsPerMinute}
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,
-                  reserve: {
-                    ...current.reserve,
-                    tokens: Math.max(1, Number(event.target.value || 1)),
-                  },
+                  authAttemptsPerMinute: Number(event.target.value),
                 }))
               }
             />
           </Field>
-        </div>
+        </SettingsSection>
+      </div>
 
-        <p className="mt-3 text-[var(--text-muted)] text-xs">
-          A larger reservation keeps limits tighter but makes someone near their limit look closer
-          to it while a response is generating. It is never charged, and someone with less than this
-          left still gets one more response rather than being locked out of the remainder.
-        </p>
-      </SettingsSection>
-
-      <SettingsSection
-        title="Sign-in attempts"
-        description="Counted per IP address and per account, so neither can be varied to evade the limit."
+      <div
+        hidden={tab !== 'reservations'}
+        id="panel-reservations"
+        role="tabpanel"
+        className="flex flex-col gap-10"
       >
-        <Field label="Attempts per minute" htmlFor="rate-auth">
-          <Input
-            id="rate-auth"
-            type="number"
-            min="1"
-            className="sm:max-w-48"
-            value={draft.authAttemptsPerMinute}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                authAttemptsPerMinute: Number(event.target.value),
-              }))
-            }
-          />
-        </Field>
-      </SettingsSection>
+        <SettingsSection
+          title="Reservations"
+          description="Held while a response generates, then replaced by what was actually used. Without a reservation, simultaneous runs all measure the same starting point and can collectively pass a limit; the concurrency cap above bounds the rest."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Budget held per response"
+              htmlFor="reserve-cost"
+              hint="In US dollars. Anything unused is released as soon as the response finishes."
+            >
+              <Input
+                id="reserve-cost"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={(draft.reserve.costMicros / MICROS_PER_DOLLAR).toFixed(2)}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    reserve: {
+                      ...current.reserve,
+                      // Dollars are converted to integer micro-dollars so no
+                      // amount is ever stored as a float.
+                      costMicros: Math.max(
+                        1,
+                        Math.round(Number(event.target.value || 0) * MICROS_PER_DOLLAR),
+                      ),
+                    },
+                  }))
+                }
+              />
+            </Field>
+
+            <Field
+              label="Tokens held per response"
+              htmlFor="reserve-tokens"
+              hint="Used by token limits in the same way."
+            >
+              <Input
+                id="reserve-tokens"
+                type="number"
+                min="1"
+                step="100"
+                value={draft.reserve.tokens}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    reserve: {
+                      ...current.reserve,
+                      tokens: Math.max(1, Number(event.target.value || 1)),
+                    },
+                  }))
+                }
+              />
+            </Field>
+          </div>
+
+          <p className="mt-3 text-[var(--text-muted)] text-xs">
+            A larger reservation keeps limits tighter but makes someone near their limit look closer
+            to it while a response is generating. It is never charged, and someone with less than
+            this left still gets one more response rather than being locked out of the remainder.
+          </p>
+        </SettingsSection>
+      </div>
 
       <Notice title="Limits are shared across replicas through Redis">
         Without Redis these fall back to per-process counting, which means the effective limit is
