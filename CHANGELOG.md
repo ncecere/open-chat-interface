@@ -9,6 +9,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- An administration usage report covering activity, spend by model and person,
+  limit denials, and storage consumption, with a configurable reporting
+  timezone. Every figure is a count or a total; nothing reads conversation
+  content.
+- Per-user quota overrides with an optional expiry and reason, for policies a
+  person's role already carries.
+- Configurable reservation amounts, so how much a run holds before its real
+  usage is known can be tuned per instance.
+- Single-conversation Markdown download.
+
 - Quota policies can be scoped to specific models, so a family such as Anthropic
   or OpenAI carries its own independent budget. An unscoped policy still applies
   to every model, and a model in no policy remains unlimited.
