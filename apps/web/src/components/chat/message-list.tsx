@@ -117,15 +117,31 @@ function reasoningOf(message: UIMessage): string {
     .join('\n');
 }
 
-function ReasoningPanel({ text, streaming }: { text: string; streaming: boolean }) {
-  const [open, setOpen] = useState(false);
+function ReasoningPanel({
+  text,
+  streaming,
+  answerStarted,
+}: {
+  text: string;
+  streaming: boolean;
+  answerStarted: boolean;
+}) {
+  const [choice, setChoice] = useState<boolean | null>(null);
+
+  /**
+   * Expanded while reasoning is the only thing happening, so the wait shows
+   * something rather than hiding it behind a disclosure. It collapses once the
+   * answer starts, which is what the reader actually wants. An explicit click
+   * wins either way.
+   */
+  const open = choice ?? (streaming && !answerStarted);
 
   return (
     <div className="mb-6">
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setChoice(!open)}
         className="flex w-fit items-center gap-2 text-left text-[0.8125rem] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Brain className={cn('size-4 shrink-0', streaming && 'animate-pulse')} />
@@ -251,6 +267,21 @@ export function MessageList({
   const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const last = messages.at(-1);
+  const lastIsAssistant = last?.role === 'assistant';
+  const lastText = lastIsAssistant ? textOf(last) : '';
+  const lastReasoning = lastIsAssistant ? reasoningOf(last) : '';
+
+  // An assistant row exists well before it has anything to show, so presence
+  // of the row cannot stand in for progress.
+  const hasVisibleContent = Boolean(lastText || lastReasoning);
+
+  /**
+   * Reasoning arriving first is the one signal that distinguishes waiting for
+   * a model from waiting on the network, so it is worth naming.
+   */
+  const waitingLabel = lastReasoning ? 'Thinking' : 'Working on it';
+
   function cancelEdit() {
     if (saving) return;
     setEditingId(null);
@@ -350,7 +381,13 @@ export function MessageList({
         return (
           <article key={message.id} className="group flex flex-col" aria-label="Assistant message">
             {grounding && <SearchSourcesPanel grounding={grounding} />}
-            {reasoning && <ReasoningPanel text={reasoning} streaming={streaming && isLast} />}
+            {reasoning && (
+              <ReasoningPanel
+                text={reasoning}
+                streaming={streaming && isLast}
+                answerStarted={Boolean(text)}
+              />
+            )}
 
             <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
               <Markdown className={MARKDOWN_PROSE}>{text}</Markdown>
@@ -374,19 +411,30 @@ export function MessageList({
         );
       })}
 
+      {/*
+       * Shown from submission until the first visible content arrives, which
+       * is not the same as "until the assistant message exists": that row is
+       * created empty and can sit silent for seconds while a model reasons.
+       * Keying off content rather than message role is what makes the wait
+       * legible on every provider, including those that never reveal any
+       * reasoning at all.
+       */}
       {streaming &&
-        messages.at(-1)?.role === 'user' &&
+        !hasVisibleContent &&
         (searching ? (
           <SearchLoading />
         ) : (
-          <div role="status" className="flex gap-1.5 py-2" aria-label="Generating response">
-            {[0, 1, 2].map((dot) => (
-              <span
-                key={dot}
-                className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
-                style={{ animationDelay: `${dot * 0.15}s` }}
-              />
-            ))}
+          <div role="status" className="flex items-center gap-2 py-2" aria-label={waitingLabel}>
+            <span className="flex gap-1.5">
+              {[0, 1, 2].map((dot) => (
+                <span
+                  key={dot}
+                  className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
+                  style={{ animationDelay: `${dot * 0.15}s` }}
+                />
+              ))}
+            </span>
+            <span className="text-[0.8125rem] text-[var(--text-muted)]">{waitingLabel}</span>
           </div>
         ))}
     </div>

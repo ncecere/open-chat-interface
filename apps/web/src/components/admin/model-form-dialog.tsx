@@ -167,6 +167,10 @@ export function ModelFormDialog({
   const [slugTouched, setSlugTouched] = useState(Boolean(model));
   const [error, setError] = useState<string | null>(null);
 
+  // Whether thinking can be surfaced at all depends on the wire protocol, so
+  // the guidance follows whichever provider is selected.
+  const selectedProviderKind = providers.find((provider) => provider.id === draft.providerId)?.kind;
+
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       model ? api.patch(`/admin/models/${model.id}`, body) : api.post('/admin/models', body),
@@ -415,6 +419,13 @@ export function ModelFormDialog({
               setDraft((current) => ({ ...current, supportedEfforts }))
             }
           />
+          {draft.supportedEfforts.length > 0 && (
+            <p className="mt-2 text-[var(--text-muted)] text-xs leading-relaxed">
+              {selectedProviderKind === 'openai-compatible'
+                ? 'Effort is applied, but whether any thinking is shown depends on the model. Some report it and some return only the answer. If a model should show its thinking and does not, a provider using the Responses API may.'
+                : 'Effort is applied and a summary of the thinking is shown while the model works, when the model produces one.'}
+            </p>
+          )}
         </Field>
         <Field label="Visible to roles">
           <ChoicePills
