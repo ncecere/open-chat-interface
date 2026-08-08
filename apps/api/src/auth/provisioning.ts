@@ -40,9 +40,52 @@ export function isDomainAllowed(email: string, allowedDomains: string[]): boolea
   return domain ? allowedDomains.includes(domain) : false;
 }
 
+/** Most privileged first, so a tie between mappings resolves predictably. */
+const ROLE_PRECEDENCE: UserRole[] = ['admin', 'user', 'restricted'];
+
 /**
- * Resolves a role from IdP claims. The first matching mapping wins; otherwise
- * the provider's configured default role is used.
+ * Reads a claim, following dots into nested objects.
+ *
+ * SAML assertions and some OIDC providers nest group membership rather than
+ * exposing it at the top level, so `attributes.groups` has to be reachable.
+ */
+function claimValue(claims: Record<string, unknown>, path: string): unknown {
+  if (path in claims) return claims[path];
+
+  let current: unknown = claims;
+  for (const segment of path.split('.')) {
+    if (typeof current !== 'object' || current === null) return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+/**
+ * Whether a claim carries the expected value.
+ *
+ * Group membership arrives as an array far more often than as a scalar, and
+ * either shape has to match. Comparison is case-insensitive because directory
+ * services are inconsistent about the casing of group names, and a mapping
+ * that silently fails to match is worse than one that matches too readily.
+ */
+function claimMatches(value: unknown, expected: string): boolean {
+  const wanted = expected.trim().toLowerCase();
+  if (!wanted) return false;
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => String(entry).trim().toLowerCase() === wanted);
+  }
+  if (value === undefined || value === null) return false;
+  return String(value).trim().toLowerCase() === wanted;
+}
+
+/**
+ * Resolves a role from IdP claims or group membership.
+ *
+ * Every mapping is evaluated and the most privileged match wins, rather than
+ * the first one listed. Someone in both a staff group and an administrators
+ * group should not get a different role depending on the order an
+ * administrator happened to add the rows.
  */
 export function resolveRoleFromClaims(
   claims: Record<string, unknown> | undefined,
@@ -51,15 +94,16 @@ export function resolveRoleFromClaims(
 ): UserRole {
   if (!claims || mappings.length === 0) return defaultRole;
 
-  for (const mapping of mappings) {
-    const claimValue = claims[mapping.claim];
-    const matches = Array.isArray(claimValue)
-      ? claimValue.some((entry) => String(entry) === mapping.value)
-      : String(claimValue ?? '') === mapping.value;
+  const matched = mappings.filter(
+    (mapping) =>
+      USER_ROLES.includes(mapping.role) &&
+      claimMatches(claimValue(claims, mapping.claim), mapping.value),
+  );
 
-    if (matches && USER_ROLES.includes(mapping.role)) {
-      return mapping.role;
-    }
+  if (matched.length === 0) return defaultRole;
+
+  for (const role of ROLE_PRECEDENCE) {
+    if (matched.some((mapping) => mapping.role === role)) return role;
   }
 
   return defaultRole;

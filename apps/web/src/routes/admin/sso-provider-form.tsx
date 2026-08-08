@@ -178,11 +178,15 @@ function RoleMappings({
     <fieldset className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <legend className="text-sm font-medium text-[var(--text-primary)]">
-            Claim-to-role mappings
+          <legend className="font-medium text-[var(--text-primary)] text-sm">
+            Group and claim mappings
           </legend>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">
-            Assign a role when an exact claim value matches. The default role is used otherwise.
+          <p className="mt-1 max-w-2xl text-[var(--text-muted)] text-xs leading-relaxed">
+            Assign a role when a claim carries a value. Group membership usually arrives as a list,
+            and a rule matches if any entry does. Use a dotted path such as{' '}
+            <code className="rounded bg-black/20 px-1">attributes.groups</code> for a nested claim.
+            Matching ignores case. When several rules match, the most privileged role wins, so
+            ordering does not matter. The default role applies when nothing matches.
           </p>
         </div>
         <Button
@@ -207,7 +211,7 @@ function RoleMappings({
           key={mapping.draftId}
           className="grid gap-2 rounded-lg border border-[var(--border-subtle)] p-3 sm:grid-cols-[1fr_1fr_9rem_auto] sm:items-end"
         >
-          <Field label="Claim" htmlFor={`claim-${index}`}>
+          <Field label="Claim or group attribute" htmlFor={`claim-${index}`}>
             <Input
               id={`claim-${index}`}
               value={mapping.claim}
@@ -217,7 +221,7 @@ function RoleMappings({
               onChange={(event) => update(index, { claim: event.target.value })}
             />
           </Field>
-          <Field label="Exact value" htmlFor={`claim-value-${index}`}>
+          <Field label="Value to match" htmlFor={`claim-value-${index}`}>
             <Input
               id={`claim-value-${index}`}
               value={mapping.value}
