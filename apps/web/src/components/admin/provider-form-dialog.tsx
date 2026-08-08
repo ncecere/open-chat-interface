@@ -129,14 +129,12 @@ export function ProviderFormDialog({
             id="provider-kind"
             value={kind}
             disabled={kindLocked}
-            onChange={(event) => setKind(event.target.value as ProviderKind)}
-          >
-            {PROVIDER_KINDS.map((option) => (
-              <option key={option} value={option}>
-                {PROVIDER_KIND_LABELS[option]}
-              </option>
-            ))}
-          </Select>
+            onChange={(next) => setKind(next as ProviderKind)}
+            options={PROVIDER_KINDS.map((option) => ({
+              value: option,
+              label: PROVIDER_KIND_LABELS[option],
+            }))}
+          />
         </Field>
 
         <Field label="Display name" htmlFor="provider-label" hint="Shown only in this dashboard.">
@@ -178,12 +176,13 @@ export function ProviderFormDialog({
                 id="provider-credential-action"
                 aria-label="API key action"
                 value={credentialAction}
-                onChange={(event) => setCredentialAction(event.target.value as CredentialAction)}
-              >
-                <option value="keep">Keep the stored key</option>
-                <option value="replace">Replace the key</option>
-                <option value="clear">Remove the key</option>
-              </Select>
+                onChange={(next) => setCredentialAction(next as CredentialAction)}
+                options={[
+                  { value: 'keep', label: 'Keep the stored key' },
+                  { value: 'replace', label: 'Replace the key' },
+                  { value: 'clear', label: 'Remove the key' },
+                ]}
+              />
               {credentialAction === 'replace' && (
                 <Input
                   id="provider-api-key"

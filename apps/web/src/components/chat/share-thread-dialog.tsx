@@ -257,16 +257,15 @@ export function ShareThreadDialog({
               id="share-cutoff"
               value={cutoffId}
               disabled={messages.isLoading || create.isPending}
-              onChange={(event) => setCutoffId(event.target.value)}
-            >
-              <option value="">Latest messages (live)</option>
-              {publicMessages.map((message, index) => (
-                <option key={message.id} value={message.id}>
-                  {index + 1}. {message.role === 'user' ? 'You' : 'Assistant'}:{' '}
-                  {textPreview(message)}
-                </option>
-              ))}
-            </Select>
+              onChange={setCutoffId}
+              options={[
+                { value: '', label: 'Latest messages (live)' },
+                ...publicMessages.map((message, index) => ({
+                  value: message.id,
+                  label: `${index + 1}. ${message.role === 'user' ? 'You' : 'Assistant'}: ${textPreview(message)}`,
+                })),
+              ]}
+            />
           </Field>
 
           <Field

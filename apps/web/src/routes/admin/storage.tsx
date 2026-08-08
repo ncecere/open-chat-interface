@@ -358,17 +358,15 @@ function StorageSettingsForm({ initialSettings }: { initialSettings: StorageSett
                   id="storage-driver"
                   value={draft.driver}
                   disabled={save.isPending}
-                  onChange={(event) => {
+                  onChange={(next) => {
                     beginEdit();
-                    setDraft((current) => ({
-                      ...current,
-                      driver: event.target.value as StorageDriver,
-                    }));
+                    setDraft((current) => ({ ...current, driver: next as StorageDriver }));
                   }}
-                >
-                  <option value="local">Local filesystem</option>
-                  <option value="s3">S3-compatible object storage</option>
-                </Select>
+                  options={[
+                    { value: 'local', label: 'Local filesystem' },
+                    { value: 's3', label: 'S3-compatible object storage' },
+                  ]}
+                />
               </Field>
 
               {driverChanged && <DriverWarning driver={draft.driver} />}

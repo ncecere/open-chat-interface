@@ -203,16 +203,14 @@ export function QuotaPolicyDialog({
             <Select
               id="policy-metric"
               value={draft.metric}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, metric: event.target.value as QuotaMetric }))
+              onChange={(next) =>
+                setDraft((current) => ({ ...current, metric: next as QuotaMetric }))
               }
-            >
-              {QUOTA_METRICS.map((metric) => (
-                <option key={metric} value={metric}>
-                  {METRIC_LABELS[metric]}
-                </option>
-              ))}
-            </Select>
+              options={QUOTA_METRICS.map((metric) => ({
+                value: metric,
+                label: METRIC_LABELS[metric],
+              }))}
+            />
           </Field>
 
           <Field
@@ -239,19 +237,14 @@ export function QuotaPolicyDialog({
             <Select
               id="policy-window"
               value={draft.windowKind}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  windowKind: event.target.value as QuotaWindowKind,
-                }))
+              onChange={(next) =>
+                setDraft((current) => ({ ...current, windowKind: next as QuotaWindowKind }))
               }
-            >
-              {QUOTA_WINDOW_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {WINDOW_LABELS[kind]}
-                </option>
-              ))}
-            </Select>
+              options={QUOTA_WINDOW_KINDS.map((kind) => ({
+                value: kind,
+                label: WINDOW_LABELS[kind],
+              }))}
+            />
           </Field>
 
           {isRolling ? (
@@ -281,16 +274,12 @@ export function QuotaPolicyDialog({
               <Select
                 id="policy-timezone"
                 value={draft.timezone}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, timezone: event.target.value }))
-                }
-              >
-                {[...new Set([draft.timezone, ...COMMON_TIMEZONES])].map((zone) => (
-                  <option key={zone} value={zone}>
-                    {zone}
-                  </option>
-                ))}
-              </Select>
+                onChange={(timezone) => setDraft((current) => ({ ...current, timezone }))}
+                options={[...new Set([draft.timezone, ...COMMON_TIMEZONES])].map((zone) => ({
+                  value: zone,
+                  label: zone,
+                }))}
+              />
             </Field>
           )}
         </div>
