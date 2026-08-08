@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAllowance,
   calculateCostMicros,
+  describeLimit,
+  describeWindow,
   type EvaluablePolicy,
   formatMicros,
   limitMessage,
@@ -86,6 +88,42 @@ describe('metric selection', () => {
     ['cost', 250_000],
   ] as const)('reads the %s metric', (metric, expected) => {
     expect(usedForMetric(metric, totals)).toBe(expected);
+  });
+});
+
+/**
+ * These render the numbers an administrator sets a policy against. They are no
+ * longer reachable from a user-facing message, so they need their own coverage:
+ * a wrong figure here silently misstates what a limit actually is.
+ */
+describe('administrative limit descriptions', () => {
+  it('describes each metric in its own unit', () => {
+    expect(describeLimit(policy({ metric: 'messages', limitValue: 1_500 }))).toBe('1,500 messages');
+    expect(describeLimit(policy({ metric: 'tokens', limitValue: 40_000 }))).toBe('40,000 tokens');
+    expect(describeLimit(policy({ metric: 'cost', limitValue: 5 * MICROS_PER_DOLLAR }))).toBe(
+      '$5.00',
+    );
+  });
+
+  it('falls back to the raw value for an unrecognized metric', () => {
+    // Guards a metric added to the schema but not yet handled here.
+    expect(describeLimit(policy({ metric: 'requests' as never, limitValue: 42 }))).toBe('42');
+  });
+
+  it('describes every window kind', () => {
+    expect(describeWindow(policy({ windowKind: 'rolling', windowHours: 12 }))).toBe(
+      'the last 12 hours',
+    );
+    expect(describeWindow(policy({ windowKind: 'daily' }))).toBe('today');
+    expect(describeWindow(policy({ windowKind: 'weekly' }))).toBe('this week');
+    expect(describeWindow(policy({ windowKind: 'monthly' }))).toBe('this month');
+    expect(describeWindow(policy({ windowKind: 'yearly' as never }))).toBe('this window');
+  });
+
+  it('defaults a rolling window with no length to 24 hours', () => {
+    expect(describeWindow(policy({ windowKind: 'rolling', windowHours: null }))).toBe(
+      'the last 24 hours',
+    );
   });
 });
 
