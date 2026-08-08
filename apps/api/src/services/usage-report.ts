@@ -1,4 +1,4 @@
-import { schema, sql } from '@oci/db';
+import { and, eq, gte, inArray, schema, sql } from '@oci/db';
 import { db } from '../db/index.js';
 import { getDisplayTimezone } from './lifecycle/settings.js';
 
@@ -89,6 +89,12 @@ export async function dailyUsage(days: number): Promise<DailyUsage[]> {
   }));
 }
 
+/** A bounded list plus what it left out, so a truncated view says so. */
+export interface Bounded<T> {
+  entries: T[];
+  totalCount: number;
+}
+
 export interface ModelUsage {
   modelSlug: string;
   displayName: string | null;
@@ -106,8 +112,16 @@ export interface ModelUsage {
  * Error counts come from message status only. The message table holds
  * conversation content, so nothing but the status column is read here.
  */
-export async function modelUsage(days: number): Promise<ModelUsage[]> {
+export async function modelUsage(days: number, limit = 25): Promise<Bounded<ModelUsage>> {
   const start = rangeStart(days);
+
+  // A curated catalog can hold hundreds of models, so the table is capped and
+  // the remainder reported rather than rendered.
+  const [counted] = await db.execute<{ total: string }>(sql`
+    select count(distinct model_slug) as total
+    from usage_event
+    where occurred_at >= ${start}::timestamptz and pending = false
+  `);
 
   const rows = await db.execute<{
     model_slug: string;
@@ -131,26 +145,48 @@ export async function modelUsage(days: number): Promise<ModelUsage[]> {
     where e.occurred_at >= ${start}::timestamptz and e.pending = false
     group by e.model_slug, m.display_name, m.lab_id, m.enabled
     order by sum(e.cost_micros) desc, sum(e.message_count) desc
+    limit ${limit}
   `);
 
-  const errorRows = await db.execute<{ model_slug: string; errors: string }>(sql`
-    select model_slug, count(*) as errors
-    from message
-    where created_at >= ${start}::timestamptz and status = 'error' and model_slug is not null
-    group by model_slug
-  `);
-  const errorsBySlug = new Map(errorRows.map((row) => [row.model_slug, Number(row.errors)]));
+  // Only the models actually shown need an error count.
+  const shownSlugs = rows.map((row) => row.model_slug);
+  // Built through the query builder so the slug list is bound as an array
+  // rather than flattened into a single malformed parameter.
+  const errorRows =
+    shownSlugs.length === 0
+      ? []
+      : await db
+          .select({
+            modelSlug: schema.message.modelSlug,
+            errors: sql<number>`count(*)::int`,
+          })
+          .from(schema.message)
+          .where(
+            and(
+              gte(schema.message.createdAt, new Date(start)),
+              eq(schema.message.status, 'error'),
+              inArray(schema.message.modelSlug, shownSlugs),
+            ),
+          )
+          .groupBy(schema.message.modelSlug);
 
-  return rows.map((row) => ({
-    modelSlug: row.model_slug,
-    displayName: row.display_name,
-    labId: row.lab_id,
-    enabled: row.enabled ?? false,
-    messages: Number(row.messages),
-    tokens: Number(row.tokens),
-    costMicros: Number(row.cost_micros),
-    errors: errorsBySlug.get(row.model_slug) ?? 0,
-  }));
+  const errorsBySlug = new Map(
+    errorRows.flatMap((row) => (row.modelSlug ? [[row.modelSlug, Number(row.errors)]] : [])),
+  );
+
+  return {
+    entries: rows.map((row) => ({
+      modelSlug: row.model_slug,
+      displayName: row.display_name,
+      labId: row.lab_id,
+      enabled: row.enabled ?? false,
+      messages: Number(row.messages),
+      tokens: Number(row.tokens),
+      costMicros: Number(row.cost_micros),
+      errors: errorsBySlug.get(row.model_slug) ?? 0,
+    })),
+    totalCount: Number(counted?.total ?? 0),
+  };
 }
 
 export interface ConsumerUsage {
@@ -164,7 +200,15 @@ export interface ConsumerUsage {
 }
 
 /** Heaviest consumers. Identity and counts only; never conversation content. */
-export async function topConsumers(days: number, limit = 10): Promise<ConsumerUsage[]> {
+export async function topConsumers(days: number, limit = 10): Promise<Bounded<ConsumerUsage>> {
+  // Grows with the user base, so the page shows a leaderboard and says how
+  // many people are behind it rather than listing everyone.
+  const [counted] = await db.execute<{ total: string }>(sql`
+    select count(distinct user_id) as total
+    from usage_event
+    where occurred_at >= ${rangeStart(days)}::timestamptz and pending = false
+  `);
+
   const rows = await db.execute<{
     user_id: string;
     name: string;
@@ -187,15 +231,18 @@ export async function topConsumers(days: number, limit = 10): Promise<ConsumerUs
     limit ${limit}
   `);
 
-  return rows.map((row) => ({
-    userId: row.user_id,
-    name: row.name,
-    email: row.email,
-    role: row.role,
-    messages: Number(row.messages),
-    tokens: Number(row.tokens),
-    costMicros: Number(row.cost_micros),
-  }));
+  return {
+    entries: rows.map((row) => ({
+      userId: row.user_id,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      messages: Number(row.messages),
+      tokens: Number(row.tokens),
+      costMicros: Number(row.cost_micros),
+    })),
+    totalCount: Number(counted?.total ?? 0),
+  };
 }
 
 export interface ActivitySummary {
@@ -302,6 +349,8 @@ export interface StorageSummary {
   pendingBytes: number;
   pendingFileCount: number;
   topUsers: Array<{ userId: string; name: string; email: string; bytes: number; files: number }>;
+  /** How many people hold storage, behind the capped list above. */
+  totalUsers: number;
 }
 
 /** Where object storage is actually going. */
@@ -338,7 +387,12 @@ export async function storageSummary(): Promise<StorageSummary> {
     limit 10
   `);
 
+  const [countedUsers] = await db.execute<{ total: string }>(sql`
+    select count(distinct user_id) as total from attachment where deleted_at is null
+  `);
+
   return {
+    totalUsers: Number(countedUsers?.total ?? 0),
     liveBytes: Number(totals?.live_bytes ?? 0),
     liveFileCount: Number(totals?.live_files ?? 0),
     pendingBytes: Number(totals?.pending_bytes ?? 0),
@@ -367,8 +421,13 @@ export interface DenialSummary {
  * rather than that anyone is misbehaving; that distinction is the whole point
  * of reporting distinct users alongside the raw count.
  */
-export async function denialSummary(days: number): Promise<DenialSummary[]> {
+export async function denialSummary(days: number, limit = 25): Promise<Bounded<DenialSummary>> {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  // Grows with policies times people, so it is capped like the others.
+  const [counted] = await db.execute<{ total: string }>(sql`
+    select count(distinct policy_id) as total from quota_denial where day >= ${since}
+  `);
 
   const rows = await db.execute<{
     policy_id: string | null;
@@ -383,14 +442,18 @@ export async function denialSummary(days: number): Promise<DenialSummary[]> {
     where day >= ${since}
     group by policy_id, policy_name
     order by sum(denial_count) desc
+    limit ${limit}
   `);
 
-  return rows.map((row) => ({
-    policyId: row.policy_id,
-    policyName: row.policy_name,
-    denials: Number(row.denials),
-    usersAffected: Number(row.users_affected),
-  }));
+  return {
+    entries: rows.map((row) => ({
+      policyId: row.policy_id,
+      policyName: row.policy_name,
+      denials: Number(row.denials),
+      usersAffected: Number(row.users_affected),
+    })),
+    totalCount: Number(counted?.total ?? 0),
+  };
 }
 
 export interface IdleModel {
@@ -403,23 +466,39 @@ export interface IdleModel {
  * Models enabled in the catalog but unused over the range. Directly actionable
  * for a curated catalog: an enabled model nobody picks is a choice to revisit.
  */
-export async function idleModels(days: number): Promise<IdleModel[]> {
+export async function idleModels(days: number, limit = 30): Promise<Bounded<IdleModel>> {
+  const start = rangeStart(days);
+
+  const [counted] = await db.execute<{ total: string }>(sql`
+    select count(*) as total
+    from model m
+    where m.enabled = true
+      and not exists (
+        select 1 from usage_event e
+        where e.model_slug = m.slug and e.occurred_at >= ${start}::timestamptz
+      )
+  `);
+
   const rows = await db.execute<{ slug: string; display_name: string; lab_id: string | null }>(sql`
     select m.slug, m.display_name, m.lab_id
     from model m
     where m.enabled = true
       and not exists (
         select 1 from usage_event e
-        where e.model_slug = m.slug and e.occurred_at >= ${rangeStart(days)}::timestamptz
+        where e.model_slug = m.slug and e.occurred_at >= ${start}::timestamptz
       )
     order by m.display_name
+    limit ${limit}
   `);
 
-  return rows.map((row) => ({
-    slug: row.slug,
-    displayName: row.display_name,
-    labId: row.lab_id,
-  }));
+  return {
+    entries: rows.map((row) => ({
+      slug: row.slug,
+      displayName: row.display_name,
+      labId: row.lab_id,
+    })),
+    totalCount: Number(counted?.total ?? 0),
+  };
 }
 
 export async function usageRange(days: number): Promise<UsageReportRange> {

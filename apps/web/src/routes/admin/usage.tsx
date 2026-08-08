@@ -38,11 +38,17 @@ interface OverviewResponse {
   daily: Array<{ day: string; messages: number; activeUsers: number }>;
 }
 
+/** A capped list plus the true total, so a truncated view can say so. */
+interface Bounded<T> {
+  entries: T[];
+  totalCount: number;
+}
+
 interface SpendResponse {
   range: Range;
   totals: Totals;
   daily: Array<{ day: string; messages: number; tokens: number; costMicros: number }>;
-  models: Array<{
+  models: Bounded<{
     modelSlug: string;
     displayName: string | null;
     labId: string | null;
@@ -52,19 +58,19 @@ interface SpendResponse {
     costMicros: number;
     errors: number;
   }>;
-  consumers: Array<{
+  consumers: Bounded<{
     userId: string;
     name: string;
     email: string;
     messages: number;
     costMicros: number;
   }>;
-  idleModels: Array<{ slug: string; displayName: string; labId: string | null }>;
+  idleModels: Bounded<{ slug: string; displayName: string; labId: string | null }>;
 }
 
 interface LimitsResponse {
   range: Range;
-  denials: Array<{
+  denials: Bounded<{
     policyId: string | null;
     policyName: string;
     denials: number;
@@ -78,6 +84,7 @@ interface StorageResponse {
   pendingBytes: number;
   pendingFileCount: number;
   topUsers: Array<{ userId: string; name: string; email: string; bytes: number; files: number }>;
+  totalUsers: number;
 }
 
 const TABS = [
@@ -164,6 +171,16 @@ function Trend({
         <span>{points.at(-1)?.day}</span>
       </div>
     </div>
+  );
+}
+
+/** States what a capped list left out, so a partial view never reads as whole. */
+function TruncationNote({ shown, total, noun }: { shown: number; total: number; noun: string }) {
+  if (total <= shown) return null;
+  return (
+    <p className="mt-2 text-[var(--text-muted)] text-xs">
+      Showing the top {shown} of {total.toLocaleString()} {noun}.
+    </p>
   );
 }
 
@@ -294,7 +311,7 @@ function SpendTab({ days }: { days: number }) {
         title="By model"
         description="Where the consumption goes, and how often a model failed to answer."
       >
-        {data.models.length === 0 ? (
+        {data.models.entries.length === 0 ? (
           <p className="text-[var(--text-muted)] text-sm">Nothing recorded in this range.</p>
         ) : (
           <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
@@ -309,7 +326,7 @@ function SpendTab({ days }: { days: number }) {
                 </tr>
               </thead>
               <tbody>
-                {data.models.map((model) => (
+                {data.models.entries.map((model) => (
                   <tr
                     key={model.modelSlug}
                     className="border-[var(--border-subtle)] border-b last:border-0"
@@ -341,6 +358,11 @@ function SpendTab({ days }: { days: number }) {
                 ))}
               </tbody>
             </table>
+            <TruncationNote
+              shown={data.models.entries.length}
+              total={data.models.totalCount}
+              noun="models used"
+            />
           </div>
         )}
       </SettingsSection>
@@ -350,7 +372,7 @@ function SpendTab({ days }: { days: number }) {
         description="Who is using the most. Identity and volume only; conversations are never shown here."
       >
         <PeopleList
-          entries={data.consumers.map((consumer) => ({
+          entries={data.consumers.entries.map((consumer) => ({
             userId: consumer.userId,
             name: consumer.name,
             email: consumer.email,
@@ -358,17 +380,22 @@ function SpendTab({ days }: { days: number }) {
             secondary: `${compact(consumer.messages)} messages`,
           }))}
         />
+        <TruncationNote
+          shown={data.consumers.entries.length}
+          total={data.consumers.totalCount}
+          noun="people"
+        />
       </SettingsSection>
 
       <SettingsSection
         title="Unused models"
         description="Enabled in the catalog but not chosen by anyone in this range."
       >
-        {data.idleModels.length === 0 ? (
+        {data.idleModels.entries.length === 0 ? (
           <p className="text-[var(--text-muted)] text-sm">Every enabled model was used.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {data.idleModels.map((model) => (
+            {data.idleModels.entries.map((model) => (
               <span
                 key={model.slug}
                 className="flex items-center gap-1.5 rounded-full bg-[var(--bg-control-alt)] px-3 py-1 text-xs"
@@ -379,6 +406,11 @@ function SpendTab({ days }: { days: number }) {
             ))}
           </div>
         )}
+        <TruncationNote
+          shown={data.idleModels.entries.length}
+          total={data.idleModels.totalCount}
+          noun="unused models"
+        />
       </SettingsSection>
 
       {!data.range.exact && (
@@ -404,13 +436,13 @@ function LimitsTab({ days }: { days: number }) {
       title="Limit denials"
       description="Runs a limit refused. Denials spread across many people usually mean a limit is set too low rather than that anyone is misbehaving."
     >
-      {data.denials.length === 0 ? (
+      {data.denials.entries.length === 0 ? (
         <p className="text-[var(--text-muted)] text-sm">
           No one was stopped by a limit in this range.
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-          {data.denials.map((denial) => (
+          {data.denials.entries.map((denial) => (
             <div
               key={`${denial.policyId}-${denial.policyName}`}
               className="flex items-center justify-between gap-4 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
@@ -428,6 +460,11 @@ function LimitsTab({ days }: { days: number }) {
           ))}
         </div>
       )}
+      <TruncationNote
+        shown={data.denials.entries.length}
+        total={data.denials.totalCount}
+        noun="limits"
+      />
     </SettingsSection>
   );
 }
@@ -463,6 +500,11 @@ function StorageTab() {
             primary: bytes(entry.bytes),
             secondary: `${compact(entry.files)} files`,
           }))}
+        />
+        <TruncationNote
+          shown={data.topUsers.length}
+          total={data.totalUsers}
+          noun="people holding files"
         />
       </SettingsSection>
     </div>
