@@ -405,17 +405,6 @@ export function ModelFormDialog({
               onCheckedChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
             />
           </label>
-          <label
-            htmlFor="model-default"
-            className="flex items-center justify-between gap-3 text-sm"
-          >
-            Default model
-            <Switch
-              id="model-default"
-              checked={draft.isDefault}
-              onCheckedChange={(isDefault) => setDraft((current) => ({ ...current, isDefault }))}
-            />
-          </label>
         </div>
 
         {error && (
