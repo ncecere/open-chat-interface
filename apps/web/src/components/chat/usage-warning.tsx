@@ -5,33 +5,14 @@ import { toast } from 'sonner';
 import { api } from '~/lib/api-client';
 
 /**
- * How much of an allowance is left, as a percentage.
- *
- * Deliberately not the underlying messages, tokens, or dollars: those are
- * three different units that mean little to the reader, and spend is instance
- * cost rather than something a user should be shown.
- */
-function percentRemaining(allowance: UsageAllowance): number {
-  const fraction = Math.max(0, 1 - allowance.used / allowance.limitValue);
-  return fraction > 0 ? Math.max(1, Math.floor(fraction * 100)) : 0;
-}
-
-function resetLabel(allowance: UsageAllowance): string {
-  if (!allowance.resetsAt) return '';
-  const remaining = new Date(allowance.resetsAt).getTime() - Date.now();
-  if (remaining <= 0) return '';
-
-  const hours = Math.ceil(remaining / 3_600_000);
-  if (hours >= 24) return ` Resets in ${Math.ceil(hours / 24)} day${hours >= 48 ? 's' : ''}.`;
-  return ` Resets in ${hours} hour${hours === 1 ? '' : 's'}.`;
-}
-
-/**
  * Warns before a user is cut off rather than after.
  *
- * A toast rather than an inline banner: the warning is worth interrupting for
- * once, but it should not permanently occupy space above the composer or
- * outgrow the input it sits over.
+ * A toast rather than an inline banner: worth interrupting for once, but it
+ * should not permanently occupy space above the composer.
+ *
+ * The message carries no numbers at all. A toast is an interruption, so it
+ * only needs to say that attention is warranted and which limit is involved;
+ * the meter in settings is where someone goes to see how much is left.
  *
  * Severity is computed server-side so this cannot disagree with enforcement.
  */
@@ -59,17 +40,17 @@ export function UsageWarning() {
       announced.current.set(allowance.policyId, allowance.severity);
 
       const exceeded = allowance.severity === 'exceeded';
-      const scoped = allowance.modelSlugs.length > 0;
-
-      const description = exceeded
-        ? `${scoped ? 'Other models are still available.' : ''}${resetLabel(allowance)}`.trim()
-        : `${percentRemaining(allowance)}% remaining.${resetLabel(allowance)}`;
+      const options = {
+        id: `usage-${allowance.policyId}`,
+        description:
+          exceeded && allowance.modelSlugs.length > 0
+            ? 'Other models are still available.'
+            : undefined,
+      };
 
       const message = exceeded
-        ? `You have used all of your ${allowance.name} allowance.`
-        : `You are close to your ${allowance.name} limit.`;
-
-      const options = { id: `usage-${allowance.policyId}`, description };
+        ? `You have reached your ${allowance.name} limit.`
+        : `You are approaching your ${allowance.name} limit.`;
 
       if (exceeded || allowance.severity === 'critical') toast.error(message, options);
       else toast.warning(message, options);
