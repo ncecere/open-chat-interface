@@ -203,27 +203,23 @@ function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettin
                 id="search-provider"
                 value={draft.provider ?? 'off'}
                 disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(validation.provider)}
-                onChange={(event) => {
+                onChange={(next) => {
                   beginEdit();
-                  const provider =
-                    event.target.value === 'off'
-                      ? null
-                      : (event.target.value as SearchProviderKind);
+                  const provider = next === 'off' ? null : (next as SearchProviderKind);
                   setDraft((current) => ({
                     ...current,
                     provider,
                     enabled: provider === null ? false : current.enabled,
                   }));
                 }}
-              >
-                <option value="off">Off / no provider</option>
-                {SEARCH_PROVIDER_KINDS.map((provider) => (
-                  <option key={provider} value={provider}>
-                    {PROVIDER_LABELS[provider]}
-                  </option>
-                ))}
-              </Select>
+                options={[
+                  { value: 'off', label: 'Off / no provider' },
+                  ...SEARCH_PROVIDER_KINDS.map((provider) => ({
+                    value: provider,
+                    label: PROVIDER_LABELS[provider],
+                  })),
+                ]}
+              />
             </Field>
 
             <Field

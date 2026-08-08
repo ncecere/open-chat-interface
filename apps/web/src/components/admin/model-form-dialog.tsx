@@ -221,17 +221,12 @@ export function ModelFormDialog({
             <Select
               id="model-provider"
               value={draft.providerId}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, providerId: event.target.value }))
-              }
-            >
-              {providers.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.label}
-                  {provider.enabled ? '' : ' (disabled)'}
-                </option>
-              ))}
-            </Select>
+              onChange={(providerId) => setDraft((current) => ({ ...current, providerId }))}
+              options={providers.map((provider) => ({
+                value: provider.id,
+                label: `${provider.label}${provider.enabled ? '' : ' (disabled)'}`,
+              }))}
+            />
           </Field>
 
           <Field
@@ -247,17 +242,12 @@ export function ModelFormDialog({
                 id="model-lab"
                 className="min-w-0 flex-1"
                 value={draft.labId}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, labId: event.target.value }))
-                }
-              >
-                <option value="">No lab</option>
-                {MODEL_LABS.map((lab) => (
-                  <option key={lab.id} value={lab.id}>
-                    {lab.name}
-                  </option>
-                ))}
-              </Select>
+                onChange={(labId) => setDraft((current) => ({ ...current, labId }))}
+                options={[
+                  { value: '', label: 'No lab' },
+                  ...MODEL_LABS.map((lab) => ({ value: lab.id, label: lab.name })),
+                ]}
+              />
             </div>
           </Field>
 

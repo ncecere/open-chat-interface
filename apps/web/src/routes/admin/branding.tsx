@@ -411,15 +411,12 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
                   id="default-theme"
                   value={draft.defaultTheme}
                   disabled={save.isPending}
-                  aria-invalid={Boolean(errors.defaultTheme)}
-                  onChange={(event) => updateField('defaultTheme', event.target.value as ThemeMode)}
-                >
-                  {THEME_MODES.map((theme) => (
-                    <option key={theme} value={theme}>
-                      {THEME_LABELS[theme]}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(next) => updateField('defaultTheme', next as ThemeMode)}
+                  options={THEME_MODES.map((theme) => ({
+                    value: theme,
+                    label: THEME_LABELS[theme],
+                  }))}
+                />
               </Field>
             </div>
           </SettingsSection>

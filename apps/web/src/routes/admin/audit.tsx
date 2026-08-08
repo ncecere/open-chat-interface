@@ -363,15 +363,12 @@ export function AdminAuditPage() {
             id="audit-action"
             value={action}
             aria-label="Filter audit events by action"
-            onChange={(event) => setAction(event.target.value)}
-          >
-            <option value="all">All actions</option>
-            {actions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </Select>
+            onChange={setAction}
+            options={[
+              { value: 'all', label: 'All actions' },
+              ...actions.map((option) => ({ value: option, label: option })),
+            ]}
+          />
         </div>
       </div>
 

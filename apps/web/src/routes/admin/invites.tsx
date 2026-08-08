@@ -196,14 +196,12 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           <Select
             id="invite-role"
             value={role}
-            onChange={(event) => setRole(event.target.value as UserRole)}
-          >
-            {USER_ROLES.map((option) => (
-              <option key={option} value={option}>
-                {option.charAt(0).toUpperCase() + option.slice(1)}
-              </option>
-            ))}
-          </Select>
+            onChange={(next) => setRole(next as UserRole)}
+            options={USER_ROLES.map((option) => ({
+              value: option,
+              label: option.charAt(0).toUpperCase() + option.slice(1),
+            }))}
+          />
         </Field>
 
         <Field

@@ -122,14 +122,13 @@ export function AuthenticationSettingsForm({
               id="registration-mode"
               value={draft.registrationMode}
               disabled={save.isPending}
-              onChange={(event) =>
-                setRegistrationMode(event.target.value as AuthSettings['registrationMode'])
-              }
-            >
-              <option value="open">Open registration</option>
-              <option value="invite_only">Invite only</option>
-              <option value="closed">Closed</option>
-            </Select>
+              onChange={(next) => setRegistrationMode(next as AuthSettings['registrationMode'])}
+              options={[
+                { value: 'open', label: 'Open registration' },
+                { value: 'invite_only', label: 'Invite only' },
+                { value: 'closed', label: 'Closed' },
+              ]}
+            />
           </Field>
         </SettingsSection>
 

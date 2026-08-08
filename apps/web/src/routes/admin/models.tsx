@@ -160,14 +160,9 @@ function ModelRow({ model, onEdit }: { model: AdminModel; onEdit: () => void }) 
               <Select
                 id={`cost-${model.id}`}
                 value={model.costTier}
-                onChange={(event) => update.mutate({ costTier: event.target.value })}
-              >
-                {COST_TIERS.map((tier) => (
-                  <option key={tier} value={tier}>
-                    {tier}
-                  </option>
-                ))}
-              </Select>
+                onChange={(costTier) => update.mutate({ costTier })}
+                options={COST_TIERS.map((tier) => ({ value: tier, label: tier }))}
+              />
             </Field>
           </div>
 

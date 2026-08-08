@@ -21,6 +21,13 @@ import {
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
+
+/** Both SAML algorithm fields offer the same choices. */
+const ALGORITHM_OPTIONS = [
+  { value: 'sha256', label: 'SHA-256' },
+  { value: 'sha512', label: 'SHA-512' },
+] as const;
+
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { ApiError, api } from '~/lib/api-client';
@@ -225,14 +232,12 @@ function RoleMappings({
               id={`claim-role-${index}`}
               value={mapping.role}
               disabled={disabled}
-              onChange={(event) => update(index, { role: event.target.value as UserRole })}
-            >
-              {USER_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
-                </option>
-              ))}
-            </Select>
+              onChange={(next) => update(index, { role: next as UserRole })}
+              options={USER_ROLES.map((role) => ({
+                value: role,
+                label: role.charAt(0).toUpperCase() + role.slice(1),
+              }))}
+            />
           </Field>
           <Button
             type="button"
@@ -283,14 +288,12 @@ function PolicyFields({
             id="sso-default-role"
             value={policy.defaultRole}
             disabled={disabled}
-            onChange={(event) => set('defaultRole', event.target.value as UserRole)}
-          >
-            {USER_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {role.charAt(0).toUpperCase() + role.slice(1)}
-              </option>
-            ))}
-          </Select>
+            onChange={(next) => set('defaultRole', next as UserRole)}
+            options={USER_ROLES.map((role) => ({
+              value: role,
+              label: role.charAt(0).toUpperCase() + role.slice(1),
+            }))}
+          />
         </Field>
       </div>
       <Field
@@ -523,24 +526,18 @@ function SamlFields({
             id="saml-signature-algorithm"
             value={protocol.signatureAlgorithm}
             disabled={disabled}
-            onChange={(event) =>
-              set('signatureAlgorithm', event.target.value as 'sha256' | 'sha512')
-            }
-          >
-            <option value="sha256">SHA-256</option>
-            <option value="sha512">SHA-512</option>
-          </Select>
+            onChange={(next) => set('signatureAlgorithm', next as 'sha256' | 'sha512')}
+            options={ALGORITHM_OPTIONS}
+          />
         </Field>
         <Field label="Digest algorithm" htmlFor="saml-digest-algorithm">
           <Select
             id="saml-digest-algorithm"
             value={protocol.digestAlgorithm}
             disabled={disabled}
-            onChange={(event) => set('digestAlgorithm', event.target.value as 'sha256' | 'sha512')}
-          >
-            <option value="sha256">SHA-256</option>
-            <option value="sha512">SHA-512</option>
-          </Select>
+            onChange={(next) => set('digestAlgorithm', next as 'sha256' | 'sha512')}
+            options={ALGORITHM_OPTIONS}
+          />
         </Field>
       </div>
     </section>
@@ -694,13 +691,12 @@ export function SsoProviderForm({
                   id="sso-kind"
                   value={protocol.kind}
                   disabled={save.isPending}
-                  onChange={(event) =>
-                    setProtocol({ ...protocol, kind: event.target.value as ProviderKind })
-                  }
-                >
-                  <option value="oidc">OpenID Connect</option>
-                  <option value="saml">SAML 2.0</option>
-                </Select>
+                  onChange={(next) => setProtocol({ ...protocol, kind: next as ProviderKind })}
+                  options={[
+                    { value: 'oidc', label: 'OpenID Connect' },
+                    { value: 'saml', label: 'SAML 2.0' },
+                  ]}
+                />
               </Field>
               <Field
                 label="Provider ID"
