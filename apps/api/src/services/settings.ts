@@ -16,7 +16,15 @@ export type SettingKey =
 
 export interface BrandingSettings {
   appName: string;
+  /** Optional compact mark for the sidebar; initials are derived when unset. */
+  shortName: string | null;
+  /**
+   * Either an external URL or a storage key under `branding/`. An uploaded
+   * logo is stored rather than linked so it survives the source going away.
+   */
   logoUrl: string | null;
+  /** Content type of an uploaded logo; unused for an external URL. */
+  logoMimeType: string | null;
   accentColor: string | null;
   loginMessage: string | null;
   defaultTheme: 'light' | 'dark' | 'system';
@@ -27,6 +35,9 @@ export interface BrandingSettings {
 export function normalizeBrandingSettings(value: BrandingSettings): BrandingSettings {
   return {
     ...value,
+    // Written before a short name was configurable.
+    shortName: value?.shortName ?? null,
+    logoMimeType: value?.logoMimeType ?? null,
     colorTheme: COLOR_THEMES.includes(value?.colorTheme as ColorTheme)
       ? value.colorTheme
       : 'neutral',

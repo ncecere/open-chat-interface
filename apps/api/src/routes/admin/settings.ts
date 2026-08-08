@@ -8,6 +8,7 @@ import { logger } from '../../lib/logger.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
 import { getSetting, updateSetting } from '../../services/settings.js';
 import {
   applyS3SettingsPatch,
@@ -35,7 +36,8 @@ settingsRoutes.get('/', async (c) => {
 
   const payload: InstanceSettings = {
     appName: branding.appName,
-    logoUrl: branding.logoUrl,
+    shortName: branding.shortName,
+    logoUrl: publicLogoUrl(branding.logoUrl),
     accentColor: branding.accentColor,
     loginMessage: branding.loginMessage,
     defaultTheme: branding.defaultTheme,
@@ -115,6 +117,7 @@ settingsRoutes.patch('/', async (c) => {
 
   if (
     patch.appName !== undefined ||
+    patch.shortName !== undefined ||
     patch.logoUrl !== undefined ||
     patch.accentColor !== undefined ||
     patch.loginMessage !== undefined ||
@@ -123,6 +126,7 @@ settingsRoutes.patch('/', async (c) => {
   ) {
     await updateSetting('branding', {
       ...(patch.appName !== undefined && { appName: patch.appName }),
+      ...(patch.shortName !== undefined && { shortName: patch.shortName }),
       ...(patch.logoUrl !== undefined && { logoUrl: patch.logoUrl }),
       ...(patch.accentColor !== undefined && { accentColor: patch.accentColor }),
       ...(patch.loginMessage !== undefined && { loginMessage: patch.loginMessage }),
@@ -206,6 +210,51 @@ settingsRoutes.patch('/', async (c) => {
     action: 'settings.update',
     targetType: 'instance',
     metadata: { keys: Object.keys(patch) },
+  });
+
+  return c.json({ ok: true });
+});
+
+/**
+ * Uploads an instance logo.
+ *
+ * Stored rather than linked, so branding does not break when an external host
+ * changes. The previous file is left in place: it is a single small object,
+ * and deleting it eagerly would break any page still holding the old URL.
+ */
+settingsRoutes.post('/logo', async (c) => {
+  const actor = currentUser(c);
+  const form = await c.req.formData();
+
+  interface UploadedFile {
+    name?: string;
+    type?: string;
+    arrayBuffer: () => Promise<ArrayBuffer>;
+  }
+
+  const entry = form.get('file') as unknown as UploadedFile | null;
+  if (!entry || typeof entry.arrayBuffer !== 'function') {
+    throw validationFailed('No file was provided');
+  }
+
+  const stored = await storeInstanceLogo({
+    filename: entry.name ?? 'logo',
+    declaredMimeType: entry.type ?? 'application/octet-stream',
+    bytes: Buffer.from(await entry.arrayBuffer()),
+  });
+
+  await updateSetting('branding', {
+    logoUrl: stored.storageKey,
+    logoMimeType: stored.mimeType,
+  });
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'settings.branding.logo.upload',
+    targetType: 'settings',
+    targetId: 'branding',
+    metadata: { sizeBytes: stored.sizeBytes, mimeType: stored.mimeType },
   });
 
   return c.json({ ok: true });

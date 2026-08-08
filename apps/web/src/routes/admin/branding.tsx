@@ -7,7 +7,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ImageIcon, Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -18,7 +18,7 @@ import { ApiError, api } from '~/lib/api-client';
 
 type BrandingSettings = Pick<
   InstanceSettings,
-  'appName' | 'logoUrl' | 'accentColor' | 'loginMessage' | 'defaultTheme'
+  'appName' | 'shortName' | 'logoUrl' | 'accentColor' | 'loginMessage' | 'defaultTheme'
 >;
 type BrandingPatch = Partial<BrandingSettings>;
 type BrandingErrors = Partial<Record<keyof BrandingSettings, string>>;
@@ -41,6 +41,7 @@ const THEME_ICONS = {
 function brandingFromResponse(settings: InstanceSettings): BrandingSettings {
   return {
     appName: settings.appName,
+    shortName: settings.shortName,
     logoUrl: settings.logoUrl,
     accentColor: settings.accentColor,
     loginMessage: settings.loginMessage,
@@ -51,6 +52,7 @@ function brandingFromResponse(settings: InstanceSettings): BrandingSettings {
 function normalizeBranding(settings: BrandingSettings): BrandingSettings {
   return {
     appName: settings.appName.trim(),
+    shortName: settings.shortName?.trim() || null,
     logoUrl: settings.logoUrl?.trim() || null,
     accentColor: settings.accentColor?.trim().toLowerCase() || null,
     loginMessage: settings.loginMessage?.trim() || null,
@@ -64,6 +66,7 @@ function changedBranding(saved: BrandingSettings, draft: BrandingSettings): Bran
 
   for (const key of [
     'appName',
+    'shortName',
     'logoUrl',
     'accentColor',
     'loginMessage',
@@ -98,6 +101,10 @@ function validateBranding(settings: BrandingSettings): BrandingErrors {
     errors.appName = 'App name is required.';
   } else if (normalized.appName.length > 80) {
     errors.appName = 'App name must be 80 characters or fewer.';
+  }
+
+  if (normalized.shortName && normalized.shortName.length > 12) {
+    errors.shortName = 'Short name must be 12 characters or fewer.';
   }
 
   if (normalized.logoUrl) {
@@ -337,9 +344,33 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
               </Field>
 
               <Field
+                label="Short name"
+                htmlFor="short-name"
+                hint="Optional compact mark for the sidebar. Initials of the full name are used when this is blank."
+              >
+                <Input
+                  id="short-name"
+                  value={draft.shortName ?? ''}
+                  maxLength={13}
+                  placeholder="OCI"
+                  disabled={save.isPending}
+                  aria-invalid={Boolean(errors.shortName)}
+                  aria-describedby={errors.shortName ? 'short-name-error' : undefined}
+                  onChange={(event) => updateField('shortName', event.target.value || null)}
+                />
+                {errors.shortName && (
+                  <p id="short-name-error" role="alert" className="text-xs text-[var(--danger)]">
+                    {errors.shortName}
+                  </p>
+                )}
+              </Field>
+
+              <LogoUpload currentLogoUrl={draft.logoUrl} />
+
+              <Field
                 label="Logo URL"
                 htmlFor="logo-url"
-                hint="Optional. Use an http(s) URL or a root-relative path. SVG is supported by most browsers."
+                hint="Set automatically when a file is uploaded. You can also point at an external image instead."
               >
                 <Input
                   id="logo-url"
@@ -482,6 +513,87 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Uploads a logo file rather than requiring one to be hosted elsewhere.
+ *
+ * The file is stored by the instance, so branding does not break when an
+ * external host changes or disappears. Saving is immediate: an upload is not a
+ * draft edit, and pairing it with the surrounding form's save button would
+ * suggest it could be reverted by discarding changes.
+ */
+function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }) {
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append('file', file);
+      const response = await fetch('/api/admin/settings/logo', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body,
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(payload?.error?.message ?? 'The logo could not be uploaded.');
+      }
+    },
+    onSuccess: async () => {
+      setError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['auth', 'status'] }),
+      ]);
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : 'Upload failed.'),
+  });
+
+  return (
+    <Field label="Logo file" hint="PNG, JPEG, or WebP up to 1 MB.">
+      <div className="flex flex-wrap items-center gap-3">
+        {currentLogoUrl && (
+          <img
+            src={currentLogoUrl}
+            alt="Current logo"
+            className="h-10 w-auto max-w-40 rounded border border-[var(--border-subtle)] bg-[var(--bg-control)] object-contain p-1"
+          />
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) upload.mutate(file);
+            // Clear so choosing the same file twice still fires a change.
+            event.target.value = '';
+          }}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={upload.isPending}
+          onClick={() => inputRef.current?.click()}
+        >
+          {upload.isPending && <Spinner />}
+          {currentLogoUrl ? 'Replace logo' : 'Upload logo'}
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-[var(--danger)]">
+          {error}
+        </p>
+      )}
+    </Field>
   );
 }
 

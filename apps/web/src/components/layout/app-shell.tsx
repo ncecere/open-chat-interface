@@ -5,7 +5,6 @@ import { CommandPalette } from '~/components/command-palette/command-palette';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
 import { TopBar } from '~/components/layout/top-bar';
-import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCommandPalette } from '~/hooks/use-command-palette';
 import { TemporaryChatProvider } from '~/providers/temporary-chat-provider';
 
@@ -19,7 +18,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const previousPathname = useRef(pathname);
   const commandPalette = useCommandPalette();
-  const { data: status } = useAuthStatus();
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 768px)');
@@ -64,12 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <TemporaryChatProvider>
       <div className="flex h-dvh overflow-hidden bg-[var(--bg-app)]">
         <SkipLink />
-        <Sidebar
-          appName={status?.branding.appName}
-          open={sidebarOpen}
-          mobile={mobile}
-          onToggle={closeSidebar}
-        />
+        <Sidebar open={sidebarOpen} mobile={mobile} onToggle={closeSidebar} />
 
         <div
           className="flex min-w-0 flex-1 flex-col"
