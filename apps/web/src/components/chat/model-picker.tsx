@@ -1,12 +1,12 @@
 import type { CatalogModel, ModelCapability } from '@oci/shared';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Info, Search } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
+import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
+import { ModelInfoCard } from '~/components/model/model-info-card';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { cn } from '~/lib/utils';
 import {
-  CAPABILITY_ICONS,
-  CAPABILITY_LABELS,
   labsFrom,
   matchesCapabilities,
   matchesSearch,
@@ -29,6 +29,14 @@ export function ModelPicker({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [capabilityFilters, setCapabilityFilters] = useState<ModelCapability[]>([]);
   const [combineFilters, setCombineFilters] = useState(false);
+  /**
+   * Which model's details are showing.
+   *
+   * Held here rather than per row so the card occupies one fixed position
+   * beside the panel. A popover anchored to each row would jump up and down
+   * the screen as the pointer moves between them.
+   */
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const labs = useMemo(() => labsFrom(models), [models]);
@@ -43,6 +51,10 @@ export function ModelPicker({
     [models, query, labFilter, capabilityFilters, combineFilters],
   );
 
+  // A card left open for a model that filtering has just removed would describe
+  // something no longer on screen.
+  const detailsModel = visible.find((model) => model.id === detailsFor) ?? null;
+
   if (models.length === 0) {
     return (
       <span className="px-2 text-[0.8125rem] text-[var(--text-muted)]">No models available</span>
@@ -54,7 +66,10 @@ export function ModelPicker({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        if (!nextOpen) setFiltersOpen(false);
+        if (!nextOpen) {
+          setFiltersOpen(false);
+          setDetailsFor(null);
+        }
       }}
     >
       <PopoverTrigger
@@ -76,7 +91,7 @@ export function ModelPicker({
           searchRef.current?.focus();
         }}
         aria-label="Choose a model"
-        className="relative w-[min(29rem,calc(100vw-1rem))] overflow-hidden p-0"
+        className="relative w-[min(29rem,calc(100vw-1rem))] p-0"
       >
         <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5">
           <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
@@ -102,7 +117,7 @@ export function ModelPicker({
           />
         </div>
 
-        <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-64">
+        <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-64 overflow-hidden rounded-b-xl">
           {labs.length > 1 && (
             <fieldset className="scrollbar-thin m-0 flex shrink-0 flex-col items-center gap-1 overflow-y-auto border-0 border-r border-[var(--border-subtle)] p-2">
               <legend className="sr-only">Filter by lab</legend>
@@ -152,52 +167,86 @@ export function ModelPicker({
               </p>
             ) : (
               visible.map((model) => (
-                <button
+                // The info trigger is a sibling rather than a child: a button
+                // inside a button is invalid markup, and browsers resolve it by
+                // dropping the inner control.
+                <div
                   key={model.id}
-                  type="button"
-                  role="option"
-                  aria-selected={selected?.id === model.id}
-                  onClick={() => {
-                    onSelect(model);
-                    setOpen(false);
-                  }}
                   className={cn(
-                    'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left outline-offset-[-2px] transition-colors',
-                    'text-[var(--text-secondary)] hover:bg-[var(--bg-control)]',
+                    'relative flex w-full items-center rounded-lg transition-colors',
+                    'hover:bg-[var(--bg-control)]',
                     selected?.id === model.id && 'bg-[var(--accent-soft)]',
                   )}
                 >
-                  <span className="flex w-full items-center gap-2">
-                    <LabLogo labId={model.labId} className="size-4" />
-                    <span className="min-w-0 flex-1 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
-                      {model.displayName}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected?.id === model.id}
+                    onClick={() => {
+                      onSelect(model);
+                      setOpen(false);
+                    }}
+                    className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
+                  >
+                    <span className="flex w-full items-center gap-2">
+                      <LabLogo labId={model.labId} className="size-4 shrink-0" />
+                      <span className="min-w-0 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
+                        {model.displayName}
+                      </span>
                     </span>
-                  </span>
 
-                  <span className="flex w-full items-start gap-2 pl-6">
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium leading-4 text-[var(--text-muted)]">
+                    <span className="w-full truncate pl-6 text-xs font-medium leading-4 text-[var(--text-muted)]">
                       {modelDescription(model)}
                     </span>
-                    {model.capabilities.length > 0 && (
-                      <span className="flex shrink-0 items-center gap-1 pt-0.5">
-                        {model.capabilities.map((capability) => {
-                          const Icon = CAPABILITY_ICONS[capability];
-                          return Icon ? (
-                            <Icon
-                              key={capability}
-                              aria-label={CAPABILITY_LABELS[capability]}
-                              className="size-3 text-[var(--text-muted)]"
-                            />
-                          ) : null;
-                        })}
-                      </span>
-                    )}
+                  </button>
+
+                  {/*
+                   * Capabilities and the details control share one right-hand
+                   * column, so both line up down the list however long a model
+                   * name happens to be.
+                   */}
+                  <span className="flex shrink-0 items-center gap-1 pr-2">
+                    {model.capabilities.map((capability) => (
+                      <CapabilityIcon key={capability} capability={capability} />
+                    ))}
+
+                    <button
+                      type="button"
+                      aria-label={`Details for ${model.displayName}`}
+                      aria-expanded={detailsFor === model.id}
+                      onClick={() =>
+                        setDetailsFor((current) => (current === model.id ? null : model.id))
+                      }
+                      className={cn(
+                        'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
+                        detailsFor === model.id
+                          ? 'text-[var(--text-primary)]'
+                          : 'text-[var(--text-faint)]',
+                      )}
+                    >
+                      <Info className="size-3.5" />
+                    </button>
                   </span>
-                </button>
+                </div>
               ))
             )}
           </div>
         </div>
+
+        {/*
+         * One card for the whole panel, in a fixed position beside it.
+         *
+         * Sitting to the left keeps it clear of the list: the picker opens from
+         * the composer at the bottom-left, so the space on that side is free
+         * while the right may be occupied by the viewport edge.
+         */}
+        {detailsModel && (
+          <div className="pointer-events-none absolute top-0 right-full bottom-0 hidden items-center pr-2 md:flex">
+            <div className="pointer-events-auto flex h-[26rem] max-h-full w-[min(32rem,32vw)] flex-col overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-popover)]">
+              <ModelInfoCard model={detailsModel} />
+            </div>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
