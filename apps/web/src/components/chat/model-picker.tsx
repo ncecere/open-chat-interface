@@ -1,12 +1,12 @@
 import type { CatalogModel, ModelCapability } from '@oci/shared';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Info, Search } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
+import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
+import { ModelInfoCard } from '~/components/model/model-info-card';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { cn } from '~/lib/utils';
 import {
-  CAPABILITY_ICONS,
-  CAPABILITY_LABELS,
   labsFrom,
   matchesCapabilities,
   matchesSearch,
@@ -152,48 +152,70 @@ export function ModelPicker({
               </p>
             ) : (
               visible.map((model) => (
-                <button
+                // The info trigger is a sibling rather than a child: a button
+                // inside a button is invalid markup, and browsers resolve it by
+                // dropping the inner control.
+                <div
                   key={model.id}
-                  type="button"
-                  role="option"
-                  aria-selected={selected?.id === model.id}
-                  onClick={() => {
-                    onSelect(model);
-                    setOpen(false);
-                  }}
                   className={cn(
-                    'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left outline-offset-[-2px] transition-colors',
-                    'text-[var(--text-secondary)] hover:bg-[var(--bg-control)]',
+                    'relative flex w-full items-center rounded-lg transition-colors',
+                    'hover:bg-[var(--bg-control)]',
                     selected?.id === model.id && 'bg-[var(--accent-soft)]',
                   )}
                 >
-                  <span className="flex w-full items-center gap-2">
-                    <LabLogo labId={model.labId} className="size-4" />
-                    <span className="min-w-0 flex-1 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
-                      {model.displayName}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected?.id === model.id}
+                    onClick={() => {
+                      onSelect(model);
+                      setOpen(false);
+                    }}
+                    className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
+                  >
+                    <span className="flex w-full items-center gap-2">
+                      <LabLogo labId={model.labId} className="size-4 shrink-0" />
+                      <span className="min-w-0 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
+                        {model.displayName}
+                      </span>
+                      {/* Pushes the capabilities to the right edge of the row. */}
+                      <span className="flex-1" />
+                      {model.capabilities.length > 0 && (
+                        <span className="flex shrink-0 items-center gap-1">
+                          {model.capabilities.map((capability) => (
+                            <CapabilityIcon key={capability} capability={capability} />
+                          ))}
+                        </span>
+                      )}
                     </span>
-                  </span>
 
-                  <span className="flex w-full items-start gap-2 pl-6">
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium leading-4 text-[var(--text-muted)]">
+                    <span className="w-full truncate pl-6 text-xs font-medium leading-4 text-[var(--text-muted)]">
                       {modelDescription(model)}
                     </span>
-                    {model.capabilities.length > 0 && (
-                      <span className="flex shrink-0 items-center gap-1 pt-0.5">
-                        {model.capabilities.map((capability) => {
-                          const Icon = CAPABILITY_ICONS[capability];
-                          return Icon ? (
-                            <Icon
-                              key={capability}
-                              aria-label={CAPABILITY_LABELS[capability]}
-                              className="size-3 text-[var(--text-muted)]"
-                            />
-                          ) : null;
-                        })}
-                      </span>
-                    )}
-                  </span>
-                </button>
+                  </button>
+
+                  {/*
+                   * A popover rather than a hover card: the panel carries real
+                   * detail, and content that vanishes when the pointer drifts
+                   * cannot be read at leisure or reached from a keyboard.
+                   */}
+                  <Popover>
+                    <PopoverTrigger
+                      aria-label={`Details for ${model.displayName}`}
+                      className="mr-2 shrink-0 self-end rounded p-1.5 text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]"
+                    >
+                      <Info className="size-3.5" />
+                    </PopoverTrigger>
+                    <PopoverContent
+                      side="right"
+                      align="end"
+                      collisionPadding={12}
+                      className="max-h-[min(28rem,calc(100vh-6rem))] min-h-56 w-[min(34rem,calc(100vw-2rem))] overflow-y-auto p-6"
+                    >
+                      <ModelInfoCard model={model} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               ))
             )}
           </div>

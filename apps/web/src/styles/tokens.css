@@ -145,7 +145,49 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Capability colours
+ *
+ * One hue per capability, so a model's abilities stay recognisable at a
+ * glance. These sit outside the accent system deliberately: the accent is
+ * configurable per instance, and a capability that changed colour with the
+ * theme would stop being a reliable signal.
+ *
+ * Only the text colour is defined. Pills tint their own background from it
+ * with `bg-current` at low opacity, which keeps the pair in step and halves
+ * the number of values to maintain.
+ * ------------------------------------------------------------------------ */
+
+:root,
+.dark {
+  --cap-vision: hsl(168 54% 74%);
+  --cap-reasoning: hsl(263 58% 75%);
+  --cap-effort: hsl(304 44% 72%);
+  --cap-tools: hsl(10 74% 74%);
+  --cap-pdf: hsl(237 75% 77%);
+  --cap-fast: hsl(46 77% 74%);
+  --cap-image: hsl(325 60% 76%);
+  --cap-search: hsl(200 60% 74%);
+}
+
+.light {
+  /*
+   * Much darker than the dark-mode hues. The pill tints its background from
+   * its own text colour, so a mid-tone reads against a wash of itself and
+   * fails; these are measured to clear 4.5:1 against that blend.
+   */
+  --cap-vision: hsl(168 90% 19%);
+  --cap-reasoning: hsl(263 70% 40%);
+  --cap-effort: hsl(304 65% 30%);
+  --cap-tools: hsl(10 75% 33%);
+  --cap-pdf: hsl(237 70% 42%);
+  --cap-fast: hsl(46 90% 21%);
+  --cap-image: hsl(325 75% 31%);
+  --cap-search: hsl(200 90% 24%);
+}
+
+/* ---------------------------------------------------------------------------
  * Accent families
+
  *
  * Each block overrides only the accent tokens. `--accent` is the solid fill,
  * `--accent-bright` carries text and focus rings, and `--accent-soft` is the
