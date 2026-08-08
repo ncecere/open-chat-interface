@@ -3,6 +3,8 @@ import {
   DEFAULT_AUTH_ATTEMPTS_PER_MINUTE,
   DEFAULT_CHAT_REQUESTS_PER_MINUTE,
   DEFAULT_MAX_CONCURRENT_STREAMS,
+  DEFAULT_RESERVED_COST_MICROS,
+  DEFAULT_RESERVED_TOKENS,
   DEFAULT_TRASH_RETENTION_DAYS,
   DEFAULT_UPLOAD_REQUESTS_PER_MINUTE,
   DEFAULT_USAGE_EVENT_RETENTION_DAYS,
@@ -64,6 +66,12 @@ export async function updateRetentionSettings(
 export interface RateLimitConfig {
   roles: Record<UserRole, RateLimitSettings>;
   authAttemptsPerMinute: number;
+  /**
+   * What a reservation holds before real usage is known. Paired with the
+   * concurrency cap because together they bound how far simultaneous runs can
+   * overshoot a budget: worst case is roughly cap x reserve.
+   */
+  reserve: { costMicros: number; tokens: number };
 }
 
 /** Per-role rate and concurrency limits, with environment-supplied defaults. */
@@ -99,12 +107,25 @@ export async function getRateLimitSettings(): Promise<RateLimitConfig> {
     authAttemptsPerMinute:
       stored.authAttemptsPerMinute ??
       positiveInt(env.RATE_LIMIT_AUTH_PER_MINUTE, DEFAULT_AUTH_ATTEMPTS_PER_MINUTE),
+    reserve: {
+      costMicros:
+        stored.reserve?.costMicros ??
+        positiveInt(env.QUOTA_RESERVE_COST_MICROS, DEFAULT_RESERVED_COST_MICROS),
+      tokens:
+        stored.reserve?.tokens ?? positiveInt(env.QUOTA_RESERVE_TOKENS, DEFAULT_RESERVED_TOKENS),
+    },
   };
+}
+
+/** Just the reserve, for the reservation path that needs nothing else. */
+export async function getReserveAmounts(): Promise<{ costMicros: number; tokens: number }> {
+  return (await getRateLimitSettings()).reserve;
 }
 
 export async function updateRateLimitSettings(patch: {
   roles?: Partial<Record<UserRole, Partial<RateLimitSettings>>>;
   authAttemptsPerMinute?: number;
+  reserve?: { costMicros?: number; tokens?: number };
 }): Promise<RateLimitConfig> {
   const current = await getSetting('rateLimits');
   const roles = { ...current.roles };
@@ -118,6 +139,7 @@ export async function updateRateLimitSettings(patch: {
     ...(patch.authAttemptsPerMinute === undefined
       ? {}
       : { authAttemptsPerMinute: patch.authAttemptsPerMinute }),
+    ...(patch.reserve ? { reserve: { ...current.reserve, ...patch.reserve } } : {}),
   });
 
   return getRateLimitSettings();

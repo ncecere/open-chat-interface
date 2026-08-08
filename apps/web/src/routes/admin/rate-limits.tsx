@@ -1,4 +1,10 @@
-import { type RateLimitSettings, USER_ROLES, type UserRole } from '@oci/shared';
+import {
+  MICROS_PER_DOLLAR,
+  type RateLimitSettings,
+  type ReserveAmounts,
+  USER_ROLES,
+  type UserRole,
+} from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -12,6 +18,7 @@ import { api } from '~/lib/api-client';
 interface RateLimitConfig {
   roles: Record<UserRole, RateLimitSettings>;
   authAttemptsPerMinute: number;
+  reserve: ReserveAmounts;
 }
 
 function RateLimitForm({ settings }: { settings: RateLimitConfig }) {
@@ -91,6 +98,70 @@ function RateLimitForm({ settings }: { settings: RateLimitConfig }) {
             </div>
           ))}
         </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Reservations"
+        description="Held while a response generates, then replaced by what was actually used. Without a reservation, simultaneous runs all measure the same starting point and can collectively pass a limit; the concurrency cap above bounds the rest."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Budget held per response"
+            htmlFor="reserve-cost"
+            hint="In US dollars. Anything unused is released as soon as the response finishes."
+          >
+            <Input
+              id="reserve-cost"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={(draft.reserve.costMicros / MICROS_PER_DOLLAR).toFixed(2)}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  reserve: {
+                    ...current.reserve,
+                    // Dollars are converted to integer micro-dollars so no
+                    // amount is ever stored as a float.
+                    costMicros: Math.max(
+                      1,
+                      Math.round(Number(event.target.value || 0) * MICROS_PER_DOLLAR),
+                    ),
+                  },
+                }))
+              }
+            />
+          </Field>
+
+          <Field
+            label="Tokens held per response"
+            htmlFor="reserve-tokens"
+            hint="Used by token limits in the same way."
+          >
+            <Input
+              id="reserve-tokens"
+              type="number"
+              min="1"
+              step="100"
+              value={draft.reserve.tokens}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  reserve: {
+                    ...current.reserve,
+                    tokens: Math.max(1, Number(event.target.value || 1)),
+                  },
+                }))
+              }
+            />
+          </Field>
+        </div>
+
+        <p className="mt-3 text-[var(--text-muted)] text-xs">
+          A larger reservation keeps limits tighter but makes someone near their limit look closer
+          to it while a response is generating. It is never charged, and someone with less than this
+          left still gets one more response rather than being locked out of the remainder.
+        </p>
       </SettingsSection>
 
       <SettingsSection

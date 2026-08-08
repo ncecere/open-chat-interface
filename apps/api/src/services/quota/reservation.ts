@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
-import { DEFAULT_RESERVED_COST_MICROS, DEFAULT_RESERVED_TOKENS, type UserRole } from '@oci/shared';
+import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { quotaExceeded } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -42,12 +42,18 @@ export interface UsageReservation {
  * exactly one more generation instead of being locked out of the tail of their
  * own allowance.
  */
+export interface ReserveAmounts {
+  costMicros: number;
+  tokens: number;
+}
+
 function reservedAmounts(
   policies: EvaluablePolicy[],
   totals: Map<string, WindowTotals>,
-): { costMicros: number; tokens: number } {
-  let costMicros = DEFAULT_RESERVED_COST_MICROS;
-  let tokens = DEFAULT_RESERVED_TOKENS;
+  configured: ReserveAmounts,
+): ReserveAmounts {
+  let costMicros = configured.costMicros;
+  let tokens = configured.tokens;
 
   for (const policy of policies) {
     const used = usedForMetric(policy.metric, totals.get(policy.id) ?? emptyTotals());
@@ -124,6 +130,8 @@ export async function reserveQuota(params: {
   modelSlug: string;
   policies: EvaluablePolicy[];
   pricing: ModelPricing;
+  /** Read before the transaction so settings lookups never widen it. */
+  reserve: ReserveAmounts;
 }): Promise<UsageReservation> {
   const organizationId = await getDefaultOrganizationId();
   const now = new Date();
@@ -151,7 +159,7 @@ export async function reserveQuota(params: {
       }
     }
 
-    const reserved = reservedAmounts(params.policies, totalsByPolicy);
+    const reserved = reservedAmounts(params.policies, totalsByPolicy, params.reserve);
 
     const [created] = await tx
       .insert(schema.usageEvent)

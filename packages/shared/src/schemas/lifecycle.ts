@@ -55,11 +55,22 @@ export const rateLimitSettingsSchema = z.object({
   uploadRequestsPerMinute: z.number().int().min(1).max(10_000),
 });
 
+/**
+ * What a reservation holds before real usage is known. Lives with the rate
+ * limits because the concurrency cap and this together bound how far
+ * simultaneous runs can overshoot a budget.
+ */
+export const reserveAmountsSchema = z.object({
+  costMicros: z.number().int().min(1).max(100_000_000),
+  tokens: z.number().int().min(1).max(10_000_000),
+});
+
 export const updateRateLimitSettingsSchema = z
   .object({
     /** Keyed by role; a missing role keeps its current value. */
     roles: z.record(z.enum(USER_ROLES), rateLimitSettingsSchema.partial()).optional(),
     authAttemptsPerMinute: z.number().int().min(1).max(1_000).optional(),
+    reserve: reserveAmountsSchema.partial().optional(),
   })
   .strict();
 
@@ -90,6 +101,7 @@ export type StorageUsage = z.infer<typeof storageUsageSchema>;
 export type RetentionSettings = z.infer<typeof retentionSettingsSchema>;
 export type UpdateRetentionSettings = z.infer<typeof updateRetentionSettingsSchema>;
 export type RateLimitSettings = z.infer<typeof rateLimitSettingsSchema>;
+export type ReserveAmounts = z.infer<typeof reserveAmountsSchema>;
 export type UpdateRateLimitSettings = z.infer<typeof updateRateLimitSettingsSchema>;
 export type TrashedThread = z.infer<typeof trashedThreadSchema>;
 export type JobRun = z.infer<typeof jobRunSchema>;

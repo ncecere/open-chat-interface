@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   execute: vi.fn().mockResolvedValue(undefined),
   getDefaultOrganizationId: vi.fn().mockResolvedValue('organization-1'),
+  getReserveAmounts: vi.fn().mockResolvedValue({ costMicros: 250_000, tokens: 4_000 }),
 }));
 
 vi.mock('../../db/index.js', () => ({
@@ -19,6 +20,9 @@ vi.mock('../../db/index.js', () => ({
 }));
 vi.mock('../../services/organization.js', () => ({
   getDefaultOrganizationId: mocks.getDefaultOrganizationId,
+}));
+vi.mock('../../services/lifecycle/settings.js', () => ({
+  getReserveAmounts: mocks.getReserveAmounts,
 }));
 vi.mock('../../lib/logger.js', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
@@ -77,13 +81,20 @@ const budgetPolicy = {
 const unpriced = { inputPriceMicros: null, outputPriceMicros: null };
 
 /** Runs the reservation transaction against the mocked query chain. */
+/** Captures the row a reservation writes, so its held amounts can be asserted. */
+let reservedRow: Record<string, unknown> | null = null;
+
 function runTransaction() {
+  reservedRow = null;
   mocks.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
     fn({
       execute: mocks.execute,
       select: mocks.select,
       insert: () => ({
-        values: () => ({ returning: () => Promise.resolve([{ id: 'reservation-1' }]) }),
+        values: (row: Record<string, unknown>) => {
+          reservedRow = row;
+          return { returning: () => Promise.resolve([{ id: 'reservation-1' }]) };
+        },
       }),
     }),
   );
@@ -93,6 +104,9 @@ describe('integration with mocked DB: quota reservation', () => {
   beforeEach(() => {
     mocks.select.mockReset();
     mocks.transaction.mockReset();
+    // Reset clears the resolved value, and the reservation path reads this
+    // before opening its transaction.
+    mocks.getReserveAmounts.mockResolvedValue({ costMicros: 250_000, tokens: 4_000 });
     runTransaction();
   });
 
@@ -115,6 +129,37 @@ describe('integration with mocked DB: quota reservation', () => {
     await expect(
       reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
     ).resolves.toMatchObject({ id: 'reservation-1' });
+  });
+
+  it('holds the configured reserve rather than a hard-coded amount', async () => {
+    mocks.getReserveAmounts.mockResolvedValue({ costMicros: 900_000, tokens: 12_000 });
+    mocks.select
+      .mockReturnValueOnce(policyQuery([budgetPolicy]))
+      .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 0, tokens: 0, costMicros: 0 }]));
+
+    await reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' });
+
+    expect(reservedRow).toMatchObject({ reservedCostMicros: 900_000, reservedTokens: 12_000 });
+  });
+
+  it('never reserves more than the allowance still has left', async () => {
+    // Otherwise the tail of a budget becomes unspendable: someone with less
+    // remaining than the reserve could never start another run.
+    mocks.getReserveAmounts.mockResolvedValue({ costMicros: 250_000, tokens: 4_000 });
+    mocks.select
+      .mockReturnValueOnce(policyQuery([budgetPolicy]))
+      .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(
+        // $4.90 of a $5.00 budget already spent, so only $0.10 remains.
+        tableQuery([{ messages: 0, tokens: 0, costMicros: 4.9 * MICROS_PER_DOLLAR }]),
+      );
+
+    await reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' });
+
+    expect(reservedRow).toMatchObject({ reservedCostMicros: 0.1 * MICROS_PER_DOLLAR });
   });
 
   it('refuses when usage exactly reaches the limit', async () => {

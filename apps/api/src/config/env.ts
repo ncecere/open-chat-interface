@@ -40,6 +40,8 @@ const envSchema = z.object({
   RATE_LIMIT_CHAT_PER_MINUTE: z.string().optional(),
   RATE_LIMIT_UPLOAD_PER_MINUTE: z.string().optional(),
   RATE_LIMIT_AUTH_PER_MINUTE: z.string().optional(),
+  QUOTA_RESERVE_COST_MICROS: z.string().optional(),
+  QUOTA_RESERVE_TOKENS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

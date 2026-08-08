@@ -145,6 +145,7 @@ export interface StoredRateLimitSettings {
     >
   >;
   authAttemptsPerMinute?: number;
+  reserve?: { costMicros?: number; tokens?: number };
 }
 
 interface SettingsMap {

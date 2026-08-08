@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
 import type { UsageSummary, UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
+import { getReserveAmounts } from '../lifecycle/settings.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import {
   buildAllowance,
@@ -137,7 +138,12 @@ export async function reserveQuotaForRun(params: {
   const policies = all.filter((policy) => policyCoversModel(policy, params.modelSlug));
   if (policies.length === 0) return null;
 
-  return reserveQuota({ ...params, policies, pricing: await modelPricing(params.modelSlug) });
+  const [pricing, reserve] = await Promise.all([
+    modelPricing(params.modelSlug),
+    getReserveAmounts(),
+  ]);
+
+  return reserveQuota({ ...params, policies, pricing, reserve });
 }
 
 /** Per-policy consumption for the usage meter in settings. */
