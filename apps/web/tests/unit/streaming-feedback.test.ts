@@ -33,7 +33,7 @@ function waitingState(messages: Message[], streaming: boolean) {
 
   return {
     showIndicator: streaming && !hasVisibleContent,
-    label: reasoning ? 'Thinking' : 'Working on it',
+    label: reasoning ? 'Thinking' : 'Generating response',
   };
 }
 
@@ -72,14 +72,15 @@ describe('streaming feedback', () => {
     expect(waitingState(messages, true).showIndicator).toBe(false);
   });
 
-  it('names the wait differently once reasoning is what is happening', () => {
+  it('announces the wait to assistive technology without showing text', () => {
+    // The bouncing dots carry the meaning visually, so the label exists only
+    // for screen readers.
     const thinking: Message[] = [
       user,
       { role: 'assistant', parts: [{ type: 'reasoning', text: 'Considering' }] },
     ];
     expect(waitingState(thinking, true).label).toBe('Thinking');
-    // A provider that reveals no reasoning still gets an honest label.
-    expect(waitingState([user], true).label).toBe('Working on it');
+    expect(waitingState([user], true).label).toBe('Generating response');
   });
 
   it('shows nothing when no run is active', () => {

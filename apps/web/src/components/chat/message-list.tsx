@@ -276,11 +276,9 @@ export function MessageList({
   // of the row cannot stand in for progress.
   const hasVisibleContent = Boolean(lastText || lastReasoning);
 
-  /**
-   * Reasoning arriving first is the one signal that distinguishes waiting for
-   * a model from waiting on the network, so it is worth naming.
-   */
-  const waitingLabel = lastReasoning ? 'Thinking' : 'Working on it';
+  // Announced to assistive technology only. The animation carries the meaning
+  // visually, so repeating it as text beside the dots would just be noise.
+  const waitingLabel = lastReasoning ? 'Thinking' : 'Generating response';
 
   function cancelEdit() {
     if (saving) return;
@@ -424,17 +422,14 @@ export function MessageList({
         (searching ? (
           <SearchLoading />
         ) : (
-          <div role="status" className="flex items-center gap-2 py-2" aria-label={waitingLabel}>
-            <span className="flex gap-1.5">
-              {[0, 1, 2].map((dot) => (
-                <span
-                  key={dot}
-                  className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
-                  style={{ animationDelay: `${dot * 0.15}s` }}
-                />
-              ))}
-            </span>
-            <span className="text-[0.8125rem] text-[var(--text-muted)]">{waitingLabel}</span>
+          <div role="status" className="flex gap-1.5 py-2" aria-label={waitingLabel}>
+            {[0, 1, 2].map((dot) => (
+              <span
+                key={dot}
+                className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
+                style={{ animationDelay: `${dot * 0.15}s` }}
+              />
+            ))}
           </div>
         ))}
     </div>
