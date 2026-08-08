@@ -4,6 +4,7 @@ import { listAudit } from '../../services/audit.js';
 import { inviteRoutes } from './invites.js';
 import { lifecycleRoutes } from './lifecycle.js';
 import { modelRoutes } from './models.js';
+import { overrideRoutes } from './overrides.js';
 import { overviewRoutes } from './overview.js';
 import { providerRoutes } from './providers.js';
 import { quotaRoutes } from './quotas.js';
@@ -16,6 +17,9 @@ export const adminRoutes = new Hono<AppBindings>();
 adminRoutes.use('*', requireAdmin);
 
 adminRoutes.route('/overview', overviewRoutes);
+// Mounted before the user routes so the override paths are not shadowed by a
+// broader `/users/:id` handler.
+adminRoutes.route('/users', overrideRoutes);
 adminRoutes.route('/users', userRoutes);
 adminRoutes.route('/invites', inviteRoutes);
 adminRoutes.route('/providers', providerRoutes);

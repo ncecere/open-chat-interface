@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, or, schema, sql } from '@oci/db';
+import { and, eq, gt, gte, inArray, isNull, or, schema, sql } from '@oci/db';
 import type { UsageSummary, UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { getReserveAmounts } from '../lifecycle/settings.js';
@@ -32,8 +32,14 @@ export {
 } from './reservation.js';
 export { resolveWindow } from './windows.js';
 
-/** Every enabled policy applied to a role, with its model scope resolved. */
-async function loadPoliciesForRole(role: UserRole): Promise<EvaluablePolicy[]> {
+/**
+ * Every enabled policy applied to a role, with model scope and any per-user
+ * override resolved.
+ *
+ * Overrides are applied here rather than at each call site so enforcement and
+ * the usage meter can never disagree about what a person's limit actually is.
+ */
+async function loadPoliciesForRole(role: UserRole, userId?: string): Promise<EvaluablePolicy[]> {
   const organizationId = await getDefaultOrganizationId();
 
   const rows = await db
@@ -79,7 +85,48 @@ async function loadPoliciesForRole(role: UserRole): Promise<EvaluablePolicy[]> {
     slugsByPolicy.set(scope.policyId, existing);
   }
 
-  return rows.map((row) => ({ ...row, modelSlugs: slugsByPolicy.get(row.id) ?? [] }));
+  const overrides = userId
+    ? await loadOverrides(
+        userId,
+        rows.map((row) => row.id),
+      )
+    : new Map();
+
+  return rows.map((row) => ({
+    ...row,
+    limitValue: overrides.get(row.id) ?? Number(row.limitValue),
+    modelSlugs: slugsByPolicy.get(row.id) ?? [],
+  }));
+}
+
+/**
+ * A user's active limit overrides, keyed by policy.
+ *
+ * Expiry is filtered in the query rather than swept by a job: a job runs on an
+ * interval, so between ticks someone would keep an elevated limit their
+ * override no longer grants. The read decides; cleanup is only housekeeping.
+ */
+async function loadOverrides(userId: string, policyIds: string[]): Promise<Map<string, number>> {
+  if (policyIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      policyId: schema.quotaPolicyOverride.policyId,
+      limitValue: schema.quotaPolicyOverride.limitValue,
+    })
+    .from(schema.quotaPolicyOverride)
+    .where(
+      and(
+        eq(schema.quotaPolicyOverride.userId, userId),
+        inArray(schema.quotaPolicyOverride.policyId, policyIds),
+        or(
+          isNull(schema.quotaPolicyOverride.expiresAt),
+          gt(schema.quotaPolicyOverride.expiresAt, new Date()),
+        ),
+      ),
+    );
+
+  return new Map(rows.map((row) => [row.policyId, Number(row.limitValue)]));
 }
 
 /**
@@ -132,7 +179,7 @@ export async function reserveQuotaForRun(params: {
   role: UserRole;
   modelSlug: string;
 }): Promise<UsageReservation | null> {
-  const all = await loadPoliciesForRole(params.role);
+  const all = await loadPoliciesForRole(params.role, params.userId);
   // Only policies that govern this model constrain this run; a model in no
   // policy is unlimited.
   const policies = all.filter((policy) => policyCoversModel(policy, params.modelSlug));
@@ -148,7 +195,7 @@ export async function reserveQuotaForRun(params: {
 
 /** Per-policy consumption for the usage meter in settings. */
 export async function getUsageSummary(userId: string, role: UserRole): Promise<UsageSummary> {
-  const policies = await loadPoliciesForRole(role);
+  const policies = await loadPoliciesForRole(role, userId);
 
   const allowances = await Promise.all(
     policies.map(async (policy) => {

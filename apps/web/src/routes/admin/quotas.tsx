@@ -93,6 +93,13 @@ export function AdminQuotasPage() {
                       ? 'all models'
                       : `${policy.modelSlugs.length} model${policy.modelSlugs.length === 1 ? '' : 's'}`}
                   </Badge>
+                  {/* Keeps an override discoverable from the policy as well as
+                      from the person it was granted to. */}
+                  {policy.overrideCount > 0 && (
+                    <Badge variant="outline">
+                      {policy.overrideCount} override{policy.overrideCount === 1 ? '' : 's'}
+                    </Badge>
+                  )}
                 </div>
                 <p className="truncate text-xs text-[var(--text-muted)]">
                   {formatWindow(policy)}

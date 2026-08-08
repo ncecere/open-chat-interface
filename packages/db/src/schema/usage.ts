@@ -66,6 +66,44 @@ export const quotaPolicyModel = pgTable(
   ],
 );
 
+/**
+ * Raises or lowers one policy's limit for one person.
+ *
+ * Deliberately not a way to assign a policy: an override only adjusts a limit
+ * the user's role already carries. Otherwise it becomes a back door for
+ * granting individuals unrelated policies, and "why is this person limited
+ * this way?" stops having a single answer.
+ *
+ * `expiresAt` is evaluated when a limit is read rather than swept, so an
+ * override stops applying the moment it lapses instead of at the next job tick.
+ */
+export const quotaPolicyOverride = pgTable(
+  'quota_policy_override',
+  {
+    id: primaryId(),
+    policyId: text('policy_id')
+      .notNull()
+      .references(() => quotaPolicy.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    limitValue: bigint('limit_value', { mode: 'number' }).notNull(),
+    /** Null never expires. Most overrides are temporary in practice. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    /** Why this exists, so a later reader can judge whether it still should. */
+    reason: text('reason'),
+    createdByUserId: text('created_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex('quota_policy_override_unique').on(t.policyId, t.userId),
+    index('quota_policy_override_user_idx').on(t.userId),
+    index('quota_policy_override_expiry_idx').on(t.expiresAt),
+  ],
+);
+
 /** Applies a policy to a role. A role may carry several policies at once. */
 export const quotaPolicyRole = pgTable(
   'quota_policy_role',

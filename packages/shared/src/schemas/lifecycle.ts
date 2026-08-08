@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { MAX_TRASH_RETENTION_DAYS, MIN_TRASH_RETENTION_DAYS, USER_ROLES } from '../constants.js';
+import {
+  MAX_TRASH_RETENTION_DAYS,
+  MIN_TRASH_RETENTION_DAYS,
+  QUOTA_METRICS,
+  USER_ROLES,
+} from '../constants.js';
 
 /**
  * Per-role storage allowance. Storage is a gauge rather than a flow, so these
@@ -84,6 +89,34 @@ export const trashedThreadSchema = z.object({
   purgeAt: z.string(),
 });
 
+/**
+ * Raises or lowers one policy's limit for one person. Only adjusts a limit the
+ * user's role already carries; it never grants an unassigned policy.
+ */
+export const quotaOverrideSchema = z.object({
+  policyId: z.string(),
+  policyName: z.string(),
+  metric: z.enum(QUOTA_METRICS),
+  /** What the role would otherwise get, for comparison. */
+  roleLimitValue: z.number().int().positive(),
+  limitValue: z.number().int().positive(),
+  expiresAt: z.string().nullable(),
+  reason: z.string().nullable(),
+  /** False once the expiry has passed; the row lingers until cleanup runs. */
+  active: z.boolean(),
+  createdAt: z.string(),
+});
+
+export const upsertQuotaOverrideSchema = z
+  .object({
+    policyId: z.string().min(1),
+    limitValue: z.number().int().positive().max(1_000_000_000_000),
+    /** Null never expires. Most overrides are temporary in practice. */
+    expiresAt: z.string().datetime().nullable().optional(),
+    reason: z.string().trim().max(300).nullable().optional(),
+  })
+  .strict();
+
 export const jobRunSchema = z.object({
   id: z.string(),
   jobName: z.string(),
@@ -105,3 +138,5 @@ export type ReserveAmounts = z.infer<typeof reserveAmountsSchema>;
 export type UpdateRateLimitSettings = z.infer<typeof updateRateLimitSettingsSchema>;
 export type TrashedThread = z.infer<typeof trashedThreadSchema>;
 export type JobRun = z.infer<typeof jobRunSchema>;
+export type QuotaOverride = z.infer<typeof quotaOverrideSchema>;
+export type UpsertQuotaOverrideInput = z.infer<typeof upsertQuotaOverrideSchema>;

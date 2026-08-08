@@ -58,6 +58,14 @@ function scopeQuery(rows: unknown[] = []) {
   return tableQuery(rows);
 }
 
+/**
+ * The per-user override lookup that follows the scope query. No rows means the
+ * user is on their role's limit.
+ */
+function overrideQuery(rows: unknown[] = []) {
+  return tableQuery(rows);
+}
+
 const messagePolicy = {
   id: 'policy-messages',
   name: 'Daily messages',
@@ -123,6 +131,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 4, tokens: 0, costMicros: 0 }]));
 
@@ -131,11 +140,42 @@ describe('integration with mocked DB: quota reservation', () => {
     ).resolves.toMatchObject({ id: 'reservation-1' });
   });
 
+  it('enforces a per-user override instead of the role limit', async () => {
+    mocks.select
+      .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(scopeQuery())
+      // Raised from the role's 5 to 20 for this person.
+      .mockReturnValueOnce(overrideQuery([{ policyId: 'policy-messages', limitValue: 20 }]))
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 9, tokens: 0, costMicros: 0 }]));
+
+    // Nine messages would exceed the role limit but sits well inside the
+    // override, so the run must be allowed.
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).resolves.toMatchObject({ id: 'reservation-1' });
+  });
+
+  it('still refuses once an overridden limit is itself reached', async () => {
+    mocks.select
+      .mockReturnValueOnce(policyQuery([messagePolicy]))
+      .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery([{ policyId: 'policy-messages', limitValue: 20 }]))
+      .mockReturnValueOnce(tableQuery([unpriced]))
+      .mockReturnValueOnce(tableQuery([{ messages: 20, tokens: 0, costMicros: 0 }]));
+
+    // An override raises a limit; it does not remove one.
+    await expect(
+      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+  });
+
   it('holds the configured reserve rather than a hard-coded amount', async () => {
     mocks.getReserveAmounts.mockResolvedValue({ costMicros: 900_000, tokens: 12_000 });
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 0, tokens: 0, costMicros: 0 }]));
 
@@ -151,6 +191,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(
         // $4.90 of a $5.00 budget already spent, so only $0.10 remains.
@@ -166,6 +207,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 5, tokens: 0, costMicros: 0 }]));
 
@@ -179,6 +221,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 5, tokens: 0, costMicros: 0 }]));
 
@@ -191,6 +234,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 0, tokens: 0, costMicros: 0 }]));
 
@@ -203,6 +247,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(
         tableQuery([{ messages: 1, tokens: 10, costMicros: 5 * MICROS_PER_DOLLAR }]),
@@ -217,6 +262,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy, budgetPolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: 1, tokens: 0, costMicros: 0 }]))
       .mockReturnValueOnce(
@@ -232,6 +278,7 @@ describe('integration with mocked DB: quota reservation', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([budgetPolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([unpriced]))
       .mockReturnValueOnce(tableQuery([{ messages: '1', tokens: '10', costMicros: '5000000' }]));
 
@@ -250,6 +297,7 @@ describe('integration with mocked DB: usage summary', () => {
     mocks.select
       .mockReturnValueOnce(policyQuery([messagePolicy, budgetPolicy]))
       .mockReturnValueOnce(scopeQuery())
+      .mockReturnValueOnce(overrideQuery())
       .mockReturnValueOnce(tableQuery([{ messages: 2, tokens: 0, costMicros: 0 }]))
       .mockReturnValueOnce(
         tableQuery([{ messages: 2, tokens: 0, costMicros: 1 * MICROS_PER_DOLLAR }]),

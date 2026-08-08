@@ -2,8 +2,10 @@ import type { AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { AdminPageHeader } from '~/components/admin/admin-ui';
+import { QuotaOverrideDialog } from '~/components/admin/quota-override-dialog';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { Dialog } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -22,6 +24,7 @@ const ROLE_VARIANT = {
 
 export function AdminUsersPage() {
   const [search, setSearch] = useState('');
+  const [limitsFor, setLimitsFor] = useState<AdminUser | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -93,6 +96,9 @@ export function AdminUsersPage() {
                     {formatRelativeTime(user.createdAt)}
                   </td>
                   <td className="px-4 py-3 text-right">
+                    <Button size="sm" variant="ghost" onClick={() => setLimitsFor(user)}>
+                      Limits
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -113,6 +119,10 @@ export function AdminUsersPage() {
           </table>
         </div>
       )}
+
+      <Dialog open={Boolean(limitsFor)} onOpenChange={(open) => !open && setLimitsFor(null)}>
+        {limitsFor && <QuotaOverrideDialog user={limitsFor} onClose={() => setLimitsFor(null)} />}
+      </Dialog>
     </div>
   );
 }
