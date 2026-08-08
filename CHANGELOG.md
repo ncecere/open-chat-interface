@@ -7,41 +7,47 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+Governance and lifecycle management: what people are allowed to consume, how
+long their data is kept, and what an operator can see about both.
+
 ### Added
 
-- An administration usage report covering activity, spend by model and person,
-  limit denials, and storage consumption, with a configurable reporting
-  timezone. Every figure is a count or a total; nothing reads conversation
-  content.
-- Per-user quota overrides with an optional expiry and reason, for policies a
-  person's role already carries.
-- Configurable reservation amounts, so how much a run holds before its real
-  usage is known can be tuned per instance.
-- Single-conversation Markdown download.
-
-- Quota policies can be scoped to specific models, so a family such as Anthropic
-  or OpenAI carries its own independent budget. An unscoped policy still applies
-  to every model, and a model in no policy remains unlimited.
+- Quota policies can be scoped to specific models, so a family such as
+  Anthropic or OpenAI carries its own independent budget. An unscoped policy
+  still applies to every model, and a model in no policy remains unlimited.
+- Per-user quota overrides with an optional expiry and reason, adjusting a
+  limit the person's role already carries.
 - Per-role storage allowances covering total bytes, stored file count, and
   maximum file size, enforced per user before an upload is written.
 - Trash for deleted conversations, restorable until a configurable grace period
   elapses, with immediate permanent deletion and empty-trash actions.
 - Optional retention for inactive conversations, usage history, audit entries,
-  share links, and expired authentication artifacts.
+  share links, and expired authentication artifacts. Security-relevant audit
+  actions are kept regardless.
 - Per-role concurrency caps and rate limits for chat and uploads, plus per-IP
   and per-account limits on authentication attempts.
+- An administration usage report covering activity, spend by model and person,
+  limit denials, and storage consumption, with a configurable reporting
+  timezone. Every figure is a count or a total, and usage records carry no
+  reference to a conversation.
+- Configurable reservation amounts, so how much a run holds before its real
+  usage is known can be tuned per instance.
+- Single-conversation Markdown download.
 - In-app usage warnings before a limit is reached, and a storage meter in
   attachment settings.
-- Administration for storage allowances, retention, rate limits, background job
-  health, and storage reconciliation.
-- Background job runner using per-job advisory locks so scheduled maintenance
-  runs once across replicas rather than once per replica.
+- A background job runner using per-job advisory locks, so scheduled
+  maintenance runs once across replicas rather than once per replica, with an
+  administration view of what ran and what it touched.
+- Storage reconciliation that compares object storage against the database in
+  both directions.
 
 ### Fixed
 
 - Attachment objects are no longer orphaned when a thread or user is deleted.
   Cascading deletes bypass the application entirely, so a database trigger now
-  queues every removed blob for deletion with retries.
+  queues every removed object for deletion with retries.
 - Attachments are removed with the message they were sent on instead of being
   detached, which previously stranded both the row and its stored object and
   made an already-sent attachment appear re-sendable.
@@ -53,8 +59,26 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Administration is reorganized: Governance holds usage, quotas, storage
+  limits, rate limits, and retention, while Platform keeps service
+  configuration and gains a Maintenance view. This separates what people are
+  allowed to do from where things are wired up.
+- Usage is presented to users as a percentage remaining rather than messages,
+  tokens, or spend, and limit messages no longer quote the underlying figure.
 - Storage drivers can enumerate stored objects, which reconciliation needs to
-  detect blobs with no database row and rows with no object.
+  detect objects with no database row and rows with no object.
+
+### Upgrade notes
+
+- Applying this release runs four migrations, one of which adds a trigger on
+  the attachment table and backfills per-user storage counters.
+- Deleting a conversation now moves it to a trash for 30 days by default rather
+  than removing it immediately. Adjust or disable this under
+  **Governance → Retention**.
+- Automatic conversation retention is off by default and must be enabled
+  deliberately.
+- Storage allowances and rate limits start unlimited and unenforced; existing
+  behavior is unchanged until an administrator sets them.
 
 ## [0.1.0] - 2026-08-07
 
@@ -107,5 +131,6 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/compare/v0.1.0...main
+[Unreleased]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/compare/v0.2.0...main
+[0.2.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.2.0
 [0.1.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.1.0

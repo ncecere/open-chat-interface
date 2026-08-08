@@ -33,8 +33,8 @@ Start from a clean, up-to-date default branch:
 git switch main
 git pull --ff-only origin main
 pnpm release:check
-git tag -a v0.1.0 -m "Open Chat Interface v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "Open Chat Interface v0.2.0"
+git push origin v0.2.0
 ```
 
 The tag pipeline verifies that:
