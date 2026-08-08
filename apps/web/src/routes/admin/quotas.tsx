@@ -60,7 +60,7 @@ export function AdminQuotasPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Quotas & limits"
+        title="Usage quotas"
         description="Create a policy, then apply it to the roles that should share it. A role can carry several policies at once, and every one of them is enforced. Scope a policy to specific models to give a family such as Anthropic its own budget."
         actions={
           <Button variant="primary" onClick={() => setFormFor({ policy: null })}>

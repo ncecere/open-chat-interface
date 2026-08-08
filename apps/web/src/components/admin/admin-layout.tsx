@@ -1,5 +1,6 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import {
+  Archive,
   ArrowLeft,
   Boxes,
   Cpu,
@@ -13,7 +14,9 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Timer,
   Users,
+  Wrench,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SkipLink } from '~/components/layout/skip-link';
@@ -42,7 +45,20 @@ const NAV_SECTIONS = [
     items: [
       { to: '/admin/providers', label: 'Providers & Keys', icon: KeyRound },
       { to: '/admin/models', label: 'Model catalog', icon: Cpu },
-      { to: '/admin/quotas', label: 'Quotas & limits', icon: Gauge },
+    ],
+  },
+  /**
+   * What people are allowed to do, kept apart from where things are wired up.
+   * Storage appears in both: the allowance belongs here, the S3 connection
+   * belongs under Platform.
+   */
+  {
+    label: 'Governance',
+    items: [
+      { to: '/admin/quotas', label: 'Usage quotas', icon: Gauge },
+      { to: '/admin/storage-limits', label: 'Storage limits', icon: HardDrive },
+      { to: '/admin/rate-limits', label: 'Rate limits', icon: Timer },
+      { to: '/admin/retention', label: 'Retention', icon: Archive },
     ],
   },
   {
@@ -50,7 +66,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/admin/search', label: 'Search', icon: Search },
       { to: '/admin/storage', label: 'Storage', icon: Boxes },
-      { to: '/admin/lifecycle', label: 'Storage & retention', icon: HardDrive },
+      { to: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
       { to: '/admin/audit', label: 'Audit log', icon: ScrollText },
     ],
   },

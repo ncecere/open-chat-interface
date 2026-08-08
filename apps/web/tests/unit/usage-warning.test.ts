@@ -22,54 +22,75 @@ const allowance = (overrides: Partial<UsageAllowance> = {}): UsageAllowance => (
 });
 
 /**
- * Mirrors the banner's selection rule: warn on anything that is not ok, and
- * lead with the most urgent allowance so the message stays actionable.
+ * Mirrors the announcement rule: a policy is toasted when it first reaches a
+ * severity, and again only if it worsens. Recovery clears the record so the
+ * next approach warns again.
  */
-function mostUrgent(allowances: UsageAllowance[]): UsageAllowance | undefined {
-  const order: Record<UsageAllowance['severity'], number> = {
-    exceeded: 0,
-    critical: 1,
-    warning: 2,
-    ok: 3,
-  };
+function announce(
+  seen: Map<string, UsageAllowance['severity']>,
+  allowances: UsageAllowance[],
+): string[] {
+  const raised: string[] = [];
 
-  return [...allowances]
-    .filter((entry) => entry.severity !== 'ok')
-    .sort((a, b) => order[a.severity] - order[b.severity])[0];
+  for (const entry of allowances) {
+    if (entry.severity === 'ok') {
+      seen.delete(entry.policyId);
+      continue;
+    }
+    if (seen.get(entry.policyId) === entry.severity) continue;
+    seen.set(entry.policyId, entry.severity);
+    raised.push(entry.policyId);
+  }
+
+  return raised;
 }
 
-describe('usage warning selection', () => {
-  it('stays hidden while every allowance is healthy', () => {
-    expect(mostUrgent([allowance(), allowance({ policyId: 'policy-2' })])).toBeUndefined();
+describe('usage warning announcements', () => {
+  it('stays silent while every allowance is healthy', () => {
+    const seen = new Map<string, UsageAllowance['severity']>();
+    expect(announce(seen, [allowance(), allowance({ policyId: 'policy-2' })])).toEqual([]);
   });
 
-  it('surfaces an exceeded policy ahead of a merely warning one', () => {
-    const shown = mostUrgent([
-      allowance({ policyId: 'warning', severity: 'warning' }),
-      allowance({ policyId: 'spent', severity: 'exceeded' }),
-    ]);
+  it('announces a policy once rather than on every poll', () => {
+    const seen = new Map<string, UsageAllowance['severity']>();
+    const warning = [allowance({ severity: 'warning' })];
 
-    expect(shown?.policyId).toBe('spent');
+    expect(announce(seen, warning)).toEqual(['policy-1']);
+    // Polling continues; the toast must not reappear unprompted.
+    expect(announce(seen, warning)).toEqual([]);
   });
 
-  it('prefers critical over warning when nothing is exceeded', () => {
-    const shown = mostUrgent([
-      allowance({ policyId: 'warning', severity: 'warning' }),
-      allowance({ policyId: 'critical', severity: 'critical' }),
-    ]);
+  it('announces again when the situation gets worse', () => {
+    const seen = new Map<string, UsageAllowance['severity']>();
 
-    expect(shown?.policyId).toBe('critical');
+    announce(seen, [allowance({ severity: 'warning' })]);
+    expect(announce(seen, [allowance({ severity: 'critical' })])).toEqual(['policy-1']);
+    expect(announce(seen, [allowance({ severity: 'exceeded' })])).toEqual(['policy-1']);
+  });
+
+  it('warns again after a window resets and the user approaches the limit anew', () => {
+    const seen = new Map<string, UsageAllowance['severity']>();
+
+    announce(seen, [allowance({ severity: 'critical' })]);
+    announce(seen, [allowance({ severity: 'ok' })]);
+    expect(announce(seen, [allowance({ severity: 'warning' })])).toEqual(['policy-1']);
+  });
+
+  it('announces each policy independently', () => {
+    const seen = new Map<string, UsageAllowance['severity']>();
+
+    expect(
+      announce(seen, [
+        allowance({ policyId: 'anthropic', severity: 'warning' }),
+        allowance({ policyId: 'openai', severity: 'exceeded' }),
+      ]),
+    ).toEqual(['anthropic', 'openai']);
   });
 
   it('uses thresholds that leave room to act before the cutoff', () => {
-    // A warning that only appears at the limit would be useless.
+    // A warning that only appeared at the limit would be useless.
     expect(USAGE_WARNING_THRESHOLD).toBeLessThan(1);
     expect(USAGE_CRITICAL_THRESHOLD).toBeLessThan(1);
     expect(USAGE_WARNING_THRESHOLD).toBeLessThan(USAGE_CRITICAL_THRESHOLD);
-  });
-
-  it('carries the model scope so the message can name what is still available', () => {
-    const scoped = allowance({ severity: 'exceeded', modelSlugs: ['claude-sonnet-4-6'] });
-    expect(mostUrgent([scoped])?.modelSlugs).toEqual(['claude-sonnet-4-6']);
   });
 });

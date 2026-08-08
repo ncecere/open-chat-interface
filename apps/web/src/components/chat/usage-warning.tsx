@@ -1,9 +1,8 @@
 import { MICROS_PER_DOLLAR, type UsageAllowance, type UsageSummary } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { api } from '~/lib/api-client';
-import { cn } from '~/lib/utils';
 
 function formatAmount(value: number, metric: UsageAllowance['metric']): string {
   if (metric !== 'cost') return value.toLocaleString();
@@ -35,12 +34,16 @@ function resetLabel(allowance: UsageAllowance): string {
 /**
  * Warns before a user is cut off rather than after.
  *
- * Placed next to the composer instead of in a global banner: this is where the
- * limit will actually bite, and where the user can act on it. Severity is
- * computed server-side so this cannot disagree with enforcement.
+ * A toast rather than an inline banner: the warning is worth interrupting for
+ * once, but it should not permanently occupy space above the composer or
+ * outgrow the input it sits over.
+ *
+ * Severity is computed server-side so this cannot disagree with enforcement.
  */
 export function UsageWarning() {
-  const [dismissed, setDismissed] = useState<Record<string, UsageAllowance['severity']>>({});
+  // Remembers the severity each policy was last announced at, so crossing into
+  // a worse state warns again while ordinary polling stays silent.
+  const announced = useRef(new Map<string, UsageAllowance['severity']>());
 
   const { data } = useQuery({
     queryKey: ['me', 'usage'],
@@ -48,55 +51,35 @@ export function UsageWarning() {
     staleTime: 30_000,
   });
 
-  const pressing = (data?.allowances ?? [])
-    .filter((allowance) => allowance.severity !== 'ok')
-    // A dismissal covers the severity it was made at, so crossing into a worse
-    // state surfaces the warning again.
-    .filter((allowance) => dismissed[allowance.policyId] !== allowance.severity);
+  useEffect(() => {
+    for (const allowance of data?.allowances ?? []) {
+      if (allowance.severity === 'ok') {
+        // Recovered, most likely because the window rolled over. Clear the
+        // record so the next approach warns again.
+        announced.current.delete(allowance.policyId);
+        continue;
+      }
 
-  if (pressing.length === 0) return null;
+      if (announced.current.get(allowance.policyId) === allowance.severity) continue;
+      announced.current.set(allowance.policyId, allowance.severity);
 
-  // One message at a time; the most urgent allowance is the actionable one.
-  const order: Record<UsageAllowance['severity'], number> = {
-    exceeded: 0,
-    critical: 1,
-    warning: 2,
-    ok: 3,
-  };
-  const allowance = [...pressing].sort((a, b) => order[a.severity] - order[b.severity])[0];
-  if (!allowance) return null;
+      const exceeded = allowance.severity === 'exceeded';
+      const scoped = allowance.modelSlugs.length > 0;
 
-  const exceeded = allowance.severity === 'exceeded';
-  const scoped = allowance.modelSlugs.length > 0;
+      const description = exceeded
+        ? `${scoped ? 'Other models are still available.' : ''}${resetLabel(allowance)}`.trim()
+        : `${formatAmount(allowance.remaining, allowance.metric)} remaining.${resetLabel(allowance)}`;
 
-  const message = exceeded
-    ? `You have used all of your ${allowance.name} ${metricNoun(allowance)}.${
-        scoped ? ' Other models are still available.' : ''
-      }${resetLabel(allowance)}`
-    : `${formatAmount(allowance.remaining, allowance.metric)} of your ${allowance.name} ${metricNoun(allowance)} remaining.${resetLabel(allowance)}`;
+      const message = exceeded
+        ? `You have used all of your ${allowance.name} ${metricNoun(allowance)}.`
+        : `You are close to your ${allowance.name} limit.`;
 
-  return (
-    <div
-      role="status"
-      className={cn(
-        'mx-auto mb-2 flex w-full max-w-3xl items-start gap-2.5 rounded-xl border px-3 py-2 text-xs',
-        exceeded || allowance.severity === 'critical'
-          ? 'border-[var(--danger)]/40 bg-[var(--danger)]/10 text-[var(--danger-foreground)]'
-          : 'border-[var(--warning)]/40 bg-[var(--warning)]/10 text-[var(--text-secondary)]',
-      )}
-    >
-      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-      <p className="min-w-0 flex-1 leading-relaxed">{message}</p>
-      <button
-        type="button"
-        aria-label="Dismiss usage warning"
-        onClick={() =>
-          setDismissed((current) => ({ ...current, [allowance.policyId]: allowance.severity }))
-        }
-        className="shrink-0 rounded p-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
+      const options = { id: `usage-${allowance.policyId}`, description };
+
+      if (exceeded || allowance.severity === 'critical') toast.error(message, options);
+      else toast.warning(message, options);
+    }
+  }, [data]);
+
+  return null;
 }

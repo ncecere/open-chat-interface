@@ -197,6 +197,7 @@ function ThreadConversation({
         <div ref={bottomRef} />
       </div>
 
+      {/* Renders no markup; raises a toast when an allowance runs low. */}
       <UsageWarning />
 
       <Composer

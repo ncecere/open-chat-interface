@@ -155,6 +155,7 @@ export function ChatHomePage() {
         </div>
       </div>
 
+      {/* Renders no markup; raises a toast when an allowance runs low. */}
       <UsageWarning />
 
       <Composer
