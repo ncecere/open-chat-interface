@@ -99,19 +99,17 @@ export function IntroductionWizard() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-[var(--bg-app)] px-4 py-10">
-      <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
-        <div className="grid md:grid-cols-[1fr_1.15fr]">
+      <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
+        <div className="grid min-h-[26rem] md:grid-cols-[1fr_1.15fr]">
           {/* Context stays put while the question changes, so the wizard reads
               as one task rather than a series of unrelated screens. */}
-          <div className="flex flex-col justify-between gap-8 border-[var(--border-subtle)] border-b p-6 md:border-r md:border-b-0 md:p-8">
+          <div className="flex flex-col justify-between gap-8 border-[var(--border-subtle)] border-b p-8 md:border-r md:border-b-0 md:p-10">
             <div>
-              <span className="flex size-10 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
-                <Icon className="size-5 text-[var(--accent-bright)]" aria-hidden="true" />
+              <span className="flex size-12 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
+                <Icon className="size-6 text-[var(--accent-bright)]" aria-hidden="true" />
               </span>
-              <h1 className="mt-5 font-semibold text-xl leading-tight">{current.title}</h1>
-              <p className="mt-2 text-[var(--text-muted)] text-sm leading-relaxed">
-                {current.description}
-              </p>
+              <h1 className="mt-6 font-semibold text-2xl leading-tight">{current.title}</h1>
+              <p className="mt-3 text-[var(--text-muted)] leading-relaxed">{current.description}</p>
             </div>
 
             <div className="flex items-center gap-2" aria-hidden="true">
@@ -134,14 +132,15 @@ export function IntroductionWizard() {
             </div>
           </div>
 
-          <div className="flex flex-col justify-between gap-8 p-6 md:p-8">
-            <div className="flex flex-col gap-4">
+          <div className="flex flex-col justify-between gap-8 p-8 md:p-10">
+            <div className="flex flex-1 flex-col justify-center gap-5">
               {current.id === 'name' && (
                 <>
                   <label className="flex flex-col gap-1.5 text-sm" htmlFor="wizard-name">
                     <span className="font-medium">Name</span>
                     <Input
                       id="wizard-name"
+                      className="h-11"
                       autoFocus
                       value={draft.displayName}
                       maxLength={120}
@@ -155,6 +154,7 @@ export function IntroductionWizard() {
                     <span className="font-medium">What do you do?</span>
                     <Input
                       id="wizard-occupation"
+                      className="h-11"
                       value={draft.occupation}
                       maxLength={200}
                       placeholder="Research administrator"
@@ -177,7 +177,7 @@ export function IntroductionWizard() {
                         aria-pressed={selected}
                         onClick={() => toggleTrait(trait)}
                         className={cn(
-                          'flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm capitalize transition-colors',
+                          'flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm capitalize transition-colors',
                           selected
                             ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
                             : 'bg-[var(--bg-control-alt)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
@@ -196,7 +196,7 @@ export function IntroductionWizard() {
                   <span className="font-medium">Notes</span>
                   <Textarea
                     id="wizard-context"
-                    rows={6}
+                    rows={9}
                     value={draft.additionalContext}
                     maxLength={4_000}
                     placeholder="I prefer short answers with examples, and I work mostly in TypeScript."
