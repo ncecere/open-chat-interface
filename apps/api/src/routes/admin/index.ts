@@ -10,6 +10,7 @@ import { providerRoutes } from './providers.js';
 import { quotaRoutes } from './quotas.js';
 import { settingsRoutes } from './settings.js';
 import { ssoRoutes } from './sso.js';
+import { usageRoutes } from './usage.js';
 import { userRoutes } from './users.js';
 
 export const adminRoutes = new Hono<AppBindings>();
@@ -25,6 +26,7 @@ adminRoutes.route('/invites', inviteRoutes);
 adminRoutes.route('/providers', providerRoutes);
 adminRoutes.route('/models', modelRoutes);
 adminRoutes.route('/quotas', quotaRoutes);
+adminRoutes.route('/usage', usageRoutes);
 adminRoutes.route('/lifecycle', lifecycleRoutes);
 adminRoutes.route('/settings', settingsRoutes);
 adminRoutes.route('/sso', ssoRoutes);

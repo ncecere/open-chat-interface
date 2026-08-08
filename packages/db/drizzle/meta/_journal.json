@@ -92,6 +92,13 @@
       "when": 1786160000000,
       "tag": "0012_quota_policy_overrides",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786161000000,
+      "tag": "0013_quota_denials",
+      "breakpoints": true
     }
   ]
 }

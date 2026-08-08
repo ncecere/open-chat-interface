@@ -53,6 +53,7 @@ export async function getRetentionSettings(): Promise<RetentionSettings> {
     auditLogRetentionDays:
       stored.auditLogRetentionDays ??
       positiveInt(env.RETENTION_AUDIT_LOG_DAYS, DEFAULT_AUDIT_LOG_RETENTION_DAYS),
+    displayTimezone: stored.displayTimezone ?? env.DISPLAY_TIMEZONE ?? 'UTC',
   };
 }
 
@@ -115,6 +116,27 @@ export async function getRateLimitSettings(): Promise<RateLimitConfig> {
         stored.reserve?.tokens ?? positiveInt(env.QUOTA_RESERVE_TOKENS, DEFAULT_RESERVED_TOKENS),
     },
   };
+}
+
+/**
+ * The zone reporting is presented in.
+ *
+ * Deliberately separate from a policy's timezone, which governs when a limit
+ * actually resets. Enforcement stays per-policy; this only decides where a day
+ * boundary falls on a chart, so the two can never be confused for each other.
+ */
+export async function getDisplayTimezone(): Promise<string> {
+  const stored = await getSetting('retention');
+  const configured = stored.displayTimezone ?? loadEnv().DISPLAY_TIMEZONE;
+  if (!configured) return 'UTC';
+
+  // An unknown zone would make Postgres raise on every reporting query.
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: configured });
+    return configured;
+  } catch {
+    return 'UTC';
+  }
 }
 
 /** Just the reserve, for the reservation path that needs nothing else. */

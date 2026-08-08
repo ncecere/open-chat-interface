@@ -165,6 +165,40 @@ export const usageEvent = pgTable(
   ],
 );
 
+/**
+ * Daily count of refused runs, per policy and person.
+ *
+ * A rollup rather than one row per refusal: a rejected request is cheap to
+ * make, so anything scripting against a limit would otherwise write without
+ * bound. The policy name is snapshotted the way prices are, so deleting a
+ * policy does not erase the history that explains why it was removed.
+ *
+ * Sustained denials usually mean a limit is set wrong rather than that someone
+ * is misbehaving, which is exactly what an administrator currently cannot see.
+ */
+export const quotaDenial = pgTable(
+  'quota_denial',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    policyId: text('policy_id'),
+    policyName: text('policy_name').notNull(),
+    modelSlug: text('model_slug').notNull(),
+    day: text('day').notNull(),
+    denialCount: integer('denial_count').notNull().default(0),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex('quota_denial_unique').on(t.userId, t.policyId, t.modelSlug, t.day),
+    index('quota_denial_day_idx').on(t.day),
+  ],
+);
+
 /** Daily rollup used by the usage meter and admin analytics. */
 export const usageRecord = pgTable(
   'usage_record',

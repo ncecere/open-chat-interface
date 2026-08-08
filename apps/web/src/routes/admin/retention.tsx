@@ -98,6 +98,21 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
         </Field>
 
         <Field
+          label="Reporting timezone"
+          htmlFor="display-timezone"
+          hint="Where a day starts and ends on the Usage page. Limits reset on their own policy's timezone, which this does not change."
+        >
+          <Input
+            id="display-timezone"
+            value={draft.displayTimezone}
+            placeholder="UTC"
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, displayTimezone: event.target.value }))
+            }
+          />
+        </Field>
+
+        <Field
           label="Audit log (days)"
           htmlFor="audit-days"
           hint="Security-relevant entries such as role and credential changes are kept regardless."

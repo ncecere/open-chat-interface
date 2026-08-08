@@ -25,6 +25,7 @@ import { AdminSettingsPage } from '~/routes/admin/settings';
 import { AdminSsoPage } from '~/routes/admin/sso';
 import { AdminStoragePage } from '~/routes/admin/storage';
 import { AdminStorageLimitsPage } from '~/routes/admin/storage-limits';
+import { AdminUsagePage } from '~/routes/admin/usage';
 import { AdminUsersPage } from '~/routes/admin/users';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
@@ -275,6 +276,12 @@ const adminRetentionRoute = createRoute({
   component: AdminRetentionPage,
 });
 
+const adminUsageRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/usage',
+  component: AdminUsagePage,
+});
+
 const adminMaintenanceRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/maintenance',
@@ -311,6 +318,7 @@ const routeTree = rootRoute.addChildren([
     adminStorageLimitsRoute,
     adminRateLimitsRoute,
     adminRetentionRoute,
+    adminUsageRoute,
     adminMaintenanceRoute,
     adminAuditRoute,
   ]),

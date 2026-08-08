@@ -42,6 +42,8 @@ const envSchema = z.object({
   RATE_LIMIT_AUTH_PER_MINUTE: z.string().optional(),
   QUOTA_RESERVE_COST_MICROS: z.string().optional(),
   QUOTA_RESERVE_TOKENS: z.string().optional(),
+  /** IANA zone used to present usage reporting. Enforcement is unaffected. */
+  DISPLAY_TIMEZONE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
