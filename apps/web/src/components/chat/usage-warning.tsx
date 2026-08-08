@@ -1,24 +1,19 @@
-import { MICROS_PER_DOLLAR, type UsageAllowance, type UsageSummary } from '@oci/shared';
+import type { UsageAllowance, UsageSummary } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { api } from '~/lib/api-client';
 
-function formatAmount(value: number, metric: UsageAllowance['metric']): string {
-  if (metric !== 'cost') return value.toLocaleString();
-  const dollars = value / MICROS_PER_DOLLAR;
-  return `$${dollars.toFixed(value > 0 && dollars < 0.01 ? 4 : 2)}`;
-}
-
-function metricNoun(allowance: UsageAllowance): string {
-  switch (allowance.metric) {
-    case 'messages':
-      return 'messages';
-    case 'tokens':
-      return 'tokens';
-    default:
-      return 'budget';
-  }
+/**
+ * How much of an allowance is left, as a percentage.
+ *
+ * Deliberately not the underlying messages, tokens, or dollars: those are
+ * three different units that mean little to the reader, and spend is instance
+ * cost rather than something a user should be shown.
+ */
+function percentRemaining(allowance: UsageAllowance): number {
+  const fraction = Math.max(0, 1 - allowance.used / allowance.limitValue);
+  return fraction > 0 ? Math.max(1, Math.floor(fraction * 100)) : 0;
 }
 
 function resetLabel(allowance: UsageAllowance): string {
@@ -68,10 +63,10 @@ export function UsageWarning() {
 
       const description = exceeded
         ? `${scoped ? 'Other models are still available.' : ''}${resetLabel(allowance)}`.trim()
-        : `${formatAmount(allowance.remaining, allowance.metric)} remaining.${resetLabel(allowance)}`;
+        : `${percentRemaining(allowance)}% remaining.${resetLabel(allowance)}`;
 
       const message = exceeded
-        ? `You have used all of your ${allowance.name} ${metricNoun(allowance)}.`
+        ? `You have used all of your ${allowance.name} allowance.`
         : `You are close to your ${allowance.name} limit.`;
 
       const options = { id: `usage-${allowance.policyId}`, description };

@@ -122,13 +122,28 @@ describe('allowance reporting', () => {
 });
 
 describe('limit messages', () => {
-  it('formats a cost limit in dollars', () => {
+  it('names the policy and window a user can act on', () => {
+    const message = limitMessage(
+      policy({ name: 'Anthropic models', metric: 'cost', windowKind: 'monthly' }),
+    );
+
+    expect(message).toContain('Anthropic models');
+    expect(message).toContain('this month');
+  });
+
+  it('never exposes the underlying spend figure to a user', () => {
     const message = limitMessage(
       policy({ metric: 'cost', limitValue: 5 * MICROS_PER_DOLLAR, windowKind: 'monthly' }),
     );
 
-    expect(message).toContain('$5.00');
-    expect(message).toContain('this month');
+    // Spend is instance cost, not something a user should be shown.
+    expect(message).not.toContain('$');
+    expect(message).not.toContain('5000000');
+  });
+
+  it('never exposes raw message or token counts to a user', () => {
+    expect(limitMessage(policy({ metric: 'messages', limitValue: 100 }))).not.toContain('100');
+    expect(limitMessage(policy({ metric: 'tokens', limitValue: 50_000 }))).not.toContain('50,000');
   });
 
   it('describes a rolling window by length', () => {
