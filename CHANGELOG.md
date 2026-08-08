@@ -7,6 +7,24 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-07
+
+### Fixed
+
+- A reasoning model no longer leaves the screen blank while it thinks. The
+  typing indicator was tied to the last message still being the user's, so it
+  disappeared the moment an empty assistant message was created, which is
+  exactly when a model begins working and the wait is longest. It now persists
+  until the response actually produces something.
+
+### Changed
+
+- The reasoning panel opens itself while thinking is the only thing happening
+  and collapses once the answer begins. An explicit click still wins.
+- The model dialog explains whether a provider can show a model's thinking at
+  all, since that depends on the wire protocol and the model rather than on any
+  setting in this application.
+
 ## [0.2.0] - 2026-08-07
 
 Governance and lifecycle management: what people are allowed to consume, how
@@ -131,6 +149,7 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/compare/v0.2.0...main
+[Unreleased]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/compare/v0.2.1...main
+[0.2.1]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.2.1
 [0.2.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.2.0
 [0.1.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.1.0

@@ -9,7 +9,7 @@ provider configuration before relying on them in production.
 Authenticate to the GitLab registry and select an immutable release tag:
 
 ```bash
-export OCI_VERSION=v0.2.0
+export OCI_VERSION=v0.2.1
 export OCI_REGISTRY=registry.gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
 docker login registry.gitlab.it.ufl.edu
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"

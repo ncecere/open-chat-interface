@@ -75,7 +75,7 @@ Release deployments should pin both application images to the same immutable
 version instead of tracking `latest`:
 
 ```bash
-export OCI_VERSION=v0.2.0
+export OCI_VERSION=v0.2.1
 export OCI_REGISTRY=registry.gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
