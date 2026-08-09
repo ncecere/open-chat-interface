@@ -7,6 +7,65 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-08
+
+Administration and onboarding: what an instance tells people when they arrive,
+and how an administrator manages it once they are here.
+
+### Added
+
+- An acceptable use policy that people must accept before using the instance.
+  Policies are versioned and never edited in place: an acceptance records
+  agreement to specific wording, so publishing a change creates a new version
+  and re-prompts everyone automatically. A version somebody accepted cannot be
+  deleted, since that would destroy the record of what they agreed to.
+- A short introduction for new accounts, collecting a name, occupation, tone,
+  and any other context. Everything it asks feeds the system prompt, which is
+  the only reason to ask. It can be skipped.
+- Instance-wide announcements, shown as a banner rather than a toast so a
+  maintenance notice stays readable. Dismissal is per person, and editing an
+  announcement does not re-show it to those who have already dismissed it; a
+  separate action does that deliberately.
+- A logo upload for the sign-in page and sidebar, with a short name as a
+  fallback. Uploads are validated by content rather than file extension, and
+  SVG is rejected: the logo renders before sign-in, where a scriptable image
+  would be stored cross-site scripting.
+- An information card for each model in the picker, listing its description,
+  features, provider, and limits.
+- Sorting and filtering on the user list, applied in the query so it describes
+  every account rather than the page already loaded.
+
+### Changed
+
+- Roles from SSO group membership now resolve to the most privileged matching
+  group rather than the first one listed. Row order is an authoring detail, not
+  a privilege decision. Group claims are matched case-insensitively and can be
+  read from nested attributes, which SAML and some OIDC providers require.
+  **An existing user's role may rise on their next sign-in.**
+- Model capabilities are colour-coded in the picker, each with its own hue and
+  a matching label. Colour is a second signal rather than the only one.
+- The default model is set in instance settings rather than on individual
+  catalogue rows.
+- Every dropdown is now a themed control rather than the browser's own, so all
+  of them match the rest of the interface.
+
+### Removed
+
+- The cost tier field and its `$$` badge. It fed no pricing, quota, rate
+  limiting, or routing decision — it was a label whose only effect was to
+  render itself, and once it left the model form nobody could edit it. The
+  column is dropped in migration `0016`.
+
+### Fixed
+
+- The theme preview swatch showed the accent already in effect rather than the
+  one it advertised.
+- A section header in the sidebar was smaller than the 24px minimum target size
+  required by WCAG 2.2.
+- Accessibility scans no longer run while the theme transition is still
+  animating, where they sampled blended colours and reported contrast failures
+  against values nobody ever sees.
+
 ## [0.2.1] - 2026-08-07
 
 ### Fixed
