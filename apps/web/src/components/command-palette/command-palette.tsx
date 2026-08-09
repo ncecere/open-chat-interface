@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { NAV_SECTIONS } from '~/components/admin/admin-layout';
 import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useCreateThread, useThreads } from '~/hooks/use-threads';
@@ -171,7 +172,7 @@ export function CommandPalette({
       },
     ];
 
-    if (currentUser?.user.role === 'admin') {
+    if (currentUser?.user.role === 'admin' || currentUser?.user.role === 'auditor') {
       groups.push({
         id: 'admin',
         label: 'Admin',
@@ -183,6 +184,19 @@ export function CommandPalette({
             icon: Shield,
             onSelect: () => navigate({ to: '/admin' }),
           },
+          // Built from the sidebar's own list, so a page added there is
+          // reachable here without anybody remembering to add it twice.
+          ...NAV_SECTIONS.flatMap((section) =>
+            section.items
+              .filter((item) => item.to !== '/admin')
+              .map((item) => ({
+                id: `admin-${item.to}`,
+                label: item.label,
+                keywords: `admin administration ${section.label}`,
+                icon: item.icon,
+                onSelect: () => navigate({ to: item.to }),
+              })),
+          ),
         ],
       });
     }

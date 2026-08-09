@@ -177,6 +177,16 @@ export function AdminUserDetailPage() {
       </Section>
 
       <Section title="Recent activity">
+        {/* The panel shows the last twenty-five; the log holds the rest. */}
+        <p className="mb-3 text-xs">
+          <Link
+            to="/admin/audit"
+            search={{ search: user.email }}
+            className="text-[var(--accent-bright)] hover:underline"
+          >
+            See every event for this account
+          </Link>
+        </p>
         {audit.length === 0 ? (
           <Empty>No recorded events.</Empty>
         ) : (

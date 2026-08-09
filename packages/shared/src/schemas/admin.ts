@@ -252,8 +252,15 @@ export const usageSummarySchema = z.object({
 
 export const adminOverviewSchema = z.object({
   users: z.object({ total: z.number(), active30d: z.number(), admins: z.number() }),
-  threads: z.object({ total: z.number(), last24h: z.number() }),
-  messages: z.object({ total: z.number(), last24h: z.number() }),
+  threads: z.object({
+    total: z.number(),
+    last24h: z.number(),
+    /** The 24 hours before that, so the figure above can be compared. */
+    previous24h: z.number(),
+  }),
+  messages: z.object({ total: z.number(), last24h: z.number(), previous24h: z.number() }),
+  /** Daily message counts, oldest first, for a shape rather than a number. */
+  activity: z.array(z.object({ day: z.string(), messages: z.number() })),
   models: z.object({ enabled: z.number(), total: z.number() }),
   providers: z.object({ configured: z.number(), enabled: z.number() }),
   storage: z.object({

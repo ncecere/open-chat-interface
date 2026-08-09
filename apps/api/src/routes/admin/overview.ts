@@ -1,4 +1,4 @@
-import { count, eq, gte, schema, sql } from '@oci/db';
+import { and, count, eq, gte, lt, schema, sql } from '@oci/db';
 import type { AdminOverview } from '@oci/shared';
 import { Hono } from 'hono';
 import { db, sql as sqlClient } from '../../db/index.js';
@@ -10,6 +10,7 @@ export const overviewRoutes = new Hono<AppBindings>();
 
 overviewRoutes.get('/', async (c) => {
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const [
@@ -24,6 +25,9 @@ overviewRoutes.get('/', async (c) => {
     enabledModels,
     providerTotals,
     enabledProviders,
+    previousThreads,
+    previousMessages,
+    activityRows,
     storageTotals,
   ] = await Promise.all([
     db.select({ value: count() }).from(schema.user),
@@ -37,6 +41,25 @@ overviewRoutes.get('/', async (c) => {
     db.select({ value: count() }).from(schema.model).where(eq(schema.model.enabled, true)),
     db.select({ value: count() }).from(schema.provider),
     db.select({ value: count() }).from(schema.provider).where(eq(schema.provider.enabled, true)),
+    db
+      .select({ value: count() })
+      .from(schema.thread)
+      .where(and(gte(schema.thread.createdAt, twoDaysAgo), lt(schema.thread.createdAt, dayAgo))),
+    db
+      .select({ value: count() })
+      .from(schema.message)
+      .where(and(gte(schema.message.createdAt, twoDaysAgo), lt(schema.message.createdAt, dayAgo))),
+    // Grouped in the database rather than fetched and bucketed here: the row
+    // count is fourteen either way, but the message table is not.
+    db
+      .select({
+        day: sql<string>`to_char(date_trunc('day', ${schema.message.createdAt}), 'YYYY-MM-DD')`,
+        messages: count(),
+      })
+      .from(schema.message)
+      .where(gte(schema.message.createdAt, new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)))
+      .groupBy(sql`date_trunc('day', ${schema.message.createdAt})`)
+      .orderBy(sql`date_trunc('day', ${schema.message.createdAt})`),
     db
       .select({
         files: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is null)::int`,
@@ -62,8 +85,17 @@ overviewRoutes.get('/', async (c) => {
       active30d: activeUsers[0]?.value ?? 0,
       admins: adminUsers[0]?.value ?? 0,
     },
-    threads: { total: threadTotals[0]?.value ?? 0, last24h: recentThreads[0]?.value ?? 0 },
-    messages: { total: messageTotals[0]?.value ?? 0, last24h: recentMessages[0]?.value ?? 0 },
+    threads: {
+      total: threadTotals[0]?.value ?? 0,
+      last24h: recentThreads[0]?.value ?? 0,
+      previous24h: previousThreads[0]?.value ?? 0,
+    },
+    messages: {
+      total: messageTotals[0]?.value ?? 0,
+      last24h: recentMessages[0]?.value ?? 0,
+      previous24h: previousMessages[0]?.value ?? 0,
+    },
+    activity: activityRows.map((row) => ({ day: row.day, messages: row.messages })),
     models: { enabled: enabledModels[0]?.value ?? 0, total: modelTotals[0]?.value ?? 0 },
     providers: {
       configured: providerTotals[0]?.value ?? 0,
