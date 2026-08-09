@@ -98,6 +98,9 @@ export const instanceSettingsSchema = z.object({
   registrationMode: z.enum(REGISTRATION_MODES),
   emailVerificationRequired: z.boolean(),
   localAuthEnabled: z.boolean(),
+  /** Days a session stays valid, and how often activity extends it. */
+  sessionLifetimeDays: z.number().int().min(1).max(365).default(30),
+  sessionRefreshDays: z.number().int().min(1).max(365).default(1),
   defaultSystemPrompt: z.string().nullable(),
   features: z.object({
     shareLinks: z.boolean(),

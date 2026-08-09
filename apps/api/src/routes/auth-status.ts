@@ -35,6 +35,7 @@ authStatusRoutes.get('/status', async (c) => {
         providerId: schema.ssoProvider.providerId,
         label: schema.ssoProvider.label,
         kind: schema.ssoProvider.kind,
+        autoRedirect: schema.ssoProvider.autoRedirect,
       })
       .from(schema.ssoProvider)
       .where(eq(schema.ssoProvider.enabled, true)),
@@ -50,6 +51,7 @@ authStatusRoutes.get('/status', async (c) => {
       label: provider.label || provider.providerId,
       kind: provider.kind === 'saml' ? 'saml' : 'oidc',
       iconUrl: null,
+      autoRedirect: provider.autoRedirect,
     })),
     branding: {
       appName: branding.appName,

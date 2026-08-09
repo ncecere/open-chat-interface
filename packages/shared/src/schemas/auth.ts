@@ -54,6 +54,8 @@ export const authStatusSchema = z.object({
       label: z.string(),
       kind: z.enum(['oidc', 'saml']),
       iconUrl: z.string().url().nullable(),
+      /** Whether the sign-in page should go straight to this provider. */
+      autoRedirect: z.boolean().default(false),
     }),
   ),
   branding: z.object({

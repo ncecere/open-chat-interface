@@ -127,6 +127,13 @@
       "when": 1786373800000,
       "tag": "0017_message_user_index",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786460200000,
+      "tag": "0018_sso_auth_controls",
+      "breakpoints": true
     }
   ]
 }

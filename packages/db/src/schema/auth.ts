@@ -122,6 +122,33 @@ export const ssoProvider = pgTable(
       .$type<ClaimRoleMapping[]>()
       .notNull()
       .default([]),
+    /**
+     * Whether a login that matches no role mapping is refused.
+     *
+     * Off preserves the original behaviour, where an unmatched user silently
+     * receives `defaultRole` — which means everyone the identity provider will
+     * authenticate gets an account. Turning this on is what makes group
+     * mapping an authorisation boundary rather than a label.
+     */
+    requireRoleMatch: boolean('require_role_match').notNull().default(false),
+    /** Shown to a refused user. Blank falls back to a generic message. */
+    roleRequiredMessage: text('role_required_message'),
+    /**
+     * Claim names carrying profile fields. Null uses the standard OIDC claim,
+     * which is right for a conforming provider and wrong for the several that
+     * are not.
+     */
+    claimMappings: jsonb('claim_mappings')
+      .$type<{ email?: string; name?: string; image?: string; subject?: string }>()
+      .notNull()
+      .default({}),
+    /**
+     * Sends the sign-in page straight here, skipping the local form.
+     *
+     * The form remains reachable at `/auth/login?local=1`, which is the only
+     * way back in if the provider breaks.
+     */
+    autoRedirect: boolean('auto_redirect').notNull().default(false),
     ...timestamps(),
   },
   (t) => [uniqueIndex('sso_provider_provider_id_unique').on(t.providerId)],

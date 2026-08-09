@@ -9,6 +9,21 @@ interface ProviderPolicy {
   allowedDomains: string[];
   defaultRole: UserRole;
   claimRoleMappings: ClaimRoleMapping[];
+  requireRoleMatch: boolean;
+  roleRequiredMessage: string | null;
+}
+
+/**
+ * Raised when a login matched no role mapping and the provider requires one.
+ *
+ * Carries the administrator's message so the sign-in page can explain the
+ * refusal, rather than showing a generic failure that looks like an outage.
+ */
+export class SsoRoleRequiredError extends Error {
+  constructor(readonly adminMessage: string | null) {
+    super(adminMessage?.trim() || 'Your account is not authorised to use this application.');
+    this.name = 'SsoRoleRequiredError';
+  }
 }
 
 export async function loadProviderPolicy(providerId: string): Promise<ProviderPolicy | null> {
@@ -18,6 +33,8 @@ export async function loadProviderPolicy(providerId: string): Promise<ProviderPo
       allowedDomains: schema.ssoProvider.allowedDomains,
       defaultRole: schema.ssoProvider.defaultRole,
       claimRoleMappings: schema.ssoProvider.claimRoleMappings,
+      requireRoleMatch: schema.ssoProvider.requireRoleMatch,
+      roleRequiredMessage: schema.ssoProvider.roleRequiredMessage,
       enabled: schema.ssoProvider.enabled,
     })
     .from(schema.ssoProvider)
@@ -31,6 +48,8 @@ export async function loadProviderPolicy(providerId: string): Promise<ProviderPo
     allowedDomains: row.allowedDomains,
     defaultRole: row.defaultRole as UserRole,
     claimRoleMappings: row.claimRoleMappings,
+    requireRoleMatch: row.requireRoleMatch,
+    roleRequiredMessage: row.roleRequiredMessage,
   };
 }
 
@@ -92,7 +111,21 @@ export function resolveRoleFromClaims(
   mappings: ClaimRoleMapping[],
   defaultRole: UserRole,
 ): UserRole {
-  if (!claims || mappings.length === 0) return defaultRole;
+  return matchRoleFromClaims(claims, mappings) ?? defaultRole;
+}
+
+/**
+ * The role the claims actually match, or null when none do.
+ *
+ * Separate from `resolveRoleFromClaims` because "matched nothing" and "matched
+ * a rule that happens to grant the default role" are the same answer once a
+ * default has been substituted, and refusing a login has to tell them apart.
+ */
+export function matchRoleFromClaims(
+  claims: Record<string, unknown> | undefined,
+  mappings: ClaimRoleMapping[],
+): UserRole | null {
+  if (!claims || mappings.length === 0) return null;
 
   const matched = mappings.filter(
     (mapping) =>
@@ -100,13 +133,13 @@ export function resolveRoleFromClaims(
       claimMatches(claimValue(claims, mapping.claim), mapping.value),
   );
 
-  if (matched.length === 0) return defaultRole;
+  if (matched.length === 0) return null;
 
   for (const role of ROLE_PRECEDENCE) {
     if (matched.some((mapping) => mapping.role === role)) return role;
   }
 
-  return defaultRole;
+  return null;
 }
 
 /**
@@ -129,7 +162,27 @@ export async function applySsoProvisioning(params: {
     throw new Error(`Email domain is not permitted for provider ${params.providerId}`);
   }
 
-  const role = resolveRoleFromClaims(params.claims, policy.claimRoleMappings, policy.defaultRole);
+  const matched = matchRoleFromClaims(params.claims, policy.claimRoleMappings);
+
+  if (policy.requireRoleMatch && matched === null) {
+    // Refused rather than admitted with the default role. Without this, every
+    // account the identity provider will authenticate receives access, which
+    // for an institution-wide provider is everyone.
+    //
+    // The plugin creates the session before calling this hook and sets the
+    // cookie afterwards, so throwing keeps the browser unauthenticated but
+    // leaves the row behind. Clearing it means a refused attempt cannot be
+    // resumed and does not accumulate.
+    await db.delete(schema.session).where(eq(schema.session.userId, params.userId));
+
+    logger.warn(
+      { userId: params.userId, providerId: params.providerId },
+      'SSO login refused: no role mapping matched',
+    );
+    throw new SsoRoleRequiredError(policy.roleRequiredMessage);
+  }
+
+  const role = matched ?? policy.defaultRole;
 
   await db.update(schema.user).set({ role }).where(eq(schema.user.id, params.userId));
 

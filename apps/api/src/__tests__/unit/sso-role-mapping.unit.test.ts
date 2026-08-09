@@ -1,6 +1,6 @@
 import type { ClaimRoleMapping } from '@oci/shared';
 import { describe, expect, it } from 'vitest';
-import { resolveRoleFromClaims } from '../../auth/provisioning.js';
+import { matchRoleFromClaims, resolveRoleFromClaims } from '../../auth/provisioning.js';
 
 const mapping = (
   claim: string,
@@ -140,5 +140,38 @@ describe('SSO role mapping', () => {
     expect(resolveRoleFromClaims({ groups: null }, [mapping('groups', '', 'admin')], 'user')).toBe(
       'user',
     );
+  });
+});
+
+describe('matchRoleFromClaims', () => {
+  const mappings: ClaimRoleMapping[] = [
+    { claim: 'groups', value: 'oci-users', role: 'user' },
+    { claim: 'groups', value: 'oci-admins', role: 'admin' },
+  ];
+
+  it('reports no match when the claims carry none of the mapped groups', () => {
+    expect(matchRoleFromClaims({ groups: ['finance'] }, mappings)).toBeNull();
+  });
+
+  it('reports no match when there are no mappings to match against', () => {
+    expect(matchRoleFromClaims({ groups: ['oci-users'] }, [])).toBeNull();
+  });
+
+  it('reports no match when the assertion carries no claims at all', () => {
+    expect(matchRoleFromClaims(undefined, mappings)).toBeNull();
+  });
+
+  it('returns the matched role', () => {
+    expect(matchRoleFromClaims({ groups: ['oci-users'] }, mappings)).toBe('user');
+  });
+
+  it('distinguishes an unmatched login from one matching a default-valued rule', () => {
+    // This is the distinction the refusal depends on: resolveRoleFromClaims
+    // answers "user" for both, having already substituted the default.
+    expect(resolveRoleFromClaims({ groups: ['finance'] }, mappings, 'user')).toBe('user');
+    expect(resolveRoleFromClaims({ groups: ['oci-users'] }, mappings, 'user')).toBe('user');
+
+    expect(matchRoleFromClaims({ groups: ['finance'] }, mappings)).toBeNull();
+    expect(matchRoleFromClaims({ groups: ['oci-users'] }, mappings)).toBe('user');
   });
 });

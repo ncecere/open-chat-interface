@@ -7,6 +7,13 @@ export const claimRoleMappingSchema = z.object({
   role: z.enum(USER_ROLES),
 });
 
+export const claimMappingsSchema = z.object({
+  email: z.string().trim().max(120).optional(),
+  name: z.string().trim().max(120).optional(),
+  image: z.string().trim().max(120).optional(),
+  subject: z.string().trim().max(120).optional(),
+});
+
 const baseProviderFields = {
   providerId: z
     .string()
@@ -22,6 +29,17 @@ const baseProviderFields = {
   allowedDomains: z.array(z.string().trim().toLowerCase().max(253)).default([]),
   defaultRole: z.enum(USER_ROLES).default('user'),
   claimRoleMappings: z.array(claimRoleMappingSchema).default([]),
+  /**
+   * Refuse a login that matches no role mapping, rather than granting the
+   * default role. Off by default so an existing provider is unaffected by an
+   * upgrade.
+   */
+  requireRoleMatch: z.boolean().default(false),
+  roleRequiredMessage: z.string().trim().max(500).nullable().optional(),
+  /** Claim names for profile fields. Empty uses the standard OIDC claim. */
+  claimMappings: claimMappingsSchema.default({}),
+  /** Send the sign-in page straight to this provider. */
+  autoRedirect: z.boolean().default(false),
 };
 
 export const createOidcProviderSchema = z.object({
@@ -63,6 +81,10 @@ export const ssoProviderSummarySchema = z.object({
   allowedDomains: z.array(z.string()),
   defaultRole: z.enum(USER_ROLES),
   claimRoleMappings: z.array(claimRoleMappingSchema),
+  requireRoleMatch: z.boolean(),
+  roleRequiredMessage: z.string().nullable(),
+  claimMappings: claimMappingsSchema,
+  autoRedirect: z.boolean(),
   issuer: z.string(),
   metadataUrl: z.string().nullable(),
   callbackUrl: z.string(),
@@ -73,3 +95,4 @@ export const ssoProviderSummarySchema = z.object({
 export type CreateSsoProviderInput = z.infer<typeof createSsoProviderSchema>;
 export type SsoProviderSummary = z.infer<typeof ssoProviderSummarySchema>;
 export type ClaimRoleMapping = z.infer<typeof claimRoleMappingSchema>;
+export type ClaimMappings = z.infer<typeof claimMappingsSchema>;
