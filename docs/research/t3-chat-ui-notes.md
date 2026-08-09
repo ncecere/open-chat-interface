@@ -1,3 +1,9 @@
+> **Competitor analysis, not product documentation.**
+>
+> These are observations of T3 Chat's interface, captured while deciding how
+> Open Chat Interface should look and behave. They describe somebody else's
+> product. For how OCI actually works, see [the documentation index](../README.md).
+
 # T3 Chat Replication Design Document
 
 **Status:** Reverse-engineering reference  
