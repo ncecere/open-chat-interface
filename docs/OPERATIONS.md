@@ -73,6 +73,29 @@ and verify attachment downloads.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
 
+## Single sign-on roles
+
+A user's role is recalculated from identity-provider claims on every SSO
+sign-in, then written to their account.
+
+Two consequences follow, and both surprise administrators who have not met them
+before:
+
+- **A role set by hand does not persist.** Promoting an SSO user in the admin
+  interface lasts until their next sign-in, at which point the mapping wins.
+  Grant a lasting role by changing the group membership in the identity
+  provider, or by mapping the group they are already in.
+- **A role can go down as well as up.** Someone removed from a mapped group
+  drops to whatever still matches, or to the provider's default role.
+
+Where a user matches several mappings, the most privileged one wins. Ordering
+the rows differently will not change the outcome; that is deliberate, so a
+privilege does not depend on the order somebody happened to add the rows.
+
+To audit what an instance will do before enabling a provider, read its
+`claimRoleMappings` and remember that every mapping is evaluated, not just the
+first that matches.
+
 ## Rollback and recovery
 
 Application images can be rolled back by restoring `OCI_API_IMAGE` and
