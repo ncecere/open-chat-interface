@@ -45,6 +45,8 @@ settingsRoutes.get('/', async (c) => {
     registrationMode: authSettings.registrationMode,
     emailVerificationRequired: authSettings.emailVerificationRequired,
     localAuthEnabled: authSettings.localAuthEnabled,
+    sessionLifetimeDays: authSettings.sessionLifetimeDays,
+    sessionRefreshDays: authSettings.sessionRefreshDays,
     defaultSystemPrompt: chat.defaultSystemPrompt,
     features,
     storage: {
@@ -138,7 +140,9 @@ settingsRoutes.patch('/', async (c) => {
   if (
     patch.registrationMode !== undefined ||
     patch.emailVerificationRequired !== undefined ||
-    patch.localAuthEnabled !== undefined
+    patch.localAuthEnabled !== undefined ||
+    patch.sessionLifetimeDays !== undefined ||
+    patch.sessionRefreshDays !== undefined
   ) {
     await updateSetting('auth', {
       ...(patch.registrationMode !== undefined && { registrationMode: patch.registrationMode }),
@@ -146,6 +150,12 @@ settingsRoutes.patch('/', async (c) => {
         emailVerificationRequired: patch.emailVerificationRequired,
       }),
       ...(patch.localAuthEnabled !== undefined && { localAuthEnabled: patch.localAuthEnabled }),
+      ...(patch.sessionLifetimeDays !== undefined && {
+        sessionLifetimeDays: patch.sessionLifetimeDays,
+      }),
+      ...(patch.sessionRefreshDays !== undefined && {
+        sessionRefreshDays: patch.sessionRefreshDays,
+      }),
     });
   }
 

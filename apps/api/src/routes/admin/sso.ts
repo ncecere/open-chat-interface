@@ -1,5 +1,5 @@
 import { desc, eq, schema } from '@oci/db';
-import { createSsoProviderSchema, type SsoProviderSummary } from '@oci/shared';
+import { claimMappingsSchema, createSsoProviderSchema, type SsoProviderSummary } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { auth } from '../../auth/index.js';
@@ -46,6 +46,10 @@ ssoRoutes.get('/providers', async (c) => {
       allowedDomains: row.allowedDomains,
       defaultRole: row.defaultRole as SsoProviderSummary['defaultRole'],
       claimRoleMappings: row.claimRoleMappings,
+      requireRoleMatch: row.requireRoleMatch,
+      roleRequiredMessage: row.roleRequiredMessage,
+      claimMappings: row.claimMappings,
+      autoRedirect: row.autoRedirect,
       issuer: row.issuer,
       metadataUrl: metadataUrl(row.providerId, kind),
       callbackUrl: callbackUrl(row.providerId, kind),
@@ -139,6 +143,10 @@ ssoRoutes.post('/providers', async (c) => {
       allowedDomains: input.allowedDomains,
       defaultRole: input.defaultRole,
       claimRoleMappings: input.claimRoleMappings,
+      requireRoleMatch: input.requireRoleMatch,
+      roleRequiredMessage: input.roleRequiredMessage ?? null,
+      claimMappings: input.claimMappings,
+      autoRedirect: input.autoRedirect,
     })
     .where(eq(schema.ssoProvider.providerId, input.providerId));
 
@@ -170,6 +178,10 @@ const policyPatchSchema = z.object({
       }),
     )
     .optional(),
+  requireRoleMatch: z.boolean().optional(),
+  roleRequiredMessage: z.string().trim().max(500).nullable().optional(),
+  claimMappings: claimMappingsSchema.optional(),
+  autoRedirect: z.boolean().optional(),
 });
 
 ssoRoutes.patch('/providers/:providerId', async (c) => {

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -38,6 +38,42 @@ export function LoginPage() {
     setError(null);
     await authClient.signIn.sso({ providerId, callbackURL: '/' });
   }
+
+  /**
+   * Surfaces a refusal carried back from the identity provider round trip.
+   *
+   * A sign-in refused for want of a role fails after authentication succeeded,
+   * so without this the page would look like an outage rather than a decision
+   * somebody configured.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const description = params.get('error_description');
+    const code = params.get('error');
+    if (!description && !code) return;
+
+    setError(description || 'Your account is not authorised to use this application.');
+  }, []);
+
+  /**
+   * Sends straight to a provider configured to skip this page.
+   *
+   * `?local=1` suppresses it. Without that escape hatch a broken provider
+   * would make the instance unreachable, since every visit would bounce
+   * to it and there would be no way to reach the local form.
+   *
+   * A refusal message means the redirect has already happened and come back;
+   * bouncing again would loop.
+   */
+  useEffect(() => {
+    if (!status || error) return;
+    if (new URLSearchParams(window.location.search).has('local')) return;
+
+    const auto = status.ssoProviders.find((provider) => provider.autoRedirect);
+    // Called directly rather than through handleSso, which is rebuilt on every
+    // render and would re-run this effect each time.
+    if (auto) void authClient.signIn.sso({ providerId: auto.providerId, callbackURL: '/' });
+  }, [status, error]);
 
   const appName = status?.branding.appName;
 

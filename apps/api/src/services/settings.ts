@@ -48,6 +48,15 @@ export interface AuthSettings {
   registrationMode: 'open' | 'invite_only' | 'closed';
   emailVerificationRequired: boolean;
   localAuthEnabled: boolean;
+  /**
+   * How long a session stays valid, and how often activity extends it.
+   *
+   * Read at request time rather than at startup so a change takes effect
+   * without a restart. Shortening it does not retroactively expire sessions
+   * already issued; those last until their own expiry.
+   */
+  sessionLifetimeDays: number;
+  sessionRefreshDays: number;
 }
 
 export interface FeatureSettings {
@@ -58,6 +67,20 @@ export interface FeatureSettings {
   webSearch: boolean;
   attachments: boolean;
   branching: boolean;
+}
+
+/**
+ * Supplies session lifetimes to auth settings written before they existed.
+ *
+ * An upgraded instance has a stored `auth` object without these keys, and an
+ * undefined lifetime would otherwise reach Better Auth as `NaN` seconds.
+ */
+export function normalizeAuthSettings(value: AuthSettings): AuthSettings {
+  return {
+    ...value,
+    sessionLifetimeDays: value.sessionLifetimeDays ?? 30,
+    sessionRefreshDays: value.sessionRefreshDays ?? 1,
+  };
 }
 
 /** Drops the retired persona flag from settings written by older releases. */
@@ -207,7 +230,9 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<Settings
         ? normalizeBrandingSettings(stored as BrandingSettings)
         : key === 'features'
           ? normalizeFeatureSettings(stored as FeatureSettings)
-          : stored
+          : key === 'auth'
+            ? normalizeAuthSettings(stored as AuthSettings)
+            : stored
   ) as SettingsMap[K];
   cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
   return value;

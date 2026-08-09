@@ -22,6 +22,8 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
     registrationMode: 'invite_only',
     emailVerificationRequired: true,
     localAuthEnabled: true,
+    sessionLifetimeDays: 30,
+    sessionRefreshDays: 1,
   },
   features: {
     shareLinks: true,

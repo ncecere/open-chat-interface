@@ -39,6 +39,13 @@ const policySchema = z.object({
   trustedForLinking: z.boolean(),
   allowedDomains: z.array(z.string().trim().toLowerCase().min(1).max(253)),
   defaultRole: z.enum(USER_ROLES),
+  requireRoleMatch: z.boolean(),
+  roleRequiredMessage: z.string().trim().max(500),
+  autoRedirect: z.boolean(),
+  claimEmail: z.string().trim().max(120),
+  claimName: z.string().trim().max(120),
+  claimImage: z.string().trim().max(120),
+  claimSubject: z.string().trim().max(120),
   claimRoleMappings: z.array(
     z.object({
       claim: z.string().trim().min(1, 'Each role mapping needs a claim.').max(120),
@@ -62,6 +69,13 @@ interface PolicyDraft {
   allowedDomains: string;
   defaultRole: UserRole;
   claimRoleMappings: DraftClaimRoleMapping[];
+  requireRoleMatch: boolean;
+  roleRequiredMessage: string;
+  autoRedirect: boolean;
+  claimEmail: string;
+  claimName: string;
+  claimImage: string;
+  claimSubject: string;
 }
 
 interface ProtocolDraft {
@@ -89,6 +103,13 @@ const EMPTY_POLICY: PolicyDraft = {
   allowedDomains: '',
   defaultRole: 'user',
   claimRoleMappings: [],
+  requireRoleMatch: false,
+  roleRequiredMessage: '',
+  autoRedirect: false,
+  claimEmail: '',
+  claimName: '',
+  claimImage: '',
+  claimSubject: '',
 };
 
 const EMPTY_PROTOCOL: ProtocolDraft = {
@@ -344,6 +365,87 @@ function PolicyFields({
         disabled={disabled}
         onChange={(mappings) => set('claimRoleMappings', mappings)}
       />
+
+      <ToggleField
+        id="sso-require-role"
+        label="Require a matching role"
+        description="Refuse a sign-in that matches none of the mappings above, instead of granting the default role. Leave this off and every account the provider will authenticate receives access."
+        checked={policy.requireRoleMatch}
+        disabled={disabled}
+        onCheckedChange={(checked) => set('requireRoleMatch', checked)}
+      />
+
+      {policy.requireRoleMatch && (
+        <Field
+          label="Message for a refused sign-in"
+          htmlFor="sso-role-message"
+          hint="Shown to somebody who authenticated but matched no role. Leave blank for a generic message."
+        >
+          <Input
+            id="sso-role-message"
+            value={policy.roleRequiredMessage}
+            disabled={disabled}
+            maxLength={500}
+            placeholder="Request access through the IT service desk."
+            onChange={(event) => set('roleRequiredMessage', event.target.value)}
+          />
+        </Field>
+      )}
+
+      <ToggleField
+        id="sso-auto-redirect"
+        label="Skip the sign-in form"
+        description="Send visitors straight to this provider. The form stays reachable at /auth/login?local=1, which is the way back in if the provider fails."
+        checked={policy.autoRedirect}
+        disabled={disabled}
+        onCheckedChange={(checked) => set('autoRedirect', checked)}
+      />
+
+      <fieldset className="m-0 border-0 p-0">
+        <legend className="font-medium text-sm">Profile claims</legend>
+        <p className="mt-1 mb-3 text-[var(--text-muted)] text-xs">
+          Leave blank to use the standard claim. Set these only for a provider that names them
+          differently.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Email" htmlFor="sso-claim-email">
+            <Input
+              id="sso-claim-email"
+              value={policy.claimEmail}
+              disabled={disabled}
+              placeholder="email"
+              onChange={(event) => set('claimEmail', event.target.value)}
+            />
+          </Field>
+          <Field label="Display name" htmlFor="sso-claim-name">
+            <Input
+              id="sso-claim-name"
+              value={policy.claimName}
+              disabled={disabled}
+              placeholder="name"
+              onChange={(event) => set('claimName', event.target.value)}
+            />
+          </Field>
+          <Field label="Picture" htmlFor="sso-claim-image">
+            <Input
+              id="sso-claim-image"
+              value={policy.claimImage}
+              disabled={disabled}
+              placeholder="picture"
+              onChange={(event) => set('claimImage', event.target.value)}
+            />
+          </Field>
+          <Field label="Subject" htmlFor="sso-claim-subject">
+            <Input
+              id="sso-claim-subject"
+              value={policy.claimSubject}
+              disabled={disabled}
+              placeholder="sub"
+              onChange={(event) => set('claimSubject', event.target.value)}
+            />
+          </Field>
+        </div>
+      </fieldset>
     </section>
   );
 }
@@ -570,6 +672,13 @@ export function SsoProviderForm({
             ...mapping,
             draftId: crypto.randomUUID(),
           })),
+          requireRoleMatch: provider.requireRoleMatch,
+          roleRequiredMessage: provider.roleRequiredMessage ?? '',
+          autoRedirect: provider.autoRedirect,
+          claimEmail: provider.claimMappings.email ?? '',
+          claimName: provider.claimMappings.name ?? '',
+          claimImage: provider.claimMappings.image ?? '',
+          claimSubject: provider.claimMappings.subject ?? '',
         }
       : EMPTY_POLICY,
   );
@@ -577,7 +686,7 @@ export function SsoProviderForm({
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const save = useMutation({
-    mutationFn: async (body: CreateSsoProviderInput | z.infer<typeof policySchema>) => {
+    mutationFn: async (body: CreateSsoProviderInput | Record<string, unknown>) => {
       if (provider) {
         await api.patch<{ ok: boolean }>(`/admin/sso/providers/${provider.providerId}`, body);
       } else {
@@ -605,8 +714,24 @@ export function SsoProviderForm({
       return;
     }
 
+    const { claimEmail, claimName, claimImage, claimSubject, roleRequiredMessage, ...policyRest } =
+      policyResult.data;
+
+    // The form holds one field per claim so each can be labelled; the API takes
+    // them as one object, and a blank means "use the standard claim".
+    const submitted = {
+      ...policyRest,
+      roleRequiredMessage: roleRequiredMessage || null,
+      claimMappings: {
+        ...(claimEmail && { email: claimEmail }),
+        ...(claimName && { name: claimName }),
+        ...(claimImage && { image: claimImage }),
+        ...(claimSubject && { subject: claimSubject }),
+      },
+    };
+
     if (provider) {
-      save.mutate(policyResult.data);
+      save.mutate(submitted);
       return;
     }
 
@@ -633,7 +758,7 @@ export function SsoProviderForm({
           };
 
     const result = createSsoProviderSchema.safeParse({
-      ...policyResult.data,
+      ...submitted,
       providerId: protocol.providerId,
       ...protocolFields,
     });

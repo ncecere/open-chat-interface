@@ -73,6 +73,35 @@ and verify attachment downloads.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
 
+## Getting back in when sign-on fails
+
+Two settings can make an instance unreachable through the identity provider,
+and both have a way around them. Confirm the route works before enabling either
+in production.
+
+- **The sign-in form is skipped.** A provider set to redirect sends every
+  visitor straight to it. `/auth/login?local=1` suppresses that and shows the
+  form, which is the way in if the provider is down or misconfigured.
+- **A login is refused for want of a role.** With `require_role_match` on, a
+  user matching no mapping is refused rather than admitted with the default
+  role. An administrator locked out this way signs in locally with the account
+  seeded at installation, or one promoted with the recovery CLI.
+
+Local sign-in for an administrator is deliberately preserved. Turning off local
+authentication still admits a verified administrator, precisely so that setting
+cannot lock everybody out — but it depends on at least one administrator
+account having a verified email and a password that somebody knows. Check that
+before disabling it.
+
+If nothing above works, the recovery CLI promotes an existing account:
+
+```bash
+docker compose exec api node dist/scripts/promote-admin.js user@example.com
+```
+
+Outside a container, from a checkout: `pnpm --filter @oci/api admin:promote
+user@example.com`.
+
 ## Single sign-on roles
 
 A user's role is recalculated from identity-provider claims on every SSO
