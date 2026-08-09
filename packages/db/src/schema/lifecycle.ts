@@ -239,3 +239,63 @@ export const storagePolicy = pgTable(
   },
   (t) => [uniqueIndex('storage_policy_org_role_unique').on(t.organizationId, t.role)],
 );
+
+/**
+ * A named set of list filters an administrator returns to.
+ *
+ * Stored per person rather than per instance: "accounts I still have to review"
+ * is a working note, not instance configuration, and two administrators
+ * looking at the same directory rarely want the same slice of it.
+ */
+export const savedView = pgTable(
+  'saved_view',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** Which list this belongs to, such as `users` or `audit`. */
+    surface: text('surface').notNull(),
+    name: text('name').notNull(),
+    /** The query string, stored whole so a new filter needs no migration. */
+    filters: jsonb('filters').$type<Record<string, string>>().notNull().default({}),
+    ...timestamps(),
+  },
+  (t) => [
+    index('saved_view_user_surface_idx').on(t.userId, t.surface),
+    uniqueIndex('saved_view_user_surface_name_unique').on(t.userId, t.surface, t.name),
+  ],
+);
+
+/**
+ * A usage report delivered on a schedule.
+ *
+ * Sent by email rather than accumulated in the application: somebody who wants
+ * a monthly figure will not remember to open a page for it, which is the whole
+ * reason the report is scheduled.
+ */
+export const scheduledReport = pgTable(
+  'scheduled_report',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** `usage` today; named so another report needs no new table. */
+    kind: text('kind').notNull().default('usage'),
+    cadence: text('cadence').$type<'daily' | 'weekly' | 'monthly'>().notNull(),
+    /** Window the report covers, in days. */
+    windowDays: integer('window_days').notNull().default(30),
+    recipients: jsonb('recipients').$type<string[]>().notNull().default([]),
+    enabled: boolean('enabled').notNull().default(true),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    lastStatus: text('last_status').$type<'success' | 'error'>(),
+    lastError: text('last_error'),
+    ...timestamps(),
+  },
+  (t) => [index('scheduled_report_enabled_idx').on(t.enabled, t.lastRunAt)],
+);
