@@ -10,11 +10,27 @@ import { logger } from '../lib/logger.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/email.js';
 import { getDefaultOrganizationId } from '../services/organization.js';
 import { getSetting } from '../services/settings.js';
+import { recordAuthEvent } from './audit.js';
 import { ac, roles } from './permissions.js';
 import { enforceAuthRequestPolicy, isEmailVerificationEnforced } from './policy.js';
 import { applySsoProvisioning, SsoRoleRequiredError } from './provisioning.js';
 
 const env = loadEnv();
+
+/**
+ * Client address from proxy headers, for the auth hook.
+ *
+ * The hook is handed raw headers rather than a Hono context, so this cannot
+ * reuse `clientIp`. The precedence is the same.
+ */
+function forwardedIp(headers: Headers | undefined): string | null {
+  if (!headers) return null;
+  const cloudflare = headers.get('cf-connecting-ip')?.trim();
+  if (cloudflare) return cloudflare;
+  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  if (forwarded) return forwarded;
+  return headers.get('x-real-ip')?.trim() || null;
+}
 
 /**
  * The claims a role mapping can be written against.
@@ -185,6 +201,37 @@ export const auth = betterAuth({
           },
         },
       };
+    }),
+
+    /**
+     * Records the outcome of each authentication request.
+     *
+     * Placed here rather than at each call site because Better Auth owns these
+     * routes: there is no handler of ours to add it to, and a hook sees every
+     * path including ones added by a plugin later.
+     */
+    after: createAuthMiddleware(async (ctx) => {
+      // A failure returns an APIError carrying `statusCode`, not a Response.
+      // Checking only for a Response records every failed attempt as a success,
+      // which is precisely backwards for the events worth having.
+      const returned = ctx.context.returned as { status?: number; statusCode?: number } | undefined;
+      const status = returned instanceof Response ? returned.status : (returned?.statusCode ?? 200);
+      const session = ctx.context.newSession;
+
+      await recordAuthEvent({
+        path: ctx.path,
+        status,
+        ipAddress: forwardedIp(ctx.headers),
+        userAgent: ctx.headers?.get('user-agent') ?? null,
+        actorUserId: session?.user?.id ?? null,
+        // Falls back to the submitted address so a failed attempt still says
+        // which account was tried, which is the point of recording it.
+        actorEmail:
+          session?.user?.email ??
+          (typeof (ctx.body as { email?: unknown } | undefined)?.email === 'string'
+            ? (ctx.body as { email: string }).email
+            : null),
+      });
     }),
   },
 

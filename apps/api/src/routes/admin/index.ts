@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { type AppBindings, requireAdmin } from '../../middleware/context.js';
-import { listAudit } from '../../services/audit.js';
+import { auditRoutes } from './audit.js';
 import { broadcastRoutes } from './broadcasts.js';
 import { inviteRoutes } from './invites.js';
 import { lifecycleRoutes } from './lifecycle.js';
@@ -35,12 +35,4 @@ adminRoutes.route('/lifecycle', lifecycleRoutes);
 adminRoutes.route('/settings', settingsRoutes);
 adminRoutes.route('/sso', ssoRoutes);
 
-adminRoutes.get('/audit', async (c) => {
-  const entries = await listAudit(200);
-  return c.json({
-    entries: entries.map((entry) => ({
-      ...entry,
-      createdAt: entry.createdAt.toISOString(),
-    })),
-  });
-});
+adminRoutes.route('/audit', auditRoutes);

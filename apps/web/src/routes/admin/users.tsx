@@ -1,5 +1,6 @@
 import { type AdminUser, USER_ROLES } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 import { AdminPageHeader } from '~/components/admin/admin-ui';
@@ -227,7 +228,13 @@ export function AdminUsersPage() {
               {data.users.map((user) => (
                 <tr key={user.id} className="border-b border-[var(--border-subtle)] last:border-0">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-[var(--text-primary)]">{user.name}</p>
+                    <Link
+                      to="/admin/users/$userId"
+                      params={{ userId: user.id }}
+                      className="font-medium text-[var(--text-primary)] hover:underline"
+                    >
+                      {user.name}
+                    </Link>
                     <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
                   </td>
                   <td className="px-4 py-3">
