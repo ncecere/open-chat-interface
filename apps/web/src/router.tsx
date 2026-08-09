@@ -14,6 +14,7 @@ import { ApiError, api } from '~/lib/api-client';
 import { AdminAuditPage } from '~/routes/admin/audit';
 import { AdminBrandingPage } from '~/routes/admin/branding';
 import { AdminBroadcastsPage } from '~/routes/admin/broadcasts';
+import { AdminHealthPage } from '~/routes/admin/health';
 import { AdminInvitesPage } from '~/routes/admin/invites';
 import { AdminMaintenancePage } from '~/routes/admin/maintenance';
 import { AdminModelsPage } from '~/routes/admin/models';
@@ -212,6 +213,12 @@ const adminUsersRoute = createRoute({
   component: AdminUsersPage,
 });
 
+const adminHealthRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/health',
+  component: AdminHealthPage,
+});
+
 const adminUserDetailRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/users/$userId',
@@ -333,6 +340,7 @@ const routeTree = rootRoute.addChildren([
     adminOverviewRoute,
     adminUsersRoute,
     adminUserDetailRoute,
+    adminHealthRoute,
     adminProvidersRoute,
     adminModelsRoute,
     adminSettingsRoute,

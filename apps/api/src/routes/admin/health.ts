@@ -1,0 +1,229 @@
+import { and, count, desc, eq, gte, isNull, lt, schema, sql } from '@oci/db';
+import { Hono } from 'hono';
+import { db } from '../../db/index.js';
+import { logger } from '../../lib/logger.js';
+import type { AppBindings } from '../../middleware/context.js';
+import { sharedRedis } from '../../services/chat-streams.js';
+import { getSetting } from '../../services/settings.js';
+
+export const healthRoutes = new Hono<AppBindings>();
+
+type Status = 'ok' | 'warn' | 'error';
+
+interface Check {
+  id: string;
+  label: string;
+  status: Status;
+  detail: string;
+}
+
+async function databaseCheck(): Promise<Check> {
+  try {
+    const started = Date.now();
+    await db.execute(sql`select 1`);
+    const ms = Date.now() - started;
+    return {
+      id: 'database',
+      label: 'Database',
+      status: ms > 500 ? 'warn' : 'ok',
+      detail: `Responded in ${ms} ms`,
+    };
+  } catch (error) {
+    logger.error({ error }, 'Admin health: database check failed');
+    return { id: 'database', label: 'Database', status: 'error', detail: 'Not reachable' };
+  }
+}
+
+/**
+ * Redis is optional: without it rate limiting falls back to per-process
+ * counters, which still work but do not hold across replicas. That is a
+ * warning rather than a failure, since a single-replica deployment is a
+ * supported configuration.
+ */
+async function redisCheck(): Promise<Check> {
+  const redis = await sharedRedis();
+  if (!redis) {
+    return {
+      id: 'redis',
+      label: 'Redis',
+      status: 'warn',
+      detail: 'Not configured. Rate limits and streams are per-process.',
+    };
+  }
+
+  try {
+    await redis.ping();
+    return { id: 'redis', label: 'Redis', status: 'ok', detail: 'Responding' };
+  } catch (error) {
+    logger.error({ error }, 'Admin health: Redis check failed');
+    return { id: 'redis', label: 'Redis', status: 'error', detail: 'Configured but not reachable' };
+  }
+}
+
+async function providerCheck(): Promise<Check> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(schema.provider)
+    .where(eq(schema.provider.enabled, true));
+
+  const enabled = row?.total ?? 0;
+  return {
+    id: 'providers',
+    label: 'Model providers',
+    status: enabled > 0 ? 'ok' : 'error',
+    detail: enabled > 0 ? `${enabled} enabled` : 'None enabled. Nobody can send a message.',
+  };
+}
+
+async function modelCheck(): Promise<Check> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(schema.model)
+    .where(eq(schema.model.enabled, true));
+
+  const enabled = row?.total ?? 0;
+  return {
+    id: 'models',
+    label: 'Models',
+    status: enabled > 0 ? 'ok' : 'error',
+    detail: enabled > 0 ? `${enabled} available` : 'None enabled. Nobody can send a message.',
+  };
+}
+
+/** A job left running long past any plausible duration has died mid-flight. */
+const STUCK_AFTER_MS = 60 * 60 * 1000;
+
+async function jobCheck(): Promise<Check> {
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [failures, stuck] = await Promise.all([
+    db
+      .select({ total: count() })
+      .from(schema.jobRun)
+      .where(and(eq(schema.jobRun.status, 'error'), gte(schema.jobRun.startedAt, dayAgo))),
+    db
+      .select({ total: count() })
+      .from(schema.jobRun)
+      .where(
+        and(
+          eq(schema.jobRun.status, 'running'),
+          isNull(schema.jobRun.finishedAt),
+          lt(schema.jobRun.startedAt, new Date(Date.now() - STUCK_AFTER_MS)),
+        ),
+      ),
+  ]);
+
+  const failed = failures[0]?.total ?? 0;
+  const hanging = stuck[0]?.total ?? 0;
+
+  if (hanging > 0) {
+    return {
+      id: 'jobs',
+      label: 'Background jobs',
+      status: 'error',
+      detail: `${hanging} started over an hour ago and never finished`,
+    };
+  }
+  if (failed > 0) {
+    return {
+      id: 'jobs',
+      label: 'Background jobs',
+      status: 'warn',
+      detail: `${failed} failed in the last 24 hours`,
+    };
+  }
+  return { id: 'jobs', label: 'Background jobs', status: 'ok', detail: 'No recent failures' };
+}
+
+async function emailCheck(): Promise<Check> {
+  const smtp = await getSetting('smtp');
+  const configured = Boolean(smtp.host && smtp.port && smtp.fromAddress);
+
+  return {
+    id: 'email',
+    label: 'Email delivery',
+    status: configured ? 'ok' : 'warn',
+    detail: configured
+      ? `Sending through ${smtp.host}`
+      : 'Not configured. Invitations and password resets cannot be sent.',
+  };
+}
+
+async function storageCheck(): Promise<Check> {
+  const storage = await getSetting('storage');
+
+  const [orphans] = await db
+    .select({ total: count() })
+    .from(schema.attachment)
+    // Never attached to a message and older than a day: an upload whose
+    // request was abandoned, still occupying storage.
+    .where(
+      and(
+        isNull(schema.attachment.messageId),
+        isNull(schema.attachment.deletedAt),
+        lt(schema.attachment.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+      ),
+    );
+
+  const stale = orphans?.total ?? 0;
+  return {
+    id: 'storage',
+    label: 'Attachment storage',
+    status: stale > 0 ? 'warn' : 'ok',
+    detail:
+      stale > 0
+        ? `${storage.driver}: ${stale} upload${stale === 1 ? '' : 's'} never attached to a message`
+        : `${storage.driver}: no stale uploads`,
+  };
+}
+
+/**
+ * Operational state in one place.
+ *
+ * Each of these previously surfaced as a user complaint: nobody can send a
+ * message because every provider is disabled, invitations vanish because SMTP
+ * was never configured, retention silently stopped because its job has been
+ * failing for a week.
+ */
+healthRoutes.get('/', async (c) => {
+  const checks = await Promise.all([
+    databaseCheck(),
+    redisCheck(),
+    providerCheck(),
+    modelCheck(),
+    jobCheck(),
+    emailCheck(),
+    storageCheck(),
+  ]);
+
+  const recentJobs = await db
+    .select({
+      id: schema.jobRun.id,
+      jobName: schema.jobRun.jobName,
+      status: schema.jobRun.status,
+      startedAt: schema.jobRun.startedAt,
+      durationMs: schema.jobRun.durationMs,
+      itemsProcessed: schema.jobRun.itemsProcessed,
+      errorMessage: schema.jobRun.errorMessage,
+    })
+    .from(schema.jobRun)
+    .orderBy(desc(schema.jobRun.startedAt))
+    .limit(10);
+
+  // The worst individual result decides the overall one: a green summary above
+  // a failing row would be worse than no summary at all.
+  const status: Status = checks.some((check) => check.status === 'error')
+    ? 'error'
+    : checks.some((check) => check.status === 'warn')
+      ? 'warn'
+      : 'ok';
+
+  return c.json({
+    status,
+    checks,
+    recentJobs: recentJobs.map((job) => ({
+      ...job,
+      startedAt: job.startedAt.toISOString(),
+    })),
+  });
+});
