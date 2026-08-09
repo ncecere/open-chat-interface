@@ -1,5 +1,6 @@
 import type { AuditLogEntry } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { ChevronDown, Download, ScrollText, Search } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { AdminPageHeader, EmptyState } from '~/components/admin/admin-ui';
@@ -50,6 +51,32 @@ function actorLabel(entry: AuditLogEntry): string {
 function targetLabel(entry: AuditLogEntry): string {
   if (entry.targetType && entry.targetId) return `${entry.targetType}: ${entry.targetId}`;
   return entry.targetType ?? entry.targetId ?? '—';
+}
+
+/**
+ * The target as a link where the thing has a page of its own.
+ *
+ * An audit row naming a user identifier that cannot be clicked leaves the
+ * reader to copy it into a search box, which is the sort of friction that
+ * makes a log go unread.
+ */
+function TargetCell({ entry }: { entry: AuditLogEntry }) {
+  const label = targetLabel(entry);
+
+  if (entry.targetType === 'user' && entry.targetId) {
+    return (
+      <Link
+        to="/admin/users/$userId"
+        params={{ userId: entry.targetId }}
+        className="hover:underline"
+        title={label}
+      >
+        {label}
+      </Link>
+    );
+  }
+
+  return <span title={label}>{label}</span>;
 }
 
 function EventDetails({ entry }: { entry: AuditLogEntry }) {
@@ -180,11 +207,8 @@ function DesktopEventTable({
                     </Badge>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <p
-                      className="truncate font-mono text-xs text-[var(--text-secondary)]"
-                      title={targetLabel(entry)}
-                    >
-                      {targetLabel(entry)}
+                    <p className="truncate font-mono text-xs text-[var(--text-secondary)]">
+                      <TargetCell entry={entry} />
                     </p>
                   </td>
                   <td className="px-4 py-2 text-right align-top">
@@ -292,7 +316,15 @@ const RANGES = [
 const PAGE_SIZE = 50;
 
 export function AdminAuditPage() {
-  const [search, setSearch] = useState('');
+  /**
+   * Seeded from the query string so a link can arrive pre-filtered.
+   *
+   * Read once on mount rather than kept in sync: this is a starting point for
+   * somebody who followed a link, and thereafter the controls own the state.
+   */
+  const [search, setSearch] = useState(
+    () => new URLSearchParams(window.location.search).get('search') ?? '',
+  );
   const [action, setAction] = useState('all');
   const [range, setRange] = useState<string>('all');
   const [page, setPage] = useState(0);

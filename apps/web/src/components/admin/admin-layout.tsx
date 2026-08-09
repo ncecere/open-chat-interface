@@ -28,7 +28,11 @@ import { SkipLink } from '~/components/layout/skip-link';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
-const NAV_SECTIONS = [
+/**
+ * Exported so the command palette offers the same destinations as the sidebar.
+ * A second hand-kept list would drift the moment a page is added.
+ */
+export const NAV_SECTIONS = [
   {
     label: 'Instance',
     items: [
