@@ -7,6 +7,81 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-09
+
+Administration at scale: what an administrator can control, what they can find
+out afterwards, and whether either holds up at twenty thousand accounts.
+
+### Added
+
+- **A read-only auditor role.** Administration was all or nothing, so a
+  compliance reviewer needed write access to do a job that only requires
+  reading. An auditor sees every administrative surface and can change none of
+  it, enforced on the request method rather than on a hand-kept list of
+  endpoints.
+- **Authentication events in the audit log.** Sign-in, sign-up, sign-out,
+  password reset, email change, verification, and single sign-on now record an
+  outcome. Failures are recorded too, including for an account that does not
+  exist, which is what makes a brute-force attempt visible. The source address
+  is recorded with them; the column existed but had never been populated.
+- **A user detail view**, showing counts, storage, active sessions with their
+  addresses, recent conversation titles, and the audit trail for that account.
+  Conversation titles only: an administrator managing an account has no reason
+  to read its contents.
+- **An operational health page** covering the database, Redis, providers,
+  models, background jobs, email, and attachment storage. Each of these
+  previously surfaced as a user complaint rather than as a status.
+- **Refusing a sign-in that matches no role.** A provider can now require that
+  group membership map to a role, instead of admitting everybody the identity
+  provider will authenticate with a default role. Off by default, so an
+  upgrade changes nothing until an administrator turns it on.
+- **Profile claim mapping and direct sign-on.** Which claims carry email, name,
+  picture, and subject is configurable, and a provider can take over the
+  sign-in page. The local form stays reachable at `/auth/login?local=1`, which
+  is the way back in if the provider fails.
+- **Configurable session lifetime**, applied as each session is issued rather
+  than read once at startup.
+- **Bulk user actions** for roles, bans, and session revocation. An
+  administrator cannot include their own account, and a ban revokes sessions in
+  the same operation.
+- **Saved list views**, held per person, and **scheduled usage reports**
+  delivered by email.
+- **Audit export and filtering.** Search, action family, and date window are
+  applied in the query, with a CSV export. The log previously returned two
+  hundred rows and filtered them in the browser, so retained history could not
+  be reached.
+- **Configuration change history.** A settings entry records what a value was
+  as well as what it became. Secrets record only whether they are set.
+- Administrative pages are reachable from the command palette, audit entries
+  link to the accounts they name, and the overview compares activity with the
+  window before it.
+
+### Fixed
+
+- **The user listing did not work at scale.** Counting threads and messages per
+  account scanned the whole message table once per row. Measured at twenty
+  thousand users and two million messages, the default listing took 2,553 ms
+  and sorting by message count did not finish in sixty seconds; both are now
+  5 ms and 147 ms. Migration `0017` adds the missing index.
+- **Most of the directory was unreachable.** The listing accepted paging
+  parameters that the interface never sent and offered no control, so it showed
+  the first fifty accounts and nothing else.
+- **Role mapping from single sign-on had never matched a real claim.** The
+  provisioning hook was reading the OAuth token response rather than the
+  identity claims, and the plugin's normalised profile carries only id, email,
+  name, and image — so a claim such as `groups` was in neither. Any existing
+  mapping could only have matched by accident.
+- A refused single sign-on returned an error page indistinguishable from an
+  outage, and left an unused session behind.
+- Session expiry was displayed as though it had already passed.
+
+### Security
+
+- Refusing an unmatched sign-in makes group mapping an authorisation boundary
+  rather than a label. Existing providers are unaffected until it is enabled.
+- Settings changes redact secret values recursively, including a secret nested
+  inside a configuration branch whose own name does not look like one.
+
 ## [0.3.0] - 2026-08-08
 
 Administration and onboarding: what an instance tells people when they arrive,
