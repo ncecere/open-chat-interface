@@ -11,10 +11,12 @@ import { overviewRoutes } from './overview.js';
 import { policyRoutes } from './policies.js';
 import { providerRoutes } from './providers.js';
 import { quotaRoutes } from './quotas.js';
+import { reportRoutes } from './reports.js';
 import { settingsRoutes } from './settings.js';
 import { ssoRoutes } from './sso.js';
 import { usageRoutes } from './usage.js';
 import { userRoutes } from './users.js';
+import { viewRoutes } from './views.js';
 
 export const adminRoutes = new Hono<AppBindings>();
 
@@ -38,3 +40,5 @@ adminRoutes.route('/sso', ssoRoutes);
 
 adminRoutes.route('/audit', auditRoutes);
 adminRoutes.route('/health', adminHealthRoutes);
+adminRoutes.route('/views', viewRoutes);
+adminRoutes.route('/reports', reportRoutes);

@@ -23,6 +23,7 @@ import { AdminPoliciesPage } from '~/routes/admin/policies';
 import { AdminProvidersPage } from '~/routes/admin/providers';
 import { AdminQuotasPage } from '~/routes/admin/quotas';
 import { AdminRateLimitsPage } from '~/routes/admin/rate-limits';
+import { AdminReportsPage } from '~/routes/admin/reports';
 import { AdminRetentionPage } from '~/routes/admin/retention';
 import { AdminSearchPage } from '~/routes/admin/search';
 import { AdminSettingsPage } from '~/routes/admin/settings';
@@ -213,6 +214,12 @@ const adminUsersRoute = createRoute({
   component: AdminUsersPage,
 });
 
+const adminReportsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/reports',
+  component: AdminReportsPage,
+});
+
 const adminHealthRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/health',
@@ -341,6 +348,7 @@ const routeTree = rootRoute.addChildren([
     adminUsersRoute,
     adminUserDetailRoute,
     adminHealthRoute,
+    adminReportsRoute,
     adminProvidersRoute,
     adminModelsRoute,
     adminSettingsRoute,

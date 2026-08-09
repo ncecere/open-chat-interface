@@ -1,7 +1,7 @@
 import { type AdminUser, USER_ROLES } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import { useState } from 'react';
 import { AdminPageHeader } from '~/components/admin/admin-ui';
 import { QuotaOverrideDialog } from '~/components/admin/quota-override-dialog';
@@ -16,6 +16,12 @@ import { formatRelativeTime } from '~/lib/utils';
 
 /** Matches the API's own default; the server caps it at 200. */
 const PAGE_SIZE = 50;
+
+interface SavedView {
+  id: string;
+  name: string;
+  filters: Record<string, string>;
+}
 
 interface UsersResponse {
   users: AdminUser[];
@@ -86,6 +92,47 @@ export function AdminUsersPage() {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkRole, setBulkRole] = useState<AdminUser['role']>('user');
+  const [viewName, setViewName] = useState('');
+
+  const views = useQuery({
+    queryKey: ['admin', 'views', 'users'],
+    queryFn: () => api.get<{ views: SavedView[] }>('/admin/views?surface=users'),
+  });
+
+  const saveView = useMutation({
+    mutationFn: () =>
+      api.post('/admin/views', {
+        surface: 'users',
+        name: viewName.trim(),
+        // Only the filters, not the page: a saved view is a slice of the
+        // directory, and page four of it means nothing tomorrow.
+        filters: {
+          ...(search.trim() && { search: search.trim() }),
+          ...(role !== 'all' && { role }),
+          ...(status !== 'all' && { status }),
+          sort,
+          direction,
+        },
+      }),
+    onSuccess: () => {
+      setViewName('');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'views', 'users'] });
+    },
+  });
+
+  const deleteView = useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/views/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'views', 'users'] }),
+  });
+
+  function applyView(view: SavedView) {
+    setPage(0);
+    setSearch(view.filters.search ?? '');
+    setRole(view.filters.role ?? 'all');
+    setStatus(view.filters.status ?? 'all');
+    if (view.filters.sort) setSort(view.filters.sort as SortKey);
+    if (view.filters.direction) setDirection(view.filters.direction as 'asc' | 'desc');
+  }
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<string>('all');
   const [status, setStatus] = useState<string>('all');
@@ -155,6 +202,8 @@ export function AdminUsersPage() {
     });
   }
 
+  // Offering to save "everything, unsorted" would just add clutter.
+  const hasActiveFilters = search.trim() !== '' || role !== 'all' || status !== 'all';
   const pageIds = data?.users.map((user) => user.id) ?? [];
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 
@@ -217,6 +266,51 @@ export function AdminUsersPage() {
         </div>
       ) : (
         <div className="mt-6">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {views.data?.views.map((view) => (
+              <span
+                key={view.id}
+                className="flex items-center gap-1 rounded-full bg-[var(--bg-control-alt)] pr-1 pl-3 text-sm"
+              >
+                <button
+                  type="button"
+                  className="py-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  onClick={() => applyView(view)}
+                >
+                  {view.name}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete the ${view.name} view`}
+                  className="rounded p-1 text-[var(--text-faint)] hover:text-[var(--text-primary)]"
+                  onClick={() => deleteView.mutate(view.id)}
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+
+            {hasActiveFilters && (
+              <span className="flex items-center gap-2">
+                <Input
+                  aria-label="Name for this view"
+                  className="h-8 w-44"
+                  placeholder="Save these filters as…"
+                  value={viewName}
+                  onChange={(event) => setViewName(event.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={!viewName.trim() || saveView.isPending}
+                  onClick={() => saveView.mutate()}
+                >
+                  Save view
+                </Button>
+              </span>
+            )}
+          </div>
+
           {selected.size > 0 && (
             <section
               aria-label="Bulk actions"

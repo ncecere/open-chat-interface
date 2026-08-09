@@ -8,6 +8,7 @@ import {
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
 import { sweepAbandonedReservations } from '../quota/index.js';
+import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
 import { drainDeletedObjects, pruneDrainedObjects } from '../storage/reaper.js';
 import { purgeExpiredTemporaryThreads } from '../threads.js';
@@ -22,6 +23,13 @@ const HOUR = 60 * MINUTE;
  */
 export function lifecycleJobs(): JobDefinition[] {
   return [
+    {
+      name: 'reports.send-due',
+      // Hourly rather than daily: due-ness is decided from the last send, so a
+      // frequent tick simply notices sooner rather than sending more often.
+      intervalMs: HOUR,
+      run: () => runDueReports(),
+    },
     {
       name: 'storage.drain-deleted-objects',
       // Frequent: this is what actually frees disk after a deletion.

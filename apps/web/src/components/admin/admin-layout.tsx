@@ -12,6 +12,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Mail,
+  Mails,
   Megaphone,
   Palette,
   ScrollText,
@@ -62,6 +63,7 @@ const NAV_SECTIONS = [
     label: 'Governance',
     items: [
       { to: '/admin/usage', label: 'Usage', icon: ChartColumn },
+      { to: '/admin/reports', label: 'Reports', icon: Mails },
       { to: '/admin/quotas', label: 'Usage quotas', icon: Gauge },
       { to: '/admin/storage-limits', label: 'Storage limits', icon: HardDrive },
       { to: '/admin/rate-limits', label: 'Rate limits', icon: Timer },
