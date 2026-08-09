@@ -42,6 +42,17 @@ if (mismatches.length > 0) {
   );
 }
 
+// The API reports this when OCI_VERSION is unset, which is how a container
+// built outside CI identifies itself. It is not a package manifest, so nothing
+// above catches it drifting.
+const versionSource = await readFile('apps/api/src/version.ts', 'utf8');
+const fallback = versionSource.match(/configuredVersion \|\| '([^']+)'/)?.[1];
+if (fallback !== version) {
+  throw new Error(
+    `apps/api/src/version.ts fallback must match ${tag}; found ${fallback ?? 'none'}`,
+  );
+}
+
 const changelog = await readFile('CHANGELOG.md', 'utf8');
 
 // Located by literal prefix rather than a regex built from the version. The
