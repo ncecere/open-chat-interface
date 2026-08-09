@@ -1,7 +1,7 @@
 export const APP_NAME = 'Open Chat Interface';
 export const APP_SHORT_NAME = 'OCI';
 
-export const USER_ROLES = ['admin', 'user', 'restricted'] as const;
+export const USER_ROLES = ['admin', 'auditor', 'user', 'restricted'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const REGISTRATION_MODES = ['open', 'invite_only', 'closed'] as const;
@@ -102,18 +102,21 @@ export const PROTECTED_AUDIT_ACTIONS = [
 /** Rate limiting and concurrency defaults, overridable per role by an admin. */
 export const DEFAULT_MAX_CONCURRENT_STREAMS: Record<UserRole, number> = {
   admin: 10,
+  auditor: 3,
   user: 3,
   restricted: 1,
 };
 
 export const DEFAULT_CHAT_REQUESTS_PER_MINUTE: Record<UserRole, number> = {
   admin: 120,
+  auditor: 30,
   user: 30,
   restricted: 10,
 };
 
 export const DEFAULT_UPLOAD_REQUESTS_PER_MINUTE: Record<UserRole, number> = {
   admin: 120,
+  auditor: 20,
   user: 20,
   restricted: 5,
 };
