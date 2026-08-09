@@ -6,6 +6,9 @@ chat and reasoning, resumable Redis-backed generations, attachments, grounded we
 search, branching, temporary chats, and privacy-filtered share links.
 
 [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md) ·
+**[Documentation](docs/README.md)** — [using it](docs/user/README.md) ·
+[running it](docs/admin/README.md) · [working on it](docs/dev/README.md)
+
 [Contributing](CONTRIBUTING.md) · [Release process](docs/RELEASING.md) ·
 [Production operations](docs/OPERATIONS.md)
 

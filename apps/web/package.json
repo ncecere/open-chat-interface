@@ -10,7 +10,8 @@
     "e2e": "playwright test",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run tests/unit"
+    "test": "vitest run tests/unit",
+    "docs:shots": "playwright test --config=playwright.screenshots.config.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "4.0.58",

@@ -1,0 +1,75 @@
+# Frontend
+
+Vite, React 19, TanStack Router and Query, Tailwind 4.
+
+## Where things live
+
+```
+apps/web/src/
+  routes/       one file per screen
+  components/   shared UI, grouped by area
+  hooks/        data fetching and shared behaviour
+  lib/          api-client, utilities
+  providers/    theme, temporary chat
+  styles/       tokens.css, global.css
+```
+
+## Routing
+
+TanStack Router, declared in `router.tsx`. Routes are typed: a link to a path
+that does not exist will not compile.
+
+Administrative routes nest under a parent that supplies the layout, so the path
+declared in a child is relative to it. Getting this wrong produces
+`/admin/admin/...`, which the type checker will point at.
+
+## Data
+
+TanStack Query throughout. `lib/api-client.ts` is the only module that talks to
+the network — it resolves the API against the current origin, which is what
+makes the same-origin deployment work without configuration.
+
+Query keys are arrays describing what is fetched:
+
+```ts
+queryKey: ['admin', 'users', search, role, status, sort, direction, page]
+```
+
+Everything the request depends on belongs in the key. A filter left out produces
+a cached result for a query nobody made.
+
+## Styling
+
+Tailwind 4, over CSS custom properties in `styles/tokens.css`.
+
+**Use the tokens, not raw colours.** `bg-[var(--bg-elevated)]`, not
+`bg-neutral-900`. The theme system replaces token values; a literal colour
+ignores it.
+
+The tokens are organised as:
+
+- **Surfaces** — `--bg-app`, `--bg-elevated`, `--bg-control`
+- **Text** — `--text-primary` through `--text-faint`
+- **Accent** — `--accent`, `--accent-bright`, `--accent-soft`, configurable per
+  instance
+- **Capability colours** — one hue per model capability, deliberately outside
+  the accent system so a capability stays recognisable when the accent changes
+
+### Contrast
+
+Verify by sampling rendered pixels, not by computing from tokens. Modern CSS
+colours do not survive naive parsing — `getComputedStyle` returns `oklch(...)`
+unconverted, and treating that as RGB produces numbers that look plausible and
+are wrong.
+
+## Accessibility
+
+- Every control needs an accessible name. An icon-only button needs
+  `aria-label`.
+- Targets meet 24×24 CSS pixels. Where a label is deliberately small, padding
+  carries the height.
+- Colour is never the only signal. Capability pills carry an icon and a label
+  as well as a hue.
+- A dialog traps focus and restores it on dismissal, which Radix handles.
+
+`tests/e2e/accessibility.spec.ts` scans for regressions. It is a net, not proof.
