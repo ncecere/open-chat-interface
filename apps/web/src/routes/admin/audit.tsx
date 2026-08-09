@@ -1,6 +1,6 @@
 import type { AuditLogEntry } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ScrollText, Search } from 'lucide-react';
+import { ChevronDown, Download, ScrollText, Search } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { AdminPageHeader, EmptyState } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
@@ -13,6 +13,8 @@ import { cn } from '~/lib/utils';
 
 interface AuditResponse {
   entries: AuditLogEntry[];
+  /** Rows matching the filters, not the number on this page. */
+  total: number;
 }
 
 const MAX_METADATA_CHARACTERS = 20_000;
@@ -48,21 +50,6 @@ function actorLabel(entry: AuditLogEntry): string {
 function targetLabel(entry: AuditLogEntry): string {
   if (entry.targetType && entry.targetId) return `${entry.targetType}: ${entry.targetId}`;
   return entry.targetType ?? entry.targetId ?? '—';
-}
-
-function eventSearchText(entry: AuditLogEntry): string {
-  return [
-    entry.action,
-    entry.actorEmail,
-    entry.actorUserId,
-    entry.targetType,
-    entry.targetId,
-    entry.ipAddress,
-    entry.metadata ? serializeMetadata(entry.metadata) : null,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLocaleLowerCase();
 }
 
 function EventDetails({ entry }: { entry: AuditLogEntry }) {
@@ -293,31 +280,68 @@ function MobileEventList({
   );
 }
 
+/** Windows offered for narrowing the history, rather than a free date picker. */
+const RANGES = [
+  { value: 'all', label: 'All time', days: null },
+  { value: '24h', label: 'Last 24 hours', days: 1 },
+  { value: '7d', label: 'Last 7 days', days: 7 },
+  { value: '30d', label: 'Last 30 days', days: 30 },
+  { value: '90d', label: 'Last 90 days', days: 90 },
+] as const;
+
+const PAGE_SIZE = 50;
+
 export function AdminAuditPage() {
   const [search, setSearch] = useState('');
   const [action, setAction] = useState('all');
+  const [range, setRange] = useState<string>('all');
+  const [page, setPage] = useState(0);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
+  /**
+   * Filters are sent to the API rather than applied to the loaded page, so a
+   * search describes the whole history instead of the rows already fetched.
+   */
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: String(page * PAGE_SIZE),
+    });
+    if (search.trim()) params.set('search', search.trim());
+    if (action !== 'all') params.set('action', action);
+
+    const days = RANGES.find((option) => option.value === range)?.days;
+    if (days) params.set('from', new Date(Date.now() - days * 86_400_000).toISOString());
+
+    return params;
+  }, [search, action, range, page]);
+
   const audit = useQuery({
-    queryKey: ['admin', 'audit'],
-    queryFn: () => api.get<AuditResponse>('/admin/audit'),
+    queryKey: ['admin', 'audit', queryParams.toString()],
+    queryFn: () => api.get<AuditResponse>(`/admin/audit?${queryParams}`),
+    placeholderData: (previous) => previous,
+  });
+
+  // Offered from what the log actually holds, not from the current page.
+  const actionList = useQuery({
+    queryKey: ['admin', 'audit', 'actions'],
+    queryFn: () => api.get<{ actions: string[] }>('/admin/audit/actions'),
   });
 
   const entries = audit.data?.entries;
-  const actions = useMemo(
-    () => [...new Set(entries?.map((entry) => entry.action) ?? [])].sort(),
-    [entries],
-  );
-  const filteredEntries = useMemo(() => {
-    if (!entries) return [];
-    const query = search.trim().toLocaleLowerCase();
+  const total = audit.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const actions = actionList.data?.actions ?? [];
+  const filteredEntries = entries ?? [];
 
-    return entries.filter(
-      (entry) =>
-        (action === 'all' || entry.action === action) &&
-        (!query || eventSearchText(entry).includes(query)),
-    );
-  }, [action, entries, search]);
+  function exportCsv() {
+    const params = new URLSearchParams(queryParams);
+    params.delete('limit');
+    params.delete('offset');
+    // A normal navigation, so the browser handles the download and the session
+    // cookie travels with it.
+    window.location.href = `/api/admin/audit/export?${params}`;
+  }
 
   function toggleDetails(id: string) {
     setExpandedIds((current) => {
@@ -328,16 +352,16 @@ export function AdminAuditPage() {
     });
   }
 
-  const hasFilters = search.trim() !== '' || action !== 'all';
+  const hasFilters = search.trim() !== '' || action !== 'all' || range !== 'all';
 
   return (
     <div>
       <AdminPageHeader
         title="Audit log"
-        description="Review up to 200 of the most recent administrative and security events."
+        description="Search administrative and security events across the retained history."
       />
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_12rem_auto]">
         <div className="relative">
           <label htmlFor="audit-search" className="sr-only">
             Search audit events
@@ -352,7 +376,10 @@ export function AdminAuditPage() {
             className="pl-9"
             placeholder="Search actor, action, target, or metadata…"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setPage(0);
+              setSearch(event.target.value);
+            }}
           />
         </div>
         <div>
@@ -363,13 +390,35 @@ export function AdminAuditPage() {
             id="audit-action"
             value={action}
             aria-label="Filter audit events by action"
-            onChange={setAction}
+            onChange={(value) => {
+              setPage(0);
+              setAction(value);
+            }}
             options={[
               { value: 'all', label: 'All actions' },
               ...actions.map((option) => ({ value: option, label: option })),
             ]}
           />
         </div>
+        <div>
+          <label htmlFor="audit-range" className="sr-only">
+            Filter by date
+          </label>
+          <Select
+            id="audit-range"
+            value={range}
+            aria-label="Filter audit events by date"
+            onChange={(value) => {
+              setPage(0);
+              setRange(value);
+            }}
+            options={RANGES.map((option) => ({ value: option.value, label: option.label }))}
+          />
+        </div>
+        <Button variant="secondary" onClick={exportCsv} disabled={total === 0}>
+          <Download />
+          Export
+        </Button>
       </div>
 
       {audit.isLoading ? (
@@ -410,6 +459,8 @@ export function AdminAuditPage() {
             onClick={() => {
               setSearch('');
               setAction('all');
+              setRange('all');
+              setPage(0);
             }}
           >
             Clear filters
@@ -418,8 +469,8 @@ export function AdminAuditPage() {
       ) : (
         <div className="mt-6">
           <p className="mb-2 text-xs text-[var(--text-muted)]" aria-live="polite">
-            Showing {filteredEntries.length} of {entries.length} event
-            {entries.length === 1 ? '' : 's'}
+            Showing {page * PAGE_SIZE + 1}–{Math.min(total, (page + 1) * PAGE_SIZE)} of {total}{' '}
+            event{total === 1 ? '' : 's'}
             {hasFilters ? ' matching your filters' : ''}.
           </p>
           <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
@@ -434,6 +485,30 @@ export function AdminAuditPage() {
               onToggle={toggleDetails}
             />
           </div>
+
+          {total > PAGE_SIZE && (
+            <nav aria-label="Audit log pages" className="mt-4 flex items-center justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={page === 0}
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-[var(--text-muted)] text-sm">
+                Page {page + 1} of {pageCount}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={page + 1 >= pageCount}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Next
+              </Button>
+            </nav>
+          )}
         </div>
       )}
     </div>

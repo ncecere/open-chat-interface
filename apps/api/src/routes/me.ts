@@ -3,6 +3,7 @@ import { completeOnboardingSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
+import { clientIp } from '../lib/client-ip.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
 import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
@@ -123,10 +124,7 @@ meRoutes.post('/onboarding/accept-policy', async (c) => {
     userId: user.id,
     policyId,
     // Recorded alongside the acceptance because it is part of the evidence.
-    ipAddress:
-      c.req.header('cf-connecting-ip') ??
-      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
-      null,
+    ipAddress: clientIp(c),
   });
 
   return c.json({ ok: true });
