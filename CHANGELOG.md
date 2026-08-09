@@ -37,11 +37,18 @@ and how an administrator manages it once they are here.
 
 ### Changed
 
-- Roles from SSO group membership now resolve to the most privileged matching
-  group rather than the first one listed. Row order is an authoring detail, not
-  a privilege decision. Group claims are matched case-insensitively and can be
-  read from nested attributes, which SAML and some OIDC providers require.
-  **An existing user's role may rise on their next sign-in.**
+- Roles for SSO users are recalculated from identity-provider group membership
+  on every sign-in. Where a user matches several group mappings, the most
+  privileged one now wins rather than whichever mapping happened to be listed
+  first: row order is an authoring detail, not a privilege decision. Group
+  claims are matched case-insensitively and can be read from nested attributes,
+  which SAML and some OIDC providers require.
+
+  **Some users may see their role change on their next sign-in**, in either
+  direction — a user matching a more privileged mapping gains it, and one who
+  has left a group loses it. Recalculation on every sign-in predates this
+  release; what changed is which mapping wins. Note that a role set by hand in
+  the admin interface does not survive an SSO user's next sign-in.
 - Model capabilities are colour-coded in the picker, each with its own hue and
   a matching label. Colour is a second signal rather than the only one.
 - The default model is set in instance settings rather than on individual
