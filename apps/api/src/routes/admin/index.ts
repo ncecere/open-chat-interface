@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { type AppBindings, requireAdmin } from '../../middleware/context.js';
 import { auditRoutes } from './audit.js';
 import { broadcastRoutes } from './broadcasts.js';
+import { healthRoutes as adminHealthRoutes } from './health.js';
 import { inviteRoutes } from './invites.js';
 import { lifecycleRoutes } from './lifecycle.js';
 import { modelRoutes } from './models.js';
@@ -36,3 +37,4 @@ adminRoutes.route('/settings', settingsRoutes);
 adminRoutes.route('/sso', ssoRoutes);
 
 adminRoutes.route('/audit', auditRoutes);
+adminRoutes.route('/health', adminHealthRoutes);

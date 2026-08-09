@@ -1,5 +1,6 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import {
+  Activity,
   Archive,
   ArrowLeft,
   Boxes,
@@ -72,6 +73,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/admin/search', label: 'Search', icon: Search },
       { to: '/admin/storage', label: 'Storage', icon: Boxes },
+      { to: '/admin/health', label: 'Health', icon: Activity },
       { to: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
       { to: '/admin/audit', label: 'Audit log', icon: ScrollText },
     ],

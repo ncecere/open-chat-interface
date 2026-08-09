@@ -10,6 +10,7 @@ import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
 import { getSetting, updateSetting } from '../../services/settings.js';
+import { diffSettings, redactSecrets } from '../../services/settings-diff.js';
 import {
   applyS3SettingsPatch,
   getS3ConfigurationIssues,
@@ -22,6 +23,37 @@ export const settingsRoutes = new Hono<AppBindings>();
 const storageTestSchema = z.object({
   mode: z.enum(['read', 'write']).default('read'),
 });
+
+/**
+ * The settings as they stand, flattened to the shape a patch arrives in.
+ *
+ * Mirrors the request body rather than the stored objects so a change can be
+ * compared key for key. Nested branches are compared whole, which is enough to
+ * show that storage or search configuration changed and what it was.
+ */
+async function currentSettingsSnapshot(): Promise<Record<string, unknown>> {
+  const [branding, authSettings, features, storage, search, smtp, chat] = await Promise.all([
+    getSetting('branding'),
+    getSetting('auth'),
+    getSetting('features'),
+    getSetting('storage'),
+    getSetting('search'),
+    getSetting('smtp'),
+    getSetting('chat'),
+  ]);
+
+  return {
+    ...branding,
+    ...authSettings,
+    defaultSystemPrompt: chat.defaultSystemPrompt,
+    features,
+    // Redacted here rather than at the diff, because these arrive as whole
+    // objects and carry encrypted credentials inside them.
+    storage: redactSecrets(storage),
+    search: redactSecrets(search),
+    smtp: redactSecrets(smtp),
+  };
+}
 
 settingsRoutes.get('/', async (c) => {
   const [branding, authSettings, features, storage, search, smtp, chat] = await Promise.all([
@@ -116,6 +148,10 @@ settingsRoutes.post('/storage/test', async (c) => {
 settingsRoutes.patch('/', async (c) => {
   const actor = currentUser(c);
   const patch = await parseBody(c, updateInstanceSettingsSchema);
+
+  // Captured before anything is written, so the audit entry can say what the
+  // value was as well as what it became.
+  const previous = await currentSettingsSnapshot();
 
   if (
     patch.appName !== undefined ||
@@ -219,7 +255,10 @@ settingsRoutes.patch('/', async (c) => {
     actorEmail: actor.email,
     action: 'settings.update',
     targetType: 'instance',
-    metadata: { keys: Object.keys(patch) },
+    metadata: {
+      keys: Object.keys(patch),
+      changes: diffSettings(previous, patch as Record<string, unknown>),
+    },
   });
 
   return c.json({ ok: true });
