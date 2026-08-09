@@ -1,10 +1,11 @@
-import { and, asc, count, desc, eq, ilike, isNull, or, schema, sql } from '@oci/db';
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, schema, sql } from '@oci/db';
 import { type AdminUser, createUserSchema, USER_ROLES, updateUserSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { auth } from '../../auth/index.js';
 import { isEmailVerificationEnforced } from '../../auth/policy.js';
 import { db } from '../../db/index.js';
+import { clientIp } from '../../lib/client-ip.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody, parseQuery } from '../../middleware/validate.js';
@@ -185,6 +186,91 @@ userRoutes.post('/', async (c) => {
  * person hitting a limit, what have they been doing, is this account
  * compromised — are all asked at once.
  */
+/**
+ * Applies one change to several accounts.
+ *
+ * At twenty thousand users, changing a role or revoking sessions one account
+ * at a time is not a workflow. Bounded at two hundred per request so a single
+ * call cannot rewrite the whole directory by accident.
+ */
+const bulkActionSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1).max(200),
+  action: z.enum(['set_role', 'ban', 'unban', 'revoke_sessions']),
+  role: z.enum(USER_ROLES).optional(),
+  reason: z.string().trim().max(500).optional(),
+});
+
+userRoutes.post('/bulk', async (c) => {
+  const actor = currentUser(c);
+  const input = await parseBody(c, bulkActionSchema);
+
+  if (input.action === 'set_role' && !input.role) {
+    throw validationFailed('Choose a role to apply.', [
+      { path: ['role'], message: 'Required when setting a role' },
+    ]);
+  }
+
+  // An administrator removing their own access, or locking themselves out
+  // mid-operation, is a mistake the API should not help with.
+  const targets = input.userIds.filter((id) => id !== actor.id);
+  const skippedSelf = targets.length !== input.userIds.length;
+
+  if (targets.length === 0) {
+    throw validationFailed('Select an account other than your own.', [
+      { path: ['userIds'], message: 'Your own account cannot be changed in bulk' },
+    ]);
+  }
+
+  let affected = 0;
+
+  if (input.action === 'set_role' && input.role) {
+    const rows = await db
+      .update(schema.user)
+      .set({ role: input.role })
+      .where(inArray(schema.user.id, targets))
+      .returning({ id: schema.user.id });
+    affected = rows.length;
+  } else if (input.action === 'ban' || input.action === 'unban') {
+    const banned = input.action === 'ban';
+    const rows = await db
+      .update(schema.user)
+      .set({ banned, banReason: banned ? (input.reason ?? null) : null })
+      .where(inArray(schema.user.id, targets))
+      .returning({ id: schema.user.id });
+    affected = rows.length;
+
+    // A ban that leaves the session alive is not a ban until it expires.
+    if (banned) {
+      await db.delete(schema.session).where(inArray(schema.session.userId, targets));
+    }
+  } else {
+    const rows = await db
+      .delete(schema.session)
+      .where(inArray(schema.session.userId, targets))
+      .returning({ id: schema.session.id });
+    affected = rows.length;
+  }
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: `user.bulk.${input.action}`,
+    targetType: 'user',
+    targetId: null,
+    ipAddress: clientIp(c),
+    metadata: {
+      requested: input.userIds.length,
+      affected,
+      ...(input.role ? { role: input.role } : {}),
+      // Recorded rather than summarised: an audit entry saying "47 accounts"
+      // without naming them cannot be checked afterwards.
+      userIds: targets,
+    },
+  });
+
+  return c.json({ affected, skippedSelf });
+});
+
 userRoutes.get('/:id', async (c) => {
   const targetId = c.req.param('id');
 

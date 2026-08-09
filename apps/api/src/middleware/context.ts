@@ -61,11 +61,36 @@ export const requireAuth = createMiddleware<AppBindings>(async (c, next) => {
   await next();
 });
 
+/** Methods that only observe. Everything else changes something. */
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Guards the administration API.
+ *
+ * An auditor may read every administrative surface and change none of it.
+ * Enforced on the request method here rather than annotated onto each route:
+ * there are forty-nine mutating admin endpoints, and a list that has to be
+ * kept in step with them is one somebody will eventually forget to extend —
+ * failing open, which is the wrong direction for a permission check.
+ */
 export const requireAdmin = createMiddleware<AppBindings>(async (c, next) => {
   const user = c.get('user');
   if (!user) throw unauthorized();
-  if (user.role !== 'admin') throw forbidden('Administrator access required');
-  await next();
+
+  if (user.role === 'admin') {
+    await next();
+    return;
+  }
+
+  if (user.role === 'auditor') {
+    if (!READ_METHODS.has(c.req.method)) {
+      throw forbidden('This account has read-only administrative access');
+    }
+    await next();
+    return;
+  }
+
+  throw forbidden('Administrator access required');
 });
 
 export function currentUser(c: { get: (key: 'user') => AuthenticatedUser | null }) {

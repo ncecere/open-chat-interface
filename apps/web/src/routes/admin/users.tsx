@@ -24,6 +24,7 @@ interface UsersResponse {
 
 const ROLE_VARIANT = {
   admin: 'accent',
+  auditor: 'accent',
   user: 'neutral',
   restricted: 'outline',
 } as const;
@@ -83,6 +84,8 @@ function SortableHeader({
 
 export function AdminUsersPage() {
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkRole, setBulkRole] = useState<AdminUser['role']>('user');
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<string>('all');
   const [status, setStatus] = useState<string>('all');
@@ -130,6 +133,30 @@ export function AdminUsersPage() {
     setSort(key);
     setDirection('desc');
   }
+
+  const bulk = useMutation({
+    mutationFn: (body: { action: string; role?: string; reason?: string }) =>
+      api.post<{ affected: number; skippedSelf: boolean }>('/admin/users/bulk', {
+        userIds: [...selected],
+        ...body,
+      }),
+    onSuccess: () => {
+      setSelected(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+  });
+
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const pageIds = data?.users.map((user) => user.id) ?? [];
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 
   const updateRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: AdminUser['role'] }) =>
@@ -189,90 +216,176 @@ export function AdminUsersPage() {
           <FullPageSpinner />
         </div>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
-                <SortableHeader
-                  label="User"
-                  sortKey="name"
-                  active={sort}
-                  direction={direction}
-                  onSort={toggleSort}
+        <div className="mt-6">
+          {selected.size > 0 && (
+            <section
+              aria-label="Bulk actions"
+              className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-3"
+            >
+              <span className="font-medium text-sm">
+                {selected.size} account{selected.size === 1 ? '' : 's'} selected
+              </span>
+
+              <span className="ml-auto flex flex-wrap items-center gap-2">
+                <Select
+                  aria-label="Role to apply"
+                  value={bulkRole}
+                  onChange={(value) => setBulkRole(value as AdminUser['role'])}
+                  options={USER_ROLES.map((role) => ({
+                    value: role,
+                    label: role.charAt(0).toUpperCase() + role.slice(1),
+                  }))}
                 />
-                <SortableHeader
-                  label="Role"
-                  sortKey="role"
-                  active={sort}
-                  direction={direction}
-                  onSort={toggleSort}
-                />
-                <SortableHeader
-                  label="Threads"
-                  sortKey="threads"
-                  active={sort}
-                  direction={direction}
-                  onSort={toggleSort}
-                />
-                <SortableHeader
-                  label="Joined"
-                  sortKey="created"
-                  active={sort}
-                  direction={direction}
-                  onSort={toggleSort}
-                />
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {data.users.map((user) => (
-                <tr key={user.id} className="border-b border-[var(--border-subtle)] last:border-0">
-                  <td className="px-4 py-3">
-                    <Link
-                      to="/admin/users/$userId"
-                      params={{ userId: user.id }}
-                      className="font-medium text-[var(--text-primary)] hover:underline"
-                    >
-                      {user.name}
-                    </Link>
-                    <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={ROLE_VARIANT[user.role]} className="capitalize">
-                      {user.role}
-                    </Badge>
-                    {user.banned && (
-                      <Badge variant="danger" className="ml-1">
-                        banned
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-secondary)]">{user.threadCount}</td>
-                  <td className="px-4 py-3 text-[var(--text-muted)]">
-                    {formatRelativeTime(user.createdAt)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button size="sm" variant="ghost" onClick={() => setLimitsFor(user)}>
-                      Limits
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={updateRole.isPending}
-                      onClick={() =>
-                        updateRole.mutate({
-                          id: user.id,
-                          role: user.role === 'admin' ? 'user' : 'admin',
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={bulk.isPending}
+                  onClick={() => bulk.mutate({ action: 'set_role', role: bulkRole })}
+                >
+                  Apply role
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={bulk.isPending}
+                  onClick={() => bulk.mutate({ action: 'revoke_sessions' })}
+                >
+                  Sign out
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={bulk.isPending}
+                  onClick={() => bulk.mutate({ action: 'ban' })}
+                >
+                  Ban
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                  Clear
+                </Button>
+              </span>
+            </section>
+          )}
+
+          {bulk.data?.skippedSelf && (
+            <p className="mb-3 text-[var(--text-muted)] text-xs">
+              Your own account was left unchanged.
+            </p>
+          )}
+
+          <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label="Select every account on this page"
+                      checked={allOnPageSelected}
+                      onChange={(event) =>
+                        setSelected((current) => {
+                          const next = new Set(current);
+                          for (const id of pageIds) {
+                            if (event.target.checked) next.add(id);
+                            else next.delete(id);
+                          }
+                          return next;
                         })
                       }
-                    >
-                      {user.role === 'admin' ? 'Demote' : 'Make admin'}
-                    </Button>
-                  </td>
+                    />
+                  </th>
+                  <SortableHeader
+                    label="User"
+                    sortKey="name"
+                    active={sort}
+                    direction={direction}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    label="Role"
+                    sortKey="role"
+                    active={sort}
+                    direction={direction}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    label="Threads"
+                    sortKey="threads"
+                    active={sort}
+                    direction={direction}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    label="Joined"
+                    sortKey="created"
+                    active={sort}
+                    direction={direction}
+                    onSort={toggleSort}
+                  />
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.users.map((user) => (
+                  <tr
+                    key={user.id}
+                    className="border-b border-[var(--border-subtle)] last:border-0"
+                  >
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${user.email}`}
+                        checked={selected.has(user.id)}
+                        onChange={() => toggleSelected(user.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        to="/admin/users/$userId"
+                        params={{ userId: user.id }}
+                        className="font-medium text-[var(--text-primary)] hover:underline"
+                      >
+                        {user.name}
+                      </Link>
+                      <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={ROLE_VARIANT[user.role]} className="capitalize">
+                        {user.role}
+                      </Badge>
+                      {user.banned && (
+                        <Badge variant="danger" className="ml-1">
+                          banned
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--text-secondary)]">{user.threadCount}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">
+                      {formatRelativeTime(user.createdAt)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setLimitsFor(user)}>
+                        Limits
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={updateRole.isPending}
+                        onClick={() =>
+                          updateRole.mutate({
+                            id: user.id,
+                            role: user.role === 'admin' ? 'user' : 'admin',
+                          })
+                        }
+                      >
+                        {user.role === 'admin' ? 'Demote' : 'Make admin'}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
