@@ -38,7 +38,8 @@
     "infra:reset": "docker compose -f docker/compose.dev.yaml down -v",
     "logos:sync": "node scripts/sync-logos.mjs",
     "db:seed:demo": "pnpm --filter @oci/db seed:demo",
-    "docs:shots": "pnpm --filter @oci/web docs:shots"
+    "docs:shots": "pnpm --filter @oci/web docs:shots",
+    "docs:api": "node scripts/generate-api-reference.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",

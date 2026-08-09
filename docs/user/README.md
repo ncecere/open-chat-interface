@@ -1,0 +1,48 @@
+# Using Open Chat Interface
+
+OCI puts several AI models behind one interface. Your institution decides which
+models are available and how much you may use; everything else works the same
+way regardless of which model you pick.
+
+![The chat home screen](../images/user-chat-home.png)
+
+## Contents
+
+1. [Getting started](getting-started.md) — signing in, the introduction, your
+   first message.
+2. [Conversations](conversations.md) — choosing a model, editing, branching,
+   temporary chats.
+3. [Attachments](attachments.md) — sending images and documents.
+4. [Searching the web](web-search.md) — grounding an answer in sources.
+5. [Sharing](sharing.md) — publishing a conversation read-only.
+6. [Settings](settings.md) — your account, personalisation, history, models.
+7. [Limits](limits.md) — what a usage warning means and what to do about it.
+
+## The parts of the screen
+
+**The sidebar** holds your conversations, newest first, with pinned ones at the
+top. Search finds a conversation by its title or its contents.
+
+**The composer** at the bottom is where you type. The controls along its edge
+choose the model, turn web search on, and attach a file.
+
+**The top right** holds your recent activity and the settings menu.
+
+On a narrow screen the sidebar becomes a panel you open from the top left, and
+the composer's controls collapse behind a single button.
+
+![The interface on a phone](../images/mobile-chat-home.png)
+
+## What your administrator controls
+
+Several things you might expect to configure are decided for the whole
+instance:
+
+- **Which models appear** in the picker, and which are available to your role.
+- **How much you may use**, whether that is measured in messages, tokens, or
+  cost.
+- **How long conversations are kept** before they are removed.
+- **Whether attachments, web search, or sharing are available at all.**
+
+If something described here is missing from your instance, it has been turned
+off rather than broken.

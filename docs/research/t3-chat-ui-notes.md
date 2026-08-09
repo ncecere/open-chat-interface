@@ -9,7 +9,7 @@
 **Status:** Reverse-engineering reference  
 **Source:** Authenticated, non-source-code browser exploration of `https://t3.chat/`  
 **Capture viewport:** Desktop `1720 × 1323`; mobile `390 × 844`  
-**Evidence:** 108 PNG screenshots plus accessibility snapshots in [`screen_shots/`](./screen_shots/)
+**Evidence:** 108 PNG screenshots plus accessibility snapshots in `screen_shots/` (not committed)
 
 > **Privacy warning:** The captures were made from an authenticated account. Several screenshots include a name, email address, profile image, thread titles, generated content, usage limits, attachments, and share metadata. Do not publish this folder without redacting it.
 
@@ -754,4 +754,4 @@ These flows should use confirmation dialogs, explicit consequences, and idempote
 
 ## 19. Evidence Index
 
-See [`screen_shots/README.md`](./screen_shots/README.md) for the complete screenshot catalog. Each interactive capture generally has a corresponding `*-elements.txt` accessibility snapshot.
+The capture catalogue lived in `screen_shots/README.md`, which is not committed: Each interactive capture generally has a corresponding `*-elements.txt` accessibility snapshot.

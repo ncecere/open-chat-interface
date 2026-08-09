@@ -25,6 +25,20 @@ that builds and publishes container images or creates a GitLab Release.
 6. Confirm the `v*` protected-tag rule allows only release maintainers to create
    tags.
 
+## Refresh the documentation
+
+Screenshots and the API reference are committed, so they drift silently between
+releases. Regenerate both while preparing one:
+
+```bash
+pnpm docs:api
+pnpm db:seed:demo          # a presentable instance, not your own data
+pnpm docs:shots            # needs E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD
+```
+
+Review the resulting diff. An image that changed for no reason you can name is
+worth understanding before it is committed.
+
 ## Publish
 
 Start from a clean, up-to-date default branch:

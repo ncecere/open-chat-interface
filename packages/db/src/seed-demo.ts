@@ -158,9 +158,48 @@ export async function seedDemoData(db: Database): Promise<void> {
     ]);
   }
 
+  await seedAdminPreferences(db);
   await seedAdminConversations(db, modelSlug);
   await seedUsageHistory(db, org.id, userIds, modelSlug);
   await seedAuditHistory(db, org.id, userIds);
+}
+
+/**
+ * Personalisation for the account screenshots are taken as.
+ *
+ * Overwritten rather than left alone: whoever ran the captures last will have
+ * their own name and preferences here, and those would be published in the
+ * documentation.
+ */
+async function seedAdminPreferences(db: Database): Promise<void> {
+  const [admin] = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.role, 'admin'))
+    .limit(1);
+
+  if (!admin) return;
+
+  await db
+    .insert(schema.userPreference)
+    .values({
+      userId: admin.id,
+      displayName: 'Alex',
+      occupation: 'Research administrator',
+      traits: ['concise', 'technical'],
+      additionalContext: 'I work mostly with policy documents and data returns.',
+      onboardedAt: DEMO_NOW,
+    })
+    .onConflictDoUpdate({
+      target: schema.userPreference.userId,
+      set: {
+        displayName: 'Alex',
+        occupation: 'Research administrator',
+        traits: ['concise', 'technical'],
+        additionalContext: 'I work mostly with policy documents and data returns.',
+        onboardedAt: DEMO_NOW,
+      },
+    });
 }
 
 /**
