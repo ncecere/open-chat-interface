@@ -120,6 +120,13 @@
       "when": 1786287400000,
       "tag": "0016_drop_cost_tier",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786373800000,
+      "tag": "0017_message_user_index",
+      "breakpoints": true
     }
   ]
 }

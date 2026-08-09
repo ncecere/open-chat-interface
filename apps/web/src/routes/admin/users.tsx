@@ -13,6 +13,9 @@ import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 
+/** Matches the API's own default; the server caps it at 200. */
+const PAGE_SIZE = 50;
+
 interface UsersResponse {
   users: AdminUser[];
   total: number;
@@ -78,6 +81,7 @@ function SortableHeader({
 }
 
 export function AdminUsersPage() {
+  const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<string>('all');
   const [status, setStatus] = useState<string>('all');
@@ -87,20 +91,37 @@ export function AdminUsersPage() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'users', search, role, status, sort, direction],
+    queryKey: ['admin', 'users', search, role, status, sort, direction, page],
     queryFn: () => {
       // Sorting and filtering are applied by the API so they describe every
       // account, not just the page that happens to be loaded.
-      const params = new URLSearchParams({ sort, direction });
+      const params = new URLSearchParams({
+        sort,
+        direction,
+        limit: String(PAGE_SIZE),
+        offset: String(page * PAGE_SIZE),
+      });
       if (search) params.set('search', search);
       if (role !== 'all') params.set('role', role);
       if (status !== 'all') params.set('status', status);
       return api.get<UsersResponse>(`/admin/users?${params}`);
     },
+    placeholderData: (previous) => previous,
   });
 
-  /** Clicking the active column flips direction; a new column starts descending. */
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const firstOnPage = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const lastOnPage = Math.min(total, (page + 1) * PAGE_SIZE);
+
+  /**
+   * Clicking the active column flips direction; a new column starts descending.
+   *
+   * Re-sorting returns to the first page: page four of the old order describes
+   * nothing in the new one.
+   */
   function toggleSort(key: SortKey) {
+    setPage(0);
     if (sort === key) {
       setDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
       return;
@@ -129,11 +150,17 @@ export function AdminUsersPage() {
           placeholder="Search by name or email..."
           className="max-w-sm"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            setPage(0);
+            setSearch(event.target.value);
+          }}
         />
         <Select
           value={role}
-          onChange={setRole}
+          onChange={(value) => {
+            setPage(0);
+            setRole(value);
+          }}
           aria-label="Filter by role"
           className="w-40"
           options={[
@@ -146,7 +173,10 @@ export function AdminUsersPage() {
         />
         <Select
           value={status}
-          onChange={setStatus}
+          onChange={(value) => {
+            setPage(0);
+            setStatus(value);
+          }}
           aria-label="Filter by status"
           className="w-44"
           options={[...STATUS_OPTIONS]}
@@ -237,6 +267,36 @@ export function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {total > PAGE_SIZE && (
+        <nav aria-label="User list pages" className="mt-4 flex items-center justify-between gap-4">
+          <p aria-live="polite" className="text-[var(--text-muted)] text-sm">
+            Showing {firstOnPage}–{lastOnPage} of {total}
+          </p>
+
+          <span className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={page === 0}
+              onClick={() => setPage((current) => Math.max(0, current - 1))}
+            >
+              Previous
+            </Button>
+            <span className="text-[var(--text-muted)] text-sm">
+              Page {page + 1} of {pageCount}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={page + 1 >= pageCount}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Next
+            </Button>
+          </span>
+        </nav>
       )}
 
       <Dialog open={Boolean(limitsFor)} onOpenChange={(open) => !open && setLimitsFor(null)}>
