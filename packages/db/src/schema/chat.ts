@@ -75,6 +75,10 @@ export const message = pgTable(
   (t) => [
     index('message_thread_position_idx').on(t.threadId, t.position),
     index('message_parent_idx').on(t.parentMessageId),
+    // Per-user message counts are read on every admin user listing. Without
+    // this the count scans the whole table once per row returned, which at two
+    // million messages takes the page from milliseconds to minutes.
+    index('message_user_idx').on(t.userId),
   ],
 );
 
