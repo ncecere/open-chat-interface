@@ -1,6 +1,6 @@
 import type { CatalogModel, ModelCapability } from '@oci/shared';
 import { ChevronDown, Info, Search } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
 import { ModelInfoCard } from '~/components/model/model-info-card';
@@ -46,22 +46,62 @@ export function ModelPicker({
    *
    * Deciding once rather than per render keeps the card still: re-measuring as
    * the contents change could flip it mid-read.
+   *
+   * Returns false when neither side fits, since the card is as wide as the
+   * picker and a narrow window has room for one or the other, not both.
    */
+  function placeDetails(): 'left' | 'right' | null {
+    const panel = panelRef.current?.getBoundingClientRect();
+    if (!panel) return 'right';
+
+    // The card matches the panel's width, so that plus the gutter is exactly
+    // what has to fit beside it.
+    const width = panel.width + 8;
+    if (panel.right + width <= window.innerWidth) return 'right';
+    if (panel.left - width >= 0) return 'left';
+    return null;
+  }
+
   function showDetails(modelId: string) {
     setDetailsFor((current) => {
       if (current === modelId) return null;
 
-      const panel = panelRef.current?.getBoundingClientRect();
-      if (panel) {
-        // Mirrors the card's own `w-[min(32rem,32vw)]` plus its gutter, so the
-        // measurement matches what will actually render.
-        const width = Math.min(512, window.innerWidth * 0.32) + 8;
-        const fitsRight = panel.right + width <= window.innerWidth;
-        setDetailsOnLeft(!fitsRight && panel.left - width >= 0);
-      }
+      const side = placeDetails();
+      if (!side) return null;
+
+      setDetailsOnLeft(side === 'left');
       return modelId;
     });
   }
+
+  /**
+   * Whether the details control is worth offering.
+   *
+   * A button that does nothing when clicked is worse than no button, so it is
+   * hidden when the window is too narrow to place the card beside the picker.
+   *
+   * Measured in an effect rather than during render: the panel is portalled,
+   * so on the render that first shows it there is nothing yet to measure.
+   */
+  const [canShowDetails, setCanShowDetails] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setCanShowDetails(false);
+      return;
+    }
+
+    const update = () => setCanShowDetails(placeDetails() !== null);
+    // Radix positions the panel after mounting it, so a measurement taken in
+    // the same frame reads its pre-placement box.
+    const frame = requestAnimationFrame(update);
+
+    window.addEventListener('resize', update);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', update);
+    };
+  });
 
   const labs = useMemo(() => labsFrom(models), [models]);
   const visible = useMemo(
@@ -235,20 +275,22 @@ export function ModelPicker({
                       <CapabilityIcon key={capability} capability={capability} />
                     ))}
 
-                    <button
-                      type="button"
-                      aria-label={`Details for ${model.displayName}`}
-                      aria-expanded={detailsFor === model.id}
-                      onClick={() => showDetails(model.id)}
-                      className={cn(
-                        'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
-                        detailsFor === model.id
-                          ? 'text-[var(--text-primary)]'
-                          : 'text-[var(--text-faint)]',
-                      )}
-                    >
-                      <Info className="size-3.5" />
-                    </button>
+                    {canShowDetails && (
+                      <button
+                        type="button"
+                        aria-label={`Details for ${model.displayName}`}
+                        aria-expanded={detailsFor === model.id}
+                        onClick={() => showDetails(model.id)}
+                        className={cn(
+                          'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
+                          detailsFor === model.id
+                            ? 'text-[var(--text-primary)]'
+                            : 'text-[var(--text-faint)]',
+                        )}
+                      >
+                        <Info className="size-3.5" />
+                      </button>
+                    )}
                   </span>
                 </div>
               ))
@@ -264,17 +306,18 @@ export function ModelPicker({
          * it stays there for as long as the picker is open, so moving between
          * models changes the contents and nothing else.
          *
-         * Aligned to the panel's top rather than centred, so the heading sits
-         * at a predictable height however much detail a model carries.
+         * Matches the picker exactly: same width, and stretched to the panel's
+         * own top and bottom edges. A card of some other size reads as a
+         * detached object floating next to the list rather than part of it.
          */}
         {detailsModel && (
           <div
             className={cn(
-              'pointer-events-none absolute top-0 hidden md:block',
-              detailsOnLeft ? 'right-full pr-2' : 'left-full pl-2',
+              'pointer-events-none absolute inset-y-0 hidden w-[calc(100%+2px)] md:block',
+              detailsOnLeft ? 'right-full -translate-x-2' : 'left-full translate-x-2',
             )}
           >
-            <div className="pointer-events-auto flex h-[26rem] w-[min(32rem,32vw)] flex-col overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-popover)]">
+            <div className="pointer-events-auto flex h-full w-full flex-col overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-popover)]">
               <ModelInfoCard model={detailsModel} />
             </div>
           </div>
