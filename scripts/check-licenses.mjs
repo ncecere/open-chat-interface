@@ -23,7 +23,10 @@ const result = spawnSync('pnpm', ['licenses', 'list', '--prod', '--json'], {
 });
 
 if (result.status !== 0) {
-  process.stderr.write(result.stderr || 'Unable to inspect production dependency licenses.\n');
+  // pnpm's JSON mode reports command failures on stdout, not necessarily stderr.
+  process.stderr.write(
+    result.stderr || result.stdout || 'Unable to inspect production dependency licenses.\n',
+  );
   process.exit(result.status ?? 1);
 }
 

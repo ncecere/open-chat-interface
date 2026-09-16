@@ -12,6 +12,11 @@ export class ApiError extends Error {
   }
 }
 
+/** Only server API errors are suitable for display; other failures use caller-specific copy. */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
 export function sameOriginApiUrl(path: string, origin: string): string {
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\') || path.includes('#')) {
     throw new TypeError('API path must be a same-origin absolute path');

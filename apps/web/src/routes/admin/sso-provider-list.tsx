@@ -14,13 +14,9 @@ import {
 } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 type CopiedEndpoint = 'callback' | 'metadata' | null;
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
-}
 
 function Endpoint({
   label,
@@ -223,7 +219,7 @@ function ProviderRow({
 
       {toggle.error && (
         <p role="alert" className="mt-3 text-xs text-[var(--danger)]">
-          {errorMessage(toggle.error, 'The provider status could not be changed.')}
+          {apiErrorMessage(toggle.error, 'The provider status could not be changed.')}
         </p>
       )}
     </div>
@@ -290,7 +286,7 @@ export function DeleteSsoProviderDialog({
 
       {remove.error && (
         <p role="alert" className="mt-3 text-sm text-[var(--danger)]">
-          {errorMessage(remove.error, 'The provider could not be deleted.')}
+          {apiErrorMessage(remove.error, 'The provider could not be deleted.')}
         </p>
       )}
 

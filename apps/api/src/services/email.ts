@@ -9,11 +9,6 @@ export interface OutboundEmail {
   text: string;
 }
 
-export async function isSmtpConfigured(): Promise<boolean> {
-  const smtp = await getSetting('smtp');
-  return Boolean(smtp.host && smtp.port && smtp.fromAddress);
-}
-
 /**
  * Whether SMTP is sufficiently configured for an auth flow to depend on it.
  * This deliberately does not make a network connection on every sign-in, but

@@ -1,4 +1,4 @@
-import { desc, schema } from '@oci/db';
+import { schema } from '@oci/db';
 import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
 import { getDefaultOrganizationId } from './organization.js';
@@ -30,12 +30,4 @@ export async function recordAudit(event: AuditEvent): Promise<void> {
     // Auditing must never break the request it is describing.
     logger.error({ error, action: event.action }, 'Failed to write audit log entry');
   }
-}
-
-export async function listAudit(limit = 100) {
-  return db
-    .select()
-    .from(schema.auditLog)
-    .orderBy(desc(schema.auditLog.createdAt))
-    .limit(Math.min(limit, 500));
 }

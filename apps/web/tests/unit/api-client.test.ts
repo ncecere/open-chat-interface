@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { sameOriginApiUrl } from '../../src/lib/api-client';
+import { ApiError, apiErrorMessage, sameOriginApiUrl } from '../../src/lib/api-client';
+
+describe('apiErrorMessage', () => {
+  it('displays API errors and preserves caller-specific fallback copy for other failures', () => {
+    expect(apiErrorMessage(new ApiError(403, 'FORBIDDEN', 'Access denied'), 'Try again')).toBe(
+      'Access denied',
+    );
+    for (const error of [new Error('Internal detail'), null, undefined, 'Internal detail']) {
+      expect(apiErrorMessage(error, 'Try again')).toBe('Try again');
+    }
+  });
+});
 
 describe('sameOriginApiUrl', () => {
   it('keeps API paths and query strings on the current origin', () => {

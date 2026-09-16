@@ -6,16 +6,12 @@ import { AdminPageHeader } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { SsoProviderForm } from '~/routes/admin/sso-provider-form';
 import { DeleteSsoProviderDialog, SsoProviderList } from '~/routes/admin/sso-provider-list';
 
 interface SsoProvidersResponse {
   providers: SsoProviderSummary[];
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Unable to load SSO providers.';
 }
 
 export function AdminSsoPage() {
@@ -53,7 +49,9 @@ export function AdminSsoPage() {
           <p role="alert" className="text-sm font-medium text-[var(--text-primary)]">
             SSO providers could not be loaded.
           </p>
-          <p className="text-xs text-[var(--text-muted)]">{errorMessage(providers.error)}</p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {apiErrorMessage(providers.error, 'Unable to load SSO providers.')}
+          </p>
           <Button
             type="button"
             variant="secondary"

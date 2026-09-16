@@ -6,6 +6,7 @@ import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { admin as adminPlugin } from 'better-auth/plugins';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
+import { clientIpFromHeaders } from '../lib/client-ip.js';
 import { logger } from '../lib/logger.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/email.js';
 import { getDefaultOrganizationId } from '../services/organization.js';
@@ -16,21 +17,6 @@ import { enforceAuthRequestPolicy, isEmailVerificationEnforced } from './policy.
 import { applySsoProvisioning, SsoRoleRequiredError } from './provisioning.js';
 
 const env = loadEnv();
-
-/**
- * Client address from proxy headers, for the auth hook.
- *
- * The hook is handed raw headers rather than a Hono context, so this cannot
- * reuse `clientIp`. The precedence is the same.
- */
-function forwardedIp(headers: Headers | undefined): string | null {
-  if (!headers) return null;
-  const cloudflare = headers.get('cf-connecting-ip')?.trim();
-  if (cloudflare) return cloudflare;
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  if (forwarded) return forwarded;
-  return headers.get('x-real-ip')?.trim() || null;
-}
 
 /**
  * The claims a role mapping can be written against.
@@ -221,7 +207,7 @@ export const auth = betterAuth({
       await recordAuthEvent({
         path: ctx.path,
         status,
-        ipAddress: forwardedIp(ctx.headers),
+        ipAddress: clientIpFromHeaders(ctx.headers),
         userAgent: ctx.headers?.get('user-agent') ?? null,
         actorUserId: session?.user?.id ?? null,
         // Falls back to the submitted address so a failed attempt still says

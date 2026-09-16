@@ -17,7 +17,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 interface InvitesResponse {
   invites: Array<Omit<Invite, 'token'>>;
@@ -49,10 +49,6 @@ function formatDate(value: string): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value));
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
 }
 
 function CreateInviteDialog({ onClose }: { onClose: () => void }) {
@@ -164,7 +160,8 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
   }
 
   const formError =
-    validationError ?? (create.error && errorMessage(create.error, 'Failed to create invitation.'));
+    validationError ??
+    (create.error && apiErrorMessage(create.error, 'Failed to create invitation.'));
 
   return (
     <DialogContent className="w-[calc(100%-2rem)]">
@@ -276,7 +273,7 @@ function RevokeInviteDialog({
           className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
           role="alert"
         >
-          {errorMessage(revoke.error, 'Failed to revoke invitation.')}
+          {apiErrorMessage(revoke.error, 'Failed to revoke invitation.')}
         </p>
       )}
 
@@ -411,7 +408,7 @@ export function AdminInvitesPage() {
             Invitations could not be loaded.
           </p>
           <p className="text-xs text-[var(--text-muted)]">
-            {errorMessage(invites.error, 'Please try again.')}
+            {apiErrorMessage(invites.error, 'Please try again.')}
           </p>
           <Button variant="secondary" size="sm" onClick={() => void invites.refetch()}>
             Try again

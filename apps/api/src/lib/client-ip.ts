@@ -13,13 +13,19 @@ import type { Context } from 'hono';
  * The left-most entry of `x-forwarded-for` is the original client; the rest are
  * intermediaries appended on the way through.
  */
-export function clientIp(c: Context): string | null {
-  const cloudflare = c.req.header('cf-connecting-ip')?.trim();
+export function clientIpFromHeaders(headers: Headers | undefined): string | null {
+  if (!headers) return null;
+  const cloudflare = headers.get('cf-connecting-ip')?.trim();
   if (cloudflare) return cloudflare;
 
-  const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
+  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
   if (forwarded) return forwarded;
 
-  const real = c.req.header('x-real-ip')?.trim();
+  const real = headers.get('x-real-ip')?.trim();
   return real || null;
+}
+
+/** Hono adapter; authentication hooks use the same resolver with raw Headers. */
+export function clientIp(c: Context): string | null {
+  return clientIpFromHeaders(c.req.raw.headers);
 }
