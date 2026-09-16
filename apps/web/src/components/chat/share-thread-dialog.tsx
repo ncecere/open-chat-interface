@@ -15,7 +15,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 interface OwnerShareLink {
   id: string;
@@ -32,10 +32,6 @@ interface ThreadMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   parts: Array<Record<string, unknown>>;
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
 }
 
 function textPreview(message: ThreadMessage): string {
@@ -298,7 +294,7 @@ export function ShareThreadDialog({
             className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
             role="alert"
           >
-            {formError ?? errorMessage(create.error, 'Failed to create share link.')}
+            {formError ?? apiErrorMessage(create.error, 'Failed to create share link.')}
           </p>
         )}
         {copyError && (
@@ -311,7 +307,7 @@ export function ShareThreadDialog({
             className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
             role="alert"
           >
-            {errorMessage(revoke.error, 'Failed to revoke share link.')}
+            {apiErrorMessage(revoke.error, 'Failed to revoke share link.')}
           </p>
         )}
 
@@ -330,7 +326,7 @@ export function ShareThreadDialog({
               className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
               role="alert"
             >
-              {errorMessage(loadError, 'Failed to load share links.')}
+              {apiErrorMessage(loadError, 'Failed to load share links.')}
             </p>
           )}
           {links.data?.links.length === 0 && (

@@ -1,0 +1,139 @@
+import { eq, schema } from '@oci/db';
+import type { createUserSchema, updateUserSchema } from '@oci/shared';
+import type { z } from 'zod';
+import { auth } from '../../auth/index.js';
+import { isEmailVerificationEnforced } from '../../auth/policy.js';
+import { db } from '../../db/index.js';
+import { conflict, notFound, validationFailed } from '../../lib/errors.js';
+import { recordAudit } from '../audit.js';
+
+export interface AdminUserActor {
+  id: string;
+  email: string;
+}
+
+export async function createUser(actor: AdminUserActor, input: z.infer<typeof createUserSchema>) {
+  const [existing] = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.email, input.email))
+    .limit(1);
+
+  if (existing) throw conflict('A user with that email already exists');
+
+  const created = await auth.api.createUser({
+    body: {
+      email: input.email,
+      password: input.password,
+      name: input.name,
+      role: input.role === 'admin' ? 'admin' : 'user',
+    },
+  });
+
+  if (input.role === 'restricted') {
+    await db
+      .update(schema.user)
+      .set({ role: 'restricted' })
+      .where(eq(schema.user.id, created.user.id));
+  }
+
+  if (await isEmailVerificationEnforced()) {
+    try {
+      await auth.api.sendVerificationEmail({
+        body: { email: input.email, callbackURL: '/' },
+      });
+    } catch {
+      // Email delivery must never create an unusable administrator-created account.
+      await db
+        .update(schema.user)
+        .set({ emailVerified: true })
+        .where(eq(schema.user.id, created.user.id));
+    }
+  } else {
+    await db
+      .update(schema.user)
+      .set({ emailVerified: true })
+      .where(eq(schema.user.id, created.user.id));
+  }
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'user.create',
+    targetType: 'user',
+    targetId: created.user.id,
+    metadata: { email: input.email, role: input.role },
+  });
+
+  return { id: created.user.id };
+}
+
+export async function updateUser(
+  actor: AdminUserActor,
+  targetId: string,
+  patch: z.infer<typeof updateUserSchema>,
+) {
+  const [target] = await db
+    .select({ id: schema.user.id, role: schema.user.role })
+    .from(schema.user)
+    .where(eq(schema.user.id, targetId))
+    .limit(1);
+
+  if (!target) throw notFound('User not found');
+  if (targetId === actor.id && patch.role && patch.role !== 'admin') {
+    throw validationFailed('You cannot remove your own administrator role');
+  }
+  if (targetId === actor.id && patch.banned) {
+    throw validationFailed('You cannot ban your own account');
+  }
+
+  const [updated] = await db
+    .update(schema.user)
+    .set({
+      ...(patch.name !== undefined && { name: patch.name }),
+      ...(patch.role !== undefined && { role: patch.role }),
+      ...(patch.banned !== undefined && { banned: patch.banned }),
+      ...(patch.banReason !== undefined && { banReason: patch.banReason }),
+    })
+    .where(eq(schema.user.id, targetId))
+    .returning({ id: schema.user.id });
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'user.update',
+    targetType: 'user',
+    targetId,
+    metadata: patch,
+  });
+
+  return { id: updated?.id };
+}
+
+export async function revokeUserSessions(actor: AdminUserActor, targetId: string) {
+  await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'user.revoke_sessions',
+    targetType: 'user',
+    targetId,
+  });
+  return { ok: true };
+}
+
+export async function deleteUser(actor: AdminUserActor, targetId: string) {
+  if (targetId === actor.id) {
+    throw validationFailed('You cannot delete your own account');
+  }
+
+  await db.delete(schema.user).where(eq(schema.user.id, targetId));
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'user.delete',
+    targetType: 'user',
+    targetId,
+  });
+  return { ok: true };
+}

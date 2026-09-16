@@ -92,21 +92,6 @@ export async function acquireStreamSlot(
   }
 }
 
-/** How many generations a user currently has in flight. */
-export async function activeStreamCount(userId: string): Promise<number> {
-  const key = slotKey(userId);
-  const redis = await sharedRedis();
-
-  if (!redis) return localSlots.get(key)?.size ?? 0;
-
-  try {
-    await redis.zremrangebyscore(key, 0, Date.now());
-    return await redis.zcard(key);
-  } catch {
-    return 0;
-  }
-}
-
 export function resetLocalConcurrency(): void {
   localSlots.clear();
 }

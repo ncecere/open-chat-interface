@@ -10,6 +10,7 @@
 6. [Testing](testing.md) — the four suites and what each is for.
 7. [Adding a feature](adding-a-feature.md) — a worked example, end to end.
 8. [Screenshots](screenshots.md) — regenerating the documentation images.
+9. [Maintainability review](maintainability-review.md) — module boundaries, repeatable structural inventory, and unresolved findings.
 
 ## The shape of it
 
