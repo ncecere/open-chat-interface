@@ -1,32 +1,31 @@
-import { and, eq, inArray, schema } from '@oci/db';
+import { and, type Database, eq, inArray, schema } from '@oci/db';
 import type { QuotaPolicy } from '@oci/shared';
-import { db } from '../../db/index.js';
 import { validationFailed } from '../../lib/errors.js';
 
-export async function replaceRoles(policyId: string, roles: QuotaPolicy['roles']): Promise<void> {
-  await db.delete(schema.quotaPolicyRole).where(eq(schema.quotaPolicyRole.policyId, policyId));
-  if (roles.length === 0) return;
+export type PolicyTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
-  await db
-    .insert(schema.quotaPolicyRole)
-    .values(roles.map((role) => ({ policyId, role })))
-    .onConflictDoNothing();
+export async function replaceRoles(
+  tx: PolicyTransaction,
+  policyId: string,
+  roles: QuotaPolicy['roles'],
+): Promise<void> {
+  await tx.delete(schema.quotaPolicyRole).where(eq(schema.quotaPolicyRole.policyId, policyId));
+  const unique = [...new Set(roles)];
+  if (unique.length === 0) return;
+
+  await tx.insert(schema.quotaPolicyRole).values(unique.map((role) => ({ policyId, role })));
 }
 
-/**
- * Replaces a policy's model scope. Slugs are validated against the catalog so
- * a typo becomes an error rather than a policy that silently governs nothing.
- */
-export async function replaceModels(
-  policyId: string,
+/** Validate the entire scope before mutating the policy or any assignments. */
+export async function validateModelScope(
+  tx: PolicyTransaction,
   organizationId: string,
   modelSlugs: string[],
-): Promise<void> {
-  await db.delete(schema.quotaPolicyModel).where(eq(schema.quotaPolicyModel.policyId, policyId));
-  if (modelSlugs.length === 0) return;
-
+): Promise<string[]> {
   const unique = [...new Set(modelSlugs)];
-  const known = await db
+  if (unique.length === 0) return unique;
+
+  const known = await tx
     .select({ slug: schema.model.slug })
     .from(schema.model)
     .where(
@@ -41,8 +40,20 @@ export async function replaceModels(
     ]);
   }
 
-  await db
+  return unique;
+}
+
+/** Replace a previously validated scope in the same transaction as the policy. */
+export async function replaceModels(
+  tx: PolicyTransaction,
+  policyId: string,
+  modelSlugs: string[],
+): Promise<void> {
+  await tx.delete(schema.quotaPolicyModel).where(eq(schema.quotaPolicyModel.policyId, policyId));
+  const unique = [...new Set(modelSlugs)];
+  if (unique.length === 0) return;
+
+  await tx
     .insert(schema.quotaPolicyModel)
-    .values(unique.map((modelSlug) => ({ policyId, modelSlug })))
-    .onConflictDoNothing();
+    .values(unique.map((modelSlug) => ({ policyId, modelSlug })));
 }

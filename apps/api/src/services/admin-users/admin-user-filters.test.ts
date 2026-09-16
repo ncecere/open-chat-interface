@@ -240,11 +240,19 @@ describe('individual user mutations', () => {
     });
   });
 
-  it('preserves the existing auditor-create mapping rather than fixing it during extraction', async () => {
+  it('persists the requested auditor role before reporting creation success', async () => {
+    const update = query();
+    mocks.db.update.mockReturnValueOnce(update);
     await createUser(actor, { ...input, role: 'auditor' });
     expect(mocks.createUser).toHaveBeenCalledWith({ body: { ...input, role: 'user' } });
-    expect(mocks.db.update).toHaveBeenCalledTimes(1);
+    expect(update.set).toHaveBeenCalledWith({ role: 'auditor' });
+    expect(mocks.db.update).toHaveBeenCalledTimes(2);
     expect(mocks.sendVerificationEmail).not.toHaveBeenCalled();
+    expect(mocks.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: { email: input.email, role: 'auditor' },
+      }),
+    );
   });
 
   it('rejects duplicate creation before contacting Better Auth', async () => {
