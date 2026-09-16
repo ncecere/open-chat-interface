@@ -12,6 +12,23 @@ const KEY_PREFIX = 'oci:concurrency';
  */
 const SLOT_TTL_SECONDS = 30 * 60;
 
+// The cap check and reservation must be atomic across replicas. A retry for an
+// already-live run renews that member without consuming another slot.
+const ACQUIRE_SLOT_SCRIPT = `
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local runId = ARGV[3]
+local ttl = tonumber(ARGV[4])
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now)
+if not redis.call('ZSCORE', key, runId) and redis.call('ZCARD', key) >= limit then
+  return 0
+end
+redis.call('ZADD', key, now + ttl * 1000, runId)
+redis.call('EXPIRE', key, ttl)
+return 1
+`;
+
 export interface ConcurrencySlot {
   release: () => Promise<void>;
 }
@@ -48,36 +65,30 @@ export async function acquireStreamSlot(
 
   if (!redis) {
     const slots = localSlots.get(key) ?? new Set<string>();
-    if (slots.size >= limit) return null;
+    if (!slots.has(runId) && slots.size >= limit) return null;
     slots.add(runId);
     localSlots.set(key, slots);
 
     return {
       release: async () => {
         slots.delete(runId);
-        if (slots.size === 0) localSlots.delete(key);
+        // A repeated release must not remove a newer set created for this user.
+        if (slots.size === 0 && localSlots.get(key) === slots) localSlots.delete(key);
       },
     };
   }
 
   try {
-    // Drop expired members first so a crashed replica cannot hold a slot past
-    // the TTL, then count what genuinely remains live.
-    const [, countResult] = await redis
-      .multi()
-      .zremrangebyscore(key, 0, now)
-      .zcard(key)
-      .exec()
-      .then((results) => results ?? []);
-
-    const active = Number(countResult?.[1] ?? 0);
-    if (active >= limit) return null;
-
-    await redis
-      .multi()
-      .zadd(key, now + SLOT_TTL_SECONDS * 1000, runId)
-      .expire(key, SLOT_TTL_SECONDS)
-      .exec();
+    const acquired = await redis.eval(
+      ACQUIRE_SLOT_SCRIPT,
+      1,
+      key,
+      now,
+      limit,
+      runId,
+      SLOT_TTL_SECONDS,
+    );
+    if (acquired !== 1) return null;
 
     return {
       release: async () => {

@@ -13,11 +13,11 @@ import {
   captureChatRun,
   isChatRunCancellationRequested,
   registerLocalChatRun,
-  unregisterLocalChatRun,
 } from '../chat-streams.js';
 import { reasoningCallSettings } from '../reasoning.js';
 import { touchThread } from '../threads.js';
 import type { PreparedTurn } from './prepare-turn.js';
+import { failRunSetup, releaseRunHandles } from './run-cleanup.js';
 import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
 
 type RunOutcome = { status: Exclude<ChatRunStatus, 'active'>; error?: string };
@@ -35,115 +35,154 @@ async function persistAssistant(
   } catch {
     usage = undefined;
   }
-  await db
-    .update(schema.message)
-    .set({
-      parts: responseMessage.parts as unknown as Record<string, unknown>[],
-      status,
-      errorMessage: status === 'error' ? 'The model failed to generate a response' : null,
-      tokensIn: usage?.inputTokens ?? null,
-      tokensOut: usage?.outputTokens ?? null,
-      durationMs: Date.now() - startedAt,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(schema.message.id, assistantMessage.id),
-        eq(schema.message.threadId, thread.id),
-        eq(schema.message.userId, user.id),
-      ),
-    );
+  let persistenceFailure: { error: unknown } | undefined;
+  try {
+    await db
+      .update(schema.message)
+      .set({
+        parts: responseMessage.parts as unknown as Record<string, unknown>[],
+        status,
+        errorMessage: status === 'error' ? 'The model failed to generate a response' : null,
+        tokensIn: usage?.inputTokens ?? null,
+        tokensOut: usage?.outputTokens ?? null,
+        durationMs: Date.now() - startedAt,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.message.id, assistantMessage.id),
+          eq(schema.message.threadId, thread.id),
+          eq(schema.message.userId, user.id),
+        ),
+      );
 
-  await touchThread(thread.id);
-  // Settle even without provider usage: cancelled/failed runs count toward a message quota.
-  await settleUsage(reservation, usage ?? null, { userId: user.id, modelSlug: resolved.slug });
+    await touchThread(thread.id);
+  } catch (error) {
+    persistenceFailure = { error };
+  }
+  // Attempt both operations, but never replace the initiating persistence error
+  // with a secondary settlement error. Report the latter separately.
+  try {
+    await settleUsage(reservation, usage ?? null, { userId: user.id, modelSlug: resolved.slug });
+  } catch (error) {
+    logger.error(
+      { error, threadId: thread.id, reservationId: reservation?.id },
+      'Failed to settle chat usage',
+    );
+    if (!persistenceFailure) throw error;
+  }
+  if (persistenceFailure) throw persistenceFailure.error;
 }
 
 /** Start the provider and compose its persisted, resumable SDK response. */
 export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
   const { input, thread, resolved, uiMessages, system, sourceParts, searchGroundingPart } = turn;
-  const { runIdentity, assistantMessage, streamSlot, persistence } = run;
+  const { runIdentity, assistantMessage, persistence } = run;
   const abortController = new AbortController();
-  registerLocalChatRun(runIdentity, abortController);
-  let modelFailed = false;
-  let lastCancellationCheck = 0;
+  let modelStarted = false;
+  let setupFailed = false;
+  let completion: Promise<void> | undefined;
+  let captureStarted = false;
   let outcome: RunOutcome = { status: 'complete' };
-  const result = streamText({
-    model: resolved.languageModel,
-    system,
-    messages: await convertToModelMessages(uiMessages),
-    abortSignal: abortController.signal,
-    ...(resolved.maxOutputTokens ? { maxOutputTokens: resolved.maxOutputTokens } : {}),
-    ...reasoningCallSettings(input.effort, resolved.providerKind),
-    onChunk: async () => {
-      if (Date.now() - lastCancellationCheck < 500) return;
-      lastCancellationCheck = Date.now();
-      if (await isChatRunCancellationRequested(runIdentity.runId)) {
-        abortController.abort('user-stop');
-      }
-    },
-    onError: ({ error }) => {
-      modelFailed = true;
-      logger.error(
-        { error, modelSlug: resolved.slug, runId: runIdentity.runId },
-        'Model stream failed',
-      );
-    },
-  });
-
-  const responseStream = createUIMessageStream({
-    originalMessages: uiMessages,
-    generateId: () => assistantMessage.id,
-    execute: ({ writer }) => {
-      // Attribute the reply while it streams, not only after reloading storage.
-      writer.write({
-        type: 'start',
-        messageMetadata: { modelSlug: resolved.slug, effort: input.effort ?? null },
-      });
-      if (searchGroundingPart) writer.write(searchGroundingPart);
-      for (const source of sourceParts) writer.write(source);
-      writer.merge(
-        result.toUIMessageStream({
-          originalMessages: uiMessages,
-          sendStart: false,
-        }),
-      );
-    },
-    onEnd: async ({ responseMessage, isAborted }) => {
-      const status = isAborted ? 'cancelled' : modelFailed ? 'error' : 'complete';
-      outcome = {
-        status,
-        ...(status === 'error' ? { error: 'The model stream failed' } : {}),
-      };
-
-      try {
-        await persistAssistant(turn, run, responseMessage, status, () => result.usage);
-      } catch (error) {
-        outcome = { status: 'error', error: 'Assistant message persistence failed' };
-        logger.error(
-          { error, threadId: thread.id, runId: runIdentity.runId },
-          'Failed to persist assistant message',
-        );
-      } finally {
-        // Release on generation end, not response close: clients may disconnect
-        // and resume the same run while it continues generating.
-        await streamSlot.release();
-        if (persistence !== 'available') unregisterLocalChatRun(runIdentity.runId);
-      }
-    },
-  });
-
-  return createUIMessageStreamResponse({
-    stream: responseStream,
-    headers: {
-      'X-OCI-Chat-Run-Id': runIdentity.runId,
-      'X-OCI-Stream-Persistence': persistence === 'available' ? 'redis' : 'unavailable',
-    },
-    ...(persistence === 'available'
-      ? {
-          consumeSseStream: ({ stream }: { stream: ReadableStream<string> }) =>
-            captureChatRun(runIdentity, stream, () => outcome),
+  try {
+    const messages = await convertToModelMessages(uiMessages);
+    registerLocalChatRun(runIdentity, abortController);
+    let modelFailed = false;
+    let lastCancellationCheck = 0;
+    const result = streamText({
+      model: resolved.languageModel,
+      system,
+      messages,
+      abortSignal: abortController.signal,
+      ...(resolved.maxOutputTokens ? { maxOutputTokens: resolved.maxOutputTokens } : {}),
+      ...reasoningCallSettings(input.effort, resolved.providerKind),
+      onChunk: async () => {
+        if (Date.now() - lastCancellationCheck < 500) return;
+        lastCancellationCheck = Date.now();
+        if (await isChatRunCancellationRequested(runIdentity.runId)) {
+          abortController.abort('user-stop');
         }
-      : {}),
-  });
+      },
+      onError: ({ error }) => {
+        modelFailed = true;
+        logger.error(
+          { error, modelSlug: resolved.slug, runId: runIdentity.runId },
+          'Model stream failed',
+        );
+      },
+    });
+
+    modelStarted = true;
+    const responseStream = createUIMessageStream({
+      originalMessages: uiMessages,
+      generateId: () => assistantMessage.id,
+      execute: ({ writer }) => {
+        // Attribute the reply while it streams, not only after reloading storage.
+        writer.write({
+          type: 'start',
+          messageMetadata: { modelSlug: resolved.slug, effort: input.effort ?? null },
+        });
+        if (searchGroundingPart) writer.write(searchGroundingPart);
+        for (const source of sourceParts) writer.write(source);
+        writer.merge(
+          result.toUIMessageStream({
+            originalMessages: uiMessages,
+            sendStart: false,
+          }),
+        );
+      },
+      onEnd: ({ responseMessage, isAborted }) => {
+        if (setupFailed) return;
+        completion ??= (async () => {
+          const status = isAborted ? 'cancelled' : modelFailed ? 'error' : 'complete';
+          outcome = {
+            status,
+            ...(status === 'error' ? { error: 'The model stream failed' } : {}),
+          };
+
+          try {
+            await persistAssistant(turn, run, responseMessage, status, () => result.usage);
+          } catch (error) {
+            outcome = { status: 'error', error: 'Assistant message persistence failed' };
+            logger.error(
+              { error, threadId: thread.id, runId: runIdentity.runId },
+              'Failed to persist assistant message',
+            );
+          } finally {
+            // Release on generation end, not response close: clients may disconnect
+            // and resume the same run while it continues generating.
+            await releaseRunHandles(run);
+          }
+        })();
+        return completion;
+      },
+    });
+
+    return createUIMessageStreamResponse({
+      stream: responseStream,
+      headers: {
+        'X-OCI-Chat-Run-Id': runIdentity.runId,
+        'X-OCI-Stream-Persistence': persistence === 'available' ? 'redis' : 'unavailable',
+      },
+      ...(persistence === 'available'
+        ? {
+            consumeSseStream: ({ stream }: { stream: ReadableStream<string> }) => {
+              // The SDK starts this consumer before constructing the Response.
+              // Once started it exclusively owns Redis finalization, even if
+              // response construction subsequently throws.
+              captureStarted = true;
+              return captureChatRun(runIdentity, stream, () => outcome);
+            },
+          }
+        : {}),
+    });
+  } catch (error) {
+    setupFailed = true;
+    outcome = { status: 'error', error: 'Stream setup failed' };
+    abortController.abort('setup-failed');
+    // If SDK completion already began, let its measured usage settle first.
+    await completion;
+    await failRunSetup(run, { modelStarted, abandon: !captureStarted });
+    throw error;
+  }
 }

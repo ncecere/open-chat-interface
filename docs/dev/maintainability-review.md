@@ -62,10 +62,11 @@ Smaller files and thin routes are useful boundaries, not proof that complexity
 has disappeared. Re-run the inventory when adding responsibilities to these
 modules.
 
-## Behavioural findings requiring separate fixes
+## Behavioural findings at the refactor boundary
 
-These predate the refactor. They are intentionally listed rather than silently
-changed while moving code.
+These predated the refactor and were intentionally not changed while moving
+code. The following list records the original findings; see the runtime
+remediation below for their current status.
 
 1. **Concurrent stream acquisition is not atomic in Redis.**
    `services/limits/concurrency.ts` counts active slots in one transaction and
@@ -90,7 +91,36 @@ changed while moving code.
 Session deletion also remains subject to Better Auth's existing cookie cache;
 this refactor does not introduce immediate revocation or alter that policy.
 
-## Verification and limits
+## Runtime remediation
+
+The separate runtime-safety change addresses all four findings:
+
+| Finding | Change | Regression evidence |
+| --- | --- | --- |
+| Redis stream cap | One Lua operation prunes expired members, checks capacity, reserves the run, and sets TTL. Existing-run retries do not consume another slot. | Real Redis: 12 connections, 96 competing acquisitions, five rounds at each of three role caps; expiry, retry, and release tests. |
+| Partial quota writes | Validate model scope before writes, then commit policy and assignments together. Existing-policy row locks serialize edits; success audit runs after commit. | 13 real PostgreSQL tests: invalid inputs, immediate and deferred insert failures, rollback, concurrent name conflicts/edits, scopes and deletion. |
+| Auditor creation | Persist both non-built-in roles, auditor and restricted, after Better Auth creation. | Unit regression and four PostgreSQL route tests covering every role, persisted read-back and auditor read/write gating. Better Auth creation itself is stubbed in these tests. |
+| Chat setup leaks | One cleanup boundary covers partial acquisition and SDK setup. Cleanup attempts are independent, preserve the original error and mark only the owned streaming assistant failed. Completion attempts quota settlement even if message persistence fails. Once SSE capture starts, it exclusively owns Redis finalization. | 14 fault-injection tests covering fallback lookup, insertion, quota refusal, conversion, SDK/response creation before and after capture starts, dual cleanup failures and successful completion. |
+
+These are bounded guarantees, not a distributed-systems all-clear. Redis-down
+behaviour remains local/fail-open and crashed slots expire after 30 minutes.
+Cleanup cannot guarantee a database write during an outage; failures are logged.
+Before SDK startup, failed setup releases the reservation. After SDK startup, a
+response-construction failure counts the attempted message with unknown tokens
+settled at zero, matching the existing failed-run policy. Model/SDK calls in the
+fault-injection tests are mocked, not live provider requests. The existing
+cookie-cache revocation delay is unchanged. Dependencies are handled separately.
+
+Runtime-fix verification: build, lint, typechecks, license policy and version
+consistency pass; 301 API unit/integration tests and 120 web tests pass. The API
+coverage run passes its existing thresholds with 413 tests (including 112 live
+PostgreSQL/SMTP checks) and six S3 checks skipped because the configured MinIO
+image could not be pulled. An isolated API smoke also used **real Better Auth**
+to create an auditor, read its persisted role, sign in, read admin users and
+confirm a write returned 403. No browser suite or external IdP was run for this
+backend-only remediation.
+
+## Refactor verification and limits (historical)
 
 - Build, lint, typechecks, release-version consistency, and license policy checks pass.
 - API unit/integration: 277 passed; web unit: 120 passed.

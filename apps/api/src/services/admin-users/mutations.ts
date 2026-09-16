@@ -30,10 +30,12 @@ export async function createUser(actor: AdminUserActor, input: z.infer<typeof cr
     },
   });
 
-  if (input.role === 'restricted') {
+  // Better Auth's create-user API accepts its built-in admin/user presets.
+  // Apply OCI's additional validated roles before returning or auditing success.
+  if (input.role !== 'admin' && input.role !== 'user') {
     await db
       .update(schema.user)
-      .set({ role: 'restricted' })
+      .set({ role: input.role })
       .where(eq(schema.user.id, created.user.id));
   }
 

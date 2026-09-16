@@ -4,7 +4,7 @@ import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { recordAudit } from '../audit.js';
 import { getDefaultOrganizationId } from '../organization.js';
-import { replaceModels, replaceRoles } from './policy-assignments.js';
+import { replaceModels, replaceRoles, validateModelScope } from './policy-assignments.js';
 import { isValidTimezone } from './windows.js';
 
 type Actor = { id: string; email: string };
@@ -12,6 +12,23 @@ type Actor = { id: string; email: string };
 /** Calendar windows ignore windowHours; rolling windows ignore the timezone. */
 function normalizeWindow(input: { windowKind: string; windowHours?: number | null }) {
   return input.windowKind === 'rolling' ? (input.windowHours ?? 24) : null;
+}
+
+/** Concurrent name claims can race the friendly precheck; preserve its domain error. */
+function rethrowPolicyWriteError(error: unknown): never {
+  let cause = error;
+  while (cause && typeof cause === 'object') {
+    if (
+      'code' in cause &&
+      cause.code === '23505' &&
+      'constraint_name' in cause &&
+      cause.constraint_name === 'quota_policy_org_name_unique'
+    ) {
+      throw conflict('A policy with that name already exists');
+    }
+    cause = 'cause' in cause ? cause.cause : undefined;
+  }
+  throw error;
 }
 
 export async function createQuotaPolicy(actor: Actor, input: UpsertQuotaPolicyInput) {
@@ -23,36 +40,42 @@ export async function createQuotaPolicy(actor: Actor, input: UpsertQuotaPolicyIn
     ]);
   }
 
-  const [existing] = await db
-    .select({ id: schema.quotaPolicy.id })
-    .from(schema.quotaPolicy)
-    .where(
-      and(
-        eq(schema.quotaPolicy.organizationId, organizationId),
-        eq(schema.quotaPolicy.name, input.name),
-      ),
-    )
-    .limit(1);
-  if (existing) throw conflict('A policy with that name already exists');
+  const created = await db
+    .transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ id: schema.quotaPolicy.id })
+        .from(schema.quotaPolicy)
+        .where(
+          and(
+            eq(schema.quotaPolicy.organizationId, organizationId),
+            eq(schema.quotaPolicy.name, input.name),
+          ),
+        )
+        .limit(1);
+      if (existing) throw conflict('A policy with that name already exists');
 
-  const [created] = await db
-    .insert(schema.quotaPolicy)
-    .values({
-      organizationId,
-      name: input.name,
-      description: input.description ?? null,
-      metric: input.metric,
-      limitValue: input.limitValue,
-      windowKind: input.windowKind,
-      windowHours: normalizeWindow(input),
-      timezone: input.timezone,
-      enabled: input.enabled,
+      const modelSlugs = await validateModelScope(tx, organizationId, input.modelSlugs);
+      const [policy] = await tx
+        .insert(schema.quotaPolicy)
+        .values({
+          organizationId,
+          name: input.name,
+          description: input.description ?? null,
+          metric: input.metric,
+          limitValue: input.limitValue,
+          windowKind: input.windowKind,
+          windowHours: normalizeWindow(input),
+          timezone: input.timezone,
+          enabled: input.enabled,
+        })
+        .returning({ id: schema.quotaPolicy.id });
+
+      if (!policy) throw validationFailed('The policy could not be created.');
+      await replaceRoles(tx, policy.id, input.roles);
+      await replaceModels(tx, policy.id, modelSlugs);
+      return policy;
     })
-    .returning({ id: schema.quotaPolicy.id });
-
-  if (!created) throw validationFailed('The policy could not be created.');
-  await replaceRoles(created.id, input.roles);
-  await replaceModels(created.id, organizationId, input.modelSlugs);
+    .catch(rethrowPolicyWriteError);
 
   await recordAudit({
     actorUserId: actor.id,
@@ -80,45 +103,52 @@ export async function updateQuotaPolicy(actor: Actor, id: string, input: UpsertQ
     ]);
   }
 
-  const [existing] = await db
-    .select({ id: schema.quotaPolicy.id })
-    .from(schema.quotaPolicy)
-    .where(
-      and(eq(schema.quotaPolicy.id, id), eq(schema.quotaPolicy.organizationId, organizationId)),
-    )
-    .limit(1);
-  if (!existing) throw notFound('Policy not found');
-
-  const [nameClash] = await db
-    .select({ id: schema.quotaPolicy.id })
-    .from(schema.quotaPolicy)
-    .where(
-      and(
-        eq(schema.quotaPolicy.organizationId, organizationId),
-        eq(schema.quotaPolicy.name, input.name),
-      ),
-    )
-    .limit(1);
-  if (nameClash && nameClash.id !== id) {
-    throw conflict('A policy with that name already exists');
-  }
-
   await db
-    .update(schema.quotaPolicy)
-    .set({
-      name: input.name,
-      description: input.description ?? null,
-      metric: input.metric,
-      limitValue: input.limitValue,
-      windowKind: input.windowKind,
-      windowHours: normalizeWindow(input),
-      timezone: input.timezone,
-      enabled: input.enabled,
-    })
-    .where(eq(schema.quotaPolicy.id, id));
+    .transaction(async (tx) => {
+      // Serialize edits before reading/replacing either assignment set.
+      const [existing] = await tx
+        .select({ id: schema.quotaPolicy.id })
+        .from(schema.quotaPolicy)
+        .where(
+          and(eq(schema.quotaPolicy.id, id), eq(schema.quotaPolicy.organizationId, organizationId)),
+        )
+        .limit(1)
+        .for('update');
+      if (!existing) throw notFound('Policy not found');
 
-  await replaceRoles(id, input.roles);
-  await replaceModels(id, organizationId, input.modelSlugs);
+      const [nameClash] = await tx
+        .select({ id: schema.quotaPolicy.id })
+        .from(schema.quotaPolicy)
+        .where(
+          and(
+            eq(schema.quotaPolicy.organizationId, organizationId),
+            eq(schema.quotaPolicy.name, input.name),
+          ),
+        )
+        .limit(1);
+      if (nameClash && nameClash.id !== id) {
+        throw conflict('A policy with that name already exists');
+      }
+
+      const modelSlugs = await validateModelScope(tx, organizationId, input.modelSlugs);
+      await tx
+        .update(schema.quotaPolicy)
+        .set({
+          name: input.name,
+          description: input.description ?? null,
+          metric: input.metric,
+          limitValue: input.limitValue,
+          windowKind: input.windowKind,
+          windowHours: normalizeWindow(input),
+          timezone: input.timezone,
+          enabled: input.enabled,
+        })
+        .where(eq(schema.quotaPolicy.id, id));
+
+      await replaceRoles(tx, id, input.roles);
+      await replaceModels(tx, id, modelSlugs);
+    })
+    .catch(rethrowPolicyWriteError);
 
   await recordAudit({
     actorUserId: actor.id,
