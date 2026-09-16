@@ -107,7 +107,7 @@ application database. Browser tests stub model responses and SSO provider
 registration; they do not prove live model inference or an external IdP login.
 No exhaustive security or accessibility conformance claim is made.
 
-## Dependency scan
+## Dependency scan (before remediation)
 
 `pnpm audit --prod` on September 16, 2026 reported **20 advisory entries: 10 high,
 10 moderate, no critical**. These are scanner findings, not 20 independently
@@ -126,3 +126,10 @@ change. Dependency upgrades belong in a separate branch with SAML, mail, HTTP,
 and test-runner verification. Optional/dev paths need deployment reachability
 analysis, not automatic dismissal. A successful SAST job or build is not evidence
 that these findings have been resolved.
+
+### Subsequent dependency remediation
+
+The separate dependency change upgrades the packages above and reports zero
+advisories in both production and full audits, without ignored findings. See
+[dependency remediation](dependency-remediation.md) for versions, reachability
+limits, coverage changes and the repeatable signed-SAML smoke.
