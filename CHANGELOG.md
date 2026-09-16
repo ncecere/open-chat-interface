@@ -7,6 +7,66 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-16
+
+Reliability and dependency security fixes, focused internal modules, and complete
+user, administrator and developer guides. No new database migrations are required
+when upgrading from 0.4.0.
+
+### Fixed
+
+- **Concurrent responses now reserve Redis slots atomically.** Competing requests
+  can no longer both observe the last available slot and exceed the configured
+  cap. Retrying the same run does not consume another slot. Redis-unavailable
+  behaviour remains local/fail-open.
+- **Quota policy edits are all-or-nothing.** Model scope is validated before
+  mutation, and policy, role and model assignments commit together. Rejected
+  edits preserve the previous configuration; concurrent edits are serialized.
+- **Administrator-created auditors retain their requested role** instead of
+  becoming ordinary users.
+- **Failed chat setup cleans up acquired resources.** Database fallback errors,
+  quota refusals and SDK setup failures release owned slots and reservations and
+  attempt to mark streaming placeholders failed. Once SSE capture starts, it
+  alone owns run finalization. Usage settlement is still attempted if saving the
+  assistant response fails, without masking the original failure.
+
+### Security
+
+- Updated Hono to 4.13.5, Nodemailer to 9.1.1, transitive xmldom to 0.8.15 and
+  Nanoid to 3.3.18. Updated Vitest, its mocker and V8 coverage provider to 4.1.11.
+- Production and full dependency audits report zero advisories as of September
+  16, 2026, down from 20 production advisory entries. No findings were suppressed;
+  this is a scanner result, not a guarantee of zero vulnerabilities.
+
+### Added
+
+- End-to-end user, administrator and developer documentation, with 37 product
+  screenshots, a generated API reference, feature-development examples, and a
+  fictional demo dataset and separate screenshot-capture harness.
+- Regression checks for Redis contention, PostgreSQL rollback and concurrent
+  policy edits, auditor creation and chat failure cleanup. Added security-boundary
+  assertions for the upgraded test runner without lowering coverage thresholds.
+- A repeatable signed-SAML dependency smoke that checks a valid response,
+  signature tampering and malformed XML using disposable local keys.
+
+### Changed
+
+- Split oversized chat and administrative workflows into focused service,
+  form-state and presentation modules while preserving their existing contracts.
+  Removed confirmed dead exports and unused direct dependencies.
+- Added an informational structural-audit command and documented maintenance
+  boundaries, dependency remediation and verification limits.
+
+### Verification limits
+
+- Combined remediation checks passed with 312 API tests, 120 web tests and 112
+  live PostgreSQL/SMTP checks. Existing coverage thresholds were retained.
+- Six S3 checks remain unverified because the configured MinIO image could not
+  be pulled. A staging/production deployment smoke has not yet been performed.
+- The signed-SAML smoke does not replace an external IdP interoperability test.
+  Existing SSO/session-control follow-ups and cookie-cache revocation behaviour
+  are not changed by this release.
+
 ## [0.4.0] - 2026-08-09
 
 Administration at scale: what an administrator can control, what they can find
@@ -290,7 +350,10 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/compare/v0.2.1...main
+[Unreleased]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/compare/v0.4.1...main
+[0.4.1]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.1
+[0.4.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.0
+[0.3.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.3.0
 [0.2.1]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.2.1
 [0.2.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.2.0
 [0.1.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.1.0
