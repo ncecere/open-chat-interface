@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     localAuthEnabled: true,
   },
   smtpUsable: true,
+  settingsError: null as Error | null,
 }));
 
 vi.mock('../../db/index.js', () => ({
@@ -25,7 +26,10 @@ vi.mock('../../db/index.js', () => ({
 }));
 
 vi.mock('../../services/settings.js', () => ({
-  getSetting: async () => mocks.settings,
+  getSetting: async () => {
+    if (mocks.settingsError) throw mocks.settingsError;
+    return mocks.settings;
+  },
 }));
 
 vi.mock('../../services/email.js', () => ({
@@ -36,7 +40,7 @@ vi.mock('../../lib/logger.js', () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
 
-import { enforceAuthRequestPolicy } from '../../auth/policy.js';
+import { enforceAuthRequestPolicy, isEmailVerificationEnforced } from '../../auth/policy.js';
 
 describe('dynamic auth request policy', () => {
   beforeEach(() => {
@@ -48,6 +52,25 @@ describe('dynamic auth request policy', () => {
       localAuthEnabled: true,
     };
     mocks.smtpUsable = true;
+    mocks.settingsError = null;
+  });
+
+  it('allows verification to fail open when settings are unavailable', async () => {
+    mocks.settingsError = new Error('Settings unavailable');
+    await expect(isEmailVerificationEnforced()).resolves.toBe(false);
+  });
+
+  it('preserves only verified administrator recovery when settings are unavailable', async () => {
+    mocks.settingsError = new Error('Settings unavailable');
+    await expect(
+      enforceAuthRequestPolicy('/sign-in/email', { email: 'person@example.com' }),
+    ).rejects.toMatchObject({ status: 'SERVICE_UNAVAILABLE' });
+
+    mocks.role = 'admin';
+    mocks.emailVerified = true;
+    await expect(
+      enforceAuthRequestPolicy('/sign-in/email', { email: 'admin@example.com' }),
+    ).resolves.toEqual({ requireEmailVerification: false });
   });
 
   it('only guards local email/password endpoints', async () => {

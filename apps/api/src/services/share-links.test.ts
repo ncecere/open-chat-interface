@@ -61,6 +61,31 @@ describe('unit: sanitizePublicParts', () => {
     ]);
   });
 
+  it('omits invalid sources and non-string text, and bounds public content', () => {
+    expect(
+      sanitizePublicParts([
+        { type: 'text', text: 42 },
+        { type: 'source-url', url: null },
+        { type: 'source-url', url: 'not a URL' },
+        { type: 'source-url', url: `https://example.com/${'x'.repeat(2048)}` },
+        { type: 'source-url', url: 'http://example.com/', title: '' },
+        { type: 'source-url', url: 'https://example.com/', title: 42 },
+        { type: 'text', text: 'x'.repeat(100_001) },
+        { type: 'source-url', url: 'https://example.com/', title: 'x'.repeat(501) },
+      ]),
+    ).toEqual([
+      { type: 'source-url', sourceId: 'source-5', url: 'http://example.com/' },
+      { type: 'source-url', sourceId: 'source-6', url: 'https://example.com/' },
+      { type: 'text', text: 'x'.repeat(100_000) },
+      {
+        type: 'source-url',
+        sourceId: 'source-8',
+        url: 'https://example.com/',
+        title: 'x'.repeat(500),
+      },
+    ]);
+  });
+
   it('fails closed for malformed containers, non-HTTP URLs, and unknown parts', () => {
     expect(sanitizePublicParts(null)).toEqual([]);
     expect(sanitizePublicParts({ type: 'text', text: 'not an array' })).toEqual([]);

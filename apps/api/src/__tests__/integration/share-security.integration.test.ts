@@ -14,7 +14,12 @@ vi.mock('../../db/index.js', () => ({
 vi.mock('../../services/settings.js', () => ({ getSetting: mocks.getSetting }));
 vi.mock('../../services/threads.js', () => ({ getOwnedThread: mocks.getOwnedThread }));
 
-import { createShareLink, getPublicShare, listShareLinks } from '../../services/share-links.js';
+import {
+  assertShareLinkManagementAllowed,
+  createShareLink,
+  getPublicShare,
+  listShareLinks,
+} from '../../services/share-links.js';
 
 function limitedQuery(rows: unknown[]) {
   const chain = {
@@ -22,6 +27,7 @@ function limitedQuery(rows: unknown[]) {
     innerJoin: () => chain,
     where: () => chain,
     limit: () => Promise.resolve(rows),
+    orderBy: () => Promise.resolve(rows),
   };
   return chain;
 }
@@ -82,6 +88,81 @@ describe('integration with mocked DB: share ownership and expiry', () => {
     });
     expect(tx.select).toHaveBeenCalledTimes(1);
     expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  it('permits management only for unrestricted users with sharing enabled', async () => {
+    await expect(assertShareLinkManagementAllowed('restricted')).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(assertShareLinkManagementAllowed('user')).resolves.toBeUndefined();
+    mocks.getSetting.mockResolvedValue({ shareLinks: false });
+    await expect(assertShareLinkManagementAllowed('admin')).rejects.toMatchObject({
+      status: 422,
+    });
+  });
+
+  it.each([false, true])('rejects unavailable public links (revoked: %s)', async (revoked) => {
+    const tx = {
+      select: vi.fn(() => limitedQuery(revoked ? [{ revokedAt: new Date() }] : [])),
+      update: vi.fn(),
+    };
+    mocks.transaction.mockImplementation(async (callback) => callback(tx));
+    await expect(getPublicShare('A'.repeat(32))).rejects.toMatchObject({
+      status: revoked ? 410 : 404,
+    });
+    expect(tx.select).toHaveBeenCalledTimes(1);
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('sanitizes a successful public share (snapshot: %s)', async (snapshot) => {
+    const createdAt = new Date('2026-01-01T00:00:00Z');
+    const expiresAt = snapshot ? new Date(Date.now() + 60_000) : null;
+    const select = vi.fn().mockReturnValueOnce(
+      limitedQuery([
+        {
+          id: 'share-1',
+          threadId: 'thread-1',
+          title: 'password=private',
+          upToMessageId: snapshot ? 'message-1' : null,
+          expiresAt,
+          revokedAt: null,
+          createdAt,
+        },
+      ]),
+    );
+    if (snapshot) select.mockReturnValueOnce(limitedQuery([{ position: 1 }]));
+    select.mockReturnValueOnce(
+      limitedQuery([
+        {
+          id: 'message-1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'Public answer' },
+            { type: 'reasoning', text: 'Private reasoning' },
+          ],
+          createdAt,
+        },
+      ]),
+    );
+    const returning = vi.fn().mockResolvedValue([{ viewCount: 1 }]);
+    const update = vi.fn(() => ({ set: () => ({ where: () => ({ returning }) }) }));
+    mocks.transaction.mockImplementation(async (callback) => callback({ select, update }));
+
+    await expect(getPublicShare('A'.repeat(32))).resolves.toEqual({
+      thread: { title: 'password=[REDACTED]', sharedAt: createdAt.toISOString() },
+      messages: [
+        {
+          id: 'message-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Public answer' }],
+          createdAt: createdAt.toISOString(),
+        },
+      ],
+      snapshot,
+      expiresAt: expiresAt?.toISOString() ?? null,
+    });
+    expect(select).toHaveBeenCalledTimes(snapshot ? 3 : 2);
+    expect(returning).toHaveBeenCalledOnce();
   });
 
   it('hides all links while public sharing is disabled', async () => {

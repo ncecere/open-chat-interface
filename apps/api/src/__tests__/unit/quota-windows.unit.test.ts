@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isValidTimezone, resolveWindow } from '../../services/quota/windows.js';
+import {
+  isValidTimezone,
+  resolveWindow,
+  type WindowDefinition,
+} from '../../services/quota/windows.js';
 
 /** Renders an instant as wall-clock time in a zone, for readable assertions. */
 function wallClock(instant: Date, timeZone: string): string {
@@ -17,6 +21,20 @@ function wallClock(instant: Date, timeZone: string): string {
 }
 
 describe('rolling windows', () => {
+  it('falls back to a 24-hour window for an unrecognized persisted kind', () => {
+    const now = new Date('2026-03-10T15:00:00Z');
+    const definition = {
+      windowKind: 'unknown',
+      windowHours: 6,
+      timezone: 'UTC',
+    } as unknown as WindowDefinition;
+
+    expect(resolveWindow(definition, now)).toEqual({
+      start: new Date('2026-03-09T15:00:00Z'),
+      resetsAt: null,
+    });
+  });
+
   it('looks back exactly the configured number of hours', () => {
     const now = new Date('2026-03-10T15:30:00Z');
     const { start, resetsAt } = resolveWindow(

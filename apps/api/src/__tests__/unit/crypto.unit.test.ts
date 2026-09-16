@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { decryptSecret, encryptSecret, hashToken, safeCompare } from '../../lib/crypto.js';
+import {
+  credentialHint,
+  decryptSecret,
+  encryptSecret,
+  generateToken,
+  hashToken,
+  safeCompare,
+} from '../../lib/crypto.js';
 
 describe('unit: authenticated secret encryption', () => {
   it.each(['', 'short secret', 'κρυπτογράφηση\nwith unicode and newlines'])(
@@ -32,10 +39,25 @@ describe('unit: authenticated secret encryption', () => {
 });
 
 describe('unit: token comparison helpers', () => {
+  it('hides short credentials and exposes only the last four characters of longer ones', () => {
+    expect(credentialHint('')).toBe('••••');
+    expect(credentialHint('abcd')).toBe('••••');
+    expect(credentialHint('secret-1234')).toBe('••••1234');
+  });
+
+  it('generates URL-safe tokens with the default and explicit byte lengths', () => {
+    const token = generateToken();
+    expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(Buffer.from(token, 'base64url')).toHaveLength(32);
+    expect(Buffer.from(generateToken(16), 'base64url')).toHaveLength(16);
+    expect(generateToken()).not.toBe(token);
+  });
+
   it('hashes deterministically and compares only exact values', () => {
     expect(hashToken('token')).toBe(hashToken('token'));
     expect(safeCompare('same', 'same')).toBe(true);
     expect(safeCompare('same', 'different')).toBe(false);
+    expect(safeCompare('same', 'diff')).toBe(false);
     expect(safeCompare('short', 'longer')).toBe(false);
   });
 });
