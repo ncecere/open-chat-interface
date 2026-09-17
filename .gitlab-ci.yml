@@ -1,4 +1,5 @@
-# GitLab CI for Open Chat Interface.
+# Legacy GitLab CI for the original mirror; GitHub Actions is now primary.
+# This file does not run on GitHub. See .github/workflows/ for current CI/GHCR.
 #
 # Stages run cheapest-first so a formatting slip fails in seconds rather than
 # after a container build. Branch pipelines validate the application; stable

@@ -19,7 +19,7 @@ RUN pnpm --filter @oci/web... build
 FROM caddy:2-alpine AS runtime
 ARG OCI_VERSION=dev
 ARG OCI_REVISION=unknown
-ARG OCI_SOURCE=https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
+ARG OCI_SOURCE=https://github.com/ncecere/open-chat-interface
 ARG OCI_CREATED=unknown
 LABEL org.opencontainers.image.title="Open Chat Interface Web" \
       org.opencontainers.image.description="Web application and same-origin proxy for Open Chat Interface" \
@@ -27,7 +27,7 @@ LABEL org.opencontainers.image.title="Open Chat Interface Web" \
       org.opencontainers.image.revision=$OCI_REVISION \
       org.opencontainers.image.source=$OCI_SOURCE \
       org.opencontainers.image.url=$OCI_SOURCE \
-      org.opencontainers.image.documentation="${OCI_SOURCE}/-/blob/main/README.md" \
+      org.opencontainers.image.documentation="${OCI_SOURCE}/blob/main/README.md" \
       org.opencontainers.image.vendor="Open Chat Interface contributors" \
       org.opencontainers.image.created=$OCI_CREATED \
       org.opencontainers.image.licenses="MIT"

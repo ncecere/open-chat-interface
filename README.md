@@ -43,9 +43,12 @@ docker/       Dockerfiles, Caddy config, compose files
 
 ## Local development
 
-Requires Node 22+, pnpm 11+, and Docker.
+The primary repository is [ncecere/open-chat-interface on GitHub](https://github.com/ncecere/open-chat-interface).
+Requires Node 22+, pnpm 11.18.0 (the pinned package manager), and Docker.
 
 ```bash
+git clone git@github.com:ncecere/open-chat-interface.git
+cd open-chat-interface
 pnpm install
 cp .env.example .env          # then edit the secrets
 pnpm infra:up                 # Postgres + Redis
@@ -78,15 +81,26 @@ Release deployments should pin both application images to the same immutable
 version instead of tracking `latest`:
 
 ```bash
-export OCI_VERSION=v0.2.1
-export OCI_REGISTRY=registry.gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
+export OCI_VERSION=v0.4.1
+export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
-docker login registry.gitlab.it.ufl.edu
+# GHCR_READ_TOKEN must come from your secret manager, not a committed file.
+printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u ncecere --password-stdin
 cd docker
 docker compose pull api web migrate
 docker compose up -d --no-build
 ```
+
+The repository is private. Keep both GHCR packages private and verify their
+visibility after publication: package visibility is independent of repository
+visibility. Private pulls require a personal access token (classic) with
+`read:packages` and access to the repository/packages; never commit it. Published images target `linux/amd64` only. Unset `OCI_API_IMAGE` and
+`OCI_WEB_IMAGE` to retain Compose's local source-build defaults.
+
+The existing `v0.4.1` tag needs a one-time manual publish after the GitHub
+workflows merge; see [Release process](docs/RELEASING.md). Confirm that publish
+succeeded before pulling it.
 
 Optional profiles: `--profile s3` (MinIO), `--profile search` (SearXNG).
 
@@ -115,7 +129,7 @@ instead:
 
 ```bash
 docker compose run --rm migrate                       # once, before rollout
-RUN_MIGRATIONS=false docker compose up -d --scale api=3
+RUN_MIGRATIONS=false docker compose up -d --no-build --scale api=3
 ```
 
 A replica started with `RUN_MIGRATIONS=false` against a database with no schema
@@ -168,20 +182,29 @@ erosion without inviting number-chasing.
 
 ## Continuous integration
 
-`.gitlab-ci.yml` runs lint, type checking, license policy and dependency audits,
-mock/live/browser tests, SAST, dependency scanning, SBOM generation, and Code
-Quality reporting.
+GitHub Actions validates pull requests and `main` with read-only permissions,
+using Node 22 and pnpm 11.18.0. Checks cover lint, type checking, builds,
+unit/integration tests, API coverage floors, live PostgreSQL/Redis/Mailpit and
+browser tests, production dependency auditing, and license policy. S3-dependent
+live tests can skip when S3 is unavailable; a green run does not establish S3
+coverage. GitLab SAST and dependency-scanning report parity is not provided.
 
-Live tests get Postgres, Redis, MinIO, and Mailpit as GitLab services, so CI
-exercises real migrations, resumable streams, and storage rather than only
-mocks. Branch and default-branch pipelines validate without building images. A
-stable `vX.Y.Z` tag on `main` must match package metadata and the changelog; only
-then does CI build and publish API/web images and create a GitLab Release.
+**Publish containers** runs for stable `vX.Y.Z` tag pushes or a manual dispatch
+for an existing stable tag. It checks `main` ancestry, package versions, and the
+changelog, then validates the checked-out tagged source before publishing API
+and web images to GHCR. PR and `main` validation never publish images. Publishing
+uses `GITHUB_TOKEN` with `packages:write`, not a stored PAT. See the
+[release process](docs/RELEASING.md) for tags, retries, and `latest` promotion.
+
+`.gitlab-ci.yml` remains as legacy configuration only. Existing GitLab releases,
+images, and history remain hosted there; their historical changelog links are
+preserved. GitHub Actions does not create GitHub Releases or import GitLab
+release metadata.
 
 ## Live integration tests
 
-`pnpm test` runs entirely against mocks, so it needs no services. `pnpm
-test:live` additionally exercises real infrastructure:
+`pnpm test` runs unit/integration suites, including Redis checks when available.
+`pnpm test:live` additionally exercises PostgreSQL, SMTP and S3:
 
 ```bash
 pnpm infra:up                                          # Postgres

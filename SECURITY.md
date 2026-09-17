@@ -7,17 +7,20 @@ release only.
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
+| 0.4.x | Yes |
 | Earlier versions | No |
 
 ## Reporting a vulnerability
 
-Do not disclose suspected vulnerabilities in public issues, merge requests, or
-chat channels.
+Do not disclose suspected vulnerabilities in public issues, pull requests, or
+chat channels. Ordinary GitHub issues are not confidential security reports.
 
-Report them through a **confidential issue** in the
-[Open Chat Interface GitLab project](https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/issues/new).
-Select **This issue is confidential** before submitting. Include:
+Use **Report a vulnerability** in the
+[GitHub repository's Security tab](https://github.com/ncecere/open-chat-interface/security)
+if private vulnerability reporting is enabled and available to you. Its
+availability has not been verified for this private repository. Otherwise,
+contact a project maintainer through an established private channel and ask for
+a secure reporting path before sharing details. Include in the private report:
 
 - the affected version or commit;
 - the deployment conditions required to reproduce it;
@@ -25,10 +28,9 @@ Select **This issue is confidential** before submitting. Include:
 - the likely impact; and
 - any suggested mitigation, if known.
 
-If you cannot access the project or create a confidential issue, contact the
-project maintainers through the UF AIPE support channel and ask for a private
-security-reporting path. Do not send credentials, API keys, session cookies, or
-production data in the initial message.
+Do not send credentials, API keys, session cookies, or production data in the
+initial message. Do not fall back to a public issue if private reporting is
+unavailable.
 
 Maintainers will acknowledge a complete report, assess severity and affected
 versions, coordinate a fix, and credit the reporter unless anonymity is

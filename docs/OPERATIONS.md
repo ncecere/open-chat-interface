@@ -6,15 +6,26 @@ provider configuration before relying on them in production.
 
 ## Deploy a released version
 
-Authenticate to the GitLab registry and select an immutable release tag:
+Authenticate to GHCR and select a release tag. The repository is private;
+verify both GHCR packages are also private, since package visibility is
+independent and is not enforced by the workflow. Supply a personal access token (classic) with
+`read:packages` and repository/package access through your secret manager; never
+commit registry credentials or put them in `.env.example`.
 
 ```bash
-export OCI_VERSION=v0.2.1
-export OCI_REGISTRY=registry.gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
-docker login registry.gitlab.it.ufl.edu
+export OCI_VERSION=v0.4.1
+export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
+# GHCR_READ_TOKEN is supplied externally by your secret manager.
+printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u ncecere --password-stdin
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
 ```
+
+Published images are `linux/amd64` only, matching the previous release
+architecture. Confirm **Publish containers** succeeded for your version before
+pulling; the existing `v0.4.1` tag requires the one-time manual dispatch described
+in [Release process](RELEASING.md). CI publishing uses `GITHUB_TOKEN`; the token
+above is a deployment credential, not a saved CI PAT.
 
 Create `docker/.env` from `.env.example` or provide the required variables
 through your secret manager. Then pull and start without local builds:
@@ -28,6 +39,23 @@ curl --fail "http://localhost:${OCI_PORT:-8080}/api/health/ready"
 ```
 
 Pin production to `vX.Y.Z`; use `latest` only for evaluation environments.
+`latest` advances only after both images succeed and the tag is the newest
+stable release on `main`. Existing matching release images are reused on a
+retry, not overwritten; conflicting image metadata fails publication. This
+assumes the serialized workflow is the only registry writer: GHCR tags remain
+mutable. Pin by digest for content identity independent of tag writers.
+
+Promotion of the two `latest` aliases is sequential, not atomic. If one update
+fails, retry publication for the unchanged release; do not deploy a mixed pair.
+Version/digest-pinned deployments avoid this `latest` transition window.
+
+Compose still defaults to local source builds when `OCI_API_IMAGE` and
+`OCI_WEB_IMAGE` are unset. For released deployments, keep both overrides set
+and use `--no-build` on startup and rollout commands.
+
+Historical GitLab releases and images remain on GitLab. GitHub Actions does not
+copy them or their release metadata; choose GHCR only for versions successfully
+published there.
 
 ## Back up
 

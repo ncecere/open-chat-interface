@@ -5,8 +5,9 @@ self-hosted architecture, security boundaries, accessibility, and MIT license.
 
 ## Before opening a change
 
-- Use an issue for substantial features or architectural changes so the design
-  can be agreed before implementation.
+- Use an issue in [the GitHub repository](https://github.com/ncecere/open-chat-interface)
+  for substantial features or architectural changes so the design can be agreed
+  before implementation.
 - Report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
 - Keep modules focused; avoid combining unrelated behavior into large files.
 - Do not commit credentials, production data, authenticated screenshots, or
@@ -14,7 +15,7 @@ self-hosted architecture, security boundaries, accessibility, and MIT license.
 
 ## Development setup
 
-OCI requires Node 22+, pnpm 11+, and Docker.
+OCI requires Node 22+, pnpm 11.18.0 (pinned in `package.json`), and Docker.
 
 ```bash
 pnpm install
@@ -29,7 +30,7 @@ See [README.md](README.md) for service URLs and optional test infrastructure.
 
 ## Required checks
 
-Run the checks relevant to your change before opening a merge request:
+Run the checks relevant to your change before opening a pull request:
 
 ```bash
 pnpm lint
@@ -50,7 +51,7 @@ Database schema changes must include generated Drizzle SQL and metadata. New or
 changed security boundaries require focused tests rather than relying only on a
 repository-wide coverage number.
 
-## Merge requests
+## Pull requests
 
 - Explain the user-visible change, security implications, and deployment or
   migration requirements.
@@ -60,8 +61,12 @@ repository-wide coverage number.
 - Do not bypass the curated model catalog, attachment ownership checks, or
   server-side reconstruction of trusted chat history.
 
-All CI jobs must pass before merge. A successful security scanner means the scan
-completed; findings still require review and disposition.
+GitHub Actions CI must pass before merge. It validates pull requests and `main`
+with read-only permissions and does not publish images. Checks include builds,
+coverage, production dependency auditing, license policy, and live/browser tests
+alongside lint, types, and unit tests. Review audit findings and live-test skips:
+S3 tests can skip when S3 is unavailable. GitLab SAST and dependency-scanning
+reports are not reproduced by these workflows; `.gitlab-ci.yml` is legacy only.
 
 ## Releases
 

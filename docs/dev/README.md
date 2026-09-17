@@ -1,5 +1,9 @@
 # Developing Open Chat Interface
 
+Development is hosted on [GitHub](https://github.com/ncecere/open-chat-interface).
+Open pull requests there; see [Contributing](../../CONTRIBUTING.md) for checks
+and [Release process](../RELEASING.md) for GitHub Actions and GHCR publishing.
+
 ## Contents
 
 1. [Setup](setup.md) — running it locally.

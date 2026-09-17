@@ -2,12 +2,14 @@
 
 ## What you need
 
-- **Node 22** and **pnpm**
+- **Node 22** and **pnpm 11.18.0** (pinned in `package.json`)
 - **Docker**, for PostgreSQL and Redis
 
 ## Getting it running
 
 ```bash
+git clone git@github.com:ncecere/open-chat-interface.git
+cd open-chat-interface
 pnpm install
 cp .env.example .env
 ```
