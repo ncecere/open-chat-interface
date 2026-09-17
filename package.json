@@ -4,13 +4,13 @@
   "private": true,
   "description": "Open Chat Interface (OCI) \u2014 self-hostable multi-model chat application",
   "license": "MIT",
-  "homepage": "https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface",
+  "homepage": "https://github.com/ncecere/open-chat-interface",
   "repository": {
     "type": "git",
-    "url": "ssh://git@gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface.git"
+    "url": "git+https://github.com/ncecere/open-chat-interface.git"
   },
   "bugs": {
-    "url": "https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/issues"
+    "url": "https://github.com/ncecere/open-chat-interface/issues"
   },
   "packageManager": "pnpm@11.18.0",
   "engines": {

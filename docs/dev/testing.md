@@ -61,6 +61,22 @@ The accessibility check is a **regression net, not a conformance claim**.
 Automation covers perhaps a third of the criteria — contrast, names, roles,
 structure. Whether an error message actually helps still needs a person.
 
+## GitHub Actions
+
+Pull requests and `main` pushes run read-only validation with Node 22 and pnpm
+11.18.0: lint, type checking, builds, unit/integration tests, API coverage floors,
+production dependency auditing, license policy, and live/browser tests.
+PostgreSQL, Redis, and Mailpit provide CI dependencies. S3-dependent live suites
+can skip when S3 is unavailable; inspect the test output rather than treating a
+green run as proof that S3 was exercised. Run those suites against local S3
+infrastructure when changing storage behavior.
+
+**Publish containers** reuses validation against the exact checked-out release
+tag before publishing to GHCR. It is separate from PR/`main` CI and is the only
+workflow that publishes images. GitLab SAST and dependency-scanning report
+parity is not provided; `.gitlab-ci.yml` is retained as legacy configuration.
+See [Release process](../RELEASING.md) for release gates and manual dispatch.
+
 ## What to reach for
 
 **A pure function** — unit test.

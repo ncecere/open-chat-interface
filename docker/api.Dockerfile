@@ -21,7 +21,7 @@ RUN pnpm --filter @oci/api... build
 FROM base AS runtime
 ARG OCI_VERSION=dev
 ARG OCI_REVISION=unknown
-ARG OCI_SOURCE=https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface
+ARG OCI_SOURCE=https://github.com/ncecere/open-chat-interface
 ARG OCI_CREATED=unknown
 ENV NODE_ENV=production
 ENV OCI_VERSION=$OCI_VERSION
@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.title="Open Chat Interface API" \
       org.opencontainers.image.revision=$OCI_REVISION \
       org.opencontainers.image.source=$OCI_SOURCE \
       org.opencontainers.image.url=$OCI_SOURCE \
-      org.opencontainers.image.documentation="${OCI_SOURCE}/-/blob/main/README.md" \
+      org.opencontainers.image.documentation="${OCI_SOURCE}/blob/main/README.md" \
       org.opencontainers.image.vendor="Open Chat Interface contributors" \
       org.opencontainers.image.created=$OCI_CREATED \
       org.opencontainers.image.licenses="MIT"

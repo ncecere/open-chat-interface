@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact reviewed release commit to verify
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Application checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: oci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: oci_ci
+        ports: ['5439:5432']
+        options: >-
+          --health-cmd "pg_isready -U oci -d oci_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ['6389:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      mailpit:
+        image: axllent/mailpit:latest
+        env:
+          MP_SMTP_AUTH_ACCEPT_ANY: '1'
+          MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+        ports: ['1025:1025', '8025:8025']
+    env:
+      DATABASE_URL: postgres://oci:ci-only-password@127.0.0.1:5439/oci_ci
+      TEST_DATABASE_URL: postgres://oci:ci-only-password@127.0.0.1:5439/oci_ci
+      REDIS_URL: redis://127.0.0.1:6389
+      TEST_REDIS_URL: redis://127.0.0.1:6389
+      AUTH_SECRET: ci-auth-secret-at-least-32-characters
+      ENCRYPTION_KEY: ci-encryption-key-at-least-32-characters
+      APP_URL: http://127.0.0.1:4173
+      E2E_BASE_URL: http://127.0.0.1:4173
+      VITE_API_PROXY: http://127.0.0.1:3000
+      INITIAL_ADMIN_EMAIL: admin@example.test
+      INITIAL_ADMIN_PASSWORD: ci-admin-password-1234
+      E2E_ADMIN_EMAIL: admin@example.test
+      E2E_ADMIN_PASSWORD: ci-admin-password-1234
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.0'
+      - name: Install locked dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.18.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Static, dependency and build checks
+        run: |
+          pnpm release:check
+          pnpm lint
+          pnpm typecheck
+          pnpm build
+          pnpm licenses:check
+          pnpm audit --prod
+          pnpm audit
+      - name: Unit, integration and release automation tests
+        run: |
+          pnpm test
+          if compgen -G 'scripts/*.test.mjs' > /dev/null; then
+            node --test scripts/*.test.mjs
+          fi
+      - name: Coverage with PostgreSQL, Redis and SMTP
+        run: |
+          echo 'S3 tests are not provided with a MinIO service and may skip; this is not S3 validation.'
+          pnpm test:coverage
+          if test -f scripts/smoke-saml.mjs; then node scripts/smoke-saml.mjs; fi
+      - name: Browser and accessibility regression tests
+        run: |
+          pnpm --filter @oci/web exec playwright install --with-deps chromium
+          pnpm db:migrate
+          pnpm db:seed
+          node apps/api/dist/server.js > /tmp/oci-api.log 2>&1 &
+          api_pid=$!
+          pnpm --filter @oci/web exec vite preview --host 127.0.0.1 --port 4173 > /tmp/oci-web.log 2>&1 &
+          web_pid=$!
+          trap 'kill "$api_pid" "$web_pid" 2>/dev/null || true' EXIT
+          node --input-type=module <<'JS'
+          import { setTimeout } from 'node:timers/promises';
+          for (const url of ['http://127.0.0.1:3000/api/health/ready', 'http://127.0.0.1:4173']) {
+            let ready = false;
+            for (let i = 0; i < 60; i++) {
+              try { ready = (await fetch(url, { signal: AbortSignal.timeout(1000) })).ok; } catch {}
+              if (ready) break;
+              await setTimeout(1000);
+            }
+            if (!ready) throw new Error(`Service did not become ready: ${url}`);
+          }
+          JS
+          pnpm test:e2e
+      - name: Preserve failed test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-diagnostics
+          retention-days: 7
+          path: |
+            apps/api/coverage
+            apps/web/test-results
+            apps/web/playwright-report
+            /tmp/oci-api.log
+            /tmp/oci-web.log
+
+  containers:
+    name: Build ${{ matrix.app }} (no publication)
+    if: github.event_name == 'pull_request' || github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/${{ matrix.app }}.Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max

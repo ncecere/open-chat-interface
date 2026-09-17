@@ -1,7 +1,13 @@
 # Release process
 
-OCI uses semantic versions. A stable tag matching `vX.Y.Z` is the only event
-that builds and publishes container images or creates a GitLab Release.
+OCI uses semantic versions. GitHub Actions' **Publish containers** workflow
+builds and publishes API and web images to GHCR on a stable `vX.Y.Z` tag push,
+or on manual dispatch with an existing stable tag. Pull requests and `main`
+pushes validate only; they do not publish images.
+
+The workflow does not create GitHub Releases or import GitLab release metadata.
+Existing GitLab releases, images, history, and historical changelog links remain
+on GitLab. `.gitlab-ci.yml` is retained as legacy configuration only.
 
 ## Prepare
 
@@ -20,10 +26,14 @@ that builds and publishes container images or creates a GitLab Release.
    pnpm licenses:check
    ```
 
-5. Merge the release-preparation merge request only after its full GitLab
-   pipeline and security reports pass.
-6. Confirm the `v*` protected-tag rule allows only release maintainers to create
-   tags.
+5. Merge the release-preparation pull request only after GitHub Actions CI
+   passes. Review audit findings and any skipped live tests; GitHub CI does not
+   provide GitLab SAST or dependency-scanning report parity.
+6. Configure branch protection or a ruleset requiring review and CI on `main`,
+   and restrict creation, updates, and deletion of `v*` tags to release
+   maintainers where your GitHub plan supports it. These are recommendations,
+   not confirmation that protection is configured or available for this private
+   repository; verify the settings before releasing.
 
 ## Refresh the documentation
 
@@ -47,35 +57,88 @@ Start from a clean, up-to-date default branch:
 git switch main
 git pull --ff-only origin main
 pnpm release:check
-git tag -a v0.2.1 -m "Open Chat Interface v0.2.1"
-git push origin v0.2.1
+# Replace X.Y.Z with the next prepared version; never recreate an existing tag.
+git tag -a vX.Y.Z -m "Open Chat Interface vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
-The tag pipeline verifies that:
+**Publish containers** verifies that:
 
 - the tag points to a commit contained in `main`;
-- the tag matches every workspace package version;
+- the tag matches the root and every workspace package version;
 - the matching changelog section exists;
-- the production dependency audit and normal test/security jobs pass.
+- reusable validation passes against the checked-out tagged source, not merely
+  against the current `main` checkout.
 
-It then publishes API and web images with the release version and short commit
-SHA. After both images exist, it updates `latest` and creates the GitLab Release
-using the matching changelog section.
+Validation uses Node 22 and pnpm 11.18.0 for lint, type checking, builds,
+unit/integration tests, coverage floors, live PostgreSQL/Redis/Mailpit and
+browser tests, production dependency auditing, and license checks. S3-dependent
+live tests can skip when S3 is unavailable; review skips before claiming storage
+coverage.
+
+Images are published for `linux/amd64` only to:
+
+- `ghcr.io/ncecere/open-chat-interface/api`
+- `ghcr.io/ncecere/open-chat-interface/web`
+
+Each image receives the version tag (for example, `v0.4.1`) and an eight-character
+commit SHA tag. The workflow uses `GITHUB_TOKEN` with `packages:write`; no saved
+PAT is required for CI. The repository is private; keep both GHCR packages
+private and verify their visibility after publication. The workflow does not
+change or enforce package visibility.
+
+`latest` is promoted only after both images succeed and the release tag is the
+newest stable tag on `main`. Publishing an older tag does not roll `latest`
+back. Each run first pushes a candidate by digest only, with provenance and an
+SBOM. Version/SHA aliases are assigned only after verifying platform and OCI
+labels. Existing matching aliases retain their original digest even if a rebuilt
+candidate differs; conflicts fail rather than overwriting a release. Untagged
+candidate versions can remain after retries; any package cleanup must preserve
+release, SHA and `latest` tags.
+
+Version/SHA immutability assumes this serialized workflow is the only registry
+writer. GHCR tags themselves remain mutable; the inspect/create sequence is not
+an atomic create-only operation. Restrict other writers and pin deployments by
+manifest digest when content identity must be registry-independent.
+
+The two `latest` aliases update sequentially, not atomically. A registry failure
+can leave one updated and the other unchanged even though both versioned images
+exist. Retry publication for the unchanged tag to repair promotion; deploy pinned
+version/digest pairs rather than relying on synchronized `latest` updates.
+
+### Seed GHCR from the existing v0.4.1 tag
+
+The existing `v0.4.1` commit has no GitHub publish workflow. Do not move, delete,
+or recreate the tag to add one. After these workflows are merged into `main`:
+
+1. Open **Actions → Publish containers → Run workflow** on GitHub.
+2. Select `main` as the workflow ref and set the string input `tag` to `v0.4.1`.
+3. Run the workflow. It resolves the existing tag, validates that tagged source,
+   and publishes the images under the same gates as a tag-push release.
+
+The same manual dispatch can retry an existing stable release tag. Run it from
+`main`; the `tag` input selects the source to validate and publish.
 
 ## Verify
 
-- Confirm the tag pipeline is green.
-- Confirm both `api` and `web` registry repositories contain `vX.Y.Z`, the short
-  SHA, and `latest`, with the same source revision label.
-- Confirm the GitLab Release contains the expected notes and links.
+- Confirm **Publish containers** and its validation jobs are green; inspect
+  skipped live tests.
+- Confirm both GHCR packages are private and contain `vX.Y.Z` and the
+  eight-character SHA tag with the expected source revision label.
+- For the newest stable tag on `main`, confirm `latest` points to that release
+  for both images. An older release must leave `latest` unchanged.
+- If a GitHub Release page is needed, create it separately with the matching
+  changelog notes and image links; the workflow does not create one.
 - Deploy the versioned images to a staging instance and verify
   `/api/health/ready`, sign-in, one model response, and attachment persistence.
 - Record any operational caveat in the release notes before announcing it.
 
 ## Failed releases
 
-Do not move or reuse a published version tag. If a defect is found after images
-or a GitLab Release have been published, fix it on `main` and issue the next
-patch version. A tag pipeline that fails before publishing may be retried after
-correcting runner or registry infrastructure, provided the tagged source itself
-has not changed.
+Do not move or reuse a published version tag. If a defect is found in released
+source, fix it on `main` and issue the next patch version. Infrastructure failures
+can be retried for the unchanged tag, including after only one image was
+published: matching aliases are retained and missing aliases are repaired from
+the verified existing digest (or the new candidate for a new release). Investigate
+metadata conflicts rather than deleting or overwriting release images to bypass
+the guard. `latest` is not promoted unless both image jobs succeed.

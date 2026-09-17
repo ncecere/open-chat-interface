@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub is now the primary repository. GitHub Actions validates changes and
+  publishes reviewed stable releases as API/web images on GHCR, with
+  version, commit and latest tags. Existing release tags can be published by
+  manual dispatch without moving them. GitLab release history remains intact.
+
 ## [0.4.1] - 2026-09-16
 
 Reliability and dependency security fixes, focused internal modules, and complete
@@ -350,7 +357,7 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/compare/v0.4.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.4.1...main
 [0.4.1]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.1
 [0.4.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.0
 [0.3.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.3.0
