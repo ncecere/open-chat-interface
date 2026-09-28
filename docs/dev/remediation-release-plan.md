@@ -191,9 +191,14 @@ The remaining execution/release gates below still apply.
     actual finish-frame proof, missing-owner isolation or route status wiring.
     These are scoped source reviews, not additional test executions. Broader
     release gates remain open.
-11. Historical verification review. Inspect evidence first; do not bulk revoke
-    verification or sessions based only on timestamps or guesses. Account-access
-    changes may require owner judgment.
+11. **Historical verification — source review complete; owner decisions open.**
+    [Evidence assessment](email-verification-provenance.md) compares `fd4cfa0`
+    with `6257862` and the pinned SDK. Flags, timestamps, SSO links and generic
+    HTTP-outcome audit events cannot reliably classify all accounts. Token-error
+    redirects may even be named verification successes. No production accounts,
+    credentials or sessions were accessed or changed. Production evidence scope,
+    accepted proof and handling of unknown provenance require owner approval;
+    there is no blanket flag/session reset or inferred historical repair.
 12. Full authenticated browser, live service, migration, build/typecheck, lint,
     coverage, audit, license and release validation; final independent review.
 13. Organize and commit changes; prepare a new semver version/changelog; integrate

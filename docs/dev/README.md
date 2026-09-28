@@ -17,6 +17,7 @@ and [Release process](../RELEASING.md) for GitHub Actions and GHCR publishing.
 9. [Maintainability review](maintainability-review.md) — module boundaries, repeatable structural inventory, and unresolved findings.
 10. [Chat performance and application review](chat-performance-review.md) — memoization guardrails, measured render work, and prioritized remaining risks.
 11. [Browser performance evidence](browser-performance.md) — isolated production-build comparisons, startup chunk adjustment, measured tradeoffs, and reproducible harness.
+12. [Historical verification evidence](email-verification-provenance.md) — provenance limits, safe aggregate inspection, and owner decisions before account-access changes.
 
 ## The shape of it
 

@@ -49,6 +49,11 @@ proof and marks newly created accounts verified. Enabling it later does not
 retroactively revoke those accounts or existing sessions. Review accounts created
 under older versions during delivery failures: historical `emailVerified` flags
 do not distinguish actual email proof from the previous delivery-failure fallback.
+Audit verification “success” events are not sufficient proof either: some token
+errors redirect and are recorded as successful HTTP outcomes. Do not bulk change
+flags or sessions based on dates or absent logs. See the
+[historical evidence assessment](../dev/email-verification-provenance.md) before
+planning account re-verification.
 
 ### Session length
 
