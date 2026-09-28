@@ -14,9 +14,11 @@ That is not authorization to tag, publish a release, or deploy incomplete work.
 
 ## Current checkpoint
 
-`proc_8035` passes: 584 scoped API tests, normal API 403, frontend 195, eight
-build/typecheck tasks, coverage floors, lint, licenses and diff checks. Upload
-acceptance changes are implemented and tested; their independent review is pending.
+`proc_4ba2` passes: 584 scoped API tests, normal API 403, frontend 215, eight
+build/typecheck tasks, production route graph gate, coverage floors, lint, licenses
+and diff checks. Earlier work is committed/pushed as `f056f41` (not a release). Upload
+acceptance changes are implemented, tested, and independently reviewed without
+concrete scoped findings.
 The remaining execution/release gates below still apply.
 
 ## Execution order
@@ -114,7 +116,7 @@ The remaining execution/release gates below still apply.
    normal API 402, frontend 181, eight build/typecheck tasks, coverage floors,
    lint/licenses/diff checks. Independent read-only verification confirms the
    targeted fixes, with no concrete new scoped regressions.
-7. **Next-turn uploads — implemented; independent review pending.**
+7. **Next-turn uploads — complete and independently reviewed.**
    Snapshot request IDs/cards, consume only accepted files, retain rejected files,
    leave pending next-turn uploads/previews alone, and exclude new files from
    regeneration. Canonical user references reconcile ambiguous acceptance without
@@ -124,7 +126,24 @@ The remaining execution/release gates below still apply.
    mismatch: the real SDK HTTP response now carries the saved prompt ID, which
    updates the optimistic user row without refetching the entire history. The
    failing-before/passing-after retry regression and API header test both pass.
-8. Lazy-load admin/settings routes; preserve authorization/error/loading boundaries.
+   Read-only independent review confirmed snapshot isolation, acceptance-bound
+   consumption, regeneration exclusion, prompt identity and guarded canonical
+   reconciliation; no concrete scoped findings.
+8. **Lazy admin/settings routes — implemented and validated.**
+   Page/layout imports are deferred; eager session/admin guards remain in place.
+   Navigation metadata no longer imports the admin layout through the command
+   palette. Pending UI is accessible and route errors expose generic reload/home
+   actions, not raw exceptions. A production manifest/source-map gate checks the
+   entire static import graph; six fixture tests pass, and the gate rejects an
+   actual eager build of checkpoint `f056f41`. Initial JavaScript changes from
+   1,114,040 to 873,266 bytes (gzip level 9: 312,362 to 272,774 bytes). However,
+   initial JS files increase from 2 to 58; this is not a browser-latency result.
+   Production build/graph gate, 201 existing/graph tests and the Linux web build
+   stage pass (`proc_6f3a`). Fourteen additional real-router cases check import
+   factories, direct links, guards/redirects, controlled loading, safe errors/reload
+   and dynamic parameters (page/layout bodies mocked). Parent corrected a fixture
+   hook-placement lint issue, reran all 20 routing/graph cases, and passed the full
+   checkpoint above. Browser cold-load/typeability measurements follow.
 9. Real-browser responsiveness and long-response measurements; no inferred latency
    claims from render counts alone.
 10. Focused Composer/ModelPicker/backend boundaries with behavioral regressions.

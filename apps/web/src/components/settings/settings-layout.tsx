@@ -1,7 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation, useNavigate } from '@tanstack/react-router';
+import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Moon, Sun } from 'lucide-react';
-import type { ReactNode } from 'react';
 import { UsageLimits } from '~/components/settings/usage-limits';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -84,7 +83,7 @@ function IdentityRail() {
   );
 }
 
-export function SettingsLayout({ children }: { children: ReactNode }) {
+export function SettingsLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -148,7 +147,9 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
               })}
             </nav>
 
-            <div className="mt-8 pb-16">{children}</div>
+            <div className="mt-8 pb-16">
+              <Outlet />
+            </div>
           </div>
         </div>
       </div>

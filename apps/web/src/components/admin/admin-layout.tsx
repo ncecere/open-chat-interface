@@ -1,92 +1,11 @@
-import { Link, useLocation } from '@tanstack/react-router';
-import {
-  Activity,
-  Archive,
-  ArrowLeft,
-  Boxes,
-  ChartColumn,
-  Cpu,
-  FileText,
-  Gauge,
-  HardDrive,
-  KeyRound,
-  LayoutDashboard,
-  Mail,
-  Mails,
-  Megaphone,
-  Palette,
-  ScrollText,
-  Search,
-  Settings,
-  ShieldCheck,
-  Timer,
-  Users,
-  Wrench,
-} from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Link, Outlet, useLocation } from '@tanstack/react-router';
+import { ArrowLeft } from 'lucide-react';
 import { SkipLink } from '~/components/layout/skip-link';
 import { Button } from '~/components/ui/button';
+import { NAV_SECTIONS } from '~/lib/admin-navigation';
 import { cn } from '~/lib/utils';
 
-/**
- * Exported so the command palette offers the same destinations as the sidebar.
- * A second hand-kept list would drift the moment a page is added.
- */
-export const NAV_SECTIONS = [
-  {
-    label: 'Instance',
-    items: [
-      { to: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
-      { to: '/admin/settings', label: 'Settings', icon: Settings },
-      { to: '/admin/branding', label: 'Branding', icon: Palette },
-      { to: '/admin/broadcasts', label: 'Announcements', icon: Megaphone },
-    ],
-  },
-  {
-    label: 'People',
-    items: [
-      { to: '/admin/users', label: 'Users', icon: Users },
-      { to: '/admin/invites', label: 'Invitations', icon: Mail },
-      { to: '/admin/sso', label: 'Auth & SSO', icon: ShieldCheck },
-      { to: '/admin/policies', label: 'Acceptable use', icon: FileText },
-    ],
-  },
-  {
-    label: 'Models',
-    items: [
-      { to: '/admin/providers', label: 'Providers & Keys', icon: KeyRound },
-      { to: '/admin/models', label: 'Model catalog', icon: Cpu },
-    ],
-  },
-  /**
-   * What people are allowed to do, kept apart from where things are wired up.
-   * Storage appears in both: the allowance belongs here, the S3 connection
-   * belongs under Platform.
-   */
-  {
-    label: 'Governance',
-    items: [
-      { to: '/admin/usage', label: 'Usage', icon: ChartColumn },
-      { to: '/admin/reports', label: 'Reports', icon: Mails },
-      { to: '/admin/quotas', label: 'Usage quotas', icon: Gauge },
-      { to: '/admin/storage-limits', label: 'Storage limits', icon: HardDrive },
-      { to: '/admin/rate-limits', label: 'Rate limits', icon: Timer },
-      { to: '/admin/retention', label: 'Retention', icon: Archive },
-    ],
-  },
-  {
-    label: 'Platform',
-    items: [
-      { to: '/admin/search', label: 'Search', icon: Search },
-      { to: '/admin/storage', label: 'Storage', icon: Boxes },
-      { to: '/admin/health', label: 'Health', icon: Activity },
-      { to: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
-      { to: '/admin/audit', label: 'Audit log', icon: ScrollText },
-    ],
-  },
-] as const;
-
-export function AdminLayout({ children }: { children: ReactNode }) {
+export function AdminLayout() {
   const { pathname } = useLocation();
 
   return (
@@ -142,7 +61,9 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
             keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}
         <div id="main-content" tabIndex={0} className="scrollbar-thin h-full overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-8 py-10">{children}</div>
+          <div className="mx-auto w-full max-w-5xl px-8 py-10">
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>

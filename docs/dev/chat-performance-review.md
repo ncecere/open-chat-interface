@@ -236,12 +236,17 @@ Paths in this table are relative to `apps/api/src/`.
   Independent read-only verification found no concrete new scoped regressions.
   Checkpoint `proc_151a`: 583 scoped API, normal API 402, frontend 181;
   build/typecheck/coverage/lint/licenses/diff checks pass.
-- **The initial bundle eagerly includes admin/settings routes.**
-  `apps/web/src/router.tsx:14–48` statically imports these pages. This branch's
-  production entry is approximately 1,104 kB minified / 313 kB gzip. Route-level
-  splitting is a better startup experiment than sprinkling more `useMemo` calls.
-  Preserve auth/loading/error boundaries and measure cold-load typeability.
-- **Implemented; independent review pending: next-turn uploads.**
+- **Implemented and validated: lazy admin/settings routes.**
+  Pages/layouts now use router-native dynamic imports behind unchanged eager
+  guards. Shared palette navigation no longer pulls in the admin layout. Loading
+  is accessible and errors expose safe reload/home actions. Fourteen real-router
+  tests (mocked page/layout bodies) and six production-graph checker tests pass;
+  the actual eager `f056f41` build fails that graph gate as expected. Initial JS:
+  1,114,040 → 873,266 bytes; gzip level 9: 312,362 → 272,774. Initial JS files:
+  2 → 58, so browser latency still needs measurement. Linux web build passes;
+  checkpoint `proc_4ba2`: 584 scoped API, normal API 403, frontend 215, full
+  build/typecheck/coverage/graph/lint/licenses/diff checks pass.
+- **Fixed and independently reviewed: next-turn uploads.**
   Submission snapshots IDs/cards and consumes only files acknowledged by the
   accepted response, rather than clearing the queue when streaming finishes.
   Rejected files remain available; new ready/pending files and previews survive.
@@ -250,7 +255,8 @@ Paths in this table are relative to `apps/api/src/`.
   real-SDK baseline failures are fixed; ten upload cases now pass. A related
   immediate-retry ID mismatch was reproduced and fixed with a canonical prompt-ID
   response header. Checkpoint `proc_8035`: 584 scoped API, normal API 403,
-  frontend 195; build/typecheck/coverage/lint/licenses/diff checks pass.
+  frontend 195; build/typecheck/coverage/lint/licenses/diff checks pass. Read-only
+  independent review found no concrete scoped acceptance/file/identity regressions.
 
 ## “No hell files”: next boundaries, not arbitrary line limits
 

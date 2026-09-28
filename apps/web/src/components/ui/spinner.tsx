@@ -7,7 +7,11 @@ export function Spinner({ className }: { className?: string }) {
 
 export function FullPageSpinner() {
   return (
-    <div className="flex h-full w-full items-center justify-center">
+    <div
+      role="status"
+      aria-label="Loading page"
+      className="flex h-full w-full items-center justify-center"
+    >
       <Spinner className="size-6" />
     </div>
   );
