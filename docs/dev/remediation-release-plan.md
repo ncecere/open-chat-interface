@@ -143,9 +143,27 @@ The remaining execution/release gates below still apply.
    factories, direct links, guards/redirects, controlled loading, safe errors/reload
    and dynamic parameters (page/layout bodies mocked). Parent corrected a fixture
    hook-placement lint issue, reran all 20 routing/graph cases, and passed the full
-   checkpoint above. Browser cold-load/typeability measurements follow.
-9. Real-browser responsiveness and long-response measurements; no inferred latency
-   claims from render counts alone.
+   checkpoint above. These are the original phase-eight measurements; phase nine
+   below subsequently consolidated initial shared code without eager route loading.
+9. **Real-browser responsiveness and long-response measurements — complete;
+   local scope and tradeoffs documented.**
+   [Method, results and limitations](browser-performance.md): original `fd4cfa0`
+   versus the remediated frontend, same real API/auth/disposable PostgreSQL and
+   local synthetic provider. Initial cold testing exposed a 58-chunk startup
+   regression. Grouping only initial shared modules leaves three startup files;
+   repeat cold medians improve composer DOM readiness 163.7 → 148.4 ms and JS
+   transfer bytes 311,683 → 258,173 (five trials each). Four unprofiled long-history
+   trials per build plus two traces show similar typing responsiveness and reduced
+   JS work, not reduced layout. First response DOM text is about 50 ms later in
+   the candidate: not a uniformly faster result. All ten final streaming trials
+   preserve drafts/render complete fixture output without observed page errors.
+   Real admin/models and settings/account browser smokes also pass. No INP,
+   production latency, mobile/load or RSS claim. Sixteen fixture contract tests
+   pass. Checkpoint `proc_da24`: 600 scoped API tests (including 16 fixture tests),
+   normal API 419, frontend 215, eight build/typecheck tasks, coverage floors,
+   production graph gate (3 files / 860,995 bytes), lint, licenses and diff checks
+   pass. The Linux web build stage also passes with the same three-file graph
+   (`proc_b013`). This is not the broader phase-twelve release gate.
 10. Focused Composer/ModelPicker/backend boundaries with behavioral regressions.
 11. Historical verification review. Inspect evidence first; do not bulk revoke
     verification or sessions based only on timestamps or guesses. Account-access

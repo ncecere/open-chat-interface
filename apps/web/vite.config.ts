@@ -37,5 +37,15 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     manifest: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          // Route splitting otherwise fragments shared startup code into dozens
+          // of requests. Group only modules already needed by the initial page;
+          // do not eagerly bundle dependencies exclusive to deferred routes.
+          groups: [{ name: 'initial-shared', tags: ['$initial'], minShareCount: 2 }],
+        },
+      },
+    },
   },
 });

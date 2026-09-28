@@ -16,6 +16,7 @@ and [Release process](../RELEASING.md) for GitHub Actions and GHCR publishing.
 8. [Screenshots](screenshots.md) — regenerating the documentation images.
 9. [Maintainability review](maintainability-review.md) — module boundaries, repeatable structural inventory, and unresolved findings.
 10. [Chat performance and application review](chat-performance-review.md) — memoization guardrails, measured render work, and prioritized remaining risks.
+11. [Browser performance evidence](browser-performance.md) — isolated production-build comparisons, startup chunk adjustment, measured tradeoffs, and reproducible harness.
 
 ## The shape of it
 

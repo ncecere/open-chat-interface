@@ -243,7 +243,8 @@ Paths in this table are relative to `apps/api/src/`.
   tests (mocked page/layout bodies) and six production-graph checker tests pass;
   the actual eager `f056f41` build fails that graph gate as expected. Initial JS:
   1,114,040 → 873,266 bytes; gzip level 9: 312,362 → 272,774. Initial JS files:
-  2 → 58, so browser latency still needs measurement. Linux web build passes;
+  2 → 58 at that checkpoint; subsequent browser measurements and consolidation
+  are recorded below. Linux web build passes;
   checkpoint `proc_4ba2`: 584 scoped API, normal API 403, frontend 215, full
   build/typecheck/coverage/graph/lint/licenses/diff checks pass.
 - **Fixed and independently reviewed: next-turn uploads.**
@@ -257,6 +258,20 @@ Paths in this table are relative to `apps/api/src/`.
   response header. Checkpoint `proc_8035`: 584 scoped API, normal API 403,
   frontend 195; build/typecheck/coverage/lint/licenses/diff checks pass. Read-only
   independent review found no concrete scoped acceptance/file/identity regressions.
+
+### Real-browser follow-up
+
+[Browser evidence and reproducible harness](browser-performance.md) now compare
+original `fd4cfa0` with the remediated frontend against the same isolated real
+API/auth/PostgreSQL and synthetic provider. The 58-chunk build regressed local
+cold startup. Consolidating already-initial shared modules to three files keeps
+admin/settings lazy and improves repeated cold composer DOM readiness medians
+163.7 → 148.4 ms, with 17% fewer JS transfer bytes. Four unprofiled 100-message /
+~19 KB reply trials per build and two separate traces show less JavaScript work
+but similar already-responsive typing, no layout improvement, and **about 50 ms
+later first response DOM text**. Drafts survive all ten final streaming trials.
+These small desktop loopback samples are not INP, painted-frame measurements,
+production provider latency, mobile/load/RSS evidence, or release approval.
 
 ## “No hell files”: next boundaries, not arbitrary line limits
 
@@ -280,9 +295,10 @@ Worth focused follow-ups:
 
 [How we made Claude faster](https://claude.dev/blog/how-we-made-claude-ai-faster/)
 emphasizes measurable journeys, deterministic work counters and small protected
-changes. This branch applies the render-count approach, not its reported speedups.
+changes. This branch applies the render-count approach and the bounded local
+browser comparison above, not the article's reported speedups.
 
-Next experiments, after the P1 fixes:
+Further experiments beyond the collected local baseline:
 
 1. Measure cold load → typeable composer, new conversation → usable composer,
    conversation selection → painted transcript, and send → first visible output.
@@ -291,7 +307,8 @@ Next experiments, after the P1 fixes:
 2. Correlate the render-count reduction with real-browser traces using short and
    long transcripts, code/math/reasoning, desktop/mobile and CPU throttling.
    Record long tasks, commits, layout work and input responsiveness, not only
-   total stream duration. No real-browser latency baseline was collected here.
+   total stream duration. The collected baseline covers desktop, 100-message
+   histories and Markdown/code, not this broader matrix.
 3. Lazy-load non-chat routes; measure before considering hover-prefetching.
    Do not share conversation caches across users or revive expired/deleted data.
 4. Profile growing Markdown separately. The existing Streamdown renderer already
