@@ -116,9 +116,9 @@ vi.mock('../../services/chat-streams.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../services/chat-streams.js')>();
   return {
     ...actual,
-    beginChatRun: async (identity: { runId: string; threadId: string; userId: string }) => {
-      state.identities.push(identity);
-      return state.mode === 'available' ? state.store!.begin(identity) : state.mode;
+    beginChatRun: async (...args: Parameters<typeof actual.beginChatRun>) => {
+      state.identities.push(args[0]);
+      return state.mode === 'available' ? state.store!.begin(...args) : state.mode;
     },
     abandonChatRun: async (identity: { runId: string; threadId: string; userId: string }) => {
       await state.store?.abandon(identity);
@@ -345,14 +345,48 @@ describe.skipIf(!available)('live atomic chat admission', () => {
     },
   );
 
-  it.each(['quota', 'slot', 'redis', 'preparation'] as const)(
+  it.skipIf(!redisAvailable)(
+    'supersedes terminal-run cache metadata only after durable admission',
+    async () => {
+      const chat = await thread();
+      state.mode = 'available';
+      expect((await post(chat.id, 'first')).status).toBe(200);
+      const first = state.started[0]!.run.runIdentity;
+      // Real durable completion without Redis finalization; no model inference.
+      await pool.db
+        .update(schema.message)
+        .set({ status: 'complete' })
+        .where(eq(schema.message.id, first.runId));
+      expect(await state.store!.activeRun(chat.id, owner)).toEqual(first);
+      expect((await post(chat.id, 'second')).status).toBe(200);
+      const second = state.started[1]!.run.runIdentity;
+      expect(state.started[1]!.run.persistence).toBe('available');
+      expect(await state.store!.activeRun(chat.id, owner)).toEqual(second);
+      await state.store!.finalize(first, { status: 'complete' });
+      expect(await state.store!.activeRun(chat.id, owner)).toEqual(second);
+      expect((await post(chat.id, 'third')).status).toBe(409);
+      expect(state.started).toHaveLength(2);
+      expect(await messages(chat.id)).toHaveLength(4);
+    },
+  );
+
+  it('keeps a durable claim when a cache-only conflict is reported', async () => {
+    const chat = await thread();
+    state.mode = 'conflict';
+    expect((await post(chat.id, 'accepted without cache')).status).toBe(200);
+    expect(state.started).toHaveLength(1);
+    expect(state.started[0]!.run.persistence).toBe('unavailable');
+    expect(await messages(chat.id)).toHaveLength(2);
+    expect(state.released).toBe(0);
+  });
+
+  it.each(['quota', 'slot', 'preparation'] as const)(
     'leaves no prompt, claim, title or allocation after %s rejection',
     async (failure) => {
       const chat = await thread();
       const file = await attachment();
       if (failure === 'quota') state.quotaDenied = true;
       if (failure === 'slot') state.slotDenied = true;
-      if (failure === 'redis') state.mode = 'conflict';
       if (failure === 'preparation')
         state.hook = async () => {
           throw new Error('Injected preparation failure');
@@ -408,16 +442,27 @@ describe.skipIf(!available)('live atomic chat admission', () => {
   );
 
   it.skipIf(!redisAvailable)(
-    'does not clear an existing Redis owner when its own provisional claim is rejected',
+    'does not clear a durable/cache owner when a new claim is rejected',
     async () => {
       const chat = await thread();
       state.mode = 'available';
       const identity = { threadId: chat.id, userId: owner, runId: randomUUID() };
       state.identities.push(identity);
       await state.store!.begin(identity);
+      await pool.db.insert(schema.message).values({
+        id: identity.runId,
+        threadId: chat.id,
+        userId: owner,
+        role: 'assistant',
+        status: 'streaming',
+        parts: [],
+      });
       expect((await post(chat.id, 'rejected')).status).toBe(409);
-      expect(await messages(chat.id)).toHaveLength(0);
+      expect(await messages(chat.id)).toEqual([
+        expect.objectContaining({ id: identity.runId, status: 'streaming' }),
+      ]);
       expect(await state.store!.activeRun(chat.id, owner)).toEqual(identity);
+      expect(state.started).toHaveLength(0);
     },
   );
 

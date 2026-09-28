@@ -163,8 +163,34 @@ The remaining execution/release gates below still apply.
    normal API 419, frontend 215, eight build/typecheck tasks, coverage floors,
    production graph gate (3 files / 860,995 bytes), lint, licenses and diff checks
    pass. The Linux web build stage also passes with the same three-file graph
-   (`proc_b013`). This is not the broader phase-twelve release gate.
-10. Focused Composer/ModelPicker/backend boundaries with behavioral regressions.
+   (`proc_b013`). Independent read-only review cross-checked the artifacts and
+   found no actionable isolation, correctness or evidence-claim issues.
+   This is not the broader phase-twelve release gate.
+10. **Focused Composer/ModelPicker/backend boundaries — checkpoint validated.**
+    Migration session ownership/cleanup and report arithmetic defects have
+    real-PostgreSQL regressions and targeted fixes (details below). Reporting
+    query-domain extraction is verified. Thirty real-component Composer/ModelPicker
+    interaction cases now pass, including fixes for two IME Enter submission bugs
+    (28-pass/two-fail baseline `proc_3287`, green `proc_629f`). Composer option/file
+    controls and ModelPicker option/details presentation now have separate modules;
+    textarea submission and picker focus/geometry remain in their controllers.
+    Parent-reviewed changes preserve DOM order, callbacks and memo boundaries.
+    Latest checkpoint: 706 scoped API tests with coverage floors (including new
+    deadline/status-reader ratchets), eight build/typecheck tasks, 459 normal API
+    tests, 246 web tests, lint/licenses/diff all pass (`proc_7f3a`). Linux API
+    runtime/build and web build images pass (`proc_cf09`, refreshed API
+    `proc_162a`); 57 Linux migration/replay/transport regressions pass. Non-root
+    bundled-runtime migration/readiness/concurrent-replica checks also passed
+    (`proc_2213`, exact disposable database removed; migration runtime unchanged
+    by the later replay correction).
+    Independent reviews prompted a real migration reconnect probe and a healthy
+    replay-completion race regression. Both are reproduced and corrected (details
+    below). Migration review now finds no production blocker; nontransactional
+    DDL-start evidence plus a rollback control close its observation gap. Final
+    replay-correction review finds no blocker in bounded terminal reconciliation,
+    actual finish-frame proof, missing-owner isolation or route status wiring.
+    These are scoped source reviews, not additional test executions. Broader
+    release gates remain open.
 11. Historical verification review. Inspect evidence first; do not bulk revoke
     verification or sessions based only on timestamps or guesses. Account-access
     changes may require owner judgment.
@@ -203,24 +229,92 @@ Admission changes require drained old producers; rolling mixed old/new code is
 not supported. Interrupted runs and uploads fail closed. Recovery procedures
 are in OPERATIONS and require confirming the producer has stopped.
 
-## Additional observations to inspect during backend cleanup
+## Backend cleanup observations and evidence
 
-- `services/chat-streams.ts`: inspect cancellation's separate metadata read/HSET
-  for an expiry race; prove with Redis before making it conditional/atomic.
-- The Redis availability cooldown can skip finalization after an append transport
-  failure, leaving a stale active pointer despite a terminal PostgreSQL message.
-  Verify recovery against the durable claim, not elapsed age; never clear a live
-  producer's ownership based solely on cache absence. Replay corruption handling
-  is not a claim that network-partition finalization is guaranteed.
+- **Fixed, targeted validation passed:** cancellation's separate HGETALL/HSET
+  recreated expired metadata with an immortal TTL (`PTTL=-1`) and could write
+  into replaced ownership. Five real-Redis baselines failed, two controls passed.
+  Atomic Lua now requires matching run/thread/user, active status and positive
+  physical/logical lifetime, without refreshing TTL. The runtime wrapper also
+  acknowledged requests that the store rejected; a further real-Redis race failed
+  before that fix (`proc_5f52`). Ten cancellation cases plus existing stream/replay
+  suites, typecheck and lint pass (`proc_f678`), including local fallback and remote
+  acceptance controls. A later registry-overlap baseline (`proc_ce63`, ten controls
+  pass/one failure) showed explicit Stop targeting an older terminal run still
+  settling usage instead of its newer local producer. Selection now uses newest
+  owned registration; eleven cancellation cases pass within `proc_56c6`.
+  Acceptance still does not prove that a producer stopped.
+- **Fixed recovery, targeted validation passed:** Redis cooldown can skip
+  finalization after an append transport failure, leaving a stale active pointer
+  despite a terminal PostgreSQL message. Real Redis baselines failed 11/12 cases;
+  real PG/Redis route baselines failed 8/12. Only a successful durable claimant
+  can now conditionally supersede stale cache indexing; ordinary cache-only
+  admission still conflicts. Racing publication yields non-resumable fallback,
+  and same-run retries preserve events/cancellation/TTLs rather than resurrecting
+  missing or invalid state. Initial resume checks the exact owned assistant/run
+  (terminal/missing → 204; validation failure → safe 503). Idle readers recheck
+  every two seconds, with a two-second abortable reader deadline and one-second
+  SQL statement timeout. Missing ownership/error ends only the replay reader with
+  SDK-friendly error/DONE. An independent review exposed healthy completion
+  during a status check or delayed finalization being mistaken for failure; both
+  real-Redis baselines failed (`proc_d1d3`). Owned-terminal state now refreshes a
+  fixed tail snapshot and closes cleanly only after a real finish frame has been
+  forwarded; missing ownership never authorizes a new suffix. Incomplete snapshots
+  still fall back to canonical history rather than chasing an unbounded cache.
+  Real SDK encoder/decoder, completion-race, missing-owner and growing-cache cases
+  pass with existing admission/recovery tests (122 cases, typecheck/diff,
+  `proc_8162`). No claim takeover, age-based death inference, producer cancellation
+  or automatic resend.
+  The runtime cooldown case injects a transport-style failure before real Redis
+  Lua: it is **not packet-loss evidence** or a guarantee of finalization during a
+  partition. Real-SDK frontend coverage additionally verifies idle error closure
+  precedes canonical hydration and preserves the next draft (`proc_39c1`).
 
-- `packages/db/src/migrator.ts`: `runMigrationsWithLock` constructs a separate
-  migration pool but closes only the lock client. Check pool disposal and session
-  ownership before release; this is not yet fixed or regression-tested.
-- `services/usage-report.ts` still adds per-event int32 token columns before
-  summing. Cast operands before addition, as the quota meter now does, and test
-  large valid reports through reporting as well as settlement.
-- Audit lifecycle transaction parent-lock ordering before release: restore/trash
-  can take thread/file locks before `lockStorageUsage` obtains the user lock,
-  potentially cycling with account deletion. Historical chat work adds a
-  parent-first user lock for chat and sorted file locks for thread trash; verify
-  the other lifecycle paths with forced-overlap regressions, not just upload.
+- **Fixed, targeted validation passed:** `runMigrationsWithLock` used different
+  PostgreSQL sessions for its lock and DDL, and leaked its migration connection
+  after both commit and rollback. Two instrumentation controls passed while three
+  production baselines failed. The first private `max:1`-client fix passed eight
+  ordinary ownership/cleanup cases (`proc_63c3`), but **was not physically pinned**:
+  terminating its idle lock owner let the real pool reconnect and execute 35
+  observed CREATE TABLE statements without ownership (`proc_1949`, repeating the
+  independent probe). The migrator now wraps lock acquisition, journal reads and
+  DDL in a physical READ COMMITTED transaction. Its transaction-scoped lock lasts
+  through outer commit/rollback; Drizzle's inner transaction becomes a savepoint,
+  without copying unpinned pool query methods into the adapter. Disconnect now
+  rejects before observed DDL. Controls also verify an overridden repeatable-read
+  server default. All 19 reconnect/ownership/readiness/replica tests, typecheck and
+  scoped lint pass (`proc_68a2`). Independent driver/adapter review found no
+  production blocker, but transactional observation rows alone cannot exclude
+  rolled-back DDL. A nontransactional sequence now counts DDL-start events; a
+  rollback control proves that evidence survives abort. All four enhanced probe
+  cases pass on macOS and Linux (`proc_74fc`, `proc_fce1`), with zero DDL starts
+  following the injected disconnect. Build `@oci/db` before standalone API tests:
+  imports resolve its built `dist`.
+- **Fixed, targeted validation passed:** overall/daily/model/consumer token
+  reports added int32 operands before SUM. Four valid PostgreSQL baselines failed
+  with `integer out of range`; operands now widen before addition. Five new cases
+  exercise two 1.5-billion input/output events (6-billion total tokens) and empty
+  results. Original timezone/reporting tests remain unchanged and pass alongside
+  them (11 reporting tests total). Reporting now has consumption, activity,
+  storage, governance and common modules behind the unchanged public facade.
+  Parent AST comparison verifies all 23 declaration bodies against the fixed
+  pre-extraction snapshot (only sibling-private `rangeStart` gains `export`).
+  Typecheck and scoped lint pass.
+- **Fixed, targeted validation passed:** two real-PostgreSQL baselines showed
+  `migrationsApplied()` accepted stale history and an unrelated future marker.
+  Non-migrating startup now requires the exact latest bundled migration timestamp
+  to be recorded. Five readiness cases cover current/missing/stale/history-ahead
+  states; combined migration/readiness/replica checks pass (`proc_d86e`). This
+  verifies required history, not physical schema integrity or rollback safety.
+- **Fixed, targeted validation passed:** trash, restore and retention each
+  deadlocked with account deletion while repairing a missing storage counter
+  (`40P01`, three failing real-PostgreSQL races and three successful controls,
+  `proc_9849`). Lifecycle mutations now lock the user parent before thread/file
+  locks and counter insertion. Retention discovers at most 500 eligible candidates
+  with nonblocking owner/thread locks, releases discovery locks, then rechecks and
+  commits each thread separately in parent-first order. Busy owners are excluded
+  before the limit, so one busy owner cannot hide other eligible owners. Completed
+  threads survive an interrupted batch; retries do not double-adjust them.
+  Nine new cases plus existing share/locking/storage suites pass (52 tests,
+  `proc_39ff`), with typecheck and scoped lint. This is scoped lock-order evidence,
+  not a proof that every lifecycle/deletion path is deadlock-free.

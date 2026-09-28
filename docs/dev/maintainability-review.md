@@ -30,6 +30,9 @@ not the same problem. A short file can still have poor boundaries.
 | `apps/api/src/routes/admin/users.ts` | 426 → 54 | Listing, detail aggregation, account mutations, and bulk actions |
 | `apps/api/src/routes/admin/quotas.ts` | 290 → 35 | Policy queries, assignments, and administration |
 | `apps/api/src/routes/admin/overrides.ts` | 210 → 29 | Per-user override reads and mutations |
+| `apps/api/src/services/usage-report.ts` | 512 → 29 | Consumption, activity, storage, governance and shared range helpers; unchanged public facade |
+| `apps/web/src/components/chat/composer.tsx` | 297 → 130 | Controlled option/file controls; textarea, submission and Stop stay in Composer |
+| `apps/web/src/components/chat/model-picker.tsx` | 328 → 256 | Option/details presentation; filtering, focus, geometry and selection stay in the controller |
 
 The goal is not to hide the old function behind an import. Each extracted module
 owns a distinct part of the workflow. Services accept validated domain inputs,
@@ -49,14 +52,14 @@ of a removed direct dependency may still exist in the lockfile.
 ## Long modules retained
 
 - `packages/shared/src/model-labs.ts`: mostly static catalogue data.
-- `apps/api/src/services/usage-report.ts`: related, individually scoped reporting
-  queries rather than one large handler.
 - Quota reservation and chat-stream persistence modules: cohesive lifecycles.
 - Branding, usage, and general-settings pages: already separated into themed
   sections/components. Long JSX alone is not a reason to add indirection.
-- The model picker remains a substantial interactive component. Its filtering
-  and model-data helpers are already separate; positioning/focus changes need
-  dedicated visual regression testing rather than a mechanical line-count cut.
+- The model picker remains a substantial interactive controller. Its filtering,
+  model-data and option/details presentation are separate. Thirty new real-component
+  Composer/ModelPicker cases cover callbacks, IME, input resizing, filtering, focus
+  and deterministic geometry; they do not replace real-browser visual testing.
+  Positioning/focus behaviour was preserved, not redesigned to reduce line count.
 
 Smaller files and thin routes are useful boundaries, not proof that complexity
 has disappeared. Re-run the inventory when adding responsibilities to these
@@ -91,9 +94,14 @@ remediation below for their current status.
 Session deletion also remains subject to Better Auth's existing cookie cache;
 this refactor does not introduce immediate revocation or alter that policy.
 
-## Runtime remediation
+## Runtime remediation (initial checkpoint)
 
-The separate runtime-safety change addresses all four findings:
+This section records the initial runtime fixes and their historical checks.
+Subsequent durable admission, accounting and recovery work supersedes the fallback
+and cleanup descriptions below; see the [current remediation plan](remediation-release-plan.md).
+These counts are not the current release gate.
+
+The initial runtime-safety change addressed all four findings:
 
 | Finding | Change | Regression evidence |
 | --- | --- | --- |

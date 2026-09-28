@@ -21,6 +21,7 @@ vi.mock('../../db/index.js', () => ({
 }));
 
 import { claimThread } from '../../services/chat/thread-claim.js';
+import { lockLifecycleOwner } from '../../services/lifecycle/owner-lock.js';
 import { trashLockedThread } from '../../services/lifecycle/trash-thread.js';
 import { adjustStorageUsage } from '../../services/storage/usage.js';
 
@@ -206,6 +207,7 @@ describe.skipIf(!available)('live chat and historical file lock ordering', () =>
           // than accidentally passing because a primary-key scan visits LOW first.
           await tx.execute(sql`set local enable_indexscan = off`);
           await tx.execute(sql`set local enable_bitmapscan = off`);
+          await lockLifecycleOwner(tx, userId);
           await tx
             .select()
             .from(schema.thread)

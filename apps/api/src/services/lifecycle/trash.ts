@@ -4,6 +4,7 @@ import { db } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
 import { attachmentTotals, lockStorageUsage } from '../storage/usage.js';
+import { lockLifecycleOwner } from './owner-lock.js';
 import { getRetentionSettings } from './settings.js';
 import { type DeleteReason, trashLockedThread } from './trash-thread.js';
 
@@ -27,6 +28,7 @@ export async function softDeleteThread(
   reason: DeleteReason = 'user',
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    if (!(await lockLifecycleOwner(tx, userId))) throw notFound('Thread not found');
     const [thread] = await tx
       .select({ id: schema.thread.id, organizationId: schema.thread.organizationId })
       .from(schema.thread)
@@ -56,6 +58,7 @@ export async function restoreThread(threadId: string, userId: string): Promise<v
   if (!role) throw new Error('Invalid storage owner role');
   const limits = await getStorageLimits(role);
   await db.transaction(async (tx) => {
+    if (!(await lockLifecycleOwner(tx, userId))) throw notFound('Thread not found in trash');
     const [thread] = await tx
       .select({ id: schema.thread.id, organizationId: schema.thread.organizationId })
       .from(schema.thread)

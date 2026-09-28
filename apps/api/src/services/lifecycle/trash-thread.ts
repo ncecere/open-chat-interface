@@ -8,7 +8,9 @@ type LockedThread = Pick<typeof schema.thread.$inferSelect, 'id' | 'userId' | 'o
 
 /**
  * Shared deletion bookkeeping for user/admin deletion and retention. The caller
- * must hold an UPDATE lock on a live thread in this transaction. That keeps
+ * must lock the user parent first (KEY SHARE), then hold an UPDATE lock on the
+ * live thread in this transaction. Parent-first avoids account-cascade cycles;
+ * the thread lock keeps
  * concurrent deletion/restoration from adjusting storage twice and serializes
  * deletion with share creation/public reads, which take a SHARE lock.
  */

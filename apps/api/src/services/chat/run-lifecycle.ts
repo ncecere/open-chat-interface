@@ -1,4 +1,4 @@
-import { conflict, rateLimited } from '../../lib/errors.js';
+import { rateLimited } from '../../lib/errors.js';
 import { beginChatRun } from '../chat-streams.js';
 import { acquireStreamSlot } from '../limits/concurrency.js';
 import { reserveQuotaForRun, settleReservation, type UsageReservation } from '../quota/index.js';
@@ -36,9 +36,10 @@ export async function acquireRun(context: TurnContext): Promise<AcquiredRun> {
   try {
     const assistantMessage = await claimThread(context, runIdentity.runId);
     resources.assistantMessage = assistantMessage;
-    resources.persistence = await beginChatRun(runIdentity);
-    if (resources.persistence === 'conflict')
-      throw conflict('A response is already being generated for this thread');
+    const persistence = await beginChatRun(runIdentity, { admission: 'durable' });
+    // A cache collision cannot veto the durable claim. A racing publication or
+    // unusable cache only makes this response non-resumable.
+    resources.persistence = persistence === 'available' ? 'available' : 'unavailable';
     // Keep the identity available for cleanup even if a successful reservation
     // commit loses its reply. Prices here are not used for settlement.
     resources.reservation = {

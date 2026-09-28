@@ -212,7 +212,7 @@ describe.skipIf(!available)('live Postgres: public share lifecycle', () => {
     expect(row?.deletedReason).toBe('retention');
   });
 
-  it('bounds a retention transaction to 500 eligible threads and advances next time', async () => {
+  it('bounds a retention pass to 500 eligible threads and advances next time', async () => {
     await fixture.db.insert(schema.thread).values(
       Array.from({ length: 501 }, () => ({
         organizationId: fixture.organizationId,

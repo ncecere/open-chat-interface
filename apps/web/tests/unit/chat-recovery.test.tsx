@@ -232,40 +232,54 @@ describe('canonical chat recovery with the real AI SDK', () => {
     expect(chatPosts()).toHaveLength(0);
   });
 
-  it('awaits the entire resume promise, not headers, before hydrating saved messages', async () => {
-    const headers = deferred<Response>();
-    const replay = sse('accepted-replay');
-    const saved = history(messages('Replay tail plus canonical suffix'));
-    network.mockReturnValue(headers.promise);
-    getHistory.mockResolvedValue(saved);
-    await mount(initialPending());
-    expect(session.recovery.resuming).toBe(true);
-    expect(getHistory).not.toHaveBeenCalled();
+  it.each(['finish', 'friendly-error'] as const)(
+    'awaits the entire resume through %s before hydrating saved messages',
+    async (ending) => {
+      const headers = deferred<Response>();
+      const replay = sse('accepted-replay');
+      const saved = history(messages('Replay tail plus canonical suffix'));
+      network.mockReturnValue(headers.promise);
+      getHistory.mockResolvedValue(saved);
+      await mount(initialPending());
+      expect(session.recovery.resuming).toBe(true);
+      expect(getHistory).not.toHaveBeenCalled();
 
-    await settle(() => {
-      replay.push({ type: 'start', messageId: 'assistant-1' });
-      replay.push({ type: 'text-start', id: 'text-1' });
-      replay.push({ type: 'text-delta', id: 'text-1', delta: 'Replay tail' });
-      headers.resolve(replay.response);
-    });
-    expect(session.status).toBe('streaming');
-    expect(session.recovery.resuming).toBe(true);
-    await advance(6_000);
-    expect(getHistory).not.toHaveBeenCalled();
+      await settle(() => {
+        replay.push({ type: 'start', messageId: 'assistant-1' });
+        replay.push({ type: 'text-start', id: 'text-1' });
+        replay.push({ type: 'text-delta', id: 'text-1', delta: 'Replay tail' });
+        headers.resolve(replay.response);
+      });
+      expect(session.status).toBe('streaming');
+      expect(session.recovery.resuming).toBe(true);
+      await settle(() => session.setDraft('Keep my next question'));
+      await advance(6_000);
+      expect(getHistory).not.toHaveBeenCalled();
 
-    await settle(() => {
-      replay.push({ type: 'text-end', id: 'text-1' });
-      replay.push({ type: 'finish', finishReason: 'stop' });
-      replay.close();
-    });
-    expect(getHistory).toHaveBeenCalledOnce();
-    expect(session.messages).toEqual(saved.messages);
-    expect(session.messages.filter((message) => message.role === 'assistant')).toHaveLength(1);
-    expect(session.streaming).toBe(false);
-    await advance(4_000);
-    expect(getHistory).toHaveBeenCalledOnce();
-    expect(chatPosts()).toHaveLength(0);
-  });
+      await settle(() => {
+        if (ending === 'finish') {
+          replay.push({ type: 'text-end', id: 'text-1' });
+          replay.push({ type: 'finish', finishReason: 'stop' });
+        } else {
+          replay.push({
+            type: 'error',
+            errorText:
+              'Live replay is no longer available. Reload this conversation to see saved messages; a response may still be running.',
+          });
+        }
+        replay.close();
+      });
+      expect(getHistory).toHaveBeenCalledOnce();
+      expect(session.messages).toEqual(saved.messages);
+      expect(session.messages.filter((message) => message.role === 'assistant')).toHaveLength(1);
+      expect(session.streaming).toBe(false);
+      expect(session.draft).toBe('Keep my next question');
+      expect(session.error).toBeUndefined();
+      await advance(4_000);
+      expect(getHistory).toHaveBeenCalledOnce();
+      expect(chatPosts()).toHaveLength(0);
+    },
+  );
 
   it('polls pending storage at two seconds, keeps Stop available, and ends on terminal storage', async () => {
     network.mockImplementation(async () => new Response(null, { status: 204 }));

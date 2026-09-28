@@ -1,9 +1,12 @@
 import type Redis from 'ioredis';
+import type { OwnedRunState } from './chat/run-state.js';
+import { type ReplayValidator, validateReplayRun } from './chat-replay-validation.js';
 
 export const REPLAY_UNAVAILABLE_MESSAGE =
   'Live replay is no longer available. Reload this conversation to see saved messages; a response may still be running.';
 const POLL_MS = 100;
 const BATCH_SIZE = 200;
+const VALIDATION_INTERVAL_MS = 2000;
 
 function sequence(value: string | undefined): number | null {
   if (!value || !/^(0|[1-9]\d*)$/.test(value)) return null;
@@ -11,21 +14,42 @@ function sequence(value: string | undefined): number | null {
   return Number.isSafeInteger(result) ? result : null;
 }
 
+// The pinned SDK's JsonToSseTransformStream emits one complete frame per string.
+// Unrecognized/fragmented frames never establish successful completion. This
+// does not synthesize a finish: the actual frame must have been forwarded.
+function isFinishFrame(value: string): boolean {
+  if (!value.startsWith('data:') || !value.endsWith('\n\n')) return false;
+  try {
+    return JSON.parse(value.slice(5, -2))?.type === 'finish';
+  } catch {
+    return false;
+  }
+}
+
 /** Replay failure affects this reader only, never the producer or its admission claim. */
 export function createChatReplay(options: {
   redis: Redis;
-  identity: { threadId: string; userId: string };
+  identity: { runId: string; threadId: string; userId: string };
   metadataKey: string;
   eventsKey: string;
   signal?: AbortSignal;
+  readState?: ReplayValidator<OwnedRunState>;
 }): ReadableStream<Uint8Array> {
-  const { redis, identity, metadataKey, eventsKey, signal } = options;
+  const { redis, identity, metadataKey, eventsKey, readState } = options;
+  const cancellation = new AbortController();
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, cancellation.signal])
+    : cancellation.signal;
+  let nextValidation = performance.now() + VALIDATION_INTERVAL_MS;
   const encoder = new TextEncoder();
   let cancelled = false;
   let lastId = '0-0';
   let lastSequence = 0;
   let batch: Array<[string, string[]]> = [];
   let index = 0;
+  let finishDelivered = false;
+  let durableTerminal = false;
+  let terminalLimit: number | null = null;
 
   return new ReadableStream<Uint8Array>({
     // Pull, rather than an eager start loop, bounds queued replay data to a
@@ -33,6 +57,11 @@ export function createChatReplay(options: {
     async pull(controller) {
       try {
         while (!cancelled && !signal?.aborted) {
+          if (terminalLimit !== null && lastSequence >= terminalLimit) {
+            if (!finishDelivered) throw new Error('Terminal replay has no captured finish');
+            controller.close();
+            return;
+          }
           if (index < batch.length) {
             const [id, fields] = batch[index++]!;
             const values: Record<string, string> = {};
@@ -46,11 +75,13 @@ export function createChatReplay(options: {
             lastId = id;
             lastSequence++;
             controller.enqueue(encoder.encode(values.data));
+            finishDelivered ||= isFinishFrame(values.data);
             return;
           }
           const metadata = await redis.hgetall(metadataKey);
           const total = sequence(metadata.lastSequence);
           if (
+            metadata.runId !== identity.runId ||
             metadata.threadId !== identity.threadId ||
             metadata.userId !== identity.userId ||
             metadata.replayVersion !== '1' ||
@@ -62,6 +93,11 @@ export function createChatReplay(options: {
             !['active', 'complete', 'error', 'cancelled'].includes(metadata.status ?? '')
           )
             throw new Error('Replay metadata unavailable');
+          // Reconcile once after a terminal durable check: completion may have
+          // arrived during that query. Freeze the tail boundary so a still-active
+          // cache cannot keep this reader following new events indefinitely.
+          if (durableTerminal) terminalLimit ??= total;
+          if (terminalLimit !== null && lastSequence >= terminalLimit) continue;
           batch = await redis.xrange(eventsKey, `(${lastId}`, '+', 'COUNT', BATCH_SIZE);
           index = 0;
           if (batch.length) continue;
@@ -71,6 +107,17 @@ export function createChatReplay(options: {
             if (!lastSequence) throw new Error('Replay never captured a prefix');
             if (!cancelled) controller.close();
             return;
+          }
+          if (readState && performance.now() >= nextValidation) {
+            const state = await validateReplayRun(readState, signal);
+            if (state !== 'streaming') {
+              // Missing/deleted/expired/foreign ownership is not completion and
+              // must not authorize forwarding any newly cached suffix.
+              if (state !== 'terminal') throw new Error('Durable run unavailable');
+              durableTerminal = true;
+              continue;
+            }
+            nextValidation = performance.now() + VALIDATION_INTERVAL_MS;
           }
           await new Promise((resolve) => setTimeout(resolve, POLL_MS));
         }
@@ -91,6 +138,7 @@ export function createChatReplay(options: {
     },
     cancel() {
       cancelled = true;
+      cancellation.abort();
     },
   });
 }

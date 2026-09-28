@@ -192,14 +192,14 @@ describe('run acquisition rollback', () => {
     );
   });
 
-  it('removes its provisional claim but never abandons the Redis winner', async () => {
+  it('does not let a cache conflict veto its durable claim or abandon another cache run', async () => {
     mocks.begin.mockResolvedValue('conflict');
-    await expect(acquireRun(turn)).rejects.toMatchObject({
-      status: 409,
-    });
-    expect(mocks.delete).toHaveBeenCalledOnce();
+    const acquired = await acquireRun(turn);
+    expect(acquired.persistence).toBe('unavailable');
+    expect(mocks.begin).toHaveBeenCalledWith(acquired.runIdentity, { admission: 'durable' });
+    expect(mocks.delete).not.toHaveBeenCalled();
     expect(mocks.abandon).not.toHaveBeenCalled();
-    expect(mocks.releaseSlot).toHaveBeenCalledOnce();
+    expect(mocks.releaseSlot).not.toHaveBeenCalled();
   });
 
   it('cleans up independently when marking a failed row also fails', async () => {

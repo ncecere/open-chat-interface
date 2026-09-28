@@ -81,7 +81,20 @@ A `Seq Scan` on a large table in a per-row subquery is the shape of the problem.
 
 ## Migrations under several replicas
 
-Applied under an advisory lock, so replicas starting together produce one run.
+A private client pins advisory-lock acquisition, journal reads and DDL inside one
+physical transaction. Drizzle's inner migration transaction runs as a savepoint;
+commit or rollback releases the transaction-scoped advisory lock. An idle
+disconnect fails the attempt instead of allowing a pool reconnect to continue
+without ownership. The private client closes after success or failure. Concurrent
+replicas serialize; later ones skip already-applied work. The application still
+requires direct PostgreSQL or a session-mode pooler for its session-locked
+maintenance jobs; transaction pooling is not a supported deployment mode.
+
 For a deployment that scales the API, run migrations once beforehand and start
-replicas with `RUN_MIGRATIONS=false`. See
+replicas with `RUN_MIGRATIONS=false`. Startup requires the latest bundled
+migration's recorded timestamp, not merely any older migration row. Keep the
+bundled migration files in the runtime image even when migration execution is
+disabled (the repository Dockerfile already does). This is a history check, not
+physical-schema validation or proof that unknown newer migrations are compatible
+with an older binary. See
 [Operations](../OPERATIONS.md#upgrade).

@@ -1,7 +1,8 @@
-import { and, asc, eq, isNull, lte, or, schema, sql } from '@oci/db';
+import { and, eq, isNull, lte, or, schema, sql } from '@oci/db';
 import { PROTECTED_AUDIT_ACTIONS } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { lockLifecycleOwner } from './owner-lock.js';
 import { getRetentionSettings } from './settings.js';
 import { trashLockedThread } from './trash-thread.js';
 
@@ -43,31 +44,53 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
 
   if (exemptPinnedThreads) conditions.push(eq(schema.thread.pinned, false));
 
-  const expired = await db.transaction(async (tx) => {
-    // Filter before limiting: active or exempt rows must not starve eligible
-    // threads. Lock the selected live rows through all deletion bookkeeping.
-    const threads = await tx
-      .select({
-        id: schema.thread.id,
-        userId: schema.thread.userId,
-        organizationId: schema.thread.organizationId,
-      })
-      .from(schema.thread)
-      .where(and(...conditions))
-      .orderBy(asc(schema.thread.createdAt), asc(schema.thread.id))
-      .limit(BATCH_SIZE)
-      .for('update', { skipLocked: true });
+  // This discovery statement commits before acquiring any owner lock. Its
+  // short-lived row locks skip busy owners AND threads before limiting; neither
+  // lock may wait while holding the other. Actual mutations reacquire parent-first.
+  // Drizzle's builder retains only one FOR clause, hence the explicit SQL here.
+  const candidates = await db.execute<{ id: string; userId: string }>(sql`
+    select ${schema.thread.id} as id, ${schema.thread.userId} as "userId"
+    from ${schema.thread}
+    inner join ${schema.user} on ${schema.user.id} = ${schema.thread.userId}
+    where ${and(...conditions)}
+    order by ${schema.thread.createdAt}, ${schema.thread.id}
+    limit ${BATCH_SIZE}
+    for key share of ${schema.user} skip locked
+    for update of ${schema.thread} skip locked
+  `);
 
-    for (const thread of threads) {
+  let expired = 0;
+  for (const candidate of candidates) {
+    const changed = await db.transaction(async (tx) => {
+      if (!(await lockLifecycleOwner(tx, candidate.userId, true))) return false;
+      const [thread] = await tx
+        .select({
+          id: schema.thread.id,
+          userId: schema.thread.userId,
+          organizationId: schema.thread.organizationId,
+        })
+        .from(schema.thread)
+        .where(
+          and(
+            ...conditions,
+            eq(schema.thread.id, candidate.id),
+            eq(schema.thread.userId, candidate.userId),
+          ),
+        )
+        .for('update', { skipLocked: true });
+      if (!thread) return false;
       await trashLockedThread(tx, thread, 'retention', now);
-    }
-    return threads;
-  });
-
-  if (expired.length > 0) {
-    logger.info({ count: expired.length }, 'Moved inactive conversations to trash');
+      return true;
+    });
+    // Each thread commits separately. An interrupted batch keeps completed work;
+    // retries select only still-live eligible threads and cannot double-adjust it.
+    if (changed) expired++;
   }
-  return expired.length;
+
+  if (expired > 0) {
+    logger.info({ count: expired }, 'Moved inactive conversations to trash');
+  }
+  return expired;
 }
 
 /**

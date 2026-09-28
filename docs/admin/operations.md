@@ -81,6 +81,11 @@ does **not** guarantee one run per scheduled interval. Staggered replicas can
 run sequentially. A lost database connection releases its lock but cannot cancel
 external work already underway, so job side effects still need safe retries.
 
+Conversation retention considers up to 500 eligible, unlocked threads per pass
+and commits each thread separately. Busy accounts or threads are skipped. A failed
+pass can have completed some threads; retrying continues with those still eligible
+rather than repeating their storage adjustments.
+
 `DATABASE_URL` must use a direct PostgreSQL connection or a session-mode pooler,
 not transaction pooling. Budget one additional connection per concurrently
 attempted job per API replica, separate from the regular application pool

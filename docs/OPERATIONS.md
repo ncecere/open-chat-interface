@@ -107,7 +107,13 @@ and verify attachment downloads.
    ```
 
    A single-replica deployment may leave `RUN_MIGRATIONS=true`; startup applies
-   migrations under a PostgreSQL advisory lock.
+   migrations under a transaction-scoped PostgreSQL advisory lock, with lock,
+   journal reads and DDL pinned to one physical transaction. A disconnect fails
+   the attempt instead of continuing on an unlocked replacement connection.
+   Direct PostgreSQL or session-mode pooling remains required for maintenance jobs.
+   With `RUN_MIGRATIONS=false`, startup refuses to serve unless the latest bundled
+   migration's timestamp is recorded. That marker is not a schema-integrity check
+   or evidence that reverting an image after newer migrations is safe.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
 
@@ -192,6 +198,26 @@ claim, or prevent the final answer from being saved. Use an explicit stop or
 wait for completion; do not clear claims based on missing cache data. Network
 partitions can prevent Redis from recording its final state, so cache metadata
 alone is not proof of producer liveness or completion.
+
+Before opening replay, the API checks the exact cached assistant/run against its
+owned, live PostgreSQL thread. Missing or terminal runs return no replay (204),
+so the client can load saved history. A failed durable validation returns a safe
+503 instead of pretending the run is absent. Already-idle readers recheck every
+two seconds. Missing ownership or validation failure ends only that reader with
+the friendly replay error. For an owned terminal run, the reader refreshes a
+bounded cache-tail snapshot: it closes cleanly only after forwarding a real SDK
+finish frame, otherwise it reports unavailable replay. This covers completion
+that arrives during the status check or before delayed cache finalization,
+without following an indefinitely growing cache or fabricating completion.
+Each validation has a two-second reader deadline, a one-second SQL statement
+timeout, and abort checks before queued work proceeds.
+The reader deadline does not itself cancel a queued database transaction.
+
+A successfully acquired PostgreSQL claim may replace stale Redis indexing with
+conditional publication. A racing index change makes the new response
+non-resumable, not rejected; same-run retries never reset cached events,
+cancellation or TTLs. This does not delete old cache data or reclaim a streaming
+PostgreSQL claim, and does not guarantee Redis finalization during a partition.
 
 Replay readers apply backpressure and buffer at most one 200-event Redis batch
 plus one queued chunk. These are event-count bounds, not byte/RSS guarantees.

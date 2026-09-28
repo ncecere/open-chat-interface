@@ -1,6 +1,8 @@
 import Redis from 'ioredis';
 import { loadEnv } from '../config/env.js';
 import { logger } from '../lib/logger.js';
+import type { OwnedRunState } from './chat/run-state.js';
+import { type ReplayValidator, validateReplayRun } from './chat-replay-validation.js';
 import { createChatReplay } from './chat-stream-replay.js';
 
 const KEY_PREFIX = 'oci:chat-stream';
@@ -23,6 +25,11 @@ interface ChatRunOutcome {
 
 export type BeginChatRunResult = 'available' | 'unavailable' | 'conflict';
 
+/** Only a caller that has already acquired the durable assistant claim may use this. */
+interface BeginOptions {
+  admission: 'durable';
+}
+
 function activeKey(threadId: string) {
   return `${KEY_PREFIX}:thread:${threadId}:active`;
 }
@@ -42,7 +49,8 @@ export class ChatStreamStore {
     private readonly ttlSeconds: number,
   ) {}
 
-  async begin(identity: ChatRunIdentity): Promise<'available' | 'conflict'> {
+  async begin(identity: ChatRunIdentity, options?: BeginOptions): Promise<BeginChatRunResult> {
+    if (options?.admission === 'durable') return this.publishAdmitted(identity);
     const active = activeKey(identity.threadId);
     const acquired = await this.redis.set(active, identity.runId, 'EX', this.ttlSeconds, 'NX');
     if (acquired !== 'OK') return 'conflict';
@@ -78,6 +86,54 @@ export class ChatStreamStore {
     }
   }
 
+  private async publishAdmitted(identity: ChatRunIdentity): Promise<'available' | 'unavailable'> {
+    const active = activeKey(identity.threadId);
+    const observed = await this.redis.get(active);
+    // PostgreSQL has already admitted this run. Redis is only a cache, but a
+    // delayed publication must still compare-and-swap rather than overwrite an
+    // index that changed after observation. Never erase another run's data or
+    // reset this run's existing prefix, cancellation flag, or expiry on retry.
+    const published = await this.redis.eval(
+      `
+      local current = redis.call('GET', KEYS[1]) or ''
+      if current ~= ARGV[1] then return 0 end
+      if current == ARGV[2] then
+        local expires = tonumber(redis.call('HGET', KEYS[2], 'expiresAt'))
+        if redis.call('HGET', KEYS[2], 'runId') == ARGV[2]
+          and redis.call('HGET', KEYS[2], 'threadId') == ARGV[3]
+          and redis.call('HGET', KEYS[2], 'userId') == ARGV[4]
+          and redis.call('HGET', KEYS[2], 'status') == 'active'
+          and redis.call('HGET', KEYS[2], 'replayVersion') == '1'
+          and redis.call('HGET', KEYS[2], 'replayUnavailable') == '0'
+          and expires and expires > tonumber(ARGV[7])
+          and redis.call('PTTL', KEYS[1]) > 0
+          and redis.call('PTTL', KEYS[2]) > 0 then return 1 end
+        return 0
+      end
+      if redis.call('EXISTS', KEYS[2]) == 1 or redis.call('EXISTS', KEYS[3]) == 1 then return 0 end
+      redis.call('HSET', KEYS[2],
+        'runId', ARGV[2], 'threadId', ARGV[3], 'userId', ARGV[4],
+        'status', 'active', 'replayVersion', '1', 'lastSequence', '0',
+        'replayUnavailable', '0', 'expiresAt', ARGV[6])
+      redis.call('PEXPIRE', KEYS[2], ARGV[5])
+      redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[5])
+      return 1
+    `,
+      3,
+      active,
+      metadataKey(identity.runId),
+      eventsKey(identity.runId),
+      observed ?? '',
+      identity.runId,
+      identity.threadId,
+      identity.userId,
+      this.ttlSeconds * 1000,
+      Date.now() + this.ttlSeconds * 1000,
+      Date.now(),
+    );
+    return published === 1 ? 'available' : 'unavailable';
+  }
+
   async abandon(identity: ChatRunIdentity): Promise<void> {
     await this.finalize(identity, {
       status: 'error',
@@ -87,12 +143,28 @@ export class ChatStreamStore {
   }
 
   async requestCancellation(identity: ChatRunIdentity): Promise<boolean> {
-    const metadata = await this.redis.hgetall(metadataKey(identity.runId));
-    if (metadata.threadId !== identity.threadId || metadata.userId !== identity.userId)
-      return false;
-
-    await this.redis.hset(metadataKey(identity.runId), 'cancelRequested', '1');
-    return true;
+    // Validate and write atomically: a separate HGETALL/HSET can resurrect an
+    // expired hash without a TTL or mutate metadata whose ownership changed.
+    const accepted = await this.redis.eval(
+      `
+      local expires = tonumber(redis.call('HGET', KEYS[1], 'expiresAt'))
+      if redis.call('HGET', KEYS[1], 'threadId') ~= ARGV[1]
+        or redis.call('HGET', KEYS[1], 'userId') ~= ARGV[2]
+        or redis.call('HGET', KEYS[1], 'runId') ~= ARGV[3]
+        or redis.call('HGET', KEYS[1], 'status') ~= 'active'
+        or not expires or expires <= tonumber(ARGV[4])
+        or redis.call('PTTL', KEYS[1]) <= 0 then return 0 end
+      redis.call('HSET', KEYS[1], 'cancelRequested', '1')
+      return 1
+    `,
+      1,
+      metadataKey(identity.runId),
+      identity.threadId,
+      identity.userId,
+      identity.runId,
+      Date.now(),
+    );
+    return accepted === 1;
   }
 
   async cancellationRequested(runId: string): Promise<boolean> {
@@ -165,6 +237,7 @@ export class ChatStreamStore {
     const metadata = await this.redis.hgetall(metadataKey(runId));
     if (
       metadata.status !== 'active' ||
+      metadata.runId !== runId ||
       metadata.threadId !== threadId ||
       metadata.userId !== userId
     ) {
@@ -175,13 +248,18 @@ export class ChatStreamStore {
   }
 
   /** Replays from the beginning, then tails until the producer finalizes. */
-  createReplayStream(identity: ChatRunIdentity, signal?: AbortSignal): ReadableStream<Uint8Array> {
+  createReplayStream(
+    identity: ChatRunIdentity,
+    signal?: AbortSignal,
+    options?: { readState: ReplayValidator<OwnedRunState> },
+  ): ReadableStream<Uint8Array> {
     return createChatReplay({
       redis: this.redis,
       identity,
       metadataKey: metadataKey(identity.runId),
       eventsKey: eventsKey(identity.runId),
       signal,
+      readState: options?.readState,
     });
   }
 }
@@ -265,8 +343,11 @@ export async function chatStreamRedisStatus(): Promise<'ok' | 'error' | 'disable
   return (await runtimeChatStreamStore()) ? 'ok' : 'error';
 }
 
-export async function beginChatRun(identity: ChatRunIdentity): Promise<BeginChatRunResult> {
-  const result = await withStore((store) => store.begin(identity));
+export async function beginChatRun(
+  identity: ChatRunIdentity,
+  options?: BeginOptions,
+): Promise<BeginChatRunResult> {
+  const result = await withStore((store) => store.begin(identity, options));
   return result ?? 'unavailable';
 }
 
@@ -287,32 +368,32 @@ export async function isChatRunCancellationRequested(runId: string): Promise<boo
 }
 
 export async function cancelActiveChatRun(threadId: string, userId: string): Promise<boolean> {
-  const local = [...localRuns.values()].find(
-    (run) => run.identity.threadId === threadId && run.identity.userId === userId,
-  );
+  // Registration follows durable admission. An older terminal run may still be
+  // settling usage; explicit Stop must target the newer local producer, not it.
+  const local = [...localRuns.values()]
+    .reverse()
+    .find((run) => run.identity.threadId === threadId && run.identity.userId === userId);
   if (local) local.abort.abort('user-stop');
 
   const active = await withStore((store) => store.activeRun(threadId, userId));
-  if (active) await withStore((store) => store.requestCancellation(active));
-  return Boolean(local || active);
+  const requested = active ? await withStore((store) => store.requestCancellation(active)) : false;
+  return Boolean(local || requested);
 }
 
 export async function resumeActiveChatRun(
   threadId: string,
   userId: string,
   signal?: AbortSignal,
+  options?: {
+    readState: (identity: ChatRunIdentity, signal: AbortSignal) => Promise<OwnedRunState>;
+  },
 ): Promise<{ stream: ReadableStream<Uint8Array>; persistence: 'redis'; runId: string } | null> {
   const store = await runtimeChatStreamStore();
   if (!store) return null;
 
+  let identity: ChatRunIdentity | null;
   try {
-    const identity = await store.activeRun(threadId, userId);
-    if (!identity) return null;
-    return {
-      stream: store.createReplayStream(identity, signal),
-      persistence: 'redis',
-      runId: identity.runId,
-    };
+    identity = await store.activeRun(threadId, userId);
   } catch (error) {
     logger.warn(
       { err: error instanceof Error ? error.message : 'Redis operation failed' },
@@ -320,6 +401,19 @@ export async function resumeActiveChatRun(
     );
     return null;
   }
+  if (!identity) return null;
+  const owned = identity;
+  const readState: ReplayValidator<OwnedRunState> | undefined = options
+    ? (checkSignal) => options.readState(owned, checkSignal)
+    : undefined;
+  // Durable validation failures are not cache absence: let the route report a
+  // safe retryable failure rather than silently returning 204 or opening SSE.
+  if (readState && (await validateReplayRun(readState, signal)) !== 'streaming') return null;
+  return {
+    stream: store.createReplayStream(owned, signal, readState ? { readState } : undefined),
+    persistence: 'redis',
+    runId: owned.runId,
+  };
 }
 
 export async function captureChatRun(

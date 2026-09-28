@@ -42,6 +42,12 @@ export default defineConfig({
         'src/services/chat/context-history.ts': { statements: 90, branches: 85, functions: 100 },
         'src/services/chat/model-context.ts': { statements: 90, branches: 85, functions: 100 },
         'src/services/chat-stream-replay.ts': { statements: 90, branches: 80, functions: 100 },
+        'src/services/chat-replay-validation.ts': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+        },
+        'src/services/chat/run-state.ts': { statements: 95, branches: 80, functions: 100 },
         'src/services/quota/settlement.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/quota/sweep.ts': { statements: 90, branches: 80, functions: 100 },
         'src/services/quota/windows.ts': { statements: 95, branches: 70, functions: 100 },

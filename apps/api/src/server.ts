@@ -18,8 +18,8 @@ async function main() {
    * together, and every operation here is idempotent.
    *
    * Operators running a dedicated migration job set RUN_MIGRATIONS=false, in
-   * which case the process refuses to serve against a schema that is missing
-   * rather than failing later on an arbitrary query.
+   * which case the process requires the latest bundled migration to be recorded
+   * rather than serving a missing/stale schema and failing on an arbitrary query.
    */
   if (env.RUN_MIGRATIONS) {
     logger.info('Applying database migrations');
@@ -27,7 +27,7 @@ async function main() {
     await seedDatabase(db);
   } else if (!(await migrationsApplied(db))) {
     throw new Error(
-      'RUN_MIGRATIONS is false but the database has no schema. Run `pnpm db:migrate` first.',
+      'RUN_MIGRATIONS is false but the latest required database migration is not recorded. Run `pnpm db:migrate` first.',
     );
   }
 
