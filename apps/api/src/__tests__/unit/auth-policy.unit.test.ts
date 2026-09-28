@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   emailVerified: false,
   settings: {
     registrationMode: 'open' as 'open' | 'invite_only' | 'closed',
-    emailVerificationRequired: false,
+    emailVerificationRequired: false as unknown,
     localAuthEnabled: true,
   },
   smtpUsable: true,
@@ -55,10 +55,31 @@ describe('dynamic auth request policy', () => {
     mocks.settingsError = null;
   });
 
-  it('allows verification to fail open when settings are unavailable', async () => {
+  it('fails closed when verification policy cannot be read', async () => {
     mocks.settingsError = new Error('Settings unavailable');
-    await expect(isEmailVerificationEnforced()).resolves.toBe(false);
+    await expect(isEmailVerificationEnforced()).rejects.toMatchObject({
+      status: 'SERVICE_UNAVAILABLE',
+      body: { code: 'AUTH_POLICY_UNAVAILABLE' },
+    });
   });
+
+  it.each([undefined, null, 0, 'false'])(
+    'does not treat invalid verification value %s as disabled',
+    async (value) => {
+      mocks.settings.emailVerificationRequired = value;
+      await expect(isEmailVerificationEnforced()).rejects.toMatchObject({
+        status: 'SERVICE_UNAVAILABLE',
+      });
+      await expect(
+        enforceAuthRequestPolicy('/sign-up/email', { email: 'person@example.com' }),
+      ).rejects.toMatchObject({ status: 'SERVICE_UNAVAILABLE' });
+      mocks.role = 'admin';
+      mocks.emailVerified = true;
+      await expect(
+        enforceAuthRequestPolicy('/sign-in/email', { email: 'admin@example.com' }),
+      ).resolves.toEqual({ requireEmailVerification: false });
+    },
+  );
 
   it('preserves only verified administrator recovery when settings are unavailable', async () => {
     mocks.settingsError = new Error('Settings unavailable');
@@ -73,8 +94,18 @@ describe('dynamic auth request policy', () => {
     ).resolves.toEqual({ requireEmailVerification: false });
   });
 
-  it('only guards local email/password endpoints', async () => {
+  it('does not change SSO authentication policy', async () => {
     await expect(enforceAuthRequestPolicy('/sign-in/sso', undefined)).resolves.toBeNull();
+  });
+
+  it('checks resend policy availability without requiring a session or an existing account', async () => {
+    await expect(
+      enforceAuthRequestPolicy('/send-verification-email', { email: 'person@example.com' }),
+    ).resolves.toEqual({ requireEmailVerification: false });
+    mocks.settingsError = new Error('Settings unavailable');
+    await expect(
+      enforceAuthRequestPolicy('/send-verification-email', { email: 'person@example.com' }),
+    ).rejects.toMatchObject({ status: 'SERVICE_UNAVAILABLE' });
   });
 
   it.each(['invite_only', 'closed'] as const)('blocks public sign-up in %s mode', async (mode) => {
@@ -114,14 +145,14 @@ describe('dynamic auth request policy', () => {
     ).rejects.toThrow('disabled');
   });
 
-  it('rejects sign-in for an unverified account when verification is enforced', async () => {
+  it('requires SDK verification without exposing account state before password validation', async () => {
     mocks.settings.emailVerificationRequired = true;
     mocks.role = 'user';
     mocks.emailVerified = false;
 
     await expect(
       enforceAuthRequestPolicy('/sign-in/email', { email: 'person@example.com' }),
-    ).rejects.toThrow('Verify your email address');
+    ).resolves.toEqual({ requireEmailVerification: true });
 
     mocks.emailVerified = true;
     await expect(
@@ -138,15 +169,20 @@ describe('dynamic auth request policy', () => {
     ).resolves.toEqual({ requireEmailVerification: true });
   });
 
-  it('requires verification only when both the setting and usable SMTP are present', async () => {
+  it('requires verification independently of SMTP availability', async () => {
     mocks.settings.emailVerificationRequired = true;
     await expect(
       enforceAuthRequestPolicy('/sign-up/email', { email: 'person@example.com' }),
     ).resolves.toEqual({ requireEmailVerification: true });
 
     mocks.smtpUsable = false;
+    await expect(isEmailVerificationEnforced()).resolves.toBe(true);
     await expect(
       enforceAuthRequestPolicy('/sign-up/email', { email: 'person@example.com' }),
-    ).resolves.toEqual({ requireEmailVerification: false });
+    ).resolves.toEqual({ requireEmailVerification: true });
+    mocks.role = 'user';
+    await expect(
+      enforceAuthRequestPolicy('/sign-in/email', { email: 'person@example.com' }),
+    ).resolves.toEqual({ requireEmailVerification: true });
   });
 });

@@ -1,6 +1,7 @@
 import { eq, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { withJobLock } from './lock.js';
 
 export interface JobDefinition {
   name: string;
@@ -9,33 +10,13 @@ export interface JobDefinition {
   run: () => Promise<number>;
 }
 
-/**
- * Stable 64-bit key for a job's advisory lock. Names are hashed rather than
- * enumerated so adding a job never requires picking an unused integer.
- */
-function lockKey(jobName: string): string {
-  return `oci:job:${jobName}`;
+/** Returns null when another local tick or database session owns this job. */
+export function runExclusively(job: JobDefinition): Promise<number | null> {
+  return withJobLock(job.name, () => runRecordedJob(job));
 }
 
-/**
- * Runs a job only if this replica wins its advisory lock.
- *
- * Every replica ticks on the same schedule; without this they would all run
- * the same cleanup simultaneously. A session-level lock is used rather than a
- * transaction lock because a job performs many independent transactions and
- * must hold exclusivity across all of them.
- *
- * A replica that cannot acquire the lock skips silently: another one is
- * already doing the work, which is the desired outcome, not an error.
- */
-export async function runExclusively(job: JobDefinition): Promise<number | null> {
-  const key = lockKey(job.name);
-
-  const [acquired] = await db.execute<{ locked: boolean }>(
-    sql`select pg_try_advisory_lock(hashtext(${key})) as locked`,
-  );
-  if (!acquired?.locked) return null;
-
+/** Lock cleanup surrounds the entire callback, including this initial insert. */
+async function runRecordedJob(job: JobDefinition): Promise<number> {
   const startedAt = new Date();
   const [record] = await db
     .insert(schema.jobRun)
@@ -74,12 +55,6 @@ export async function runExclusively(job: JobDefinition): Promise<number | null>
         .catch(() => undefined);
     }
     return 0;
-  } finally {
-    // Always release: a session-level lock outlives the transaction and would
-    // otherwise wedge this job until the connection is recycled.
-    await db
-      .execute(sql`select pg_advisory_unlock(hashtext(${key}))`)
-      .catch((error) => logger.error({ error, job: job.name }, 'Failed to release job lock'));
   }
 }
 

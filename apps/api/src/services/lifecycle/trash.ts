@@ -1,11 +1,13 @@
-import { and, eq, isNotNull, isNull, lte, schema, sql } from '@oci/db';
-import type { TrashedThread } from '@oci/shared';
+import { and, eq, inArray, isNotNull, isNull, lte, schema, sql } from '@oci/db';
+import { type TrashedThread, USER_ROLES } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
-import { adjustStorageUsage } from '../storage/quota.js';
+import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
+import { attachmentTotals, lockStorageUsage } from '../storage/usage.js';
 import { getRetentionSettings } from './settings.js';
+import { type DeleteReason, trashLockedThread } from './trash-thread.js';
 
-export type DeleteReason = 'user' | 'retention' | 'admin';
+export type { DeleteReason } from './trash-thread.js';
 
 /**
  * Moves a thread to the trash.
@@ -35,56 +37,24 @@ export async function softDeleteThread(
           isNull(schema.thread.deletedAt),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for('update');
 
     if (!thread) throw notFound('Thread not found');
-    const now = new Date();
-
-    // Children stay valid conversations; only the stale navigation link goes.
-    await tx
-      .update(schema.thread)
-      .set({ parentThreadId: null })
-      .where(and(eq(schema.thread.parentThreadId, threadId), eq(schema.thread.userId, userId)));
-
-    await tx
-      .update(schema.thread)
-      .set({ deletedAt: now, deletedReason: reason, pinned: false })
-      .where(eq(schema.thread.id, threadId));
-
-    await tx
-      .update(schema.shareLink)
-      .set({ revokedAt: now })
-      .where(and(eq(schema.shareLink.threadId, threadId), isNull(schema.shareLink.revokedAt)));
-
-    const attachments = await tx
-      .select({ id: schema.attachment.id, sizeBytes: schema.attachment.sizeBytes })
-      .from(schema.attachment)
-      .innerJoin(schema.message, eq(schema.message.id, schema.attachment.messageId))
-      .where(and(eq(schema.message.threadId, threadId), isNull(schema.attachment.deletedAt)));
-
-    if (attachments.length > 0) {
-      await tx
-        .update(schema.attachment)
-        .set({ deletedAt: now, deletedReason: 'thread' })
-        .where(
-          sql`${schema.attachment.id} = any(${attachments.map((attachment) => attachment.id)})`,
-        );
-
-      const bytes = attachments.reduce((total, attachment) => total + attachment.sizeBytes, 0);
-      await adjustStorageUsage(tx, {
-        organizationId: thread.organizationId,
-        userId,
-        liveBytes: -bytes,
-        liveFiles: -attachments.length,
-        pendingBytes: bytes,
-        pendingFiles: attachments.length,
-      });
-    }
+    await trashLockedThread(tx, { ...thread, userId }, reason, new Date());
   });
 }
 
 /** Returns a thread and its attachments to normal use. */
 export async function restoreThread(threadId: string, userId: string): Promise<void> {
+  const [owner] = await db
+    .select({ role: schema.user.role })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId));
+  if (!owner) throw notFound('Thread not found in trash');
+  const role = USER_ROLES.find((candidate) => candidate === owner.role);
+  if (!role) throw new Error('Invalid storage owner role');
+  const limits = await getStorageLimits(role);
   await db.transaction(async (tx) => {
     const [thread] = await tx
       .select({ id: schema.thread.id, organizationId: schema.thread.organizationId })
@@ -96,7 +66,8 @@ export async function restoreThread(threadId: string, userId: string): Promise<v
           isNotNull(schema.thread.deletedAt),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for('update');
 
     if (!thread) throw notFound('Thread not found in trash');
 
@@ -105,12 +76,13 @@ export async function restoreThread(threadId: string, userId: string): Promise<v
       .set({ deletedAt: null, deletedReason: null })
       .where(eq(schema.thread.id, threadId));
 
-    // Deleting revoked the links because the owner meant to withdraw them;
-    // restoring is an undo, so the same links come back.
+    // Restoring private history must not republish old URLs. Preserve existing
+    // revocations and revoke any legacy links that deletion failed to withdraw.
+    // Sharing again requires a new link.
     await tx
       .update(schema.shareLink)
-      .set({ revokedAt: null })
-      .where(and(eq(schema.shareLink.threadId, threadId), isNotNull(schema.shareLink.revokedAt)));
+      .set({ revokedAt: new Date() })
+      .where(and(eq(schema.shareLink.threadId, threadId), isNull(schema.shareLink.revokedAt)));
 
     const attachments = await tx
       .select({ id: schema.attachment.id, sizeBytes: schema.attachment.sizeBytes })
@@ -118,25 +90,42 @@ export async function restoreThread(threadId: string, userId: string): Promise<v
       .innerJoin(schema.message, eq(schema.message.id, schema.attachment.messageId))
       .where(
         and(eq(schema.message.threadId, threadId), eq(schema.attachment.deletedReason, 'thread')),
-      );
+      )
+      .orderBy(schema.attachment.id)
+      .for('update', { of: schema.attachment });
 
     if (attachments.length > 0) {
+      await lockStorageUsage(tx, { organizationId: thread.organizationId, userId });
+      const totals = await attachmentTotals(tx, userId);
+      assertStorageAllowanceForUsage(
+        { ...totals, ...limits },
+        {
+          incomingBytes: attachments.reduce((total, attachment) => total + attachment.sizeBytes, 0),
+          incomingFiles: attachments.length,
+          checkFileSize: false,
+        },
+      );
       await tx
         .update(schema.attachment)
         .set({ deletedAt: null, deletedReason: null })
         .where(
-          sql`${schema.attachment.id} = any(${attachments.map((attachment) => attachment.id)})`,
+          inArray(
+            schema.attachment.id,
+            attachments.map((attachment) => attachment.id),
+          ),
         );
 
       const bytes = attachments.reduce((total, attachment) => total + attachment.sizeBytes, 0);
-      await adjustStorageUsage(tx, {
-        organizationId: thread.organizationId,
-        userId,
-        liveBytes: bytes,
-        liveFiles: attachments.length,
-        pendingBytes: -bytes,
-        pendingFiles: -attachments.length,
-      });
+      await tx
+        .update(schema.storageUsage)
+        .set({
+          liveBytes: totals.liveBytes + bytes,
+          liveFileCount: totals.liveFileCount + attachments.length,
+          pendingBytes: Math.max(0, totals.pendingBytes - bytes),
+          pendingFileCount: Math.max(0, totals.pendingFileCount - attachments.length),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.storageUsage.userId, userId));
     }
   });
 }

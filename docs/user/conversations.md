@@ -13,13 +13,13 @@ Hovering over a message reveals its controls.
 | **Retry** | The reply | Answers the same question again |
 | **Fork conversation here** | Either | Starts a separate conversation from this point |
 
-### Editing and retrying replace what follows
+### Editing, retrying and forking preserve the original
 
-Both discard everything after the point you act on, because the rest was a
-response to something that no longer stands.
+Editing creates a branch with your revised question. Retrying generates another
+answer to the selected stored question, using context through that question;
+later messages remain stored but are not included in the retry.
 
-If you want to keep the original, **fork first**. Forking is the non-destructive
-option: it copies the conversation up to that point into a new one and leaves
+Forking copies the conversation up to the chosen point into a new one and leaves
 the original untouched, so you can pursue an alternative without losing the
 answer you already have.
 
@@ -42,23 +42,50 @@ The control sits beside the model name when the chosen model offers it.
 
 ## Temporary chats
 
-A temporary chat is not saved. It does not appear in your sidebar, it is not
-included in an export, and it is removed once it expires.
+A temporary chat stays off the sidebar, becomes unavailable when it expires,
+and is removed by background cleanup. The instance still stores it while it is
+active.
 
-Use one when you would rather the conversation left no trace — trying an
-awkwardly worded question, or working with something you do not want kept.
-
-Everything else behaves normally. The reply is not different; only its
-persistence is.
+Temporary does not mean trace-free: usage and audit records may remain, and the
+model provider's retention policy still applies. Check your institution's data
+policy before sending sensitive information.
 
 ## Switching model mid-conversation
 
-You can change model at any point. The new model sees everything already said
-and continues from there.
+You can change model at any point. The new model receives the recent conversation
+context that fits its input budget, including eligible earlier attachments.
 
 This is a practical way to work: start somewhere fast and cheap, and move to a
 more capable model at the point the question turns difficult. Each reply records
 which model produced it, so the conversation stays readable afterwards.
+
+## Reconnecting to a reply
+
+A live reply can usually reconnect, but its replay cache has a size limit and
+expires. If replay fails, the app checks saved history for a known pending reply.
+You can also choose **Reload saved messages**. This does not resend a failed
+request; copy any unsaved message text before replacing local history. A draft
+you are typing stays in the composer during recovery.
+
+A pending reply may still be running. You can wait or request **Stop**; a local
+reader closing is not proof that the server stopped. Moving to another
+conversation closes its browser reader without cancelling the server response.
+
+Load failures show a retry or unavailable state rather than an empty chat.
+Opening another conversation will not send a pending new-chat prompt there.
+
+## What the model can see
+
+The visible transcript is not always the entire input sent to a model. Older
+turns are omitted as needed to fit a bounded recent history. A notice above the
+reply tells you when earlier context was omitted; your stored messages are not
+deleted or rewritten.
+
+Your latest request, system instructions, selected attachments and any current
+search grounding must fit together. If they do not, the request is refused
+before a new user turn is saved. Shorten it, remove files, or choose a model with
+more context. The application also has fixed safety ceilings, so choosing a
+larger model does not remove every limit.
 
 ## Organising the sidebar
 

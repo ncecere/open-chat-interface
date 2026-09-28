@@ -227,9 +227,9 @@ export function AuthenticationSettingsForm({
 
         {draft.emailVerificationRequired && !smtpConfigured && (
           <Notice tone="warning" title="Email delivery is not configured">
-            Verification is saved as required, but the public authentication status suppresses the
-            requirement until SMTP has a host, port, and from address. Configure email delivery
-            below before relying on verification.
+            Verification remains required even when email delivery is unavailable. Unverified
+            accounts cannot sign in until delivery is restored and they verify their address.
+            Configure and test email delivery before enabling this requirement.
           </Notice>
         )}
 

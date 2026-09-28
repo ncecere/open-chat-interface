@@ -103,6 +103,8 @@ export const attachment = pgTable(
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     storageKey: text('storage_key').notNull(),
+    /** Durable capacity reservation; hidden from clients until the blob is committed. */
+    uploadPending: boolean('upload_pending').notNull().default(false),
     thumbnailKey: text('thumbnail_key'),
     /** Text extracted from PDFs and documents for model context. */
     extractedText: text('extracted_text'),

@@ -1,6 +1,7 @@
 import { eq, schema } from '@oci/db';
 import { type AuthStatus, acceptInviteSchema, validateInviteSchema } from '@oci/shared';
 import { Hono } from 'hono';
+import { getAuthPolicySettings } from '../auth/policy.js';
 import { db } from '../db/index.js';
 import type { AppBindings } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
@@ -27,7 +28,7 @@ authStatusRoutes.post('/accept-invite', async (c) => {
  */
 authStatusRoutes.get('/status', async (c) => {
   const [authSettings, branding, smtpConfigured, providers] = await Promise.all([
-    getSetting('auth'),
+    getAuthPolicySettings(),
     getSetting('branding'),
     isSmtpUsable(),
     db
@@ -43,7 +44,7 @@ authStatusRoutes.get('/status', async (c) => {
 
   const payload: AuthStatus = {
     registrationMode: authSettings.registrationMode,
-    emailVerificationRequired: authSettings.emailVerificationRequired && smtpConfigured,
+    emailVerificationRequired: authSettings.emailVerificationRequired,
     smtpConfigured,
     localAuthEnabled: authSettings.localAuthEnabled,
     ssoProviders: providers.map((provider) => ({

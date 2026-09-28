@@ -4,8 +4,7 @@ import { Hono } from 'hono';
 import { rateLimited } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
-import { prepareTurn } from '../services/chat/prepare-turn.js';
-import { acquireRun } from '../services/chat/run-lifecycle.js';
+import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
 import { cancelActiveChatRun, resumeActiveChatRun } from '../services/chat-streams.js';
 import { chatRateLimit } from '../services/limits/rate-limit.js';
@@ -29,8 +28,7 @@ chatRoutes.post('/', async (c) => {
   }
 
   const input = await parseBody(c, sendMessageSchema);
-  const turn = await prepareTurn(user, input);
-  const run = await acquireRun(turn);
+  const { turn, run } = await setupTurn(user, input);
   return streamResponse(turn, run);
 });
 
@@ -45,6 +43,7 @@ chatRoutes.get('/:threadId/stream', async (c) => {
     headers: {
       ...UI_MESSAGE_STREAM_HEADERS,
       'X-OCI-Stream-Persistence': resumed.persistence,
+      'X-OCI-Chat-Run-Id': resumed.runId,
     },
   });
 });

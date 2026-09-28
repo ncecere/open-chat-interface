@@ -2,16 +2,19 @@ import { type Attachment, REASONING_EFFORTS, type ReasoningEffort } from '@oci/s
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
+import { ConversationLoadError } from '~/components/chat/conversation-load-error';
 import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
-import { api } from '~/lib/api-client';
+import { ApiError } from '~/lib/api-client';
+import { getChatHistory } from '~/lib/chat-history';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 const PENDING_KEY = 'oci.pendingPrompt';
+const PENDING_THREAD_KEY = 'oci.pendingThreadId';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 const PENDING_EFFORT_KEY = 'oci.pendingEffort';
 const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
@@ -102,9 +105,11 @@ function ThreadConversation({
     initialWebSearch: carriedSearch,
     temporary,
   });
+  const { send, stop, regenerate, selectedModel } = session;
+  const selectedModelSlug = selectedModel?.slug;
   const navigate = useNavigate();
-  const branchMessage = useBranchMessage();
-  const forkMessage = useForkMessage();
+  const { mutateAsync: branchMessage } = useBranchMessage();
+  const { mutateAsync: forkMessage } = useForkMessage();
   const bottomRef = useRef<HTMLDivElement>(null);
   const sentPending = useRef(false);
   const continuedBranch = useRef(false);
@@ -114,64 +119,93 @@ function ThreadConversation({
 
   // A prompt handed over from the landing page is sent once the thread mounts.
   useEffect(() => {
-    if (sentPending.current) return;
+    if (sentPending.current || session.streaming || session.recovery.unavailable) return;
     const pending = sessionStorage.getItem(PENDING_KEY);
-    if (!pending || !session.selectedModel) return;
+    if (sessionStorage.getItem(PENDING_THREAD_KEY) !== threadId || !pending || !selectedModel)
+      return;
 
     sentPending.current = true;
     sessionStorage.removeItem(PENDING_KEY);
     sessionStorage.removeItem(PENDING_ATTACHMENTS_KEY);
     sessionStorage.removeItem(PENDING_EFFORT_KEY);
     sessionStorage.removeItem(PENDING_SEARCH_KEY);
-    void session.send(pending);
-  }, [session.selectedModel, session.send]);
+    sessionStorage.removeItem(PENDING_THREAD_KEY);
+    void send(pending);
+  }, [threadId, selectedModel, send, session.streaming, session.recovery.unavailable]);
 
   // The branch API has already stored the edited user turn. Regenerate from
   // that exact row so Save & submit cannot append a duplicate user message.
   useEffect(() => {
     if (
       continuedBranch.current ||
+      session.streaming ||
+      session.recovery.unavailable ||
       !pendingBranch ||
-      !session.selectedModel ||
+      !selectedModel ||
       (pendingBranch.modelSlug &&
         pendingModelAvailable &&
-        session.selectedModel.slug !== pendingBranch.modelSlug)
+        selectedModel.slug !== pendingBranch.modelSlug)
     ) {
       return;
     }
 
     continuedBranch.current = true;
     sessionStorage.removeItem(PENDING_BRANCH_KEY);
-    void session.regenerate({ messageId: pendingBranch.messageId });
-  }, [pendingBranch, pendingModelAvailable, session.regenerate, session.selectedModel]);
+    void regenerate({ messageId: pendingBranch.messageId });
+  }, [
+    pendingBranch,
+    pendingModelAvailable,
+    regenerate,
+    selectedModel,
+    session.streaming,
+    session.recovery.unavailable,
+  ]);
 
-  async function forkAtMessage(messageId: string) {
-    const result = await forkMessage.mutateAsync({ threadId, messageId });
-    await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
-  }
+  const retry = useCallback(() => regenerate(), [regenerate]);
+  const submit = useCallback(() => send(), [send]);
 
-  async function editAndBranch(messageId: string, text: string) {
-    const result = await branchMessage.mutateAsync({ threadId, messageId, text });
-    const modelSlug = result.message.modelSlug ?? session.selectedModel?.slug ?? null;
-    const effort = result.message.effort ?? 'instant';
+  const forkAtMessage = useCallback(
+    async (messageId: string) => {
+      const result = await forkMessage({ threadId, messageId });
+      await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
+    },
+    [forkMessage, threadId, navigate],
+  );
 
-    if (modelSlug) localStorage.setItem(MODEL_STORAGE_KEY, modelSlug);
-    sessionStorage.setItem(
-      PENDING_BRANCH_KEY,
-      JSON.stringify({
-        threadId: result.thread.id,
-        messageId: result.message.id,
-        modelSlug,
-        effort,
-      }),
-    );
-    await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
-  }
+  const editAndBranch = useCallback(
+    async (messageId: string, text: string) => {
+      const result = await branchMessage({ threadId, messageId, text });
+      const modelSlug = result.message.modelSlug ?? selectedModelSlug ?? null;
+      const effort = result.message.effort ?? 'instant';
+
+      if (modelSlug) localStorage.setItem(MODEL_STORAGE_KEY, modelSlug);
+      sessionStorage.setItem(
+        PENDING_BRANCH_KEY,
+        JSON.stringify({
+          threadId: result.thread.id,
+          messageId: result.message.id,
+          modelSlug,
+          effort,
+        }),
+      );
+      await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
+    },
+    [branchMessage, threadId, selectedModelSlug, navigate],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new content
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [session.messages.length, session.streaming]);
+
+  if (session.recovery.unavailable)
+    return (
+      <ConversationLoadError
+        unavailable
+        retry={session.recovery.recover}
+        retrying={session.recovery.refreshing}
+      />
+    );
 
   return (
     <div className="flex h-full flex-col">
@@ -180,16 +214,41 @@ function ThreadConversation({
           messages={session.messages}
           streaming={session.streaming}
           searching={session.webSearch}
-          onRetry={() => session.regenerate()}
+          onRetry={retry}
           onFork={session.features?.branching ? forkAtMessage : undefined}
           onEdit={session.features?.branching ? editAndBranch : undefined}
         />
 
-        {session.error && (
-          <div className="mx-auto max-w-[42rem] px-4 pb-4">
-            <p className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]">
-              {session.error.message || 'Something went wrong generating a response.'}
-            </p>
+        {(session.error || session.recovery.error || session.recovery.remotePending) && (
+          <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
+            {(session.recovery.error || session.error) && (
+              <p
+                role="alert"
+                className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+              >
+                {session.recovery.error ||
+                  session.error?.message ||
+                  'Something went wrong generating a response.'}
+              </p>
+            )}
+            {session.recovery.remotePending && (
+              <p role="status" className="text-sm text-[var(--text-muted)]">
+                A reply is pending on the server. You can stop it or wait for saved messages.
+              </p>
+            )}
+            <button
+              type="button"
+              className="text-sm underline"
+              disabled={
+                session.recovery.refreshing ||
+                session.recovery.resuming ||
+                session.status === 'streaming' ||
+                session.status === 'submitted'
+              }
+              onClick={session.recovery.recover}
+            >
+              Reload saved messages
+            </button>
           </div>
         )}
 
@@ -199,8 +258,8 @@ function ThreadConversation({
       <Composer
         value={session.draft}
         onChange={session.setDraft}
-        onSubmit={() => session.send()}
-        onStop={() => session.stop()}
+        onSubmit={submit}
+        onStop={stop}
         streaming={session.streaming}
         models={session.models}
         selectedModel={session.selectedModel}
@@ -220,32 +279,54 @@ function ThreadConversation({
 }
 
 export function ChatThreadPage({ threadId }: { threadId: string }) {
+  // Query, recovery, and handover state all belong to this conversation.
+  return <ThreadLoader key={threadId} threadId={threadId} />;
+}
+
+function ThreadLoader({ threadId }: { threadId: string }) {
   // Read once on mount so a re-render cannot lose the handover.
-  const [carriedAttachments] = useState(peekPendingAttachments);
-  const [carriedEffort] = useState(peekPendingEffort);
-  const [carriedSearch] = useState(peekPendingSearch);
+  const [carriedAttachments] = useState(() =>
+    sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingAttachments() : [],
+  );
+  const [carriedEffort] = useState(() =>
+    sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingEffort() : undefined,
+  );
+  const [carriedSearch] = useState(
+    () => sessionStorage.getItem(PENDING_THREAD_KEY) === threadId && peekPendingSearch(),
+  );
   const { setTemporary } = useTemporaryChat();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, isFetching, fetchStatus, refetch } = useQuery({
     queryKey: ['thread', threadId, 'messages'],
-    queryFn: () =>
-      api.get<{
-        thread: {
-          id: string;
-          temporary: boolean;
-          expiresAt: string | null;
-        };
-        messages: UIMessage[];
-      }>(`/chat/${threadId}/messages`),
+    queryFn: ({ signal }) => getChatHistory(threadId, signal),
+    retry: (failures, failure) =>
+      !(failure instanceof ApiError && failure.status >= 400 && failure.status < 500) &&
+      failures < 2,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 0,
   });
 
   useEffect(() => {
-    if (data) setTemporary(data.thread.temporary);
-  }, [data, setTemporary]);
+    if (data && !isError) setTemporary(data.thread.temporary);
+  }, [data, isError, setTemporary]);
 
-  if (isLoading || !data) return <FullPageSpinner />;
+  if (isError || error || fetchStatus === 'paused' || (!isLoading && !data)) {
+    return (
+      <ConversationLoadError
+        unavailable={error instanceof ApiError && [401, 403, 404].includes(error.status)}
+        retry={() => {
+          void refetch();
+        }}
+        retrying={isFetching}
+      />
+    );
+  }
+  if (isLoading || !data)
+    return (
+      <div role="status" aria-label="Loading conversation" className="h-full">
+        <FullPageSpinner />
+      </div>
+    );
 
   // Remount when the thread changes so useChat starts from the right history.
   return (

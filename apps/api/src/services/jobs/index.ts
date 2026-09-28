@@ -18,8 +18,9 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 
 /**
- * Every recurring maintenance task, each holding its own advisory lock so a
- * multi-replica deployment runs each exactly once per tick.
+ * Every recurring maintenance task, with a per-job advisory lock preventing
+ * overlap while its owning session is alive. Ticks are not durable claims:
+ * staggered replicas may run sequentially, so jobs still need safe retries.
  */
 export function lifecycleJobs(): JobDefinition[] {
   return [

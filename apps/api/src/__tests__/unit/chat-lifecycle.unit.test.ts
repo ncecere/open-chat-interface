@@ -1,9 +1,11 @@
+import type { UIMessageChunk } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PreparedTurn } from '../../services/chat/prepare-turn.js';
 import type { AcquiredRun } from '../../services/chat/run-lifecycle.js';
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn(),
+  claim: vi.fn(),
   insert: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
@@ -17,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   reserve: vi.fn(),
   releaseReservation: vi.fn(),
   settleReservation: vi.fn(),
-  recordUsage: vi.fn(),
   position: vi.fn(),
   touch: vi.fn(),
   convert: vi.fn(),
@@ -39,11 +40,11 @@ vi.mock('../../services/chat-streams.js', () => ({
   captureChatRun: mocks.capture,
 }));
 vi.mock('../../services/limits/concurrency.js', () => ({ acquireStreamSlot: mocks.acquireSlot }));
+vi.mock('../../services/chat/thread-claim.js', () => ({ claimThread: mocks.claim }));
 vi.mock('../../services/quota/index.js', () => ({
   reserveQuotaForRun: mocks.reserve,
   releaseReservation: mocks.releaseReservation,
   settleReservation: mocks.settleReservation,
-  recordUsage: mocks.recordUsage,
 }));
 vi.mock('../../services/threads.js', () => ({
   nextPosition: mocks.position,
@@ -69,6 +70,7 @@ const turn = {
   submittedMessageId: 'prompt',
   uiMessages: [],
   system: '',
+  generationSettings: { maxOutputTokens: 4096 },
   sourceParts: [],
   searchGroundingPart: null,
 } as unknown as PreparedTurn;
@@ -113,6 +115,7 @@ beforeEach(() => {
       return { where: async () => undefined };
     },
   }));
+  mocks.claim.mockResolvedValue({ id: 'assistant' });
   mocks.acquireSlot.mockResolvedValue({ release: mocks.releaseSlot });
   mocks.begin.mockResolvedValue('available');
   mocks.reserve.mockResolvedValue(reservation);
@@ -138,55 +141,63 @@ describe('run acquisition rollback', () => {
     expect(mocks.abandon).not.toHaveBeenCalled();
   });
 
-  it('releases the slot when the database fallback query fails', async () => {
+  it('releases the slot when database admission fails, without touching Redis', async () => {
     const error = new Error('database unavailable');
-    mocks.begin.mockResolvedValue('unavailable');
-    mocks.select.mockReturnValue({
-      from: () => ({
-        where: () => ({
-          limit: async () => {
-            throw error;
-          },
-        }),
-      }),
-    });
+    mocks.claim.mockRejectedValue(error);
     await expect(acquireRun(turn)).rejects.toBe(error);
     expect(mocks.releaseSlot).toHaveBeenCalledOnce();
     expect(mocks.reserve).not.toHaveBeenCalled();
   });
 
-  it('releases both handles if assistant row creation fails', async () => {
-    const error = new Error('insert failed');
-    mocks.insert.mockReturnValue({
-      values: () => ({
-        returning: async () => {
-          throw error;
-        },
-      }),
+  it('returns a provisional claim and reservation before preparation begins', async () => {
+    expect(await acquireRun(turn)).toMatchObject({
+      assistantMessage: { id: 'assistant' },
+      turnPersisted: false,
+      reservation,
     });
-    await expect(acquireRun(turn)).rejects.toBe(error);
-    expect(mocks.releaseSlot).toHaveBeenCalledOnce();
-    expect(mocks.abandon).toHaveBeenCalledOnce();
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.claim.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.begin.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.begin.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.reserve.mock.invocationCallOrder[0]!,
+    );
   });
 
-  it('marks the assistant failed and releases locks on quota denial without spending allowance', async () => {
+  it('removes the provisional assistant and releases locks on quota denial without spending allowance', async () => {
     const denial = new Error('quota exceeded');
     mocks.reserve.mockRejectedValue(denial);
     await expect(acquireRun(turn)).rejects.toBe(denial);
-    expect(updated).toEqual([expect.objectContaining({ status: 'error' })]);
+    expect(updated).toEqual([]);
+    expect(mocks.delete).toHaveBeenCalledOnce();
     expect(mocks.releaseSlot).toHaveBeenCalledOnce();
     expect(mocks.abandon).toHaveBeenCalledOnce();
-    expect(mocks.releaseReservation).not.toHaveBeenCalled();
+    expect(mocks.releaseReservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: mocks.claim.mock.calls[0]?.[1],
+        userId: 'user',
+        modelSlug: 'model',
+      }),
+    );
     expect(mocks.settleReservation).not.toHaveBeenCalled();
   });
 
-  it('never abandons another run that won the lock or deletes a regeneration target', async () => {
+  it('retains the reservation identity for cleanup after an ambiguous admission reply', async () => {
+    const failure = new Error('Reservation commit reply lost');
+    mocks.reserve.mockRejectedValue(failure);
+    await expect(acquireRun(turn)).rejects.toBe(failure);
+    const attempted = mocks.reserve.mock.calls[0]?.[0];
+    expect(attempted.runId).toBe(mocks.claim.mock.calls[0]?.[1]);
+    expect(mocks.releaseReservation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: attempted.runId }),
+    );
+  });
+
+  it('removes its provisional claim but never abandons the Redis winner', async () => {
     mocks.begin.mockResolvedValue('conflict');
-    await expect(acquireRun({ ...turn, submittedMessageId: null })).rejects.toMatchObject({
+    await expect(acquireRun(turn)).rejects.toMatchObject({
       status: 409,
     });
-    expect(mocks.delete).not.toHaveBeenCalled();
+    expect(mocks.delete).toHaveBeenCalledOnce();
     expect(mocks.abandon).not.toHaveBeenCalled();
     expect(mocks.releaseSlot).toHaveBeenCalledOnce();
   });
@@ -194,7 +205,7 @@ describe('run acquisition rollback', () => {
   it('cleans up independently when marking a failed row also fails', async () => {
     const denial = new Error('quota exceeded');
     mocks.reserve.mockRejectedValue(denial);
-    mocks.update.mockImplementation(() => {
+    mocks.delete.mockImplementation(() => {
       throw new Error('database down');
     });
     await expect(acquireRun(turn)).rejects.toBe(denial);
@@ -208,6 +219,74 @@ describe('run acquisition rollback', () => {
 });
 
 describe('SDK setup and completion cleanup', () => {
+  it('returns the persisted prompt ID through the real SDK HTTP response headers', async () => {
+    const actual = await vi.importActual<typeof import('ai')>('ai');
+    mocks.createStream.mockImplementation(actual.createUIMessageStream);
+    mocks.createResponse.mockImplementation(actual.createUIMessageStreamResponse);
+    mocks.streamText.mockReturnValue({
+      usage: Promise.resolve({ inputTokens: 2, outputTokens: 3 }),
+      toUIMessageStream: () =>
+        new ReadableStream<UIMessageChunk>({
+          start(controller) {
+            controller.enqueue({ type: 'finish', finishReason: 'stop' });
+            controller.close();
+          },
+        }),
+    });
+    const response = await streamResponse(turn, run());
+    expect(response.headers.get('X-OCI-Prompt-Message-Id')).toBe(turn.promptMessageId);
+    expect(response.headers.get('X-OCI-Chat-Run-Id')).toBeTruthy();
+    await response.text();
+    expect(mocks.releaseSlot).toHaveBeenCalledOnce();
+  });
+
+  it('sends the reserved output cap and persists the context notice through the real SDK parser', async () => {
+    const actual = await vi.importActual<typeof import('ai')>('ai');
+    mocks.createStream.mockImplementation(actual.createUIMessageStream);
+    let stream: ReadableStream<UIMessageChunk> | undefined;
+    mocks.createResponse.mockImplementation(
+      (options: { stream: ReadableStream<UIMessageChunk> }) => {
+        stream = options.stream;
+        return new Response('stream');
+      },
+    );
+    const chunks: UIMessageChunk[] = [
+      { type: 'text-start', id: 'text' },
+      { type: 'text-delta', id: 'text', delta: 'Answer' },
+      { type: 'text-end', id: 'text' },
+      { type: 'finish', finishReason: 'stop' },
+    ];
+    mocks.streamText.mockReturnValue({
+      usage: Promise.resolve({ inputTokens: 2, outputTokens: 3 }),
+      toUIMessageStream: () =>
+        new ReadableStream<UIMessageChunk>({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
+    });
+    await streamResponse(
+      {
+        ...turn,
+        contextLimited: true,
+        resolved: { ...turn.resolved, maxOutputTokens: 1234 },
+        generationSettings: { maxOutputTokens: 1234 },
+      },
+      run(),
+    );
+    const messages = [];
+    for await (const message of actual.readUIMessageStream({ stream: stream! }))
+      messages.push(message);
+    const notice = { type: 'data-context-window', data: { limited: true } };
+    expect(messages.at(-1)?.parts).toContainEqual(notice);
+    expect(updated.find((patch) => patch.status === 'complete')?.parts).toContainEqual(notice);
+    expect(mocks.streamText).toHaveBeenCalledWith(
+      expect.objectContaining({ maxOutputTokens: 1234 }),
+    );
+    expect(mocks.releaseSlot).toHaveBeenCalledOnce();
+  });
+
   it.each(['convert', 'streamText'] as const)(
     'cleans every acquired resource if %s throws before model startup',
     async (stage) => {

@@ -13,7 +13,8 @@ export interface OutboundEmail {
  * Whether SMTP is sufficiently configured for an auth flow to depend on it.
  * This deliberately does not make a network connection on every sign-in, but
  * it does verify that any stored credential can be decrypted. Delivery errors
- * are handled by the caller so they cannot strand a newly-created account.
+ * do not change whether verification is required; callers keep accounts
+ * unverified and offer another delivery attempt.
  */
 export async function isSmtpUsable(): Promise<boolean> {
   try {
@@ -28,8 +29,8 @@ export async function isSmtpUsable(): Promise<boolean> {
 }
 
 /**
- * SMTP is optional. When it is not configured the message is logged so an
- * administrator can still complete the flow manually from the container logs.
+ * SMTP is optional. Missing configuration or failed delivery returns false;
+ * logs include delivery metadata, never message bodies or verification tokens.
  */
 export async function sendEmail(email: OutboundEmail): Promise<{ delivered: boolean }> {
   const smtp = await getSetting('smtp');

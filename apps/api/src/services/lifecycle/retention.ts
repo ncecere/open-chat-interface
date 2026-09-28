@@ -1,8 +1,9 @@
-import { and, eq, isNull, lte, or, schema, sql } from '@oci/db';
+import { and, asc, eq, isNull, lte, or, schema, sql } from '@oci/db';
 import { PROTECTED_AUDIT_ACTIONS } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { getRetentionSettings } from './settings.js';
+import { trashLockedThread } from './trash-thread.js';
 
 const BATCH_SIZE = 500;
 
@@ -42,20 +43,26 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
 
   if (exemptPinnedThreads) conditions.push(eq(schema.thread.pinned, false));
 
-  const expired = await db
-    .update(schema.thread)
-    .set({ deletedAt: now, deletedReason: 'retention' })
-    .where(
-      and(
-        ...conditions,
-        sql`${schema.thread.id} in (
-          select id from thread
-          where deleted_at is null and temporary = false
-          limit ${BATCH_SIZE}
-        )`,
-      ),
-    )
-    .returning({ id: schema.thread.id });
+  const expired = await db.transaction(async (tx) => {
+    // Filter before limiting: active or exempt rows must not starve eligible
+    // threads. Lock the selected live rows through all deletion bookkeeping.
+    const threads = await tx
+      .select({
+        id: schema.thread.id,
+        userId: schema.thread.userId,
+        organizationId: schema.thread.organizationId,
+      })
+      .from(schema.thread)
+      .where(and(...conditions))
+      .orderBy(asc(schema.thread.createdAt), asc(schema.thread.id))
+      .limit(BATCH_SIZE)
+      .for('update', { skipLocked: true });
+
+    for (const thread of threads) {
+      await trashLockedThread(tx, thread, 'retention', now);
+    }
+    return threads;
+  });
 
   if (expired.length > 0) {
     logger.info({ count: expired.length }, 'Moved inactive conversations to trash');
@@ -68,8 +75,8 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
  *
  * The daily rollup is the long-lived record; events exist so a rolling or
  * non-UTC calendar window can be evaluated exactly, and only recent ones are
- * ever read for that. Pending rows are never pruned: one belongs to a run that
- * may still be streaming.
+ * ever read for that. Pending and unknown rows are never pruned: a producer may
+ * still report usage, and amendments need the event's identity and price snapshot.
  */
 export async function pruneUsageEvents(now: Date = new Date()): Promise<number> {
   const { usageEventRetentionDays } = await getRetentionSettings();
@@ -97,8 +104,9 @@ export async function pruneUsageEvents(now: Date = new Date()): Promise<number> 
     .where(
       and(
         lte(schema.usageEvent.occurredAt, cutoff),
-        // A pending row may belong to a run that is still going.
+        // Preserve both active runs and unresolved accounting identities.
         eq(schema.usageEvent.pending, false),
+        eq(schema.usageEvent.usageUnknown, false),
       ),
     )
     .returning({ id: schema.usageEvent.id });

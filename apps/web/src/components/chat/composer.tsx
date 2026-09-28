@@ -15,6 +15,7 @@ import {
   type ComponentPropsWithoutRef,
   forwardRef,
   type KeyboardEvent,
+  memo,
   useLayoutEffect,
   useRef,
 } from 'react';
@@ -94,7 +95,7 @@ Pill.displayName = 'Pill';
  * Bottom-anchored composer. The card is flush with the bottom edge and only
  * its top corners are rounded, matching the reference layout.
  */
-export function Composer({
+export const Composer = memo(function Composer({
   value,
   onChange,
   onSubmit,
@@ -293,4 +294,4 @@ export function Composer({
       </div>
     </div>
   );
-}
+});

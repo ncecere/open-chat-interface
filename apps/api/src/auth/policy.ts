@@ -2,7 +2,6 @@ import { eq, schema } from '@oci/db';
 import { APIError } from 'better-auth/api';
 import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
-import { isSmtpUsable } from '../services/email.js';
 import { type AuthSettings, getSetting } from '../services/settings.js';
 
 interface LocalUserPolicy {
@@ -34,35 +33,34 @@ function isRecoveryAdmin(user: LocalUserPolicy | null): boolean {
   return user?.role === 'admin' && user.emailVerified;
 }
 
-/** Fail open if settings storage is unavailable: auth policy must not lock out recovery. */
-export async function isEmailVerificationEnforced(): Promise<boolean> {
+/** Missing/malformed storage is unavailable policy, never an implicit opt-out. */
+export async function getAuthPolicySettings(): Promise<AuthSettings> {
   try {
-    const [settings, smtpUsable] = await Promise.all([getSetting('auth'), isSmtpUsable()]);
-    return settings.emailVerificationRequired && smtpUsable;
+    const settings = await getSetting('auth');
+    if (
+      typeof settings?.emailVerificationRequired !== 'boolean' ||
+      typeof settings.localAuthEnabled !== 'boolean' ||
+      !['open', 'invite_only', 'closed'].includes(settings.registrationMode)
+    ) {
+      throw new Error('Invalid authentication policy settings');
+    }
+    return settings;
   } catch (error) {
-    logger.error({ error }, 'Could not resolve email verification policy; allowing sign-in');
-    return false;
+    logger.error({ error }, 'Could not resolve authentication policy');
+    throw new APIError('SERVICE_UNAVAILABLE', {
+      code: 'AUTH_POLICY_UNAVAILABLE',
+      message: 'Authentication settings are temporarily unavailable',
+    });
   }
+}
+
+/** Delivery availability is not permission to waive a configured requirement. */
+export async function isEmailVerificationEnforced(): Promise<boolean> {
+  return (await getAuthPolicySettings()).emailVerificationRequired;
 }
 
 export interface AuthRequestPolicy {
   requireEmailVerification: boolean;
-}
-
-/**
- * Better Auth resolves `requireEmailVerification` from its static options, so a
- * request-scoped option override does not reach the sign-in handler. Enforce
- * the database-backed setting here instead of relying on that override.
- */
-function assertEmailVerified(user: LocalUserPolicy | null): void {
-  // An unknown email must fall through to Better Auth so invalid credentials
-  // and unverified accounts stay indistinguishable.
-  if (user && !user.emailVerified) {
-    throw new APIError('FORBIDDEN', {
-      code: 'EMAIL_NOT_VERIFIED',
-      message: 'Verify your email address before signing in',
-    });
-  }
 }
 
 /** Resolve dynamic policy for Better Auth's email/password endpoints. */
@@ -70,6 +68,11 @@ export async function enforceAuthRequestPolicy(
   path: string,
   body: Record<string, unknown> | undefined,
 ): Promise<AuthRequestPolicy | null> {
+  if (path === '/send-verification-email') {
+    // A policy outage must produce the same response for existing and unknown
+    // addresses, rather than failing only when the delivery callback runs.
+    return { requireEmailVerification: await isEmailVerificationEnforced() };
+  }
   if (path !== '/sign-in/email' && path !== '/sign-up/email') return null;
 
   const email = normalizedEmail(body?.email);
@@ -78,15 +81,11 @@ export async function enforceAuthRequestPolicy(
 
   let settings: AuthSettings;
   try {
-    settings = await getSetting('auth');
+    settings = await getAuthPolicySettings();
   } catch (error) {
-    // Preserve the administrator recovery path if settings cannot be read.
-    logger.error({ error }, 'Could not resolve local authentication policy');
+    // Preserve only the verified administrator recovery path.
     if (recoveryAdmin) return { requireEmailVerification: false };
-    throw new APIError('SERVICE_UNAVAILABLE', {
-      code: 'AUTH_POLICY_UNAVAILABLE',
-      message: 'Authentication settings are temporarily unavailable',
-    });
+    throw error;
   }
 
   if (!settings.localAuthEnabled && !recoveryAdmin) {
@@ -106,8 +105,7 @@ export async function enforceAuthRequestPolicy(
     });
   }
 
-  const requireEmailVerification = recoveryAdmin ? false : await isEmailVerificationEnforced();
-  if (requireEmailVerification && path === '/sign-in/email') assertEmailVerified(user);
-
-  return { requireEmailVerification };
+  // The SDK checks the password before refusing an unverified account. Do not
+  // expose verification state through a pre-password error in this hook.
+  return { requireEmailVerification: recoveryAdmin ? false : settings.emailVerificationRequired };
 }

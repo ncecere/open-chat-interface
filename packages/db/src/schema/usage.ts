@@ -122,7 +122,7 @@ export const quotaPolicyRole = pgTable(
 );
 
 /**
- * One row per completed generation. Policy evaluation reads these because a
+ * One row per admitted generation attempt. Policy evaluation reads these because a
  * daily rollup cannot answer a rolling or non-UTC calendar window correctly.
  * Prices are snapshotted so later catalog edits never rewrite past spend.
  */
@@ -147,13 +147,15 @@ export const usageEvent = pgTable(
     /**
      * A reservation written before generation so concurrent requests see each
      * other. Settled once the run finishes; a row left pending by a crashed
-     * process stops counting after the reservation TTL.
+     * process is recoverable after the TTL only when no active chat claim remains.
      */
     pending: boolean('pending').notNull().default(false),
+    /** No complete provider report yet; late actuals may amend the rollup once. */
+    usageUnknown: boolean('usage_unknown').notNull().default(false),
     /**
-     * Spend held by a live reservation before real usage is known. Counted
-     * while pending and cleared at settlement, so concurrent expensive runs
-     * cannot all read the same pre-spend total and collectively overshoot.
+     * Estimated usage not yet replaced by a complete provider report. Holds
+     * count inside the quota window even after an unknown completion; they are
+     * not measured spend and are never included in daily rollups.
      */
     reservedCostMicros: bigint('reserved_cost_micros', { mode: 'number' }).notNull().default(0),
     reservedTokens: integer('reserved_tokens').notNull().default(0),
@@ -213,8 +215,8 @@ export const usageRecord = pgTable(
     modelSlug: text('model_slug').notNull(),
     day: text('day').notNull(),
     messageCount: integer('message_count').notNull().default(0),
-    tokensIn: integer('tokens_in').notNull().default(0),
-    tokensOut: integer('tokens_out').notNull().default(0),
+    tokensIn: bigint('tokens_in', { mode: 'number' }).notNull().default(0),
+    tokensOut: bigint('tokens_out', { mode: 'number' }).notNull().default(0),
     costMicros: bigint('cost_micros', { mode: 'number' }).notNull().default(0),
     ...timestamps(),
   },

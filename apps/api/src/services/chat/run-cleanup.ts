@@ -1,4 +1,4 @@
-import { and, eq, schema } from '@oci/db';
+import { and, eq, isNull, schema } from '@oci/db';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import {
@@ -17,6 +17,8 @@ export interface RunResources {
   persistence: BeginChatRunResult;
   assistantMessage?: { id: string };
   reservation: UsageReservation | null;
+  /** False until the prompt/lineage transaction has committed. */
+  turnPersisted?: boolean;
 }
 
 async function attempt(resources: RunResources, operation: string, cleanup: () => Promise<void>) {
@@ -44,10 +46,11 @@ export async function releaseRunHandles(resources: RunResources, abandon = false
 }
 
 /**
- * Setup has no response consumer to finish the run. Mark only our streaming row
- * failed and release pending allowance when the SDK never started. If the SDK
+ * Remove only a provisional claim, or mark our committed assistant failed, and
+ * release pending allowance when the SDK never started. If the SDK
  * already returned a stream, count the failed attempt (like cancellation), not
- * a free generation. Unknown token usage settles at zero, as in normal failure.
+ * a free generation. Missing token reports remain explicitly unknown and may
+ * be amended by a later complete report without counting another message.
  */
 export async function failRunSetup(
   resources: RunResources,
@@ -57,6 +60,23 @@ export async function failRunSetup(
     releaseRunHandles(resources, abandon),
     attempt(resources, 'assistant row', async () => {
       if (!resources.assistantMessage) return;
+      if (resources.turnPersisted === false) {
+        // Never delete a committed prompt (its attachments cascade) or a claim
+        // whose commit result was ambiguous. Parentless is provisional only.
+        await db
+          .delete(schema.message)
+          .where(
+            and(
+              eq(schema.message.id, resources.assistantMessage.id),
+              eq(schema.message.threadId, resources.runIdentity.threadId),
+              eq(schema.message.userId, resources.runIdentity.userId),
+              eq(schema.message.role, 'assistant'),
+              eq(schema.message.status, 'streaming'),
+              isNull(schema.message.parentMessageId),
+            ),
+          );
+        return;
+      }
       await db
         .update(schema.message)
         .set({

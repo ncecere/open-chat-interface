@@ -1,6 +1,7 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -33,7 +34,8 @@ export function SignupPage() {
       return;
     }
 
-    if (status?.emailVerificationRequired) {
+    // The server's current policy wins over possibly stale bootstrap settings.
+    if (!result.data?.token) {
       setCreated(true);
       setSubmitting(false);
       return;
@@ -64,8 +66,10 @@ export function SignupPage() {
               <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
               <h1 className="text-lg font-semibold">Check your email</h1>
               <p className="text-sm text-[var(--text-muted)]">
-                Follow the verification link before signing in.
+                Follow the verification link before signing in. If it does not arrive, you can
+                request another email below.
               </p>
+              <ResendVerification email={email} />
               <Button asChild variant="primary" className="w-full">
                 <Link to="/auth/login">Return to sign in</Link>
               </Button>

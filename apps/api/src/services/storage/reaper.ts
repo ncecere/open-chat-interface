@@ -1,4 +1,4 @@
-import { and, isNull, lte, schema, sql } from '@oci/db';
+import { and, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { getStorageDriver } from './index.js';
@@ -136,7 +136,7 @@ export async function reconcileStorage(options?: {
     const known = await db
       .select({ storageKey: schema.attachment.storageKey })
       .from(schema.attachment)
-      .where(sql`${schema.attachment.storageKey} = any(${keys})`);
+      .where(inArray(schema.attachment.storageKey, keys));
 
     const knownKeys = new Set(known.map((row) => row.storageKey));
     const orphans = candidates.filter((object) => !knownKeys.has(object.key));
@@ -161,7 +161,12 @@ export async function reconcileStorage(options?: {
   const rows = await db
     .select({ id: schema.attachment.id, storageKey: schema.attachment.storageKey })
     .from(schema.attachment)
-    .where(sql`${schema.attachment.storageKey} <> 'pending'`)
+    .where(
+      and(
+        eq(schema.attachment.uploadPending, false),
+        sql`${schema.attachment.storageKey} <> 'pending'`,
+      ),
+    )
     .limit(5_000);
 
   for (const row of rows) {

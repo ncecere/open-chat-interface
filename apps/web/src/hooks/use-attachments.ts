@@ -157,6 +157,24 @@ export function useAttachments() {
     setItems([]);
   }, []);
 
+  // Acceptance transfers only these files to saved history. Never abort another
+  // upload, delete an allocated object, or clear the next turn's composer state.
+  const consume = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    const accepted = new Set(ids);
+    for (const [localId, resource] of resources.current) {
+      if (!resource.attachmentId || !accepted.has(resource.attachmentId)) continue;
+      if (resource.previewUrl) URL.revokeObjectURL(resource.previewUrl);
+      resources.current.delete(localId);
+    }
+    setItems((current) => {
+      const remaining = current.filter(
+        (item) => !item.attachment || !accepted.has(item.attachment.id),
+      );
+      return remaining.length === current.length ? current : remaining;
+    });
+  }, []);
+
   const readyIds = items
     .filter((item) => item.status === 'ready' && item.attachment)
     .map((item) => item.attachment!.id);
@@ -166,6 +184,7 @@ export function useAttachments() {
     upload,
     remove,
     clear,
+    consume,
     readyIds,
     uploading: items.some((item) => item.status === 'uploading'),
   };

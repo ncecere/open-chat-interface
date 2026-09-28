@@ -1,6 +1,6 @@
 import type { CatalogModel, ModelCapability } from '@oci/shared';
 import { ChevronDown, Info, Search } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
 import { ModelInfoCard } from '~/components/model/model-info-card';
@@ -14,7 +14,7 @@ import {
 } from './model-picker-data';
 import { ModelPickerFilters } from './model-picker-filters';
 
-export function ModelPicker({
+export const ModelPicker = memo(function ModelPicker({
   models,
   selected,
   onSelect,
@@ -325,4 +325,4 @@ export function ModelPicker({
       </PopoverContent>
     </Popover>
   );
-}
+});

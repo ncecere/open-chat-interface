@@ -28,6 +28,8 @@ export function assertReasoningEffortSupported(
 }
 
 /**
+ * Base reasoning mapping. Chat callers must use chat/generation-settings to
+ * keep adapter-added thinking inside the reserved total output limit.
  * Uses AI SDK's provider-neutral reasoning control so each adapter performs
  * the model-specific mapping (for example Gemini 3 thinking levels versus
  * Gemini 2.5 token budgets, and adaptive versus budgeted Anthropic thinking).

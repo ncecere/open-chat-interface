@@ -26,7 +26,7 @@ function limitedQuery(rows: unknown[]) {
     from: () => chain,
     innerJoin: () => chain,
     where: () => chain,
-    limit: () => Promise.resolve(rows),
+    limit: () => Object.assign(Promise.resolve(rows), { for: () => Promise.resolve(rows) }),
     orderBy: () => Promise.resolve(rows),
   };
   return chain;
@@ -43,6 +43,12 @@ describe('integration with mocked DB: share ownership and expiry', () => {
 
   it('fails closed when the caller does not own the shared thread', async () => {
     mocks.getOwnedThread.mockRejectedValue(notFound('Thread not found'));
+    mocks.transaction.mockImplementation(async (callback) =>
+      callback({
+        select: () => limitedQuery([]),
+        insert: mocks.insert,
+      }),
+    );
 
     await expect(createShareLink('thread-1', 'intruder', {})).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -144,7 +150,7 @@ describe('integration with mocked DB: share ownership and expiry', () => {
         },
       ]),
     );
-    const returning = vi.fn().mockResolvedValue([{ viewCount: 1 }]);
+    const returning = vi.fn().mockResolvedValue([{ available: true }]);
     const update = vi.fn(() => ({ set: () => ({ where: () => ({ returning }) }) }));
     mocks.transaction.mockImplementation(async (callback) => callback({ select, update }));
 

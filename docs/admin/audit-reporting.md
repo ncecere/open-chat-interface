@@ -47,6 +47,19 @@ never enters the log.
 What has been consumed: totals, daily volume, a breakdown by model, and the
 heaviest consumers.
 
+Token totals contain reported usage; cost is calculated from the catalog prices
+snapshotted for that request. Neither includes the estimates held by quota
+enforcement, and they are not an authoritative provider invoice. Missing or
+incomplete reports are stored as unknown, not proof of zero spend. Partial
+reports preserve cumulative reported counts; a complete report can correct the
+original UTC-day rollup without counting another message.
+
+Unresolved events are exempt from normal usage-event retention until resolved,
+so their identity and original prices remain available for reconciliation.
+Account deletion still removes that account's usage records. A quota meter can
+include held allowance not yet present in daily totals. Historical losses from
+older non-transactional accounting are not repaired automatically by an upgrade.
+
 Use it before setting a quota. A limit chosen from observed use lands better
 than one chosen from an assumption, and this page is how you find out what
 ordinary use looks like on your instance.

@@ -3,6 +3,7 @@ import { ERROR_CODES, type UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { AppError, forbidden, notFound, validationFailed } from '../lib/errors.js';
 import { getSetting } from './settings.js';
+import { shareableThreadCondition } from './share-link-availability.js';
 import { getOwnedThread } from './threads.js';
 
 const PUBLIC_ROLES = ['user', 'assistant'] as const;
@@ -58,47 +59,62 @@ export async function createShareLink(
   userId: string,
   input: CreateShareLinkInput,
 ) {
-  await getOwnedThread(threadId, userId);
-
   if (input.expiresAt && input.expiresAt.getTime() <= Date.now()) {
     throw validationFailed('Expiration must be in the future');
   }
 
-  if (input.upToMessageId) {
-    const [cutoff] = await db
-      .select({ id: schema.message.id })
-      .from(schema.message)
+  return db.transaction(async (tx) => {
+    const [thread] = await tx
+      .select({ id: schema.thread.id })
+      .from(schema.thread)
       .where(
         and(
-          eq(schema.message.id, input.upToMessageId),
-          eq(schema.message.threadId, threadId),
-          inArray(schema.message.role, PUBLIC_ROLES),
+          eq(schema.thread.id, threadId),
+          eq(schema.thread.userId, userId),
+          shareableThreadCondition(),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for('share');
+    if (!thread) throw notFound('Thread not found');
 
-    if (!cutoff) throw validationFailed('Snapshot message does not belong to this thread');
-  }
+    // Hold the thread lock through insertion. A concurrent deletion must either
+    // reject creation or see and revoke this new link, never miss it.
+    if (input.upToMessageId) {
+      const [cutoff] = await tx
+        .select({ id: schema.message.id })
+        .from(schema.message)
+        .where(
+          and(
+            eq(schema.message.id, input.upToMessageId),
+            eq(schema.message.threadId, threadId),
+            inArray(schema.message.role, PUBLIC_ROLES),
+          ),
+        )
+        .limit(1);
 
-  // A unique constraint is the final collision guard. Retrying keeps creation
-  // deterministic even in the extraordinarily unlikely event of a collision.
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const [created] = await db
-      .insert(schema.shareLink)
-      .values({
-        threadId,
-        userId,
-        slug: randomSlug(),
-        upToMessageId: input.upToMessageId ?? null,
-        expiresAt: input.expiresAt ?? null,
-      })
-      .onConflictDoNothing({ target: schema.shareLink.slug })
-      .returning();
+      if (!cutoff) throw validationFailed('Snapshot message does not belong to this thread');
+    }
 
-    if (created) return created;
-  }
+    // A unique constraint is the final collision guard.
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const [created] = await tx
+        .insert(schema.shareLink)
+        .values({
+          threadId,
+          userId,
+          slug: randomSlug(),
+          upToMessageId: input.upToMessageId ?? null,
+          expiresAt: input.expiresAt ?? null,
+        })
+        .onConflictDoNothing({ target: schema.shareLink.slug })
+        .returning();
 
-  throw new Error('Failed to generate a unique share-link slug');
+      if (created) return created;
+    }
+
+    throw new Error('Failed to generate a unique share-link slug');
+  });
 }
 
 export async function listShareLinks(threadId: string, userId: string) {
@@ -243,8 +259,11 @@ export async function getPublicShare(slug: string) {
       })
       .from(schema.shareLink)
       .innerJoin(schema.thread, eq(schema.thread.id, schema.shareLink.threadId))
-      .where(eq(schema.shareLink.slug, slug))
-      .limit(1);
+      .where(and(eq(schema.shareLink.slug, slug), shareableThreadCondition()))
+      .limit(1)
+      // Lock only the thread, not the link: the final link update serializes
+      // revocation. All lifecycle operations lock thread before share rows.
+      .for('share', { of: schema.thread });
 
     if (!link) throw notFound('Share link not found');
     if (link.revokedAt) throw unavailable('revoked');
@@ -284,21 +303,24 @@ export async function getPublicShare(slug: string) {
       .where(and(...conditions))
       .orderBy(asc(schema.message.position));
 
-    // Recheck availability in the write itself so a concurrent revoke/expiry
-    // cannot produce a successful response or an inflated count.
+    const available = and(
+      isNull(schema.shareLink.revokedAt),
+      sql`(${schema.shareLink.expiresAt} is null or ${schema.shareLink.expiresAt} > clock_timestamp())`,
+      sql`exists (
+        select 1 from ${schema.thread}
+        where ${schema.thread.id} = ${schema.shareLink.threadId}
+          and ${shareableThreadCondition()}
+      )`,
+    );
     const [view] = await tx
       .update(schema.shareLink)
       .set({ viewCount: sql`${schema.shareLink.viewCount} + 1` })
-      .where(
-        and(
-          eq(schema.shareLink.id, link.id),
-          isNull(schema.shareLink.revokedAt),
-          sql`(${schema.shareLink.expiresAt} is null or ${schema.shareLink.expiresAt} > now())`,
-        ),
-      )
-      .returning({ viewCount: schema.shareLink.viewCount });
+      .where(and(eq(schema.shareLink.id, link.id), available))
+      // WHERE may run before waiting on a row lock. RETURNING checks again
+      // after the write; throwing below rolls back the count on elapsed expiry.
+      .returning({ available: sql<boolean>`${available}` });
 
-    if (!view) {
+    if (!view?.available) {
       const [latest] = await tx
         .select({ revokedAt: schema.shareLink.revokedAt })
         .from(schema.shareLink)

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, isNull, lte, schema, sql } from '@oci/db';
+import { and, asc, type Database, desc, eq, ilike, isNull, lte, schema, sql } from '@oci/db';
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
@@ -271,8 +271,12 @@ export async function listMessages(threadId: string) {
     .orderBy(asc(schema.message.position));
 }
 
-export async function nextPosition(threadId: string): Promise<number> {
-  const [row] = await db
+/** Allocating this position requires holding the thread row lock in the same transaction. */
+export async function nextPosition(
+  threadId: string,
+  executor: Pick<Database, 'select'> = db,
+): Promise<number> {
+  const [row] = await executor
     .select({ value: sql<number>`coalesce(max(${schema.message.position}), -1)::int` })
     .from(schema.message)
     .where(eq(schema.message.threadId, threadId));

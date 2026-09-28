@@ -2,13 +2,16 @@ import { useChat } from '@ai-sdk/react';
 import type { Attachment, CatalogModel, ReasoningEffort } from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAttachments } from '~/hooks/use-attachments';
+import { useChatRecovery } from '~/hooks/use-chat-recovery';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
+import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
 import { coerceReasoningEffort, reasoningEffortForRequest } from '~/lib/reasoning';
 
 const MODEL_STORAGE_KEY = 'oci.model';
+const EMPTY_MODELS: CatalogModel[] = [];
 
 /**
  * Owns composer state, model selection, and the streaming connection for one
@@ -25,8 +28,64 @@ export function useChatSession(options: {
   temporary?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { data: models = [] } = useModels();
+  const { data: models = EMPTY_MODELS } = useModels();
   const { data: currentUser } = useCurrentUser();
+  const scope = useMemo(
+    () => ({
+      active: true,
+      lifetime: 0,
+      request: 0,
+      threadId: options.threadId,
+      runId: null as string | null,
+      reconnectAbort: null as AbortController | null,
+    }),
+    [options.threadId],
+  );
+  const [runId, setRunId] = useState<string | null>(null);
+  const requestRecovery = useRef<() => void>(() => {});
+  const acceptSubmission = useRef<
+    (
+      submission: NonNullable<ReturnType<typeof readChatSubmission>>,
+      promptId: string | null,
+    ) => void
+  >(() => {});
+  const clearRun = useCallback(
+    (id: string) => setRunId((current) => (current === id ? null : current)),
+    [],
+  );
+  const fetchChat = useCallback(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const sending = init?.method?.toUpperCase() === 'POST';
+      const request = sending ? ++scope.request : scope.request;
+      if (sending) {
+        scope.runId = null;
+        setRunId(null);
+      }
+      let signal = init?.signal;
+      if (init?.method?.toUpperCase() === 'GET') {
+        const abort = new AbortController();
+        scope.reconnectAbort = abort;
+        signal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
+      }
+      const response = await fetch(input, { ...init, signal });
+      // The SDK cannot abort a reconnect before its headers arrive. Do not let
+      // that late response create another browser reader after navigation.
+      if (!scope.active || signal?.aborted) {
+        await response.body?.cancel();
+        throw new DOMException('Conversation changed', 'AbortError');
+      }
+      const acceptedRun = response.headers.get('X-OCI-Chat-Run-Id');
+      if (response.ok && acceptedRun && scope.request === request) {
+        scope.runId = acceptedRun;
+        setRunId(acceptedRun);
+        const submission = sending ? readChatSubmission(init?.body) : null;
+        if (submission)
+          acceptSubmission.current(submission, response.headers.get('X-OCI-Prompt-Message-Id'));
+      }
+      return response;
+    },
+    [scope],
+  );
 
   const [draft, setDraft] = useState('');
   const [effort, setEffort] = useState<ReasoningEffort>(options.initialEffort ?? 'instant');
@@ -35,6 +94,7 @@ export function useChatSession(options: {
     () => options.initialModelSlug ?? localStorage.getItem(MODEL_STORAGE_KEY),
   );
   const attachments = useAttachments();
+  const { items: attachmentItems, consume: consumeAttachments } = attachments;
 
   // Fall back to the catalog default once models load or the saved model
   // disappears from the catalog.
@@ -62,17 +122,34 @@ export function useChatSession(options: {
   const [carriedAttachments, setCarriedAttachments] = useState<Attachment[]>(
     options.carriedAttachments ?? [],
   );
-  const attachmentIds = [
-    ...carriedAttachments.map((attachment) => attachment.id),
-    ...attachments.readyIds,
-  ];
-  const attachmentKey = attachmentIds.join(',');
+  const consumeFiles = useCallback(
+    (ids: string[]) => {
+      if (!ids.length) return;
+      consumeAttachments(ids);
+      const consumed = new Set(ids);
+      setCarriedAttachments((current) => {
+        const remaining = current.filter((file) => !consumed.has(file.id));
+        return remaining.length === current.length ? current : remaining;
+      });
+    },
+    [consumeAttachments],
+  );
+  const reconcileFiles = useCallback(
+    (messages: UIMessage[]) => {
+      consumeFiles(confirmedAttachmentIds(messages));
+    },
+    [consumeFiles],
+  );
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/chat',
         credentials: 'same-origin',
+        fetch: fetchChat,
+        prepareReconnectToStreamRequest: () => ({
+          api: `/api/chat/${encodeURIComponent(options.threadId)}/stream`,
+        }),
         prepareSendMessagesRequest: ({ messages, body, trigger }) => {
           const latestUser = messages.findLast((message) => message.role === 'user');
           const textParts = latestUser?.parts.flatMap((part) =>
@@ -90,84 +167,143 @@ export function useChatSession(options: {
               effort: reasoningEffortForRequest(selectedModel, effort),
               webSearch,
               temporary: options.temporary ?? false,
-              attachmentIds: attachmentKey ? attachmentKey.split(',') : [],
+              attachmentIds: trigger === 'regenerate-message' ? [] : (body?.attachmentIds ?? []),
               trigger,
             },
           };
         },
       }),
-    [
-      options.threadId,
-      options.temporary,
-      modelSlug,
-      selectedModel,
-      effort,
-      webSearch,
-      attachmentKey,
-    ],
+    [options.threadId, options.temporary, modelSlug, selectedModel, effort, webSearch, fetchChat],
   );
 
   const chat = useChat({
     id: options.threadId,
     messages: options.initialMessages,
     transport,
-    resume: true,
-    onFinish: () => {
-      // The server may have renamed the thread from its first message.
+    // Recovery serializes reconnect and canonical hydration to avoid two
+    // writers appending a replay to an already-complete saved assistant.
+    resume: false,
+    onFinish: ({ isAbort, isDisconnect, isError, finishReason }) => {
+      // Do not reload an entire transcript after every healthy reply. An
+      // accepted but interrupted/unfinished stream needs canonical recovery.
+      if (scope.active && scope.runId) {
+        if (isAbort || isDisconnect || isError || finishReason === undefined)
+          requestRecovery.current();
+        else clearRun(scope.runId);
+      }
       queryClient.invalidateQueries({ queryKey: ['threads'] });
     },
   });
 
-  async function stop() {
+  const { stop: stopChat, sendMessage } = chat;
+  acceptSubmission.current = (submission, promptId) => {
+    consumeFiles(submission.attachmentIds);
+    if (promptId && promptId !== submission.clientMessageId)
+      chat.setMessages((current) => confirmPromptId(current, submission.clientMessageId, promptId));
+  };
+  const recovery = useChatRecovery({
+    threadId: options.threadId,
+    initialMessages: options.initialMessages,
+    chat,
+    runId,
+    clearRun,
+    scope,
+    onCanonicalMessages: reconcileFiles,
+  });
+  requestRecovery.current = recovery.waitForServer;
+  useEffect(() => {
+    scope.active = true;
+    const lifetime = ++scope.lifetime;
+    return () => {
+      scope.active = false;
+      // Strict Mode immediately reacquires this same scope. Let that happen
+      // before aborting a one-shot handover; a real departure stays inactive.
+      queueMicrotask(() => {
+        if (scope.active || scope.lifetime !== lifetime) return;
+        scope.reconnectAbort?.abort();
+        void stopChat();
+      });
+    };
+  }, [scope, stopChat]);
+
+  const stop = useCallback(async () => {
     // Stopping the browser reader alone must not leave the detached resumable
     // producer running. The owner-scoped endpoint aborts it server-side.
-    const localStop = chat.stop();
-    const remoteStop = fetch(`/api/chat/${options.threadId}/stream`, {
+    recovery.waitForServer();
+    scope.reconnectAbort?.abort();
+    const localStop = stopChat();
+    const remoteStop = fetch(`/api/chat/${encodeURIComponent(options.threadId)}/stream`, {
       method: 'DELETE',
       credentials: 'same-origin',
     }).catch(() => undefined);
     await Promise.all([localStop, remoteStop]);
-  }
+  }, [stopChat, options.threadId, recovery.waitForServer, scope]);
 
-  function selectModel(model: CatalogModel) {
+  const selectModel = useCallback((model: CatalogModel) => {
     setModelSlug(model.slug);
     setEffort((current) => coerceReasoningEffort(model, current));
     localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
-  }
+  }, []);
 
-  async function send(text?: string) {
-    const content = (text ?? draft).trim();
-    if (!content || !selectedModel) return;
+  const send = useCallback(
+    async (text?: string) => {
+      const content = (text ?? draft).trim();
+      if (
+        !content ||
+        !selectedModel ||
+        recovery.remotePending ||
+        recovery.resuming ||
+        recovery.unavailable
+      )
+        return;
 
-    // Mirror what the server records so the sent bubble shows its files
-    // immediately rather than only after a reload.
-    const localAttachments = attachments.items.flatMap((item) =>
-      item.attachment ? [item.attachment] : [],
-    );
-    const cards = [...carriedAttachments, ...localAttachments].map((attachment) => ({
-      type: 'data-attachment' as const,
-      data: {
-        id: attachment.id,
-        filename: attachment.filename,
-        mimeType: attachment.mimeType,
-        url: attachment.url,
-      },
-    }));
+      // Mirror what the server records so the sent bubble shows its files
+      // immediately rather than only after a reload.
+      const localAttachments = attachmentItems.flatMap((item) =>
+        item.status === 'ready' && item.attachment ? [item.attachment] : [],
+      );
+      const submitted = [...carriedAttachments, ...localAttachments];
+      const cards = submitted.map((attachment) => ({
+        type: 'data-attachment' as const,
+        data: {
+          id: attachment.id,
+          filename: attachment.filename,
+          mimeType: attachment.mimeType,
+          url: attachment.url,
+        },
+      }));
 
-    setDraft('');
-    await chat.sendMessage({
-      parts: [{ type: 'text', text: content }, ...cards],
-    } as Parameters<typeof chat.sendMessage>[0]);
-
-    // Attachments belong to the turn that sent them.
-    attachments.clear();
-    setCarriedAttachments([]);
-  }
+      setDraft('');
+      await sendMessage(
+        {
+          parts: [{ type: 'text', text: content }, ...cards],
+        } as Parameters<typeof sendMessage>[0],
+        { body: { attachmentIds: submitted.map((file) => file.id) } },
+      );
+      // The SDK resolves even on HTTP failure. Only accepted response headers
+      // (or confirmed canonical history) may consume the submitted files.
+    },
+    [
+      draft,
+      selectedModel,
+      attachmentItems,
+      carriedAttachments,
+      sendMessage,
+      recovery.remotePending,
+      recovery.resuming,
+      recovery.unavailable,
+    ],
+  );
 
   return {
     ...chat,
     stop,
-    streaming: chat.status === 'streaming' || chat.status === 'submitted',
+    streaming:
+      chat.status === 'streaming' ||
+      chat.status === 'submitted' ||
+      recovery.remotePending ||
+      recovery.resuming,
+    recovery,
     draft,
     setDraft,
     effort,

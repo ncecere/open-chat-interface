@@ -1,0 +1,2 @@
+# Unified-diff context markers on empty lines are meaningful, not trailing spaces.
+patches/*.patch -whitespace

@@ -1,7 +1,7 @@
-import type { ReasoningEffort } from '@oci/shared';
+import type { CatalogModel, ReasoningEffort } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
 import { useAttachments } from '~/hooks/use-attachments';
@@ -15,7 +15,9 @@ import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 type CategoryId = (typeof SUGGESTION_CATEGORIES)[number]['id'];
 
 const MODEL_STORAGE_KEY = 'oci.model';
+const EMPTY_MODELS: CatalogModel[] = [];
 const PENDING_KEY = 'oci.pendingPrompt';
+const PENDING_THREAD_KEY = 'oci.pendingThreadId';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 const PENDING_EFFORT_KEY = 'oci.pendingEffort';
 const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
@@ -26,9 +28,9 @@ const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
  */
 export function ChatHomePage() {
   const { data } = useCurrentUser();
-  const { data: models = [] } = useModels();
+  const { data: models = EMPTY_MODELS } = useModels();
   const navigate = useNavigate();
-  const createThread = useCreateThread();
+  const { mutateAsync: createThread } = useCreateThread();
   const { temporary } = useTemporaryChat();
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
@@ -38,7 +40,7 @@ export function ChatHomePage() {
   const [modelSlug, setModelSlug] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
   );
-  const attachments = useAttachments();
+  const { items: attachmentItems, upload, remove } = useAttachments();
 
   const selectedModel =
     models.find((model) => model.slug === modelSlug) ??
@@ -51,32 +53,46 @@ export function ChatHomePage() {
     SUGGESTION_CATEGORIES.find((category) => category.id === activeCategory)?.prompts ??
     DEFAULT_PROMPTS;
 
-  async function startThread(text: string) {
-    const content = text.trim();
-    if (!content || !selectedModel) return;
+  const selectModel = useCallback((model: CatalogModel) => {
+    setModelSlug(model.slug);
+    setEffort((current) => coerceReasoningEffort(model, current));
+    localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
+  }, []);
 
-    const { thread } = await createThread.mutateAsync({ temporary });
-    sessionStorage.setItem(PENDING_KEY, content);
-    const requestEffort = reasoningEffortForRequest(selectedModel, effort);
-    if (requestEffort) sessionStorage.setItem(PENDING_EFFORT_KEY, requestEffort);
-    else sessionStorage.removeItem(PENDING_EFFORT_KEY);
-    if (webSearch) sessionStorage.setItem(PENDING_SEARCH_KEY, 'true');
-    else sessionStorage.removeItem(PENDING_SEARCH_KEY);
+  const startThread = useCallback(
+    async (text: string) => {
+      const content = text.trim();
+      if (!content || !selectedModel) return;
 
-    // Hand any uploads over to the thread view along with the prompt.
-    const readyAttachments = attachments.items.flatMap((item) =>
-      item.attachment ? [item.attachment] : [],
-    );
-    if (readyAttachments.length > 0) {
-      // Carry display metadata as well as IDs so the first sent bubble can
-      // render its attachment cards immediately.
-      sessionStorage.setItem(PENDING_ATTACHMENTS_KEY, JSON.stringify(readyAttachments));
-    } else {
-      sessionStorage.removeItem(PENDING_ATTACHMENTS_KEY);
-    }
+      const { thread } = await createThread({ temporary });
+      // Invalidate the old destination before changing any payload fields.
+      sessionStorage.removeItem(PENDING_THREAD_KEY);
+      sessionStorage.setItem(PENDING_KEY, content);
+      const requestEffort = reasoningEffortForRequest(selectedModel, effort);
+      if (requestEffort) sessionStorage.setItem(PENDING_EFFORT_KEY, requestEffort);
+      else sessionStorage.removeItem(PENDING_EFFORT_KEY);
+      if (webSearch) sessionStorage.setItem(PENDING_SEARCH_KEY, 'true');
+      else sessionStorage.removeItem(PENDING_SEARCH_KEY);
 
-    await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
-  }
+      // Hand any uploads over to the thread view along with the prompt.
+      const readyAttachments = attachmentItems.flatMap((item) =>
+        item.attachment ? [item.attachment] : [],
+      );
+      if (readyAttachments.length > 0) {
+        // Carry display metadata as well as IDs so the first sent bubble can
+        // render its attachment cards immediately.
+        sessionStorage.setItem(PENDING_ATTACHMENTS_KEY, JSON.stringify(readyAttachments));
+      } else {
+        sessionStorage.removeItem(PENDING_ATTACHMENTS_KEY);
+      }
+
+      sessionStorage.setItem(PENDING_THREAD_KEY, thread.id);
+      await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
+    },
+    [selectedModel, createThread, temporary, effort, webSearch, attachmentItems, navigate],
+  );
+
+  const submit = useCallback(() => startThread(draft), [startThread, draft]);
 
   return (
     <div className="flex h-full flex-col justify-center md:justify-normal">
@@ -157,23 +173,19 @@ export function ChatHomePage() {
       <Composer
         value={draft}
         onChange={setDraft}
-        onSubmit={() => startThread(draft)}
+        onSubmit={submit}
         models={models}
         selectedModel={selectedModel}
-        onSelectModel={(model) => {
-          setModelSlug(model.slug);
-          setEffort((current) => coerceReasoningEffort(model, current));
-          localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
-        }}
+        onSelectModel={selectModel}
         effort={effort}
         onEffortChange={setEffort}
         webSearch={webSearch}
         onWebSearchChange={setWebSearch}
         webSearchAvailable={data?.features.webSearch ?? false}
         attachmentsAvailable={data?.features.attachments ?? false}
-        attachments={attachments.items}
-        onAttachFiles={attachments.upload}
-        onRemoveAttachment={attachments.remove}
+        attachments={attachmentItems}
+        onAttachFiles={upload}
+        onRemoveAttachment={remove}
       />
     </div>
   );

@@ -1,10 +1,10 @@
 import Redis from 'ioredis';
 import { loadEnv } from '../config/env.js';
 import { logger } from '../lib/logger.js';
+import { createChatReplay } from './chat-stream-replay.js';
 
 const KEY_PREFIX = 'oci:chat-stream';
 const MAX_EVENTS = 10_000;
-const RESUME_POLL_MS = 100;
 const REDIS_RETRY_DELAY_MS = 30_000;
 
 export type ChatRunStatus = 'active' | 'complete' | 'error' | 'cancelled';
@@ -18,6 +18,7 @@ interface ChatRunIdentity {
 interface ChatRunOutcome {
   status: Exclude<ChatRunStatus, 'active'>;
   error?: string;
+  replayUnavailable?: boolean;
 }
 
 export type BeginChatRunResult = 'available' | 'unavailable' | 'conflict';
@@ -34,16 +35,6 @@ function eventsKey(runId: string) {
   return `${KEY_PREFIX}:run:${runId}:events`;
 }
 
-function fieldsToRecord(fields: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (let index = 0; index < fields.length; index += 2) {
-    const key = fields[index];
-    const value = fields[index + 1];
-    if (key !== undefined && value !== undefined) result[key] = value;
-  }
-  return result;
-}
-
 /** Redis persistence for one bounded, owner-scoped AI SDK SSE stream. */
 export class ChatStreamStore {
   constructor(
@@ -57,26 +48,42 @@ export class ChatStreamStore {
     if (acquired !== 'OK') return 'conflict';
 
     try {
-      await this.redis
+      const replies = await this.redis
         .multi()
         .hset(metadataKey(identity.runId), {
           runId: identity.runId,
           threadId: identity.threadId,
           userId: identity.userId,
           status: 'active',
+          replayVersion: '1',
+          lastSequence: '0',
+          replayUnavailable: '0',
           expiresAt: String(Date.now() + this.ttlSeconds * 1000),
         })
         .expire(metadataKey(identity.runId), this.ttlSeconds)
         .exec();
+      if (!replies || replies.some(([error]) => error))
+        throw new Error('Could not initialize chat stream metadata');
       return 'available';
     } catch (error) {
-      await this.redis.del(active).catch(() => undefined);
+      await this.redis
+        .eval(
+          `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0`,
+          1,
+          active,
+          identity.runId,
+        )
+        .catch(() => undefined);
       throw error;
     }
   }
 
   async abandon(identity: ChatRunIdentity): Promise<void> {
-    await this.finalize(identity, { status: 'error', error: 'Stream setup failed' });
+    await this.finalize(identity, {
+      status: 'error',
+      error: 'Stream setup failed',
+      replayUnavailable: true,
+    });
   }
 
   async requestCancellation(identity: ChatRunIdentity): Promise<boolean> {
@@ -93,30 +100,62 @@ export class ChatStreamStore {
   }
 
   async append(runId: string, value: string): Promise<void> {
-    const key = eventsKey(runId);
-    const expiresAt = Number(await this.redis.hget(metadataKey(runId), 'expiresAt'));
-    if (!Number.isFinite(expiresAt)) throw new Error('Chat stream metadata expired');
-
-    const remainingSeconds = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
-    await this.redis
-      .multi()
-      .xadd(key, 'MAXLEN', '~', MAX_EVENTS, '*', 'data', value)
-      .expire(key, remainingSeconds)
-      .exec();
+    // One operation: metadata cannot expire between validation and XADD, and
+    // sequence gaps remain detectable even when MAXLEN drops the SSE prefix.
+    // Increment before XADD: if the latter fails, replay sees a missing event
+    // rather than mistaking a partial cache for successful completion.
+    await this.redis.eval(
+      `
+      local expires = tonumber(redis.call('HGET', KEYS[1], 'expiresAt'))
+      local ttl = redis.call('PTTL', KEYS[1])
+      if not expires or expires <= tonumber(ARGV[1]) or ttl <= 0 then
+        return redis.error_reply('Chat stream metadata expired')
+      end
+      if redis.call('HGET', KEYS[1], 'status') ~= 'active'
+        or redis.call('HGET', KEYS[1], 'replayVersion') ~= '1' then
+        return redis.error_reply('Chat stream is not accepting events')
+      end
+      local seq = redis.call('HINCRBY', KEYS[1], 'lastSequence', 1)
+      local appended = redis.pcall('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', 'seq', tostring(seq), 'data', ARGV[3])
+      if type(appended) == 'table' and appended.err then
+        redis.call('HSET', KEYS[1], 'replayUnavailable', '1')
+        return redis.error_reply(appended.err)
+      end
+      redis.call('PEXPIRE', KEYS[2], ttl)
+      return seq
+    `,
+      2,
+      metadataKey(runId),
+      eventsKey(runId),
+      Date.now(),
+      MAX_EVENTS,
+      value,
+    );
   }
 
   async finalize(identity: ChatRunIdentity, outcome: ChatRunOutcome): Promise<void> {
-    const metadata = await this.redis.hgetall(metadataKey(identity.runId));
-    if (metadata.threadId !== identity.threadId || metadata.userId !== identity.userId) return;
-
-    const active = activeKey(identity.threadId);
-    const transaction = this.redis.multi().hset(metadataKey(identity.runId), {
-      status: outcome.status,
-      ...(outcome.error ? { error: outcome.error.slice(0, 500) } : {}),
-    });
-
-    if ((await this.redis.get(active)) === identity.runId) transaction.del(active);
-    await transaction.exec();
+    // Ownership check and deletion must be one operation: an expired active
+    // key can be replaced between a client-side GET and a subsequent DEL.
+    await this.redis.eval(
+      `
+      if redis.call('HGET', KEYS[1], 'threadId') ~= ARGV[1]
+        or redis.call('HGET', KEYS[1], 'userId') ~= ARGV[2] then return 0 end
+      redis.call('HSET', KEYS[1], 'status', ARGV[4])
+      if ARGV[5] ~= '' then redis.call('HSET', KEYS[1], 'error', ARGV[5]) end
+      if ARGV[6] == '1' then redis.call('HSET', KEYS[1], 'replayUnavailable', '1') end
+      if redis.call('GET', KEYS[2]) == ARGV[3] then redis.call('DEL', KEYS[2]) end
+      return 1
+    `,
+      2,
+      metadataKey(identity.runId),
+      activeKey(identity.threadId),
+      identity.threadId,
+      identity.userId,
+      identity.runId,
+      outcome.status,
+      outcome.error?.slice(0, 500) ?? '',
+      outcome.replayUnavailable ? '1' : '0',
+    );
   }
 
   async activeRun(threadId: string, userId: string): Promise<ChatRunIdentity | null> {
@@ -137,48 +176,12 @@ export class ChatStreamStore {
 
   /** Replays from the beginning, then tails until the producer finalizes. */
   createReplayStream(identity: ChatRunIdentity, signal?: AbortSignal): ReadableStream<Uint8Array> {
-    const encoder = new TextEncoder();
-    let cancelled = false;
-
-    return new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        void (async () => {
-          let lastId = '0-0';
-          try {
-            while (!cancelled && !signal?.aborted) {
-              const metadata = await this.redis.hgetall(metadataKey(identity.runId));
-              if (metadata.threadId !== identity.threadId || metadata.userId !== identity.userId) {
-                break;
-              }
-
-              const rows = (await this.redis.xrange(
-                eventsKey(identity.runId),
-                `(${lastId}`,
-                '+',
-                'COUNT',
-                200,
-              )) as Array<[string, string[]]>;
-
-              for (const [id, fields] of rows) {
-                lastId = id;
-                const value = fieldsToRecord(fields).data;
-                if (value !== undefined) controller.enqueue(encoder.encode(value));
-              }
-
-              if (metadata.status !== 'active' && rows.length === 0) break;
-              if (rows.length === 0) {
-                await new Promise((resolve) => setTimeout(resolve, RESUME_POLL_MS));
-              }
-            }
-            if (!cancelled) controller.close();
-          } catch (error) {
-            if (!cancelled && !signal?.aborted) controller.error(error);
-          }
-        })();
-      },
-      cancel: () => {
-        cancelled = true;
-      },
+    return createChatReplay({
+      redis: this.redis,
+      identity,
+      metadataKey: metadataKey(identity.runId),
+      eventsKey: eventsKey(identity.runId),
+      signal,
     });
   }
 }
@@ -298,14 +301,18 @@ export async function resumeActiveChatRun(
   threadId: string,
   userId: string,
   signal?: AbortSignal,
-): Promise<{ stream: ReadableStream<Uint8Array>; persistence: 'redis' } | null> {
+): Promise<{ stream: ReadableStream<Uint8Array>; persistence: 'redis'; runId: string } | null> {
   const store = await runtimeChatStreamStore();
   if (!store) return null;
 
   try {
     const identity = await store.activeRun(threadId, userId);
     if (!identity) return null;
-    return { stream: store.createReplayStream(identity, signal), persistence: 'redis' };
+    return {
+      stream: store.createReplayStream(identity, signal),
+      persistence: 'redis',
+      runId: identity.runId,
+    };
   } catch (error) {
     logger.warn(
       { err: error instanceof Error ? error.message : 'Redis operation failed' },
@@ -347,7 +354,7 @@ export async function captureChatRun(
   } finally {
     reader.releaseLock();
     const outcome = persistenceFailed
-      ? { status: 'error' as const, error: 'Stream persistence failed' }
+      ? { status: 'error' as const, error: 'Stream persistence failed', replayUnavailable: true }
       : getOutcome();
     await withStore((store) => store.finalize(identity, outcome));
     unregisterLocalChatRun(identity.runId);
