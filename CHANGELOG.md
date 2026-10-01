@@ -44,7 +44,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   **Default theme** now applies to people who have not chosen a theme.
 - Auditors can open every admin page read-only, with a banner; controls that
   would change something are hidden or disabled.
-- On narrow screens the admin navigation opens in a drawer from a menu button.
+- On narrow screens the admin navigation opens in a drawer from a menu button,
+  wide tables scroll within the page instead of widening it, and provider rows
+  wrap their actions below the details. Admin tab strips follow the standard
+  keyboard pattern (arrow keys, Home and End).
 - Admin pages report failed saves, confirm destructive actions such as deleting
   a provider or banning in bulk, and offer a retry when a page fails to load.
   The Canvas, MCP and session-refresh controls, which had no effect, are removed.

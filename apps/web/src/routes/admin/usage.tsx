@@ -214,7 +214,7 @@ function PeopleList({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+    <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
       {entries.map((entry) => (
         <div
           key={entry.userId}
@@ -346,7 +346,7 @@ function SpendTab({ days }: { days: number }) {
         {data.models.entries.length === 0 ? (
           <p className="text-[var(--text-muted)] text-sm">Nothing recorded in this range.</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+          <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
             <table className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-[var(--border-subtle)] border-b text-left text-[var(--text-muted)] text-xs uppercase tracking-wider">
@@ -474,7 +474,7 @@ function LimitsTab({ days }: { days: number }) {
           No one was stopped by a limit in this range.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+        <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
           {data.denials.entries.map((denial) => (
             <div
               key={`${denial.policyId}-${denial.policyName}`}

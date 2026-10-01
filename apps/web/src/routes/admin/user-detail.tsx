@@ -230,7 +230,7 @@ export function AdminUserDetailPage() {
         {sessions.length === 0 ? (
           <Empty>No active sessions.</Empty>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+          <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
             <table className="w-full min-w-[32rem] text-sm">
               <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
                 <tr>

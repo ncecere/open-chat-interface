@@ -169,9 +169,14 @@ export function AdminLayout() {
         </header>
 
         <main className="min-h-0 min-w-0 flex-1">
-          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
-              keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}
-          <div id="main-content" tabIndex={0} className="scrollbar-thin h-full overflow-y-auto">
+          {/* Positioned so absolutely placed descendants (such as Radix Select's hidden
+              native select) stay inside it instead of widening the page on phones. */}
+          <div
+            id="main-content"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access per WCAG 2.1.1, and this doubles as the skip-link target
+            tabIndex={0}
+            className="scrollbar-thin relative h-full overflow-y-auto"
+          >
             <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
               {role === 'auditor' && (
                 <div

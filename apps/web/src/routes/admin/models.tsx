@@ -104,9 +104,9 @@ function ModelRow({
           onClick={() => setExpanded((value) => !value)}
           className="min-w-0 flex-1 text-left"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <LabLogo labId={model.labId} className="size-4" />
-            <span className="truncate font-medium">{model.displayName}</span>
+            <span className="min-w-0 truncate font-medium">{model.displayName}</span>
             {model.isDefault && <Badge variant="accent">default</Badge>}
           </div>
           <p className="truncate text-xs text-[var(--text-muted)]">

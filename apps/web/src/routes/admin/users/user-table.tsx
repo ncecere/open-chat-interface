@@ -75,7 +75,7 @@ export function UserTable({
   // Selection only feeds bulk changes, so read-only viewers get no checkboxes.
   const { canEdit } = useAdminAccess();
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+    <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
       <table className="w-full min-w-[40rem] text-sm">
         <thead>
           <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">

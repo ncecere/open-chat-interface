@@ -20,7 +20,7 @@ export function DesktopEventTable({
   onToggle: (id: string) => void;
 }) {
   return (
-    <div className="hidden overflow-x-auto md:block">
+    <div className="relative hidden overflow-x-auto md:block">
       <table className="w-full min-w-[48rem] table-fixed text-left text-sm">
         <caption className="sr-only">Administrative and security audit events</caption>
         <thead>

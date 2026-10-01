@@ -447,7 +447,7 @@ function BudgetList({ access }: { access: RoleAccess }) {
           No usage budget applies to this role, so usage is limited only by the rate limits above.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+        <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
           <table className="w-full min-w-[32rem] text-sm">
             <thead className="bg-[var(--bg-control-alt)] text-left text-[var(--text-muted)] text-xs">
               <tr>

@@ -58,6 +58,8 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
   const invalidate = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'users', user.id, 'quota-overrides'] }),
+      // The user's limits summary shows the adjusted allowance behind this dialog.
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users', user.id, 'limits'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'quotas'] }),
     ]);
 

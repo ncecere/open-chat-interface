@@ -90,14 +90,16 @@ export function ProvidersSection() {
       ) : data.providers.length > 0 ? (
         <RowList>
           {data.providers.map((provider) => (
-            <Row key={provider.id}>
+            // Actions wrap below the details on narrow screens, so the name
+            // and endpoint are never squeezed out by the buttons.
+            <Row key={provider.id} className="flex-wrap gap-y-2 sm:flex-nowrap">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-control-hover)]">
                 <KeyRound className="size-4 text-[var(--text-secondary)]" />
               </span>
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate font-medium">{provider.label}</p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="min-w-0 truncate font-medium">{provider.label}</p>
                   <Badge variant="neutral">{PROVIDER_KIND_LABELS[provider.kind]}</Badge>
                   {!provider.enabled && <Badge variant="warning">disabled</Badge>}
                 </div>
@@ -109,33 +111,35 @@ export function ProvidersSection() {
               </div>
 
               <EditOnly>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={discover.isPending}
-                  onClick={() => discover.mutate(provider)}
-                >
-                  {discover.isPending && discover.variables?.id === provider.id && <Spinner />}
-                  Discover models
-                </Button>
+                <div className="flex w-full items-center justify-end gap-1 sm:w-auto">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={discover.isPending}
+                    onClick={() => discover.mutate(provider)}
+                  >
+                    {discover.isPending && discover.variables?.id === provider.id && <Spinner />}
+                    Discover models
+                  </Button>
 
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Edit ${provider.label}`}
-                  onClick={() => setFormFor({ provider })}
-                >
-                  <Pencil />
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Edit ${provider.label}`}
+                    onClick={() => setFormFor({ provider })}
+                  >
+                    <Pencil />
+                  </Button>
 
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Delete ${provider.label}`}
-                  onClick={() => setDeleteFor(provider)}
-                >
-                  <Trash2 />
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Delete ${provider.label}`}
+                    onClick={() => setDeleteFor(provider)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
               </EditOnly>
             </Row>
           ))}
