@@ -20,7 +20,8 @@ Not included:
 
 - **Your reasoning panels.** The thinking a model did on the way to an answer is
   yours, not part of the published answer.
-- **Your attachments**, unless your instance is configured otherwise.
+- **Your attachments.** Files you attached stay private; the shared page shows
+  the messages without them.
 - **Anything about your account** beyond a display name.
 
 ## Revoking
