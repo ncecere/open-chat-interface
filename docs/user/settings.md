@@ -47,6 +47,10 @@ with.
 If your institution has set a retention period, it is stated here, along with
 when the oldest conversations will be removed.
 
+The **Your data** section at the bottom downloads all of your conversations and
+files at once, and imports history from ChatGPT or Claude. See
+[Your data](your-data.md).
+
 ## Models
 
 ![The models available to you](../images/user-settings-models.png)

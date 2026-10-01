@@ -7,6 +7,41 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Feature entitlements per role.** On Roles & access each role has switches
+  for web search, file attachments, share links, temporary chats and branching,
+  and a choice of allowed reasoning levels (Instant is always allowed). A
+  feature is available only when both the instance-wide switch and the role's
+  allow it; the server enforces each one, including web search on a chat turn
+  and reasoning levels in `/models` and chat validation. Saved through
+  `PUT /api/admin/roles/:role` (changed fields only, audited as
+  `role.features.update`, read-only for auditors). Defaults match the previous
+  fixed rules, so restricted accounts still cannot upload, share or start
+  temporary chats until an administrator changes it. Refusals now read "…is
+  not available for your role". No database migration.
+- **Default reasoning level** on General settings (`defaultEffort` in
+  `PATCH /api/admin/settings`, exposed to clients in `/api/me`). New
+  conversations start at it, clamped to what the selected model and the
+  person's role allow, falling back to Instant.
+- **Export everything and import from ChatGPT or Claude** (Settings → History →
+  Your data). `GET /api/me/export` streams a ZIP of every active and archived
+  conversation (Markdown plus a complete JSON record with reasoning), the
+  person's attached files, `manifest.json` and `README.txt`; trashed and
+  temporary chats are excluded. One export at a time per person, audited as
+  `user.export`. `POST /api/me/imports` accepts a ChatGPT or Claude export
+  `.zip` (including ChatGPT's split 2026 layout and nested Privacy Portal
+  archives) or a bare `conversations.json`, up to `IMPORT_MAX_UPLOAD_BYTES`
+  (default 512 MB), and processes it in the background (`imports.process`
+  job, resumed after restarts). Only the visible branch is imported, with
+  titles, timestamps and reasoning; re-importing skips conversations already
+  present. Imports are streamed, bounded against zip bombs and unsafe paths,
+  do not count towards usage limits, and are audited as `user.import`.
+  `GET /api/me/imports` lists them and `DELETE /api/me/imports/:id` cancels or
+  removes one. Migration `0022_conversation_imports` adds the
+  `conversation_import` table and `thread.import_source`/`import_source_id`.
+  New dependencies: `fflate`, `@streamparser/json`, `busboy` (all MIT).
+
 ## [0.6.1] - 2026-10-01
 
 Providers & Models split into tabs. No database migrations; deploy the API and

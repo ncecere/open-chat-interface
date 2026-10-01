@@ -1,4 +1,5 @@
 import type { ReasoningEffort } from '@oci/shared';
+import { sql } from 'drizzle-orm';
 import { boolean, index, integer, jsonb, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
@@ -32,10 +33,17 @@ export const thread = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     /** Why it was deleted, so the trash UI can explain automatic removals. */
     deletedReason: text('deleted_reason').$type<'user' | 'retention' | 'admin'>(),
+    /** Set on conversations imported from another service; null otherwise. */
+    importSource: text('import_source').$type<'chatgpt' | 'claude'>(),
+    /** The source's conversation id, which makes re-importing idempotent. */
+    importSourceId: text('import_source_id'),
     ...timestamps(),
   },
   (t) => [
     index('thread_user_updated_idx').on(t.userId, t.updatedAt),
+    uniqueIndex('thread_import_source_unique')
+      .on(t.userId, t.importSource, t.importSourceId)
+      .where(sql`${t.importSourceId} is not null`),
     index('thread_parent_idx').on(t.parentThreadId),
     index('thread_temporary_expiry_idx').on(t.temporary, t.expiresAt),
     index('thread_deleted_idx').on(t.deletedAt),

@@ -2,9 +2,9 @@ import { asc, eq, schema } from '@oci/db';
 import { db } from '../db/index.js';
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
-const MAX_EXPORT_MESSAGES = 2_000;
+export const MAX_EXPORT_MESSAGES = 2_000;
 
-interface ExportMessage {
+export interface ExportMessage {
   role: string;
   parts: Record<string, unknown>[];
   modelSlug: string | null;
@@ -44,7 +44,7 @@ function sourcesFromParts(parts: Record<string, unknown>[]): Array<{ title: stri
  * it never presented. Attachments appear by name only, since the bytes live in
  * object storage and a Markdown file cannot carry them.
  */
-function renderMarkdown(
+export function renderMarkdown(
   thread: { title: string; createdAt: Date },
   messages: ExportMessage[],
 ): string {
@@ -97,8 +97,8 @@ function renderMarkdown(
   return lines.join('\n');
 }
 
-/** A filesystem-safe name derived from the conversation title. */
-export function exportFilename(title: string): string {
+/** A filesystem-safe slug derived from a conversation title. */
+export function safeTitleSlug(title: string): string {
   const safe = title
     .replace(/[^\w\s-]/g, '')
     .trim()
@@ -106,7 +106,12 @@ export function exportFilename(title: string): string {
     .slice(0, 60)
     .toLowerCase();
 
-  return `${safe || 'conversation'}-${new Date().toISOString().slice(0, 10)}.md`;
+  return safe || 'conversation';
+}
+
+/** A filesystem-safe name derived from the conversation title. */
+export function exportFilename(title: string): string {
+  return `${safeTitleSlug(title)}-${new Date().toISOString().slice(0, 10)}.md`;
 }
 
 /** Ownership is enforced by the caller before this runs. */

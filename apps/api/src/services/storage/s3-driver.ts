@@ -1,3 +1,6 @@
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -74,6 +77,32 @@ export class S3StorageDriver implements StorageDriver {
       return Buffer.from(bytes);
     } catch {
       throw notFound('Attachment file is missing from storage');
+    }
+  }
+
+  async putFile(key: string, path: string, contentType: string): Promise<StoredObject> {
+    const { size } = await stat(path);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: createReadStream(path),
+        ContentLength: size,
+        ContentType: contentType,
+      }),
+    );
+    return { key, sizeBytes: size };
+  }
+
+  async getStream(key: string): Promise<NodeJS.ReadableStream> {
+    try {
+      const result = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      if (!(result.Body instanceof Readable)) throw new Error('Unexpected object body');
+      return result.Body;
+    } catch {
+      throw notFound('Stored file is missing from storage');
     }
   }
 

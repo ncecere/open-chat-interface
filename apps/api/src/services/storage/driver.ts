@@ -30,6 +30,12 @@ export interface StorageDriver {
    * find blobs with no database row; without it orphans are undetectable.
    */
   list(options?: { cursor?: string; limit?: number }): Promise<ListPage>;
+  /**
+   * Optional streaming variants for objects too large to hold in memory, such
+   * as an uploaded export. Callers fall back to `put`/`get` when absent.
+   */
+  putFile?(key: string, path: string, contentType: string): Promise<StoredObject>;
+  getStream?(key: string): Promise<NodeJS.ReadableStream>;
 }
 
 /** Namespaces objects by owner so a traversal cannot reach another user. */

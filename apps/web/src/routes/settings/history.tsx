@@ -1,6 +1,7 @@
 import type { ThreadSummary, TrashedThread } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { YourDataSection } from '~/components/settings/your-data';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { useDeleteThread, useThreads, useUpdateThread } from '~/hooks/use-threads';
@@ -259,6 +260,8 @@ export function SettingsHistoryPage() {
           ))}
         </div>
       )}
+
+      <YourDataSection />
     </div>
   );
 }
