@@ -13,7 +13,7 @@ independent and is not enforced by the workflow. Supply a personal access token 
 commit registry credentials or put them in `.env.example`.
 
 ```bash
-export OCI_VERSION=v0.4.1
+export OCI_VERSION=v0.5.0
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 # GHCR_READ_TOKEN is supplied externally by your secret manager.
 printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u ncecere --password-stdin
@@ -23,12 +23,14 @@ export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
 
 Published images are `linux/amd64` only, matching the previous release
 architecture. Confirm **Publish containers** succeeded for your version before
-pulling; the existing `v0.4.1` tag requires the one-time manual dispatch described
+pulling. Historical `v0.4.1` publication uses the manual dispatch described
 in [Release process](RELEASING.md). CI publishing uses `GITHUB_TOKEN`; the token
 above is a deployment credential, not a saved CI PAT.
 
 Create `docker/.env` from `.env.example` or provide the required variables
-through your secret manager. Then pull and start without local builds:
+through your secret manager. For a **fresh installation**, pull and start without
+local builds as below. Existing instances must first follow the drained upgrade
+procedure later in this guide; do not use this shortcut for a 0.5.0 upgrade:
 
 ```bash
 cd docker

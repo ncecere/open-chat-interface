@@ -78,10 +78,12 @@ docker compose up -d --build
 ### Deploy a released version
 
 Release deployments should pin both application images to the same immutable
-version instead of tracking `latest`:
+version instead of tracking `latest`. The commands below are for a fresh
+installation; existing instances must follow the drained upgrade procedure in
+[Production operations](docs/OPERATIONS.md) before starting new API producers:
 
 ```bash
-export OCI_VERSION=v0.4.1
+export OCI_VERSION=v0.5.0
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
@@ -98,9 +100,9 @@ visibility. Private pulls require a personal access token (classic) with
 `read:packages` and access to the repository/packages; never commit it. Published images target `linux/amd64` only. Unset `OCI_API_IMAGE` and
 `OCI_WEB_IMAGE` to retain Compose's local source-build defaults.
 
-The existing `v0.4.1` tag needs a one-time manual publish after the GitHub
-workflows merge; see [Release process](docs/RELEASING.md). Confirm that publish
-succeeded before pulling it.
+Confirm publication succeeded for the selected version before pulling it.
+[Release process](docs/RELEASING.md) also documents manual publication of the
+historical `v0.4.1` tag without moving it.
 
 Optional profiles: `--profile s3` (MinIO), `--profile search` (SearXNG).
 

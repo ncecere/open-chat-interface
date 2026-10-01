@@ -68,8 +68,11 @@ export async function listUsers({
   ].filter((clause) => clause !== undefined);
 
   const where = filters.length > 0 ? and(...filters) : undefined;
-  const threadCountSql = sql<number>`(select count(*) from ${schema.thread} where ${schema.thread.userId} = ${schema.user.id})::int`;
-  const messageCountSql = sql<number>`(select count(*) from ${schema.message} where ${schema.message.userId} = ${schema.user.id})::int`;
+  // Drizzle removes PgColumn qualifiers in single-table SELECT expressions.
+  // Keep the outer reference explicit or `id` binds to the inner child table.
+  const outerUserId = sql`${schema.user}.${sql.identifier(schema.user.id.name)}`;
+  const threadCountSql = sql<number>`(select count(*) from ${schema.thread} where ${schema.thread.userId} = ${outerUserId})::int`;
+  const messageCountSql = sql<number>`(select count(*) from ${schema.message} where ${schema.message.userId} = ${outerUserId})::int`;
   const sortColumn = {
     created: schema.user.createdAt,
     name: schema.user.name,
