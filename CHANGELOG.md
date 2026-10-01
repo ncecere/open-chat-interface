@@ -7,12 +7,75 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-01
+
+Chat reliability, privacy and accounting under concurrency, with measured startup
+improvements and explicit recovery and rollout contracts.
+
+### Fixed
+
+- Reserve a durable response claim before expensive chat preparation. Cache loss
+  or age alone no longer permits competing producers to take over a conversation.
+- Reserve upload capacity atomically and settle usage transactionally. Ambiguous
+  uploads retain capacity; partial usage cannot erase known consumption, and
+  unresolved reservation records survive retention until they can be reconciled.
+- Keep shared conversations private after deletion, expiry and restore. Restoring
+  a conversation does not reactivate its old public links.
+- Pin migration ownership to one physical PostgreSQL transaction and check the
+  latest required migration before starting with automatic migrations disabled.
+  Maintenance locks clean up private connections, including forced shutdown.
+- Reconcile interrupted replay against the exact saved response without treating
+  a reader disconnect as cancellation. Preserve drafts, accepted attachments and
+  canonical prompt identity across interruption, navigation and recovery.
+- Reconstruct historical attachments from authorized stored references, bound
+  selected conversation context, and include Anthropic thinking within the total
+  output budget. Omitted earlier context is visibly indicated; required input
+  that exceeds the budget is rejected instead of silently discarded.
+- Preserve IME composition without submitting early, and avoid integer overflow
+  when aggregating large usage totals.
+- Correct administrative user-list thread/message counts: single-table SQL
+  projections could bind the owner reference to a child identifier, displaying
+  zero or another account's count. Counts now remain correlated to the listed user.
+
+### Security
+
+- SMTP failure no longer waives required email verification; unreadable policy
+  fails closed while verified administrators retain the documented recovery path.
+  Historical verification flags and sessions are not reset or treated as proof
+  of mailbox ownership.
+- Update Hono to 4.13.7, Nodemailer to 10.0.9, Undici to 7.29.1 and DOMPurify to
+  3.4.16. Registry audits report zero known advisories as of October 1, 2026,
+  without suppressions; this is not a container-OS or universal security claim.
+
 ### Changed
 
+- Defer administration/settings routes and avoid rerendering unchanged historical
+  messages during streaming. The isolated comparison reduced startup JavaScript
+  transfer by about 17%; typing was already responsive, and first text was about
+  50 ms slower. See the recorded evidence rather than assuming universal wins.
+- Separate chat controls, lifecycle, context planning and usage reporting by
+  responsibility, with regression coverage for their public behavior.
 - GitHub is now the primary repository. GitHub Actions validates changes and
   publishes reviewed stable releases as API/web images on GHCR, with
   version, commit and latest tags. Existing release tags can be published by
   manual dispatch without moving them. GitLab release history remains intact.
+
+### Upgrade and verification notes
+
+- **Migrations 0020 and 0021 are required.** Back up and verify restore readiness,
+  drain old producers, apply migrations once, and roll out a verified API/web
+  pair. Do not mix old/new producers. Database/schema rollback is not implied by
+  retaining old image digests; follow the recovery runbook.
+- At the remediation checkpoint, 799 API tests passed on the host and Linux/arm64
+  with real PostgreSQL/Redis/SMTP/S3-compatible services, plus 44 production-browser
+  cases. PR CI passed linux/amd64 image builds and 793 API cases; only six S3
+  cases skipped because CI lacks that service. Those six passed locally. After
+  the user-count correction, the release branch passed 803 API tests on Linux
+  with real PostgreSQL/Redis/SMTP/S3-compatible services and no skips. Counts
+  overlap. The legacy source-built MinIO was an isolated test fixture, not an
+  official release or production recommendation.
+- No paid-provider, production-load or full accessibility-conformance claim is
+  made. Release publication, staging and deployment remain separate gates.
 
 ## [0.4.1] - 2026-09-16
 
@@ -357,7 +420,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.4.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.5.0...main
+[0.5.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.5.0
 [0.4.1]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.1
 [0.4.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.0
 [0.3.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.3.0

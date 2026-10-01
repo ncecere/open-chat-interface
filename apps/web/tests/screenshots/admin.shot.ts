@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { capture, gotoAdmin, signIn } from './helpers';
 
 /**
@@ -32,6 +32,28 @@ const PAGES: { route: string; heading: string; name: string }[] = [
   { route: '/admin/audit', heading: 'Audit log', name: 'admin-audit' },
 ];
 
+/**
+ * The listing keeps previous rows visible while it refetches. Wait for the
+ * sorted response so captures and row selection do not use the old order.
+ */
+async function sortUsersByThreads(page: Page): Promise<void> {
+  const sorted = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === '/api/admin/users' &&
+      url.searchParams.get('sort') === 'threads' &&
+      url.searchParams.get('direction') === 'desc' &&
+      response.ok()
+    );
+  });
+  await page.getByRole('button', { name: /threads/i }).click();
+  await sorted;
+  await expect(page.getByRole('columnheader', { name: /threads/i })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  );
+}
+
 test.describe('administration', () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -49,30 +71,31 @@ test.describe('administration', () => {
 
     // Sorted by activity rather than the default, so the columns that describe
     // usage are not a column of zeroes belonging to the least active accounts.
-    await page.getByRole('button', { name: /threads/i }).click();
-    await expect(page.getByRole('columnheader', { name: /threads/i })).toHaveAttribute(
-      'aria-sort',
-      'descending',
-    );
+    await sortUsersByThreads(page);
     await capture(page, 'admin-users');
   });
 
   test('captures a user detail', async ({ page }) => {
     await gotoAdmin(page, '/admin/users', 'Users');
-    await page.getByRole('button', { name: /threads/i }).click();
+    await sortUsersByThreads(page);
 
     // Somebody other than the account doing the capturing: photographing the
     // administrator shows a column of that session's own sign-ins rather than
     // what the page looks like for a person being investigated.
-    const rows = page.locator('tbody a[href*="/admin/users/"]');
-    const count = await rows.count();
-    for (let index = 0; index < count; index += 1) {
-      const row = rows.nth(index);
-      if ((await row.textContent())?.includes('Administrator')) continue;
-      await row.click();
-      break;
-    }
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    const row = page
+      .locator('tbody a[href*="/admin/users/"]')
+      .filter({ hasNotText: 'Administrator' })
+      .first();
+    await expect(row).toBeVisible();
+    const name = (await row.innerText()).trim();
+    const href = await row.getAttribute('href');
+    if (!name || !href) throw new Error('A seeded user detail link is required');
+    const target = new URL(href, page.url()).href;
+    await row.click();
+    // The old listing heading can remain visible while the detail route loads.
+    await expect(page).toHaveURL(target);
+    await expect(page.getByRole('heading', { name, exact: true, level: 1 })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'All users', exact: true })).toBeVisible();
     await capture(page, 'admin-user-detail');
   });
 

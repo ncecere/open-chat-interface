@@ -20,11 +20,11 @@ test.describe('narrow screens', () => {
     await signIn(page);
     await page.goto('/');
 
-    const toggle = page.getByRole('button', { name: /open sidebar|menu/i }).first();
-    if (await toggle.isVisible().catch(() => false)) {
-      await toggle.click();
-      await capture(page, 'mobile-sidebar');
-    }
+    const toggle = page.getByRole('button', { name: 'Open sidebar', exact: true });
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(page.getByRole('dialog', { name: 'Conversation sidebar' })).toBeVisible();
+    await capture(page, 'mobile-sidebar');
   });
 
   test('captures administration', async ({ page }) => {
