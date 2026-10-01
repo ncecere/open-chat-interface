@@ -17,7 +17,7 @@ For each role:
   that role.
 - **Models** — how many of the available models (enabled, on an enabled
   provider) the role can see. Visibility is set per model on
-  [Providers & models](models-providers.md).
+  [Providers & Models](models-providers.md).
 - **Features** — file attachments, share links, temporary chats and web
   search, as they apply to this role. They are switched on or off under
   **Appearance & features**; web search shows as on only when it can actually

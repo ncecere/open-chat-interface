@@ -22,7 +22,7 @@ the interface rather than leaving a control that fails.
 Two things that used to live here have moved:
 
 - **The default model** is chosen on
-  [Providers & models](models-providers.md#the-default-model), beside the
+  [Providers & Models](models-providers.md#the-default-model), beside the
   catalogue it is chosen from.
 - **Web search** has a single switch, on the
   [Web search](operations.md#web-search) page with its provider.

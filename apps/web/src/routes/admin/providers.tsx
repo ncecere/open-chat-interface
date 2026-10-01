@@ -18,9 +18,9 @@ import { api } from '~/lib/api-client';
 export const PROVIDERS_SECTION_ID = 'providers';
 
 /**
- * Upstream credentials, shown at the top of Providers & models. Connecting a
+ * Upstream credentials, the Providers tab of Providers & Models. Connecting a
  * provider exposes nothing on its own; "Discover models" adds chosen models to
- * the catalog below it on the same page.
+ * the catalog on the Models tab.
  */
 export function ProvidersSection() {
   const queryClient = useQueryClient();
@@ -65,7 +65,7 @@ export function ProvidersSection() {
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
             Upstream credentials. Connecting a provider does not expose its models to anyone — use
-            Discover models to add the ones you want to the catalog below.
+            Discover models to add the ones you want to the catalog on the Models tab.
           </p>
         </div>
         <EditOnly>

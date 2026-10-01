@@ -19,7 +19,7 @@ describe('admin navigation catalogue', () => {
         'People',
         ['Users /admin/users', 'Invitations /admin/invites', 'Roles & access /admin/roles'],
       ],
-      ['Models', ['Providers & models /admin/models', 'Usage budgets /admin/quotas']],
+      ['Models', ['Providers & Models /admin/models', 'Usage budgets /admin/quotas']],
       [
         'Sign-in & security',
         [

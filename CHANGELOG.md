@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- **Providers & Models** (renamed from Providers & models) has a Providers tab
+  and a Models tab, kept in the URL (`?tab=models`), like Roles & access.
+  Setup checklist links open the tab that resolves each item.
+
 ## [0.6.0] - 2026-10-01
 
 Administration organised around the tasks administrators do, with guided setup,

@@ -43,20 +43,21 @@ Every item links to the page that resolves it. An auditor sees the same list.
 
 ## 1. Connect a model provider
 
-**Models → Providers & models.** Complete when at least one provider is
+**Models → Providers & Models**, Providers tab. Complete when at least one provider is
 enabled, valid, and has its credential — or, for an OpenAI-compatible server,
 needs none. [Models and providers](models-providers.md) covers this.
 
 ## 2. Enable at least one model
 
-Same page. Adding a provider does not expose its models. You choose which
+Same page, Models tab — use **Discover models** on a provider first. Adding a
+provider does not expose its models. You choose which
 appear, and to which roles, one at a time — so a provider offering forty models
 does not present forty to your users. The item is complete when an enabled
 model belongs to an enabled provider.
 
 ## 3. Choose a default model
 
-Same page, above the catalogue. The default is what a new conversation starts
+Models tab, above the catalogue. The default is what a new conversation starts
 with. The checklist accepts it only when exactly one model is the default, it
 is available, and it is visible to the `user` role — a default that ordinary
 users cannot see is not a default for them.

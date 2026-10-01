@@ -1,10 +1,13 @@
 # Models and providers
 
 Providers, the model catalogue, and the default model share one page,
-**Models → Providers & models** (`/admin/models`). Providers come first, then
-the catalogue. The old `/admin/providers` address lands here.
+**Models → Providers & Models** (`/admin/models`), with a **Providers** tab and a
+**Models** tab. It opens on Providers; `/admin/models?tab=models` opens the
+catalogue directly. The old `/admin/providers` address lands on the Providers tab.
 
 ## Providers hold credentials
+
+![The Providers tab](../images/admin-providers.png)
 
 A provider is an upstream service and the key used to reach it. Adding one makes
 its models *available to add*; it does not expose anything to your users.
@@ -24,7 +27,7 @@ unreadable and they must all be entered again. Do not rotate it casually.
 
 ## The model catalogue
 
-![The model catalogue](../images/admin-models.png)
+![The Models tab](../images/admin-models.png)
 
 Each entry maps a name your users see to an upstream model identifier.
 

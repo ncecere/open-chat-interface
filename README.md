@@ -121,7 +121,7 @@ instead of baking a credential into the environment.
 
 Once running, sign in and open **Admin**. The setup checklist on **Overview**
 lists what is still missing, in order, and links to each page. Start by adding a
-provider and enabling models under **Admin → Models → Providers & models**, where
+provider and enabling models under **Admin → Models → Providers & Models**, where
 the default model is also chosen. No model is available to users until an
 administrator enables one.
 
@@ -277,7 +277,7 @@ variables only, so adding a family means adding one block there plus an entry in
 ## Model labs and logos
 
 Each catalog model can be attributed to the lab that created it, chosen from a
-picker in **Admin → Models → Providers & models → Add/Edit model**.
+picker in **Admin → Models → Providers & Models → Add/Edit model**.
 The lab supplies a logo shown beside the model in the picker and the admin
 catalog, with separate light and dark marks selected from the active theme.
 

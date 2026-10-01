@@ -19,6 +19,10 @@ export type StorageTab = (typeof STORAGE_TABS)[number];
 export const DEFAULT_STORAGE_TAB: StorageTab = 'driver';
 
 /** Mirrors USER_ROLES; kept local so the router does not pull in the shared package. */
+export const MODELS_TABS = ['providers', 'models'] as const;
+export type ModelsTab = (typeof MODELS_TABS)[number];
+export const DEFAULT_MODELS_TAB: ModelsTab = 'providers';
+
 export const ROLE_TABS = ['admin', 'auditor', 'user', 'restricted'] as const;
 export type RoleTab = (typeof ROLE_TABS)[number];
 export const DEFAULT_ROLE_TAB: RoleTab = 'user';
@@ -50,6 +54,15 @@ export interface StorageSearch {
 export function validateStorageSearch(search: Record<string, unknown>): StorageSearch {
   const tab = oneOf(search.tab, STORAGE_TABS);
   return tab && tab !== DEFAULT_STORAGE_TAB ? { tab } : {};
+}
+
+export interface ModelsSearch {
+  tab?: ModelsTab;
+}
+
+export function validateModelsSearch(search: Record<string, unknown>): ModelsSearch {
+  const tab = oneOf(search.tab, MODELS_TABS);
+  return tab && tab !== DEFAULT_MODELS_TAB ? { tab } : {};
 }
 
 export interface RolesSearch {

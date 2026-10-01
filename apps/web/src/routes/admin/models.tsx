@@ -7,9 +7,11 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Check, Cpu, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EditableFieldset, EditOnly, useAdminAccess } from '~/components/admin/admin-access';
+import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
 import {
   AdminPageHeader,
   EmptyState,
@@ -31,9 +33,10 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY, useSetupCheck } from '~/hooks/use-setup-status';
+import { DEFAULT_MODELS_TAB, type ModelsTab, validateModelsSearch } from '~/lib/admin-search';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
-import { PROVIDERS_SECTION_ID, ProvidersSection } from '~/routes/admin/providers';
+import { ProvidersSection } from '~/routes/admin/providers';
 
 const CAPABILITY_LABELS: Record<ModelCapability, string> = {
   vision: 'Vision',
@@ -314,7 +317,20 @@ function DefaultModelSelector({
   );
 }
 
+const TABS: readonly AdminTab<ModelsTab>[] = [
+  { id: 'providers', label: 'Providers' },
+  { id: 'models', label: 'Models' },
+];
+
 export function AdminModelsPage() {
+  const navigate = useNavigate();
+  const tab = validateModelsSearch(useSearch({ strict: false })).tab ?? DEFAULT_MODELS_TAB;
+  const setTab = (next: ModelsTab) =>
+    void navigate({
+      to: '/admin/models',
+      search: { tab: next === DEFAULT_MODELS_TAB ? undefined : next },
+      replace: true,
+    });
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<AdminModel | null>(null);
@@ -347,79 +363,96 @@ export function AdminModelsPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Providers & models"
+        title="Providers & Models"
         description="Connect upstream providers, choose which of their models join the catalog, and control who can use each one."
       />
 
-      <div className="flex flex-col gap-10 pb-10">
-        <ProvidersSection />
+      <div className="flex flex-col gap-8 pb-10">
+        <AdminTabs
+          tabs={TABS}
+          active={tab}
+          onChange={setTab}
+          label="Providers and models"
+          controls="models-panel"
+        />
 
-        <section
-          aria-labelledby="catalog-heading"
-          className="flex flex-col gap-5 border-t border-[var(--border-subtle)] pt-8"
+        <div
+          id="models-panel"
+          role="tabpanel"
+          aria-label={tab === 'providers' ? 'Providers' : 'Models'}
         >
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2
-                id="catalog-heading"
-                className="text-base font-semibold text-[var(--text-primary)]"
-              >
-                Model catalog
-              </h2>
-              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
-                Models people can choose from. Disable one to hide it without removing it.
-              </p>
-            </div>
-            <EditOnly>
-              <Button
-                variant="secondary"
-                disabled={!providers.data || providers.data.providers.length === 0}
-                onClick={openCreate}
-              >
-                <Plus />
-                Add model
-              </Button>
-            </EditOnly>
-          </div>
-
-          {isLoading ? (
-            <div className="py-8" role="status" aria-label="Loading the model catalog">
-              <Spinner className="mx-auto size-6" />
-            </div>
-          ) : models.isError || !data ? (
-            <LoadError title="The model catalog could not be loaded." query={models} />
-          ) : data.models.length > 0 ? (
-            <>
-              <EditableFieldset>
-                <DefaultModelSelector models={data.models} providers={providers.data?.providers} />
-              </EditableFieldset>
-              <RowList>
-                {data.models.map((model) => (
-                  <ModelRow
-                    key={model.id}
-                    model={model}
-                    onEdit={() => {
-                      setEditingModel(model);
-                      setFormOpen(true);
-                    }}
-                    onRemove={() => setRemoveFor(model)}
-                  />
-                ))}
-              </RowList>
-            </>
+          {tab === 'providers' ? (
+            <ProvidersSection />
           ) : (
-            <EmptyState icon={Cpu} title="The catalog is empty.">
-              Use{' '}
-              <a
-                href={`#${PROVIDERS_SECTION_ID}`}
-                className="text-[var(--accent-bright)] hover:underline"
-              >
-                Discover models
-              </a>{' '}
-              on a provider above to choose which models to offer.
-            </EmptyState>
+            <section aria-labelledby="catalog-heading" className="flex flex-col gap-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2
+                    id="catalog-heading"
+                    className="text-base font-semibold text-[var(--text-primary)]"
+                  >
+                    Model catalog
+                  </h2>
+                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+                    Models people can choose from. Disable one to hide it without removing it.
+                  </p>
+                </div>
+                <EditOnly>
+                  <Button
+                    variant="secondary"
+                    disabled={!providers.data || providers.data.providers.length === 0}
+                    onClick={openCreate}
+                  >
+                    <Plus />
+                    Add model
+                  </Button>
+                </EditOnly>
+              </div>
+
+              {isLoading ? (
+                <div className="py-8" role="status" aria-label="Loading the model catalog">
+                  <Spinner className="mx-auto size-6" />
+                </div>
+              ) : models.isError || !data ? (
+                <LoadError title="The model catalog could not be loaded." query={models} />
+              ) : data.models.length > 0 ? (
+                <>
+                  <EditableFieldset>
+                    <DefaultModelSelector
+                      models={data.models}
+                      providers={providers.data?.providers}
+                    />
+                  </EditableFieldset>
+                  <RowList>
+                    {data.models.map((model) => (
+                      <ModelRow
+                        key={model.id}
+                        model={model}
+                        onEdit={() => {
+                          setEditingModel(model);
+                          setFormOpen(true);
+                        }}
+                        onRemove={() => setRemoveFor(model)}
+                      />
+                    ))}
+                  </RowList>
+                </>
+              ) : (
+                <EmptyState icon={Cpu} title="The catalog is empty.">
+                  Use <span className="font-medium">Discover models</span> on the{' '}
+                  <Link
+                    to="/admin/models"
+                    search={{}}
+                    className="text-[var(--accent-bright)] hover:underline"
+                  >
+                    Providers
+                  </Link>{' '}
+                  tab to choose which models to offer.
+                </EmptyState>
+              )}
+            </section>
           )}
-        </section>
+        </div>
       </div>
 
       <ConfirmDialog

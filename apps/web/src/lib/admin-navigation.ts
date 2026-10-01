@@ -59,7 +59,7 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
   {
     label: 'Models',
     items: [
-      { to: '/admin/models', label: 'Providers & models', icon: Cpu },
+      { to: '/admin/models', label: 'Providers & Models', icon: Cpu },
       { to: '/admin/quotas', label: 'Usage budgets', icon: Gauge },
     ],
   },

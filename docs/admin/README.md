@@ -50,7 +50,7 @@ Pages are grouped by task. **Overview** sits above the groups.
 
 | Page | What it is for |
 | --- | --- |
-| Providers & models | Upstream credentials, the model catalogue, the default model |
+| Providers & Models | Upstream credentials, the model catalogue, the default model |
 | Usage budgets | Consumption caps applied to roles, with per-person overrides |
 
 **Sign-in & security**

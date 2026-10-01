@@ -37,6 +37,16 @@ function StatusIndicator({ check }: { check: SetupCheck }) {
   );
 }
 
+/** Server actions are paths that may carry a query, such as `/admin/models?tab=models`. */
+function actionPath(target: string): LinkProps['to'] {
+  return target.split('?')[0] as LinkProps['to'];
+}
+
+function actionSearch(target: string): Record<string, string> | undefined {
+  const query = target.split('?')[1];
+  return query ? Object.fromEntries(new URLSearchParams(query)) : undefined;
+}
+
 function CheckRow({ check }: { check: SetupCheck }) {
   return (
     <li className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
@@ -47,7 +57,8 @@ function CheckRow({ check }: { check: SetupCheck }) {
       </div>
       {/* Navigation only: the linked page applies its own permissions. */}
       <Link
-        to={check.action.to as LinkProps['to']}
+        to={actionPath(check.action.to)}
+        search={actionSearch(check.action.to) as LinkProps['search']}
         className={cn(
           buttonVariants({ variant: 'secondary', size: 'sm' }),
           'self-start sm:self-auto',

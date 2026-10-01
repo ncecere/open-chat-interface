@@ -164,16 +164,31 @@ async function choose(select: HTMLSelectElement, value: string) {
   await settle();
 }
 
-describe('Providers & models', () => {
-  it('shows providers above the catalog under one heading', async () => {
+describe('Providers & Models', () => {
+  it('separates providers and models into tabs, opening on providers', async () => {
     ({ root } = await renderAdmin(<AdminModelsPage />));
-    expect(document.querySelector('h1')?.textContent).toBe('Providers & models');
-    const headings = [...document.querySelectorAll('h2')].map((node) => node.textContent);
-    expect(headings.indexOf('Providers')).toBeLessThan(headings.indexOf('Model catalog'));
+    expect(document.querySelector('h1')?.textContent).toBe('Providers & Models');
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Providers', 'Models']);
+    expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
+    const headings = () => [...document.querySelectorAll('h2')].map((node) => node.textContent);
+    expect(headings()).toContain('Providers');
+    expect(headings()).not.toContain('Model catalog');
+  });
+
+  it('opens the Models tab from the URL', async () => {
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
+    const models = [...document.querySelectorAll('[role="tab"]')].find(
+      (tab) => tab.textContent === 'Models',
+    );
+    expect(models?.getAttribute('aria-selected')).toBe('true');
+    expect([...document.querySelectorAll('h2')].map((node) => node.textContent)).toContain(
+      'Model catalog',
+    );
   });
 
   it('offers only usable models as the default and saves the choice atomically', async () => {
-    ({ root } = await renderAdmin(<AdminModelsPage />));
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
     const select = document.getElementById('default-model') as HTMLSelectElement;
     expect(select.value).toBe('m1');
     expect(
@@ -196,24 +211,25 @@ describe('Providers & models', () => {
         action: { label: 'Open model catalog', to: '/admin/models' },
       },
     ];
-    ({ root } = await renderAdmin(<AdminModelsPage />));
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
     expect(document.body.textContent).toContain(
       'Model m1 is the default but is hidden from the user role.',
     );
   });
 
-  it('points an empty catalog at Discover models on the same page', async () => {
+  it('points an empty catalog at Discover models on the Providers tab', async () => {
     api.get.mockImplementation(async (path: string) => {
       if (path === '/admin/models') return { models: [] };
       if (path === '/admin/providers') return { providers };
       return { checks: [] };
     });
-    ({ root } = await renderAdmin(<AdminModelsPage />));
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
+    expect(document.body.textContent).toContain('Use Discover models on the Providers tab');
     const link = [...document.querySelectorAll('a')].find(
-      (anchor) => anchor.textContent === 'Discover models',
+      (anchor) => anchor.textContent === 'Providers',
     );
-    expect(link?.getAttribute('href')).toBe('#providers');
-    expect(document.getElementById('providers')).not.toBeNull();
+    // Providers is the default tab, so the link carries no query.
+    expect(link?.getAttribute('href')).toBe('/admin/models');
   });
 });
 

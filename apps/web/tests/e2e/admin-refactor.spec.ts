@@ -168,7 +168,7 @@ test('instance settings live at their own addresses', async ({ page, isMobile })
 
 test('merged pages redirect to the page that now owns them', async ({ page }) => {
   for (const [from, to, heading] of [
-    ['/admin/providers', /\/admin\/models$/, 'Providers & models'],
+    ['/admin/providers', /\/admin\/models$/, 'Providers & Models'],
     ['/admin/rate-limits', /\/admin\/roles$/, 'Roles & access'],
     ['/admin/storage-limits', /\/admin\/roles$/, 'Roles & access'],
     ['/admin/maintenance', /\/admin\/health$/, 'System health'],
@@ -177,6 +177,18 @@ test('merged pages redirect to the page that now owns them', async ({ page }) =>
     await expect(page).toHaveURL(to);
     await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
   }
+});
+
+test('Providers & Models keeps the selected tab in the URL', async ({ page }) => {
+  await page.goto('/admin/models?tab=models');
+  await expect(page.getByRole('tab', { name: 'Models', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('heading', { name: 'Model catalog', level: 2 })).toBeVisible();
+  await page.getByRole('tab', { name: 'Providers', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/models$/);
+  await expect(page.getByRole('heading', { name: 'Providers', level: 2 })).toBeVisible();
 });
 
 test('Roles & access keeps the selected role in the URL', async ({ page }) => {
