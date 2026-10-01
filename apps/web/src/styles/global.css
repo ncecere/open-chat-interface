@@ -68,3 +68,11 @@
 
 /* Streamdown ships compiled classes that Tailwind must scan. */
 @source "../../node_modules/streamdown/dist/*.js";
+
+/* Optional wrapping of long code lines (Customization → Wrap long code lines). */
+.code-wrap [data-streamdown="code-block-body"] pre,
+.code-wrap [data-streamdown="code-block-body"] code,
+.code-wrap [data-streamdown="code-block-body"] code > span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

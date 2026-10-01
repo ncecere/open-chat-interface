@@ -11,6 +11,7 @@ import {
 
 const THEME_STORAGE_KEY = 'oci.theme';
 const BORING_STORAGE_KEY = 'oci.boring';
+const CODE_WRAP_STORAGE_KEY = 'oci.codeWrap';
 /**
  * The instance color theme is administrator-owned, but caching it avoids a
  * flash of the default accent before /auth/status resolves.
@@ -29,9 +30,12 @@ interface ThemeContextValue {
   theme: ThemeMode;
   resolvedTheme: 'light' | 'dark';
   boringMode: boolean;
+  /** Wrap long lines in code blocks instead of scrolling them sideways. */
+  codeWrap: boolean;
   colorTheme: ColorTheme;
   setTheme: (theme: ThemeMode) => void;
   setBoringMode: (enabled: boolean) => void;
+  setCodeWrap: (enabled: boolean) => void;
   setColorTheme: (theme: ColorTheme) => void;
   /**
    * The instance default from branding. Applies only while this person has
@@ -70,6 +74,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [boringMode, setBoringState] = useState(
     () => localStorage.getItem(BORING_STORAGE_KEY) === 'true',
   );
+  const [codeWrap, setCodeWrapState] = useState(
+    () => localStorage.getItem(CODE_WRAP_STORAGE_KEY) === 'true',
+  );
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(systemTheme);
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(readStoredColorTheme);
 
@@ -88,8 +95,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.toggle('dark', resolvedTheme === 'dark');
     root.classList.toggle('light', resolvedTheme === 'light');
     root.classList.toggle('boring', boringMode);
+    root.classList.toggle('code-wrap', codeWrap);
     root.dataset.colorTheme = colorTheme;
-  }, [resolvedTheme, boringMode, colorTheme]);
+  }, [resolvedTheme, boringMode, codeWrap, colorTheme]);
 
   const setTheme = useCallback((next: ThemeMode) => {
     localStorage.setItem(THEME_STORAGE_KEY, next);
@@ -106,6 +114,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setBoringState(enabled);
   }, []);
 
+  const setCodeWrap = useCallback((enabled: boolean) => {
+    localStorage.setItem(CODE_WRAP_STORAGE_KEY, String(enabled));
+    setCodeWrapState(enabled);
+  }, []);
+
   const setColorTheme = useCallback((next: ColorTheme) => {
     localStorage.setItem(COLOR_THEME_STORAGE_KEY, next);
     setColorThemeState(next);
@@ -116,9 +129,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       theme,
       resolvedTheme,
       boringMode,
+      codeWrap,
       colorTheme,
       setTheme,
       setBoringMode,
+      setCodeWrap,
       setColorTheme,
       setInstanceDefaultTheme,
     }),
@@ -126,9 +141,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       theme,
       resolvedTheme,
       boringMode,
+      codeWrap,
       colorTheme,
       setTheme,
       setBoringMode,
+      setCodeWrap,
       setColorTheme,
       setInstanceDefaultTheme,
     ],

@@ -8,30 +8,38 @@ import { cn } from '~/lib/utils';
  * fallback preserves the text so nothing disappears while it resolves.
  */
 const StreamdownMarkdown = lazy(() =>
-  Promise.all([import('streamdown'), import('@streamdown/code'), import('@streamdown/math')]).then(
-    ([{ Streamdown }, { code }, { createMathPlugin }]) => {
-      // Single-dollar inline math is off by default, but models commonly emit it.
-      const plugins = { code, math: createMathPlugin({ singleDollarTextMath: true }) };
+  Promise.all([
+    import('streamdown'),
+    import('@streamdown/code'),
+    import('@streamdown/math'),
+    import('~/components/chat/mermaid-plugin'),
+  ]).then(([{ Streamdown }, { code }, { createMathPlugin }, { createEditorialMermaidPlugin }]) => {
+    // Single-dollar inline math is off by default, but models commonly emit it.
+    // Mermaid itself loads only when a diagram is first rendered.
+    const plugins = {
+      code,
+      math: createMathPlugin({ singleDollarTextMath: true }),
+      mermaid: createEditorialMermaidPlugin(),
+    };
 
-      return {
-        default: ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
-          <Streamdown
-            plugins={plugins}
-            className={className}
-            // The reference interface shows plain code without a gutter.
-            lineNumbers={false}
-            linkSafety={MARKDOWN_LINK_SAFETY}
-            {...(skipHtml ? { skipHtml } : {})}
-            {...(urlTransform
-              ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
-              : {})}
-          >
-            {normalizeMathDelimiters(children)}
-          </Streamdown>
-        ),
-      };
-    },
-  ),
+    return {
+      default: ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
+        <Streamdown
+          plugins={plugins}
+          className={className}
+          // The reference interface shows plain code without a gutter.
+          lineNumbers={false}
+          linkSafety={MARKDOWN_LINK_SAFETY}
+          {...(skipHtml ? { skipHtml } : {})}
+          {...(urlTransform
+            ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
+            : {})}
+        >
+          {normalizeMathDelimiters(children)}
+        </Streamdown>
+      ),
+    };
+  }),
 );
 
 /**
