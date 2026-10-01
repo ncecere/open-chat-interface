@@ -107,6 +107,24 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
     });
   });
 
+  it('ends active sessions when a single account is banned', async () => {
+    const target = await seedUser(live.db, state.organizationId, { role: 'user' });
+    await live.db.insert(schema.session).values({
+      id: randomUUID(),
+      userId: target,
+      token: randomUUID(),
+      expiresAt: new Date(Date.now() + 86_400_000),
+    });
+    await send(app, 'PATCH', `/users/${target}`, { banned: true, banReason: 'Test' });
+    const sessions = await live.db
+      .select()
+      .from(schema.session)
+      .where(eq(schema.session.userId, target));
+    expect(sessions).toHaveLength(0);
+    const [stored] = await live.db.select().from(schema.user).where(eq(schema.user.id, target));
+    expect(stored).toMatchObject({ banned: true, banReason: 'Test' });
+  });
+
   it('records sign-in policy changes separately from other settings', async () => {
     await send(app, 'PATCH', '/settings', { colorTheme: 'violet' });
     expect(await events('settings.auth.update')).toHaveLength(0);

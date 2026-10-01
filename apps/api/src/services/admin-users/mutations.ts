@@ -102,6 +102,12 @@ export async function updateUser(
     .where(eq(schema.user.id, targetId))
     .returning({ id: schema.user.id });
 
+  // A ban that leaves sessions alive is not a ban until they expire. Bulk ban
+  // already ends them; a single-account ban must too.
+  if (patch.banned === true) {
+    await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  }
+
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
