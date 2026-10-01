@@ -5,10 +5,13 @@ Day-to-day running. For deployment and upgrades, see
 
 ## Health
 
-![Health](../images/admin-health.png)
+![System health](../images/admin-health.png)
 
-Whether the parts the instance depends on are working. Open this first when
-something is reported.
+**Data & storage → System health** (`/admin/health`). Whether the parts the
+instance depends on are working, the background jobs that keep it tidy, how much
+storage is in use, and storage reconciliation. Open this first when something is
+reported. The checks refresh every 30 seconds while the page is open; the old
+`/admin/maintenance` address lands here.
 
 | Check | Warns when | Fails when |
 | --- | --- | --- |
@@ -38,11 +41,15 @@ message" is a page of red here, not a mystery.
 Where attachments live — a local path or an S3-compatible bucket — and what is
 currently held.
 
-**Test** checks the configuration actually works. Do this after any change; a
-misconfigured bucket looks fine until somebody uploads a file.
+**Data & storage → Storage** (`/admin/storage`) has three tabs: the storage
+driver, the S3 connection, and the upload policy.
 
-**Reconcile** compares the database against what is really stored, and reports
-disagreement. Worth running after restoring a backup, when the two can drift.
+**Test put/read/delete** on the S3 tab checks the saved S3 settings actually
+work, and can be run while local storage is still active. Do this before
+switching and after any change; a misconfigured bucket looks fine until somebody
+uploads a file. Invalid S3 settings never fall back silently to local storage.
+
+Reconciliation has moved to [System health](#storage-reconciliation).
 
 Uploads reserve their byte and file allowance in PostgreSQL before writing an
 object. Unfinished uploads are hidden from attachment lists, but still reserve
@@ -55,18 +62,29 @@ The local path is shown but not editable: it has to exist inside the container,
 so it stays deployment-managed. It is shown at all so you know which volume to
 back up.
 
-## Search
+## Web search
 
-![Search](../images/admin-search.png)
+![Web search](../images/admin-search.png)
 
-The provider used for web search grounding, and its key. Turning search off here
-removes it from the composer entirely.
+**Appearance & features → Web search** (`/admin/search`). The provider used for
+web search grounding, its credential, and the one switch that turns search on or
+off. There is no separate web search toggle among the General features any more.
+
+People are offered search only when it can actually run: the switch is on, a
+provider is selected, and that provider has its credential — or, for SearXNG, a
+base URL. Until all of those hold, search is removed from the composer rather
+than offered and failing. The page says whether search is available, and why
+not.
 
 ## Maintenance
 
-![Maintenance](../images/admin-maintenance.png)
+Background jobs and storage reconciliation, both on
+[System health](#health). There is no separate Maintenance page any more.
 
-The background jobs, and a way to run one now.
+### Background jobs
+
+The most recent run of each scheduled job: when it started, how long it took,
+how many items it processed, and any error. **Run** starts one now.
 
 Jobs run on their own schedule. Running one by hand is for after you have
 changed a setting it depends on and would rather not wait — retention, say, or
@@ -92,9 +110,24 @@ attempted job per API replica, separate from the regular application pool
 (default ten connections). Private lock connections close after each attempt,
 including when unlocking fails.
 
+### Storage reconciliation
+
+Compares object storage against the database in both directions. **Check for
+orphans** reports objects with no record and records with no object; **Queue
+orphans for deletion** then hands the orphaned objects to the cleanup job. Worth
+running after restoring a backup, when the two can drift.
+
+Records with no object are reported, not repaired: deleting them would destroy a
+conversation's attachment metadata over what may be a temporary storage fault.
+Objects newer than 24 hours are never treated as orphans, because an upload
+writes its file before committing its record.
+
+Above it, **Storage in use** shows live bytes and files, what is in the trash,
+and how many objects are queued for removal.
+
 ## When somebody reports a problem
 
-1. **Health** — is something actually broken?
+1. **System health** — is something actually broken?
 2. **The audit log**, filtered to their address — what did they do, and what
    happened?
 3. **Their user detail** — are they at a limit? Do their sessions look right?

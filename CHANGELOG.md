@@ -7,8 +7,54 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Setup checklist on the admin Overview.** Computed by the server from stored
+  configuration — provider, models, default model, sign-in method, email
+  delivery (required when verification or scheduled reports depend on it),
+  attachment storage, web search, acceptable use and Redis — with a link to
+  the page that resolves each item. Nothing in it contacts an external service.
+- **Roles & access page** (`/admin/roles`). Per role: people count (linked to
+  the filtered user list), fixed rules, effective features, visible models,
+  editable rate limits and storage allowance, and assigned usage budgets; plus
+  instance-wide sign-in attempts and reservation amounts. Rate-limit and
+  retention values show whether they come from saved settings, an environment
+  variable or the built-in default.
+- **User account page actions.** Change role (confirmation when granting or
+  removing administrator access), ban and unban, sign out everywhere, and a
+  Limits section showing each budget's usage and reset time, storage against
+  the role's allowance, per-person adjustments and a link to role settings. The
+  user list has a role selector on each row.
+
+### Changed
+
+- **Administration is grouped by task**: People, Models, Sign-in & security,
+  Data & storage, Insights, and Appearance & features. Merged pages keep their
+  old addresses as redirects: `/admin/providers` to Providers & models,
+  `/admin/sso` to the single sign-on section of Authentication,
+  `/admin/rate-limits` and `/admin/storage-limits` to Roles & access,
+  `/admin/maintenance` to System health, and `/admin/settings` to General.
+- Instance settings are separate pages (General, Authentication, Email delivery).
+  The default model is chosen on Providers & models; background jobs and
+  storage reconciliation are on System health.
+- Web search has a single switch on the Web search page, and clients are
+  offered search only when it can run.
+- Branding's **Accent color** is now the instance accent preset (neutral, blue,
+  violet, emerald), moved from General and replacing the hex colour field.
+  **Default theme** now applies to people who have not chosen a theme.
+- Auditors can open every admin page read-only, with a banner; controls that
+  would change something are hidden or disabled.
+- On narrow screens the admin navigation opens in a drawer from a menu button.
+- Admin pages report failed saves, confirm destructive actions such as deleting
+  a provider or banning in bulk, and offer a retry when a page fails to load.
+  The Canvas, MCP and session-refresh controls, which had no effect, are removed.
+
 ### Fixed
 
+- Banning a single account now ends its sessions immediately, as bulk bans
+  already did.
+- Concurrent default-model changes are serialised, so exactly one model remains
+  the default.
 - **Saving one administrative field no longer resets others.** Partial updates
   applied create-time defaults to fields that were not sent: saving any instance
   setting reset the session lifetime to 30 days, toggling or renaming a model

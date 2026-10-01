@@ -4,7 +4,7 @@
 
 ![The audit log](../images/admin-audit.png)
 
-Who did what, when, and from where.
+**Insights → Audit log.** Who did what, when, and from where.
 
 ### What is recorded
 
@@ -44,7 +44,7 @@ never enters the log.
 
 ![Usage](../images/admin-usage.png)
 
-What has been consumed: totals, daily volume, a breakdown by model, and the
+**Insights → Usage.** What has been consumed: totals, daily volume, a breakdown by model, and the
 heaviest consumers.
 
 Token totals contain reported usage; cost is calculated from the catalog prices
@@ -68,7 +68,8 @@ ordinary use looks like on your instance.
 
 ![Scheduled reports](../images/admin-reports.png)
 
-A usage summary delivered by email, daily, weekly, or monthly.
+**Insights → Reports.** A usage summary delivered by email, daily, weekly, or
+monthly.
 
 Somebody who wants a monthly figure will not remember to open a page for it,
 which is the entire reason these exist. Send the monthly summary to whoever asks
@@ -83,5 +84,7 @@ Points worth knowing:
   without waiting a month to discover the address was wrong.
 - **A failure is recorded on the report**, not only in the logs, so you can see a
   report has been failing without reading server output.
-- Reports need email configured. Without SMTP they are quietly skipped, and
-  [Health](operations.md#health) will be saying so.
+- Reports need email configured. Without SMTP none will arrive: the Reports
+  page warns until email delivery is set up, enabling a report makes email a
+  required step on the [setup checklist](first-run.md#5-set-up-email-delivery),
+  and [System health](operations.md#health) reports email as not configured.

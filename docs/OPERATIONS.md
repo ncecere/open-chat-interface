@@ -66,8 +66,9 @@ PostgreSQL directly or through a **session-mode** pooler; transaction-mode
 pooling does not preserve lock ownership. Each concurrently attempted job opens
 one private lock connection per API replica in addition to the normal application
 pool (default ten connections). Include that headroom in database connection
-limits. See [Maintenance](admin/operations.md#maintenance) for scheduling and
-retry guarantees.
+limits. See [background jobs](admin/operations.md#background-jobs) for scheduling
+and retry guarantees; jobs are listed, and can be run by hand, on **Admin → Data
+& storage → System health**.
 
 ## Back up
 
@@ -183,8 +184,8 @@ An interrupted upload can therefore retain its allowance until explicitly remove
    to be reachable. Legacy rows whose key is literally `pending` have no known
    object key; orphan reconciliation can identify their unreferenced objects
    after its safety window.
-4. Restart producers and run storage reconciliation/counter rebuilding and the
-   object reaper as appropriate. Do not flush storage or zero counters manually.
+4. Restart producers and run storage reconciliation (**System health → Storage
+   reconciliation**), counter rebuilding and the object reaper as appropriate. Do not flush storage or zero counters manually.
 
 ## When live replay is unavailable
 

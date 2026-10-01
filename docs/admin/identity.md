@@ -1,6 +1,12 @@
 # Identity and access
 
-![Auth and single sign-on](../images/admin-sso.png)
+![The Authentication page](../images/admin-settings-authentication.png)
+
+Every way of signing in is configured on one page, **Sign-in & security →
+Authentication** (`/admin/settings/authentication`): registration, local email
+and password sign-in, session length, and — further down, under **Single
+sign-on** — OIDC and SAML providers. The old `/admin/sso` address lands on that
+section.
 
 ## Roles
 
@@ -14,13 +20,21 @@
 `auditor` exists so a compliance reviewer does not need write access to do their
 job. It is enforced on the request method, not on a list of pages, so a new
 administrative page is read-only for an auditor the moment it exists rather than
-when somebody remembers to add it.
+when somebody remembers to add it. In the dashboard an auditor sees a read-only
+banner on every page, and buttons that would save something are hidden or
+disabled.
+
+What each role is held to — rate limits, storage allowance, usage budgets,
+visible models, and the features it gets — is shown together on **People →
+Roles & access**. See [governance](governance.md#roles-and-access).
 
 ## Local accounts
 
-**Settings → Authentication** controls whether email and password sign-in is
-available at all, whether addresses must be verified, and how long a session
-lasts.
+**Authentication** controls whether email and password sign-in is available at
+all, whether addresses must be verified, and how long a session lasts. If
+neither local sign-in nor an enabled single sign-on provider is available, the
+page and the [setup checklist](first-run.md#4-offer-a-way-to-sign-in) say that
+nobody can sign in.
 
 Turning local authentication off still admits a **verified administrator**,
 deliberately, so the setting cannot lock everybody out. That safety net depends
@@ -57,19 +71,13 @@ planning account re-verification.
 
 ### Session length
 
-Two settings, under Authentication:
+**Session length (days)** is how long somebody stays signed in, between 1 and
+365 days.
 
-- **Session length** — how long somebody stays signed in.
-- **Extend after** — how much must elapse before activity renews it.
-
-Shortening the length does not end sessions already issued; those keep the
-expiry they were given. If you need people out now, revoke their sessions from
-[the user list](people.md).
-
-Setting *extend after* longer than *session length* means sessions are never
-renewed and everybody is signed out on a fixed schedule regardless of use. The
-page warns when you do this, because it is occasionally what somebody wants and
-usually not.
+Shortening it does not end sessions already issued; those keep the expiry they
+were given. If you need people out now, use **Sign out everywhere** on their
+[account page](people.md#looking-at-one-person), or select several accounts in
+the user list and sign them out together.
 
 ## Adding an identity provider
 
