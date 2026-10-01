@@ -46,7 +46,12 @@ export const MessageRow = memo(function MessageRow({
 
   if (message.role === 'user') {
     return (
-      <article className="group flex flex-col items-end" aria-label="Your message">
+      <article
+        className="group flex flex-col items-end"
+        aria-label="Your message"
+        data-message-id={message.id}
+        data-message-role="user"
+      >
         {editing && onEdit ? (
           <MessageEditor
             messageId={message.id}
@@ -76,7 +81,11 @@ export const MessageRow = memo(function MessageRow({
   const metadata = metadataOf(message);
 
   return (
-    <article className="group flex flex-col" aria-label="Assistant message">
+    <article
+      className="group flex flex-col"
+      aria-label="Assistant message"
+      data-message-id={message.id}
+    >
       {contextLimitedOf(message) && (
         <p role="note" className="mb-2 text-xs text-[var(--text-muted)]">
           Earlier conversation context was omitted to fit the input limit.

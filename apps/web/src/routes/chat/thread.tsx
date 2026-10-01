@@ -2,11 +2,13 @@ import { type Attachment, REASONING_EFFORTS, type ReasoningEffort } from '@oci/s
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
+import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { ConversationLoadError } from '~/components/chat/conversation-load-error';
 import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
+import { useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError } from '~/lib/api-client';
@@ -110,7 +112,6 @@ function ThreadConversation({
   const navigate = useNavigate();
   const { mutateAsync: branchMessage } = useBranchMessage();
   const { mutateAsync: forkMessage } = useForkMessage();
-  const bottomRef = useRef<HTMLDivElement>(null);
   const sentPending = useRef(false);
   const continuedBranch = useRef(false);
   const pendingModelAvailable = pendingBranch?.modelSlug
@@ -193,10 +194,7 @@ function ThreadConversation({
     [branchMessage, threadId, selectedModelSlug, navigate],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new content
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [session.messages.length, session.streaming]);
+  const scroll = useChatScroll(session.messages, session.streaming);
 
   if (session.recovery.unavailable)
     return (
@@ -209,50 +207,69 @@ function ThreadConversation({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <MessageList
-          messages={session.messages}
-          streaming={session.streaming}
-          searching={session.webSearch}
-          onRetry={retry}
-          onFork={session.features?.branching ? forkAtMessage : undefined}
-          onEdit={session.features?.branching ? editAndBranch : undefined}
-        />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={scroll.scrollRef}
+          onScroll={scroll.onScroll}
+          data-conversation-scroller
+          className="flex-1 overflow-y-auto"
+        >
+          <div ref={scroll.contentRef}>
+            <MessageList
+              messages={session.messages}
+              streaming={session.streaming}
+              searching={session.webSearch}
+              onRetry={retry}
+              onFork={session.features?.branching ? forkAtMessage : undefined}
+              onEdit={session.features?.branching ? editAndBranch : undefined}
+            />
 
-        {(session.error || session.recovery.error || session.recovery.remotePending) && (
-          <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
-            {(session.recovery.error || session.error) && (
-              <p
-                role="alert"
-                className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
-              >
-                {session.recovery.error ||
-                  session.error?.message ||
-                  'Something went wrong generating a response.'}
-              </p>
+            {(session.error || session.recovery.error || session.recovery.remotePending) && (
+              <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
+                {(session.recovery.error || session.error) && (
+                  <p
+                    role="alert"
+                    className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+                  >
+                    {session.recovery.error ||
+                      session.error?.message ||
+                      'Something went wrong generating a response.'}
+                  </p>
+                )}
+                {session.recovery.remotePending && (
+                  <p role="status" className="text-sm text-[var(--text-muted)]">
+                    A reply is pending on the server. You can stop it or wait for saved messages.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="text-sm underline"
+                  disabled={
+                    session.recovery.refreshing ||
+                    session.recovery.resuming ||
+                    session.status === 'streaming' ||
+                    session.status === 'submitted'
+                  }
+                  onClick={session.recovery.recover}
+                >
+                  Reload saved messages
+                </button>
+              </div>
             )}
-            {session.recovery.remotePending && (
-              <p role="status" className="text-sm text-[var(--text-muted)]">
-                A reply is pending on the server. You can stop it or wait for saved messages.
-              </p>
-            )}
-            <button
-              type="button"
-              className="text-sm underline"
-              disabled={
-                session.recovery.refreshing ||
-                session.recovery.resuming ||
-                session.status === 'streaming' ||
-                session.status === 'submitted'
-              }
-              onClick={session.recovery.recover}
-            >
-              Reload saved messages
-            </button>
           </div>
+          {/* Room below a just-sent question so it can sit at the top of the view. */}
+          <div ref={scroll.spacerRef} aria-hidden="true" />
+        </div>
+        {scroll.detached && (
+          <button
+            type="button"
+            onClick={scroll.jumpToLatest}
+            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors hover:text-[var(--text-primary)]"
+          >
+            <ArrowDown className="size-4" aria-hidden="true" />
+            Jump to latest
+          </button>
         )}
-
-        <div ref={bottomRef} />
       </div>
 
       <Composer
