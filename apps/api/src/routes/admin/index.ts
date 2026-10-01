@@ -12,7 +12,9 @@ import { policyRoutes } from './policies.js';
 import { providerRoutes } from './providers.js';
 import { quotaRoutes } from './quotas.js';
 import { reportRoutes } from './reports.js';
+import { rolesRoutes } from './roles.js';
 import { settingsRoutes } from './settings.js';
+import { setupRoutes } from './setup.js';
 import { ssoRoutes } from './sso.js';
 import { usageRoutes } from './usage.js';
 import { userRoutes } from './users.js';
@@ -23,6 +25,8 @@ export const adminRoutes = new Hono<AppBindings>();
 adminRoutes.use('*', requireAdmin);
 
 adminRoutes.route('/overview', overviewRoutes);
+adminRoutes.route('/setup-status', setupRoutes);
+adminRoutes.route('/roles', rolesRoutes);
 // Mounted before the user routes so the override paths are not shadowed by a
 // broader `/users/:id` handler.
 adminRoutes.route('/users', overrideRoutes);

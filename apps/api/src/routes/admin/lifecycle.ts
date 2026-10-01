@@ -12,6 +12,7 @@ import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { recentJobRuns, runJobNow } from '../../services/jobs/index.js';
 import {
+  getConfigSources,
   getRateLimitSettings,
   getRetentionSettings,
   updateRateLimitSettings,
@@ -118,6 +119,13 @@ lifecycleRoutes.put('/retention', async (c) => {
 
   return c.json(settings);
 });
+
+/**
+ * Which retention and rate-limit values come from saved settings, environment
+ * variables or built-in defaults. Separate from the settings bodies, which are
+ * sent back on save and validated strictly.
+ */
+lifecycleRoutes.get('/config-sources', async (c) => c.json(await getConfigSources()));
 
 lifecycleRoutes.get('/rate-limits', async (c) => {
   return c.json(await getRateLimitSettings());

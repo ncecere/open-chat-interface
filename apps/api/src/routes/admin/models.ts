@@ -48,12 +48,26 @@ modelRoutes.get('/', async (c) => {
   return c.json({ models });
 });
 
-async function clearOtherDefaults(organizationId: string, keepId?: string) {
-  const condition = keepId
-    ? and(eq(schema.model.organizationId, organizationId), ne(schema.model.id, keepId))
-    : eq(schema.model.organizationId, organizationId);
+type Executor = Pick<typeof db, 'select' | 'insert' | 'update'>;
 
-  await db.update(schema.model).set({ isDefault: false }).where(condition);
+/**
+ * Serializes default-model changes for an organization. Taken before the
+ * write, so two concurrent "make default" requests cannot both commit with
+ * their own model marked default; the later one clears the earlier.
+ */
+async function lockCatalog(tx: Executor, organizationId: string) {
+  await tx
+    .select({ id: schema.model.id })
+    .from(schema.model)
+    .where(eq(schema.model.organizationId, organizationId))
+    .for('update');
+}
+
+async function clearOtherDefaults(tx: Executor, organizationId: string, keepId: string) {
+  await tx
+    .update(schema.model)
+    .set({ isDefault: false })
+    .where(and(eq(schema.model.organizationId, organizationId), ne(schema.model.id, keepId)));
 }
 
 async function requireProvider(providerId: string, organizationId: string) {
@@ -82,32 +96,33 @@ modelRoutes.post('/', async (c) => {
 
   if (existing) throw conflict('A model with that slug already exists');
 
-  const [created] = await db
-    .insert(schema.model)
-    .values({
-      organizationId,
-      providerId: input.providerId,
-      slug: input.slug,
-      labId: input.labId ?? null,
-      upstreamModelId: input.upstreamModelId,
-      displayName: input.displayName,
-      description: input.description ?? null,
-      capabilities: input.capabilities,
-      contextWindow: input.contextWindow ?? null,
-      maxOutputTokens: input.maxOutputTokens ?? null,
-      supportedEfforts: input.supportedEfforts,
-      inputPriceMicros: input.inputPriceMicros ?? null,
-      outputPriceMicros: input.outputPriceMicros ?? null,
-      visibleToRoles: input.visibleToRoles,
-      enabled: input.enabled,
-      isDefault: input.isDefault,
-      sortOrder: input.sortOrder,
-    })
-    .returning({ id: schema.model.id });
-
-  if (input.isDefault && created) {
-    await clearOtherDefaults(organizationId, created.id);
-  }
+  const created = await db.transaction(async (tx) => {
+    if (input.isDefault) await lockCatalog(tx, organizationId);
+    const [row] = await tx
+      .insert(schema.model)
+      .values({
+        organizationId,
+        providerId: input.providerId,
+        slug: input.slug,
+        labId: input.labId ?? null,
+        upstreamModelId: input.upstreamModelId,
+        displayName: input.displayName,
+        description: input.description ?? null,
+        capabilities: input.capabilities,
+        contextWindow: input.contextWindow ?? null,
+        maxOutputTokens: input.maxOutputTokens ?? null,
+        supportedEfforts: input.supportedEfforts,
+        inputPriceMicros: input.inputPriceMicros ?? null,
+        outputPriceMicros: input.outputPriceMicros ?? null,
+        visibleToRoles: input.visibleToRoles,
+        enabled: input.enabled,
+        isDefault: input.isDefault,
+        sortOrder: input.sortOrder,
+      })
+      .returning({ id: schema.model.id });
+    if (input.isDefault && row) await clearOtherDefaults(tx, organizationId, row.id);
+    return row;
+  });
 
   await recordAudit({
     actorUserId: actor.id,
@@ -152,38 +167,39 @@ modelRoutes.patch('/:id', async (c) => {
     if (slugOwner) throw conflict('A model with that slug already exists');
   }
 
-  const [updated] = await db
-    .update(schema.model)
-    .set({
-      ...(input.providerId !== undefined && { providerId: input.providerId }),
-      ...(input.slug !== undefined && { slug: input.slug }),
-      ...(input.labId !== undefined && { labId: input.labId ?? null }),
-      ...(input.upstreamModelId !== undefined && { upstreamModelId: input.upstreamModelId }),
-      ...(input.displayName !== undefined && { displayName: input.displayName }),
-      ...(input.description !== undefined && { description: input.description ?? null }),
-      ...(input.capabilities !== undefined && { capabilities: input.capabilities }),
-      ...(input.contextWindow !== undefined && { contextWindow: input.contextWindow ?? null }),
-      ...(input.maxOutputTokens !== undefined && {
-        maxOutputTokens: input.maxOutputTokens ?? null,
-      }),
-      ...(input.supportedEfforts !== undefined && { supportedEfforts: input.supportedEfforts }),
-      ...(input.inputPriceMicros !== undefined && {
-        inputPriceMicros: input.inputPriceMicros ?? null,
-      }),
-      ...(input.outputPriceMicros !== undefined && {
-        outputPriceMicros: input.outputPriceMicros ?? null,
-      }),
-      ...(input.visibleToRoles !== undefined && { visibleToRoles: input.visibleToRoles }),
-      ...(input.enabled !== undefined && { enabled: input.enabled }),
-      ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
-      ...(input.sortOrder !== undefined && { sortOrder: input.sortOrder }),
-    })
-    .where(eq(schema.model.id, id))
-    .returning({ id: schema.model.id });
-
-  if (input.isDefault) {
-    await clearOtherDefaults(organizationId, id);
-  }
+  const updated = await db.transaction(async (tx) => {
+    if (input.isDefault) await lockCatalog(tx, organizationId);
+    const [row] = await tx
+      .update(schema.model)
+      .set({
+        ...(input.providerId !== undefined && { providerId: input.providerId }),
+        ...(input.slug !== undefined && { slug: input.slug }),
+        ...(input.labId !== undefined && { labId: input.labId ?? null }),
+        ...(input.upstreamModelId !== undefined && { upstreamModelId: input.upstreamModelId }),
+        ...(input.displayName !== undefined && { displayName: input.displayName }),
+        ...(input.description !== undefined && { description: input.description ?? null }),
+        ...(input.capabilities !== undefined && { capabilities: input.capabilities }),
+        ...(input.contextWindow !== undefined && { contextWindow: input.contextWindow ?? null }),
+        ...(input.maxOutputTokens !== undefined && {
+          maxOutputTokens: input.maxOutputTokens ?? null,
+        }),
+        ...(input.supportedEfforts !== undefined && { supportedEfforts: input.supportedEfforts }),
+        ...(input.inputPriceMicros !== undefined && {
+          inputPriceMicros: input.inputPriceMicros ?? null,
+        }),
+        ...(input.outputPriceMicros !== undefined && {
+          outputPriceMicros: input.outputPriceMicros ?? null,
+        }),
+        ...(input.visibleToRoles !== undefined && { visibleToRoles: input.visibleToRoles }),
+        ...(input.enabled !== undefined && { enabled: input.enabled }),
+        ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
+        ...(input.sortOrder !== undefined && { sortOrder: input.sortOrder }),
+      })
+      .where(eq(schema.model.id, id))
+      .returning({ id: schema.model.id });
+    if (input.isDefault) await clearOtherDefaults(tx, organizationId, id);
+    return row;
+  });
 
   await recordAudit({
     actorUserId: actor.id,

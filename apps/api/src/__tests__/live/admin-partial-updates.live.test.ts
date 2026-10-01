@@ -120,6 +120,36 @@ describe.skipIf(!available)('live: partial administrative updates', () => {
     });
   });
 
+  it('leaves exactly one default when defaults are changed concurrently', async () => {
+    const created = await live.db
+      .insert(schema.model)
+      .values(
+        Array.from({ length: 6 }, (_, index) => ({
+          organizationId: state.organizationId,
+          providerId,
+          slug: `default-race-${index}`,
+          upstreamModelId: `default-race-${index}`,
+          displayName: `Default race ${index}`,
+        })),
+      )
+      .returning({ id: schema.model.id });
+
+    await Promise.all(
+      created.map((row) => send(app, 'PATCH', `/models/${row.id}`, { isDefault: true })),
+    );
+
+    const defaults = await live.db
+      .select({ id: schema.model.id })
+      .from(schema.model)
+      .where(
+        and(
+          eq(schema.model.organizationId, state.organizationId),
+          eq(schema.model.isDefault, true),
+        ),
+      );
+    expect(defaults).toHaveLength(1);
+  });
+
   it('keeps the session lifetime when another setting is saved', async () => {
     await send(app, 'PATCH', '/settings', { sessionLifetimeDays: 14, sessionRefreshDays: 3 });
     await send(app, 'PATCH', '/settings', { colorTheme: 'blue' });

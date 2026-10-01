@@ -1,4 +1,5 @@
 import {
+  type ConfigSource,
   DEFAULT_AUDIT_LOG_RETENTION_DAYS,
   DEFAULT_AUTH_ATTEMPTS_PER_MINUTE,
   DEFAULT_CHAT_REQUESTS_PER_MINUTE,
@@ -114,6 +115,87 @@ export async function getRateLimitSettings(): Promise<RateLimitConfig> {
         positiveInt(env.QUOTA_RESERVE_COST_MICROS, DEFAULT_RESERVED_COST_MICROS),
       tokens:
         stored.reserve?.tokens ?? positiveInt(env.QUOTA_RESERVE_TOKENS, DEFAULT_RESERVED_TOKENS),
+    },
+  };
+}
+
+export interface ConfigSources {
+  retention: Record<keyof RetentionSettings, ConfigSource>;
+  rateLimits: {
+    roles: Record<UserRole, Record<keyof RateLimitSettings, ConfigSource>>;
+    authAttemptsPerMinute: ConfigSource;
+    reserve: { costMicros: ConfigSource; tokens: ConfigSource };
+  };
+}
+
+/**
+ * Mirrors the precedence used by the getters above: a saved value wins, then
+ * a valid environment variable, then the built-in default. An environment
+ * value that does not parse is ignored there, so it reports `default` here.
+ */
+function sourceOf(
+  saved: unknown,
+  env: string | undefined,
+  valid: (value: string) => boolean = (value) => positiveInt(value, 0) > 0,
+): ConfigSource {
+  if (saved !== undefined) return 'database';
+  return env !== undefined && valid(env) ? 'environment' : 'default';
+}
+
+export async function getConfigSources(): Promise<ConfigSources> {
+  const env = loadEnv();
+  const [retention, rateLimits] = await Promise.all([
+    getSetting('retention'),
+    getSetting('rateLimits'),
+  ]);
+  const roles = Object.fromEntries(
+    USER_ROLES.map((role) => {
+      const saved = rateLimits.roles?.[role] ?? {};
+      return [
+        role,
+        {
+          maxConcurrentStreams: sourceOf(
+            saved.maxConcurrentStreams,
+            env.RATE_LIMIT_MAX_CONCURRENT_STREAMS,
+          ),
+          chatRequestsPerMinute: sourceOf(
+            saved.chatRequestsPerMinute,
+            env.RATE_LIMIT_CHAT_PER_MINUTE,
+          ),
+          uploadRequestsPerMinute: sourceOf(
+            saved.uploadRequestsPerMinute,
+            env.RATE_LIMIT_UPLOAD_PER_MINUTE,
+          ),
+        },
+      ];
+    }),
+  ) as ConfigSources['rateLimits']['roles'];
+
+  return {
+    retention: {
+      trashRetentionDays: sourceOf(retention.trashRetentionDays, env.RETENTION_TRASH_DAYS),
+      threadRetentionDays: sourceOf(retention.threadRetentionDays, env.RETENTION_THREAD_DAYS),
+      exemptPinnedThreads: retention.exemptPinnedThreads !== undefined ? 'database' : 'default',
+      usageEventRetentionDays: sourceOf(
+        retention.usageEventRetentionDays,
+        env.RETENTION_USAGE_EVENT_DAYS,
+      ),
+      auditLogRetentionDays: sourceOf(
+        retention.auditLogRetentionDays,
+        env.RETENTION_AUDIT_LOG_DAYS,
+      ),
+      displayTimezone: sourceOf(retention.displayTimezone, env.DISPLAY_TIMEZONE, Boolean),
+    },
+    rateLimits: {
+      roles,
+      authAttemptsPerMinute: sourceOf(
+        rateLimits.authAttemptsPerMinute,
+        env.RATE_LIMIT_AUTH_PER_MINUTE,
+      ),
+      reserve: {
+        costMicros: sourceOf(rateLimits.reserve?.costMicros, env.QUOTA_RESERVE_COST_MICROS),
+        tokens: sourceOf(rateLimits.reserve?.tokens, env.QUOTA_RESERVE_TOKENS),
+      },
     },
   };
 }

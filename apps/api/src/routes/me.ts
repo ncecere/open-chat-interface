@@ -14,6 +14,7 @@ import {
   skipIntroduction,
 } from '../services/onboarding.js';
 import { getUsageSummary } from '../services/quota/index.js';
+import { webSearchProblem } from '../services/search/availability.js';
 import { getSetting } from '../services/settings.js';
 
 export const meRoutes = new Hono<AppBindings>();
@@ -53,9 +54,10 @@ async function loadPreferences(userId: string) {
 
 meRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const [preferences, features] = await Promise.all([
+  const [preferences, features, search] = await Promise.all([
     loadPreferences(user.id),
     getSetting('features'),
+    getSetting('search'),
   ]);
 
   return c.json({
@@ -73,6 +75,8 @@ meRoutes.get('/', async (c) => {
       attachments: features.attachments && user.role !== 'restricted',
       shareLinks: features.shareLinks && user.role !== 'restricted',
       temporaryChat: features.temporaryChat && user.role !== 'restricted',
+      // Advertised only when a search would actually run.
+      webSearch: webSearchProblem(features, search) === null,
     },
   });
 });

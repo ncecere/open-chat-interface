@@ -1,6 +1,9 @@
-import { createUserSchema, updateUserSchema } from '@oci/shared';
+import { eq, schema } from '@oci/db';
+import { createUserSchema, type UserRole, updateUserSchema } from '@oci/shared';
 import { Hono } from 'hono';
+import { db } from '../../db/index.js';
 import { clientIp } from '../../lib/client-ip.js';
+import { notFound } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody, parseQuery } from '../../middleware/validate.js';
 import { applyBulkUserAction, bulkActionSchema } from '../../services/admin-users/bulk-actions.js';
@@ -12,6 +15,8 @@ import {
   revokeUserSessions,
   updateUser,
 } from '../../services/admin-users/mutations.js';
+import { getUsageSummary } from '../../services/quota/index.js';
+import { getStorageUsage } from '../../services/storage/quota.js';
 
 export const userRoutes = new Hono<AppBindings>();
 
@@ -34,6 +39,27 @@ userRoutes.post('/bulk', async (c) => {
 
 userRoutes.get('/:id', async (c) => {
   return c.json(await getUserDetail(c.req.param('id')));
+});
+
+/**
+ * The limits one person is held to right now: each budget with its current
+ * usage and reset time, and storage use against the role's allowance. Computed
+ * by the same functions enforcement uses.
+ */
+userRoutes.get('/:id/limits', async (c) => {
+  const [target] = await db
+    .select({ id: schema.user.id, role: schema.user.role })
+    .from(schema.user)
+    .where(eq(schema.user.id, c.req.param('id')))
+    .limit(1);
+  if (!target) throw notFound('User not found');
+  // The column is plain text; role values are validated on every write.
+  const role = target.role as UserRole;
+  const [usage, storage] = await Promise.all([
+    getUsageSummary(target.id, role),
+    getStorageUsage(target.id, role),
+  ]);
+  return c.json({ usage, storage });
 });
 
 userRoutes.patch('/:id', async (c) => {
