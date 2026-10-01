@@ -11,9 +11,10 @@ import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
 import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import {
-  validateRateLimitSearch,
+  validateRolesSearch,
   validateStorageSearch,
   validateUsageSearch,
+  validateUsersSearch,
 } from '~/lib/admin-search';
 import { ApiError, api } from '~/lib/api-client';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
@@ -220,6 +221,7 @@ const adminOverviewRoute = createRoute({
 const adminUsersRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/users',
+  validateSearch: validateUsersSearch,
   component: lazyRouteComponent(() => import('~/routes/admin/users'), 'AdminUsersPage'),
 });
 
@@ -241,10 +243,39 @@ const adminUserDetailRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/user-detail'), 'AdminUserDetailPage'),
 });
 
-const adminProvidersRoute = createRoute({
+// Pages merged into another keep their old address working. Redirecting in
+// beforeLoad means no page module is loaded for the old path.
+type MergedAdminPage =
+  | '/admin/models'
+  | '/admin/settings/authentication'
+  | '/admin/roles'
+  | '/admin/health';
+
+function redirectRoute<TPath extends string>(path: TPath, to: MergedAdminPage, hash?: string) {
+  return createRoute({
+    getParentRoute: () => adminRoute,
+    path,
+    beforeLoad: () => {
+      throw redirect({ to, hash, replace: true });
+    },
+  });
+}
+
+const adminProvidersRoute = redirectRoute('/admin/providers', '/admin/models');
+const adminSsoRoute = redirectRoute(
+  '/admin/sso',
+  '/admin/settings/authentication',
+  'single-sign-on',
+);
+const adminRateLimitsRoute = redirectRoute('/admin/rate-limits', '/admin/roles');
+const adminStorageLimitsRoute = redirectRoute('/admin/storage-limits', '/admin/roles');
+const adminMaintenanceRoute = redirectRoute('/admin/maintenance', '/admin/health');
+
+const adminRolesRoute = createRoute({
   getParentRoute: () => adminRoute,
-  path: '/admin/providers',
-  component: lazyRouteComponent(() => import('~/routes/admin/providers'), 'AdminProvidersPage'),
+  path: '/admin/roles',
+  validateSearch: validateRolesSearch,
+  component: lazyRouteComponent(() => import('~/routes/admin/roles'), 'AdminRolesPage'),
 });
 
 const adminModelsRoute = createRoute({
@@ -299,12 +330,6 @@ const adminBrandingRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/branding'), 'AdminBrandingPage'),
 });
 
-const adminSsoRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: '/admin/sso',
-  component: lazyRouteComponent(() => import('~/routes/admin/sso'), 'AdminSsoPage'),
-});
-
 const adminQuotasRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/quotas',
@@ -322,22 +347,6 @@ const adminStorageRoute = createRoute({
   path: '/admin/storage',
   validateSearch: validateStorageSearch,
   component: lazyRouteComponent(() => import('~/routes/admin/storage'), 'AdminStoragePage'),
-});
-
-const adminStorageLimitsRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: '/admin/storage-limits',
-  component: lazyRouteComponent(
-    () => import('~/routes/admin/storage-limits'),
-    'AdminStorageLimitsPage',
-  ),
-});
-
-const adminRateLimitsRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: '/admin/rate-limits',
-  validateSearch: validateRateLimitSearch,
-  component: lazyRouteComponent(() => import('~/routes/admin/rate-limits'), 'AdminRateLimitsPage'),
 });
 
 const adminRetentionRoute = createRoute({
@@ -365,12 +374,6 @@ const adminUsageRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/usage'), 'AdminUsagePage'),
 });
 
-const adminMaintenanceRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: '/admin/maintenance',
-  component: lazyRouteComponent(() => import('~/routes/admin/maintenance'), 'AdminMaintenancePage'),
-});
-
 const adminAuditRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/audit',
@@ -394,6 +397,7 @@ const routeTree = rootRoute.addChildren([
     adminReportsRoute,
     adminProvidersRoute,
     adminModelsRoute,
+    adminRolesRoute,
     adminSettingsRoute,
     adminGeneralSettingsRoute,
     adminAuthenticationSettingsRoute,

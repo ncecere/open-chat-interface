@@ -7,7 +7,7 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cpu, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, Cpu, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EditableFieldset, EditOnly, useAdminAccess } from '~/components/admin/admin-access';
 import {
@@ -15,6 +15,7 @@ import {
   EmptyState,
   LoadError,
   MutationError,
+  Notice,
   Row,
   RowList,
 } from '~/components/admin/admin-ui';
@@ -26,10 +27,13 @@ import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
+import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { SETUP_STATUS_QUERY_KEY, useSetupCheck } from '~/hooks/use-setup-status';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
+import { PROVIDERS_SECTION_ID, ProvidersSection } from '~/routes/admin/providers';
 
 const CAPABILITY_LABELS: Record<ModelCapability, string> = {
   vision: 'Vision',
@@ -66,6 +70,7 @@ function ModelRow({
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
         queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
       ]),
     onError: () => setDisplayName(model.displayName),
   });
@@ -221,6 +226,94 @@ function ModelRow({
   );
 }
 
+/**
+ * Chooses the model a new conversation starts on.
+ *
+ * The flag lives on the model row (the server clears it from every other model
+ * in the same write), but the choice sits with the catalog it is made from.
+ * Only models someone could actually use are offered: enabled, on an enabled
+ * provider.
+ */
+function DefaultModelSelector({
+  models,
+  providers,
+}: {
+  models: AdminModel[];
+  providers: Provider[] | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const check = useSetupCheck('default-model');
+  const [saved, setSaved] = useState(false);
+
+  const enabledProviders = new Set(
+    (providers ?? []).filter((provider) => provider.enabled).map((provider) => provider.id),
+  );
+  const selectable = models.filter(
+    (model) => model.enabled && enabledProviders.has(model.providerId),
+  );
+  const current = models.find((model) => model.isDefault);
+  const currentSelectable = current && selectable.some((model) => model.id === current.id);
+
+  const save = useMutation({
+    mutationFn: (id: string) => api.patch(`/admin/models/${id}`, { isDefault: true }),
+    onSuccess: () => setSaved(true),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
+        queryClient.invalidateQueries({ queryKey: ['models'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+      ]),
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      {selectable.length === 0 ? (
+        <p className="text-[var(--text-muted)] text-sm">
+          Enable a model on an enabled provider to choose the default.
+        </p>
+      ) : (
+        <Field
+          label="Default model"
+          htmlFor="default-model"
+          hint="Used when someone starts a conversation without choosing a model."
+        >
+          <Select
+            id="default-model"
+            value={currentSelectable ? current.id : ''}
+            disabled={save.isPending}
+            placeholder="Select a model"
+            onChange={(id) => {
+              setSaved(false);
+              save.mutate(id);
+            }}
+            options={selectable.map((model) => ({
+              value: model.id,
+              label: `${model.displayName} · ${model.providerLabel}`,
+            }))}
+            className="sm:max-w-96"
+          />
+        </Field>
+      )}
+
+      <div aria-live="polite">
+        <MutationError error={save.error} message="The default model could not be saved." />
+        {saved && !save.isPending && (
+          <p className="flex items-center gap-1.5 text-[var(--success)] text-sm">
+            <Check className="size-4" aria-hidden="true" />
+            Default model saved.
+          </p>
+        )}
+      </div>
+
+      {check?.status === 'attention' && (
+        <Notice tone="warning" title="The default model needs attention">
+          {check.detail}
+        </Notice>
+      )}
+    </div>
+  );
+}
+
 export function AdminModelsPage() {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
@@ -242,6 +335,7 @@ export function AdminModelsPage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
       queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+      queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
     ]);
   }
 
@@ -253,47 +347,80 @@ export function AdminModelsPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Model catalog"
-        description="Add upstream models from configured providers, then control how users can access them."
-        actions={
-          <EditOnly>
-            <Button
-              variant="primary"
-              disabled={!providers.data || providers.data.providers.length === 0}
-              onClick={openCreate}
-            >
-              <Plus />
-              Add model
-            </Button>
-          </EditOnly>
-        }
+        title="Providers & models"
+        description="Connect upstream providers, choose which of their models join the catalog, and control who can use each one."
       />
 
-      {isLoading ? (
-        <div className="py-16">
-          <Spinner className="mx-auto size-6" />
-        </div>
-      ) : models.isError || !data ? (
-        <LoadError title="The model catalog could not be loaded." query={models} />
-      ) : data.models.length > 0 ? (
-        <RowList>
-          {data.models.map((model) => (
-            <ModelRow
-              key={model.id}
-              model={model}
-              onEdit={() => {
-                setEditingModel(model);
-                setFormOpen(true);
-              }}
-              onRemove={() => setRemoveFor(model)}
-            />
-          ))}
-        </RowList>
-      ) : (
-        <EmptyState icon={Cpu} title="The catalog is empty.">
-          Add a provider, then use “Discover models” to choose which ones to expose.
-        </EmptyState>
-      )}
+      <div className="flex flex-col gap-10 pb-10">
+        <ProvidersSection />
+
+        <section
+          aria-labelledby="catalog-heading"
+          className="flex flex-col gap-5 border-t border-[var(--border-subtle)] pt-8"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2
+                id="catalog-heading"
+                className="text-base font-semibold text-[var(--text-primary)]"
+              >
+                Model catalog
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+                Models people can choose from. Disable one to hide it without removing it.
+              </p>
+            </div>
+            <EditOnly>
+              <Button
+                variant="secondary"
+                disabled={!providers.data || providers.data.providers.length === 0}
+                onClick={openCreate}
+              >
+                <Plus />
+                Add model
+              </Button>
+            </EditOnly>
+          </div>
+
+          {isLoading ? (
+            <div className="py-8" role="status" aria-label="Loading the model catalog">
+              <Spinner className="mx-auto size-6" />
+            </div>
+          ) : models.isError || !data ? (
+            <LoadError title="The model catalog could not be loaded." query={models} />
+          ) : data.models.length > 0 ? (
+            <>
+              <EditableFieldset>
+                <DefaultModelSelector models={data.models} providers={providers.data?.providers} />
+              </EditableFieldset>
+              <RowList>
+                {data.models.map((model) => (
+                  <ModelRow
+                    key={model.id}
+                    model={model}
+                    onEdit={() => {
+                      setEditingModel(model);
+                      setFormOpen(true);
+                    }}
+                    onRemove={() => setRemoveFor(model)}
+                  />
+                ))}
+              </RowList>
+            </>
+          ) : (
+            <EmptyState icon={Cpu} title="The catalog is empty.">
+              Use{' '}
+              <a
+                href={`#${PROVIDERS_SECTION_ID}`}
+                className="text-[var(--accent-bright)] hover:underline"
+              >
+                Discover models
+              </a>{' '}
+              on a provider above to choose which models to offer.
+            </EmptyState>
+          )}
+        </section>
+      </div>
 
       <ConfirmDialog
         open={Boolean(removeFor)}

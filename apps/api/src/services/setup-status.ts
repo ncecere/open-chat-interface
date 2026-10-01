@@ -47,7 +47,7 @@ async function providerCheck(): Promise<SetupCheck> {
       // Self-hosted OpenAI-compatible servers commonly need no key.
       (provider.encryptedApiKey !== null || provider.kind === 'openai-compatible'),
   );
-  const action = { label: 'Manage providers', to: '/admin/providers' };
+  const action = { label: 'Open providers & models', to: '/admin/models' };
   if (usable.length > 0) {
     return {
       id: 'provider',
@@ -84,7 +84,7 @@ async function modelChecks(): Promise<SetupCheck[]> {
     .from(schema.model)
     .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id));
   const available = rows.filter((row) => row.enabled && row.providerEnabled);
-  const action = { label: 'Open model catalog', to: '/admin/models' };
+  const action = { label: 'Open providers & models', to: '/admin/models' };
 
   const models: SetupCheck = {
     id: 'models',
@@ -173,12 +173,14 @@ async function emailCheck(): Promise<SetupCheck> {
   const action = { label: 'Configure email', to: '/admin/settings/email' };
   const title = 'Set up email delivery';
 
+  // Required only while something depends on it, so the required count does
+  // not change merely because email was configured.
   if (usable) {
     return {
       id: 'email',
       title,
       status: 'complete',
-      required: true,
+      required: dependents.length > 0,
       detail: 'Email is configured.',
       action,
     };
@@ -284,9 +286,9 @@ function redisCheck(): SetupCheck {
     status: configured ? 'complete' : 'optional',
     required: false,
     detail: configured
-      ? 'Redis is configured; check Health for reachability.'
+      ? 'Redis is configured; check System health for reachability.'
       : 'Without Redis, rate limits and stream recovery work per replica only.',
-    action: { label: 'Open health', to: '/admin/health' },
+    action: { label: 'Open system health', to: '/admin/health' },
   };
 }
 

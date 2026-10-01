@@ -30,7 +30,7 @@ function submitButton(form: HTMLFormElement): HTMLButtonElement {
   return form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 }
 
-it('no longer offers the Canvas and MCP toggles, and never sends them', async () => {
+it('offers only enforced features and sends the full features object', async () => {
   const settings = {
     colorTheme: 'neutral',
     defaultSystemPrompt: null,
@@ -46,7 +46,7 @@ it('no longer offers the Canvas and MCP toggles, and never sends them', async ()
       temporaryChat: true,
       canvas: true,
       mcp: true,
-      webSearch: true,
+      webSearch: false,
       attachments: true,
       branching: true,
     },
@@ -57,11 +57,28 @@ it('no longer offers the Canvas and MCP toggles, and never sends them', async ()
   expect(document.getElementById('feature-mcp')).toBeNull();
   expect(document.body.textContent).not.toContain('MCP tools');
   expect(document.body.textContent).not.toContain('Canvas');
+  // Moved: web search to its own page, the default model to Providers &
+  // models, and the accent to Branding.
+  expect(document.getElementById('feature-webSearch')).toBeNull();
+  expect(document.getElementById('default-model')).toBeNull();
+  expect(document.querySelector('input[name="color-theme"]')).toBeNull();
 
   const shareLinks = document.getElementById('feature-shareLinks') as HTMLButtonElement;
   await click(shareLinks);
   await click(submitButton(shareLinks.closest('form')!));
-  expect(api.patch).toHaveBeenCalledWith('/admin/settings', { features: { shareLinks: false } });
+  // The server replaces the stored object, so unlisted values (including web
+  // search, switched elsewhere) are sent back exactly as loaded.
+  expect(api.patch).toHaveBeenCalledWith('/admin/settings', {
+    features: {
+      shareLinks: false,
+      temporaryChat: true,
+      canvas: true,
+      mcp: true,
+      webSearch: false,
+      attachments: true,
+      branching: true,
+    },
+  });
 });
 
 it('keeps session length but drops the unused session extension field', async () => {

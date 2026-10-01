@@ -56,8 +56,13 @@ for (const kind of ['oidc', 'saml'] as const) {
       }
       return route.fulfill({ json: { providers: [] } });
     });
+    // Single sign-on lives on the Authentication page; the old address redirects there.
     await page.goto('/admin/sso');
-    await page.getByRole('button', { name: 'Add provider', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/admin\/settings\/authentication#single-sign-on$/);
+    await page
+      .locator('#single-sign-on')
+      .getByRole('button', { name: 'Add provider', exact: true })
+      .click();
     const dialog = page.getByRole('dialog');
     if (kind === 'saml') {
       await dialog.getByRole('combobox', { name: 'Provider type' }).click();
@@ -159,4 +164,28 @@ test('instance settings live at their own addresses', async ({ page, isMobile })
   await nav.getByRole('link', { name: 'Email delivery', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/settings\/email$/);
   await expect(page.getByRole('heading', { name: 'Email delivery', level: 1 })).toBeVisible();
+});
+
+test('merged pages redirect to the page that now owns them', async ({ page }) => {
+  for (const [from, to, heading] of [
+    ['/admin/providers', /\/admin\/models$/, 'Providers & models'],
+    ['/admin/rate-limits', /\/admin\/roles$/, 'Roles & access'],
+    ['/admin/storage-limits', /\/admin\/roles$/, 'Roles & access'],
+    ['/admin/maintenance', /\/admin\/health$/, 'System health'],
+  ] as const) {
+    await page.goto(from);
+    await expect(page).toHaveURL(to);
+    await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+  }
+});
+
+test('Roles & access keeps the selected role in the URL', async ({ page }) => {
+  await page.goto('/admin/roles?role=restricted');
+  await expect(page.getByRole('tab', { name: 'Restricted', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await page.getByRole('tab', { name: 'Admin', exact: true }).click();
+  await expect(page).toHaveURL(/[?&]role=admin\b/);
+  await expect(page.getByLabel('Messages per minute')).toBeVisible();
 });

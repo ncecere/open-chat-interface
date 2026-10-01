@@ -1,4 +1,4 @@
-import type { AdminUser } from '@oci/shared';
+import type { AdminUser, UserRole } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '~/lib/api-client';
@@ -15,11 +15,12 @@ interface UsersResponse {
   total: number;
 }
 
-export function useUserDirectory() {
+/** `initialRole` opens the list already filtered, e.g. from Roles & access. */
+export function useUserDirectory(initialRole?: UserRole) {
   const [state, setState] = useState<UserDirectoryFilters & { page: number }>({
     page: 0,
     search: '',
-    role: 'all',
+    role: initialRole ?? 'all',
     status: 'all',
     sort: 'created',
     direction: 'desc',

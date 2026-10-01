@@ -100,3 +100,81 @@ export async function cleanup(root: Root) {
   await act(async () => root.unmount());
   document.body.innerHTML = '';
 }
+
+const FIXTURE_ROLES = ['admin', 'auditor', 'user', 'restricted'] as const;
+
+/** One role's access summary as GET /admin/roles returns it. */
+export function roleAccessFixture(
+  role: (typeof FIXTURE_ROLES)[number],
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    role,
+    userCount: role === 'user' ? 12 : 1,
+    rateLimits: { maxConcurrentStreams: 2, chatRequestsPerMinute: 20, uploadRequestsPerMinute: 10 },
+    rateLimitSources: {
+      maxConcurrentStreams: 'default',
+      chatRequestsPerMinute: 'environment',
+      uploadRequestsPerMinute: 'database',
+    },
+    storage: null,
+    budgets: [],
+    models: { visible: 3, available: 4 },
+    features: { attachments: true, shareLinks: false, temporaryChat: true, webSearch: false },
+    fixedRules: role === 'restricted' ? ['Cannot upload attachments.'] : [],
+    ...overrides,
+  };
+}
+
+export function rolesFixture() {
+  return { roles: FIXTURE_ROLES.map((role) => roleAccessFixture(role)) };
+}
+
+export function rateLimitsFixture() {
+  return {
+    roles: Object.fromEntries(
+      FIXTURE_ROLES.map((role) => [
+        role,
+        { maxConcurrentStreams: 2, chatRequestsPerMinute: 20, uploadRequestsPerMinute: 10 },
+      ]),
+    ),
+    authAttemptsPerMinute: 10,
+    reserve: { costMicros: 50_000, tokens: 4_000 },
+  };
+}
+
+export function configSourcesFixture() {
+  return {
+    retention: {
+      trashRetentionDays: 'database',
+      threadRetentionDays: 'default',
+      exemptPinnedThreads: 'default',
+      usageEventRetentionDays: 'environment',
+      auditLogRetentionDays: 'default',
+      displayTimezone: 'default',
+    },
+    rateLimits: {
+      roles: Object.fromEntries(
+        FIXTURE_ROLES.map((role) => [
+          role,
+          {
+            maxConcurrentStreams: 'default',
+            chatRequestsPerMinute: 'environment',
+            uploadRequestsPerMinute: 'database',
+          },
+        ]),
+      ),
+      authAttemptsPerMinute: 'environment',
+      reserve: { costMicros: 'default', tokens: 'database' },
+    },
+  };
+}
+
+/** Sets an input's value the way React observes a user typing. */
+export async function typeInto(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+}

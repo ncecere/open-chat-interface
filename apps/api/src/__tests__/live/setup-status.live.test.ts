@@ -195,7 +195,17 @@ describe.skipIf(!available)('live: administrator setup status', () => {
       fromAddress: 'oci@example.test',
       encryptedPassword: encryptSecret('test-only-smtp'),
     });
-    expect(check(await getSetupStatus(), 'email').status).toBe('complete');
+    expect(check(await getSetupStatus(), 'email')).toMatchObject({
+      status: 'complete',
+      required: true,
+    });
+
+    // Configured, with nothing depending on it: complete but not required.
+    await live.db.delete(schema.scheduledReport);
+    expect(check(await getSetupStatus(), 'email')).toMatchObject({
+      status: 'complete',
+      required: false,
+    });
   });
 
   it('flags partially enabled or incomplete web search and S3 storage', async () => {

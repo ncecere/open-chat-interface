@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../src/lib/api-client';
 import { AdminModelsPage } from '../../src/routes/admin/models';
 import { AdminOverviewPage } from '../../src/routes/admin/overview';
-import { AdminProvidersPage } from '../../src/routes/admin/providers';
-import { AdminRateLimitsPage } from '../../src/routes/admin/rate-limits';
+import { ProvidersSection } from '../../src/routes/admin/providers';
+import { AdminRolesPage } from '../../src/routes/admin/roles';
 import { alerts, button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
@@ -72,7 +72,7 @@ describe('providers', () => {
 
   it('asks before deleting and keeps the dialog open with the server error', async () => {
     api.delete.mockRejectedValue(new ApiError(409, 'CONFLICT', 'Provider is in use.'));
-    ({ root } = await renderAdmin(<AdminProvidersPage />));
+    ({ root } = await renderAdmin(<ProvidersSection />));
 
     await click(button('Delete Primary OpenAI'));
     expect(api.delete).not.toHaveBeenCalled();
@@ -86,7 +86,7 @@ describe('providers', () => {
 
   it('reports a failed model discovery instead of failing silently', async () => {
     api.post.mockRejectedValue(new ApiError(502, 'UPSTREAM_ERROR', 'Invalid API key.'));
-    ({ root } = await renderAdmin(<AdminProvidersPage />));
+    ({ root } = await renderAdmin(<ProvidersSection />));
 
     await click(button('Discover models'));
     expect(alerts()).toEqual([
@@ -99,7 +99,7 @@ describe('providers', () => {
     api.get.mockReset();
     api.get.mockRejectedValueOnce(new ApiError(500, 'INTERNAL_ERROR', 'Database unavailable.'));
     api.get.mockResolvedValue({ providers: [provider] });
-    ({ root } = await renderAdmin(<AdminProvidersPage />));
+    ({ root } = await renderAdmin(<ProvidersSection />));
 
     expect(alerts()).toEqual(['Providers could not be loaded.']);
     expect(document.body.textContent).not.toContain('No providers configured yet.');
@@ -108,11 +108,18 @@ describe('providers', () => {
   });
 });
 
+function catalogResponses(path: string) {
+  if (path === '/admin/models') return Promise.resolve({ models: [model] });
+  if (path === '/admin/providers') return Promise.resolve({ providers: [provider] });
+  if (path === '/admin/setup-status') {
+    return Promise.resolve({ requiredComplete: 0, requiredTotal: 0, checks: [] });
+  }
+  return Promise.reject(new Error(`Unexpected GET ${path}`));
+}
+
 describe('model catalog', () => {
   it('shows a failed instant toggle and refetches the server state', async () => {
-    api.get.mockImplementation((path: string) =>
-      Promise.resolve(path === '/admin/models' ? { models: [model] } : { providers: [provider] }),
-    );
+    api.get.mockImplementation(catalogResponses);
     api.patch.mockRejectedValue(new ApiError(400, 'VALIDATION_FAILED', 'Model is misconfigured.'));
     ({ root } = await renderAdmin(<AdminModelsPage />));
     const modelLoads = () => api.get.mock.calls.filter(([path]) => path === '/admin/models').length;
@@ -128,9 +135,7 @@ describe('model catalog', () => {
   });
 
   it('confirms before removing a model', async () => {
-    api.get.mockImplementation((path: string) =>
-      Promise.resolve(path === '/admin/models' ? { models: [model] } : { providers: [provider] }),
-    );
+    api.get.mockImplementation(catalogResponses);
     api.delete.mockResolvedValue({ ok: true });
     ({ root } = await renderAdmin(<AdminModelsPage />));
 
@@ -148,9 +153,18 @@ describe('model catalog', () => {
 
 describe('load failures', () => {
   it('replaces the overview spinner with an error that retries', async () => {
-    api.get
-      .mockRejectedValueOnce(new ApiError(500, 'INTERNAL_ERROR', 'Database unavailable.'))
-      .mockResolvedValue(overview);
+    // The setup checklist loads separately and must not mask an overview failure.
+    let overviewCalls = 0;
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/admin/setup-status') {
+        return { requiredComplete: 0, requiredTotal: 0, checks: [] };
+      }
+      overviewCalls += 1;
+      if (overviewCalls === 1) {
+        throw new ApiError(500, 'INTERNAL_ERROR', 'Database unavailable.');
+      }
+      return overview;
+    });
     ({ root } = await renderAdmin(<AdminOverviewPage />));
 
     expect(document.querySelector('[aria-label="Loading page"]')).toBeNull();
@@ -158,17 +172,20 @@ describe('load failures', () => {
     expect(document.body.textContent).toContain('Database unavailable.');
 
     await click(button('Try again'));
-    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(overviewCalls).toBe(2);
     expect(alerts()).toEqual([]);
     expect(document.body.textContent).toContain('Models in catalog');
   });
 
-  it('shows rate limits load failures rather than spinning', async () => {
+  it('shows role access load failures rather than spinning', async () => {
     api.get.mockRejectedValue(new Error('offline'));
-    ({ root } = await renderAdmin(<AdminRateLimitsPage />));
+    ({ root } = await renderAdmin(<AdminRolesPage />));
 
-    expect(alerts()).toEqual(['Rate limits could not be loaded.']);
+    expect(alerts()).toEqual([
+      'Role access could not be loaded.',
+      'Instance-wide limits could not be loaded.',
+    ]);
     expect(document.body.textContent).toContain('Check your connection and try again.');
-    expect(document.querySelector('[aria-label="Loading rate limits"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Loading role access"]')).toBeNull();
   });
 });

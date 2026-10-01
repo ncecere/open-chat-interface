@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { type FormEvent, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
-import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError, MutationError, Notice } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { FullPageSpinner } from '~/components/ui/spinner';
+import { useSetupCheck } from '~/hooks/use-setup-status';
 import { api } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 
@@ -21,6 +23,29 @@ interface ScheduledReport {
   lastRunAt: string | null;
   lastStatus: 'success' | 'error' | null;
   lastError: string | null;
+}
+
+/**
+ * Reports are only useful once email can be delivered. Silent while the setup
+ * status is loading or unavailable, so a slow check never flashes a warning.
+ */
+function EmailRequiredNotice() {
+  const email = useSetupCheck('email');
+  if (!email || email.status === 'complete') return null;
+
+  return (
+    <div className="mb-8">
+      <Notice tone="warning" title="Reports need email delivery">
+        <p>Scheduled reports are sent by email, so none will arrive until email delivery works.</p>
+        <Link
+          to="/admin/settings/email"
+          className="mt-2 inline-block font-medium text-[var(--accent-bright)] hover:underline"
+        >
+          Configure email delivery
+        </Link>
+      </Notice>
+    </div>
+  );
 }
 
 const CADENCES = [
@@ -104,6 +129,8 @@ export function AdminReportsPage() {
   return (
     <div>
       {header}
+
+      <EmailRequiredNotice />
 
       {/* Creating a report is the only thing this form does. */}
       <EditOnly>

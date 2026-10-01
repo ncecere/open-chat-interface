@@ -3,16 +3,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
-import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
+import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { SETUP_STATUS_QUERY_KEY, useSetupCheck } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
 
 type SearchSettings = InstanceSettings['search'];
+type Features = InstanceSettings['features'];
 type SearchPatch = Partial<Omit<SearchSettings, 'hasCredential'>> & {
   apiKey?: string | null;
 };
@@ -32,9 +34,17 @@ const PROVIDER_LABELS: Record<SearchProviderKind, string> = {
   exa: 'Exa',
 };
 
-function makeDraft(settings: SearchSettings): SearchDraft {
+/**
+ * Search runs only when both the chat feature and the search service are on,
+ * so the page offers one switch that drives both.
+ */
+function searchIsOn(features: Features, search: SearchSettings): boolean {
+  return features.webSearch && search.enabled;
+}
+
+function makeDraft(settings: SearchSettings, enabled: boolean): SearchDraft {
   return {
-    enabled: settings.enabled,
+    enabled,
     provider: settings.provider,
     baseUrl: settings.baseUrl ?? '',
     maxResults: String(settings.maxResults),
@@ -74,6 +84,7 @@ function validateDraft(draft: SearchDraft, credentialAction: CredentialAction, a
 
 function changedSearchSettings(
   saved: SearchSettings,
+  savedEnabled: boolean,
   draft: SearchDraft,
   credentialAction: CredentialAction,
   apiKey: string,
@@ -82,7 +93,7 @@ function changedSearchSettings(
   const baseUrl = draft.baseUrl.trim() || null;
   const maxResults = Number(draft.maxResults);
 
-  if (saved.enabled !== draft.enabled) patch.enabled = draft.enabled;
+  if (savedEnabled !== draft.enabled) patch.enabled = draft.enabled;
   if (saved.provider !== draft.provider) patch.provider = draft.provider;
   if (saved.baseUrl !== baseUrl) patch.baseUrl = baseUrl;
   if (Number.isInteger(maxResults) && saved.maxResults !== maxResults) {
@@ -109,10 +120,27 @@ function LoadingSearchSettings() {
   );
 }
 
-function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettings }) {
+function SearchAvailability() {
+  const check = useSetupCheck('web-search');
+  if (check?.status === 'complete') {
+    return <Notice title="Web search is available">{check.detail}</Notice>;
+  }
+  if (check?.status === 'attention') {
+    return (
+      <Notice tone="warning" title="Web search is not available">
+        {check.detail}
+      </Notice>
+    );
+  }
+  return null;
+}
+
+function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   const queryClient = useQueryClient();
-  const [saved, setSaved] = useState(initialSettings);
-  const [draft, setDraft] = useState(() => makeDraft(initialSettings));
+  const [saved, setSaved] = useState(settings.search);
+  const [features, setFeatures] = useState(settings.features);
+  const savedEnabled = searchIsOn(features, saved);
+  const [draft, setDraft] = useState(() => makeDraft(settings.search, savedEnabled));
   const [credentialAction, setCredentialAction] = useState<CredentialAction>('keep');
   const [apiKey, setApiKey] = useState('');
   const [showValidation, setShowValidation] = useState(false);
@@ -121,11 +149,19 @@ function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettin
 
   const validation = validateDraft(draft, credentialAction, apiKey);
   const isValid = Object.keys(validation).length === 0;
-  const patch = changedSearchSettings(saved, draft, credentialAction, apiKey);
+  const patch = changedSearchSettings(saved, savedEnabled, draft, credentialAction, apiKey);
   const hasChanges = Object.keys(patch).length > 0;
 
   const save = useMutation({
-    mutationFn: (search: SearchPatch) => api.patch<{ ok: boolean }>('/admin/settings', { search }),
+    mutationFn: (search: SearchPatch) =>
+      api.patch<{ ok: boolean }>('/admin/settings', {
+        search,
+        // The switch also sets the chat feature. The server replaces the
+        // stored features object, so every other feature is sent unchanged.
+        ...(search.enabled !== undefined && {
+          features: { ...features, webSearch: search.enabled },
+        }),
+      }),
     onSuccess: (_response, changes) => {
       const { apiKey: credential, ...settingsChanges } = changes;
       const next: SearchSettings = {
@@ -134,16 +170,21 @@ function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettin
         hasCredential:
           credential === null ? false : typeof credential === 'string' ? true : saved.hasCredential,
       };
+      const nextFeatures =
+        changes.enabled === undefined ? features : { ...features, webSearch: changes.enabled };
       setSaved(next);
-      setDraft(makeDraft(next));
+      setFeatures(nextFeatures);
+      setDraft(makeDraft(next, searchIsOn(nextFeatures, next)));
       setCredentialAction('keep');
       setApiKey('');
       setShowValidation(false);
       setErrorMessage(null);
       setSuccessMessage(true);
       queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
-        current ? { ...current, search: next } : current,
+        current ? { ...current, search: next, features: nextFeatures } : current,
       );
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+      void queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY });
     },
     onError: (error) => {
       setSuccessMessage(false);
@@ -179,7 +220,7 @@ function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettin
                 Enable web search
               </label>
               <p id="search-enabled-description" className="mt-1 text-xs text-[var(--text-muted)]">
-                Makes the configured search provider available to supported models.
+                Lets people ground responses with current web results, using the provider below.
               </p>
             </div>
             <Switch
@@ -193,6 +234,8 @@ function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettin
               }}
             />
           </div>
+
+          <SearchAvailability />
 
           <div className="grid gap-5 sm:grid-cols-2">
             <Field
@@ -428,7 +471,7 @@ export function AdminSearchPage() {
           </Button>
         </div>
       ) : (
-        <SearchSettingsForm initialSettings={settings.data.search} />
+        <SearchSettingsForm settings={settings.data} />
       )}
     </div>
   );

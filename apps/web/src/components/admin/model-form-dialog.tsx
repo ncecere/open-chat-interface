@@ -27,6 +27,7 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
@@ -174,6 +175,7 @@ export function ModelFormDialog({
         queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
         queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
       ]);
       onClose();
     },

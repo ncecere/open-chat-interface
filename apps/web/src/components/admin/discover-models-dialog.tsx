@@ -13,6 +13,7 @@ import {
 } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
@@ -84,6 +85,8 @@ export function DiscoverModelsDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'models'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] });
+      queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] });
+      queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY });
       onClose();
     },
   });

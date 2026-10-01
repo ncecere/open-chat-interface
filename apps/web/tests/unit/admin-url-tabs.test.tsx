@@ -1,10 +1,18 @@
 // @vitest-environment happy-dom
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { validateUsageSearch } from '../../src/lib/admin-search';
-import { AdminRateLimitsPage } from '../../src/routes/admin/rate-limits';
+import { validateRolesSearch, validateUsageSearch } from '../../src/lib/admin-search';
+import { AdminRolesPage } from '../../src/routes/admin/roles';
 import { AdminUsagePage } from '../../src/routes/admin/usage';
-import { button, cleanup, click, renderAdmin } from './admin-test-utils';
+import {
+  button,
+  cleanup,
+  click,
+  configSourcesFixture,
+  rateLimitsFixture,
+  renderAdmin,
+  rolesFixture,
+} from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -41,18 +49,9 @@ beforeEach(() => {
         daily: [],
       };
     }
-    if (path === '/admin/lifecycle/rate-limits') {
-      return {
-        roles: Object.fromEntries(
-          ['admin', 'auditor', 'user', 'restricted'].map((role) => [
-            role,
-            { maxConcurrentStreams: 2, chatRequestsPerMinute: 20, uploadRequestsPerMinute: 10 },
-          ]),
-        ),
-        authAttemptsPerMinute: 10,
-        reserve: { costMicros: 50_000, tokens: 4_000 },
-      };
-    }
+    if (path === '/admin/lifecycle/rate-limits') return rateLimitsFixture();
+    if (path === '/admin/roles') return rolesFixture();
+    if (path === '/admin/lifecycle/config-sources') return configSourcesFixture();
     throw new Error(`Unexpected GET ${path}`);
   });
 });
@@ -103,13 +102,29 @@ describe('usage tabs in the URL', () => {
   });
 });
 
-describe('rate limit tabs in the URL', () => {
-  it('opens the reservations tab from the URL', async () => {
-    ({ root } = await renderAdmin(<AdminRateLimitsPage />, {
-      path: '/admin/rate-limits?tab=reservations',
+describe('role tabs in the URL', () => {
+  it('opens the role named in the URL and writes a chosen role back', async () => {
+    let router: Awaited<ReturnType<typeof renderAdmin>>['router'];
+    ({ root, router } = await renderAdmin(<AdminRolesPage />, {
+      path: '/admin/roles?role=restricted',
     }));
-    expect(selected('Reservations')).toBe('true');
-    expect(document.getElementById('panel-reservations')?.hidden).toBe(false);
-    expect(document.getElementById('panel-roles')?.hidden).toBe(true);
+    expect(selected('Restricted')).toBe('true');
+    expect(selected('User')).toBe('false');
+    expect(document.getElementById('rate-restricted-chat')).not.toBeNull();
+    expect(document.getElementById('rate-user-chat')).toBeNull();
+
+    await click(button('Admin'));
+    expect(router.state.location.search).toEqual({ role: 'admin' });
+    expect(document.getElementById('rate-admin-chat')).not.toBeNull();
+
+    // The default role keeps the URL clean.
+    await click(button('User'));
+    expect(router.state.location.search).toEqual({});
+  });
+
+  it('defaults to the user role and ignores unknown values', () => {
+    expect(validateRolesSearch({ role: 'owner' })).toEqual({});
+    expect(validateRolesSearch({ role: 'user' })).toEqual({});
+    expect(validateRolesSearch({ role: 'auditor' })).toEqual({ role: 'auditor' });
   });
 });

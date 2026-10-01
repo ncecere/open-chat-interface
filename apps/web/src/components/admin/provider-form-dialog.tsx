@@ -14,6 +14,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
 
 export const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
@@ -60,6 +61,7 @@ export function ProviderFormDialog({
         queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
         queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
       ]);
       onClose();
     },

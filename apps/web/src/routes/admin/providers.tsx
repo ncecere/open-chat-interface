@@ -3,14 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
-import {
-  AdminPageHeader,
-  EmptyState,
-  LoadError,
-  MutationError,
-  Row,
-  RowList,
-} from '~/components/admin/admin-ui';
+import { EmptyState, LoadError, MutationError, Row, RowList } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { DiscoverModelsDialog } from '~/components/admin/discover-models-dialog';
 import { PROVIDER_KIND_LABELS, ProviderFormDialog } from '~/components/admin/provider-form-dialog';
@@ -18,9 +11,18 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api } from '~/lib/api-client';
 
-export function AdminProvidersPage() {
+/** Anchor for links that point people at a provider's "Discover models" action. */
+export const PROVIDERS_SECTION_ID = 'providers';
+
+/**
+ * Upstream credentials, shown at the top of Providers & models. Connecting a
+ * provider exposes nothing on its own; "Discover models" adds chosen models to
+ * the catalog below it on the same page.
+ */
+export function ProvidersSection() {
   const queryClient = useQueryClient();
   const [formFor, setFormFor] = useState<{ provider: Provider | null } | null>(null);
   const [discoverFor, setDiscoverFor] = useState<Provider | null>(null);
@@ -46,32 +48,41 @@ export function AdminProvidersPage() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
       queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+      queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
     ]);
   }
 
   return (
-    <div>
-      <AdminPageHeader
-        title="Providers & keys"
-        description="Configure upstream credentials. Access to a model here does not expose it to users — models must be added to the catalog separately."
-        actions={
-          <EditOnly>
-            <Button variant="primary" onClick={() => setFormFor({ provider: null })}>
-              <Plus />
-              Add provider
-            </Button>
-          </EditOnly>
-        }
-      />
+    <section
+      id={PROVIDERS_SECTION_ID}
+      aria-labelledby="providers-heading"
+      className="flex scroll-mt-6 flex-col gap-5"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 id="providers-heading" className="text-base font-semibold text-[var(--text-primary)]">
+            Providers
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+            Upstream credentials. Connecting a provider does not expose its models to anyone — use
+            Discover models to add the ones you want to the catalog below.
+          </p>
+        </div>
+        <EditOnly>
+          <Button variant="secondary" onClick={() => setFormFor({ provider: null })}>
+            <Plus />
+            Add provider
+          </Button>
+        </EditOnly>
+      </div>
 
       <MutationError
         error={discover.error}
         message={`Models could not be discovered${discover.variables ? ` for ${discover.variables.label}` : ''}.`}
-        className="mb-4"
       />
 
       {isLoading ? (
-        <div className="py-16">
+        <div className="py-8" role="status" aria-label="Loading providers">
           <Spinner className="mx-auto size-6" />
         </div>
       ) : providers.isError || !data ? (
@@ -131,7 +142,7 @@ export function AdminProvidersPage() {
         </RowList>
       ) : (
         <EmptyState icon={KeyRound} title="No providers configured yet.">
-          Add a provider to make models available. Users cannot select any model until one is
+          Add a provider, then discover its models. Users cannot select any model until one is
           enabled in the catalog.
         </EmptyState>
       )}
@@ -166,6 +177,6 @@ export function AdminProvidersPage() {
           />
         )}
       </Dialog>
-    </div>
+    </section>
   );
 }

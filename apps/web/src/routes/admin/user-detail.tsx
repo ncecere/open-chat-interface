@@ -1,11 +1,21 @@
 import type { AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Ban } from 'lucide-react';
+import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { UserLimitsSection } from '~/components/admin/user-limits';
+import {
+  ADMIN_USERS_QUERY_KEY,
+  ROLE_LABELS,
+  UserRoleSelect,
+} from '~/components/admin/user-role-select';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { Field } from '~/components/ui/field';
+import { Input } from '~/components/ui/input';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
 import { formatBytes, formatRelativeTime, formatTimeUntil } from '~/lib/utils';
@@ -43,7 +53,7 @@ interface UserDetail {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-[var(--border-subtle)] border-r px-4 py-3 last:border-r-0">
+    <div className="min-w-0 px-4 py-3">
       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wide">{label}</p>
       <p className="mt-1 font-semibold text-lg">{value}</p>
     </div>
@@ -80,9 +90,29 @@ export function AdminUserDetailPage() {
   });
   const { data, isLoading } = detail;
 
-  const revokeSessions = useMutation({
-    mutationFn: () => api.post(`/admin/users/${userId}/revoke-sessions`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users', userId] }),
+  const [confirming, setConfirming] = useState<'ban' | 'sign-out' | null>(null);
+  const [banReason, setBanReason] = useState('');
+
+  // The prefix covers this page, its limits and the account listing.
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ADMIN_USERS_QUERY_KEY });
+
+  async function banAccount() {
+    // The server ends the account's sessions as part of the ban.
+    await api.patch(`/admin/users/${userId}`, {
+      banned: true,
+      banReason: banReason.trim() || null,
+    });
+    await invalidate();
+  }
+
+  async function signOutEverywhere() {
+    await api.post(`/admin/users/${userId}/revoke-sessions`, {});
+    await invalidate();
+  }
+
+  const unban = useMutation({
+    mutationFn: () => api.patch(`/admin/users/${userId}`, { banned: false, banReason: null }),
+    onSuccess: invalidate,
   });
 
   if (isLoading) return <FullPageSpinner />;
@@ -103,6 +133,8 @@ export function AdminUserDetailPage() {
   }
 
   const { user, storage, sessions, recentThreads, audit } = data;
+  const name = user.name || user.email;
+  const sessionCount = `${sessions.length} active session${sessions.length === 1 ? '' : 's'}`;
 
   return (
     <div>
@@ -114,15 +146,80 @@ export function AdminUserDetailPage() {
         All users
       </Link>
 
-      <AdminPageHeader title={user.name || user.email} description={user.email} />
+      <AdminPageHeader
+        title={name}
+        description={user.email}
+        actions={
+          <EditOnly>
+            <div className="flex max-w-full flex-wrap items-center gap-2">
+              <UserRoleSelect user={user} />
+              {user.banned ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={unban.isPending}
+                  onClick={() => unban.mutate()}
+                >
+                  Unban
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setBanReason('');
+                    setConfirming('ban');
+                  }}
+                >
+                  Ban
+                </Button>
+              )}
+              {sessions.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setConfirming('sign-out')}
+                >
+                  Sign out everywhere
+                </Button>
+              )}
+              <MutationError
+                error={unban.error}
+                message="The ban could not be lifted."
+                className="basis-full"
+              />
+            </div>
+          </EditOnly>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={user.role === 'admin' ? 'accent' : 'neutral'}>{user.role}</Badge>
-        {user.banned && <Badge variant="danger">banned</Badge>}
-        {!user.emailVerified && <Badge variant="neutral">unverified</Badge>}
+        <Badge variant={user.role === 'admin' ? 'accent' : 'neutral'}>
+          {ROLE_LABELS[user.role]}
+        </Badge>
+        {user.banned && <Badge variant="danger">Banned</Badge>}
+        {!user.emailVerified && <Badge variant="neutral">Unverified</Badge>}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4">
+      {user.banned && (
+        <div className="mt-4 flex gap-3 rounded-xl border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-4 text-sm">
+          <Ban className="mt-0.5 size-4 shrink-0 text-[var(--danger)]" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="font-medium text-[var(--text-primary)]">This account is banned</p>
+            <p className="mt-1 break-words text-[var(--text-muted)]">
+              {user.banReason ? `Reason: ${user.banReason}` : 'No reason was recorded.'} They cannot
+              sign in until the ban is lifted.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Borders are drawn per cell so the rules stay right when the four
+          figures wrap into two rows on a phone. */}
+      <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-l sm:[&>*:nth-child(n+3)]:border-t-0">
         <Stat label="Threads" value={String(user.threadCount)} />
         <Stat label="Messages" value={String(user.messageCount)} />
         <Stat label="Storage" value={formatBytes(storage.bytesUsed)} />
@@ -133,52 +230,36 @@ export function AdminUserDetailPage() {
         {sessions.length === 0 ? (
           <Empty>No active sessions.</Empty>
         ) : (
-          <>
-            <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
-              <table className="w-full min-w-[32rem] text-sm">
-                <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Started</th>
-                    <th className="px-4 py-2 text-left">Expires</th>
-                    <th className="px-4 py-2 text-left">Address</th>
-                    <th className="px-4 py-2 text-left">Client</th>
+          <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+            <table className="w-full min-w-[32rem] text-sm">
+              <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
+                <tr>
+                  <th className="px-4 py-2 text-left">Started</th>
+                  <th className="px-4 py-2 text-left">Expires</th>
+                  <th className="px-4 py-2 text-left">Address</th>
+                  <th className="px-4 py-2 text-left">Client</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((session) => (
+                  <tr key={session.id} className="border-[var(--border-subtle)] border-t">
+                    <td className="px-4 py-2">{formatRelativeTime(session.createdAt)}</td>
+                    <td className="px-4 py-2 text-[var(--text-muted)]">
+                      {formatTimeUntil(session.expiresAt)}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
+                    <td className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs">
+                      {session.userAgent ?? '—'}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {sessions.map((session) => (
-                    <tr key={session.id} className="border-[var(--border-subtle)] border-t">
-                      <td className="px-4 py-2">{formatRelativeTime(session.createdAt)}</td>
-                      <td className="px-4 py-2 text-[var(--text-muted)]">
-                        {formatTimeUntil(session.expiresAt)}
-                      </td>
-                      <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
-                      <td className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs">
-                        {session.userAgent ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <EditOnly>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-3"
-                disabled={revokeSessions.isPending}
-                onClick={() => revokeSessions.mutate()}
-              >
-                Sign out everywhere
-              </Button>
-            </EditOnly>
-            <MutationError
-              error={revokeSessions.error}
-              message="Sessions could not be revoked."
-              className="mt-2"
-            />
-          </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Section>
+
+      <UserLimitsSection user={user} />
 
       <Section title="Recent conversations">
         {recentThreads.length === 0 ? (
@@ -233,6 +314,41 @@ export function AdminUserDetailPage() {
           </ul>
         )}
       </Section>
+
+      <ConfirmDialog
+        open={confirming === 'ban'}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={`Ban ${name}?`}
+        description={`${name} will be signed out of every session straight away and cannot sign in again until an administrator lifts the ban.`}
+        confirmLabel="Ban account"
+        pendingLabel="Banning…"
+        errorMessage="The account could not be banned."
+        onConfirm={banAccount}
+      >
+        <Field
+          label="Reason (optional)"
+          htmlFor="ban-reason"
+          hint="Shown to administrators on this account."
+        >
+          <Input
+            id="ban-reason"
+            value={banReason}
+            maxLength={500}
+            onChange={(event) => setBanReason(event.target.value)}
+          />
+        </Field>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirming === 'sign-out'}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={`Sign ${name} out everywhere?`}
+        description={`This ends ${sessionCount}. ${name} can sign in again straight away.`}
+        confirmLabel="End all sessions"
+        pendingLabel="Signing out…"
+        errorMessage="Sessions could not be revoked."
+        onConfirm={signOutEverywhere}
+      />
     </div>
   );
 }

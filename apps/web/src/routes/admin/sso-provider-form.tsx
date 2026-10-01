@@ -13,6 +13,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { OidcFields } from './sso-form/oidc-fields';
 import { PolicyFields } from './sso-form/policy-fields';
@@ -50,7 +51,10 @@ export function SsoProviderForm({
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+      ]);
       onClose();
     },
   });

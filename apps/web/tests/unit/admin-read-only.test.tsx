@@ -3,10 +3,18 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from '../../src/components/admin/confirm-dialog';
 import { AdminQuotasPage } from '../../src/routes/admin/quotas';
-import { AdminRateLimitsPage } from '../../src/routes/admin/rate-limits';
+import { AdminRolesPage } from '../../src/routes/admin/roles';
 import { AuthenticationSettingsForm } from '../../src/routes/admin/settings/authentication-settings';
 import { AdminUsersPage } from '../../src/routes/admin/users';
-import { button, cleanup, findButton, renderAdmin } from './admin-test-utils';
+import {
+  button,
+  cleanup,
+  configSourcesFixture,
+  findButton,
+  rateLimitsFixture,
+  renderAdmin,
+  rolesFixture,
+} from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -50,17 +58,6 @@ const policy = {
   overrideCount: 0,
 };
 
-const limits = {
-  roles: Object.fromEntries(
-    ['admin', 'auditor', 'user', 'restricted'].map((role) => [
-      role,
-      { maxConcurrentStreams: 2, chatRequestsPerMinute: 20, uploadRequestsPerMinute: 10 },
-    ]),
-  ),
-  authAttemptsPerMinute: 10,
-  reserve: { costMicros: 50_000, tokens: 4_000 },
-};
-
 let root: Root | undefined;
 beforeEach(() => {
   for (const method of Object.values(api)) method.mockReset();
@@ -68,7 +65,9 @@ beforeEach(() => {
     if (path.startsWith('/admin/users?')) return { users: [user], total: 1 };
     if (path.startsWith('/admin/views')) return { views: [] };
     if (path === '/admin/quotas') return { policies: [policy] };
-    if (path === '/admin/lifecycle/rate-limits') return limits;
+    if (path === '/admin/lifecycle/rate-limits') return rateLimitsFixture();
+    if (path === '/admin/roles') return rolesFixture();
+    if (path === '/admin/lifecycle/config-sources') return configSourcesFixture();
     throw new Error(`Unexpected GET ${path}`);
   });
 });
@@ -100,7 +99,7 @@ describe('auditor (read-only) access', () => {
     expect(isDisabled(button('Filter by status'))).toBe(false);
     expect(isDisabled(button('Threads'))).toBe(false);
 
-    expect(findButton('Make admin')).toBeUndefined();
+    expect(document.querySelector('[aria-label="Role for review@example.test"]')).toBeNull();
     expect(findButton('Limits')).toBeUndefined();
     expect(document.querySelector('input[type="checkbox"]')).toBeNull();
     expect(document.querySelector('[aria-label="Name for this view"]')).toBeNull();
@@ -114,13 +113,19 @@ describe('auditor (read-only) access', () => {
     expect(findButton('Delete Daily budget')).toBeUndefined();
   });
 
-  it('shows rate limits with disabled inputs, usable tabs and no save button', async () => {
-    ({ root } = await renderAdmin(<AdminRateLimitsPage />, { role: 'auditor' }));
+  it('shows role limits with disabled inputs, usable role tabs and no save buttons', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { role: 'auditor' }));
     const input = document.getElementById('rate-user-chat') as HTMLInputElement;
     expect(input.value).toBe('20');
     expect(isDisabled(input)).toBe(true);
-    expect(findButton('Save limits')).toBeUndefined();
-    expect(isDisabled(button('Reservations'))).toBe(false);
+    expect(isDisabled(document.getElementById('storage-user-total') as HTMLInputElement)).toBe(
+      true,
+    );
+    expect(isDisabled(document.getElementById('rate-auth') as HTMLInputElement)).toBe(true);
+    expect(findButton('Save rate limits')).toBeUndefined();
+    expect(findButton('Save allowance')).toBeUndefined();
+    expect(findButton('Save instance-wide limits')).toBeUndefined();
+    expect(isDisabled(button('Restricted'))).toBe(false);
   });
 
   it('drops the save row from settings forms and disables their controls', async () => {
@@ -166,7 +171,7 @@ describe('auditor (read-only) access', () => {
 describe('administrator access', () => {
   it('keeps the same controls available', async () => {
     ({ root } = await renderAdmin(<AdminUsersPage />));
-    expect(button('Make admin')).toBeDefined();
+    expect(document.querySelector('[aria-label="Role for review@example.test"]')).not.toBeNull();
     expect(button('Limits')).toBeDefined();
     expect(document.querySelector('input[type="checkbox"]')).not.toBeNull();
   });

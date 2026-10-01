@@ -1,10 +1,12 @@
 import { type InstanceSettings, instanceSettingsSchema } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { AdminPageHeader } from '~/components/admin/admin-ui';
+import { AdminPageHeader, Notice } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+import { useSetupCheck } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
+import { SsoProvidersSection } from '~/routes/admin/sso';
 import { AuthenticationSettingsForm } from './settings/authentication-settings';
 import { GeneralSettings } from './settings/general-settings';
 import { SmtpSettingsForm } from './settings/smtp-settings';
@@ -98,10 +100,28 @@ export function AdminGeneralSettingsPage() {
   return (
     <InstanceSettingsPage
       title="General"
-      description="Instance accent color, default model behavior, and optional chat features."
+      description="The default system prompt and optional chat features."
     >
       {(settings) => <GeneralSettings settings={settings} />}
     </InstanceSettingsPage>
+  );
+}
+
+/**
+ * Sign-in problems from the server's checklist, which this page resolves. A
+ * missing email server is already explained beside the verification setting,
+ * with a link to Email delivery, so it is not repeated here.
+ */
+function AuthenticationSetupNotices() {
+  const signIn = useSetupCheck('sign-in');
+  if (signIn?.status !== 'attention') return null;
+
+  return (
+    <div className="mb-8">
+      <Notice tone="warning" title="Nobody can sign in">
+        {signIn.detail} Allow email and password sign-in below, or enable a single sign-on provider.
+      </Notice>
+    </div>
   );
 }
 
@@ -109,13 +129,19 @@ export function AdminAuthenticationSettingsPage() {
   return (
     <InstanceSettingsPage
       title="Authentication"
-      description="Who can register, how people sign in, and how long sessions last."
+      description="Who can register, every way people sign in — local accounts and single sign-on — and how long sessions last."
     >
       {(settings) => (
-        <AuthenticationSettingsForm
-          initialSettings={authSettingsFromResponse(settings)}
-          smtpConfigured={settings.smtp.configured}
-        />
+        <>
+          <AuthenticationSetupNotices />
+          <div className="flex flex-col gap-8">
+            <AuthenticationSettingsForm
+              initialSettings={authSettingsFromResponse(settings)}
+              smtpConfigured={settings.smtp.configured}
+            />
+            <SsoProvidersSection />
+          </div>
+        </>
       )}
     </InstanceSettingsPage>
   );

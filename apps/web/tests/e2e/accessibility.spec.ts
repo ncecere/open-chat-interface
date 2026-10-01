@@ -158,6 +158,16 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('admin roles and access has no violations', async ({ page }) => {
+    await signIn(page);
+    await page.goto('/admin/roles');
+    await expect(page.getByRole('heading', { name: 'Roles & access', level: 1 })).toBeVisible();
+    await expect(page.getByLabel('Messages per minute')).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/quotas');

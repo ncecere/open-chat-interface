@@ -4,6 +4,12 @@ import { CheckCircle2 } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { EditableFieldset, EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, Notice } from '~/components/admin/admin-ui';
+import {
+  CONFIG_SOURCES_QUERY_KEY,
+  ConfigSourceBadge,
+  type ConfigSources,
+  useConfigSources,
+} from '~/components/admin/config-source';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -11,7 +17,25 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { ApiError, api } from '~/lib/api-client';
 
-function RetentionForm({ settings }: { settings: RetentionSettings }) {
+/**
+ * Only changed fields are sent: saving one value must not pin the others,
+ * which would turn an environment-provided value into a saved one.
+ */
+function changedRetention(saved: RetentionSettings, draft: RetentionSettings) {
+  const patch: Partial<RetentionSettings> = {};
+  for (const key of Object.keys(saved) as Array<keyof RetentionSettings>) {
+    if (saved[key] !== draft[key]) Object.assign(patch, { [key]: draft[key] });
+  }
+  return patch;
+}
+
+function RetentionForm({
+  settings,
+  sources,
+}: {
+  settings: RetentionSettings;
+  sources: ConfigSources['retention'] | undefined;
+}) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(settings);
   const [error, setError] = useState<string | null>(null);
@@ -19,13 +43,19 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
 
   useEffect(() => setDraft(settings), [settings]);
 
+  const patch = changedRetention(settings, draft);
+  const hasChanges = Object.keys(patch).length > 0;
+
   const save = useMutation({
-    mutationFn: () => api.put<RetentionSettings>('/admin/lifecycle/retention', draft),
+    mutationFn: () => api.put<RetentionSettings>('/admin/lifecycle/retention', patch),
     onSuccess: async () => {
       setError(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2_500);
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'retention'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'retention'] }),
+        queryClient.invalidateQueries({ queryKey: CONFIG_SOURCES_QUERY_KEY }),
+      ]);
     },
     onError: (cause) =>
       setError(cause instanceof ApiError ? cause.message : 'Retention could not be saved.'),
@@ -33,7 +63,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    save.mutate();
+    if (hasChanges) save.mutate();
   }
 
   return (
@@ -47,6 +77,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
           >
             <Input
               id="trash-days"
+              aria-describedby={sources ? 'trash-days-source' : undefined}
               type="number"
               min={MIN_TRASH_RETENTION_DAYS}
               max="365"
@@ -58,6 +89,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
                 }))
               }
             />
+            <ConfigSourceBadge id="trash-days-source" source={sources?.trashRetentionDays} />
           </Field>
 
           <Field
@@ -67,6 +99,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
           >
             <Input
               id="thread-days"
+              aria-describedby={sources ? 'thread-days-source' : undefined}
               type="number"
               min="1"
               placeholder="Never"
@@ -78,6 +111,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
                 }))
               }
             />
+            <ConfigSourceBadge id="thread-days-source" source={sources?.threadRetentionDays} />
           </Field>
 
           <Field
@@ -87,6 +121,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
           >
             <Input
               id="usage-days"
+              aria-describedby={sources ? 'usage-days-source' : undefined}
               type="number"
               min="1"
               value={draft.usageEventRetentionDays}
@@ -97,6 +132,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
                 }))
               }
             />
+            <ConfigSourceBadge id="usage-days-source" source={sources?.usageEventRetentionDays} />
           </Field>
 
           <Field
@@ -106,12 +142,14 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
           >
             <Input
               id="display-timezone"
+              aria-describedby={sources ? 'display-timezone-source' : undefined}
               value={draft.displayTimezone}
               placeholder="UTC"
               onChange={(event) =>
                 setDraft((current) => ({ ...current, displayTimezone: event.target.value }))
               }
             />
+            <ConfigSourceBadge id="display-timezone-source" source={sources?.displayTimezone} />
           </Field>
 
           <Field
@@ -121,6 +159,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
           >
             <Input
               id="audit-days"
+              aria-describedby={sources ? 'audit-days-source' : undefined}
               type="number"
               min="1"
               value={draft.auditLogRetentionDays}
@@ -131,14 +170,18 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
                 }))
               }
             />
+            <ConfigSourceBadge id="audit-days-source" source={sources?.auditLogRetentionDays} />
           </Field>
         </div>
 
         <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
           <div>
-            <label htmlFor="exempt-pinned" className="font-medium text-sm">
-              Keep pinned conversations
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="exempt-pinned" className="font-medium text-sm">
+                Keep pinned conversations
+              </label>
+              <ConfigSourceBadge id="exempt-pinned-source" source={sources?.exemptPinnedThreads} />
+            </div>
             <p className="mt-0.5 text-[var(--text-muted)] text-xs">
               Pinned conversations are never removed automatically. The user marked them
               deliberately.
@@ -146,6 +189,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
           </div>
           <Switch
             id="exempt-pinned"
+            aria-describedby={sources ? 'exempt-pinned-source' : undefined}
             checked={draft.exemptPinnedThreads}
             onCheckedChange={(exemptPinnedThreads) =>
               setDraft((current) => ({ ...current, exemptPinnedThreads }))
@@ -175,7 +219,7 @@ function RetentionForm({ settings }: { settings: RetentionSettings }) {
               Saved
             </span>
           )}
-          <Button type="submit" variant="primary" disabled={save.isPending}>
+          <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
             {save.isPending && <Spinner />}
             Save retention
           </Button>
@@ -190,16 +234,18 @@ export function AdminRetentionPage() {
     queryKey: ['admin', 'retention'],
     queryFn: () => api.get<RetentionSettings>('/admin/lifecycle/retention'),
   });
+  // Sources are a label beside each field; the form works without them.
+  const sources = useConfigSources();
 
   return (
     <div>
       <AdminPageHeader
         title="Retention"
-        description="How long conversations and history are kept. Everything deleted goes to a recoverable trash first, so a policy set too aggressively can still be undone."
+        description="How long conversations and history are kept. Everything deleted goes to a recoverable trash first, so a policy set too aggressively can still be undone. Each field shows whether its value is saved here, comes from the environment, or is the built-in default."
       />
 
       {retention.data ? (
-        <RetentionForm settings={retention.data} />
+        <RetentionForm settings={retention.data} sources={sources.data?.retention} />
       ) : retention.isError ? (
         <LoadError title="Retention settings could not be loaded." query={retention} />
       ) : (

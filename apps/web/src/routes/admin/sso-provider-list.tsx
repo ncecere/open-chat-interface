@@ -15,6 +15,7 @@ import {
 } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
 
 type CopiedEndpoint = 'callback' | 'metadata' | null;
@@ -77,7 +78,11 @@ function ProviderRow({
   const toggle = useMutation({
     mutationFn: (enabled: boolean) =>
       api.patch<{ ok: boolean }>(`/admin/sso/providers/${provider.providerId}`, { enabled }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+      ]),
   });
 
   async function copy(value: string, endpoint: Exclude<CopiedEndpoint, null>) {
@@ -269,7 +274,10 @@ export function DeleteSsoProviderDialog({
   const remove = useMutation({
     mutationFn: () => api.delete<{ ok: boolean }>(`/admin/sso/providers/${provider.providerId}`),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+      ]);
       onClose();
     },
   });

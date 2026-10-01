@@ -7,8 +7,6 @@ import {
   Cpu,
   FileText,
   Gauge,
-  HardDrive,
-  KeyRound,
   LayoutDashboard,
   type LucideIcon,
   Mail,
@@ -20,10 +18,8 @@ import {
   Send,
   Settings,
   ShieldCheck,
-  Timer,
   UserCog,
   Users,
-  Wrench,
 } from 'lucide-react';
 
 /** Every static admin route the router knows about, so a typo fails typecheck. */
@@ -57,15 +53,13 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     items: [
       { to: '/admin/users', label: 'Users', icon: Users },
       { to: '/admin/invites', label: 'Invitations', icon: Mail },
-      { to: '/admin/rate-limits', label: 'Rate limits', icon: Timer },
-      { to: '/admin/storage-limits', label: 'Storage limits', icon: HardDrive },
+      { to: '/admin/roles', label: 'Roles & access', icon: ShieldCheck },
     ],
   },
   {
     label: 'Models',
     items: [
-      { to: '/admin/providers', label: 'Providers & keys', icon: KeyRound },
-      { to: '/admin/models', label: 'Model catalog', icon: Cpu },
+      { to: '/admin/models', label: 'Providers & models', icon: Cpu },
       { to: '/admin/quotas', label: 'Usage budgets', icon: Gauge },
     ],
   },
@@ -73,7 +67,6 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     label: 'Sign-in & security',
     items: [
       { to: '/admin/settings/authentication', label: 'Authentication', icon: UserCog },
-      { to: '/admin/sso', label: 'Single sign-on', icon: ShieldCheck },
       { to: '/admin/settings/email', label: 'Email delivery', icon: Send },
       { to: '/admin/policies', label: 'Acceptable use', icon: FileText },
     ],
@@ -83,8 +76,7 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     items: [
       { to: '/admin/storage', label: 'Storage', icon: Boxes },
       { to: '/admin/retention', label: 'Retention', icon: Archive },
-      { to: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
-      { to: '/admin/health', label: 'Health', icon: Activity },
+      { to: '/admin/health', label: 'System health', icon: Activity },
     ],
   },
   {

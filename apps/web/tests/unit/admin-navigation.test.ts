@@ -17,38 +17,20 @@ describe('admin navigation catalogue', () => {
     ).toEqual([
       [
         'People',
-        [
-          'Users /admin/users',
-          'Invitations /admin/invites',
-          'Rate limits /admin/rate-limits',
-          'Storage limits /admin/storage-limits',
-        ],
+        ['Users /admin/users', 'Invitations /admin/invites', 'Roles & access /admin/roles'],
       ],
-      [
-        'Models',
-        [
-          'Providers & keys /admin/providers',
-          'Model catalog /admin/models',
-          'Usage budgets /admin/quotas',
-        ],
-      ],
+      ['Models', ['Providers & models /admin/models', 'Usage budgets /admin/quotas']],
       [
         'Sign-in & security',
         [
           'Authentication /admin/settings/authentication',
-          'Single sign-on /admin/sso',
           'Email delivery /admin/settings/email',
           'Acceptable use /admin/policies',
         ],
       ],
       [
         'Data & storage',
-        [
-          'Storage /admin/storage',
-          'Retention /admin/retention',
-          'Maintenance /admin/maintenance',
-          'Health /admin/health',
-        ],
+        ['Storage /admin/storage', 'Retention /admin/retention', 'System health /admin/health'],
       ],
       ['Insights', ['Usage /admin/usage', 'Reports /admin/reports', 'Audit log /admin/audit']],
       [

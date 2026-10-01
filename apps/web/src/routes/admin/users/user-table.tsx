@@ -1,11 +1,10 @@
 import type { AdminUser } from '@oci/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useAdminAccess } from '~/components/admin/admin-access';
+import { ROLE_LABELS, UserRoleSelect } from '~/components/admin/user-role-select';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { api } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import type { SortKey } from './directory-filters';
 import type { useUserSelection } from './use-user-selection';
@@ -16,16 +15,6 @@ const ROLE_VARIANT = {
   user: 'neutral',
   restricted: 'outline',
 } as const;
-
-/** One mutation shared by all rows, including its pending state. */
-export function useUserRoleMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, role }: { id: string; role: AdminUser['role'] }) =>
-      api.patch(`/admin/users/${id}`, { role }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-  });
-}
 
 /** aria-sort exposes the active order independently of the arrow icon. */
 function SortableHeader({
@@ -70,7 +59,6 @@ export function UserTable({
   direction,
   onSort,
   selection,
-  updateRole,
   onLimits,
 }: {
   users: AdminUser[];
@@ -81,7 +69,6 @@ export function UserTable({
     ReturnType<typeof useUserSelection>,
     'selected' | 'toggleSelected' | 'allOnPageSelected' | 'selectPage'
   >;
-  updateRole: ReturnType<typeof useUserRoleMutation>;
   onLimits: (user: AdminUser) => void;
 }) {
   const { selected, toggleSelected, allOnPageSelected, selectPage } = selection;
@@ -161,14 +148,14 @@ export function UserTable({
                 <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
               </td>
               <td className="px-4 py-3">
-                <Badge variant={ROLE_VARIANT[user.role]} className="capitalize">
-                  {user.role}
-                </Badge>
-                {user.banned && (
-                  <Badge variant="danger" className="ml-1">
-                    banned
-                  </Badge>
-                )}
+                <div className="flex flex-wrap items-center gap-1">
+                  {canEdit ? (
+                    <UserRoleSelect user={user} />
+                  ) : (
+                    <Badge variant={ROLE_VARIANT[user.role]}>{ROLE_LABELS[user.role]}</Badge>
+                  )}
+                  {user.banned && <Badge variant="danger">Banned</Badge>}
+                </div>
               </td>
               <td className="px-4 py-3 text-[var(--text-secondary)]">{user.threadCount}</td>
               <td className="px-4 py-3 text-[var(--text-muted)]">
@@ -178,19 +165,6 @@ export function UserTable({
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   <Button size="sm" variant="ghost" onClick={() => onLimits(user)}>
                     Limits
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={updateRole.isPending}
-                    onClick={() =>
-                      updateRole.mutate({
-                        id: user.id,
-                        role: user.role === 'admin' ? 'user' : 'admin',
-                      })
-                    }
-                  >
-                    {user.role === 'admin' ? 'Demote' : 'Make admin'}
                   </Button>
                 </td>
               )}

@@ -1,3 +1,4 @@
+import { USER_ROLES } from '@oci/shared';
 /**
  * Search-param schemas for admin pages whose tabs live in the URL.
  *
@@ -17,9 +18,10 @@ export const STORAGE_TABS = ['driver', 's3', 'uploads'] as const;
 export type StorageTab = (typeof STORAGE_TABS)[number];
 export const DEFAULT_STORAGE_TAB: StorageTab = 'driver';
 
-export const RATE_LIMIT_TABS = ['roles', 'reservations'] as const;
-export type RateLimitTab = (typeof RATE_LIMIT_TABS)[number];
-export const DEFAULT_RATE_LIMIT_TAB: RateLimitTab = 'roles';
+/** Mirrors USER_ROLES; kept local so the router does not pull in the shared package. */
+export const ROLE_TABS = ['admin', 'auditor', 'user', 'restricted'] as const;
+export type RoleTab = (typeof ROLE_TABS)[number];
+export const DEFAULT_ROLE_TAB: RoleTab = 'user';
 
 function oneOf<T extends string | number>(value: unknown, allowed: readonly T[]): T | undefined {
   // The default parser turns `?range=30` into a number; a hand-typed URL may
@@ -50,11 +52,21 @@ export function validateStorageSearch(search: Record<string, unknown>): StorageS
   return tab && tab !== DEFAULT_STORAGE_TAB ? { tab } : {};
 }
 
-export interface RateLimitSearch {
-  tab?: RateLimitTab;
+export interface RolesSearch {
+  role?: RoleTab;
 }
 
-export function validateRateLimitSearch(search: Record<string, unknown>): RateLimitSearch {
-  const tab = oneOf(search.tab, RATE_LIMIT_TABS);
-  return tab && tab !== DEFAULT_RATE_LIMIT_TAB ? { tab } : {};
+export function validateRolesSearch(search: Record<string, unknown>): RolesSearch {
+  const role = oneOf(search.role, ROLE_TABS);
+  return role && role !== DEFAULT_ROLE_TAB ? { role } : {};
+}
+
+export interface UsersSearch {
+  role?: (typeof USER_ROLES)[number];
+}
+
+/** Lets other pages open the user list already filtered to one role. */
+export function validateUsersSearch(search: Record<string, unknown>): UsersSearch {
+  const role = oneOf(search.role, USER_ROLES);
+  return role ? { role } : {};
 }

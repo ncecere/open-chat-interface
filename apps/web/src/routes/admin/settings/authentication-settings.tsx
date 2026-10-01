@@ -16,6 +16,7 @@ import {
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
 
 type AuthSettings = Pick<
@@ -77,6 +78,7 @@ export function AuthenticationSettingsForm({
         current ? { ...current, ...changes } : current,
       );
       void queryClient.invalidateQueries({ queryKey: ['auth', 'status'] });
+      void queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY });
     },
     onError: (error) => {
       setSavedMessage(false);
@@ -195,7 +197,7 @@ export function AuthenticationSettingsForm({
         {draft.emailVerificationRequired && !smtpConfigured && (
           <Notice tone="warning" title="Email delivery is not configured">
             Verification remains required even when email delivery is unavailable. Unverified
-            accounts cannot sign in until delivery is restored and they verify their address.
+            accounts cannot sign in until delivery is restored and they verify their address.{' '}
             <Link
               className="text-[var(--accent-bright)] hover:underline"
               to="/admin/settings/email"

@@ -12,11 +12,9 @@ const PAGES: { route: string; heading: string; name: string }[] = [
   { route: '/admin', heading: 'Overview', name: 'admin-overview' },
 
   { route: '/admin/invites', heading: 'Invitations', name: 'admin-invitations' },
-  { route: '/admin/rate-limits', heading: 'Rate limits', name: 'admin-rate-limits' },
-  { route: '/admin/storage-limits', heading: 'Storage limits', name: 'admin-storage-limits' },
+  { route: '/admin/roles', heading: 'Roles & access', name: 'admin-roles' },
 
-  { route: '/admin/providers', heading: 'Providers & keys', name: 'admin-providers' },
-  { route: '/admin/models', heading: 'Model catalog', name: 'admin-models' },
+  { route: '/admin/models', heading: 'Providers & models', name: 'admin-models' },
   { route: '/admin/quotas', heading: 'Usage budgets', name: 'admin-quotas' },
 
   {
@@ -24,14 +22,12 @@ const PAGES: { route: string; heading: string; name: string }[] = [
     heading: 'Authentication',
     name: 'admin-settings-authentication',
   },
-  { route: '/admin/sso', heading: 'Single sign-on', name: 'admin-sso' },
   { route: '/admin/settings/email', heading: 'Email delivery', name: 'admin-settings-email' },
   { route: '/admin/policies', heading: 'Acceptable use', name: 'admin-policies' },
 
   { route: '/admin/storage', heading: 'Storage', name: 'admin-storage' },
   { route: '/admin/retention', heading: 'Retention', name: 'admin-retention' },
-  { route: '/admin/maintenance', heading: 'Maintenance', name: 'admin-maintenance' },
-  { route: '/admin/health', heading: 'Health', name: 'admin-health' },
+  { route: '/admin/health', heading: 'System health', name: 'admin-health' },
 
   { route: '/admin/usage', heading: 'Usage', name: 'admin-usage' },
   { route: '/admin/reports', heading: 'Scheduled reports', name: 'admin-reports' },
@@ -122,10 +118,11 @@ test.describe('administration', () => {
   });
 
   test('captures the single sign-on provider form', async ({ page }) => {
-    await gotoAdmin(page, '/admin/sso', 'Single sign-on');
+    // Single sign-on is a section of the Authentication page.
+    await gotoAdmin(page, '/admin/settings/authentication', 'Authentication');
     await page
-      .getByRole('button', { name: /add provider/i })
-      .first()
+      .locator('#single-sign-on')
+      .getByRole('button', { name: 'Add provider', exact: true })
       .click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await capture(page, 'admin-sso-provider-form');
