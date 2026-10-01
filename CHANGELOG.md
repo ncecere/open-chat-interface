@@ -54,6 +54,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Conversations scroll with what is happening.** A sent question moves to the
+  top of the view with room below for the reply, and the view follows a
+  streaming reply once it fills the screen. Scrolling up stops following and
+  shows **Jump to latest**. Long conversations also open at their end; before,
+  they could stop well short of it.
 - Banning a single account now ends its sessions immediately, as bulk bans
   already did.
 - Concurrent default-model changes are serialised, so exactly one model remains
