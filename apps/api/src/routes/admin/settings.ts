@@ -20,6 +20,14 @@ import { invalidateStorageDriver, testConfiguredS3Storage } from '../../services
 
 export const settingsRoutes = new Hono<AppBindings>();
 
+const AUTH_SETTING_KEYS = new Set([
+  'registrationMode',
+  'emailVerificationRequired',
+  'localAuthEnabled',
+  'sessionLifetimeDays',
+  'sessionRefreshDays',
+]);
+
 const storageTestSchema = z.object({
   mode: z.enum(['read', 'write']).default('read'),
 });
@@ -250,16 +258,30 @@ settingsRoutes.patch('/', async (c) => {
     });
   }
 
+  const changes = diffSettings(previous, patch as Record<string, unknown>);
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'settings.update',
     targetType: 'instance',
-    metadata: {
-      keys: Object.keys(patch),
-      changes: diffSettings(previous, patch as Record<string, unknown>),
-    },
+    metadata: { keys: Object.keys(patch), changes },
   });
+
+  // Sign-in policy is security configuration. A separate protected entry keeps
+  // it beyond routine audit retention, which prunes ordinary settings changes.
+  const authKeys = Object.keys(patch).filter((key) => AUTH_SETTING_KEYS.has(key));
+  if (authKeys.length > 0) {
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'settings.auth.update',
+      targetType: 'instance',
+      metadata: {
+        keys: authKeys,
+        changes: changes.filter((change) => AUTH_SETTING_KEYS.has(change.key)),
+      },
+    });
+  }
 
   return c.json({ ok: true });
 });

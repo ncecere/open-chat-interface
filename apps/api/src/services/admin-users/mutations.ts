@@ -111,6 +111,19 @@ export async function updateUser(
     metadata: patch,
   });
 
+  // A role change is access control; record it under its protected action so
+  // routine audit retention cannot prune it with ordinary profile edits.
+  if (patch.role !== undefined && patch.role !== target.role) {
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'user.role.change',
+      targetType: 'user',
+      targetId,
+      metadata: { from: target.role, to: patch.role },
+    });
+  }
+
   return { id: updated?.id };
 }
 

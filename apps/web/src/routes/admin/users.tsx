@@ -1,6 +1,6 @@
 import { type AdminUser, USER_ROLES } from '@oci/shared';
 import { useState } from 'react';
-import { AdminPageHeader } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { QuotaOverrideDialog } from '~/components/admin/quota-override-dialog';
 import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
@@ -68,14 +68,21 @@ export function AdminUsersPage() {
         />
       </div>
 
-      {isLoading || !data ? (
+      {isLoading ? (
         <div className="py-16">
           <FullPageSpinner />
         </div>
+      ) : !data ? (
+        <LoadError title="Accounts could not be loaded." query={directory.query} className="mt-6" />
       ) : (
         <div className="mt-6">
           <SavedUserViews views={views} />
           <UserBulkToolbar selection={selection} />
+          <MutationError
+            error={updateRole.error}
+            message="The role could not be changed."
+            className="mb-3"
+          />
           <UserTable
             users={data.users}
             sort={sort}

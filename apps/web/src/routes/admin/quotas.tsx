@@ -1,8 +1,9 @@
 import { MICROS_PER_DOLLAR, type QuotaMetric, type QuotaPolicy } from '@oci/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gauge, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { AdminPageHeader, EmptyState, Row, RowList } from '~/components/admin/admin-ui';
+import { AdminPageHeader, EmptyState, LoadError, Row, RowList } from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { QuotaPolicyDialog } from '~/components/admin/quota-policy-dialog';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -44,16 +45,18 @@ function formatWindow(policy: QuotaPolicy): string {
 export function AdminQuotasPage() {
   const queryClient = useQueryClient();
   const [formFor, setFormFor] = useState<{ policy: QuotaPolicy | null } | null>(null);
+  const [deleteFor, setDeleteFor] = useState<QuotaPolicy | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const quotas = useQuery({
     queryKey: ['admin', 'quotas'],
     queryFn: () => api.get<{ policies: QuotaPolicy[] }>('/admin/quotas'),
   });
+  const { data, isLoading } = quotas;
 
-  const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/quotas/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'quotas'] }),
-  });
+  async function deletePolicy(policy: QuotaPolicy) {
+    await api.delete(`/admin/quotas/${policy.id}`);
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'quotas'] });
+  }
 
   const policies = data?.policies ?? [];
 
@@ -74,6 +77,8 @@ export function AdminQuotasPage() {
         <div className="py-16">
           <Spinner className="mx-auto size-6" />
         </div>
+      ) : quotas.isError || !data ? (
+        <LoadError title="Quota policies could not be loaded." query={quotas} />
       ) : policies.length > 0 ? (
         <RowList>
           {policies.map((policy) => (
@@ -121,7 +126,7 @@ export function AdminQuotasPage() {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`Delete ${policy.name}`}
-                onClick={() => remove.mutate(policy.id)}
+                onClick={() => setDeleteFor(policy)}
               >
                 <Trash2 />
               </Button>
@@ -134,6 +139,21 @@ export function AdminQuotasPage() {
           prices, which are set in the model catalog.
         </EmptyState>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteFor)}
+        onOpenChange={(open) => !open && setDeleteFor(null)}
+        title={`Delete ${deleteFor?.name ?? 'policy'}?`}
+        description={
+          deleteFor && deleteFor.overrideCount > 0
+            ? `The roles it applies to will no longer be limited by it, and its ${deleteFor.overrideCount} per-user override${deleteFor.overrideCount === 1 ? '' : 's'} will be removed. This action cannot be undone.`
+            : 'The roles it applies to will no longer be limited by it. This action cannot be undone.'
+        }
+        confirmLabel="Delete policy"
+        pendingLabel="Deleting…"
+        errorMessage="The quota policy could not be deleted."
+        onConfirm={() => (deleteFor ? deletePolicy(deleteFor) : Promise.resolve())}
+      />
 
       <Dialog open={Boolean(formFor)} onOpenChange={(open) => !open && setFormFor(null)}>
         {formFor && <QuotaPolicyDialog policy={formFor.policy} onClose={() => setFormFor(null)} />}

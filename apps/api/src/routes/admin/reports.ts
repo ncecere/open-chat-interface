@@ -1,4 +1,5 @@
 import { desc, eq, schema } from '@oci/db';
+import { patchSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../../db/index.js';
@@ -62,7 +63,7 @@ reportRoutes.post('/', async (c) => {
 reportRoutes.patch('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
-  const patch = await parseBody(c, reportSchema.partial());
+  const patch = await parseBody(c, patchSchema(reportSchema));
 
   const updated = await db
     .update(schema.scheduledReport)

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react';
-import { AdminPageHeader } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError } from '~/components/admin/admin-ui';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
 import { cn, formatRelativeTime } from '~/lib/utils';
@@ -43,15 +43,28 @@ const SUMMARY: Record<Status, string> = {
 };
 
 export function AdminHealthPage() {
-  const { data, isLoading } = useQuery({
+  const health = useQuery({
     queryKey: ['admin', 'health'],
     queryFn: () => api.get<HealthResponse>('/admin/health'),
     // Stale quickly: this page is opened precisely when something is suspected
     // to be wrong, and a cached green summary would be actively misleading.
     refetchInterval: 30_000,
   });
+  const { data, isLoading } = health;
 
-  if (isLoading || !data) return <FullPageSpinner />;
+  if (isLoading) return <FullPageSpinner />;
+
+  if (!data) {
+    return (
+      <div>
+        <AdminPageHeader
+          title="Health"
+          description="Whether the parts this instance depends on are working."
+        />
+        <LoadError title="Health checks could not be loaded." query={health} />
+      </div>
+    );
+  }
 
   const Overall = STATUS_STYLES[data.status].icon;
 

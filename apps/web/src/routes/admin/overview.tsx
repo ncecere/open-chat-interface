@@ -1,7 +1,7 @@
 import type { AdminOverview } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError, SettingsSection } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -79,16 +79,30 @@ function Sparkline({ points }: { points: { day: string; messages: number }[] }) 
 }
 
 export function AdminOverviewPage() {
-  const { data, isLoading } = useQuery({
+  const overview = useQuery({
     queryKey: ['admin', 'overview'],
     queryFn: () => api.get<AdminOverview>('/admin/overview'),
   });
+  const { data, isLoading } = overview;
 
-  if (isLoading || !data) return <FullPageSpinner />;
+  if (isLoading) return <FullPageSpinner />;
+
+  const header = (
+    <AdminPageHeader title="Overview" description="Instance health and activity at a glance." />
+  );
+
+  if (!data) {
+    return (
+      <div>
+        {header}
+        <LoadError title="The overview could not be loaded." query={overview} />
+      </div>
+    );
+  }
 
   return (
     <div>
-      <AdminPageHeader title="Overview" description="Instance health and activity at a glance." />
+      {header}
 
       <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border-subtle)] overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 lg:divide-y-0">
         <Stat

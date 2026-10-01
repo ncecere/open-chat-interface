@@ -2,7 +2,15 @@ import type { DiscoveredModel, Provider } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { AdminPageHeader, EmptyState, Row, RowList } from '~/components/admin/admin-ui';
+import {
+  AdminPageHeader,
+  EmptyState,
+  LoadError,
+  MutationError,
+  Row,
+  RowList,
+} from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { DiscoverModelsDialog } from '~/components/admin/discover-models-dialog';
 import { PROVIDER_KIND_LABELS, ProviderFormDialog } from '~/components/admin/provider-form-dialog';
 import { Badge } from '~/components/ui/badge';
@@ -15,21 +23,30 @@ export function AdminProvidersPage() {
   const queryClient = useQueryClient();
   const [formFor, setFormFor] = useState<{ provider: Provider | null } | null>(null);
   const [discoverFor, setDiscoverFor] = useState<Provider | null>(null);
+  const [deleteFor, setDeleteFor] = useState<Provider | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const providers = useQuery({
     queryKey: ['admin', 'providers'],
     queryFn: () => api.get<{ providers: Provider[] }>('/admin/providers'),
   });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/providers/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
-  });
+  const { data, isLoading } = providers;
 
   const discover = useMutation({
-    mutationFn: (id: string) =>
-      api.post<{ models: DiscoveredModel[] }>(`/admin/providers/${id}/discover`),
+    mutationFn: (provider: Provider) =>
+      api.post<{ models: DiscoveredModel[] }>(`/admin/providers/${provider.id}/discover`),
+    onSuccess: (result, provider) =>
+      setDiscoverFor({ ...provider, modelCount: result.models.length }),
   });
+
+  async function deleteProvider(provider: Provider) {
+    await api.delete(`/admin/providers/${provider.id}`);
+    // Deleting a provider removes its catalog models too.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
+      queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+    ]);
+  }
 
   return (
     <div>
@@ -44,11 +61,19 @@ export function AdminProvidersPage() {
         }
       />
 
+      <MutationError
+        error={discover.error}
+        message={`Models could not be discovered${discover.variables ? ` for ${discover.variables.label}` : ''}.`}
+        className="mb-4"
+      />
+
       {isLoading ? (
         <div className="py-16">
           <Spinner className="mx-auto size-6" />
         </div>
-      ) : data && data.providers.length > 0 ? (
+      ) : providers.isError || !data ? (
+        <LoadError title="Providers could not be loaded." query={providers} />
+      ) : data.providers.length > 0 ? (
         <RowList>
           {data.providers.map((provider) => (
             <Row key={provider.id}>
@@ -73,11 +98,9 @@ export function AdminProvidersPage() {
                 variant="secondary"
                 size="sm"
                 disabled={discover.isPending}
-                onClick={async () => {
-                  const result = await discover.mutateAsync(provider.id);
-                  setDiscoverFor({ ...provider, modelCount: result.models.length });
-                }}
+                onClick={() => discover.mutate(provider)}
               >
+                {discover.isPending && discover.variables?.id === provider.id && <Spinner />}
                 Discover models
               </Button>
 
@@ -94,7 +117,7 @@ export function AdminProvidersPage() {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`Delete ${provider.label}`}
-                onClick={() => remove.mutate(provider.id)}
+                onClick={() => setDeleteFor(provider)}
               >
                 <Trash2 />
               </Button>
@@ -113,6 +136,21 @@ export function AdminProvidersPage() {
           <ProviderFormDialog provider={formFor.provider} onClose={() => setFormFor(null)} />
         )}
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteFor)}
+        onOpenChange={(open) => !open && setDeleteFor(null)}
+        title={`Delete ${deleteFor?.label ?? 'provider'}?`}
+        description={
+          deleteFor
+            ? `Its stored key and ${deleteFor.modelCount} catalog model${deleteFor.modelCount === 1 ? '' : 's'} will be removed, and users will no longer be able to select them. This action cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete provider"
+        pendingLabel="Deleting…"
+        errorMessage="The provider could not be deleted."
+        onConfirm={() => (deleteFor ? deleteProvider(deleteFor) : Promise.resolve())}
+      />
 
       <Dialog open={Boolean(discoverFor)} onOpenChange={(open) => !open && setDiscoverFor(null)}>
         {discoverFor && discover.data && (

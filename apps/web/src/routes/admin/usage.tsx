@@ -1,7 +1,7 @@
 import { MICROS_PER_DOLLAR } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError, Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Badge } from '~/components/ui/badge';
 import { Spinner } from '~/components/ui/spinner';
@@ -220,13 +220,30 @@ function PeopleList({
   );
 }
 
+/** A tab's spinner, or a retryable error once its query has failed. */
+function TabPending({
+  query,
+  title,
+}: {
+  query: { error: unknown; isError: boolean; isFetching: boolean; refetch: () => unknown };
+  title: string;
+}) {
+  if (query.isError) return <LoadError title={title} query={query} />;
+  return (
+    <div role="status" aria-label="Loading">
+      <Spinner className="mx-auto size-6" />
+    </div>
+  );
+}
+
 function OverviewTab({ days }: { days: number }) {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'overview', days],
     queryFn: () => api.get<OverviewResponse>(`/admin/usage/overview?days=${days}`),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Usage overview could not be loaded." />;
 
   return (
     <div className="flex flex-col gap-10">
@@ -278,12 +295,13 @@ function OverviewTab({ days }: { days: number }) {
 }
 
 function SpendTab({ days }: { days: number }) {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'spend', days],
     queryFn: () => api.get<SpendResponse>(`/admin/usage/spend?days=${days}`),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Spend could not be loaded." />;
 
   return (
     <div className="flex flex-col gap-10">
@@ -424,12 +442,13 @@ function SpendTab({ days }: { days: number }) {
 }
 
 function LimitsTab({ days }: { days: number }) {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'limits', days],
     queryFn: () => api.get<LimitsResponse>(`/admin/usage/limits?days=${days}`),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Limit activity could not be loaded." />;
 
   return (
     <SettingsSection
@@ -470,12 +489,13 @@ function LimitsTab({ days }: { days: number }) {
 }
 
 function StorageTab() {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'storage'],
     queryFn: () => api.get<StorageResponse>('/admin/usage/storage'),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Storage usage could not be loaded." />;
 
   return (
     <div className="flex flex-col gap-10">

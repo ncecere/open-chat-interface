@@ -25,12 +25,13 @@ export function useUserDirectory() {
     direction: 'desc',
   });
   const { page, search, role, status, sort, direction } = state;
-  const { data, isLoading } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'users', search, role, status, sort, direction, page],
     // Filtering and sorting describe every account, not just the loaded page.
     queryFn: () => api.get<UsersResponse>(`/admin/users?${userListParams(state, page)}`),
     placeholderData: (previous) => previous,
   });
+  const { data, isLoading } = query;
 
   function changeFilter(key: 'search' | 'role' | 'status', value: string) {
     setState((current) => ({ ...current, page: 0, [key]: value }));
@@ -55,6 +56,7 @@ export function useUserDirectory() {
     ...state,
     data,
     isLoading,
+    query,
     total,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
     firstOnPage: total === 0 ? 0 : page * PAGE_SIZE + 1,

@@ -31,6 +31,9 @@ function guardedApp(role: UserRole | null, guard: typeof requireAuth | typeof re
     await next();
   });
   app.get('/', guard, (c) => c.json({ ok: true }));
+  for (const method of ['post', 'put', 'patch', 'delete'] as const) {
+    app[method]('/', guard, (c) => c.json({ ok: true }));
+  }
   app.onError((error, c) => {
     if (error instanceof AppError) {
       return c.json({ code: error.code }, error.status);
@@ -53,6 +56,21 @@ describe('integration: HTTP permission guards', () => {
       expect(response.status).toBe(403);
     },
   );
+
+  it('lets an auditor read administrative endpoints but never change them', async () => {
+    const app = guardedApp('auditor', requireAdmin);
+    expect((await app.request('/')).status).toBe(200);
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      expect((await app.request('/', { method })).status, method).toBe(403);
+    }
+  });
+
+  it('lets an administrator change administrative endpoints', async () => {
+    const app = guardedApp('admin', requireAdmin);
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      expect((await app.request('/', { method })).status, method).toBe(200);
+    }
+  });
 
   it('allows only the admin role through the admin guard', async () => {
     const response = await guardedApp('admin', requireAdmin).request('/');

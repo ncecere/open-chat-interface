@@ -2,7 +2,7 @@ import type { AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
-import { AdminPageHeader } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { FullPageSpinner } from '~/components/ui/spinner';
@@ -73,17 +73,33 @@ export function AdminUserDetailPage() {
   const { userId } = useParams({ strict: false }) as { userId: string };
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const detail = useQuery({
     queryKey: ['admin', 'users', userId],
     queryFn: () => api.get<UserDetail>(`/admin/users/${userId}`),
   });
+  const { data, isLoading } = detail;
 
   const revokeSessions = useMutation({
     mutationFn: () => api.post(`/admin/users/${userId}/revoke-sessions`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users', userId] }),
   });
 
-  if (isLoading || !data) return <FullPageSpinner />;
+  if (isLoading) return <FullPageSpinner />;
+
+  if (!data) {
+    return (
+      <div>
+        <Link
+          to="/admin/users"
+          className="inline-flex items-center gap-1.5 text-[var(--text-muted)] text-sm hover:text-[var(--text-primary)]"
+        >
+          <ArrowLeft className="size-4" />
+          All users
+        </Link>
+        <LoadError title="This account could not be loaded." query={detail} className="mt-6" />
+      </div>
+    );
+  }
 
   const { user, storage, sessions, recentThreads, audit } = data;
 
@@ -152,6 +168,11 @@ export function AdminUserDetailPage() {
             >
               Sign out everywhere
             </Button>
+            <MutationError
+              error={revokeSessions.error}
+              message="Sessions could not be revoked."
+              className="mt-2"
+            />
           </>
         )}
       </Section>

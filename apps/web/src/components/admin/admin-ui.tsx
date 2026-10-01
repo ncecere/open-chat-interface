@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { ApiError, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 /**
@@ -177,6 +178,74 @@ export function Notice({
         <p className="font-medium text-[var(--text-primary)]">{title}</p>
         <div className="mt-1 leading-relaxed text-[var(--text-muted)]">{children}</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Announces a failed mutation next to the control that triggered it.
+ *
+ * `message` says what failed; the server's own explanation follows when the
+ * failure came from the API. Renders nothing while `error` is empty, so it
+ * clears itself when React Query resets the mutation on retry or success.
+ */
+export function MutationError({
+  error,
+  message,
+  className,
+}: {
+  error: unknown;
+  message: string;
+  className?: string;
+}) {
+  if (!error) return null;
+  const detail = error instanceof ApiError && error.message !== message ? error.message : null;
+
+  return (
+    <p role="alert" className={cn('text-sm text-[var(--danger)]', className)}>
+      {message}
+      {detail && ` ${detail}`}
+    </p>
+  );
+}
+
+/**
+ * Shown in place of content whose query failed, so a page never spins
+ * forever. Retrying refetches the same query.
+ */
+export function LoadError({
+  title,
+  query,
+  className,
+}: {
+  title: string;
+  query: { error: unknown; isFetching: boolean; refetch: () => unknown };
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--border-subtle)] p-12 text-center',
+        className,
+      )}
+    >
+      <AlertTriangle className="size-8 text-[var(--danger)]" aria-hidden="true" />
+      <p role="alert" className="text-sm font-medium text-[var(--text-primary)]">
+        {title}
+      </p>
+      <p className="max-w-md text-xs text-[var(--text-muted)]">
+        {apiErrorMessage(query.error, 'Check your connection and try again.')}
+      </p>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={query.isFetching}
+        onClick={() => void query.refetch()}
+      >
+        {query.isFetching && <Spinner />}
+        Try again
+      </Button>
     </div>
   );
 }

@@ -2,7 +2,13 @@ import { type AdminModel, COLOR_THEMES, type ColorTheme, type InstanceSettings }
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
-import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
+import {
+  LoadError,
+  Notice,
+  SaveRow,
+  SettingsSection,
+  ToggleSetting,
+} from '~/components/admin/admin-ui';
 import { Field } from '~/components/ui/field';
 import { Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
@@ -14,6 +20,11 @@ import { useTheme } from '~/providers/theme-provider';
 type Features = InstanceSettings['features'];
 type FeaturesPatch = Partial<Features>;
 
+/**
+ * Only features the server enforces are listed. Canvas and MCP remain in the
+ * stored settings but nothing reads them yet, so they are not offered; because
+ * only rendered toggles can change, changedFeatures never sends them.
+ */
 const FEATURE_SECTIONS: Array<{
   title: string;
   description: string;
@@ -54,17 +65,6 @@ const FEATURE_SECTIONS: Array<{
         key: 'webSearch',
         label: 'Web search',
         description: 'Permit configured web search grounding during model requests.',
-      },
-      {
-        key: 'canvas',
-        label: 'Canvas',
-        description: 'Expose canvas experiences in clients that implement them.',
-      },
-      {
-        key: 'mcp',
-        label: 'MCP tools',
-        description:
-          'Expose Model Context Protocol tools in clients and providers that support them.',
       },
     ],
   },
@@ -386,10 +386,11 @@ function DefaultModelForm() {
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const modelsQuery = useQuery({
     queryKey: ['admin', 'models'],
     queryFn: () => api.get<{ models: AdminModel[] }>('/admin/models'),
   });
+  const { data, isLoading } = modelsQuery;
 
   const models = data?.models ?? [];
   const enabled = models.filter((model) => model.enabled);
@@ -414,6 +415,8 @@ function DefaultModelForm() {
   });
 
   if (isLoading) return <Spinner className="size-5" />;
+
+  if (!data) return <LoadError title="Models could not be loaded." query={modelsQuery} />;
 
   if (enabled.length === 0) {
     return (

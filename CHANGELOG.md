@@ -7,6 +7,24 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- **Saving one administrative field no longer resets others.** Partial updates
+  applied create-time defaults to fields that were not sent: saving any instance
+  setting reset the session lifetime to 30 days, toggling or renaming a model
+  cleared its default flag, capabilities, reasoning efforts, role visibility and
+  order, and pausing a scheduled report reset its window to 30 days. Omitted
+  fields now stay unchanged. Re-check those values if they were edited before.
+- **Audit-log retention now runs.** The pruning query was rejected by PostgreSQL
+  on every run, so audit entries were never removed and the job reported failure.
+- Single sign-on providers can be edited to the auditor role, matching creation.
+
+### Security
+
+- Role changes and sign-in policy changes are recorded under protected audit
+  actions that retention never removes; bulk role, ban and unban are protected
+  too. Model discovery against a provider is now audited.
+
 ## [0.5.0] - 2026-10-01
 
 Chat reliability, privacy and accounting under concurrency, with measured startup

@@ -9,4 +9,5 @@ export * from './schemas/chat.js';
 export * from './schemas/lifecycle.js';
 export * from './schemas/model.js';
 export * from './schemas/onboarding.js';
+export * from './schemas/patch.js';
 export * from './schemas/sso.js';

@@ -9,6 +9,7 @@ import {
   THEME_MODES,
   USER_ROLES,
 } from '../constants.js';
+import { patchSchema } from './patch.js';
 
 export const adminUserSchema = z.object({
   id: z.string(),
@@ -136,8 +137,8 @@ export const instanceSettingsSchema = z.object({
   }),
 });
 
-export const updateInstanceSettingsSchema = instanceSettingsSchema
-  .partial()
+// Defaults belong to reads of older stored settings, never to a partial write.
+export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
   .omit({ smtp: true, search: true, storage: true })
   .extend({
     storage: instanceSettingsSchema.shape.storage

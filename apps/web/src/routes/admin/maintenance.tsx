@@ -2,7 +2,13 @@ import type { JobRun } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
+import {
+  AdminPageHeader,
+  LoadError,
+  MutationError,
+  Notice,
+  SettingsSection,
+} from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -16,11 +22,12 @@ interface ReconcileReport {
 function JobHealth() {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const jobs = useQuery({
     queryKey: ['admin', 'jobs'],
     queryFn: () => api.get<{ runs: JobRun[] }>('/admin/lifecycle/jobs'),
     refetchInterval: 30_000,
   });
+  const { data, isLoading } = jobs;
 
   const run = useMutation({
     mutationFn: (name: string) => api.post(`/admin/lifecycle/jobs/${name}/run`),
@@ -36,6 +43,16 @@ function JobHealth() {
 
   if (isLoading) return <Spinner className="mx-auto size-5" />;
 
+  if (!data) return <LoadError title="Background jobs could not be loaded." query={jobs} />;
+
+  const runError = (
+    <MutationError
+      error={run.error}
+      message={`${run.variables ?? 'The job'} could not be started.`}
+      className="mb-3"
+    />
+  );
+
   if (runs.length === 0) {
     return (
       <p className="text-[var(--text-muted)] text-sm">
@@ -45,39 +62,42 @@ function JobHealth() {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-      {runs.map((entry) => (
-        <div
-          key={entry.id}
-          className="flex items-center gap-3 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
-        >
-          {entry.status === 'error' ? (
-            <AlertTriangle className="size-4 shrink-0 text-[var(--danger)]" aria-hidden="true" />
-          ) : (
-            <CheckCircle2 className="size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
-          )}
-
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-sm">{entry.jobName}</p>
-            <p className="truncate text-[var(--text-muted)] text-xs">
-              {new Date(entry.startedAt).toLocaleString()} · {entry.itemsProcessed} item
-              {entry.itemsProcessed === 1 ? '' : 's'}
-              {entry.errorMessage ? ` · ${entry.errorMessage}` : ''}
-            </p>
-          </div>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Run ${entry.jobName} now`}
-            disabled={run.isPending}
-            onClick={() => run.mutate(entry.jobName)}
+    <div>
+      {runError}
+      <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
+        {runs.map((entry) => (
+          <div
+            key={entry.id}
+            className="flex items-center gap-3 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
           >
-            <RefreshCw />
-          </Button>
-        </div>
-      ))}
+            {entry.status === 'error' ? (
+              <AlertTriangle className="size-4 shrink-0 text-[var(--danger)]" aria-hidden="true" />
+            ) : (
+              <CheckCircle2 className="size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
+            )}
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-sm">{entry.jobName}</p>
+              <p className="truncate text-[var(--text-muted)] text-xs">
+                {new Date(entry.startedAt).toLocaleString()} · {entry.itemsProcessed} item
+                {entry.itemsProcessed === 1 ? '' : 's'}
+                {entry.errorMessage ? ` · ${entry.errorMessage}` : ''}
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Run ${entry.jobName} now`}
+              disabled={run.isPending}
+              onClick={() => run.mutate(entry.jobName)}
+            >
+              <RefreshCw />
+            </Button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -114,6 +134,15 @@ function StorageReconcile() {
           Queue orphans for deletion
         </Button>
       </div>
+
+      <MutationError
+        error={reconcile.error}
+        message={
+          reconcile.variables
+            ? 'Orphaned objects could not be queued for deletion.'
+            : 'The storage check could not be completed.'
+        }
+      />
 
       {report && (
         <dl className="grid gap-4 sm:grid-cols-3" aria-live="polite">

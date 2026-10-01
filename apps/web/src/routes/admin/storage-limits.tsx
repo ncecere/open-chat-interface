@@ -2,7 +2,12 @@ import { type StoragePolicy, USER_ROLES, type UserRole } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
+import {
+  AdminPageHeader,
+  LoadError,
+  MutationError,
+  SettingsSection,
+} from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -115,6 +120,11 @@ function StoragePolicyRow({ role, policy }: { role: UserRole; policy: StoragePol
       </div>
 
       <div className="mt-3 flex items-center justify-end gap-3">
+        <MutationError
+          error={save.error}
+          message={`The ${role} allowance could not be saved.`}
+          className="mr-auto"
+        />
         {saved && (
           <span className="flex items-center gap-1.5 text-[var(--success)] text-xs">
             <CheckCircle2 className="size-3.5" aria-hidden="true" />
@@ -170,6 +180,10 @@ export function AdminStorageLimitsPage() {
         >
           {policies.isLoading ? (
             <Spinner className="mx-auto size-5" />
+          ) : policies.isError ? (
+            // Rendering the rows anyway would show blank "unlimited" drafts
+            // that overwrite the real allowances if saved.
+            <LoadError title="Storage allowances could not be loaded." query={policies} />
           ) : (
             <div>
               {USER_ROLES.map((role) => (
@@ -183,6 +197,10 @@ export function AdminStorageLimitsPage() {
           title="Storage in use"
           description="Deleted files still occupy disk until their trash window elapses and cleanup removes them."
         >
+          {health.isError && (
+            <LoadError title="Storage usage could not be loaded." query={health} />
+          )}
+          {health.isLoading && <Spinner className="mx-auto size-5" />}
           {health.data && (
             <dl className="grid gap-4 sm:grid-cols-3">
               <div>

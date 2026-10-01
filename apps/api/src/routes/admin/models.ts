@@ -1,5 +1,5 @@
 import { and, asc, eq, ne, schema } from '@oci/db';
-import { type AdminModel, upsertModelSchema } from '@oci/shared';
+import { type AdminModel, updateModelSchema, upsertModelSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { conflict, notFound } from '../../lib/errors.js';
@@ -133,7 +133,7 @@ modelRoutes.patch('/:id', async (c) => {
 
   if (!existing) throw notFound('Model not found');
 
-  const input = await parseBody(c, upsertModelSchema.partial());
+  const input = await parseBody(c, updateModelSchema);
   const organizationId = await getDefaultOrganizationId();
 
   if (input.providerId !== undefined) await requireProvider(input.providerId, organizationId);

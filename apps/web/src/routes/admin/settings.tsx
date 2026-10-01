@@ -16,7 +16,6 @@ function authSettingsFromResponse(settings: InstanceSettings) {
     emailVerificationRequired: settings.emailVerificationRequired,
     localAuthEnabled: settings.localAuthEnabled,
     sessionLifetimeDays: settings.sessionLifetimeDays,
-    sessionRefreshDays: settings.sessionRefreshDays,
   };
 }
 

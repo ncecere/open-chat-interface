@@ -1,20 +1,37 @@
 import { type AdminUser, USER_ROLES } from '@oci/shared';
+import { useState } from 'react';
+import { MutationError } from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
 import { Select } from '~/components/ui/select';
 import type { useUserSelection } from './use-user-selection';
 
+const BULK_ACTION_FAILURES: Record<string, string> = {
+  set_role: 'The role could not be applied to the selected accounts.',
+  revoke_sessions: 'The selected accounts could not be signed out.',
+  ban: 'The selected accounts could not be banned.',
+};
+
+function describeAccounts(count: number) {
+  return `${count} account${count === 1 ? '' : 's'}`;
+}
+
 export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof useUserSelection> }) {
   const { selected, bulkRole, setBulkRole, bulk, clear } = selection;
+  // The count is captured when the dialog opens: a successful ban clears the
+  // selection while the dialog is still closing.
+  const [banCount, setBanCount] = useState<number | null>(null);
+  const count = selected.size;
+  const banAccounts = describeAccounts(banCount ?? count);
+
   return (
     <>
-      {selected.size > 0 && (
+      {count > 0 && (
         <section
           aria-label="Bulk actions"
           className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-3"
         >
-          <span className="font-medium text-sm">
-            {selected.size} account{selected.size === 1 ? '' : 's'} selected
-          </span>
+          <span className="font-medium text-sm">{describeAccounts(count)} selected</span>
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <Select
               aria-label="Role to apply"
@@ -45,7 +62,7 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
               size="sm"
               variant="danger"
               disabled={bulk.isPending}
-              onClick={() => bulk.mutate({ action: 'ban' })}
+              onClick={() => setBanCount(count)}
             >
               Ban
             </Button>
@@ -55,11 +72,33 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
           </span>
         </section>
       )}
+      {/* The ban dialog reports its own failure while it is open. */}
+      {banCount === null && (
+        <MutationError
+          error={bulk.error}
+          message={
+            BULK_ACTION_FAILURES[bulk.variables?.action ?? ''] ??
+            'The bulk action could not be completed.'
+          }
+          className="mb-3"
+        />
+      )}
       {bulk.data?.skippedSelf && (
         <p className="mb-3 text-[var(--text-muted)] text-xs">
           Your own account was left unchanged.
         </p>
       )}
+
+      <ConfirmDialog
+        open={banCount !== null}
+        onOpenChange={(open) => !open && setBanCount(null)}
+        title={`Ban ${banAccounts}?`}
+        description="Banned accounts are signed out and cannot sign in again until an administrator lifts the ban. Your own account is never included."
+        confirmLabel={`Ban ${banAccounts}`}
+        pendingLabel="Banning…"
+        errorMessage={BULK_ACTION_FAILURES.ban ?? ''}
+        onConfirm={() => bulk.mutateAsync({ action: 'ban' })}
+      />
     </>
   );
 }

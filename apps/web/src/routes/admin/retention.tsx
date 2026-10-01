@@ -2,7 +2,7 @@ import { MIN_TRASH_RETENTION_DAYS, type RetentionSettings } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { AdminPageHeader, Notice } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError, Notice } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -194,8 +194,12 @@ export function AdminRetentionPage() {
 
       {retention.data ? (
         <RetentionForm settings={retention.data} />
+      ) : retention.isError ? (
+        <LoadError title="Retention settings could not be loaded." query={retention} />
       ) : (
-        <Spinner className="mx-auto size-5" />
+        <div role="status" aria-label="Loading retention settings">
+          <Spinner className="mx-auto size-5" />
+        </div>
       )}
     </div>
   );

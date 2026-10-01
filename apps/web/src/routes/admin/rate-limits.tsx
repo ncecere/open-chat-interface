@@ -9,7 +9,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AdminTabs } from '~/components/admin/admin-tabs';
-import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
+import {
+  AdminPageHeader,
+  LoadError,
+  MutationError,
+  Notice,
+  SettingsSection,
+} from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -217,6 +223,11 @@ function RateLimitForm({ settings }: { settings: RateLimitConfig }) {
       </Notice>
 
       <div className="flex items-center justify-end gap-3">
+        <MutationError
+          error={save.error}
+          message="Rate limits could not be saved."
+          className="mr-auto"
+        />
         {saved && (
           <span className="mr-auto flex items-center gap-1.5 text-[var(--success)] text-sm">
             <CheckCircle2 className="size-4" aria-hidden="true" />
@@ -252,8 +263,12 @@ export function AdminRateLimitsPage() {
 
       {rateLimits.data ? (
         <RateLimitForm settings={rateLimits.data} />
+      ) : rateLimits.isError ? (
+        <LoadError title="Rate limits could not be loaded." query={rateLimits} />
       ) : (
-        <Spinner className="mx-auto size-5" />
+        <div role="status" aria-label="Loading rate limits">
+          <Spinner className="mx-auto size-5" />
+        </div>
       )}
     </div>
   );

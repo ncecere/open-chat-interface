@@ -95,7 +95,10 @@ How long conversations, audit entries, and deleted items are kept.
   short period they were not told about; state it in your acceptable use policy.
 - **Deleted items** — the recovery window before a deletion becomes permanent.
 - **Audit entries** — how long the record of administrative action survives.
-  Check what your institution requires before shortening this.
+  Check what your institution requires before shortening this. Access-control
+  and security changes are kept regardless: account creation, edits and
+  deletion, role changes (including bulk role, ban and unban), provider and
+  single sign-on changes, and sign-in policy changes.
 
 Retention is easier to introduce early and shorten later than to impose on an
 instance where people have accumulated two years of work.

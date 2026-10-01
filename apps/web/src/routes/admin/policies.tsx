@@ -2,7 +2,15 @@ import { type UsagePolicy, upsertUsagePolicySchema } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Send } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { AdminPageHeader, EmptyState, Notice, Row, RowList } from '~/components/admin/admin-ui';
+import {
+  AdminPageHeader,
+  EmptyState,
+  LoadError,
+  MutationError,
+  Notice,
+  Row,
+  RowList,
+} from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -124,10 +132,11 @@ export function AdminPoliciesPage() {
   const queryClient = useQueryClient();
   const [composing, setComposing] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const policiesQuery = useQuery({
     queryKey: ['admin', 'policies'],
     queryFn: () => api.get<{ policies: UsagePolicy[] }>('/admin/policies'),
   });
+  const { data, isLoading } = policiesQuery;
 
   const publish = useMutation({
     mutationFn: (id: string) => api.post(`/admin/policies/${id}/publish`),
@@ -151,7 +160,13 @@ export function AdminPoliciesPage() {
       />
 
       <div className="flex flex-col gap-6 pb-10">
-        {!isLoading && policies.length === 0 && (
+        {policiesQuery.isError && !data && (
+          <LoadError title="Policies could not be loaded." query={policiesQuery} />
+        )}
+
+        <MutationError error={publish.error} message="The policy could not be published." />
+
+        {!isLoading && data && policies.length === 0 && (
           <EmptyState icon={FileText} title="No policy has been published.">
             Until one is published, nobody is asked to accept anything.
           </EmptyState>

@@ -187,6 +187,7 @@ providerRoutes.delete('/:id', async (c) => {
 
 /** Lists models the credential can reach; none are exposed until curated. */
 providerRoutes.post('/:id/discover', async (c) => {
+  const actor = currentUser(c);
   const id = c.req.param('id');
   const row = await loadProviderOrThrow(id);
 
@@ -203,6 +204,16 @@ providerRoutes.post('/:id/discover', async (c) => {
     .where(eq(schema.model.providerId, id));
 
   const known = new Set(existing.map((entry) => entry.upstreamModelId));
+
+  // Discovery uses the stored credential against an external service.
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'provider.discover',
+    targetType: 'provider',
+    targetId: id,
+    metadata: { discovered: discovered.length },
+  });
 
   return c.json({
     models: discovered.map((entry) => ({
