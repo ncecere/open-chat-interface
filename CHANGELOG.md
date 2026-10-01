@@ -63,7 +63,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   fields now stay unchanged. Re-check those values if they were edited before.
 - **Audit-log retention now runs.** The pruning query was rejected by PostgreSQL
   on every run, so audit entries were never removed and the job reported failure.
-- Single sign-on providers can be edited to the auditor role, matching creation.
+- Single sign-on providers can be edited to the auditor role, matching creation,
+  and a claim mapping to the auditor role now takes effect at sign-in.
 
 ### Security
 

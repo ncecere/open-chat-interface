@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { updateRateLimitSettingsSchema, upsertStoragePolicySchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminRolesPage } from '../../src/routes/admin/roles';
@@ -103,6 +104,8 @@ describe('Roles & access', () => {
     expect(api.put).toHaveBeenCalledWith('/admin/lifecycle/rate-limits', {
       roles: { restricted: { chatRequestsPerMinute: 30 } },
     });
+    // The mocked request must still be one the server's schema accepts.
+    expect(updateRateLimitSettingsSchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
     expect(roleLoads()).toBeGreaterThan(before);
   });
 
@@ -129,6 +132,7 @@ describe('Roles & access', () => {
       maxFileBytes: null,
       enabled: true,
     });
+    expect(upsertStoragePolicySchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
   });
 
   it('saves instance-wide limits without touching any role', async () => {
@@ -142,6 +146,7 @@ describe('Roles & access', () => {
       authAttemptsPerMinute: 25,
       reserve: { costMicros: 100_000 },
     });
+    expect(updateRateLimitSettingsSchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
   });
 
   it('reports a rejected save next to the form', async () => {

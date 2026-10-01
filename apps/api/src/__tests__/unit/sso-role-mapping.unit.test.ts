@@ -165,6 +165,20 @@ describe('matchRoleFromClaims', () => {
     expect(matchRoleFromClaims({ groups: ['oci-users'] }, mappings)).toBe('user');
   });
 
+  it('applies an auditor mapping, ranked between admin and user', () => {
+    const withAuditor: ClaimRoleMapping[] = [
+      ...mappings,
+      { claim: 'groups', value: 'oci-auditors', role: 'auditor' },
+    ];
+    expect(matchRoleFromClaims({ groups: ['oci-auditors'] }, withAuditor)).toBe('auditor');
+    expect(matchRoleFromClaims({ groups: ['oci-auditors', 'oci-users'] }, withAuditor)).toBe(
+      'auditor',
+    );
+    expect(matchRoleFromClaims({ groups: ['oci-auditors', 'oci-admins'] }, withAuditor)).toBe(
+      'admin',
+    );
+  });
+
   it('distinguishes an unmatched login from one matching a default-valued rule', () => {
     // This is the distinction the refusal depends on: resolveRoleFromClaims
     // answers "user" for both, having already substituted the default.
