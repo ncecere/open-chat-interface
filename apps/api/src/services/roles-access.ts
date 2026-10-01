@@ -3,21 +3,21 @@ import { type RoleAccess, type RolesAccess, USER_ROLES, type UserRole } from '@o
 import { db } from '../db/index.js';
 import { getConfigSources, getRateLimitSettings } from './lifecycle/settings.js';
 import { getDefaultOrganizationId } from './organization.js';
-import { webSearchProblem } from './search/availability.js';
+import { combineFeatures, resolveRoleFeatures } from './role-features.js';
 import { getSetting } from './settings.js';
 import { listStoragePolicies } from './storage/quota.js';
 
 /**
  * Rules enforced in code for a role, independent of any setting. Kept beside
  * the summary so the page states them instead of leaving admins to discover
- * them; the enforcing checks live in attachments, threads, share links and the
- * admin method guard.
+ * them; the enforcing check is the admin method guard. Feature limits (such as
+ * the restricted role's defaults) are role settings, not fixed rules.
  */
 const FIXED_RULES: Record<UserRole, string[]> = {
   admin: ['Full administrative access.'],
   auditor: ['Can view administration but cannot change it.'],
   user: [],
-  restricted: ['Cannot upload attachments, create share links or start temporary chats.'],
+  restricted: [],
 };
 
 /**
@@ -27,51 +27,60 @@ const FIXED_RULES: Record<UserRole, string[]> = {
  */
 export async function getRolesAccess(): Promise<RolesAccess> {
   const organizationId = await getDefaultOrganizationId();
-  const [rateLimits, sources, storage, features, search, users, budgets, models] =
-    await Promise.all([
-      getRateLimitSettings(),
-      getConfigSources(),
-      listStoragePolicies(),
-      getSetting('features'),
-      getSetting('search'),
-      db
-        .select({ role: schema.user.role, value: count() })
-        .from(schema.user)
-        .where(eq(schema.user.organizationId, organizationId))
-        .groupBy(schema.user.role),
-      db
-        .select({
-          role: schema.quotaPolicyRole.role,
-          id: schema.quotaPolicy.id,
-          name: schema.quotaPolicy.name,
-          metric: schema.quotaPolicy.metric,
-          limitValue: schema.quotaPolicy.limitValue,
-          windowKind: schema.quotaPolicy.windowKind,
-          windowHours: schema.quotaPolicy.windowHours,
-          enabled: schema.quotaPolicy.enabled,
-        })
-        .from(schema.quotaPolicyRole)
-        .innerJoin(schema.quotaPolicy, eq(schema.quotaPolicyRole.policyId, schema.quotaPolicy.id))
-        .where(eq(schema.quotaPolicy.organizationId, organizationId))
-        .orderBy(schema.quotaPolicy.name),
-      // Only models a person could actually pick: enabled, on an enabled provider.
-      db
-        .select({ visibleToRoles: schema.model.visibleToRoles })
-        .from(schema.model)
-        .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id))
-        .where(
-          and(
-            eq(schema.model.organizationId, organizationId),
-            eq(schema.model.enabled, true),
-            eq(schema.provider.enabled, true),
-          ),
+  const [
+    rateLimits,
+    sources,
+    storage,
+    features,
+    search,
+    storedRoleFeatures,
+    users,
+    budgets,
+    models,
+  ] = await Promise.all([
+    getRateLimitSettings(),
+    getConfigSources(),
+    listStoragePolicies(),
+    getSetting('features'),
+    getSetting('search'),
+    getSetting('roleFeatures'),
+    db
+      .select({ role: schema.user.role, value: count() })
+      .from(schema.user)
+      .where(eq(schema.user.organizationId, organizationId))
+      .groupBy(schema.user.role),
+    db
+      .select({
+        role: schema.quotaPolicyRole.role,
+        id: schema.quotaPolicy.id,
+        name: schema.quotaPolicy.name,
+        metric: schema.quotaPolicy.metric,
+        limitValue: schema.quotaPolicy.limitValue,
+        windowKind: schema.quotaPolicy.windowKind,
+        windowHours: schema.quotaPolicy.windowHours,
+        enabled: schema.quotaPolicy.enabled,
+      })
+      .from(schema.quotaPolicyRole)
+      .innerJoin(schema.quotaPolicy, eq(schema.quotaPolicyRole.policyId, schema.quotaPolicy.id))
+      .where(eq(schema.quotaPolicy.organizationId, organizationId))
+      .orderBy(schema.quotaPolicy.name),
+    // Only models a person could actually pick: enabled, on an enabled provider.
+    db
+      .select({ visibleToRoles: schema.model.visibleToRoles })
+      .from(schema.model)
+      .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id))
+      .where(
+        and(
+          eq(schema.model.organizationId, organizationId),
+          eq(schema.model.enabled, true),
+          eq(schema.provider.enabled, true),
         ),
-    ]);
-
-  const searchAvailable = webSearchProblem(features, search) === null;
+      ),
+  ]);
 
   const roles: RoleAccess[] = USER_ROLES.map((role) => {
-    const restricted = role === 'restricted';
+    const own = resolveRoleFeatures(role, storedRoleFeatures);
+    const { reasoningEfforts: _efforts, ...effective } = combineFeatures(features, search, own);
     return {
       role,
       userCount: users.find((row) => row.role === role)?.value ?? 0,
@@ -85,12 +94,8 @@ export async function getRolesAccess(): Promise<RolesAccess> {
         visible: models.filter((model) => model.visibleToRoles.includes(role)).length,
         available: models.length,
       },
-      features: {
-        attachments: features.attachments && !restricted,
-        shareLinks: features.shareLinks && !restricted,
-        temporaryChat: features.temporaryChat && !restricted,
-        webSearch: searchAvailable,
-      },
+      features: effective,
+      roleFeatures: own,
       fixedRules: FIXED_RULES[role],
     };
   });

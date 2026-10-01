@@ -54,6 +54,7 @@ async function currentSettingsSnapshot(): Promise<Record<string, unknown>> {
     ...branding,
     ...authSettings,
     defaultSystemPrompt: chat.defaultSystemPrompt,
+    defaultEffort: chat.defaultEffort ?? 'instant',
     features,
     // Redacted here rather than at the diff, because these arrive as whole
     // objects and carry encrypted credentials inside them.
@@ -88,6 +89,7 @@ settingsRoutes.get('/', async (c) => {
     sessionLifetimeDays: authSettings.sessionLifetimeDays,
     sessionRefreshDays: authSettings.sessionRefreshDays,
     defaultSystemPrompt: chat.defaultSystemPrompt,
+    defaultEffort: chat.defaultEffort ?? 'instant',
     features,
     storage: {
       driver: storage.driver,
@@ -203,8 +205,13 @@ settingsRoutes.patch('/', async (c) => {
     });
   }
 
-  if (patch.defaultSystemPrompt !== undefined) {
-    await updateSetting('chat', { defaultSystemPrompt: patch.defaultSystemPrompt });
+  if (patch.defaultSystemPrompt !== undefined || patch.defaultEffort !== undefined) {
+    await updateSetting('chat', {
+      ...(patch.defaultSystemPrompt !== undefined && {
+        defaultSystemPrompt: patch.defaultSystemPrompt,
+      }),
+      ...(patch.defaultEffort !== undefined && { defaultEffort: patch.defaultEffort }),
+    });
   }
 
   if (patch.features) {

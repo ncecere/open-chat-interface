@@ -108,7 +108,15 @@ describe.skipIf(!available)('live: roles and access summary', () => {
       storage: { role: 'restricted', maxTotalBytes: 1_000_000 },
       budgets: [expect.objectContaining({ name: 'Restricted daily', limitValue: 20 })],
       models: { visible: 1, available: 2 },
-      features: { attachments: false, shareLinks: false, temporaryChat: false, webSearch: false },
+      features: {
+        attachments: false,
+        shareLinks: false,
+        temporaryChat: false,
+        webSearch: false,
+        branching: false,
+      },
+      roleFeatures: { attachments: false, shareLinks: false, temporaryChat: false },
+      fixedRules: [],
     });
     expect(byRole.restricted?.rateLimits.chatRequestsPerMinute).toBe(4);
     expect(byRole.admin).toMatchObject({

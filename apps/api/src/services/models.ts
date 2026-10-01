@@ -2,6 +2,7 @@ import { and, asc, eq, schema } from '@oci/db';
 import {
   type CatalogModel,
   effectiveSupportedEfforts,
+  intersectReasoningEfforts,
   type ProviderKind,
   type ReasoningEffort,
   type UserRole,
@@ -10,9 +11,31 @@ import { db } from '../db/index.js';
 import { decryptSecret } from '../lib/crypto.js';
 import { forbidden, notFound, providerError } from '../lib/errors.js';
 import { createLanguageModel, type ProviderCredentials } from './providers/registry.js';
+import { roleFeatures } from './role-features.js';
+
+/**
+ * Levels a model offers that the role may also choose, so the picker and chat
+ * validation agree. Without any, effort control is dropped from the reported
+ * capabilities too: clients read a bare `effort_control` with no levels as
+ * "every level", which would offer ones the role cannot use.
+ */
+function effortsForRole(
+  model: { capabilities: string[]; supportedEfforts: ReasoningEffort[] },
+  roleEfforts: readonly ReasoningEffort[],
+) {
+  const supportedEfforts = intersectReasoningEfforts(effectiveSupportedEfforts(model), roleEfforts);
+  return {
+    supportedEfforts,
+    capabilities:
+      supportedEfforts.length > 0
+        ? model.capabilities
+        : model.capabilities.filter((capability) => capability !== 'effort_control'),
+  };
+}
 
 /** Models the given role may select, ordered for the picker. */
 export async function listAvailableModels(role: UserRole): Promise<CatalogModel[]> {
+  const { reasoningEfforts } = await roleFeatures(role);
   const rows = await db
     .select({ model: schema.model, provider: schema.provider })
     .from(schema.model)
@@ -22,23 +45,26 @@ export async function listAvailableModels(role: UserRole): Promise<CatalogModel[
 
   return rows
     .filter(({ model }) => model.visibleToRoles.includes(role))
-    .map(({ model, provider }) => ({
-      id: model.id,
-      slug: model.slug,
-      displayName: model.displayName,
-      description: model.description,
-      providerId: model.providerId,
-      providerKind: provider.kind,
-      providerLabel: provider.label,
-      upstreamModelId: model.upstreamModelId,
-      capabilities: model.capabilities,
-      labId: model.labId,
-      contextWindow: model.contextWindow,
-      maxOutputTokens: model.maxOutputTokens,
-      supportedEfforts: effectiveSupportedEfforts(model),
-      isDefault: model.isDefault,
-      sortOrder: model.sortOrder,
-    }));
+    .map(({ model, provider }) => {
+      const efforts = effortsForRole(model, reasoningEfforts);
+      return {
+        id: model.id,
+        slug: model.slug,
+        displayName: model.displayName,
+        description: model.description,
+        providerId: model.providerId,
+        providerKind: provider.kind,
+        providerLabel: provider.label,
+        upstreamModelId: model.upstreamModelId,
+        capabilities: efforts.capabilities as CatalogModel['capabilities'],
+        labId: model.labId,
+        contextWindow: model.contextWindow,
+        maxOutputTokens: model.maxOutputTokens,
+        supportedEfforts: efforts.supportedEfforts,
+        isDefault: model.isDefault,
+        sortOrder: model.sortOrder,
+      };
+    });
 }
 
 interface ResolvedModel {
@@ -72,6 +98,7 @@ export async function resolveModelForRole(slug: string, role: UserRole): Promise
   if (!row.model.visibleToRoles.includes(role)) {
     throw forbidden('You do not have access to that model');
   }
+  const { reasoningEfforts } = await roleFeatures(role);
 
   const credentials: ProviderCredentials = {
     kind: row.provider.kind,
@@ -92,6 +119,6 @@ export async function resolveModelForRole(slug: string, role: UserRole): Promise
     maxOutputTokens: row.model.maxOutputTokens,
     capabilities: row.model.capabilities,
     providerKind: row.provider.kind,
-    supportedEfforts: effectiveSupportedEfforts(row.model),
+    supportedEfforts: effortsForRole(row.model, reasoningEfforts).supportedEfforts,
   };
 }

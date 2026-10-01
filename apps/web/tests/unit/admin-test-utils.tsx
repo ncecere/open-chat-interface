@@ -120,8 +120,23 @@ export function roleAccessFixture(
     storage: null,
     budgets: [],
     models: { visible: 3, available: 4 },
-    features: { attachments: true, shareLinks: false, temporaryChat: true, webSearch: false },
-    fixedRules: role === 'restricted' ? ['Cannot upload attachments.'] : [],
+    features: {
+      attachments: role !== 'restricted',
+      shareLinks: false,
+      temporaryChat: role !== 'restricted',
+      webSearch: false,
+      branching: true,
+    },
+    // The built-in defaults: restricted cannot upload, share or go temporary.
+    roleFeatures: {
+      webSearch: true,
+      attachments: role !== 'restricted',
+      shareLinks: role !== 'restricted',
+      temporaryChat: role !== 'restricted',
+      branching: true,
+      reasoningEfforts: ['instant', 'low', 'medium', 'high'],
+    },
+    fixedRules: role === 'auditor' ? ['Can view administration but cannot change it.'] : [],
     ...overrides,
   };
 }

@@ -10,8 +10,9 @@ The **Search** control sits beside the model name in the composer. It applies to
 the message you are about to send, not to the conversation as a whole, so you
 can use it for one question and not the next.
 
-If the control is absent, web search is not available on your instance: an
-administrator has not turned it on, or its search provider is not fully set up.
+If the control is absent, web search is not available to you: an administrator
+has not turned it on, has turned it off for your role, or its search provider is
+not fully set up.
 It does not depend on which model you have chosen.
 
 ## What you get back

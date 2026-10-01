@@ -90,6 +90,8 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'features') return { attachments: true, temporaryChat: true };
     // Deliberately looser than the model-input file ceiling.
     if (key === 'storage') return { maxFilesPerMessage: state.maxFilesPerMessage };
+    // No saved role overrides: built-in role defaults apply.
+    if (key === 'roleFeatures') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

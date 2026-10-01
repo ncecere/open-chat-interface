@@ -2,19 +2,26 @@ import { and, asc, type Database, desc, eq, ilike, isNull, lte, schema, sql } fr
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
+import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 
 export const TEMPORARY_THREAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function assertTemporaryChatAllowed(role: UserRole): Promise<void> {
-  if (role === 'restricted') {
-    throw forbidden('Your role does not allow temporary chats');
-  }
+  await assertRoleFeature(role, 'temporaryChat');
 
   const features = await getSetting('features');
   if (!features.temporaryChat) {
     throw validationFailed('Temporary chat is disabled on this instance');
   }
+}
+
+/** Forks and edit-branches need both the role and the instance to allow branching. */
+export async function assertBranchingAllowed(role: UserRole): Promise<void> {
+  await assertRoleFeature(role, 'branching');
+
+  const features = await getSetting('features');
+  if (!features.branching) throw forbidden('Conversation branching is disabled');
 }
 
 /**

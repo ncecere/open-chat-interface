@@ -38,7 +38,9 @@ answer starts. Clicking it always wins over that behaviour.
 
 Models that support **effort control** let you ask for more or less of this.
 Higher effort means a slower, more considered answer; lower means a quicker one.
-The control sits beside the model name when the chosen model offers it.
+The control sits beside the model name when the chosen model offers it. It
+starts at the level your administrator chose as the default (Instant unless
+they changed it), and it lists only the levels your role may use.
 
 ## Temporary chats
 

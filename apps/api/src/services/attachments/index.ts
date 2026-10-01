@@ -1,16 +1,15 @@
 import { and, desc, eq, isNull, schema } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { forbidden, notFound, validationFailed } from '../../lib/errors.js';
+import { notFound, validationFailed } from '../../lib/errors.js';
+import { assertRoleFeature } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { adjustStorageUsage } from '../storage/usage.js';
 
 export { type UploadResult, uploadAttachment } from './upload.js';
 
 export async function assertAttachmentUseAllowed(role: UserRole): Promise<void> {
-  if (role === 'restricted') {
-    throw forbidden('Your role does not allow file uploads');
-  }
+  await assertRoleFeature(role, 'attachments');
 
   const features = await getSetting('features');
   if (!features.attachments) {

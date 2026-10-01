@@ -40,5 +40,5 @@ content when the conversation expires, even before background cleanup runs.
 The link needs no account, so treat it as public. If a conversation contains
 anything you would not put on a public page, it should not be shared this way.
 
-Your administrator can turn sharing off entirely; if you cannot find the option,
-that is why.
+Your administrator can turn sharing off entirely, or for your role; if you
+cannot find the option, that is why.

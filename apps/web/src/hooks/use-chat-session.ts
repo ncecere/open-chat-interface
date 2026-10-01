@@ -5,10 +5,11 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useChatRecovery } from '~/hooks/use-chat-recovery';
+import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
-import { coerceReasoningEffort, reasoningEffortForRequest } from '~/lib/reasoning';
+import { reasoningEffortForRequest } from '~/lib/reasoning';
 
 const MODEL_STORAGE_KEY = 'oci.model';
 const EMPTY_MODELS: CatalogModel[] = [];
@@ -88,7 +89,6 @@ export function useChatSession(options: {
   );
 
   const [draft, setDraft] = useState('');
-  const [effort, setEffort] = useState<ReasoningEffort>(options.initialEffort ?? 'instant');
   const [webSearch, setWebSearch] = useState(options.initialWebSearch ?? false);
   const [modelSlug, setModelSlug] = useState<string | null>(
     () => options.initialModelSlug ?? localStorage.getItem(MODEL_STORAGE_KEY),
@@ -111,12 +111,9 @@ export function useChatSession(options: {
     [models, modelSlug],
   );
 
-  // A model switch must not retain a level the new model cannot accept.
-  useEffect(() => {
-    if (!selectedModel) return;
-    const validEffort = coerceReasoningEffort(selectedModel, effort);
-    if (validEffort !== effort) setEffort(validEffort);
-  }, [selectedModel, effort]);
+  // Starts at the administrator's default; a model switch never retains a
+  // level the new model (or this person's role) cannot accept.
+  const [effort, setEffort] = useComposerEffort(selectedModel, options.initialEffort);
 
   // Uploads started on the landing page are carried over on first send.
   const [carriedAttachments, setCarriedAttachments] = useState<Attachment[]>(
@@ -241,7 +238,6 @@ export function useChatSession(options: {
 
   const selectModel = useCallback((model: CatalogModel) => {
     setModelSlug(model.slug);
-    setEffort((current) => coerceReasoningEffort(model, current));
     localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
   }, []);
 

@@ -64,6 +64,11 @@ If you do, waiting a moment is the whole remedy.
 ## If a limit is wrong for your work
 
 Quotas are set per role, and an administrator can grant an individual override
-without changing the policy for everyone. Ask, and say what you are doing —
-"I am running a literature review across 300 papers" is a case somebody can act
-on.
+without changing the policy for everyone. Features are set per role too: web
+search, attachments, share links, temporary chats, branching and the reasoning
+levels you can choose may each be switched off for a role while the rest of the
+instance keeps them. A refused request says it is "not available for your
+role".
+
+Ask, and say what you are doing — "I am running a literature review across 300
+papers" is a case somebody can act on.

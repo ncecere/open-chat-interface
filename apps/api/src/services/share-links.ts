@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
 import { ERROR_CODES, type UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
-import { AppError, forbidden, notFound, validationFailed } from '../lib/errors.js';
+import { AppError, notFound, validationFailed } from '../lib/errors.js';
+import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 import { shareableThreadCondition } from './share-link-availability.js';
 import { getOwnedThread } from './threads.js';
@@ -19,11 +20,9 @@ export interface CreateShareLinkInput {
 
 export type PublicShareUnavailableReason = 'expired' | 'revoked';
 
-/** Sharing is intentionally unavailable to restricted users, even when enabled instance-wide. */
+/** Sharing needs both the role and the instance to allow it. */
 export async function assertShareLinkManagementAllowed(role: UserRole): Promise<void> {
-  if (role === 'restricted') {
-    throw forbidden('Your role does not allow public share links');
-  }
+  await assertRoleFeature(role, 'shareLinks');
 
   const features = await getSetting('features');
   if (!features.shareLinks) {

@@ -1,14 +1,15 @@
-import type { CatalogModel, ReasoningEffort } from '@oci/shared';
+import type { CatalogModel } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
 import { useAttachments } from '~/hooks/use-attachments';
+import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
-import { coerceReasoningEffort, reasoningEffortForRequest } from '~/lib/reasoning';
+import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -35,7 +36,6 @@ export function ChatHomePage() {
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraft] = useState('');
-  const [effort, setEffort] = useState<ReasoningEffort>('instant');
   const [webSearch, setWebSearch] = useState(false);
   const [modelSlug, setModelSlug] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
@@ -47,6 +47,8 @@ export function ChatHomePage() {
     models.find((model) => model.isDefault) ??
     models[0] ??
     null;
+  // The administrator's default, clamped to what this model and role allow.
+  const [effort, setEffort] = useComposerEffort(selectedModel);
 
   const firstName = data?.user.name.split(' ')[0];
   const prompts =
@@ -55,7 +57,6 @@ export function ChatHomePage() {
 
   const selectModel = useCallback((model: CatalogModel) => {
     setModelSlug(model.slug);
-    setEffort((current) => coerceReasoningEffort(model, current));
     localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
   }, []);
 

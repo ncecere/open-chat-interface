@@ -14,7 +14,7 @@ import {
   skipIntroduction,
 } from '../services/onboarding.js';
 import { getUsageSummary } from '../services/quota/index.js';
-import { webSearchProblem } from '../services/search/availability.js';
+import { combineFeatures, roleFeatures } from '../services/role-features.js';
 import { getSetting } from '../services/settings.js';
 
 export const meRoutes = new Hono<AppBindings>();
@@ -54,11 +54,14 @@ async function loadPreferences(userId: string) {
 
 meRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const [preferences, features, search] = await Promise.all([
+  const [preferences, features, search, chat, own] = await Promise.all([
     loadPreferences(user.id),
     getSetting('features'),
     getSetting('search'),
+    getSetting('chat'),
+    roleFeatures(user.role),
   ]);
+  const { reasoningEfforts, ...effective } = combineFeatures(features, search, own);
 
   return c.json({
     user: {
@@ -70,13 +73,13 @@ meRoutes.get('/', async (c) => {
       emailVerified: user.emailVerified,
     },
     preferences,
-    features: {
-      ...features,
-      attachments: features.attachments && user.role !== 'restricted',
-      shareLinks: features.shareLinks && user.role !== 'restricted',
-      temporaryChat: features.temporaryChat && user.role !== 'restricted',
-      // Advertised only when a search would actually run.
-      webSearch: webSearchProblem(features, search) === null,
+    // Instance switches narrowed by the role's own. Web search is advertised
+    // only when a search would actually run.
+    features: { ...features, ...effective },
+    chat: {
+      /** Where the composer starts, before clamping to the model's levels. */
+      defaultEffort: chat.defaultEffort ?? 'instant',
+      reasoningEfforts,
     },
   });
 });

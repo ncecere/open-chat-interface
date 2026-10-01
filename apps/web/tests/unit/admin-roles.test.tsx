@@ -1,5 +1,9 @@
 // @vitest-environment happy-dom
-import { updateRateLimitSettingsSchema, upsertStoragePolicySchema } from '@oci/shared';
+import {
+  updateRateLimitSettingsSchema,
+  updateRoleFeaturesSchema,
+  upsertStoragePolicySchema,
+} from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminRolesPage } from '../../src/routes/admin/roles';
@@ -9,6 +13,7 @@ import {
   cleanup,
   click,
   configSourcesFixture,
+  findButton,
   rateLimitsFixture,
   renderAdmin,
   roleAccessFixture,
@@ -47,6 +52,16 @@ function input(id: string): HTMLInputElement {
   return element;
 }
 
+function featureSwitch(role: string, key: string): HTMLButtonElement {
+  const element = document.getElementById(`role-${role}-feature-${key}`);
+  if (!(element instanceof HTMLButtonElement)) throw new Error(`No switch for ${key}`);
+  return element;
+}
+
+function isDisabled(element: HTMLInputElement | HTMLButtonElement): boolean {
+  return element.disabled || element.closest('fieldset[disabled]') !== null;
+}
+
 const roleLoads = () => api.get.mock.calls.filter(([path]) => path === '/admin/roles').length;
 
 describe('Roles & access', () => {
@@ -69,11 +84,75 @@ describe('Roles & access', () => {
 
     const panel = document.getElementById('role-panel')!;
     expect(panel.textContent).toContain('3 of 4 visible');
-    expect(panel.textContent).toContain('Cannot upload attachments.');
+    // Feature limits are role settings now, not fixed rules.
+    expect(panel.textContent).not.toContain('Fixed rules');
     expect(panel.textContent).toContain('Daily cap');
     expect(panel.textContent).toContain('$2.00');
     expect(panel.querySelector('a[href="/admin/models?tab=models"]')).not.toBeNull();
     expect(panel.querySelector('a[href="/admin/quotas"]')).not.toBeNull();
+  });
+
+  it("shows the selected role's feature switches and reasoning levels", async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=restricted' }));
+
+    expect(featureSwitch('restricted', 'attachments').getAttribute('aria-checked')).toBe('false');
+    expect(featureSwitch('restricted', 'shareLinks').getAttribute('aria-checked')).toBe('false');
+    expect(featureSwitch('restricted', 'temporaryChat').getAttribute('aria-checked')).toBe('false');
+    expect(featureSwitch('restricted', 'webSearch').getAttribute('aria-checked')).toBe('true');
+    expect(featureSwitch('restricted', 'branching').getAttribute('aria-checked')).toBe('true');
+    // On for the role but off instance-wide: the page says why it is unavailable.
+    expect(
+      document.getElementById('role-restricted-feature-webSearch-description')?.textContent,
+    ).toContain('Unavailable until web search is switched on');
+    expect(document.getElementById('role-panel')?.textContent).toContain('General settings');
+
+    const instant = input('role-restricted-effort-instant');
+    expect(instant.checked).toBe(true);
+    expect(instant.disabled).toBe(true);
+    expect(input('role-restricted-effort-high').checked).toBe(true);
+    expect(button('Save features').disabled).toBe(true);
+  });
+
+  it('saves only the changed features for the selected role', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=restricted' }));
+
+    await click(featureSwitch('restricted', 'attachments'));
+    await click(input('role-restricted-effort-high'));
+    // Toggled twice: back to the saved value, so it must not be sent.
+    await click(featureSwitch('restricted', 'branching'));
+    await click(featureSwitch('restricted', 'branching'));
+    const before = roleLoads();
+    await click(button('Save features'));
+
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(api.put).toHaveBeenCalledWith('/admin/roles/restricted', {
+      attachments: true,
+      reasoningEfforts: ['instant', 'low', 'medium'],
+    });
+    expect(updateRoleFeaturesSchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
+    expect(roleLoads()).toBeGreaterThan(before);
+  });
+
+  it('reports a rejected feature save next to the form', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    api.put.mockRejectedValue(new ApiError(422, 'VALIDATION_FAILED', 'Instant is always allowed.'));
+    ({ root } = await renderAdmin(<AdminRolesPage />));
+
+    await click(featureSwitch('user', 'webSearch'));
+    await click(button('Save features'));
+
+    expect(api.put).toHaveBeenCalledWith('/admin/roles/user', { webSearch: false });
+    expect(alerts()).toContain(
+      'Features for the user role could not be saved. Instant is always allowed.',
+    );
+  });
+
+  it('shows features read-only to an auditor', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { role: 'auditor' }));
+
+    expect(isDisabled(featureSwitch('user', 'attachments'))).toBe(true);
+    expect(isDisabled(input('role-user-effort-low'))).toBe(true);
+    expect(findButton('Save features')).toBeUndefined();
   });
 
   it('shows where each rate limit value comes from', async () => {

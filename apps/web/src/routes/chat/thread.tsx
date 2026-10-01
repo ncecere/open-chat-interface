@@ -27,7 +27,8 @@ interface PendingBranchResponse {
   threadId: string;
   messageId: string;
   modelSlug: string | null;
-  effort: ReasoningEffort;
+  /** Absent when the branched message recorded none; the default level applies. */
+  effort?: ReasoningEffort;
 }
 
 function peekPendingBranch(threadId: string): PendingBranchResponse | null {
@@ -40,7 +41,7 @@ function peekPendingBranch(threadId: string): PendingBranchResponse | null {
       value.threadId !== threadId ||
       typeof value.messageId !== 'string' ||
       (value.modelSlug !== null && typeof value.modelSlug !== 'string') ||
-      !['instant', 'low', 'medium', 'high'].includes(value.effort ?? '')
+      (value.effort !== undefined && !REASONING_EFFORTS.includes(value.effort))
     ) {
       return null;
     }
@@ -177,7 +178,8 @@ function ThreadConversation({
     async (messageId: string, text: string) => {
       const result = await branchMessage({ threadId, messageId, text });
       const modelSlug = result.message.modelSlug ?? selectedModelSlug ?? null;
-      const effort = result.message.effort ?? 'instant';
+      // Without a recorded level the new thread starts at the instance default.
+      const effort = result.message.effort ?? undefined;
 
       if (modelSlug) localStorage.setItem(MODEL_STORAGE_KEY, modelSlug);
       sessionStorage.setItem(

@@ -8,7 +8,6 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { forbidden } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
 import { exportFilename, exportThreadMarkdown } from '../services/export.js';
@@ -19,8 +18,8 @@ import {
   restoreThread,
   softDeleteThread,
 } from '../services/lifecycle/trash.js';
-import { getSetting } from '../services/settings.js';
 import {
+  assertBranchingAllowed,
   branchFromUserMessage,
   createThread,
   forkFromMessage,
@@ -124,8 +123,7 @@ threadRoutes.post('/:id/forks', async (c) => {
   const user = currentUser(c);
   await getOwnedThread(c.req.param('id'), user.id);
 
-  const features = await getSetting('features');
-  if (!features.branching) throw forbidden('Conversation branching is disabled');
+  await assertBranchingAllowed(user.role);
 
   const input = await parseBody(c, forkMessageSchema);
   const fork = await forkFromMessage(c.req.param('id'), user.id, input);
@@ -136,8 +134,7 @@ threadRoutes.post('/:id/branches', async (c) => {
   const user = currentUser(c);
   await getOwnedThread(c.req.param('id'), user.id);
 
-  const features = await getSetting('features');
-  if (!features.branching) throw forbidden('Conversation branching is disabled');
+  await assertBranchingAllowed(user.role);
 
   const input = await parseBody(c, branchMessageSchema);
   const result = await branchFromUserMessage(c.req.param('id'), user.id, input);

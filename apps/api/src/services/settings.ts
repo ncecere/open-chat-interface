@@ -1,5 +1,11 @@
 import { and, eq, schema } from '@oci/db';
-import { COLOR_THEMES, type ColorTheme, type UserRole } from '@oci/shared';
+import {
+  COLOR_THEMES,
+  type ColorTheme,
+  type ReasoningEffort,
+  type RoleFeatures,
+  type UserRole,
+} from '@oci/shared';
 import { db } from '../db/index.js';
 import { getDefaultOrganizationId } from './organization.js';
 
@@ -12,7 +18,8 @@ export type SettingKey =
   | 'smtp'
   | 'chat'
   | 'retention'
-  | 'rateLimits';
+  | 'rateLimits'
+  | 'roleFeatures';
 
 export interface BrandingSettings {
   appName: string;
@@ -153,6 +160,8 @@ export interface SmtpSettings {
 
 export interface ChatSettings {
   defaultSystemPrompt: string | null;
+  /** Absent on settings written before it was configurable; read as `instant`. */
+  defaultEffort?: ReasoningEffort;
 }
 
 /**
@@ -184,6 +193,14 @@ export interface StoredRateLimitSettings {
   reserve?: { costMicros?: number; tokens?: number };
 }
 
+/**
+ * Per-role feature overrides. Sparse like the rate limits: a role or field
+ * that was never saved falls back to `DEFAULT_ROLE_FEATURES`.
+ */
+export interface StoredRoleFeatureSettings {
+  roles?: Partial<Record<UserRole, Partial<RoleFeatures>>>;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -194,6 +211,7 @@ interface SettingsMap {
   chat: ChatSettings;
   retention: StoredRetentionSettings;
   rateLimits: StoredRateLimitSettings;
+  roleFeatures: StoredRoleFeatureSettings;
 }
 
 /**

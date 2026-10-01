@@ -64,6 +64,8 @@ vi.mock('../../services/settings.js', () => ({
   getSetting: async (key: string) => {
     if (key === 'features') return { attachments: state.attachments, temporaryChat: true };
     if (key === 'storage') return { maxFilesPerMessage: 10 };
+    // No saved role overrides: built-in role defaults apply.
+    if (key === 'roleFeatures') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));
@@ -544,7 +546,7 @@ describe.skipIf(!available)('live historical attachment context', () => {
     state.attachments = true;
     released = state.released;
     await expect(send(chat.id, 'Restricted role', {}, 'restricted')).rejects.toThrow(
-      /role.*file uploads/i,
+      /attachments are not available for your role/i,
     );
     await assertFailedWithoutWrites(chat.id, before, released);
     expect(await modelText(await send(chat.id, 'Allowed again'))).toContain('fixture text');

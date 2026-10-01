@@ -1,4 +1,4 @@
-import type { UserRole } from '@oci/shared';
+import type { ReasoningEffort, UserRole } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '~/lib/api-client';
 
@@ -34,10 +34,20 @@ export interface CurrentFeatures {
   branching: boolean;
 }
 
+export interface CurrentChatDefaults {
+  /** The administrator's starting level, before clamping to the model. */
+  defaultEffort: ReasoningEffort;
+  /** Levels this person's role may choose. */
+  reasoningEfforts: ReasoningEffort[];
+}
+
 interface MeResponse {
   user: CurrentUser;
   preferences: UserPreferences;
+  /** Instance switches narrowed by the person's role. */
   features: CurrentFeatures;
+  /** Optional so a response from an older API still renders. */
+  chat?: CurrentChatDefaults;
 }
 
 export function useCurrentUser() {
