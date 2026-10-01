@@ -5,7 +5,7 @@ authentication and a first-class administration dashboard. OCI includes streamin
 chat and reasoning, resumable Redis-backed generations, attachments, grounded web
 search, branching, temporary chats, and privacy-filtered share links.
 
-[Changelog](CHANGELOG.md) · [Security policy](SECURITY.md) ·
+[Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) · [Security policy](SECURITY.md) ·
 **[Documentation](docs/README.md)** — [using it](docs/user/README.md) ·
 [running it](docs/admin/README.md) · [working on it](docs/dev/README.md)
 
