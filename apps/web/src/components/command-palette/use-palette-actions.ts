@@ -105,6 +105,7 @@ export function usePaletteActions({
       },
     ];
 
+    // Auditors may read every admin page, so they get the same destinations.
     if (currentUser?.user.role === 'admin' || currentUser?.user.role === 'auditor') {
       groups.push({
         id: 'admin',
@@ -120,15 +121,13 @@ export function usePaletteActions({
           // Built from the sidebar's own list, so a page added there is
           // reachable here without anybody remembering to add it twice.
           ...NAV_SECTIONS.flatMap((section) =>
-            section.items
-              .filter((item) => item.to !== '/admin')
-              .map((item) => ({
-                id: `admin-${item.to}`,
-                label: item.label,
-                keywords: `admin administration ${section.label}`,
-                icon: item.icon,
-                onSelect: () => navigate({ to: item.to }),
-              })),
+            section.items.map((item) => ({
+              id: `admin-${item.to}`,
+              label: item.label,
+              keywords: `admin administration ${section.label}`,
+              icon: item.icon,
+              onSelect: () => navigate({ to: item.to }),
+            })),
           ),
         ],
       });

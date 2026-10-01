@@ -1,6 +1,7 @@
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { CheckCircle2 } from 'lucide-react';
-import { useState } from 'react';
-import { AdminTabs } from '~/components/admin/admin-tabs';
+import { EditOnly } from '~/components/admin/admin-access';
+import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
+import { DEFAULT_STORAGE_TAB, type StorageTab, validateStorageSearch } from '~/lib/admin-search';
 import { DriverPanel, DriverWarning } from './driver-panel';
 import { S3Panel } from './s3-panel';
 import type { StorageSettings } from './storage-draft';
@@ -21,12 +23,19 @@ const STORAGE_TABS = [
   { id: 'driver', label: 'Storage driver' },
   { id: 's3', label: 'S3 connection' },
   { id: 'uploads', label: 'Upload policy' },
-] as const;
-
-type StorageTabId = (typeof STORAGE_TABS)[number]['id'];
+] as const satisfies readonly AdminTab<StorageTab>[];
 
 export function StorageSettingsForm({ initialSettings }: { initialSettings: StorageSettings }) {
-  const [tab, setTab] = useState<StorageTabId>('driver');
+  // The tab lives in the URL; switching only toggles `hidden`, so every panel
+  // stays mounted and the shared draft survives.
+  const navigate = useNavigate();
+  const tab = validateStorageSearch(useSearch({ strict: false })).tab ?? DEFAULT_STORAGE_TAB;
+  const setTab = (next: StorageTab) =>
+    void navigate({
+      to: '/admin/storage',
+      search: { tab: next === DEFAULT_STORAGE_TAB ? undefined : next },
+      replace: true,
+    });
   const controller = useStorageSettings(initialSettings);
   const {
     draft,
@@ -44,7 +53,7 @@ export function StorageSettingsForm({ initialSettings }: { initialSettings: Stor
   return (
     <>
       <form
-        className="flex max-w-3xl flex-col gap-8"
+        className="flex flex-col gap-8"
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
@@ -66,29 +75,31 @@ export function StorageSettingsForm({ initialSettings }: { initialSettings: Stor
           <UploadsPanel controller={controller} />
         </div>
 
-        <div className="flex min-h-9 flex-col gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
-          <div className="sm:mr-auto" aria-live="polite">
-            {errorMessage && (
-              <p role="alert" className="text-sm text-[var(--danger)]">
-                {errorMessage}
-              </p>
-            )}
-            {successMessage && (
-              <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
-                <CheckCircle2 className="size-4" /> Storage settings saved.
-              </p>
-            )}
-            {healthMessage && (
-              <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
-                <CheckCircle2 className="size-4" /> {healthMessage}
-              </p>
-            )}
+        <EditOnly>
+          <div className="flex min-h-9 flex-col gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
+            <div className="sm:mr-auto" aria-live="polite">
+              {errorMessage && (
+                <p role="alert" className="text-sm text-[var(--danger)]">
+                  {errorMessage}
+                </p>
+              )}
+              {successMessage && (
+                <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
+                  <CheckCircle2 className="size-4" /> Storage settings saved.
+                </p>
+              )}
+              {healthMessage && (
+                <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
+                  <CheckCircle2 className="size-4" /> {healthMessage}
+                </p>
+              )}
+            </div>
+            <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
+              {save.isPending && <Spinner />}
+              {save.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
           </div>
-          <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
-            {save.isPending && <Spinner />}
-            {save.isPending ? 'Saving…' : 'Save changes'}
-          </Button>
-        </div>
+        </EditOnly>
       </form>
 
       <Dialog open={showDriverConfirmation} onOpenChange={setShowDriverConfirmation}>

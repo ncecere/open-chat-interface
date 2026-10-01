@@ -1,7 +1,8 @@
 import type { AdminOverview } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
+import { AdminPageHeader, LoadError, SettingsSection } from '~/components/admin/admin-ui';
+import { SetupChecklist } from '~/components/admin/setup-checklist';
 import { Badge } from '~/components/ui/badge';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -9,12 +10,12 @@ import { formatBytes } from '~/lib/utils';
 
 function Stat({ title, value, hint }: { title: string; value: string; hint?: string }) {
   return (
-    <div className="min-w-0 p-5">
-      <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+    <div className="min-w-0 p-4 sm:p-5">
+      <p className="truncate text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
         {title}
       </p>
-      <p className="mt-2 truncate text-2xl font-semibold">{value}</p>
-      {hint && <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{hint}</p>}
+      <p className="mt-2 truncate text-xl font-semibold sm:text-2xl">{value}</p>
+      {hint && <p className="mt-1 text-xs text-[var(--text-muted)]">{hint}</p>}
     </div>
   );
 }
@@ -34,7 +35,7 @@ function Trend({ current, previous }: { current: number; previous: number }) {
   const Icon = change > 0 ? TrendingUp : change < 0 ? TrendingDown : Minus;
 
   return (
-    <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
+    <span className="inline-flex flex-wrap items-center gap-x-1 text-[var(--text-muted)]">
       {current} in last 24h
       <Icon className="size-3 shrink-0" aria-hidden="true" />
       {/* Direction is not judged: fewer messages is not automatically bad, so
@@ -79,38 +80,68 @@ function Sparkline({ points }: { points: { day: string; messages: number }[] }) 
 }
 
 export function AdminOverviewPage() {
-  const { data, isLoading } = useQuery({
+  const overview = useQuery({
     queryKey: ['admin', 'overview'],
     queryFn: () => api.get<AdminOverview>('/admin/overview'),
   });
+  const { data, isLoading } = overview;
 
-  if (isLoading || !data) return <FullPageSpinner />;
+  // The checklist loads on its own, so setup guidance still shows when the
+  // activity figures cannot be read.
+  const header = (
+    <>
+      <AdminPageHeader title="Overview" description="Instance health and activity at a glance." />
+      <SetupChecklist />
+    </>
+  );
+
+  if (isLoading) {
+    return (
+      <div>
+        {header}
+        <div className="py-16">
+          <FullPageSpinner />
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div>
+        {header}
+        <LoadError title="The overview could not be loaded." query={overview} />
+      </div>
+    );
+  }
 
   return (
     <div>
-      <AdminPageHeader title="Overview" description="Instance health and activity at a glance." />
+      {header}
 
-      <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border-subtle)] overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 lg:divide-y-0">
+      {/* Borders are drawn per cell: dividers between siblings misplace the
+          vertical rule when four figures wrap into two rows on a phone. */}
+      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t lg:[&>*:nth-child(n+2)]:border-l lg:[&>*:nth-child(n+3)]:border-t-0">
         <Stat
           title="Users"
           value={String(data.users.total)}
           hint={`${data.users.admins} admin${data.users.admins === 1 ? '' : 's'}`}
         />
-        <div className="min-w-0 p-5">
+        <div className="min-w-0 p-4 sm:p-5">
           <p className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
             Threads
           </p>
-          <p className="mt-2 truncate font-semibold text-2xl">{data.threads.total}</p>
-          <p className="mt-1 truncate text-xs">
+          <p className="mt-2 truncate font-semibold text-xl sm:text-2xl">{data.threads.total}</p>
+          <p className="mt-1 text-xs">
             <Trend current={data.threads.last24h} previous={data.threads.previous24h} />
           </p>
         </div>
-        <div className="min-w-0 p-5">
+        <div className="min-w-0 p-4 sm:p-5">
           <p className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
             Messages
           </p>
-          <p className="mt-2 truncate font-semibold text-2xl">{data.messages.total}</p>
-          <p className="mt-1 truncate text-xs">
+          <p className="mt-2 truncate font-semibold text-xl sm:text-2xl">{data.messages.total}</p>
+          <p className="mt-1 text-xs">
             <Trend current={data.messages.last24h} previous={data.messages.previous24h} />
           </p>
         </div>
@@ -129,7 +160,7 @@ export function AdminOverviewPage() {
           <div className="mt-3">
             <Sparkline points={data.activity} />
           </div>
-          <p className="mt-1 flex justify-between text-[var(--text-muted)] text-xs">
+          <p className="mt-1 flex justify-between gap-2 text-[var(--text-muted)] text-xs">
             <span>{data.activity[0]?.day}</span>
             <span>{data.activity.at(-1)?.day}</span>
           </p>
@@ -139,15 +170,15 @@ export function AdminOverviewPage() {
       <div className="mt-8 flex flex-col gap-8">
         <SettingsSection title="Models">
           <div className="flex flex-col gap-3 text-sm">
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <span className="text-[var(--text-muted)]">Providers configured</span>
               <span>{data.providers.configured}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <span className="text-[var(--text-muted)]">Models in catalog</span>
               <span>{data.models.total}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <span className="text-[var(--text-muted)]">Models enabled</span>
               <span>{data.models.enabled}</span>
             </div>

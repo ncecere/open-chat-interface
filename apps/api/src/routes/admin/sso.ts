@@ -1,5 +1,10 @@
 import { desc, eq, schema } from '@oci/db';
-import { claimMappingsSchema, createSsoProviderSchema, type SsoProviderSummary } from '@oci/shared';
+import {
+  claimMappingsSchema,
+  createSsoProviderSchema,
+  type SsoProviderSummary,
+  USER_ROLES,
+} from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { auth } from '../../auth/index.js';
@@ -168,13 +173,14 @@ const policyPatchSchema = z.object({
   jitProvisioning: z.boolean().optional(),
   trustedForLinking: z.boolean().optional(),
   allowedDomains: z.array(z.string().trim().toLowerCase().max(253)).optional(),
-  defaultRole: z.enum(['admin', 'user', 'restricted']).optional(),
+  // Same roles as creation accepts, so a provider can be edited back to them.
+  defaultRole: z.enum(USER_ROLES).optional(),
   claimRoleMappings: z
     .array(
       z.object({
         claim: z.string().trim().min(1).max(120),
         value: z.string().trim().min(1).max(200),
-        role: z.enum(['admin', 'user', 'restricted']),
+        role: z.enum(USER_ROLES),
       }),
     )
     .optional(),

@@ -9,7 +9,16 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { AdminPageHeader, EmptyState, Row, RowList } from '~/components/admin/admin-ui';
+import { EditOnly } from '~/components/admin/admin-access';
+import {
+  AdminPageHeader,
+  EmptyState,
+  LoadError,
+  MutationError,
+  Row,
+  RowList,
+} from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -292,11 +301,13 @@ function BroadcastDialog({
 export function AdminBroadcastsPage() {
   const queryClient = useQueryClient();
   const [formFor, setFormFor] = useState<{ broadcast: Broadcast | null } | null>(null);
+  const [deleteFor, setDeleteFor] = useState<Broadcast | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const broadcastsQuery = useQuery({
     queryKey: ['admin', 'broadcasts'],
     queryFn: () => api.get<{ broadcasts: Broadcast[] }>('/admin/broadcasts'),
   });
+  const { data, isLoading } = broadcastsQuery;
 
   const invalidate = () =>
     Promise.all([
@@ -304,33 +315,43 @@ export function AdminBroadcastsPage() {
       queryClient.invalidateQueries({ queryKey: ['me', 'broadcasts'] }),
     ]);
 
-  const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/broadcasts/${id}`),
-    onSuccess: invalidate,
-  });
-
   const reshow = useMutation({
     mutationFn: (id: string) => api.post(`/admin/broadcasts/${id}/reshow`),
     onSuccess: invalidate,
   });
 
+  async function deleteBroadcast(broadcast: Broadcast) {
+    await api.delete(`/admin/broadcasts/${broadcast.id}`);
+    await invalidate();
+  }
+
   const broadcasts = data?.broadcasts ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <AdminPageHeader
         title="Announcements"
         description="Tell people about planned maintenance, upcoming changes, or anything else they should see while using the instance."
         actions={
-          <Button variant="primary" onClick={() => setFormFor({ broadcast: null })}>
-            <Megaphone />
-            New announcement
-          </Button>
+          <EditOnly>
+            <Button variant="primary" onClick={() => setFormFor({ broadcast: null })}>
+              <Megaphone />
+              New announcement
+            </Button>
+          </EditOnly>
         }
+      />
+
+      <MutationError
+        error={reshow.error}
+        message="The announcement could not be shown again."
+        className="mb-4"
       />
 
       {isLoading ? (
         <Spinner className="mx-auto size-6" />
+      ) : broadcastsQuery.isError || !data ? (
+        <LoadError title="Announcements could not be loaded." query={broadcastsQuery} />
       ) : broadcasts.length > 0 ? (
         <RowList>
           {broadcasts.map((broadcast) => (
@@ -358,36 +379,38 @@ export function AdminBroadcastsPage() {
                 </p>
               </div>
 
-              {broadcast.dismissalCount > 0 && (
+              <EditOnly>
+                {broadcast.dismissalCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Show ${broadcast.title} again to everyone`}
+                    title="Show again to everyone who dismissed it"
+                    disabled={reshow.isPending}
+                    onClick={() => reshow.mutate(broadcast.id)}
+                  >
+                    <RotateCcw />
+                  </Button>
+                )}
+
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`Show ${broadcast.title} again to everyone`}
-                  title="Show again to everyone who dismissed it"
-                  disabled={reshow.isPending}
-                  onClick={() => reshow.mutate(broadcast.id)}
+                  aria-label={`Edit ${broadcast.title}`}
+                  onClick={() => setFormFor({ broadcast })}
                 >
-                  <RotateCcw />
+                  <Pencil />
                 </Button>
-              )}
 
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Edit ${broadcast.title}`}
-                onClick={() => setFormFor({ broadcast })}
-              >
-                <Pencil />
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Delete ${broadcast.title}`}
-                onClick={() => remove.mutate(broadcast.id)}
-              >
-                <Trash2 />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Delete ${broadcast.title}`}
+                  onClick={() => setDeleteFor(broadcast)}
+                >
+                  <Trash2 />
+                </Button>
+              </EditOnly>
             </Row>
           ))}
         </RowList>
@@ -397,6 +420,21 @@ export function AdminBroadcastsPage() {
           they dismiss it.
         </EmptyState>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteFor)}
+        onOpenChange={(open) => !open && setDeleteFor(null)}
+        title={`Delete ${deleteFor?.title ?? 'announcement'}?`}
+        description={
+          deleteFor?.active
+            ? 'It is showing now and will disappear for everyone immediately. This action cannot be undone.'
+            : 'It will not be shown to anyone. This action cannot be undone.'
+        }
+        confirmLabel="Delete announcement"
+        pendingLabel="Deleting…"
+        errorMessage="The announcement could not be deleted."
+        onConfirm={() => (deleteFor ? deleteBroadcast(deleteFor) : Promise.resolve())}
+      />
 
       <Dialog open={Boolean(formFor)} onOpenChange={(open) => !open && setFormFor(null)}>
         {formFor && (

@@ -119,9 +119,11 @@ Set `INITIAL_ADMIN_EMAIL` to create the first administrator. Leaving
 `INITIAL_ADMIN_PASSWORD` unset prints a one-time password to the API logs
 instead of baking a credential into the environment.
 
-Once running, sign in and add a provider under **Admin → Providers & Keys**,
-then curate models in **Admin → Model catalog**. No model is available to users
-until an administrator enables one.
+Once running, sign in and open **Admin**. The setup checklist on **Overview**
+lists what is still missing, in order, and links to each page. Start by adding a
+provider and enabling models under **Admin → Models → Providers & models**, where
+the default model is also chosen. No model is available to users until an
+administrator enables one.
 
 ### Running more than one API replica
 
@@ -146,7 +148,7 @@ Two constraints to know before scaling:
 - **Object storage is required.** The local filesystem driver writes to a
   per-container volume, so an attachment uploaded through one replica is
   invisible to the others unless every replica shares one host volume.
-  Configure S3 under **Admin → Storage**.
+  Configure S3 under **Admin → Data & storage → Storage**.
 - **Role and ban changes lag.** Sessions are cached for up to five minutes per
   replica, so a revoked session may remain usable on other replicas until that
   cache expires.
@@ -236,7 +238,8 @@ docker compose -f docker/compose.auth-test.yaml up -d
 - Mailpit UI: <http://localhost:8025> · SMTP on `localhost:1025`
 
 Run the API with `AUTH_TRUSTED_ORIGINS=http://localhost:8090`, then register the
-providers in **Admin → Auth & SSO** using provider IDs `oci-oidc` and `oci-saml`
+providers under **Single sign-on** on **Admin → Sign-in & security →
+Authentication** using provider IDs `oci-oidc` and `oci-saml`
 so the callback URLs match the imported realm. The credentials in this realm are
 test-only and must never be reused.
 
@@ -257,12 +260,15 @@ over the account.
 ## Theming
 
 Surfaces use the shadcn **neutral** palette (Tailwind `neutral`, zero chroma) in
-OKLCH. Layered on top is an accent family selected in **Admin → Settings →
-General → Appearance**: `neutral`, `blue`, `violet`, or `emerald`.
+OKLCH. Layered on top is an accent family selected as **Accent color** in
+**Admin → Appearance & features → Branding → Appearance**: `neutral`, `blue`,
+`violet`, or `emerald`.
 
 The accent is instance-wide and applied via a `data-color-theme` attribute on
 `<html>`, so it reaches the login and public share pages too. Light/dark remains
-a per-user choice, and a user's boring mode still overrides the accent locally.
+a per-user choice; **Default theme** on the same page (light, dark, or system)
+applies only to people who have not chosen one. A user's boring mode still
+overrides the accent locally.
 
 All colors live in `apps/web/src/styles/tokens.css`; components reference CSS
 variables only, so adding a family means adding one block there plus an entry in
@@ -271,9 +277,9 @@ variables only, so adding a family means adding one block there plus an entry in
 ## Model labs and logos
 
 Each catalog model can be attributed to the lab that created it, chosen from a
-picker in **Admin → Model catalog → Add/Edit model**. The lab supplies a logo
-shown beside the model in the picker and the admin catalog, with separate
-light and dark marks selected from the active theme.
+picker in **Admin → Models → Providers & models → Add/Edit model**.
+The lab supplies a logo shown beside the model in the picker and the admin
+catalog, with separate light and dark marks selected from the active theme.
 
 The catalog lives in `packages/shared/src/model-labs.ts` and the SVGs in
 `apps/web/public/logos/`. Both are generated from the
@@ -291,8 +297,9 @@ brand-use policies; the upstream MIT license ships alongside the assets.
 
 ## Quota policies
 
-Limits are named policies applied to roles, managed in **Admin → Quotas & limits**.
-A role can carry several policies at once and every one is enforced.
+Limits are named policies applied to roles, managed in
+**Admin → Models → Usage budgets**. A role can carry several policies at once
+and every one is enforced.
 
 - **Measure**: messages, tokens, or budget in dollars.
 - **Window**: rolling over N hours, or calendar-based (daily, weekly, monthly)

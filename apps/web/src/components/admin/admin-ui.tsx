@@ -1,39 +1,63 @@
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { EditableFieldset, useAdminAccess } from '~/components/admin/admin-access';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { ApiError, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 /**
  * A titled block separated by a rule rather than a card. This matches the
  * user-facing settings pages, which group content with headings only.
+ *
+ * On wide screens the heading sits in its own column beside the controls, so
+ * forms use the available width without stretching into long lines. Pass
+ * `stacked` where the section already sits in a narrow column.
+ *
+ * Its contents are an EditableFieldset: for a read-only viewer every control
+ * inside is disabled, while links and text stay usable. Pass
+ * `editable={false}` for a section whose controls only read (retry, refresh),
+ * and gate any write inside it individually.
  */
 export function SettingsSection({
   title,
   description,
   children,
   className,
+  stacked = false,
+  editable = true,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   className?: string;
+  stacked?: boolean;
+  editable?: boolean;
 }) {
   return (
     <section
       className={cn(
         'border-t border-[var(--border-subtle)] pt-8 first:border-t-0 first:pt-0',
+        !stacked && 'xl:grid xl:grid-cols-[18rem_minmax(0,1fr)] xl:gap-10',
         className,
       )}
     >
-      <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
-      {description && (
-        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
-          {description}
-        </p>
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
+        {description && (
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+            {description}
+          </p>
+        )}
+      </div>
+      {editable ? (
+        <EditableFieldset className={cn('mt-5', !stacked && 'xl:mt-0')}>
+          {children}
+        </EditableFieldset>
+      ) : (
+        <div className={cn('mt-5 min-w-0', !stacked && 'xl:mt-0')}>{children}</div>
       )}
-      <div className="mt-5">{children}</div>
     </section>
   );
 }
@@ -122,6 +146,7 @@ export function ToggleSetting({
   disabled: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
+  const { canEdit } = useAdminAccess();
   const descriptionId = `${id}-description`;
 
   return (
@@ -138,7 +163,7 @@ export function ToggleSetting({
         id={id}
         className="mt-0.5"
         checked={checked}
-        disabled={disabled}
+        disabled={disabled || !canEdit}
         onCheckedChange={onCheckedChange}
         aria-describedby={descriptionId}
       />
@@ -181,6 +206,74 @@ export function Notice({
   );
 }
 
+/**
+ * Announces a failed mutation next to the control that triggered it.
+ *
+ * `message` says what failed; the server's own explanation follows when the
+ * failure came from the API. Renders nothing while `error` is empty, so it
+ * clears itself when React Query resets the mutation on retry or success.
+ */
+export function MutationError({
+  error,
+  message,
+  className,
+}: {
+  error: unknown;
+  message: string;
+  className?: string;
+}) {
+  if (!error) return null;
+  const detail = error instanceof ApiError && error.message !== message ? error.message : null;
+
+  return (
+    <p role="alert" className={cn('text-sm text-[var(--danger)]', className)}>
+      {message}
+      {detail && ` ${detail}`}
+    </p>
+  );
+}
+
+/**
+ * Shown in place of content whose query failed, so a page never spins
+ * forever. Retrying refetches the same query.
+ */
+export function LoadError({
+  title,
+  query,
+  className,
+}: {
+  title: string;
+  query: { error: unknown; isFetching: boolean; refetch: () => unknown };
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--border-subtle)] p-12 text-center',
+        className,
+      )}
+    >
+      <AlertTriangle className="size-8 text-[var(--danger)]" aria-hidden="true" />
+      <p role="alert" className="text-sm font-medium text-[var(--text-primary)]">
+        {title}
+      </p>
+      <p className="max-w-md text-xs text-[var(--text-muted)]">
+        {apiErrorMessage(query.error, 'Check your connection and try again.')}
+      </p>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={query.isFetching}
+        onClick={() => void query.refetch()}
+      >
+        {query.isFetching && <Spinner />}
+        Try again
+      </Button>
+    </div>
+  );
+}
+
 export function SaveRow({
   hasChanges,
   isPending,
@@ -192,6 +285,10 @@ export function SaveRow({
   errorMessage: string | null;
   successMessage: string | null;
 }) {
+  // A read-only viewer cannot change anything, so there is nothing to save.
+  const { canEdit } = useAdminAccess();
+  if (!canEdit) return null;
+
   return (
     <div className="flex min-h-9 flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
       <div className="sm:mr-auto" aria-live="polite">

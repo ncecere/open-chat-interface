@@ -9,7 +9,7 @@ import { StorageSettingsForm } from './storage/storage-settings-form';
 function LoadingStorageSettings() {
   return (
     <div
-      className="flex max-w-3xl items-center gap-3 text-sm text-[var(--text-muted)]"
+      className="flex items-center gap-3 text-sm text-[var(--text-muted)]"
       role="status"
       aria-busy="true"
       aria-label="Loading storage settings"
@@ -36,7 +36,7 @@ export function AdminStoragePage() {
       {settings.isLoading ? (
         <LoadingStorageSettings />
       ) : settings.isError || !settings.data ? (
-        <div className="max-w-3xl">
+        <div>
           <p role="alert" className="text-sm text-[var(--danger)]">
             {settings.error instanceof ApiError
               ? settings.error.message

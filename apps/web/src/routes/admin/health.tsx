@@ -1,9 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
-import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react';
-import { AdminPageHeader } from '~/components/admin/admin-ui';
-import { FullPageSpinner } from '~/components/ui/spinner';
+import type { JobRun } from '@oci/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CircleAlert, CircleCheck, Play, TriangleAlert } from 'lucide-react';
+import { useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
+import {
+  AdminPageHeader,
+  LoadError,
+  MutationError,
+  Notice,
+  SettingsSection,
+} from '~/components/admin/admin-ui';
+import { Button } from '~/components/ui/button';
+import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
 import { cn, formatRelativeTime } from '~/lib/utils';
+import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
 type Status = 'ok' | 'warn' | 'error';
 
@@ -14,20 +25,23 @@ interface Check {
   detail: string;
 }
 
-interface JobRun {
-  id: string;
-  jobName: string;
-  status: string;
-  startedAt: string;
-  durationMs: number | null;
-  itemsProcessed: number;
-  errorMessage: string | null;
-}
-
 interface HealthResponse {
   status: Status;
   checks: Check[];
-  recentJobs: JobRun[];
+}
+
+interface StorageHealth {
+  liveBytes: number;
+  liveFileCount: number;
+  pendingBytes: number;
+  pendingFileCount: number;
+  pendingDeletions: number;
+}
+
+interface ReconcileReport {
+  orphanedObjects: number;
+  missingObjects: number;
+  queuedForDeletion: number;
 }
 
 const STATUS_STYLES: Record<Status, { icon: typeof CircleCheck; className: string }> = {
@@ -36,45 +50,55 @@ const STATUS_STYLES: Record<Status, { icon: typeof CircleCheck; className: strin
   error: { icon: CircleAlert, className: 'text-[var(--danger)]' },
 };
 
+const STATUS_LABELS: Record<Status, string> = { ok: 'OK', warn: 'Warning', error: 'Error' };
+
 const SUMMARY: Record<Status, string> = {
   ok: 'Everything is responding normally.',
   warn: 'Working, with something worth looking at.',
   error: 'Something is broken and users are affected.',
 };
 
-export function AdminHealthPage() {
-  const { data, isLoading } = useQuery({
+function HealthChecks() {
+  const health = useQuery({
     queryKey: ['admin', 'health'],
     queryFn: () => api.get<HealthResponse>('/admin/health'),
     // Stale quickly: this page is opened precisely when something is suspected
     // to be wrong, and a cached green summary would be actively misleading.
     refetchInterval: 30_000,
   });
+  const { data, isLoading } = health;
 
-  if (isLoading || !data) return <FullPageSpinner />;
+  if (isLoading) {
+    return (
+      <div role="status" aria-label="Loading health checks">
+        <Spinner className="mx-auto size-5" />
+      </div>
+    );
+  }
+
+  if (!data) return <LoadError title="Health checks could not be loaded." query={health} />;
 
   const Overall = STATUS_STYLES[data.status].icon;
 
   return (
     <div>
-      <AdminPageHeader
-        title="Health"
-        description="Whether the parts this instance depends on are working."
-      />
-
       <div className="flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
-        <Overall className={cn('size-5 shrink-0', STATUS_STYLES[data.status].className)} />
+        <Overall
+          className={cn('size-5 shrink-0', STATUS_STYLES[data.status].className)}
+          aria-hidden="true"
+        />
         <p className="font-medium text-sm">{SUMMARY[data.status]}</p>
       </div>
 
-      <ul className="mt-6 divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
+      <ul className="mt-4 divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
         {data.checks.map((check) => {
           const Icon = STATUS_STYLES[check.status].icon;
           return (
             <li key={check.id} className="flex items-start gap-3 px-4 py-3">
               <Icon
                 className={cn('mt-0.5 size-4 shrink-0', STATUS_STYLES[check.status].className)}
-                aria-label={check.status}
+                aria-label={STATUS_LABELS[check.status]}
+                role="img"
               />
               <div className="min-w-0">
                 <p className="font-medium text-sm">{check.label}</p>
@@ -84,55 +108,270 @@ export function AdminHealthPage() {
           );
         })}
       </ul>
+    </div>
+  );
+}
 
-      <section className="mt-8">
-        <h2 className="font-semibold text-base">Recent background jobs</h2>
-        {data.recentJobs.length === 0 ? (
-          <p className="mt-3 text-[var(--text-muted)] text-sm">No jobs have run yet.</p>
-        ) : (
-          <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
-                <tr>
-                  <th className="px-4 py-2 text-left">Job</th>
-                  <th className="px-4 py-2 text-left">Started</th>
-                  <th className="px-4 py-2 text-left">Duration</th>
-                  <th className="px-4 py-2 text-left">Items</th>
-                  <th className="px-4 py-2 text-left">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentJobs.map((job) => (
-                  <tr key={job.id} className="border-[var(--border-subtle)] border-t">
-                    <td className="px-4 py-2 font-mono text-xs">{job.jobName}</td>
-                    <td className="px-4 py-2 text-[var(--text-muted)]">
-                      {formatRelativeTime(job.startedAt)}
-                    </td>
-                    <td className="px-4 py-2 text-[var(--text-muted)]">
-                      {job.durationMs === null ? '—' : `${job.durationMs} ms`}
-                    </td>
-                    <td className="px-4 py-2 text-[var(--text-muted)]">{job.itemsProcessed}</td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={cn(
-                          'text-xs',
-                          job.status === 'error'
-                            ? 'text-[var(--danger)]'
-                            : job.status === 'running'
-                              ? 'text-[var(--warning)]'
-                              : 'text-[var(--text-muted)]',
-                        )}
-                      >
-                        {job.errorMessage ?? job.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+function BackgroundJobs() {
+  const queryClient = useQueryClient();
+
+  const jobs = useQuery({
+    queryKey: ['admin', 'jobs'],
+    queryFn: () => api.get<{ runs: JobRun[] }>('/admin/lifecycle/jobs'),
+    refetchInterval: 30_000,
+  });
+  const { data, isLoading } = jobs;
+
+  const run = useMutation({
+    mutationFn: (name: string) => api.post(`/admin/lifecycle/jobs/${name}/run`),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'storage-health'] }),
+      ]),
+  });
+
+  if (isLoading) {
+    return (
+      <div role="status" aria-label="Loading background jobs">
+        <Spinner className="mx-auto size-5" />
+      </div>
+    );
+  }
+
+  if (!data) return <LoadError title="Background jobs could not be loaded." query={jobs} />;
+
+  // One row per job, showing only its most recent run.
+  const latest = new Map<string, JobRun>();
+  for (const entry of data.runs) {
+    if (!latest.has(entry.jobName)) latest.set(entry.jobName, entry);
+  }
+  const runs = [...latest.values()].sort((a, b) => a.jobName.localeCompare(b.jobName));
+
+  if (runs.length === 0) {
+    return (
+      <p className="text-[var(--text-muted)] text-sm">
+        No background job has run yet. Jobs start on their own schedule after the API boots.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <MutationError
+        error={run.error}
+        message={`${run.variables ?? 'The job'} could not be started.`}
+        className="mb-3"
+      />
+      <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
+        {runs.map((entry) => {
+          const failed = entry.status === 'error';
+          const running = entry.status === 'running';
+          const Icon = failed ? CircleAlert : running ? TriangleAlert : CircleCheck;
+          return (
+            <li key={entry.id} className="flex items-center gap-3 px-4 py-3">
+              <Icon
+                className={cn(
+                  'size-4 shrink-0',
+                  failed
+                    ? 'text-[var(--danger)]'
+                    : running
+                      ? 'text-[var(--warning)]'
+                      : 'text-[var(--success)]',
+                )}
+                aria-label={failed ? 'Failed' : running ? 'Running' : 'Succeeded'}
+                role="img"
+              />
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-mono text-xs">{entry.jobName}</p>
+                <p className="truncate text-[var(--text-muted)] text-xs">
+                  {formatRelativeTime(entry.startedAt)}
+                  {entry.durationMs === null ? '' : ` · ${entry.durationMs} ms`} ·{' '}
+                  {entry.itemsProcessed} item{entry.itemsProcessed === 1 ? '' : 's'}
+                  {entry.errorMessage ? ` · ${entry.errorMessage}` : ''}
+                </p>
+              </div>
+
+              <EditOnly>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  aria-label={`Run ${entry.jobName} now`}
+                  disabled={run.isPending}
+                  onClick={() => run.mutate(entry.jobName)}
+                >
+                  {run.isPending && run.variables === entry.jobName ? <Spinner /> : <Play />}
+                  Run
+                </Button>
+              </EditOnly>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function StorageInUse() {
+  const health = useQuery({
+    queryKey: ['admin', 'storage-health'],
+    queryFn: () => api.get<StorageHealth>('/admin/lifecycle/storage-health'),
+  });
+
+  if (health.isLoading) {
+    return (
+      <div role="status" aria-label="Loading storage usage">
+        <Spinner className="mx-auto size-5" />
+      </div>
+    );
+  }
+  if (!health.data) return <LoadError title="Storage usage could not be loaded." query={health} />;
+
+  return (
+    <dl className="grid gap-4 sm:grid-cols-3">
+      <div>
+        <dt className="text-[var(--text-muted)] text-xs">In use</dt>
+        <dd className="mt-1 font-semibold text-lg">{formatBytes(health.data.liveBytes)}</dd>
+        <dd className="text-[var(--text-muted)] text-xs">
+          {health.data.liveFileCount.toLocaleString()} files
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[var(--text-muted)] text-xs">Pending deletion</dt>
+        <dd className="mt-1 font-semibold text-lg">{formatBytes(health.data.pendingBytes)}</dd>
+        <dd className="text-[var(--text-muted)] text-xs">
+          {health.data.pendingFileCount.toLocaleString()} files in trash
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[var(--text-muted)] text-xs">Objects queued for removal</dt>
+        <dd className="mt-1 font-semibold text-lg">
+          {health.data.pendingDeletions.toLocaleString()}
+        </dd>
+        <dd className="text-[var(--text-muted)] text-xs">Cleared by the cleanup job</dd>
+      </div>
+    </dl>
+  );
+}
+
+function StorageReconcile() {
+  const queryClient = useQueryClient();
+  const [report, setReport] = useState<ReconcileReport | null>(null);
+
+  const reconcile = useMutation({
+    mutationFn: (deleteOrphans: boolean) =>
+      api.post<ReconcileReport>(
+        `/admin/lifecycle/storage-reconcile${deleteOrphans ? '?deleteOrphans=true' : ''}`,
+      ),
+    onSuccess: async (result) => {
+      setReport(result);
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'storage-health'] });
+    },
+  });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <EditOnly>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={reconcile.isPending}
+            onClick={() => reconcile.mutate(false)}
+          >
+            {reconcile.isPending && <Spinner />}
+            Check for orphans
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={reconcile.isPending || !report || report.orphanedObjects === 0}
+            onClick={() => reconcile.mutate(true)}
+          >
+            Queue orphans for deletion
+          </Button>
+        </div>
+      </EditOnly>
+
+      <MutationError
+        error={reconcile.error}
+        message={
+          reconcile.variables
+            ? 'Orphaned objects could not be queued for deletion.'
+            : 'The storage check could not be completed.'
+        }
+      />
+
+      {report && (
+        <dl className="grid gap-4 sm:grid-cols-3" aria-live="polite">
+          <div>
+            <dt className="text-[var(--text-muted)] text-xs">Objects with no record</dt>
+            <dd className="mt-1 font-semibold text-lg">{report.orphanedObjects}</dd>
           </div>
-        )}
-      </section>
+          <div>
+            <dt className="text-[var(--text-muted)] text-xs">Records with no object</dt>
+            <dd className="mt-1 font-semibold text-lg">{report.missingObjects}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-muted)] text-xs">Queued for deletion</dt>
+            <dd className="mt-1 font-semibold text-lg">{report.queuedForDeletion}</dd>
+          </div>
+        </dl>
+      )}
+
+      <Notice title="Records with no object are reported, not repaired">
+        Deleting those rows would destroy a conversation's attachment metadata over what may be a
+        temporary storage fault, so they are left for an operator to investigate. Objects newer than
+        24 hours are never treated as orphans, because an upload writes its file before committing
+        its record.
+      </Notice>
+    </div>
+  );
+}
+
+export function AdminHealthPage() {
+  return (
+    <div>
+      <AdminPageHeader
+        title="System health"
+        description="Whether the parts this instance depends on are working, the background jobs that keep it tidy, and storage integrity."
+      />
+
+      <div className="flex flex-col gap-10 pb-10">
+        <SettingsSection
+          editable={false}
+          title="Health checks"
+          description="Refreshed every 30 seconds while this page is open."
+        >
+          <HealthChecks />
+        </SettingsSection>
+
+        <SettingsSection
+          editable={false}
+          title="Background jobs"
+          description="The most recent run of each scheduled job. Jobs hold a lock while running, so each runs on one replica at a time."
+        >
+          <BackgroundJobs />
+        </SettingsSection>
+
+        <SettingsSection
+          editable={false}
+          title="Storage in use"
+          description="Deleted files still occupy disk until their trash window elapses and cleanup removes them."
+        >
+          <StorageInUse />
+        </SettingsSection>
+
+        <SettingsSection
+          editable={false}
+          title="Storage reconciliation"
+          description="Compares object storage against the database in both directions to find files with no record and records with no file."
+        >
+          <StorageReconcile />
+        </SettingsSection>
+      </div>
     </div>
   );
 }

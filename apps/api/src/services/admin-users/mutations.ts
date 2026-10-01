@@ -102,6 +102,12 @@ export async function updateUser(
     .where(eq(schema.user.id, targetId))
     .returning({ id: schema.user.id });
 
+  // A ban that leaves sessions alive is not a ban until they expire. Bulk ban
+  // already ends them; a single-account ban must too.
+  if (patch.banned === true) {
+    await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  }
+
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
@@ -110,6 +116,19 @@ export async function updateUser(
     targetId,
     metadata: patch,
   });
+
+  // A role change is access control; record it under its protected action so
+  // routine audit retention cannot prune it with ordinary profile edits.
+  if (patch.role !== undefined && patch.role !== target.role) {
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'user.role.change',
+      targetType: 'user',
+      targetId,
+      metadata: { from: target.role, to: patch.role },
+    });
+  }
 
   return { id: updated?.id };
 }

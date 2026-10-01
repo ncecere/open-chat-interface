@@ -75,7 +75,9 @@ export const reserveAmountsSchema = z.object({
 export const updateRateLimitSettingsSchema = z
   .object({
     /** Keyed by role; a missing role keeps its current value. */
-    roles: z.record(z.enum(USER_ROLES), rateLimitSettingsSchema.partial()).optional(),
+    // partialRecord: in Zod 4 a record keyed by an enum requires every key,
+    // which would reject saving one role's limits.
+    roles: z.partialRecord(z.enum(USER_ROLES), rateLimitSettingsSchema.partial()).optional(),
     authAttemptsPerMinute: z.number().int().min(1).max(1_000).optional(),
     reserve: reserveAmountsSchema.partial().optional(),
   })

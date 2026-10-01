@@ -5,6 +5,7 @@ import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/ad
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
 
 type SmtpSettings = InstanceSettings['smtp'];
@@ -256,6 +257,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
         current ? { ...current, smtp: next } : current,
       );
       void queryClient.invalidateQueries({ queryKey: ['auth', 'status'] });
+      void queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY });
     },
     onError: (error) => {
       setSuccessMessage(false);

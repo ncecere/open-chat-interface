@@ -2,7 +2,16 @@ import { type UsagePolicy, upsertUsagePolicySchema } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Send } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { AdminPageHeader, EmptyState, Notice, Row, RowList } from '~/components/admin/admin-ui';
+import { EditOnly } from '~/components/admin/admin-access';
+import {
+  AdminPageHeader,
+  EmptyState,
+  LoadError,
+  MutationError,
+  Notice,
+  Row,
+  RowList,
+} from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -124,10 +133,11 @@ export function AdminPoliciesPage() {
   const queryClient = useQueryClient();
   const [composing, setComposing] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const policiesQuery = useQuery({
     queryKey: ['admin', 'policies'],
     queryFn: () => api.get<{ policies: UsagePolicy[] }>('/admin/policies'),
   });
+  const { data, isLoading } = policiesQuery;
 
   const publish = useMutation({
     mutationFn: (id: string) => api.post(`/admin/policies/${id}/publish`),
@@ -138,20 +148,28 @@ export function AdminPoliciesPage() {
   const current = policies.find((policy) => policy.publishedAt) ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <AdminPageHeader
         title="Acceptable use"
         description="A policy people must accept before using this instance. Each change is a new version, so a record of who accepted which wording is preserved."
         actions={
-          <Button variant="primary" onClick={() => setComposing(true)}>
-            <FileText />
-            New version
-          </Button>
+          <EditOnly>
+            <Button variant="primary" onClick={() => setComposing(true)}>
+              <FileText />
+              New version
+            </Button>
+          </EditOnly>
         }
       />
 
       <div className="flex flex-col gap-6 pb-10">
-        {!isLoading && policies.length === 0 && (
+        {policiesQuery.isError && !data && (
+          <LoadError title="Policies could not be loaded." query={policiesQuery} />
+        )}
+
+        <MutationError error={publish.error} message="The policy could not be published." />
+
+        {!isLoading && data && policies.length === 0 && (
           <EmptyState icon={FileText} title="No policy has been published.">
             Until one is published, nobody is asked to accept anything.
           </EmptyState>
@@ -184,15 +202,17 @@ export function AdminPoliciesPage() {
                 </div>
 
                 {!policy.publishedAt && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={publish.isPending}
-                    onClick={() => publish.mutate(policy.id)}
-                  >
-                    <Send />
-                    Publish
-                  </Button>
+                  <EditOnly>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={publish.isPending}
+                      onClick={() => publish.mutate(policy.id)}
+                    >
+                      <Send />
+                      Publish
+                    </Button>
+                  </EditOnly>
                 )}
               </Row>
             ))}

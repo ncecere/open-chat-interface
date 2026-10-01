@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MODEL_CAPABILITIES, PROVIDER_KINDS, REASONING_EFFORTS, USER_ROLES } from '../constants.js';
+import { patchSchema } from './patch.js';
 
 export const modelCapabilitySchema = z.enum(MODEL_CAPABILITIES);
 
@@ -60,6 +61,9 @@ export const upsertModelSchema = z.object({
   isDefault: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
 });
+
+/** Omitted fields stay unchanged; create-time defaults do not apply. */
+export const updateModelSchema = patchSchema(upsertModelSchema);
 
 export const providerSchema = z.object({
   id: z.string(),

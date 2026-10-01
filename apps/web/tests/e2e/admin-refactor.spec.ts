@@ -32,8 +32,11 @@ test('storage tabs retain one draft and submit only changed public settings', as
   const nextLimit = String(initial.storage.maxFilesPerMessage + 1);
   await page.getByLabel('Maximum files per message').fill(nextLimit);
   await page.getByRole('tab', { name: 'S3 connection' }).click();
+  // The tab is in the URL, but switching must not remount the shared draft.
+  await expect(page).toHaveURL(/[?&]tab=s3\b/);
   await expect(page.getByRole('button', { name: 'Check bucket access' })).toBeDisabled();
   await page.getByRole('tab', { name: 'Upload policy' }).click();
+  await expect(page).toHaveURL(/[?&]tab=uploads\b/);
   await expect(page.getByLabel('Maximum files per message')).toHaveValue(nextLimit);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByText('Storage settings saved.', { exact: true })).toBeVisible();
@@ -53,8 +56,13 @@ for (const kind of ['oidc', 'saml'] as const) {
       }
       return route.fulfill({ json: { providers: [] } });
     });
+    // Single sign-on lives on the Authentication page; the old address redirects there.
     await page.goto('/admin/sso');
-    await page.getByRole('button', { name: 'Add provider', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/admin\/settings\/authentication#single-sign-on$/);
+    await page
+      .locator('#single-sign-on')
+      .getByRole('button', { name: 'Add provider', exact: true })
+      .click();
     const dialog = page.getByRole('dialog');
     if (kind === 'saml') {
       await dialog.getByRole('combobox', { name: 'Provider type' }).click();
@@ -136,4 +144,48 @@ test('user filters reset pagination and selection survives page changes', async 
   expect(bulkRequests).toEqual([
     { userIds: ['first', 'second'], action: 'set_role', role: 'user' },
   ]);
+});
+
+test('instance settings live at their own addresses', async ({ page, isMobile }) => {
+  await page.goto('/admin/settings');
+  await expect(page).toHaveURL(/\/admin\/settings\/general$/);
+  await expect(page.getByRole('heading', { name: 'General', level: 1 })).toBeVisible();
+  // Narrow screens keep the navigation in a drawer behind the menu button.
+  if (isMobile) await page.getByRole('button', { name: 'Open admin navigation' }).click();
+  const nav = page.getByRole('navigation', { name: 'Administration' });
+  await expect(nav.getByRole('link', { name: 'General', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(nav.getByRole('link', { name: 'Overview', exact: true })).not.toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await nav.getByRole('link', { name: 'Email delivery', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/settings\/email$/);
+  await expect(page.getByRole('heading', { name: 'Email delivery', level: 1 })).toBeVisible();
+});
+
+test('merged pages redirect to the page that now owns them', async ({ page }) => {
+  for (const [from, to, heading] of [
+    ['/admin/providers', /\/admin\/models$/, 'Providers & models'],
+    ['/admin/rate-limits', /\/admin\/roles$/, 'Roles & access'],
+    ['/admin/storage-limits', /\/admin\/roles$/, 'Roles & access'],
+    ['/admin/maintenance', /\/admin\/health$/, 'System health'],
+  ] as const) {
+    await page.goto(from);
+    await expect(page).toHaveURL(to);
+    await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+  }
+});
+
+test('Roles & access keeps the selected role in the URL', async ({ page }) => {
+  await page.goto('/admin/roles?role=restricted');
+  await expect(page.getByRole('tab', { name: 'Restricted', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await page.getByRole('tab', { name: 'Admin', exact: true }).click();
+  await expect(page).toHaveURL(/[?&]role=admin\b/);
+  await expect(page.getByLabel('Messages per minute')).toBeVisible();
 });

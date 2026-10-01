@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useState } from 'react';
+import { MutationError } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { api } from '~/lib/api-client';
@@ -99,6 +100,17 @@ export function SavedUserViews({ views: state }: { views: ReturnType<typeof useS
           </Button>
         </span>
       )}
+
+      <MutationError
+        error={saveView.error}
+        message="The view could not be saved."
+        className="w-full"
+      />
+      <MutationError
+        error={deleteView.error}
+        message="The view could not be deleted."
+        className="w-full"
+      />
     </div>
   );
 }

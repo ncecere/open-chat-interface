@@ -1,6 +1,8 @@
 # Models and providers
 
-![Providers](../images/admin-providers.png)
+Providers, the model catalogue, and the default model share one page,
+**Models → Providers & models** (`/admin/models`). Providers come first, then
+the catalogue. The old `/admin/providers` address lands here.
 
 ## Providers hold credentials
 
@@ -85,9 +87,17 @@ when stored contents diverge from their inspected metadata.
 
 ### The default model
 
-Set under **Settings → General**, not here. It is what a new conversation starts
-with, so it should be something reasonable for everyday work rather than your
-most capable option.
+Chosen here, above the catalogue list. It is what a new conversation starts with
+when somebody has not picked a model, so it should be something reasonable for
+everyday work rather than your most capable option — everyone gets it by
+default, including people who would not have chosen it.
+
+Only models somebody could actually use are offered: enabled, on an enabled
+provider. Choosing one clears the flag from every other model in the same
+write, and concurrent changes are serialised, so exactly one model ends up as
+the default. If the default stops being usable — disabled, its provider
+disabled, or hidden from the `user` role — the page and the
+[setup checklist](first-run.md#3-choose-a-default-model) say so.
 
 ## A worked example: adding an expensive model for one group
 
@@ -98,12 +108,14 @@ everybody.
 2. **Discover** its models and add the one you want.
 3. Set **Visible to roles** to `admin` only, for now.
 4. Confirm it appears in your own picker and answers correctly.
-5. In [Auth & SSO](identity.md), map the group that should have it — say
-   `oci-researchers` — to a role.
+5. On [Authentication](identity.md#group-and-claim-mappings), map the group that
+   should have it — say `oci-researchers` — to a role.
 6. Add that role to the model's visibility.
-7. Set a [quota](governance.md#usage-quotas) scoped to that model, so access does
-   not mean unlimited access.
+7. Set a [usage budget](governance.md#usage-budgets) scoped to that model, so
+   access does not mean unlimited access.
 
-Step 7 is the one people skip. Visibility decides who *can* use a model; a quota
-decides how much. Without it, restricting the model to a group only narrows who
-can spend the budget, not how fast.
+Step 7 is the one people skip. Visibility decides who *can* use a model; a
+budget decides how much. Without it, restricting the model to a group only
+narrows who can spend the budget, not how fast.
+[Roles & access](governance.md#roles-and-access) shows how many models each role
+can see, and which budgets apply to it.

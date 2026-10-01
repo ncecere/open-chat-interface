@@ -37,22 +37,21 @@ const lazyModules = [
   ['routes/admin/user-detail', ['AdminUserDetailPage']],
   ['routes/admin/reports', ['AdminReportsPage']],
   ['routes/admin/health', ['AdminHealthPage']],
-  ['routes/admin/providers', ['AdminProvidersPage']],
   ['routes/admin/models', ['AdminModelsPage']],
-  ['routes/admin/settings', ['AdminSettingsPage']],
+  ['routes/admin/roles', ['AdminRolesPage']],
+  [
+    'routes/admin/settings',
+    ['AdminGeneralSettingsPage', 'AdminAuthenticationSettingsPage', 'AdminEmailSettingsPage'],
+  ],
   ['routes/admin/invites', ['AdminInvitesPage']],
   ['routes/admin/branding', ['AdminBrandingPage']],
-  ['routes/admin/sso', ['AdminSsoPage']],
   ['routes/admin/quotas', ['AdminQuotasPage']],
   ['routes/admin/search', ['AdminSearchPage']],
   ['routes/admin/storage', ['AdminStoragePage']],
-  ['routes/admin/storage-limits', ['AdminStorageLimitsPage']],
-  ['routes/admin/rate-limits', ['AdminRateLimitsPage']],
   ['routes/admin/retention', ['AdminRetentionPage']],
   ['routes/admin/policies', ['AdminPoliciesPage']],
   ['routes/admin/broadcasts', ['AdminBroadcastsPage']],
   ['routes/admin/usage', ['AdminUsagePage']],
-  ['routes/admin/maintenance', ['AdminMaintenancePage']],
   ['routes/admin/audit', ['AdminAuditPage']],
   ['routes/settings/account', ['SettingsAccountPage']],
   ['routes/settings/customization', ['SettingsCustomizationPage']],
@@ -257,6 +256,69 @@ describe('real router lazy admin and settings routes', () => {
     );
     expect(imported).toHaveBeenCalledWith('routes/admin/user-detail');
     expect(imported).toHaveBeenCalledWith('components/admin/admin-layout');
+  });
+
+  it.each([
+    ['/admin/settings/general', 'AdminGeneralSettingsPage'],
+    ['/admin/settings/authentication', 'AdminAuthenticationSettingsPage'],
+    ['/admin/settings/email', 'AdminEmailSettingsPage'],
+  ] as const)('serves the instance settings page %s from one lazy module', async (path, name) => {
+    await renderRoute(path);
+    expect(router.state.location.pathname).toBe(path);
+    expect(container.querySelector(`[data-page="${name}"]`)).not.toBeNull();
+    expect(imported.mock.calls.map(([module]) => module).sort()).toEqual(
+      ['components/admin/admin-layout', 'routes/admin/settings'].sort(),
+    );
+  });
+
+  it('redirects the old /admin/settings address to the General page', async () => {
+    await renderRoute('/admin/settings');
+    expect(router.state.location.pathname).toBe('/admin/settings/general');
+    expect(container.querySelector('[data-page="AdminGeneralSettingsPage"]')).not.toBeNull();
+  });
+
+  it('opens Roles & access through its own lazy module', async () => {
+    await renderRoute('/admin/roles?role=restricted');
+    expect(router.state.location.pathname).toBe('/admin/roles');
+    expect(router.state.location.search).toEqual({ role: 'restricted' });
+    expect(container.querySelector('[data-page="AdminRolesPage"]')).not.toBeNull();
+    expect(imported.mock.calls.map(([module]) => module).sort()).toEqual(
+      ['components/admin/admin-layout', 'routes/admin/roles'].sort(),
+    );
+  });
+
+  it.each([
+    ['/admin/providers', '/admin/models', '', 'AdminModelsPage', 'routes/admin/models'],
+    [
+      '/admin/sso',
+      '/admin/settings/authentication',
+      'single-sign-on',
+      'AdminAuthenticationSettingsPage',
+      'routes/admin/settings',
+    ],
+    ['/admin/rate-limits', '/admin/roles', '', 'AdminRolesPage', 'routes/admin/roles'],
+    ['/admin/storage-limits', '/admin/roles', '', 'AdminRolesPage', 'routes/admin/roles'],
+    ['/admin/maintenance', '/admin/health', '', 'AdminHealthPage', 'routes/admin/health'],
+  ] as const)(
+    'redirects the merged page %s to %s and loads only the destination',
+    async (from, to, hash, name, module) => {
+      await renderRoute(from);
+      expect(router.state.location.pathname).toBe(to);
+      expect(router.state.location.hash).toBe(hash);
+      expect(container.querySelector(`[data-page="${name}"]`)).not.toBeNull();
+      expect(imported.mock.calls.map(([entry]) => entry).sort()).toEqual(
+        ['components/admin/admin-layout', module].sort(),
+      );
+    },
+  );
+
+  it('lets a read-only auditor into administration', async () => {
+    session.get.mockResolvedValue({ user: { id: 'auditor', role: 'auditor' } });
+    await renderRoute('/admin/users');
+    expect(router.state.location.pathname).toBe('/admin/users');
+    expect(
+      container.querySelector('[data-layout="AdminLayout"] [data-page="AdminUsersPage"]'),
+    ).not.toBeNull();
   });
 
   it('redirects a non-admin to chat without rendering the admin layout or page', async () => {

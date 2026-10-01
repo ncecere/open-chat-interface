@@ -2,6 +2,7 @@ import type { SsoProviderSummary } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, ExternalLink, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { EditOnly, useAdminAccess } from '~/components/admin/admin-access';
 import { RowList } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -14,6 +15,7 @@ import {
 } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
 
 type CopiedEndpoint = 'callback' | 'metadata' | null;
@@ -69,13 +71,18 @@ function ProviderRow({
   onDelete: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { canEdit } = useAdminAccess();
   const [copied, setCopied] = useState<CopiedEndpoint>(null);
   const [copyError, setCopyError] = useState(false);
 
   const toggle = useMutation({
     mutationFn: (enabled: boolean) =>
       api.patch<{ ok: boolean }>(`/admin/sso/providers/${provider.providerId}`, { enabled }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+      ]),
   });
 
   async function copy(value: string, endpoint: Exclude<CopiedEndpoint, null>) {
@@ -114,28 +121,30 @@ function ProviderRow({
         <div className="flex shrink-0 items-center gap-1">
           <Switch
             checked={provider.enabled}
-            disabled={toggle.isPending}
+            disabled={toggle.isPending || !canEdit}
             onCheckedChange={(enabled) => toggle.mutate(enabled)}
             aria-label={`${provider.enabled ? 'Disable' : 'Enable'} ${provider.label}`}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Edit ${provider.label}`}
-            onClick={onEdit}
-          >
-            <Pencil />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Delete ${provider.label}`}
-            onClick={onDelete}
-          >
-            <Trash2 />
-          </Button>
+          <EditOnly>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${provider.label}`}
+              onClick={onEdit}
+            >
+              <Pencil />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Delete ${provider.label}`}
+              onClick={onDelete}
+            >
+              <Trash2 />
+            </Button>
+          </EditOnly>
         </div>
       </div>
 
@@ -265,7 +274,10 @@ export function DeleteSsoProviderDialog({
   const remove = useMutation({
     mutationFn: () => api.delete<{ ok: boolean }>(`/admin/sso/providers/${provider.providerId}`),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
+        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+      ]);
       onClose();
     },
   });

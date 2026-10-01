@@ -1,5 +1,6 @@
 import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
@@ -15,15 +16,12 @@ import {
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
+import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
 
 type AuthSettings = Pick<
   InstanceSettings,
-  | 'registrationMode'
-  | 'emailVerificationRequired'
-  | 'localAuthEnabled'
-  | 'sessionLifetimeDays'
-  | 'sessionRefreshDays'
+  'registrationMode' | 'emailVerificationRequired' | 'localAuthEnabled' | 'sessionLifetimeDays'
 >;
 type AuthSettingsPatch = Partial<AuthSettings>;
 
@@ -47,9 +45,6 @@ function changedSettings(saved: AuthSettings, draft: AuthSettings): AuthSettings
   }
   if (saved.sessionLifetimeDays !== draft.sessionLifetimeDays) {
     patch.sessionLifetimeDays = draft.sessionLifetimeDays;
-  }
-  if (saved.sessionRefreshDays !== draft.sessionRefreshDays) {
-    patch.sessionRefreshDays = draft.sessionRefreshDays;
   }
 
   return patch;
@@ -83,6 +78,7 @@ export function AuthenticationSettingsForm({
         current ? { ...current, ...changes } : current,
       );
       void queryClient.invalidateQueries({ queryKey: ['auth', 'status'] });
+      void queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY });
     },
     onError: (error) => {
       setSavedMessage(false);
@@ -172,6 +168,8 @@ export function AuthenticationSettingsForm({
             />
           </div>
 
+          {/* Session extension is not offered: the server does not read a
+              refresh threshold, so the field would have no effect. */}
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <Field
               label="Session length (days)"
@@ -193,43 +191,20 @@ export function AuthenticationSettingsForm({
                 }
               />
             </Field>
-
-            <Field
-              label="Extend after (days)"
-              htmlFor="session-refresh"
-              hint="How much of the session must elapse before activity extends it again."
-            >
-              <Input
-                id="session-refresh"
-                type="number"
-                min={1}
-                max={365}
-                value={draft.sessionRefreshDays}
-                disabled={save.isPending}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    sessionRefreshDays: Number(event.target.value),
-                  }))
-                }
-              />
-            </Field>
           </div>
         </SettingsSection>
-
-        {draft.sessionRefreshDays > draft.sessionLifetimeDays && (
-          <Notice tone="warning" title="Sessions will never be extended">
-            The extension threshold is longer than the session itself, so a session will expire
-            before activity can renew it. People will be signed out on a fixed schedule regardless
-            of use.
-          </Notice>
-        )}
 
         {draft.emailVerificationRequired && !smtpConfigured && (
           <Notice tone="warning" title="Email delivery is not configured">
             Verification remains required even when email delivery is unavailable. Unverified
-            accounts cannot sign in until delivery is restored and they verify their address.
-            Configure and test email delivery before enabling this requirement.
+            accounts cannot sign in until delivery is restored and they verify their address.{' '}
+            <Link
+              className="text-[var(--accent-bright)] hover:underline"
+              to="/admin/settings/email"
+            >
+              Configure and test email delivery
+            </Link>{' '}
+            before enabling this requirement.
           </Notice>
         )}
 

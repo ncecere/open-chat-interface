@@ -1,11 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { type FormEvent, useState } from 'react';
-import { AdminPageHeader } from '~/components/admin/admin-ui';
+import { EditOnly } from '~/components/admin/admin-access';
+import { AdminPageHeader, LoadError, MutationError, Notice } from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { FullPageSpinner } from '~/components/ui/spinner';
+import { useSetupCheck } from '~/hooks/use-setup-status';
 import { api } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 
@@ -21,6 +25,29 @@ interface ScheduledReport {
   lastError: string | null;
 }
 
+/**
+ * Reports are only useful once email can be delivered. Silent while the setup
+ * status is loading or unavailable, so a slow check never flashes a warning.
+ */
+function EmailRequiredNotice() {
+  const email = useSetupCheck('email');
+  if (!email || email.status === 'complete') return null;
+
+  return (
+    <div className="mb-8">
+      <Notice tone="warning" title="Reports need email delivery">
+        <p>Scheduled reports are sent by email, so none will arrive until email delivery works.</p>
+        <Link
+          to="/admin/settings/email"
+          className="mt-2 inline-block font-medium text-[var(--accent-bright)] hover:underline"
+        >
+          Configure email delivery
+        </Link>
+      </Notice>
+    </div>
+  );
+}
+
 const CADENCES = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
@@ -33,11 +60,13 @@ export function AdminReportsPage() {
   const [cadence, setCadence] = useState('monthly');
   const [windowDays, setWindowDays] = useState(30);
   const [recipients, setRecipients] = useState('');
+  const [deleteFor, setDeleteFor] = useState<ScheduledReport | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const reports = useQuery({
     queryKey: ['admin', 'reports'],
     queryFn: () => api.get<{ reports: ScheduledReport[] }>('/admin/reports'),
   });
+  const { data, isLoading } = reports;
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
 
@@ -50,11 +79,6 @@ export function AdminReportsPage() {
     },
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/reports/${id}`),
-    onSuccess: invalidate,
-  });
-
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.patch(`/admin/reports/${id}`, { enabled }),
@@ -65,6 +89,11 @@ export function AdminReportsPage() {
     mutationFn: () => api.post<{ sent: number }>('/admin/reports/run', {}),
     onSuccess: invalidate,
   });
+
+  async function deleteReport(report: ScheduledReport) {
+    await api.delete(`/admin/reports/${report.id}`);
+    await invalidate();
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -79,75 +108,109 @@ export function AdminReportsPage() {
     });
   }
 
-  if (isLoading || !data) return <FullPageSpinner />;
+  if (isLoading) return <FullPageSpinner />;
+
+  const header = (
+    <AdminPageHeader
+      title="Scheduled reports"
+      description="Usage summaries delivered by email, so a monthly figure does not depend on somebody remembering to look."
+    />
+  );
+
+  if (reports.isError || !data) {
+    return (
+      <div>
+        {header}
+        <LoadError title="Scheduled reports could not be loaded." query={reports} />
+      </div>
+    );
+  }
 
   return (
     <div>
-      <AdminPageHeader
-        title="Scheduled reports"
-        description="Usage summaries delivered by email, so a monthly figure does not depend on somebody remembering to look."
-      />
+      {header}
 
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name" htmlFor="report-name">
-          <Input
-            id="report-name"
-            value={name}
-            required
-            maxLength={120}
-            placeholder="Monthly usage"
-            onChange={(event) => setName(event.target.value)}
-          />
-        </Field>
-        <Field label="Cadence" htmlFor="report-cadence">
-          <Select id="report-cadence" value={cadence} onChange={setCadence} options={CADENCES} />
-        </Field>
-        <Field
-          label="Window (days)"
-          htmlFor="report-window"
-          hint="How much history each report covers."
-        >
-          <Input
-            id="report-window"
-            type="number"
-            min={1}
-            max={365}
-            value={windowDays}
-            onChange={(event) => setWindowDays(Number(event.target.value))}
-          />
-        </Field>
-        <Field
-          label="Recipients"
-          htmlFor="report-recipients"
-          hint="Separate addresses with commas."
-        >
-          <Input
-            id="report-recipients"
-            value={recipients}
-            required
-            placeholder="ops@example.com"
-            onChange={(event) => setRecipients(event.target.value)}
-          />
-        </Field>
-        <div className="sm:col-span-2">
-          <Button type="submit" variant="primary" disabled={create.isPending}>
-            Add report
-          </Button>
-        </div>
-      </form>
+      <EmailRequiredNotice />
 
-      <section className="mt-8">
+      {/* Creating a report is the only thing this form does. */}
+      <EditOnly>
+        <form onSubmit={submit} className="mb-8 grid gap-3 sm:grid-cols-2">
+          <Field label="Name" htmlFor="report-name">
+            <Input
+              id="report-name"
+              value={name}
+              required
+              maxLength={120}
+              placeholder="Monthly usage"
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
+          <Field label="Cadence" htmlFor="report-cadence">
+            <Select id="report-cadence" value={cadence} onChange={setCadence} options={CADENCES} />
+          </Field>
+          <Field
+            label="Window (days)"
+            htmlFor="report-window"
+            hint="How much history each report covers."
+          >
+            <Input
+              id="report-window"
+              type="number"
+              min={1}
+              max={365}
+              value={windowDays}
+              onChange={(event) => setWindowDays(Number(event.target.value))}
+            />
+          </Field>
+          <Field
+            label="Recipients"
+            htmlFor="report-recipients"
+            hint="Separate addresses with commas."
+          >
+            <Input
+              id="report-recipients"
+              value={recipients}
+              required
+              placeholder="ops@example.com"
+              onChange={(event) => setRecipients(event.target.value)}
+            />
+          </Field>
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <MutationError error={create.error} message="The report could not be added." />
+            <div>
+              <Button type="submit" variant="primary" disabled={create.isPending}>
+                Add report
+              </Button>
+            </div>
+          </div>
+        </form>
+      </EditOnly>
+
+      <section>
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-base">Reports</h2>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={runNow.isPending}
-            onClick={() => runNow.mutate()}
-          >
-            Send due now
-          </Button>
+          <EditOnly>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={runNow.isPending}
+              onClick={() => runNow.mutate()}
+            >
+              Send due now
+            </Button>
+          </EditOnly>
         </div>
+
+        <MutationError
+          error={runNow.error}
+          message="Due reports could not be sent."
+          className="mt-2"
+        />
+        <MutationError
+          error={toggle.error}
+          message={`The report could not be ${toggle.variables?.enabled ? 'resumed' : 'paused'}.`}
+          className="mt-2"
+        />
 
         {runNow.data && (
           <p className="mt-2 text-[var(--text-muted)] text-sm">
@@ -185,21 +248,35 @@ export function AdminReportsPage() {
                   )}
                 </div>
 
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
-                >
-                  {report.enabled ? 'Pause' : 'Resume'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => remove.mutate(report.id)}>
-                  Delete
-                </Button>
+                <EditOnly>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={toggle.isPending}
+                    onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
+                  >
+                    {report.enabled ? 'Pause' : 'Resume'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleteFor(report)}>
+                    Delete
+                  </Button>
+                </EditOnly>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      <ConfirmDialog
+        open={Boolean(deleteFor)}
+        onOpenChange={(open) => !open && setDeleteFor(null)}
+        title={`Delete ${deleteFor?.name ?? 'report'}?`}
+        description="Its recipients will stop receiving it. To stop it temporarily, pause it instead. This action cannot be undone."
+        confirmLabel="Delete report"
+        pendingLabel="Deleting…"
+        errorMessage="The report could not be deleted."
+        onConfirm={() => (deleteFor ? deleteReport(deleteFor) : Promise.resolve())}
+      />
     </div>
   );
 }

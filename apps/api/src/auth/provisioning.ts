@@ -60,7 +60,8 @@ export function isDomainAllowed(email: string, allowedDomains: string[]): boolea
 }
 
 /** Most privileged first, so a tie between mappings resolves predictably. */
-const ROLE_PRECEDENCE: UserRole[] = ['admin', 'user', 'restricted'];
+// Every assignable role must appear here, or a mapping to it never matches.
+const ROLE_PRECEDENCE: UserRole[] = ['admin', 'auditor', 'user', 'restricted'];
 
 /**
  * Reads a claim, following dots into nested objects.

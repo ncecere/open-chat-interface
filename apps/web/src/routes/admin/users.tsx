@@ -1,6 +1,8 @@
 import { type AdminUser, USER_ROLES } from '@oci/shared';
+import { useSearch } from '@tanstack/react-router';
 import { useState } from 'react';
-import { AdminPageHeader } from '~/components/admin/admin-ui';
+import { useAdminAccess } from '~/components/admin/admin-access';
+import { AdminPageHeader, LoadError } from '~/components/admin/admin-ui';
 import { QuotaOverrideDialog } from '~/components/admin/quota-override-dialog';
 import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
@@ -12,7 +14,7 @@ import { PAGE_SIZE } from './users/directory-filters';
 import { SavedUserViews, useSavedUserViews } from './users/saved-views';
 import { useUserDirectory } from './users/use-user-directory';
 import { useUserSelection } from './users/use-user-selection';
-import { UserTable, useUserRoleMutation } from './users/user-table';
+import { UserTable } from './users/user-table';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Any status' },
@@ -22,10 +24,11 @@ const STATUS_OPTIONS = [
 ] as const;
 
 export function AdminUsersPage() {
-  const directory = useUserDirectory();
+  const { role: initialRole } = useSearch({ strict: false }) as { role?: AdminUser['role'] };
+  const directory = useUserDirectory(initialRole);
   const views = useSavedUserViews(directory, directory.applyFilters);
   const selection = useUserSelection(directory.data?.users.map((user) => user.id) ?? []);
-  const updateRole = useUserRoleMutation();
+  const { canEdit } = useAdminAccess();
   const [limitsFor, setLimitsFor] = useState<AdminUser | null>(null);
   const { data, isLoading, search, role, status, sort, direction, page, total, pageCount } =
     directory;
@@ -68,21 +71,23 @@ export function AdminUsersPage() {
         />
       </div>
 
-      {isLoading || !data ? (
+      {isLoading ? (
         <div className="py-16">
           <FullPageSpinner />
         </div>
+      ) : !data ? (
+        <LoadError title="Accounts could not be loaded." query={directory.query} className="mt-6" />
       ) : (
         <div className="mt-6">
-          <SavedUserViews views={views} />
-          <UserBulkToolbar selection={selection} />
+          {/* Saving a view and bulk changes are writes; auditors only browse. */}
+          {canEdit && <SavedUserViews views={views} />}
+          {canEdit && <UserBulkToolbar selection={selection} />}
           <UserTable
             users={data.users}
             sort={sort}
             direction={direction}
             onSort={directory.toggleSort}
             selection={selection}
-            updateRole={updateRole}
             onLimits={setLimitsFor}
           />
         </div>

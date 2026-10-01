@@ -1,12 +1,20 @@
 import { MICROS_PER_DOLLAR } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
+import { useNavigate, useSearch } from '@tanstack/react-router';
+import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
+import { AdminPageHeader, LoadError, Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Badge } from '~/components/ui/badge';
 import { Spinner } from '~/components/ui/spinner';
+import {
+  DEFAULT_USAGE_RANGE,
+  DEFAULT_USAGE_TAB,
+  USAGE_RANGES,
+  type UsageRange,
+  type UsageTab,
+  validateUsageSearch,
+} from '~/lib/admin-search';
 import { api } from '~/lib/api-client';
-import { cn } from '~/lib/utils';
 
 interface Range {
   days: number;
@@ -92,11 +100,14 @@ const TABS = [
   { id: 'spend', label: 'Spend' },
   { id: 'limits', label: 'Limits' },
   { id: 'storage', label: 'Storage' },
-] as const;
+] as const satisfies readonly AdminTab<UsageTab>[];
 
-type TabId = (typeof TABS)[number]['id'];
+type RangeTabId = `${UsageRange}`;
 
-const RANGES = [7, 30, 90] as const;
+const RANGE_TABS: readonly AdminTab<RangeTabId>[] = USAGE_RANGES.map((range) => ({
+  id: `${range}` as RangeTabId,
+  label: `${range} days`,
+}));
 
 function money(micros: number): string {
   const dollars = micros / MICROS_PER_DOLLAR;
@@ -119,11 +130,14 @@ function bytes(value: number): string {
 
 function StatGrid({ stats }: { stats: Array<{ label: string; value: string }> }) {
   return (
-    <dl className="grid gap-4 sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       {stats.map((stat) => (
-        <div key={stat.label} className="rounded-xl border border-[var(--border-subtle)] p-4">
-          <dt className="text-[var(--text-muted)] text-xs">{stat.label}</dt>
-          <dd className="mt-1 font-semibold text-xl">{stat.value}</dd>
+        <div
+          key={stat.label}
+          className="min-w-0 rounded-xl border border-[var(--border-subtle)] p-4"
+        >
+          <dt className="truncate text-[var(--text-muted)] text-xs">{stat.label}</dt>
+          <dd className="mt-1 truncate font-semibold text-xl">{stat.value}</dd>
         </div>
       ))}
     </dl>
@@ -200,7 +214,7 @@ function PeopleList({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
+    <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
       {entries.map((entry) => (
         <div
           key={entry.userId}
@@ -220,13 +234,30 @@ function PeopleList({
   );
 }
 
+/** A tab's spinner, or a retryable error once its query has failed. */
+function TabPending({
+  query,
+  title,
+}: {
+  query: { error: unknown; isError: boolean; isFetching: boolean; refetch: () => unknown };
+  title: string;
+}) {
+  if (query.isError) return <LoadError title={title} query={query} />;
+  return (
+    <div role="status" aria-label="Loading">
+      <Spinner className="mx-auto size-6" />
+    </div>
+  );
+}
+
 function OverviewTab({ days }: { days: number }) {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'overview', days],
     queryFn: () => api.get<OverviewResponse>(`/admin/usage/overview?days=${days}`),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Usage overview could not be loaded." />;
 
   return (
     <div className="flex flex-col gap-10">
@@ -278,12 +309,13 @@ function OverviewTab({ days }: { days: number }) {
 }
 
 function SpendTab({ days }: { days: number }) {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'spend', days],
     queryFn: () => api.get<SpendResponse>(`/admin/usage/spend?days=${days}`),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Spend could not be loaded." />;
 
   return (
     <div className="flex flex-col gap-10">
@@ -314,8 +346,8 @@ function SpendTab({ days }: { days: number }) {
         {data.models.entries.length === 0 ? (
           <p className="text-[var(--text-muted)] text-sm">Nothing recorded in this range.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-            <table className="w-full text-sm">
+          <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+            <table className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-[var(--border-subtle)] border-b text-left text-[var(--text-muted)] text-xs uppercase tracking-wider">
                   <th className="px-4 py-3 font-medium">Model</th>
@@ -424,12 +456,13 @@ function SpendTab({ days }: { days: number }) {
 }
 
 function LimitsTab({ days }: { days: number }) {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'limits', days],
     queryFn: () => api.get<LimitsResponse>(`/admin/usage/limits?days=${days}`),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Limit activity could not be loaded." />;
 
   return (
     <SettingsSection
@@ -441,7 +474,7 @@ function LimitsTab({ days }: { days: number }) {
           No one was stopped by a limit in this range.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
+        <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
           {data.denials.entries.map((denial) => (
             <div
               key={`${denial.policyId}-${denial.policyName}`}
@@ -470,12 +503,13 @@ function LimitsTab({ days }: { days: number }) {
 }
 
 function StorageTab() {
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'usage', 'storage'],
     queryFn: () => api.get<StorageResponse>('/admin/usage/storage'),
   });
+  const { data } = query;
 
-  if (!data) return <Spinner className="mx-auto size-6" />;
+  if (!data) return <TabPending query={query} title="Storage usage could not be loaded." />;
 
   return (
     <div className="flex flex-col gap-10">
@@ -512,11 +546,27 @@ function StorageTab() {
 }
 
 export function AdminUsagePage() {
-  const [tab, setTab] = useState<TabId>('overview');
-  const [days, setDays] = useState<number>(30);
+  const navigate = useNavigate();
+  const search = validateUsageSearch(useSearch({ strict: false }));
+  const tab = search.tab ?? DEFAULT_USAGE_TAB;
+  const days = search.range ?? DEFAULT_USAGE_RANGE;
+
+  // Defaults stay out of the URL so the plain /admin/usage link is canonical.
+  function show(next: { tab?: UsageTab; range?: UsageRange }) {
+    const nextTab = next.tab ?? tab;
+    const nextRange = next.range ?? days;
+    void navigate({
+      to: '/admin/usage',
+      search: {
+        tab: nextTab === DEFAULT_USAGE_TAB ? undefined : nextTab,
+        range: nextRange === DEFAULT_USAGE_RANGE ? undefined : nextRange,
+      },
+      replace: true,
+    });
+  }
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    <div>
       <AdminPageHeader
         title="Usage"
         description="What this instance is actually doing. Every figure here is a count or a total; nothing reads conversation content."
@@ -524,59 +574,25 @@ export function AdminUsagePage() {
           // Storage is a gauge rather than a flow, so a range would not mean
           // anything on that tab.
           tab === 'storage' ? undefined : (
-            <div
-              className="inline-flex gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1"
-              role="tablist"
-              aria-label="Reporting range"
-            >
-              {RANGES.map((range) => (
-                <button
-                  key={range}
-                  type="button"
-                  role="tab"
-                  aria-selected={days === range}
-                  onClick={() => setDays(range)}
-                  className={cn(
-                    'rounded-lg px-3 py-1.5 text-sm transition-colors',
-                    days === range
-                      ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-                  )}
-                >
-                  {range} days
-                </button>
-              ))}
-            </div>
+            <AdminTabs
+              tabs={RANGE_TABS}
+              active={String(days) as RangeTabId}
+              onChange={(range) => show({ range: Number(range) as UsageRange })}
+              label="Reporting range"
+              controls={`panel-${tab}`}
+            />
           )
         }
       />
 
-      <div
-        className="inline-flex flex-wrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1"
-        role="tablist"
-        aria-label="Usage sections"
-      >
-        {TABS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === entry.id}
-            aria-controls={`usage-${entry.id}`}
-            onClick={() => setTab(entry.id)}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-sm transition-colors',
-              tab === entry.id
-                ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-            )}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
+      <AdminTabs
+        tabs={TABS}
+        active={tab}
+        onChange={(next) => show({ tab: next })}
+        label="Usage sections"
+      />
 
-      <div className="mt-8 pb-10" id={`usage-${tab}`} role="tabpanel">
+      <div className="mt-8 pb-10" id={`panel-${tab}`} role="tabpanel">
         {tab === 'overview' && <OverviewTab days={days} />}
         {tab === 'spend' && <SpendTab days={days} />}
         {tab === 'limits' && <LimitsTab days={days} />}

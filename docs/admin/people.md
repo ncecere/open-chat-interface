@@ -12,6 +12,16 @@ larger than one page.
 Sorting works the same way. Sorting by messages finds the heaviest users across
 the whole instance, not the heaviest fifty on this page.
 
+The list can also be opened already filtered to one role: the people count on
+[Roles & access](governance.md#roles-and-access) links here that way.
+
+### Changing a role from the list
+
+Each row has a role selector offering all four roles. A change applies as soon
+as you pick it, except one that grants or removes administrator access, which
+asks for confirmation first. You cannot remove your own administrator role; the
+server refuses and the reason is shown beside the control.
+
 ### Saved views
 
 A set of filters you return to — "restricted accounts", "unverified" — saved by
@@ -20,6 +30,9 @@ name and shown as a chip above the list.
 Views are **yours**, not the instance's. Two administrators looking at the same
 directory rarely want the same slice of it, and "accounts I still have to
 review" is a working note rather than configuration.
+
+Auditors do not see saved views, the role selector, or the bulk action bar;
+roles appear as plain labels.
 
 ## Looking at one person
 
@@ -30,31 +43,57 @@ have been doing, why they are hitting a limit, whether the account is behaving
 oddly.
 
 It shows their totals, storage, **active sessions with the address and client
-each came from**, recent conversation titles, and their audit trail — matched
-both as actor and as target, so something done *to* them appears beside things
-they did.
+each came from**, their limits, recent conversation titles, and their audit
+trail — matched both as actor and as target, so something done *to* them appears
+beside things they did. **See every event for this account** opens the audit log
+filtered to their address.
 
 Conversation **titles only**. An administrator managing an account has no reason
 to read its contents, and this page does not make that easy.
 
-**Sign out everywhere** ends every session. This is the right response to a
-suspected compromise; changing the password alone leaves existing sessions
-working.
+### Actions
+
+- **Role** — the same selector as the list, with the same confirmation for
+  granting or removing administrator access.
+- **Ban** asks for an optional reason, shown to administrators on the account.
+  The server ends every session for the account as part of the ban, so they are
+  signed out straight away. You cannot ban yourself. **Unban** lifts it; they
+  can then sign in again.
+- **Sign out everywhere** ends every session, and appears only when there is
+  one to end. This is the right response to a suspected compromise; changing the
+  password alone leaves existing sessions working. They can sign in again
+  straight away.
+
+### Limits
+
+What this person is held to right now, computed by the same code that enforces
+it:
+
+- **Budgets** — each usage budget that applies, with what has been used, what
+  remains, a progress bar, and when it resets. If no budget applies to their
+  role, their usage over the last 24 hours is shown instead.
+- **Storage** — bytes and files held against their role's allowance, and the
+  largest upload allowed. Files in the trash are listed separately and do not
+  count.
+
+**Adjust limits** sets per-person budget overrides (see below). **Role
+settings** opens [Roles & access](governance.md#roles-and-access) on their
+role, which is where the defaults come from.
 
 ## Bulk actions
 
 ![Selecting several accounts](../images/admin-users-bulk-actions.png)
 
-Select rows and the action bar appears. Roles, bans, and session revocation can
-be applied to a selection.
+Select rows and the action bar appears. A role can be applied to the selection,
+or the selection signed out or banned.
 
 Three behaviours worth knowing:
 
 - **You cannot include your own account.** Selecting only yourself is refused;
   selecting yourself alongside others silently skips you and says so. Locking
   yourself out mid-operation is not something the interface will help with.
-- **A ban revokes sessions in the same action**, because a ban that leaves the
-  session alive is not a ban until it expires.
+- **A ban revokes sessions in the same action**, exactly as a single-account ban
+  does.
 - **The audit entry names every account affected**, not just a count, so the
   action can be checked afterwards.
 
@@ -77,9 +116,13 @@ but you will have to deliver the link yourself.
 
 ## Per-person limits
 
-**Limits** beside an account sets a quota override for that individual, without
-changing the policy for their role.
+**Limits** beside an account in the list, or **Adjust limits** on their page,
+sets a budget override for that individual without changing the policy for their
+role.
 
 This is the answer to "my work needs more than the standard allowance". Use it
 rather than raising the limit for everybody, and set an expiry if the need is
 temporary — an override with no end date is one nobody will remember to remove.
+
+Storage allowance and rate limits are per role, not per person; change them on
+[Roles & access](governance.md#roles-and-access).

@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte, or, schema, sql } from '@oci/db';
+import { and, eq, isNull, lte, notInArray, or, schema, sql } from '@oci/db';
 import { PROTECTED_AUDIT_ACTIONS } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
@@ -150,7 +150,9 @@ export async function pruneAuditLog(now: Date = new Date()): Promise<number> {
     .where(
       and(
         lte(schema.auditLog.createdAt, cutoff),
-        sql`${schema.auditLog.action} <> all(${[...PROTECTED_AUDIT_ACTIONS]})`,
+        // Drizzle expands an interpolated array into a parameter list, which
+        // PostgreSQL rejects for `<> all(...)`; this always failed at runtime.
+        notInArray(schema.auditLog.action, [...PROTECTED_AUDIT_ACTIONS]),
       ),
     )
     .returning({ id: schema.auditLog.id });

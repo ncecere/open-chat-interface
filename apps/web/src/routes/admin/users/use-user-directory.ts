@@ -1,4 +1,4 @@
-import type { AdminUser } from '@oci/shared';
+import type { AdminUser, UserRole } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '~/lib/api-client';
@@ -15,22 +15,24 @@ interface UsersResponse {
   total: number;
 }
 
-export function useUserDirectory() {
+/** `initialRole` opens the list already filtered, e.g. from Roles & access. */
+export function useUserDirectory(initialRole?: UserRole) {
   const [state, setState] = useState<UserDirectoryFilters & { page: number }>({
     page: 0,
     search: '',
-    role: 'all',
+    role: initialRole ?? 'all',
     status: 'all',
     sort: 'created',
     direction: 'desc',
   });
   const { page, search, role, status, sort, direction } = state;
-  const { data, isLoading } = useQuery({
+  const query = useQuery({
     queryKey: ['admin', 'users', search, role, status, sort, direction, page],
     // Filtering and sorting describe every account, not just the loaded page.
     queryFn: () => api.get<UsersResponse>(`/admin/users?${userListParams(state, page)}`),
     placeholderData: (previous) => previous,
   });
+  const { data, isLoading } = query;
 
   function changeFilter(key: 'search' | 'role' | 'status', value: string) {
     setState((current) => ({ ...current, page: 0, [key]: value }));
@@ -55,6 +57,7 @@ export function useUserDirectory() {
     ...state,
     data,
     isLoading,
+    query,
     total,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
     firstOnPage: total === 0 ? 0 : page * PAGE_SIZE + 1,

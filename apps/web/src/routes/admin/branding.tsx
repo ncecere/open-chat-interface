@@ -1,4 +1,6 @@
 import {
+  COLOR_THEMES,
+  type ColorTheme,
   type InstanceSettings,
   instanceSettingsSchema,
   THEME_MODES,
@@ -6,8 +8,9 @@ import {
   updateInstanceSettingsSchema,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ImageIcon, Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
+import { Check, CheckCircle2, ImageIcon, Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -15,16 +18,26 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
+import { cn } from '~/lib/utils';
+import { useTheme } from '~/providers/theme-provider';
 
 type BrandingSettings = Pick<
   InstanceSettings,
-  'appName' | 'shortName' | 'logoUrl' | 'accentColor' | 'loginMessage' | 'defaultTheme'
+  'appName' | 'shortName' | 'logoUrl' | 'colorTheme' | 'loginMessage' | 'defaultTheme'
 >;
 type BrandingPatch = Partial<BrandingSettings>;
 type BrandingErrors = Partial<Record<keyof BrandingSettings, string>>;
 
-const DEFAULT_ACCENT = '#97124f';
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+/**
+ * The accent is one of the built-in color themes. The stored hex
+ * `accentColor` is not read by the app, so it is neither shown nor sent.
+ */
+const COLOR_THEME_LABELS: Record<ColorTheme, string> = {
+  neutral: 'Neutral',
+  blue: 'Blue',
+  violet: 'Violet',
+  emerald: 'Emerald',
+};
 
 const THEME_LABELS: Record<ThemeMode, string> = {
   light: 'Light',
@@ -43,7 +56,7 @@ function brandingFromResponse(settings: InstanceSettings): BrandingSettings {
     appName: settings.appName,
     shortName: settings.shortName,
     logoUrl: settings.logoUrl,
-    accentColor: settings.accentColor,
+    colorTheme: settings.colorTheme,
     loginMessage: settings.loginMessage,
     defaultTheme: settings.defaultTheme,
   };
@@ -54,7 +67,7 @@ function normalizeBranding(settings: BrandingSettings): BrandingSettings {
     appName: settings.appName.trim(),
     shortName: settings.shortName?.trim() || null,
     logoUrl: settings.logoUrl?.trim() || null,
-    accentColor: settings.accentColor?.trim().toLowerCase() || null,
+    colorTheme: settings.colorTheme,
     loginMessage: settings.loginMessage?.trim() || null,
     defaultTheme: settings.defaultTheme,
   };
@@ -68,7 +81,7 @@ function changedBranding(saved: BrandingSettings, draft: BrandingSettings): Bran
     'appName',
     'shortName',
     'logoUrl',
-    'accentColor',
+    'colorTheme',
     'loginMessage',
     'defaultTheme',
   ] as const) {
@@ -115,10 +128,6 @@ function validateBranding(settings: BrandingSettings): BrandingErrors {
     }
   }
 
-  if (normalized.accentColor && !HEX_COLOR.test(normalized.accentColor)) {
-    errors.accentColor = 'Use a six-digit hex color, such as #97124f.';
-  }
-
   if (normalized.loginMessage && normalized.loginMessage.length > 240) {
     errors.loginMessage = 'Login message must be 240 characters or fewer.';
   }
@@ -128,14 +137,6 @@ function validateBranding(settings: BrandingSettings): BrandingErrors {
   }
 
   return errors;
-}
-
-function textColorFor(background: string): string {
-  const red = Number.parseInt(background.slice(1, 3), 16);
-  const green = Number.parseInt(background.slice(3, 5), 16);
-  const blue = Number.parseInt(background.slice(5, 7), 16);
-  const luminance = (red * 299 + green * 587 + blue * 114) / 1_000;
-  return luminance > 150 ? '#211820' : '#ffffff';
 }
 
 function LoadingBranding() {
@@ -166,10 +167,6 @@ function LoadingBranding() {
 function BrandingPreview({ settings }: { settings: BrandingSettings }) {
   const [failedLogo, setFailedLogo] = useState<string | null>(null);
   const normalized = normalizeBranding(settings);
-  const accent =
-    normalized.accentColor && HEX_COLOR.test(normalized.accentColor)
-      ? normalized.accentColor
-      : DEFAULT_ACCENT;
   const logoUrl =
     normalized.logoUrl && isSafeImageUrl(normalized.logoUrl) ? normalized.logoUrl : null;
   const systemIsDark =
@@ -194,8 +191,15 @@ function BrandingPreview({ settings }: { settings: BrandingSettings }) {
         A safe approximation of the sign-in experience.
       </p>
       <div className="mt-5">
+        {/* The accent comes from the chosen theme's own tokens, in the
+            previewed light or dark variant, so it matches the live app. */}
         <div
-          className="flex min-h-96 items-center justify-center rounded-xl border border-black/10 p-5 transition-colors sm:p-8"
+          data-testid="branding-preview"
+          data-color-theme={normalized.colorTheme}
+          className={cn(
+            'flex min-h-96 items-center justify-center rounded-xl border border-black/10 p-5 transition-colors sm:p-8',
+            dark ? 'dark' : 'light',
+          )}
           style={{ backgroundColor: palette.background, color: palette.text }}
         >
           <div
@@ -214,8 +218,7 @@ function BrandingPreview({ settings }: { settings: BrandingSettings }) {
                 />
               ) : (
                 <div
-                  className="flex size-11 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: accent, color: textColorFor(accent) }}
+                  className="flex size-11 items-center justify-center rounded-xl bg-[var(--accent)] text-[var(--accent-foreground)]"
                   aria-hidden="true"
                 >
                   <ImageIcon className="size-5" />
@@ -234,18 +237,14 @@ function BrandingPreview({ settings }: { settings: BrandingSettings }) {
             <div className="mt-6 space-y-3" aria-hidden="true">
               <div className="h-9 rounded-lg border border-black/15" />
               <div className="h-9 rounded-lg border border-black/15" />
-              <div
-                className="flex h-9 items-center justify-center rounded-lg text-sm font-medium"
-                style={{ backgroundColor: accent, color: textColorFor(accent) }}
-              >
+              <div className="flex h-9 items-center justify-center rounded-lg bg-[var(--accent)] text-sm font-medium text-[var(--accent-foreground)]">
                 Sign in
               </div>
             </div>
           </div>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">
-          External logo previews are loaded by your browser without sending a referrer. Final colors
-          may vary slightly by theme.
+          External logo previews are loaded by your browser without sending a referrer.
         </p>
       </div>
     </div>
@@ -254,6 +253,7 @@ function BrandingPreview({ settings }: { settings: BrandingSettings }) {
 
 function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }) {
   const queryClient = useQueryClient();
+  const { resolvedTheme, setColorTheme } = useTheme();
   const [saved, setSaved] = useState(() => normalizeBranding(initialSettings));
   const [draft, setDraft] = useState(() => normalizeBranding(initialSettings));
   const [errors, setErrors] = useState<BrandingErrors>({});
@@ -276,6 +276,10 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
       queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
         current ? { ...current, ...changes } : current,
       );
+      // Apply a new accent immediately rather than at the next status refetch;
+      // the refetch also carries the name, logo and default theme to the app.
+      if (changes.colorTheme) setColorTheme(changes.colorTheme);
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'status'] });
     },
     onError: (error) => {
       setSavedMessage(false);
@@ -318,6 +322,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
         <div className="flex min-w-0 flex-col gap-8">
           <SettingsSection
+            stacked
             title="Identity"
             description="Set the name and logo shown to people using this instance."
           >
@@ -393,50 +398,66 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
           </SettingsSection>
 
           <SettingsSection
+            stacked
             title="Appearance"
-            description="Choose the default color and theme for the experience."
+            description="Choose the accent color and the default light or dark theme."
           >
             <div className="flex flex-col gap-5">
-              <Field
-                label="Accent color"
-                htmlFor="accent-color"
-                hint="Optional six-digit hex color. Clear it to use the OCI default."
-              >
-                <div className="flex gap-2">
-                  <Input
-                    id="accent-color"
-                    value={draft.accentColor ?? ''}
-                    placeholder={DEFAULT_ACCENT}
-                    spellCheck={false}
-                    disabled={save.isPending}
-                    aria-invalid={Boolean(errors.accentColor)}
-                    aria-describedby={errors.accentColor ? 'accent-color-error' : undefined}
-                    onChange={(event) => updateField('accentColor', event.target.value || null)}
-                  />
-                  <input
-                    type="color"
-                    aria-label="Choose accent color"
-                    className="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] p-1 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={
-                      draft.accentColor && HEX_COLOR.test(draft.accentColor)
-                        ? draft.accentColor
-                        : DEFAULT_ACCENT
-                    }
-                    disabled={save.isPending}
-                    onChange={(event) => updateField('accentColor', event.target.value)}
-                  />
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="mb-1.5 text-sm font-medium text-[var(--text-primary)]">
+                  Accent color
+                </legend>
+                <div className="flex flex-wrap gap-3">
+                  {COLOR_THEMES.map((theme) => {
+                    const selected = draft.colorTheme === theme;
+                    return (
+                      <label
+                        key={theme}
+                        data-color-theme={theme}
+                        className={cn(
+                          'flex cursor-pointer items-center gap-2.5 rounded-xl border px-4 py-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--accent)]',
+                          // Accent tokens differ between light and dark, so a
+                          // swatch carries the active mode to show the right one.
+                          resolvedTheme,
+                          selected
+                            ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                            : 'border-[var(--border-subtle)] hover:bg-[var(--bg-control)]/50',
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="color-theme"
+                          value={theme}
+                          checked={selected}
+                          disabled={save.isPending}
+                          className="sr-only"
+                          onChange={() => updateField('colorTheme', theme)}
+                        />
+                        <span
+                          aria-hidden="true"
+                          className="flex size-6 items-center justify-center rounded-full bg-[var(--accent)]"
+                        >
+                          {selected && (
+                            <Check className="size-3.5 text-[var(--accent-foreground)]" />
+                          )}
+                        </span>
+                        <span className="text-sm font-medium text-[var(--text-primary)]">
+                          {COLOR_THEME_LABELS[theme]}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
-                {errors.accentColor && (
-                  <p id="accent-color-error" role="alert" className="text-xs text-[var(--danger)]">
-                    {errors.accentColor}
-                  </p>
-                )}
-              </Field>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Applied to buttons, links and highlights across the instance. Surfaces stay
+                  neutral.
+                </p>
+              </fieldset>
 
               <Field
                 label="Default theme"
                 htmlFor="default-theme"
-                hint="System follows each person's operating system preference."
+                hint="Used by anyone who has not picked a theme themselves. System follows each person's operating system preference."
               >
                 <Select
                   id="default-theme"
@@ -453,6 +474,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
           </SettingsSection>
 
           <SettingsSection
+            stacked
             title="Sign-in message"
             description="Add a short welcome or usage notice to the sign-in page."
           >
@@ -484,34 +506,36 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
         <BrandingPreview settings={draft} />
       </div>
 
-      <div className="mt-8 flex min-h-10 flex-col-reverse gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
-        <div className="sm:mr-auto" aria-live="polite">
-          {errorMessage && (
-            <p role="alert" className="text-sm text-[var(--danger)]">
-              {errorMessage}
-            </p>
-          )}
-          {savedMessage && (
-            <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
-              <CheckCircle2 className="size-4" aria-hidden="true" />
-              Branding settings saved.
-            </p>
-          )}
+      <EditOnly>
+        <div className="mt-8 flex min-h-10 flex-col-reverse gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
+          <div className="sm:mr-auto" aria-live="polite">
+            {errorMessage && (
+              <p role="alert" className="text-sm text-[var(--danger)]">
+                {errorMessage}
+              </p>
+            )}
+            {savedMessage && (
+              <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
+                <CheckCircle2 className="size-4" aria-hidden="true" />
+                Branding settings saved.
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!hasChanges || save.isPending}
+            onClick={resetForm}
+          >
+            <RotateCcw aria-hidden="true" />
+            Reset
+          </Button>
+          <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
+            {save.isPending && <Spinner />}
+            {save.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={!hasChanges || save.isPending}
-          onClick={resetForm}
-        >
-          <RotateCcw aria-hidden="true" />
-          Reset
-        </Button>
-        <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
-          {save.isPending && <Spinner />}
-          {save.isPending ? 'Saving…' : 'Save changes'}
-        </Button>
-      </div>
+      </EditOnly>
     </form>
   );
 }
@@ -604,7 +628,7 @@ export function AdminBrandingPage() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div>
       <AdminPageHeader
         title="Branding"
         description="Customize the identity and default appearance of your Open Chat Interface instance."
@@ -613,7 +637,7 @@ export function AdminBrandingPage() {
       {settings.isLoading ? (
         <LoadingBranding />
       ) : settings.isError || !settings.data ? (
-        <div className="max-w-3xl">
+        <div>
           <p role="alert" className="text-sm text-[var(--danger)]">
             {settings.error instanceof ApiError
               ? settings.error.message

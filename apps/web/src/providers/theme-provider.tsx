@@ -16,6 +16,14 @@ const BORING_STORAGE_KEY = 'oci.boring';
  * flash of the default accent before /auth/status resolves.
  */
 const COLOR_THEME_STORAGE_KEY = 'oci.colorTheme';
+/**
+ * The administrator's default light/dark theme, cached for the same reason.
+ * Kept apart from THEME_STORAGE_KEY, which only ever holds a person's own
+ * explicit choice, so the instance default never masquerades as one.
+ */
+const INSTANCE_THEME_STORAGE_KEY = 'oci.instanceTheme';
+/** Used before the instance default is known and when nothing is cached. */
+const FALLBACK_THEME: ThemeMode = 'dark';
 
 interface ThemeContextValue {
   theme: ThemeMode;
@@ -25,6 +33,11 @@ interface ThemeContextValue {
   setTheme: (theme: ThemeMode) => void;
   setBoringMode: (enabled: boolean) => void;
   setColorTheme: (theme: ColorTheme) => void;
+  /**
+   * The instance default from branding. Applies only while this person has
+   * not chosen a theme; an explicit choice through setTheme always wins.
+   */
+  setInstanceDefaultTheme: (theme: ThemeMode) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -33,9 +46,16 @@ function systemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function readStoredTheme(): ThemeMode {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+function asThemeMode(value: string | null): ThemeMode | null {
+  return value === 'light' || value === 'dark' || value === 'system' ? value : null;
+}
+
+function readStoredTheme(): ThemeMode | null {
+  return asThemeMode(localStorage.getItem(THEME_STORAGE_KEY));
+}
+
+function readInstanceTheme(): ThemeMode {
+  return asThemeMode(localStorage.getItem(INSTANCE_THEME_STORAGE_KEY)) ?? FALLBACK_THEME;
 }
 
 function readStoredColorTheme(): ColorTheme {
@@ -44,7 +64,9 @@ function readStoredColorTheme(): ColorTheme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>(readStoredTheme);
+  const [userTheme, setUserTheme] = useState<ThemeMode | null>(readStoredTheme);
+  const [instanceTheme, setInstanceTheme] = useState<ThemeMode>(readInstanceTheme);
+  const theme = userTheme ?? instanceTheme;
   const [boringMode, setBoringState] = useState(
     () => localStorage.getItem(BORING_STORAGE_KEY) === 'true',
   );
@@ -71,7 +93,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: ThemeMode) => {
     localStorage.setItem(THEME_STORAGE_KEY, next);
-    setThemeState(next);
+    setUserTheme(next);
+  }, []);
+
+  const setInstanceDefaultTheme = useCallback((next: ThemeMode) => {
+    localStorage.setItem(INSTANCE_THEME_STORAGE_KEY, next);
+    setInstanceTheme(next);
   }, []);
 
   const setBoringMode = useCallback((enabled: boolean) => {
@@ -93,8 +120,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setTheme,
       setBoringMode,
       setColorTheme,
+      setInstanceDefaultTheme,
     }),
-    [theme, resolvedTheme, boringMode, colorTheme, setTheme, setBoringMode, setColorTheme],
+    [
+      theme,
+      resolvedTheme,
+      boringMode,
+      colorTheme,
+      setTheme,
+      setBoringMode,
+      setColorTheme,
+      setInstanceDefaultTheme,
+    ],
   );
 
   return <ThemeContext value={value}>{children}</ThemeContext>;

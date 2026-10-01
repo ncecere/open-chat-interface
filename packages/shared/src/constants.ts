@@ -90,6 +90,10 @@ export const PROTECTED_AUDIT_ACTIONS = [
   'user.update',
   'user.delete',
   'user.role.change',
+  // Bulk access changes name every affected account in one entry.
+  'user.bulk.set_role',
+  'user.bulk.ban',
+  'user.bulk.unban',
   'provider.create',
   'provider.update',
   'provider.delete',

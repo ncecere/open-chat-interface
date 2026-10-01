@@ -10,26 +10,34 @@ import { capture, gotoAdmin, signIn } from './helpers';
  */
 const PAGES: { route: string; heading: string; name: string }[] = [
   { route: '/admin', heading: 'Overview', name: 'admin-overview' },
-  { route: '/admin/settings', heading: 'Instance settings', name: 'admin-settings' },
-  { route: '/admin/branding', heading: 'Branding', name: 'admin-branding' },
-  { route: '/admin/broadcasts', heading: 'Announcements', name: 'admin-announcements' },
 
   { route: '/admin/invites', heading: 'Invitations', name: 'admin-invitations' },
-  { route: '/admin/sso', heading: 'Auth & SSO', name: 'admin-sso' },
+  { route: '/admin/roles', heading: 'Roles & access', name: 'admin-roles' },
+
+  { route: '/admin/models', heading: 'Providers & models', name: 'admin-models' },
+  { route: '/admin/quotas', heading: 'Usage budgets', name: 'admin-quotas' },
+
+  {
+    route: '/admin/settings/authentication',
+    heading: 'Authentication',
+    name: 'admin-settings-authentication',
+  },
+  { route: '/admin/settings/email', heading: 'Email delivery', name: 'admin-settings-email' },
   { route: '/admin/policies', heading: 'Acceptable use', name: 'admin-policies' },
-  { route: '/admin/providers', heading: 'Providers & Keys', name: 'admin-providers' },
-  { route: '/admin/models', heading: 'Model catalog', name: 'admin-models' },
-  { route: '/admin/usage', heading: 'Usage', name: 'admin-usage' },
-  { route: '/admin/quotas', heading: 'Usage quotas', name: 'admin-quotas' },
-  { route: '/admin/storage-limits', heading: 'Storage limits', name: 'admin-storage-limits' },
-  { route: '/admin/rate-limits', heading: 'Rate limits', name: 'admin-rate-limits' },
-  { route: '/admin/retention', heading: 'Retention', name: 'admin-retention' },
-  { route: '/admin/reports', heading: 'Scheduled reports', name: 'admin-reports' },
-  { route: '/admin/search', heading: 'Search', name: 'admin-search' },
+
   { route: '/admin/storage', heading: 'Storage', name: 'admin-storage' },
-  { route: '/admin/health', heading: 'Health', name: 'admin-health' },
-  { route: '/admin/maintenance', heading: 'Maintenance', name: 'admin-maintenance' },
+  { route: '/admin/retention', heading: 'Retention', name: 'admin-retention' },
+  { route: '/admin/health', heading: 'System health', name: 'admin-health' },
+
+  { route: '/admin/usage', heading: 'Usage', name: 'admin-usage' },
+  { route: '/admin/reports', heading: 'Scheduled reports', name: 'admin-reports' },
   { route: '/admin/audit', heading: 'Audit log', name: 'admin-audit' },
+
+  // The General settings page keeps the historical image name.
+  { route: '/admin/settings/general', heading: 'General', name: 'admin-settings' },
+  { route: '/admin/branding', heading: 'Branding', name: 'admin-branding' },
+  { route: '/admin/broadcasts', heading: 'Announcements', name: 'admin-announcements' },
+  { route: '/admin/search', heading: 'Web search', name: 'admin-search' },
 ];
 
 /**
@@ -110,10 +118,11 @@ test.describe('administration', () => {
   });
 
   test('captures the single sign-on provider form', async ({ page }) => {
-    await gotoAdmin(page, '/admin/sso', 'Auth & SSO');
+    // Single sign-on is a section of the Authentication page.
+    await gotoAdmin(page, '/admin/settings/authentication', 'Authentication');
     await page
-      .getByRole('button', { name: /add provider/i })
-      .first()
+      .locator('#single-sign-on')
+      .getByRole('button', { name: 'Add provider', exact: true })
       .click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await capture(page, 'admin-sso-provider-form');
