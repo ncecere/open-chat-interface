@@ -45,7 +45,43 @@ anything.
   cannot read one and get a reply that never mentions it.
 - **Visible to roles** — which roles see it. This is how an expensive model is
   kept to the people who need it.
-- **Max output tokens** — applied to every request to that model.
+- **Context window** — used to budget provider input. If unset, the application
+  uses a 32,768-unit fallback. Keep it aligned with the upstream model.
+- **Max output tokens** — reserved before input selection and explicitly passed
+  on every request. If unset, the default is 4,096, or one quarter of a smaller
+  context window. A configured output cap that leaves no input space is rejected.
+
+For budgeted Anthropic thinking models, the output limit includes both thinking
+and the visible answer. The application allocates 10%, 30% or 60% to low, medium
+or high thinking, with a 1,024-token minimum and some answer capacity retained.
+The installed adapter adds thinking to its answer limit, so OCI subtracts it
+from that SDK parameter first. Known adapter output ceilings are also respected.
+Limits of 1,024 or less cannot enable legacy thinking: choose Instant or increase
+the configured limit. Adaptive models keep the SDK's adaptive effort control.
+
+### Input safety ceilings
+
+Input selection reserves output space and a 512-unit framing margin, then keeps
+a contiguous recent suffix of whole turns. Text is estimated conservatively from
+UTF-8 bytes plus framing, not a provider-specific tokenizer. Images receive an
+8,192-unit allowance each; provider-specific limits can still reject a request.
+
+The application caps input at 128,000 estimated units, scans at most 129 recent
+message descriptors to select at most 128 historical messages, and selects at
+most 512 KiB of serialized stored message parts. File metadata is inspected
+before contents are loaded. A request can include at most 32 files and 20 MiB of
+image data in its selected context, independently of upload/storage limits.
+
+Required latest-turn content, system instructions and current search grounding
+are never silently shortened. Oversized required input is rejected before the
+new prompt is persisted. Older history may be omitted, with a notice on the
+reply. These are safety bounds, not precise token counts or latency measurements.
+
+Ready payloads are immutable through normal application writes. Storage corruption
+or out-of-band mutation is different: blob reads currently buffer before checking
+actual length, and stored message reads check aggregate size after individually
+bounded rows arrive. The acceptance limits are not hard peak-memory guarantees
+when stored contents diverge from their inspected metadata.
 
 ### The default model
 

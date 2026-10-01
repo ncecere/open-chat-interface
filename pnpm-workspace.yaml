@@ -8,6 +8,9 @@ overrides:
   '@xmldom/xmldom@>=0.8.0 <0.8.15': '0.8.15'
   # Security baseline: patch vulnerable 3.x ID generators without downgrading newer safe versions.
   'nanoid@>=3.0.0 <3.3.18': '3.3.18'
+  # Patch SDK transport and Markdown dependencies without changing SDK majors or newer safe versions.
+  'undici@>=7.0.0 <7.29.1': '7.29.1'
+  'dompurify@>=3.0.0 <3.4.16': '3.4.16'
 
 allowBuilds:
   esbuild: true
@@ -33,3 +36,6 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/mcp@2.0.27'
   - '@ai-sdk/react@4.0.58'
   - '@aws-sdk/client-s3@3.1105.0'
+
+patchedDependencies:
+  postgres@3.4.9: patches/postgres@3.4.9.patch

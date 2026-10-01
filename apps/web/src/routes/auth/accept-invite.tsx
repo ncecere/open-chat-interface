@@ -1,5 +1,6 @@
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -188,6 +189,7 @@ export function AcceptInvitePage() {
                   ? 'Check your email to verify your address before signing in.'
                   : 'Your invitation has been accepted. You can sign in now.'}
               </p>
+              {verificationRequired && <ResendVerification email={email} />}
               <Button
                 variant="primary"
                 className="w-full"

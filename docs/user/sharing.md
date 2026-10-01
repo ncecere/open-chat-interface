@@ -29,6 +29,11 @@ Deleting the link makes it stop working immediately. Anybody who opened it
 before that keeps whatever they saved or copied — revoking removes access, not
 memory.
 
+Deleting a conversation, including automatic retention cleanup, also revokes
+its links. Restoring the conversation does **not** reactivate those links. To
+share it again, create a new link. Links to temporary conversations stop serving
+content when the conversation expires, even before background cleanup runs.
+
 ## Before you share
 
 The link needs no account, so treat it as public. If a conversation contains

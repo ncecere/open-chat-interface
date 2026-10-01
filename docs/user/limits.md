@@ -30,6 +30,11 @@ Depends on how it was configured:
 
 Settings shows which applies and when the next reset is.
 
+In-progress replies reserve some allowance. If a model does not report its
+usage, that estimate remains held until complete usage arrives or the request
+falls outside your quota window. Cancelling a reply does not necessarily make
+it free.
+
 ## Different limits for different models
 
 A limit may apply to specific models rather than everything. An instance often
@@ -44,9 +49,9 @@ Attachments count against a separate allowance, also shown as a percentage. It
 measures what you are holding right now, not what you have ever uploaded, so
 deleting files frees space.
 
-Deleting the conversation does not free space immediately, because a deleted
-conversation stays recoverable for a period. To reclaim space now, delete the
-files from [Settings → Attachments](settings.md#attachments).
+Moving a conversation to trash also frees its files' allowance immediately.
+Restoring it requires enough free space again. In-progress uploads reserve
+allowance too. Manage files in [Settings → Attachments](settings.md#attachments).
 
 ## Rate limits
 

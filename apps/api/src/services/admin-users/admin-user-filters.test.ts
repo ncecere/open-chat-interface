@@ -217,16 +217,15 @@ describe('individual user mutations', () => {
     role: 'restricted' as const,
   };
 
-  it('keeps the restricted-role override and verification delivery fallback', async () => {
+  it('keeps the restricted-role override without waiving failed verification', async () => {
     mocks.isEmailVerificationEnforced.mockResolvedValue(true);
     mocks.sendVerificationEmail.mockRejectedValue(new Error('Delivery failed'));
     const roleUpdate = query();
-    const verificationUpdate = query();
-    mocks.db.update.mockReturnValueOnce(roleUpdate).mockReturnValueOnce(verificationUpdate);
+    mocks.db.update.mockReturnValueOnce(roleUpdate);
     expect(await createUser(actor, input)).toEqual({ id: 'target' });
     expect(mocks.createUser).toHaveBeenCalledWith({ body: { ...input, role: 'user' } });
     expect(roleUpdate.set).toHaveBeenCalledWith({ role: 'restricted' });
-    expect(verificationUpdate.set).toHaveBeenCalledWith({ emailVerified: true });
+    expect(mocks.db.update).toHaveBeenCalledTimes(1);
     expect(mocks.sendVerificationEmail).toHaveBeenCalledWith({
       body: { email: input.email, callbackURL: '/' },
     });
@@ -253,6 +252,13 @@ describe('individual user mutations', () => {
         metadata: { email: input.email, role: 'auditor' },
       }),
     );
+  });
+
+  it('does not create an account when verification policy is unavailable', async () => {
+    mocks.isEmailVerificationEnforced.mockRejectedValue(new Error('Policy unavailable'));
+    await expect(createUser(actor, input)).rejects.toThrow('Policy unavailable');
+    expect(mocks.createUser).not.toHaveBeenCalled();
+    expect(mocks.db.update).not.toHaveBeenCalled();
   });
 
   it('rejects duplicate creation before contacting Better Auth', async () => {

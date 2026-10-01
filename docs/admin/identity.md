@@ -27,6 +27,34 @@ deliberately, so the setting cannot lock everybody out. That safety net depends
 on at least one administrator having a verified address and a password somebody
 knows — check that before turning it off.
 
+### Required email verification
+
+When required, local signup does not issue a session until the address is
+verified. Missing SMTP, rejected delivery, and unavailable authentication
+settings do not waive the requirement. Invitations and administrator-created
+accounts also remain unverified when delivery fails.
+
+Configure and test SMTP before enabling this setting. After delivery recovers,
+users can **Resend verification email** from the signup or invitation confirmation,
+or after an unverified sign-in is refused. They do not need a new account or
+invitation. A resend confirmation is not proof that a message reached the inbox.
+
+Already-verified administrators retain the local recovery path when settings
+cannot be read. If needed, use the operator-only
+[recovery CLI](../OPERATIONS.md#getting-back-in-when-sign-on-fails); an unverified
+administrator does not receive an automatic exemption.
+
+Explicitly disabling verification still permits local accounts without email
+proof and marks newly created accounts verified. Enabling it later does not
+retroactively revoke those accounts or existing sessions. Review accounts created
+under older versions during delivery failures: historical `emailVerified` flags
+do not distinguish actual email proof from the previous delivery-failure fallback.
+Audit verification “success” events are not sufficient proof either: some token
+errors redirect and are recorded as successful HTTP outcomes. Do not bulk change
+flags or sessions based on dates or absent logs. See the
+[historical evidence assessment](../dev/email-verification-provenance.md) before
+planning account re-verification.
+
 ### Session length
 
 Two settings, under Authentication:

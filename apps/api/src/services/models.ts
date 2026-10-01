@@ -42,6 +42,7 @@ export async function listAvailableModels(role: UserRole): Promise<CatalogModel[
 }
 
 interface ResolvedModel {
+  contextWindow: number | null;
   languageModel: ReturnType<typeof createLanguageModel>;
   slug: string;
   displayName: string;
@@ -84,6 +85,7 @@ export async function resolveModelForRole(slug: string, role: UserRole): Promise
   }
 
   return {
+    contextWindow: row.model.contextWindow,
     languageModel: createLanguageModel(credentials, row.model.upstreamModelId),
     slug: row.model.slug,
     displayName: row.model.displayName,

@@ -15,6 +15,10 @@ and [Release process](../RELEASING.md) for GitHub Actions and GHCR publishing.
 7. [Adding a feature](adding-a-feature.md) — a worked example, end to end.
 8. [Screenshots](screenshots.md) — regenerating the documentation images.
 9. [Maintainability review](maintainability-review.md) — module boundaries, repeatable structural inventory, and unresolved findings.
+10. [Chat performance and application review](chat-performance-review.md) — memoization guardrails, measured render work, and prioritized remaining risks.
+11. [Browser performance evidence](browser-performance.md) — isolated production-build comparisons, startup chunk adjustment, measured tradeoffs, and reproducible harness.
+12. [Historical verification evidence](email-verification-provenance.md) — provenance limits, safe aggregate inspection, and owner decisions before account-access changes.
+13. [Release validation checkpoint](release-validation.md) — full live-service/browser results, corrected onboarding coverage, isolated source-built MinIO, and remaining gates.
 
 ## The shape of it
 

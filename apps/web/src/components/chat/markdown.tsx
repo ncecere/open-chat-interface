@@ -1,4 +1,4 @@
-import { type ComponentProps, lazy, Suspense } from 'react';
+import { type ComponentProps, lazy, memo, Suspense } from 'react';
 import { MARKDOWN_LINK_SAFETY } from '~/components/chat/external-link-warning';
 import { cn } from '~/lib/utils';
 
@@ -94,7 +94,14 @@ export const MARKDOWN_PROSE = cn(
   '[&_li::marker]:text-[var(--accent-bright)]',
 );
 
-export function Markdown({ children, className, skipHtml, urlTransform }: MarkdownProps) {
+// Cache at the wrapper boundary, before normalization and the lazy renderer.
+// Safety props and URL transforms participate in the default shallow comparison.
+export const Markdown = memo(function Markdown({
+  children,
+  className,
+  skipHtml,
+  urlTransform,
+}: MarkdownProps) {
   return (
     <Suspense fallback={<div className={cn('whitespace-pre-wrap', className)}>{children}</div>}>
       <StreamdownMarkdown className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
@@ -102,4 +109,4 @@ export function Markdown({ children, className, skipHtml, urlTransform }: Markdo
       </StreamdownMarkdown>
     </Suspense>
   );
-}
+});

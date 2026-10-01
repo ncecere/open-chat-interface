@@ -1,0 +1,74 @@
+diff --git a/cjs/src/connection.js b/cjs/src/connection.js
+index 07f6716702ac888215c86ad6e0071aaf55ae519c..c64af3067bed2004d69ff00040d8f685e901f130 100644
+--- a/cjs/src/connection.js
++++ b/cjs/src/connection.js
+@@ -419,7 +419,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     )
+   }
+ 
+-  function terminate() {
++  function terminate(force = false) {
+     terminated = true
+     if (stream || query || initial || sent.length)
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+@@ -428,7 +428,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+-      socket.readyState === 'open' && socket.end(b().X().end())
++      force
++        ? socket.destroy()
++        : socket.readyState === 'open' && socket.end(b().X().end())
+     }
+     ended && (ended(), ending = ended = null)
+   }
+diff --git a/cjs/src/index.js b/cjs/src/index.js
+index f09c61c7e998f411560b95c9a8e1ed6a97972c11..4d4f0e9789827b8ae16c9f9dcad949f62b0abe35 100644
+--- a/cjs/src/index.js
++++ b/cjs/src/index.js
+@@ -382,7 +382,7 @@ function Postgres(a, b) {
+   }
+ 
+   async function destroy(resolve) {
+-    await Promise.all(connections.map(c => c.terminate()))
++    await Promise.all(connections.map(c => c.terminate(true)))
+     while (queries.length)
+       queries.shift().reject(Errors.connection('CONNECTION_DESTROYED', options))
+     resolve()
+diff --git a/src/connection.js b/src/connection.js
+index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..f1c22efc6605b8282027e4d14f384580b1e98731 100644
+--- a/src/connection.js
++++ b/src/connection.js
+@@ -419,7 +419,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     )
+   }
+ 
+-  function terminate() {
++  function terminate(force = false) {
+     terminated = true
+     if (stream || query || initial || sent.length)
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+@@ -428,7 +428,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+-      socket.readyState === 'open' && socket.end(b().X().end())
++      force
++        ? socket.destroy()
++        : socket.readyState === 'open' && socket.end(b().X().end())
+     }
+     ended && (ended(), ending = ended = null)
+   }
+diff --git a/src/index.js b/src/index.js
+index c7fba3dace20173f4cb13f3f138bb6d213b43683..35c88530751a53b01ee1358f54b7f1e6876a5488 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -382,7 +382,7 @@ function Postgres(a, b) {
+   }
+ 
+   async function destroy(resolve) {
+-    await Promise.all(connections.map(c => c.terminate()))
++    await Promise.all(connections.map(c => c.terminate(true)))
+     while (queries.length)
+       queries.shift().reject(Errors.connection('CONNECTION_DESTROYED', options))
+     resolve()

@@ -1,6 +1,7 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -17,15 +18,18 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setNeedsVerification(false);
     setSubmitting(true);
 
     const result = await authClient.signIn.email({ email, password });
 
     if (result.error) {
+      setNeedsVerification(result.error.code === 'EMAIL_NOT_VERIFIED');
       setError(result.error.message ?? 'Unable to sign in. Check your email and password.');
       setSubmitting(false);
       return;
@@ -144,6 +148,7 @@ export function LoginPage() {
                 {submitting ? <Spinner className="text-white" /> : <KeyRound />}
                 Sign in
               </Button>
+              {needsVerification && <ResendVerification key={email} email={email} />}
               {status?.localAuthEnabled && status.smtpConfigured && (
                 <Link
                   to="/auth/forgot-password"

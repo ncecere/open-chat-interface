@@ -14,7 +14,6 @@ import {
   isChatRunCancellationRequested,
   registerLocalChatRun,
 } from '../chat-streams.js';
-import { reasoningCallSettings } from '../reasoning.js';
 import { touchThread } from '../threads.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { failRunSetup, releaseRunHandles } from './run-cleanup.js';
@@ -23,7 +22,7 @@ import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
 type RunOutcome = { status: Exclude<ChatRunStatus, 'active'>; error?: string };
 
 async function persistAssistant(
-  { thread, user, resolved }: PreparedTurn,
+  { thread, user }: PreparedTurn,
   { assistantMessage, startedAt, reservation }: AcquiredRun,
   responseMessage: UIMessage,
   status: RunOutcome['status'],
@@ -63,7 +62,7 @@ async function persistAssistant(
   // Attempt both operations, but never replace the initiating persistence error
   // with a secondary settlement error. Report the latter separately.
   try {
-    await settleUsage(reservation, usage ?? null, { userId: user.id, modelSlug: resolved.slug });
+    await settleUsage(reservation, usage ?? null);
   } catch (error) {
     logger.error(
       { error, threadId: thread.id, reservationId: reservation?.id },
@@ -94,8 +93,7 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
       system,
       messages,
       abortSignal: abortController.signal,
-      ...(resolved.maxOutputTokens ? { maxOutputTokens: resolved.maxOutputTokens } : {}),
-      ...reasoningCallSettings(input.effort, resolved.providerKind),
+      ...turn.generationSettings,
       onChunk: async () => {
         if (Date.now() - lastCancellationCheck < 500) return;
         lastCancellationCheck = Date.now();
@@ -122,6 +120,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
           type: 'start',
           messageMetadata: { modelSlug: resolved.slug, effort: input.effort ?? null },
         });
+        if (turn.contextLimited)
+          writer.write({ type: 'data-context-window', data: { limited: true } });
         if (searchGroundingPart) writer.write(searchGroundingPart);
         for (const source of sourceParts) writer.write(source);
         writer.merge(
@@ -162,6 +162,7 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
       stream: responseStream,
       headers: {
         'X-OCI-Chat-Run-Id': runIdentity.runId,
+        'X-OCI-Prompt-Message-Id': turn.promptMessageId,
         'X-OCI-Stream-Persistence': persistence === 'available' ? 'redis' : 'unavailable',
       },
       ...(persistence === 'available'

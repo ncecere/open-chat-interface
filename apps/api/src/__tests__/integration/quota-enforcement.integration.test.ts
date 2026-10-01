@@ -1,3 +1,4 @@
+import { schema } from '@oci/db';
 import { MICROS_PER_DOLLAR } from '@oci/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -97,11 +98,16 @@ function runTransaction() {
   mocks.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
     fn({
       execute: mocks.execute,
-      select: mocks.select,
+      select: (...args: unknown[]) => ({
+        from: (table: unknown) =>
+          table === schema.user
+            ? { where: () => ({ for: async () => [{ id: 'user-1' }] }) }
+            : mocks.select(...args).from(table),
+      }),
       insert: () => ({
         values: (row: Record<string, unknown>) => {
           reservedRow = row;
-          return { returning: () => Promise.resolve([{ id: 'reservation-1' }]) };
+          return { returning: () => Promise.resolve([{ id: row.id ?? 'reservation-1' }]) };
         },
       }),
     }),
@@ -118,13 +124,25 @@ describe('integration with mocked DB: quota reservation', () => {
     runTransaction();
   });
 
-  it('writes no reservation when no policy applies to the role', async () => {
-    mocks.select.mockReturnValueOnce(policyQuery([]));
-
+  it('gives unlimited runs a durable identity without reserving estimated spend', async () => {
+    mocks.select.mockReturnValueOnce(policyQuery([])).mockReturnValueOnce(tableQuery([unpriced]));
     await expect(
-      reserveQuotaForRun({ userId: 'user-1', role: 'user', modelSlug: 'm' }),
-    ).resolves.toBeNull();
-    expect(mocks.transaction).not.toHaveBeenCalled();
+      reserveQuotaForRun({
+        userId: 'user-1',
+        role: 'user',
+        modelSlug: 'm',
+        runId: 'run-unlimited',
+      }),
+    ).resolves.toMatchObject({ id: 'run-unlimited' });
+    expect(reservedRow).toMatchObject({
+      id: 'run-unlimited',
+      pending: true,
+      usageUnknown: true,
+      messageCount: 1,
+      reservedCostMicros: 0,
+      reservedTokens: 0,
+    });
+    expect(mocks.getReserveAmounts).not.toHaveBeenCalled();
   });
 
   it('reserves when usage is strictly below the limit', async () => {

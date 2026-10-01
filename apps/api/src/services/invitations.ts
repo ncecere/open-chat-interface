@@ -173,14 +173,10 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{
         .limit(1);
       emailVerificationRequired = !user?.emailVerified;
     } catch (error) {
-      // Delivery/configuration errors must not strand an account behind a
-      // verification requirement it cannot satisfy.
+      // Redemption stays complete, but delivery failure is not ownership proof.
+      // The account can request another verification email once delivery recovers.
       logger.error({ error, userId: redeemed.userId }, 'Invite verification email failed');
-      await db
-        .update(schema.user)
-        .set({ emailVerified: true })
-        .where(eq(schema.user.id, redeemed.userId));
-      emailVerificationRequired = false;
+      emailVerificationRequired = true;
     }
   }
 

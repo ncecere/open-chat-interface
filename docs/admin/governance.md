@@ -59,9 +59,10 @@ temporary.
 How much each role may hold in attachments.
 
 Storage is a **gauge, not a flow**: it measures what somebody holds now, not
-what they have ever uploaded. Deleting files frees space; deleting a
-conversation does not, immediately, because a deleted conversation stays
-recoverable for a period first.
+what they have ever uploaded. In-progress uploads reserve space. Deleting files
+or moving their conversation to trash frees allowance immediately, even while
+the objects remain recoverable. Restoring a conversation requires enough free
+allowance for its files.
 
 ## Rate limits
 
@@ -74,8 +75,16 @@ overwhelming the instance, and a person working normally should never meet one.
 
 The concurrency cap does double duty: it bounds how far a quota can be overshot
 by simultaneous requests, since each reserves budget before anybody knows what
-it will cost.
+it will cost. These are estimates, not a guarantee that a provider bill cannot
+exceed the configured budget. Use provider-side spending controls where a hard
+financial cap is required.
 
+A complete usage report replaces the estimate. If a provider omits usage, the
+remaining estimate stays held within the policy window rather than treating the
+request as free. It is released when complete usage arrives, a never-started
+attempt is safely cancelled, or the request ages out of that policy window.
+The fifteen-minute recovery sweep marks abandoned usage as unknown; it does not
+forgive uncertain spend or take over active generations.
 ## Retention
 
 ![Retention](../images/admin-retention.png)

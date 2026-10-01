@@ -1,11 +1,11 @@
 import { sendMessageSchema } from '@oci/shared';
 import { UI_MESSAGE_STREAM_HEADERS } from 'ai';
 import { Hono } from 'hono';
-import { rateLimited } from '../lib/errors.js';
+import { AppError, rateLimited } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
-import { prepareTurn } from '../services/chat/prepare-turn.js';
-import { acquireRun } from '../services/chat/run-lifecycle.js';
+import { readOwnedRunState } from '../services/chat/run-state.js';
+import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
 import { cancelActiveChatRun, resumeActiveChatRun } from '../services/chat-streams.js';
 import { chatRateLimit } from '../services/limits/rate-limit.js';
@@ -29,8 +29,7 @@ chatRoutes.post('/', async (c) => {
   }
 
   const input = await parseBody(c, sendMessageSchema);
-  const turn = await prepareTurn(user, input);
-  const run = await acquireRun(turn);
+  const { turn, run } = await setupTurn(user, input);
   return streamResponse(turn, run);
 });
 
@@ -38,13 +37,18 @@ chatRoutes.post('/', async (c) => {
 chatRoutes.get('/:threadId/stream', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('threadId'), user.id);
-  const resumed = await resumeActiveChatRun(thread.id, user.id, c.req.raw.signal);
+  const resumed = await resumeActiveChatRun(thread.id, user.id, c.req.raw.signal, {
+    readState: readOwnedRunState,
+  }).catch(() => {
+    throw new AppError('INTERNAL_ERROR', 'Could not check the saved response. Try again.', 503);
+  });
   if (!resumed) return c.body(null, 204);
 
   return new Response(resumed.stream, {
     headers: {
       ...UI_MESSAGE_STREAM_HEADERS,
       'X-OCI-Stream-Persistence': resumed.persistence,
+      'X-OCI-Chat-Run-Id': resumed.runId,
     },
   });
 });

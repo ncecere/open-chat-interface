@@ -1,9 +1,11 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import postgres from 'postgres';
 import { createDatabase, type Database } from './client.js';
+import * as schema from './schema/index.js';
 
 const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), '../drizzle');
 
@@ -21,19 +23,16 @@ export async function runMigrations(db: Database): Promise<void> {
 }
 
 export interface MigrationResult {
-  /** False when another process held the lock and had already migrated. */
+  /** True after the migrator completes, including an already-current no-op run. */
   applied: boolean;
 }
 
 /**
- * Applies migrations under a session-scoped advisory lock so several API
- * replicas can boot at once without racing each other.
- *
- * The lock must be session-scoped and held on a pinned connection: Drizzle's
- * migrator opens its own transactions, so a transaction-scoped lock would be
- * released before the migrations it is meant to protect have run. A dedicated
- * single-connection client guarantees the lock and the migrations share a
- * session, which a pooled client cannot.
+ * Pin lock acquisition, journal reads and DDL to one physical transaction.
+ * A max:1 pool alone may reconnect between statements and silently lose a
+ * session lock. Postgres.js transaction scopes instead fail on connection loss.
+ * Drizzle's inner migration transaction becomes a savepoint on this same scope;
+ * the transaction advisory lock remains held through the outer commit/rollback.
  */
 export async function runMigrationsWithLock(
   connectionString: string,
@@ -41,48 +40,66 @@ export async function runMigrationsWithLock(
 ): Promise<MigrationResult> {
   const timeoutMs = options.timeoutMs ?? 60_000;
 
-  // A pool would hand the lock and the migrations different connections.
-  const client = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
-  const { db } = createDatabase(connectionString, { max: 1 });
+  const { sql: client } = createDatabase(connectionString, { max: 1 });
 
   try {
     const deadline = Date.now() + timeoutMs;
-    let acquired = false;
-
-    while (!acquired) {
-      const [row] = await client<[{ locked: boolean }]>`
-        select pg_try_advisory_lock(${MIGRATION_LOCK_KEY}::bigint) as locked
-      `;
-      acquired = row?.locked ?? false;
-      if (acquired) break;
-
-      if (Date.now() > deadline) {
-        throw new Error(
-          `Timed out after ${timeoutMs}ms waiting for the migration lock. Another instance may be stuck migrating.`,
-        );
+    // Await inside the cleanup boundary: never close the client before COMMIT.
+    // Journal reads must see the preceding owner's commit after a lock wait,
+    // even if the server's default isolation is repeatable read/serializable.
+    return await client.begin('isolation level read committed', async (transaction) => {
+      while (true) {
+        const [row] = await transaction<[{ locked: boolean }]>`
+          select pg_try_advisory_xact_lock(${MIGRATION_LOCK_KEY}::bigint) as locked
+        `;
+        if (row?.locked) break;
+        if (Date.now() > deadline) {
+          throw new Error(
+            `Timed out after ${timeoutMs}ms waiting for the migration lock. Another instance may be stuck migrating.`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
 
-    // Reaching here with the lock held means any concurrent migrator has
-    // finished; drizzle then skips whatever it already applied.
-    await runMigrations(db);
-    return { applied: true };
+      // The installed Drizzle adapter requires options (type parsers) and begin.
+      // Supply only those on the pinned transaction client, mapping its inner
+      // begin to a real savepoint. Do NOT copy pool methods: unsafe/query calls
+      // must remain bound to the physical transaction, even after disconnect.
+      // This narrowed adapter is only used by the migrator, not general callers.
+      const migrationClient = Object.assign(transaction, {
+        options: client.options,
+        begin: transaction.savepoint,
+      });
+      const db = drizzle(migrationClient as unknown as typeof client, {
+        schema,
+        casing: 'snake_case',
+      });
+      await runMigrations(db);
+      return { applied: true };
+    });
   } finally {
-    // Releasing explicitly rather than relying on disconnect keeps a pooled or
-    // reused connection from holding the lock.
-    await client`select pg_advisory_unlock(${MIGRATION_LOCK_KEY}::bigint)`.catch(() => {});
+    // Transaction end releases the advisory lock. Close the private pool on
+    // success, failure and no-op; cleanup must not reconnect just to unlock.
     await client.end({ timeout: 5 }).catch(() => {});
   }
 }
 
-/** True when the schema is present and current, for replicas that do not migrate. */
+/**
+ * Require the latest bundled migration's recorded timestamp before a replica
+ * serves without migrating. This checks migration history, not physical schema
+ * integrity or compatibility with additional, newer migrations.
+ */
 export async function migrationsApplied(db: Database): Promise<boolean> {
   try {
-    const rows = await db.execute<{ count: string }>(
-      sql`select count(*)::bigint as count from drizzle.__drizzle_migrations`,
-    );
-    return Number(rows[0]?.count ?? 0) > 0;
+    const latest = readMigrationFiles({ migrationsFolder }).at(-1);
+    if (!latest) return false;
+    const rows = await db.execute<{ applied: boolean }>(sql`
+      select exists (
+        select 1 from drizzle.__drizzle_migrations
+        where created_at = ${latest.folderMillis}::bigint
+      ) as applied
+    `);
+    return rows[0]?.applied === true;
   } catch {
     return false;
   }

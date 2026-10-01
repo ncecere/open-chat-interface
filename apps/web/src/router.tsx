@@ -2,49 +2,21 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   redirect,
 } from '@tanstack/react-router';
-import { AdminLayout } from '~/components/admin/admin-layout';
 import { AppShell } from '~/components/layout/app-shell';
 import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
-import { SettingsLayout } from '~/components/settings/settings-layout';
+import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
-import { AdminAuditPage } from '~/routes/admin/audit';
-import { AdminBrandingPage } from '~/routes/admin/branding';
-import { AdminBroadcastsPage } from '~/routes/admin/broadcasts';
-import { AdminHealthPage } from '~/routes/admin/health';
-import { AdminInvitesPage } from '~/routes/admin/invites';
-import { AdminMaintenancePage } from '~/routes/admin/maintenance';
-import { AdminModelsPage } from '~/routes/admin/models';
-import { AdminOverviewPage } from '~/routes/admin/overview';
-import { AdminPoliciesPage } from '~/routes/admin/policies';
-import { AdminProvidersPage } from '~/routes/admin/providers';
-import { AdminQuotasPage } from '~/routes/admin/quotas';
-import { AdminRateLimitsPage } from '~/routes/admin/rate-limits';
-import { AdminReportsPage } from '~/routes/admin/reports';
-import { AdminRetentionPage } from '~/routes/admin/retention';
-import { AdminSearchPage } from '~/routes/admin/search';
-import { AdminSettingsPage } from '~/routes/admin/settings';
-import { AdminSsoPage } from '~/routes/admin/sso';
-import { AdminStoragePage } from '~/routes/admin/storage';
-import { AdminStorageLimitsPage } from '~/routes/admin/storage-limits';
-import { AdminUsagePage } from '~/routes/admin/usage';
-import { AdminUserDetailPage } from '~/routes/admin/user-detail';
-import { AdminUsersPage } from '~/routes/admin/users';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
 import { SignupPage } from '~/routes/auth/signup';
 import { ChatHomePage } from '~/routes/chat/home';
 import { ChatThreadPage } from '~/routes/chat/thread';
-import { SettingsAccountPage } from '~/routes/settings/account';
-import { SettingsAttachmentsPage } from '~/routes/settings/attachments';
-import { SettingsCustomizationPage } from '~/routes/settings/customization';
-import { SettingsHistoryPage } from '~/routes/settings/history';
-import { SettingsModelsPage } from '~/routes/settings/models';
-import { SettingsContactPage, SettingsShortcutsPage } from '~/routes/settings/simple-tabs';
 import { PublicSharePage } from '~/routes/share/public-share';
 
 interface SessionSnapshot {
@@ -159,22 +131,54 @@ const settingsRoute = createRoute({
     if (!session) throw redirect({ to: '/auth/login' });
     return { session };
   },
-  component: () => (
-    <SettingsLayout>
-      <Outlet />
-    </SettingsLayout>
+  component: lazyRouteComponent(
+    () => import('~/components/settings/settings-layout'),
+    'SettingsLayout',
   ),
   pendingComponent: FullPageSpinner,
 });
 
 const SETTINGS_TABS = [
-  { path: '/settings', component: SettingsAccountPage },
-  { path: '/settings/customization', component: SettingsCustomizationPage },
-  { path: '/settings/history', component: SettingsHistoryPage },
-  { path: '/settings/models', component: SettingsModelsPage },
-  { path: '/settings/attachments', component: SettingsAttachmentsPage },
-  { path: '/settings/shortcuts', component: SettingsShortcutsPage },
-  { path: '/settings/contact', component: SettingsContactPage },
+  {
+    path: '/settings',
+    component: lazyRouteComponent(() => import('~/routes/settings/account'), 'SettingsAccountPage'),
+  },
+  {
+    path: '/settings/customization',
+    component: lazyRouteComponent(
+      () => import('~/routes/settings/customization'),
+      'SettingsCustomizationPage',
+    ),
+  },
+  {
+    path: '/settings/history',
+    component: lazyRouteComponent(() => import('~/routes/settings/history'), 'SettingsHistoryPage'),
+  },
+  {
+    path: '/settings/models',
+    component: lazyRouteComponent(() => import('~/routes/settings/models'), 'SettingsModelsPage'),
+  },
+  {
+    path: '/settings/attachments',
+    component: lazyRouteComponent(
+      () => import('~/routes/settings/attachments'),
+      'SettingsAttachmentsPage',
+    ),
+  },
+  {
+    path: '/settings/shortcuts',
+    component: lazyRouteComponent(
+      () => import('~/routes/settings/simple-tabs'),
+      'SettingsShortcutsPage',
+    ),
+  },
+  {
+    path: '/settings/contact',
+    component: lazyRouteComponent(
+      () => import('~/routes/settings/simple-tabs'),
+      'SettingsContactPage',
+    ),
+  },
 ] as const;
 
 const settingsTabRoutes = SETTINGS_TABS.map((tab) =>
@@ -194,144 +198,143 @@ const adminRoute = createRoute({
     if (session.user.role !== 'admin') throw redirect({ to: '/' });
     return { session };
   },
-  component: () => (
-    <AdminLayout>
-      <Outlet />
-    </AdminLayout>
-  ),
+  component: lazyRouteComponent(() => import('~/components/admin/admin-layout'), 'AdminLayout'),
   pendingComponent: FullPageSpinner,
 });
 
 const adminOverviewRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin',
-  component: AdminOverviewPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/overview'), 'AdminOverviewPage'),
 });
 
 const adminUsersRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/users',
-  component: AdminUsersPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/users'), 'AdminUsersPage'),
 });
 
 const adminReportsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/reports',
-  component: AdminReportsPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/reports'), 'AdminReportsPage'),
 });
 
 const adminHealthRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/health',
-  component: AdminHealthPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/health'), 'AdminHealthPage'),
 });
 
 const adminUserDetailRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/users/$userId',
-  component: AdminUserDetailPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/user-detail'), 'AdminUserDetailPage'),
 });
 
 const adminProvidersRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/providers',
-  component: AdminProvidersPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/providers'), 'AdminProvidersPage'),
 });
 
 const adminModelsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/models',
-  component: AdminModelsPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/models'), 'AdminModelsPage'),
 });
 
 const adminSettingsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/settings',
-  component: AdminSettingsPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/settings'), 'AdminSettingsPage'),
 });
 
 const adminInvitesRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/invites',
-  component: AdminInvitesPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/invites'), 'AdminInvitesPage'),
 });
 
 const adminBrandingRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/branding',
-  component: AdminBrandingPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/branding'), 'AdminBrandingPage'),
 });
 
 const adminSsoRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/sso',
-  component: AdminSsoPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/sso'), 'AdminSsoPage'),
 });
 
 const adminQuotasRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/quotas',
-  component: AdminQuotasPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/quotas'), 'AdminQuotasPage'),
 });
 
 const adminSearchRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/search',
-  component: AdminSearchPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/search'), 'AdminSearchPage'),
 });
 
 const adminStorageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/storage',
-  component: AdminStoragePage,
+  component: lazyRouteComponent(() => import('~/routes/admin/storage'), 'AdminStoragePage'),
 });
 
 const adminStorageLimitsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/storage-limits',
-  component: AdminStorageLimitsPage,
+  component: lazyRouteComponent(
+    () => import('~/routes/admin/storage-limits'),
+    'AdminStorageLimitsPage',
+  ),
 });
 
 const adminRateLimitsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/rate-limits',
-  component: AdminRateLimitsPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/rate-limits'), 'AdminRateLimitsPage'),
 });
 
 const adminRetentionRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/retention',
-  component: AdminRetentionPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/retention'), 'AdminRetentionPage'),
 });
 
 const adminPoliciesRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/policies',
-  component: AdminPoliciesPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/policies'), 'AdminPoliciesPage'),
 });
 
 const adminBroadcastsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/broadcasts',
-  component: AdminBroadcastsPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/broadcasts'), 'AdminBroadcastsPage'),
 });
 
 const adminUsageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/usage',
-  component: AdminUsagePage,
+  component: lazyRouteComponent(() => import('~/routes/admin/usage'), 'AdminUsagePage'),
 });
 
 const adminMaintenanceRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/maintenance',
-  component: AdminMaintenancePage,
+  component: lazyRouteComponent(() => import('~/routes/admin/maintenance'), 'AdminMaintenancePage'),
 });
 
 const adminAuditRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/audit',
-  component: AdminAuditPage,
+  component: lazyRouteComponent(() => import('~/routes/admin/audit'), 'AdminAuditPage'),
 });
 
 const routeTree = rootRoute.addChildren([
@@ -373,6 +376,7 @@ export const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
   defaultPendingComponent: FullPageSpinner,
+  defaultErrorComponent: RouteLoadError,
 });
 
 declare module '@tanstack/react-router' {

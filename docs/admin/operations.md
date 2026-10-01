@@ -23,9 +23,10 @@ something is reported.
 The summary takes the worst individual result, so a green banner above a failing
 row cannot happen.
 
-**Redis absent is a warning, not an error.** A single-replica deployment without
-it is supported; rate limits and streams simply become per-process. Across
-several replicas it matters, and the warning is telling you so.
+**Redis absent is a warning, not an error.** Live replies still work, but stream
+replay is unavailable and rate limits fall back to per-process enforcement.
+Thread admission remains coordinated in PostgreSQL, including across replicas.
+Redis is still important for shared rate limits, replay and cancellation.
 
 Each of these previously surfaced as a user complaint. "Nobody can send a
 message" is a page of red here, not a mystery.
@@ -42,6 +43,13 @@ misconfigured bucket looks fine until somebody uploads a file.
 
 **Reconcile** compares the database against what is really stored, and reports
 disagreement. Worth running after restoring a backup, when the two can drift.
+
+Uploads reserve their byte and file allowance in PostgreSQL before writing an
+object. Unfinished uploads are hidden from attachment lists, but still reserve
+space. Their objects are protected from orphan cleanup. Crashed or uncertain
+uploads do not expire automatically; see [upload recovery](../OPERATIONS.md#recovering-an-interrupted-upload).
+Deleting a file releases its allowance immediately, and restoring a conversation
+requires enough allowance for its files.
 
 The local path is shown but not editable: it has to exist inside the container,
 so it stays deployment-managed. It is shown at all so you know which volume to
@@ -64,8 +72,25 @@ Jobs run on their own schedule. Running one by hand is for after you have
 changed a setting it depends on and would rather not wait — retention, say, or
 storage reconciliation.
 
-In a multi-replica deployment each job holds a lock, so it runs once regardless
-of how many replicas are up.
+Each running job holds a PostgreSQL session lock on a private connection.
+Competing attempts skip while that lock is held, including repeated local timer
+or manual requests. Run-record failures also release the lock.
+
+This prevents overlapping runs while the owning database session is alive; it
+does **not** guarantee one run per scheduled interval. Staggered replicas can
+run sequentially. A lost database connection releases its lock but cannot cancel
+external work already underway, so job side effects still need safe retries.
+
+Conversation retention considers up to 500 eligible, unlocked threads per pass
+and commits each thread separately. Busy accounts or threads are skipped. A failed
+pass can have completed some threads; retrying continues with those still eligible
+rather than repeating their storage adjustments.
+
+`DATABASE_URL` must use a direct PostgreSQL connection or a session-mode pooler,
+not transaction pooling. Budget one additional connection per concurrently
+attempted job per API replica, separate from the regular application pool
+(default ten connections). Private lock connections close after each attempt,
+including when unlocking fails.
 
 ## When somebody reports a problem
 

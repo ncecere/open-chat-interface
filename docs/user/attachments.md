@@ -15,18 +15,17 @@ be.
 
 ## The model has to be able to read it
 
-This is the part that catches people out. Attaching an image to a model without
-**vision**, or a PDF to one without **PDF comprehension**, gets you a reply that
-politely fails to mention the file.
+Images require a model with **vision**. Otherwise the model receives an
+unreadable-file notice, not the image. The picker shows model abilities and lets
+you filter for them.
 
-The picker shows those abilities as coloured icons beside each model name, and
-its filter narrows the list to models that have them. Check before attaching
-rather than after.
+PDFs and text files are sent as extracted text. A model's PDF capability does not
+change that extraction path: page layout, diagrams and scanned text may not be
+available. If extraction fails, the model receives an unreadable-file notice.
 
 ## A worked example: asking about a document
 
-1. Choose a model showing the document icon — filter by **PDF comprehension** if
-   you are not sure which do.
+1. Choose a model suited to your document questions.
 2. Attach the PDF. A chip appears above the composer while it uploads.
 3. Ask something specific: "What does section 4 say about data retention?"
    rather than "summarise this".
@@ -42,10 +41,14 @@ asked about section 4, it answers about section 4.
 uploaded, with the conversation each belongs to, and lets you delete files you
 no longer want kept.
 
-Attachments count towards any storage limit your institution sets. If you reach
-it, deleting old files from here is what frees space — deleting the conversation
-alone does not, immediately, because a deleted conversation is recoverable for a
-period first.
+Attachments count towards any storage limit your institution sets, including
+uploads still in progress. Deleting a file or moving its conversation to trash
+frees its allowance immediately; physical deletion happens later. Restoring a
+conversation requires enough space for its files again.
+
+Simultaneous uploads share the same allowance. If another upload takes the last
+available space, a later one may be refused even if the meter showed room when
+you started it.
 
 ## What happens to a file
 
@@ -53,5 +56,17 @@ Uploads are stored by the instance, not sent to a third party for storage. When
 you send a message with an attachment, the file's contents go to the model
 provider chosen for that message, in the same way the text of your message does.
 
-If that matters for what you are working with, ask your administrator which
-providers the instance is configured to use.
+Follow-ups and regenerated replies can resend earlier attachments in the
+conversation context. Switching models can send those contents to a different
+provider. Ask your administrator which providers are appropriate for your data.
+Deleting a file cannot recall contents already sent to a provider.
+
+Forks reference the original file rather than making an independent copy. If
+that file or its source conversation becomes unavailable, the fork cannot use
+its contents. Current role and attachment-feature restrictions also apply to
+historical files; a file-free conversation can still be used when file access
+is disabled.
+
+If a file is being changed or deleted while a reply is prepared, the request may
+be refused as unavailable or busy. Retry after the file operation finishes;
+that failed preparation does not save a new user turn.

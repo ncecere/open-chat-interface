@@ -5,6 +5,7 @@ import { auth } from '../../auth/index.js';
 import { isEmailVerificationEnforced } from '../../auth/policy.js';
 import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import { recordAudit } from '../audit.js';
 
 export interface AdminUserActor {
@@ -13,6 +14,8 @@ export interface AdminUserActor {
 }
 
 export async function createUser(actor: AdminUserActor, input: z.infer<typeof createUserSchema>) {
+  // Resolve before creating anything; an unavailable policy is not an exemption.
+  const verificationRequired = await isEmailVerificationEnforced();
   const [existing] = await db
     .select({ id: schema.user.id })
     .from(schema.user)
@@ -39,17 +42,16 @@ export async function createUser(actor: AdminUserActor, input: z.infer<typeof cr
       .where(eq(schema.user.id, created.user.id));
   }
 
-  if (await isEmailVerificationEnforced()) {
+  if (verificationRequired) {
     try {
       await auth.api.sendVerificationEmail({
         body: { email: input.email, callbackURL: '/' },
       });
     } catch {
-      // Email delivery must never create an unusable administrator-created account.
-      await db
-        .update(schema.user)
-        .set({ emailVerified: true })
-        .where(eq(schema.user.id, created.user.id));
+      logger.warn(
+        { userId: created.user.id },
+        'Verification request failed; account remains unverified',
+      );
     }
   } else {
     await db

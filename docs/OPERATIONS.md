@@ -57,6 +57,16 @@ Historical GitLab releases and images remain on GitLab. GitHub Actions does not
 copy them or their release metadata; choose GHCR only for versions successfully
 published there.
 
+## Database connections for maintenance
+
+Background jobs use session-level advisory locks. `DATABASE_URL` must point to
+PostgreSQL directly or through a **session-mode** pooler; transaction-mode
+pooling does not preserve lock ownership. Each concurrently attempted job opens
+one private lock connection per API replica in addition to the normal application
+pool (default ten connections). Include that headroom in database connection
+limits. See [Maintenance](admin/operations.md#maintenance) for scheduling and
+retry guarantees.
+
 ## Back up
 
 Back up all durable state before an upgrade:
@@ -97,9 +107,167 @@ and verify attachment downloads.
    ```
 
    A single-replica deployment may leave `RUN_MIGRATIONS=true`; startup applies
-   migrations under a PostgreSQL advisory lock.
+   migrations under a transaction-scoped PostgreSQL advisory lock, with lock,
+   journal reads and DDL pinned to one physical transaction. A disconnect fails
+   the attempt instead of continuing on an unlocked replacement connection.
+   Direct PostgreSQL or session-mode pooling remains required for maintenance jobs.
+   With `RUN_MIGRATIONS=false`, startup refuses to serve unless the latest bundled
+   migration's timestamp is recorded. That marker is not a schema-integrity check
+   or evidence that reverting an image after newer migrations is safe.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
+
+## Usage accounting after an interrupted run
+
+Migration `0021_usage_settlement` marks new incomplete reports with
+`usage_unknown` and widens daily token aggregates to `bigint`. Every new chat
+attempt has a usage-event ID equal to its run/assistant ID, even without an
+applicable quota. Prices are snapshotted before generation.
+
+Settlement and daily rollup commit together. Repeated complete reports cannot
+add another message. Partial reports merge cumulative counts without erasing
+previous actuals; a complete report replaces them, including downward corrections.
+Unresolved events are exempt from normal usage-event pruning until reconciled,
+retaining their identity and price snapshot. This does not extend their quota
+window, and account deletion still erases the account's usage history.
+A sweep processes at most 200 old unclaimed events,
+with one short transaction per event, and skips active matching assistant rows.
+It records uncertainty, not measured zero or proof that an old producer stopped.
+
+Quota meters retain the remaining configured estimate for unknown usage within
+the policy window. Daily reports include only reported amounts, not that held
+estimate. The reservation age alone no longer forgives uncertain spend.
+
+- Confirm the producer has stopped before recovering its chat claim.
+- Never clear usage events or edit daily totals merely to unblock a conversation.
+  For a proven never-started attempt, use the transactional reservation-release
+  service in reviewed maintenance code; for actual usage, use the settlement
+  service with verified provider totals and the exact event owner/model.
+- Investigate an unknown event against provider records before treating it as
+  free. An audited quota override may be appropriate while usage is unresolved.
+- These changes do not reconstruct historical lost rollups or classify older
+  zero-usage settlements. Do not rebuild long-lived daily totals from a partially
+  retained event history: that would discard legitimate older usage.
+
+## Recovering an interrupted upload
+
+Migration `0020_atomic_upload_admission` adds durable upload reservations and a
+counter-release trigger for attachment deletion, including cascades. Drain old
+API producers before migrating and deploying: old versions do not honor upload
+reservations. Back up the database and objects together before upgrading.
+
+An attachment with `upload_pending = true` reserves capacity but cannot be listed,
+read or sent. There is no timeout takeover: a slow upload is not proof of a crash.
+An interrupted upload can therefore retain its allowance until explicitly removed.
+
+1. Confirm the upload producer has stopped. If ownership is uncertain, drain and
+   stop all API/worker replicas. Do not clear reservations while a writer can
+   still publish their objects.
+2. Inspect the affected owner's `attachment` rows with `upload_pending = true`.
+   Check the exact ID, owner and object key, not merely its age.
+3. Delete only the confirmed abandoned reservation in a maintenance session:
+
+   ```sql
+   -- Replace both placeholders with the inspected values.
+   DELETE FROM attachment
+   WHERE id = 'REPLACE_WITH_ATTACHMENT_ID'
+     AND user_id = 'REPLACE_WITH_OWNER_ID'
+     AND upload_pending = true
+   RETURNING id;
+   ```
+
+   The delete triggers release its counters and durably queue its object for
+   removal. They do not delete completed attachments or require object storage
+   to be reachable. Legacy rows whose key is literally `pending` have no known
+   object key; orphan reconciliation can identify their unreferenced objects
+   after its safety window.
+4. Restart producers and run storage reconciliation/counter rebuilding and the
+   object reaper as appropriate. Do not flush storage or zero counters manually.
+
+## When live replay is unavailable
+
+Redis holds an approximately 10,000-event window, not a complete durable
+transcript. Replay checks versioned event sequences before forwarding them to
+the AI SDK. If a prefix or later range was trimmed, the cache expired, or capture
+failed, it reports that live replay is unavailable instead of sending orphan
+text/reasoning deltas. Old unversioned caches also fail closed.
+
+Reload the conversation to retrieve saved messages. A response can still be
+running: losing replay does not cancel the producer, release its PostgreSQL
+claim, or prevent the final answer from being saved. Use an explicit stop or
+wait for completion; do not clear claims based on missing cache data. Network
+partitions can prevent Redis from recording its final state, so cache metadata
+alone is not proof of producer liveness or completion.
+
+Before opening replay, the API checks the exact cached assistant/run against its
+owned, live PostgreSQL thread. Missing or terminal runs return no replay (204),
+so the client can load saved history. A failed durable validation returns a safe
+503 instead of pretending the run is absent. Already-idle readers recheck every
+two seconds. Missing ownership or validation failure ends only that reader with
+the friendly replay error. For an owned terminal run, the reader refreshes a
+bounded cache-tail snapshot: it closes cleanly only after forwarding a real SDK
+finish frame, otherwise it reports unavailable replay. This covers completion
+that arrives during the status check or before delayed cache finalization,
+without following an indefinitely growing cache or fabricating completion.
+Each validation has a two-second reader deadline, a one-second SQL statement
+timeout, and abort checks before queued work proceeds.
+The reader deadline does not itself cancel a queued database transaction.
+
+A successfully acquired PostgreSQL claim may replace stale Redis indexing with
+conditional publication. A racing index change makes the new response
+non-resumable, not rejected; same-run retries never reset cached events,
+cancellation or TTLs. This does not delete old cache data or reclaim a streaming
+PostgreSQL claim, and does not guarantee Redis finalization during a partition.
+
+Replay readers apply backpressure and buffer at most one 200-event Redis batch
+plus one queued chunk. These are event-count bounds, not byte/RSS guarantees.
+The drained rollout below also avoids mixed replay protocol versions.
+
+## Recovering an interrupted chat run
+
+Chat admission is coordinated in PostgreSQL, even when Redis is unavailable.
+A streaming assistant row claims its thread until completion is persisted.
+Admission does not assume a run is dead just because it is over 15 minutes old.
+
+**Before rolling out this admission change, drain and stop old API producers.**
+Mixed old/new versions do not share the same admission protocol. Normal client
+disconnection is not proof that a model stopped; do not clear a claim merely
+because Redis is empty or its TTL elapsed.
+
+If a crashed producer leaves a thread blocked:
+
+1. Positively stop its producer. If ownership is uncertain, drain/stop **all** API
+   and worker replicas before proceeding. An abort request alone is not proof.
+2. Inspect the affected thread and streaming assistant ID in PostgreSQL. New
+   assistant claim IDs also identify their runs in application logs.
+3. In a maintenance database session, repair **only those exact IDs**. For
+   example, using psql variables after replacing the placeholders:
+
+   ```sql
+   \set thread_id 'REPLACE_WITH_THREAD_ID'
+   \set assistant_id 'REPLACE_WITH_ASSISTANT_ID'
+   BEGIN;
+   SELECT id FROM thread WHERE id = :'thread_id' FOR UPDATE;
+   -- No prompt was committed for a parentless provisional claim.
+   DELETE FROM message
+   WHERE id = :'assistant_id' AND thread_id = :'thread_id'
+     AND role = 'assistant' AND status = 'streaming'
+     AND parent_message_id IS NULL;
+   -- Retain committed prompts, attachments and any partial response.
+   UPDATE message SET status = 'error', updated_at = now(),
+     error_message = 'Generation interrupted; recovered after producer shutdown'
+   WHERE id = :'assistant_id' AND thread_id = :'thread_id'
+     AND role = 'assistant' AND status = 'streaming';
+   COMMIT;
+   ```
+
+4. If Redis still has `oci:chat-stream:thread:THREAD_ID:active`, remove only that
+   thread's stale pointer while producers remain stopped, or wait for its TTL.
+   Do not flush Redis or delete user messages. Existing quota-reservation
+   recovery remains separate; do not delete usage records to unblock a thread.
+5. Restart producers, then retry the affected conversation.
+
+This is fail-closed recovery, not a lease or automatic fencing mechanism.
 
 ## Getting back in when sign-on fails
 

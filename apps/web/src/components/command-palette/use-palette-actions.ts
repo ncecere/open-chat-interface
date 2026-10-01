@@ -13,8 +13,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useMemo } from 'react';
-import { NAV_SECTIONS } from '~/components/admin/admin-layout';
 import { useCurrentUser } from '~/hooks/use-current-user';
+import { NAV_SECTIONS } from '~/lib/admin-navigation';
 import { useTheme } from '~/providers/theme-provider';
 import type { CommandPaletteProps, PaletteGroup } from './types';
 

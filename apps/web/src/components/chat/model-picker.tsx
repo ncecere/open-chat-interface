@@ -1,20 +1,14 @@
 import type { CatalogModel, ModelCapability } from '@oci/shared';
-import { ChevronDown, Info, Search } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { CapabilityIcon } from '~/components/model/capability-pill';
+import { ChevronDown, Search } from 'lucide-react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
-import { ModelInfoCard } from '~/components/model/model-info-card';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { cn } from '~/lib/utils';
-import {
-  labsFrom,
-  matchesCapabilities,
-  matchesSearch,
-  modelDescription,
-} from './model-picker-data';
+import { labsFrom, matchesCapabilities, matchesSearch } from './model-picker-data';
 import { ModelPickerFilters } from './model-picker-filters';
+import { ModelPickerDetails, ModelPickerOption } from './model-picker-presentation';
 
-export function ModelPicker({
+export const ModelPicker = memo(function ModelPicker({
   models,
   selected,
   onSelect,
@@ -232,97 +226,31 @@ export function ModelPicker({
               </p>
             ) : (
               visible.map((model) => (
-                // The info trigger is a sibling rather than a child: a button
-                // inside a button is invalid markup, and browsers resolve it by
-                // dropping the inner control.
-                <div
+                <ModelPickerOption
                   key={model.id}
-                  className={cn(
-                    'relative flex w-full items-center rounded-lg transition-colors',
-                    'hover:bg-[var(--bg-control)]',
-                    selected?.id === model.id && 'bg-[var(--accent-soft)]',
-                  )}
-                >
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={selected?.id === model.id}
-                    onClick={() => {
-                      onSelect(model);
-                      setOpen(false);
-                    }}
-                    className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
-                  >
-                    <span className="flex w-full items-center gap-2">
-                      <LabLogo labId={model.labId} className="size-4 shrink-0" />
-                      <span className="min-w-0 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
-                        {model.displayName}
-                      </span>
-                    </span>
-
-                    <span className="w-full truncate pl-6 text-xs font-medium leading-4 text-[var(--text-muted)]">
-                      {modelDescription(model)}
-                    </span>
-                  </button>
-
-                  {/*
-                   * Capabilities and the details control share one right-hand
-                   * column, so both line up down the list however long a model
-                   * name happens to be.
-                   */}
-                  <span className="flex shrink-0 items-center gap-1 pr-2">
-                    {model.capabilities.map((capability) => (
-                      <CapabilityIcon key={capability} capability={capability} />
-                    ))}
-
-                    {canShowDetails && (
-                      <button
-                        type="button"
-                        aria-label={`Details for ${model.displayName}`}
-                        aria-expanded={detailsFor === model.id}
-                        onClick={() => showDetails(model.id)}
-                        className={cn(
-                          'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
-                          detailsFor === model.id
-                            ? 'text-[var(--text-primary)]'
-                            : 'text-[var(--text-faint)]',
-                        )}
-                      >
-                        <Info className="size-3.5" />
-                      </button>
-                    )}
-                  </span>
-                </div>
+                  model={model}
+                  selected={selected?.id === model.id}
+                  canShowDetails={canShowDetails}
+                  detailsOpen={detailsFor === model.id}
+                  onSelect={(model) => {
+                    onSelect(model);
+                    setOpen(false);
+                  }}
+                  onDetails={showDetails}
+                />
               ))
             )}
           </div>
         </div>
 
         {/*
-         * One card for the whole panel, in a fixed position beside it.
-         *
          * Prefers the right, and falls back to the left only when the panel is
          * too near the viewport edge for the card to fit. Whichever side wins,
          * it stays there for as long as the picker is open, so moving between
          * models changes the contents and nothing else.
-         *
-         * Matches the picker exactly: same width, and stretched to the panel's
-         * own top and bottom edges. A card of some other size reads as a
-         * detached object floating next to the list rather than part of it.
          */}
-        {detailsModel && (
-          <div
-            className={cn(
-              'pointer-events-none absolute inset-y-0 hidden w-[calc(100%+2px)] md:block',
-              detailsOnLeft ? 'right-full -translate-x-2' : 'left-full translate-x-2',
-            )}
-          >
-            <div className="pointer-events-auto flex h-full w-full flex-col overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-popover)]">
-              <ModelInfoCard model={detailsModel} />
-            </div>
-          </div>
-        )}
+        {detailsModel && <ModelPickerDetails model={detailsModel} onLeft={detailsOnLeft} />}
       </PopoverContent>
     </Popover>
   );
-}
+});

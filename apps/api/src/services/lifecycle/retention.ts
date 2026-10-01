@@ -2,7 +2,9 @@ import { and, eq, isNull, lte, or, schema, sql } from '@oci/db';
 import { PROTECTED_AUDIT_ACTIONS } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { lockLifecycleOwner } from './owner-lock.js';
 import { getRetentionSettings } from './settings.js';
+import { trashLockedThread } from './trash-thread.js';
 
 const BATCH_SIZE = 500;
 
@@ -42,25 +44,53 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
 
   if (exemptPinnedThreads) conditions.push(eq(schema.thread.pinned, false));
 
-  const expired = await db
-    .update(schema.thread)
-    .set({ deletedAt: now, deletedReason: 'retention' })
-    .where(
-      and(
-        ...conditions,
-        sql`${schema.thread.id} in (
-          select id from thread
-          where deleted_at is null and temporary = false
-          limit ${BATCH_SIZE}
-        )`,
-      ),
-    )
-    .returning({ id: schema.thread.id });
+  // This discovery statement commits before acquiring any owner lock. Its
+  // short-lived row locks skip busy owners AND threads before limiting; neither
+  // lock may wait while holding the other. Actual mutations reacquire parent-first.
+  // Drizzle's builder retains only one FOR clause, hence the explicit SQL here.
+  const candidates = await db.execute<{ id: string; userId: string }>(sql`
+    select ${schema.thread.id} as id, ${schema.thread.userId} as "userId"
+    from ${schema.thread}
+    inner join ${schema.user} on ${schema.user.id} = ${schema.thread.userId}
+    where ${and(...conditions)}
+    order by ${schema.thread.createdAt}, ${schema.thread.id}
+    limit ${BATCH_SIZE}
+    for key share of ${schema.user} skip locked
+    for update of ${schema.thread} skip locked
+  `);
 
-  if (expired.length > 0) {
-    logger.info({ count: expired.length }, 'Moved inactive conversations to trash');
+  let expired = 0;
+  for (const candidate of candidates) {
+    const changed = await db.transaction(async (tx) => {
+      if (!(await lockLifecycleOwner(tx, candidate.userId, true))) return false;
+      const [thread] = await tx
+        .select({
+          id: schema.thread.id,
+          userId: schema.thread.userId,
+          organizationId: schema.thread.organizationId,
+        })
+        .from(schema.thread)
+        .where(
+          and(
+            ...conditions,
+            eq(schema.thread.id, candidate.id),
+            eq(schema.thread.userId, candidate.userId),
+          ),
+        )
+        .for('update', { skipLocked: true });
+      if (!thread) return false;
+      await trashLockedThread(tx, thread, 'retention', now);
+      return true;
+    });
+    // Each thread commits separately. An interrupted batch keeps completed work;
+    // retries select only still-live eligible threads and cannot double-adjust it.
+    if (changed) expired++;
   }
-  return expired.length;
+
+  if (expired > 0) {
+    logger.info({ count: expired }, 'Moved inactive conversations to trash');
+  }
+  return expired;
 }
 
 /**
@@ -68,8 +98,8 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
  *
  * The daily rollup is the long-lived record; events exist so a rolling or
  * non-UTC calendar window can be evaluated exactly, and only recent ones are
- * ever read for that. Pending rows are never pruned: one belongs to a run that
- * may still be streaming.
+ * ever read for that. Pending and unknown rows are never pruned: a producer may
+ * still report usage, and amendments need the event's identity and price snapshot.
  */
 export async function pruneUsageEvents(now: Date = new Date()): Promise<number> {
   const { usageEventRetentionDays } = await getRetentionSettings();
@@ -97,8 +127,9 @@ export async function pruneUsageEvents(now: Date = new Date()): Promise<number> 
     .where(
       and(
         lte(schema.usageEvent.occurredAt, cutoff),
-        // A pending row may belong to a run that is still going.
+        // Preserve both active runs and unresolved accounting identities.
         eq(schema.usageEvent.pending, false),
+        eq(schema.usageEvent.usageUnknown, false),
       ),
     )
     .returning({ id: schema.usageEvent.id });

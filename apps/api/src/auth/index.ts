@@ -1,5 +1,5 @@
 import { sso } from '@better-auth/sso';
-import { eq, schema } from '@oci/db';
+import { schema } from '@oci/db';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
@@ -8,12 +8,13 @@ import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { clientIpFromHeaders } from '../lib/client-ip.js';
 import { logger } from '../lib/logger.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../services/email.js';
+import { sendPasswordResetEmail } from '../services/email.js';
 import { getDefaultOrganizationId } from '../services/organization.js';
 import { getSetting } from '../services/settings.js';
 import { recordAuthEvent } from './audit.js';
+import { deliverVerificationEmail } from './email-verification.js';
 import { ac, roles } from './permissions.js';
-import { enforceAuthRequestPolicy, isEmailVerificationEnforced } from './policy.js';
+import { enforceAuthRequestPolicy } from './policy.js';
 import { applySsoProvisioning, SsoRoleRequiredError } from './provisioning.js';
 
 const env = loadEnv();
@@ -143,26 +144,9 @@ export const auth = betterAuth({
 
   emailVerification: {
     autoSignInAfterVerification: true,
-    // Always enter this callback on sign-up. When verification is not viable,
-    // mark the account verified so enabling SMTP later does not lock it out.
     sendOnSignUp: true,
     sendOnSignIn: true,
-    sendVerificationEmail: async ({ user, url }) => {
-      const enforced = await isEmailVerificationEnforced();
-      const result = enforced
-        ? await sendVerificationEmail({ to: user.email, url })
-        : { delivered: false };
-
-      if (!enforced || !result.delivered) {
-        await db
-          .update(schema.user)
-          .set({ emailVerified: true })
-          .where(eq(schema.user.id, user.id));
-        if (enforced) {
-          logger.warn({ userId: user.id }, 'Verification email failed; account left accessible');
-        }
-      }
-    },
+    sendVerificationEmail: (data) => deliverVerificationEmail(data),
   },
 
   hooks: {
@@ -173,16 +157,23 @@ export const auth = betterAuth({
       );
       if (!policy) return;
 
-      // Better Auth options are otherwise static. Return a request-scoped copy
-      // instead of mutating the shared options object (which would race under
-      // concurrent sign-ins with different policy outcomes).
+      // The hook return patches the endpoint context, whose `context` field is
+      // the AuthContext. Returning options one level higher silently leaves the
+      // SDK's signup auto-session policy unchanged. Never mutate shared options.
       return {
         context: {
-          options: {
-            ...ctx.context.options,
-            emailAndPassword: {
-              ...ctx.context.options.emailAndPassword,
-              requireEmailVerification: policy.requireEmailVerification,
+          context: {
+            options: {
+              ...ctx.context.options,
+              emailVerification: {
+                ...ctx.context.options.emailVerification,
+                sendVerificationEmail: (data: Parameters<typeof deliverVerificationEmail>[0]) =>
+                  deliverVerificationEmail(data, policy.requireEmailVerification),
+              },
+              emailAndPassword: {
+                ...ctx.context.options.emailAndPassword,
+                requireEmailVerification: policy.requireEmailVerification,
+              },
             },
           },
         },

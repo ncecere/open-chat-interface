@@ -53,7 +53,9 @@ At minimum decide:
 Without SMTP, the instance cannot send invitations, password resets, or
 verification. **Settings → Email** configures it, and
 [Health](operations.md#health) will keep saying so until it is set or you have
-decided you do not need it.
+decided you do not need it. If email verification is required, missing or failed
+SMTP leaves new accounts unverified and unable to sign in. Test delivery before
+enabling that requirement; an outage never disables it automatically.
 
 ## 6. Connect your identity provider
 
