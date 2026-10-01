@@ -136,6 +136,7 @@ function RoleSummary({ access }: { access: RoleAccess }) {
           <dd>
             <Link
               to="/admin/models"
+              search={{ tab: 'models' }}
               className="text-[var(--accent-bright)] text-xs hover:underline"
             >
               Choose which roles see each model

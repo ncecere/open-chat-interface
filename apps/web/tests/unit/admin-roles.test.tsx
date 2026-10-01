@@ -72,7 +72,7 @@ describe('Roles & access', () => {
     expect(panel.textContent).toContain('Cannot upload attachments.');
     expect(panel.textContent).toContain('Daily cap');
     expect(panel.textContent).toContain('$2.00');
-    expect(panel.querySelector('a[href="/admin/models"]')).not.toBeNull();
+    expect(panel.querySelector('a[href="/admin/models?tab=models"]')).not.toBeNull();
     expect(panel.querySelector('a[href="/admin/quotas"]')).not.toBeNull();
   });
 

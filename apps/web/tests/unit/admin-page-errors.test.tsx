@@ -121,7 +121,7 @@ describe('model catalog', () => {
   it('shows a failed instant toggle and refetches the server state', async () => {
     api.get.mockImplementation(catalogResponses);
     api.patch.mockRejectedValue(new ApiError(400, 'VALIDATION_FAILED', 'Model is misconfigured.'));
-    ({ root } = await renderAdmin(<AdminModelsPage />));
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
     const modelLoads = () => api.get.mock.calls.filter(([path]) => path === '/admin/models').length;
     const before = modelLoads();
 
@@ -137,7 +137,7 @@ describe('model catalog', () => {
   it('confirms before removing a model', async () => {
     api.get.mockImplementation(catalogResponses);
     api.delete.mockResolvedValue({ ok: true });
-    ({ root } = await renderAdmin(<AdminModelsPage />));
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
 
     await click(button('Remove GPT Test'));
     expect(api.delete).not.toHaveBeenCalled();

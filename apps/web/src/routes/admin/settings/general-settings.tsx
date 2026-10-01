@@ -233,7 +233,7 @@ export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
     <div className="flex flex-col gap-8">
       <SettingsSection
         title="Model behavior"
-        description="Instructions applied to every conversation. The default model is chosen on Providers & models."
+        description="Instructions applied to every conversation. The default model is chosen on Providers & Models."
       >
         <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
       </SettingsSection>

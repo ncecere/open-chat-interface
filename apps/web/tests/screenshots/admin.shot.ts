@@ -14,7 +14,8 @@ const PAGES: { route: string; heading: string; name: string }[] = [
   { route: '/admin/invites', heading: 'Invitations', name: 'admin-invitations' },
   { route: '/admin/roles', heading: 'Roles & access', name: 'admin-roles' },
 
-  { route: '/admin/models', heading: 'Providers & models', name: 'admin-models' },
+  { route: '/admin/models', heading: 'Providers & Models', name: 'admin-providers' },
+  { route: '/admin/models?tab=models', heading: 'Providers & Models', name: 'admin-models' },
   { route: '/admin/quotas', heading: 'Usage budgets', name: 'admin-quotas' },
 
   {

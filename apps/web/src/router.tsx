@@ -11,6 +11,7 @@ import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
 import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import {
+  validateModelsSearch,
   validateRolesSearch,
   validateStorageSearch,
   validateUsageSearch,
@@ -261,6 +262,7 @@ function redirectRoute<TPath extends string>(path: TPath, to: MergedAdminPage, h
   });
 }
 
+// Providers is the default tab of Providers & Models.
 const adminProvidersRoute = redirectRoute('/admin/providers', '/admin/models');
 const adminSsoRoute = redirectRoute(
   '/admin/sso',
@@ -281,6 +283,7 @@ const adminRolesRoute = createRoute({
 const adminModelsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/models',
+  validateSearch: validateModelsSearch,
   component: lazyRouteComponent(() => import('~/routes/admin/models'), 'AdminModelsPage'),
 });
 

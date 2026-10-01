@@ -47,7 +47,7 @@ async function providerCheck(): Promise<SetupCheck> {
       // Self-hosted OpenAI-compatible servers commonly need no key.
       (provider.encryptedApiKey !== null || provider.kind === 'openai-compatible'),
   );
-  const action = { label: 'Open providers & models', to: '/admin/models' };
+  const action = { label: 'Open providers', to: '/admin/models?tab=providers' };
   if (usable.length > 0) {
     return {
       id: 'provider',
@@ -84,7 +84,7 @@ async function modelChecks(): Promise<SetupCheck[]> {
     .from(schema.model)
     .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id));
   const available = rows.filter((row) => row.enabled && row.providerEnabled);
-  const action = { label: 'Open providers & models', to: '/admin/models' };
+  const action = { label: 'Open models', to: '/admin/models?tab=models' };
 
   const models: SetupCheck = {
     id: 'models',
