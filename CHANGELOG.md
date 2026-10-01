@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-01
+
+Administration organised around the tasks administrators do, with guided setup,
+a single page for role access and actionable user accounts; correctness fixes
+found along the way; and chat that keeps up with a streaming reply.
+
 ### Added
 
 - **Setup checklist on the admin Overview.** Computed by the server from stored
@@ -79,6 +85,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Role changes and sign-in policy changes are recorded under protected audit
   actions that retention never removes; bulk role, ban and unban are protected
   too. Model discovery against a provider is now audited.
+
+### Upgrade notes
+
+- No new database migrations since 0.5.0. Deploy the API and web images as a
+  pair.
+- Before this release, saving one administrative field could reset others.
+  After upgrading, check session lifetime, each model's visible roles,
+  capabilities and default flag, and scheduled report windows.
 
 ## [0.5.0] - 2026-10-01
 
@@ -493,7 +507,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.5.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.6.0...main
+[0.6.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.5.0
 [0.4.1]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.1
 [0.4.0]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.0

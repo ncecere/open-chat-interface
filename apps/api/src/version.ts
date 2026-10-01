@@ -1,3 +1,3 @@
 const configuredVersion = process.env.OCI_VERSION?.trim();
 
-export const APP_VERSION = (configuredVersion || '0.5.0').replace(/^v/, '');
+export const APP_VERSION = (configuredVersion || '0.6.0').replace(/^v/, '');
