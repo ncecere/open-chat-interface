@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-01
+
+Providers & Models split into tabs. No database migrations; deploy the API and
+web images as a pair.
+
 ### Changed
 
 - **Providers & Models** (renamed from Providers & models) has a Providers tab
@@ -513,7 +518,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.6.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.6.1...main
+[0.6.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.6.1
 [0.6.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.5.0
 [0.4.1]: https://gitlab.it.ufl.edu/ict/aipe/software/open-chat-interface/-/releases/v0.4.1
