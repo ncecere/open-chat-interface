@@ -283,7 +283,9 @@ describe('individual user mutations', () => {
     });
     const patch = { name: 'Changed', banned: true, banReason: 'Reason' };
     expect(await updateUser(actor, 'target', patch)).toEqual({ id: 'target' });
-    expect(mocks.db.delete).not.toHaveBeenCalled();
+    // A ban ends the account's sessions, as bulk ban does.
+    expect(mocks.db.delete).toHaveBeenCalledTimes(1);
+    expect(mocks.db.delete).toHaveBeenCalledWith(schema.session);
     expect(mocks.recordAudit).toHaveBeenCalledWith({
       actorUserId: actor.id,
       actorEmail: actor.email,
