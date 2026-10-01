@@ -212,6 +212,8 @@ describe.skipIf(!available)('live Postgres: public share lifecycle', () => {
     expect(row?.deletedReason).toBe('retention');
   });
 
+  // This checks batch cardinality across 501 real per-thread transactions, not
+  // a five-second latency SLA. Leave room for concurrent coverage/CI load.
   it('bounds a retention pass to 500 eligible threads and advances next time', async () => {
     await fixture.db.insert(schema.thread).values(
       Array.from({ length: 501 }, () => ({
@@ -223,7 +225,7 @@ describe.skipIf(!available)('live Postgres: public share lifecycle', () => {
     expect(await applyThreadRetention()).toBe(500);
     expect(await applyThreadRetention()).toBe(1);
     expect(await applyThreadRetention()).toBe(0);
-  });
+  }, 20_000);
 
   it('leaves disabled retention and pinned/temporary/recent conversations alone', async () => {
     const old = new Date('2020-01-01');

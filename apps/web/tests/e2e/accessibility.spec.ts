@@ -94,15 +94,31 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     const password = process.env.E2E_ADMIN_PASSWORD;
     test.skip(!email || !password, 'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD');
 
+    // Deterministic per-page introduction data, with a delayed gate response
+    // to exercise asynchronous loading without changing persisted preferences.
+    await page.route('**/api/me/onboarding', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      const onboarding = await response.json();
+      expect(onboarding.pendingPolicy).toBeNull();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.fulfill({ response, json: { ...onboarding, needsIntroduction: true } });
+    });
+
     await page.goto('/auth/login');
     await page.getByLabel('Email').fill(email!);
     await page.getByLabel('Password').fill(password!);
     await page.getByRole('button', { name: 'Sign in' }).click();
 
     const skip = page.getByRole('button', { name: 'Skip for now' });
-    // Only meaningful while the introduction is outstanding; an instance whose
-    // account has already completed it has nothing to scan.
-    test.skip(!(await skip.isVisible().catch(() => false)), 'Introduction already completed');
+    // Authentication and the onboarding query finish after the submit click.
+    // Missing fixture UI must fail, not silently erase accessibility coverage.
+    await expect(skip).toBeVisible();
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');

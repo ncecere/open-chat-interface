@@ -199,8 +199,26 @@ The remaining execution/release gates below still apply.
     credentials or sessions were accessed or changed. Production evidence scope,
     accepted proof and handling of unknown provenance require owner approval;
     there is no blanket flag/session reset or inferred historical repair.
-12. Full authenticated browser, live service, migration, build/typecheck, lint,
-    coverage, audit, license and release validation; final independent review.
+12. **Final validation — checkpoint validated and reviewed.** [Recorded evidence](release-validation.md):
+    source-built, pinned MinIO plus Mailpit pass 12 live cases; unfiltered API
+    coverage passes 799 tests / 78 files with zero skips (`proc_ab0a`). The browser
+    introduction baseline silently skipped both projects (`proc_2f9f`); a delayed,
+    per-page fixture and awaited visibility now pass both, followed by all 44
+    desktop/mobile cases with zero skips or flaky retries (`proc_f549`). Manual
+    real-login/onboarding/streaming/Stop checks pass. Initial dependency audit
+    found four high, nine moderate and four low advisories.
+    Targeted updates (Nodemailer 10.0.9, Hono 4.13.7, Undici 7.29.1 and DOMPurify
+    3.4.16) now audit clean without SDK/Postgres changes. After correcting the
+    initial Vite build environment to production, all 44 browser cases pass again
+    (`proc_b792`). A load-sensitive 501-transaction test received a case-specific
+    deadline; subsequent host/Linux coverage both pass 799 tests (`proc_8b33`,
+    `proc_1845`). Forced workspace tests pass 459 API / 246 web, with typechecks,
+    lint and licenses (`proc_3589`). Linux runtime/build/web images pass
+    (`proc_0f14`); the non-root runtime migrates a clean database and passes health
+    checks (`proc_1a21`). Both scoped source reviews found no blocker; neither
+    independently reran tests. Owned test services and generated credentials are
+    cleaned up. See the evidence page for harness corrections and scope limits.
+    PR CI and release/deployment gates still apply.
 13. Organize and commit changes; prepare a new semver version/changelog; integrate
     through the repository's main/release process; tag and push only passing code.
 14. Verify published API/web images, stage/smoke-test, back up homelab data/secrets,
@@ -209,10 +227,16 @@ The remaining execution/release gates below still apply.
 
 ## Working infrastructure
 
-Disposable Compose project `oci-remediation`, defined in
-`/tmp/oci-chat-admission.compose.yaml`, currently uses PostgreSQL on
-`127.0.0.1:55441` and Redis on `127.0.0.1:6389`. Tests create and drop isolated
-PostgreSQL databases. Do not stop or modify unrelated local infrastructure.
+Earlier checkpoints used disposable Compose project `oci-remediation` on
+PostgreSQL `127.0.0.1:55441` and Redis `127.0.0.1:6389`; those temporary resources
+were no longer present when final validation resumed. Phase 12 used a new owned
+project with random loopback ports, private generated fixture credentials,
+PostgreSQL/Redis/Mailpit and test-only MinIO built from pinned source. Tests created
+and dropped exact owned databases. That project's containers/network and private
+fixture credentials/runtime directories have now been removed; no current test
+service should be inferred from the recorded addresses or process IDs. See
+[validation isolation](release-validation.md). Do not stop or modify unrelated
+local infrastructure.
 
 ## Release/deployment gates
 
