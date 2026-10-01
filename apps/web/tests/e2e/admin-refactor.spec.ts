@@ -32,8 +32,11 @@ test('storage tabs retain one draft and submit only changed public settings', as
   const nextLimit = String(initial.storage.maxFilesPerMessage + 1);
   await page.getByLabel('Maximum files per message').fill(nextLimit);
   await page.getByRole('tab', { name: 'S3 connection' }).click();
+  // The tab is in the URL, but switching must not remount the shared draft.
+  await expect(page).toHaveURL(/[?&]tab=s3\b/);
   await expect(page.getByRole('button', { name: 'Check bucket access' })).toBeDisabled();
   await page.getByRole('tab', { name: 'Upload policy' }).click();
+  await expect(page).toHaveURL(/[?&]tab=uploads\b/);
   await expect(page.getByLabel('Maximum files per message')).toHaveValue(nextLimit);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByText('Storage settings saved.', { exact: true })).toBeVisible();
@@ -136,4 +139,24 @@ test('user filters reset pagination and selection survives page changes', async 
   expect(bulkRequests).toEqual([
     { userIds: ['first', 'second'], action: 'set_role', role: 'user' },
   ]);
+});
+
+test('instance settings live at their own addresses', async ({ page, isMobile }) => {
+  await page.goto('/admin/settings');
+  await expect(page).toHaveURL(/\/admin\/settings\/general$/);
+  await expect(page.getByRole('heading', { name: 'General', level: 1 })).toBeVisible();
+  // Narrow screens keep the navigation in a drawer behind the menu button.
+  if (isMobile) await page.getByRole('button', { name: 'Open admin navigation' }).click();
+  const nav = page.getByRole('navigation', { name: 'Administration' });
+  await expect(nav.getByRole('link', { name: 'General', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(nav.getByRole('link', { name: 'Overview', exact: true })).not.toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await nav.getByRole('link', { name: 'Email delivery', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/settings\/email$/);
+  await expect(page.getByRole('heading', { name: 'Email delivery', level: 1 })).toBeVisible();
 });

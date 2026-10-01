@@ -2,6 +2,7 @@ import type { AdminUser } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowDown, ArrowUp } from 'lucide-react';
+import { useAdminAccess } from '~/components/admin/admin-access';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { api } from '~/lib/api-client';
@@ -84,19 +85,23 @@ export function UserTable({
   onLimits: (user: AdminUser) => void;
 }) {
   const { selected, toggleSelected, allOnPageSelected, selectPage } = selection;
+  // Selection only feeds bulk changes, so read-only viewers get no checkboxes.
+  const { canEdit } = useAdminAccess();
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+      <table className="w-full min-w-[40rem] text-sm">
         <thead>
           <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
-            <th className="w-10 px-4 py-3">
-              <input
-                type="checkbox"
-                aria-label="Select every account on this page"
-                checked={allOnPageSelected}
-                onChange={(event) => selectPage(event.target.checked)}
-              />
-            </th>
+            {canEdit && (
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  aria-label="Select every account on this page"
+                  checked={allOnPageSelected}
+                  onChange={(event) => selectPage(event.target.checked)}
+                />
+              </th>
+            )}
             <SortableHeader
               label="User"
               sortKey="name"
@@ -125,20 +130,26 @@ export function UserTable({
               direction={direction}
               onSort={onSort}
             />
-            <th className="px-4 py-3" />
+            {canEdit && (
+              <th className="px-4 py-3">
+                <span className="sr-only">Actions</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
           {users.map((user) => (
             <tr key={user.id} className="border-b border-[var(--border-subtle)] last:border-0">
-              <td className="px-4 py-3">
-                <input
-                  type="checkbox"
-                  aria-label={`Select ${user.email}`}
-                  checked={selected.has(user.id)}
-                  onChange={() => toggleSelected(user.id)}
-                />
-              </td>
+              {canEdit && (
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${user.email}`}
+                    checked={selected.has(user.id)}
+                    onChange={() => toggleSelected(user.id)}
+                  />
+                </td>
+              )}
               <td className="px-4 py-3">
                 <Link
                   to="/admin/users/$userId"
@@ -163,24 +174,26 @@ export function UserTable({
               <td className="px-4 py-3 text-[var(--text-muted)]">
                 {formatRelativeTime(user.createdAt)}
               </td>
-              <td className="px-4 py-3 text-right">
-                <Button size="sm" variant="ghost" onClick={() => onLimits(user)}>
-                  Limits
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={updateRole.isPending}
-                  onClick={() =>
-                    updateRole.mutate({
-                      id: user.id,
-                      role: user.role === 'admin' ? 'user' : 'admin',
-                    })
-                  }
-                >
-                  {user.role === 'admin' ? 'Demote' : 'Make admin'}
-                </Button>
-              </td>
+              {canEdit && (
+                <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <Button size="sm" variant="ghost" onClick={() => onLimits(user)}>
+                    Limits
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={updateRole.isPending}
+                    onClick={() =>
+                      updateRole.mutate({
+                        id: user.id,
+                        role: user.role === 'admin' ? 'user' : 'admin',
+                      })
+                    }
+                  >
+                    {user.role === 'admin' ? 'Demote' : 'Make admin'}
+                  </Button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

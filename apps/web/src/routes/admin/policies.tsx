@@ -2,6 +2,7 @@ import { type UsagePolicy, upsertUsagePolicySchema } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Send } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
   EmptyState,
@@ -147,15 +148,17 @@ export function AdminPoliciesPage() {
   const current = policies.find((policy) => policy.publishedAt) ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <AdminPageHeader
         title="Acceptable use"
         description="A policy people must accept before using this instance. Each change is a new version, so a record of who accepted which wording is preserved."
         actions={
-          <Button variant="primary" onClick={() => setComposing(true)}>
-            <FileText />
-            New version
-          </Button>
+          <EditOnly>
+            <Button variant="primary" onClick={() => setComposing(true)}>
+              <FileText />
+              New version
+            </Button>
+          </EditOnly>
         }
       />
 
@@ -199,15 +202,17 @@ export function AdminPoliciesPage() {
                 </div>
 
                 {!policy.publishedAt && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={publish.isPending}
-                    onClick={() => publish.mutate(policy.id)}
-                  >
-                    <Send />
-                    Publish
-                  </Button>
+                  <EditOnly>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={publish.isPending}
+                      onClick={() => publish.mutate(policy.id)}
+                    >
+                      <Send />
+                      Publish
+                    </Button>
+                  </EditOnly>
                 )}
               </Row>
             ))}

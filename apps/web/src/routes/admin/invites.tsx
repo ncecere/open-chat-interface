@@ -2,6 +2,7 @@ import { createInviteSchema, type Invite, USER_ROLES, type UserRole } from '@oci
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Link2, MailPlus, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, Row, RowList } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -351,15 +352,17 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
       </div>
 
       {status === 'active' && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Revoke invitation${invite.email ? ` for ${invite.email}` : ''}`}
-          onClick={onRevoke}
-        >
-          <Trash2 />
-        </Button>
+        <EditOnly>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Revoke invitation${invite.email ? ` for ${invite.email}` : ''}`}
+            onClick={onRevoke}
+          >
+            <Trash2 />
+          </Button>
+        </EditOnly>
       )}
     </Row>
   );
@@ -387,10 +390,12 @@ export function AdminInvitesPage() {
         title="Invitations"
         description="Create and manage invitation links for your organization."
         actions={
-          <Button variant="primary" onClick={() => setCreateOpen(true)}>
-            <MailPlus />
-            Create invitation
-          </Button>
+          <EditOnly>
+            <Button variant="primary" onClick={() => setCreateOpen(true)}>
+              <MailPlus />
+              Create invitation
+            </Button>
+          </EditOnly>
         }
       />
 
@@ -433,9 +438,11 @@ export function AdminInvitesPage() {
           <p className="max-w-md text-xs text-[var(--text-muted)]">
             Create an invitation to email a recipient or generate a link you can share directly.
           </p>
-          <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)}>
-            Create invitation
-          </Button>
+          <EditOnly>
+            <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)}>
+              Create invitation
+            </Button>
+          </EditOnly>
         </div>
       )}
 

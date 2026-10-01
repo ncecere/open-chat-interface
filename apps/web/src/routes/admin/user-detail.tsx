@@ -2,6 +2,7 @@ import type { AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -121,7 +122,7 @@ export function AdminUserDetailPage() {
         {!user.emailVerified && <Badge variant="neutral">unverified</Badge>}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4">
         <Stat label="Threads" value={String(user.threadCount)} />
         <Stat label="Messages" value={String(user.messageCount)} />
         <Stat label="Storage" value={formatBytes(storage.bytesUsed)} />
@@ -133,8 +134,8 @@ export function AdminUserDetailPage() {
           <Empty>No active sessions.</Empty>
         ) : (
           <>
-            <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+              <table className="w-full min-w-[32rem] text-sm">
                 <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
                   <tr>
                     <th className="px-4 py-2 text-left">Started</th>
@@ -159,15 +160,17 @@ export function AdminUserDetailPage() {
                 </tbody>
               </table>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-3"
-              disabled={revokeSessions.isPending}
-              onClick={() => revokeSessions.mutate()}
-            >
-              Sign out everywhere
-            </Button>
+            <EditOnly>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-3"
+                disabled={revokeSessions.isPending}
+                onClick={() => revokeSessions.mutate()}
+              >
+                Sign out everywhere
+              </Button>
+            </EditOnly>
             <MutationError
               error={revokeSessions.error}
               message="Sessions could not be revoked."

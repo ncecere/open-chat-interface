@@ -9,11 +9,11 @@ import { formatBytes } from '~/lib/utils';
 
 function Stat({ title, value, hint }: { title: string; value: string; hint?: string }) {
   return (
-    <div className="min-w-0 p-5">
-      <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+    <div className="min-w-0 p-4 sm:p-5">
+      <p className="truncate text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
         {title}
       </p>
-      <p className="mt-2 truncate text-2xl font-semibold">{value}</p>
+      <p className="mt-2 truncate text-xl font-semibold sm:text-2xl">{value}</p>
       {hint && <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{hint}</p>}
     </div>
   );
@@ -110,20 +110,20 @@ export function AdminOverviewPage() {
           value={String(data.users.total)}
           hint={`${data.users.admins} admin${data.users.admins === 1 ? '' : 's'}`}
         />
-        <div className="min-w-0 p-5">
+        <div className="min-w-0 p-4 sm:p-5">
           <p className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
             Threads
           </p>
-          <p className="mt-2 truncate font-semibold text-2xl">{data.threads.total}</p>
+          <p className="mt-2 truncate font-semibold text-xl sm:text-2xl">{data.threads.total}</p>
           <p className="mt-1 truncate text-xs">
             <Trend current={data.threads.last24h} previous={data.threads.previous24h} />
           </p>
         </div>
-        <div className="min-w-0 p-5">
+        <div className="min-w-0 p-4 sm:p-5">
           <p className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
             Messages
           </p>
-          <p className="mt-2 truncate font-semibold text-2xl">{data.messages.total}</p>
+          <p className="mt-2 truncate font-semibold text-xl sm:text-2xl">{data.messages.total}</p>
           <p className="mt-1 truncate text-xs">
             <Trend current={data.messages.last24h} previous={data.messages.previous24h} />
           </p>

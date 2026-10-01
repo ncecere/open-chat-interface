@@ -2,6 +2,7 @@ import { type InstanceSettings, SEARCH_PROVIDER_KINDS, type SearchProviderKind }
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -97,7 +98,7 @@ function changedSearchSettings(
 function LoadingSearchSettings() {
   return (
     <div
-      className="flex max-w-3xl items-center gap-3 text-sm text-[var(--text-muted)]"
+      className="flex items-center gap-3 text-sm text-[var(--text-muted)]"
       role="status"
       aria-busy="true"
       aria-label="Loading search settings"
@@ -159,7 +160,7 @@ function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettin
 
   return (
     <form
-      className="flex max-w-3xl flex-col gap-8"
+      className="flex flex-col gap-8"
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
@@ -370,24 +371,26 @@ function SearchSettingsForm({ initialSettings }: { initialSettings: SearchSettin
         </div>
       </SettingsSection>
 
-      <div className="flex min-h-9 flex-col gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
-        <div className="sm:mr-auto" aria-live="polite">
-          {errorMessage && (
-            <p role="alert" className="text-sm text-[var(--danger)]">
-              {errorMessage}
-            </p>
-          )}
-          {successMessage && (
-            <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
-              <CheckCircle2 className="size-4" /> Search settings saved.
-            </p>
-          )}
+      <EditOnly>
+        <div className="flex min-h-9 flex-col gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
+          <div className="sm:mr-auto" aria-live="polite">
+            {errorMessage && (
+              <p role="alert" className="text-sm text-[var(--danger)]">
+                {errorMessage}
+              </p>
+            )}
+            {successMessage && (
+              <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
+                <CheckCircle2 className="size-4" /> Search settings saved.
+              </p>
+            )}
+          </div>
+          <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
+            {save.isPending && <Spinner />}
+            {save.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
         </div>
-        <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
-          {save.isPending && <Spinner />}
-          {save.isPending ? 'Saving…' : 'Save changes'}
-        </Button>
-      </div>
+      </EditOnly>
     </form>
   );
 }
@@ -401,14 +404,14 @@ export function AdminSearchPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Search"
+        title="Web search"
         description="Configure web search grounding and its upstream provider."
       />
 
       {settings.isLoading ? (
         <LoadingSearchSettings />
       ) : settings.isError || !settings.data ? (
-        <div className="max-w-3xl">
+        <div>
           <p role="alert" className="text-sm text-[var(--danger)]">
             {settings.error instanceof ApiError
               ? settings.error.message

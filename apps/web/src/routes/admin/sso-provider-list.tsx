@@ -2,6 +2,7 @@ import type { SsoProviderSummary } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, ExternalLink, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { EditOnly, useAdminAccess } from '~/components/admin/admin-access';
 import { RowList } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -69,6 +70,7 @@ function ProviderRow({
   onDelete: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { canEdit } = useAdminAccess();
   const [copied, setCopied] = useState<CopiedEndpoint>(null);
   const [copyError, setCopyError] = useState(false);
 
@@ -114,28 +116,30 @@ function ProviderRow({
         <div className="flex shrink-0 items-center gap-1">
           <Switch
             checked={provider.enabled}
-            disabled={toggle.isPending}
+            disabled={toggle.isPending || !canEdit}
             onCheckedChange={(enabled) => toggle.mutate(enabled)}
             aria-label={`${provider.enabled ? 'Disable' : 'Enable'} ${provider.label}`}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Edit ${provider.label}`}
-            onClick={onEdit}
-          >
-            <Pencil />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Delete ${provider.label}`}
-            onClick={onDelete}
-          >
-            <Trash2 />
-          </Button>
+          <EditOnly>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${provider.label}`}
+              onClick={onEdit}
+            >
+              <Pencil />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Delete ${provider.label}`}
+              onClick={onDelete}
+            >
+              <Trash2 />
+            </Button>
+          </EditOnly>
         </div>
       </div>
 

@@ -103,8 +103,8 @@ export function AdminHealthPage() {
         {data.recentJobs.length === 0 ? (
           <p className="mt-3 text-[var(--text-muted)] text-sm">No jobs have run yet.</p>
         ) : (
-          <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border-subtle)]">
-            <table className="w-full text-sm">
+          <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+            <table className="w-full min-w-[36rem] text-sm">
               <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
                 <tr>
                   <th className="px-4 py-2 text-left">Job</th>

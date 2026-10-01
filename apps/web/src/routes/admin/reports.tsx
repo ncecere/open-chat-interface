@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
@@ -104,68 +105,73 @@ export function AdminReportsPage() {
     <div>
       {header}
 
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name" htmlFor="report-name">
-          <Input
-            id="report-name"
-            value={name}
-            required
-            maxLength={120}
-            placeholder="Monthly usage"
-            onChange={(event) => setName(event.target.value)}
-          />
-        </Field>
-        <Field label="Cadence" htmlFor="report-cadence">
-          <Select id="report-cadence" value={cadence} onChange={setCadence} options={CADENCES} />
-        </Field>
-        <Field
-          label="Window (days)"
-          htmlFor="report-window"
-          hint="How much history each report covers."
-        >
-          <Input
-            id="report-window"
-            type="number"
-            min={1}
-            max={365}
-            value={windowDays}
-            onChange={(event) => setWindowDays(Number(event.target.value))}
-          />
-        </Field>
-        <Field
-          label="Recipients"
-          htmlFor="report-recipients"
-          hint="Separate addresses with commas."
-        >
-          <Input
-            id="report-recipients"
-            value={recipients}
-            required
-            placeholder="ops@example.com"
-            onChange={(event) => setRecipients(event.target.value)}
-          />
-        </Field>
-        <div className="flex flex-col gap-2 sm:col-span-2">
-          <MutationError error={create.error} message="The report could not be added." />
-          <div>
-            <Button type="submit" variant="primary" disabled={create.isPending}>
-              Add report
-            </Button>
+      {/* Creating a report is the only thing this form does. */}
+      <EditOnly>
+        <form onSubmit={submit} className="mb-8 grid gap-3 sm:grid-cols-2">
+          <Field label="Name" htmlFor="report-name">
+            <Input
+              id="report-name"
+              value={name}
+              required
+              maxLength={120}
+              placeholder="Monthly usage"
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
+          <Field label="Cadence" htmlFor="report-cadence">
+            <Select id="report-cadence" value={cadence} onChange={setCadence} options={CADENCES} />
+          </Field>
+          <Field
+            label="Window (days)"
+            htmlFor="report-window"
+            hint="How much history each report covers."
+          >
+            <Input
+              id="report-window"
+              type="number"
+              min={1}
+              max={365}
+              value={windowDays}
+              onChange={(event) => setWindowDays(Number(event.target.value))}
+            />
+          </Field>
+          <Field
+            label="Recipients"
+            htmlFor="report-recipients"
+            hint="Separate addresses with commas."
+          >
+            <Input
+              id="report-recipients"
+              value={recipients}
+              required
+              placeholder="ops@example.com"
+              onChange={(event) => setRecipients(event.target.value)}
+            />
+          </Field>
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <MutationError error={create.error} message="The report could not be added." />
+            <div>
+              <Button type="submit" variant="primary" disabled={create.isPending}>
+                Add report
+              </Button>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      </EditOnly>
 
-      <section className="mt-8">
+      <section>
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-base">Reports</h2>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={runNow.isPending}
-            onClick={() => runNow.mutate()}
-          >
-            Send due now
-          </Button>
+          <EditOnly>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={runNow.isPending}
+              onClick={() => runNow.mutate()}
+            >
+              Send due now
+            </Button>
+          </EditOnly>
         </div>
 
         <MutationError
@@ -215,17 +221,19 @@ export function AdminReportsPage() {
                   )}
                 </div>
 
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={toggle.isPending}
-                  onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
-                >
-                  {report.enabled ? 'Pause' : 'Resume'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setDeleteFor(report)}>
-                  Delete
-                </Button>
+                <EditOnly>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={toggle.isPending}
+                    onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
+                  >
+                    {report.enabled ? 'Pause' : 'Resume'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleteFor(report)}>
+                    Delete
+                  </Button>
+                </EditOnly>
               </li>
             ))}
           </ul>

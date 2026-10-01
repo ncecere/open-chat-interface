@@ -8,6 +8,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ImageIcon, Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -318,6 +319,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
         <div className="flex min-w-0 flex-col gap-8">
           <SettingsSection
+            stacked
             title="Identity"
             description="Set the name and logo shown to people using this instance."
           >
@@ -393,6 +395,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
           </SettingsSection>
 
           <SettingsSection
+            stacked
             title="Appearance"
             description="Choose the default color and theme for the experience."
           >
@@ -453,6 +456,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
           </SettingsSection>
 
           <SettingsSection
+            stacked
             title="Sign-in message"
             description="Add a short welcome or usage notice to the sign-in page."
           >
@@ -484,34 +488,36 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
         <BrandingPreview settings={draft} />
       </div>
 
-      <div className="mt-8 flex min-h-10 flex-col-reverse gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
-        <div className="sm:mr-auto" aria-live="polite">
-          {errorMessage && (
-            <p role="alert" className="text-sm text-[var(--danger)]">
-              {errorMessage}
-            </p>
-          )}
-          {savedMessage && (
-            <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
-              <CheckCircle2 className="size-4" aria-hidden="true" />
-              Branding settings saved.
-            </p>
-          )}
+      <EditOnly>
+        <div className="mt-8 flex min-h-10 flex-col-reverse gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
+          <div className="sm:mr-auto" aria-live="polite">
+            {errorMessage && (
+              <p role="alert" className="text-sm text-[var(--danger)]">
+                {errorMessage}
+              </p>
+            )}
+            {savedMessage && (
+              <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
+                <CheckCircle2 className="size-4" aria-hidden="true" />
+                Branding settings saved.
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!hasChanges || save.isPending}
+            onClick={resetForm}
+          >
+            <RotateCcw aria-hidden="true" />
+            Reset
+          </Button>
+          <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
+            {save.isPending && <Spinner />}
+            {save.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={!hasChanges || save.isPending}
-          onClick={resetForm}
-        >
-          <RotateCcw aria-hidden="true" />
-          Reset
-        </Button>
-        <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
-          {save.isPending && <Spinner />}
-          {save.isPending ? 'Saving…' : 'Save changes'}
-        </Button>
-      </div>
+      </EditOnly>
     </form>
   );
 }
@@ -604,7 +610,7 @@ export function AdminBrandingPage() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div>
       <AdminPageHeader
         title="Branding"
         description="Customize the identity and default appearance of your Open Chat Interface instance."
@@ -613,7 +619,7 @@ export function AdminBrandingPage() {
       {settings.isLoading ? (
         <LoadingBranding />
       ) : settings.isError || !settings.data ? (
-        <div className="max-w-3xl">
+        <div>
           <p role="alert" className="text-sm text-[var(--danger)]">
             {settings.error instanceof ApiError
               ? settings.error.message

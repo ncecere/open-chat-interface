@@ -3,8 +3,8 @@ import { capture, signIn } from './helpers';
 
 /**
  * The narrow layout, which differs enough to be worth documenting: the
- * sidebar becomes a dialog, and the composer's controls collapse behind a
- * single button.
+ * sidebar becomes a dialog, the composer's controls collapse behind a single
+ * button, and administration navigation moves into a drawer.
  */
 test.describe('narrow screens', () => {
   test.skip(({ isMobile }) => !isMobile, 'Runs only in the mobile project');
@@ -32,6 +32,18 @@ test.describe('narrow screens', () => {
     await page.goto('/admin');
     await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
     await capture(page, 'mobile-admin-overview');
+  });
+
+  test('captures the administration navigation drawer', async ({ page }) => {
+    await signIn(page);
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Open admin navigation', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Administration' });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole('link', { name: 'Users', exact: true })).toBeVisible();
+    await capture(page, 'mobile-admin-navigation');
   });
 
   test('captures the sign-in page', async ({ page }) => {

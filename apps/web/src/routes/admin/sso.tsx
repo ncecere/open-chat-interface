@@ -2,6 +2,7 @@ import type { SsoProviderSummary } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
@@ -26,13 +27,15 @@ export function AdminSsoPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Auth & SSO"
+        title="Single sign-on"
         description="Connect OpenID Connect and SAML 2.0 identity providers, control account provisioning, and map identity claims to OCI roles."
         actions={
-          <Button type="button" variant="primary" onClick={() => setFormProvider('new')}>
-            <Plus />
-            Add provider
-          </Button>
+          <EditOnly>
+            <Button type="button" variant="primary" onClick={() => setFormProvider('new')}>
+              <Plus />
+              Add provider
+            </Button>
+          </EditOnly>
         }
       />
 
@@ -79,15 +82,17 @@ export function AdminSsoPage() {
             Add an OIDC or SAML 2.0 provider to offer centralized sign-in. You can keep it disabled
             while completing identity provider setup.
           </p>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setFormProvider('new')}
-          >
-            <Plus />
-            Add provider
-          </Button>
+          <EditOnly>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setFormProvider('new')}
+            >
+              <Plus />
+              Add provider
+            </Button>
+          </EditOnly>
         </div>
       )}
 

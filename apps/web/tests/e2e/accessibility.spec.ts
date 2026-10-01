@@ -149,10 +149,10 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
-  test('admin settings tabs have no violations', async ({ page }) => {
+  test('admin general settings have no violations', async ({ page }) => {
     await signIn(page);
-    await page.goto('/admin/settings');
-    await expect(page.getByRole('tab', { name: 'General' })).toBeVisible();
+    await page.goto('/admin/settings/general');
+    await expect(page.getByRole('heading', { name: 'General', level: 1 })).toBeVisible();
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');

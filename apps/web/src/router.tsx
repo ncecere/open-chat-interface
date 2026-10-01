@@ -10,6 +10,11 @@ import { AppShell } from '~/components/layout/app-shell';
 import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
 import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
+import {
+  validateRateLimitSearch,
+  validateStorageSearch,
+  validateUsageSearch,
+} from '~/lib/admin-search';
 import { ApiError, api } from '~/lib/api-client';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
@@ -195,7 +200,11 @@ const adminRoute = createRoute({
   beforeLoad: async () => {
     const session = await loadSession();
     if (!session) throw redirect({ to: '/auth/login' });
-    if (session.user.role !== 'admin') throw redirect({ to: '/' });
+    // Auditors get read-only access: the API serves them GETs and rejects
+    // writes, and the layout hides or disables every mutating control.
+    if (session.user.role !== 'admin' && session.user.role !== 'auditor') {
+      throw redirect({ to: '/' });
+    }
     return { session };
   },
   component: lazyRouteComponent(() => import('~/components/admin/admin-layout'), 'AdminLayout'),
@@ -244,10 +253,38 @@ const adminModelsRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/models'), 'AdminModelsPage'),
 });
 
+// Instance settings are three pages rather than in-page tabs, so each has a
+// URL; the old address keeps working by landing on General.
 const adminSettingsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/settings',
-  component: lazyRouteComponent(() => import('~/routes/admin/settings'), 'AdminSettingsPage'),
+  beforeLoad: () => {
+    throw redirect({ to: '/admin/settings/general', replace: true });
+  },
+});
+
+const adminGeneralSettingsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/settings/general',
+  component: lazyRouteComponent(
+    () => import('~/routes/admin/settings'),
+    'AdminGeneralSettingsPage',
+  ),
+});
+
+const adminAuthenticationSettingsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/settings/authentication',
+  component: lazyRouteComponent(
+    () => import('~/routes/admin/settings'),
+    'AdminAuthenticationSettingsPage',
+  ),
+});
+
+const adminEmailSettingsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/settings/email',
+  component: lazyRouteComponent(() => import('~/routes/admin/settings'), 'AdminEmailSettingsPage'),
 });
 
 const adminInvitesRoute = createRoute({
@@ -283,6 +320,7 @@ const adminSearchRoute = createRoute({
 const adminStorageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/storage',
+  validateSearch: validateStorageSearch,
   component: lazyRouteComponent(() => import('~/routes/admin/storage'), 'AdminStoragePage'),
 });
 
@@ -298,6 +336,7 @@ const adminStorageLimitsRoute = createRoute({
 const adminRateLimitsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/rate-limits',
+  validateSearch: validateRateLimitSearch,
   component: lazyRouteComponent(() => import('~/routes/admin/rate-limits'), 'AdminRateLimitsPage'),
 });
 
@@ -322,6 +361,7 @@ const adminBroadcastsRoute = createRoute({
 const adminUsageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/usage',
+  validateSearch: validateUsageSearch,
   component: lazyRouteComponent(() => import('~/routes/admin/usage'), 'AdminUsagePage'),
 });
 
@@ -355,6 +395,9 @@ const routeTree = rootRoute.addChildren([
     adminProvidersRoute,
     adminModelsRoute,
     adminSettingsRoute,
+    adminGeneralSettingsRoute,
+    adminAuthenticationSettingsRoute,
+    adminEmailSettingsRoute,
     adminInvitesRoute,
     adminBrandingRoute,
     adminSsoRoute,

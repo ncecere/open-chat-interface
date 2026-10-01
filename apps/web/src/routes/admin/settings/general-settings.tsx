@@ -1,5 +1,6 @@
 import { type AdminModel, COLOR_THEMES, type ColorTheme, type InstanceSettings } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -256,13 +257,13 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
 }
 
 function searchDependencyMessage(search: InstanceSettings['search']): string | null {
-  if (!search.enabled) return 'Enable search on the Search page.';
-  if (search.provider === null) return 'Choose a provider on the Search page.';
+  if (!search.enabled) return 'Enable search on the Web search page.';
+  if (search.provider === null) return 'Choose a provider on the Web search page.';
   if (search.provider === 'searxng' && !search.baseUrl) {
-    return 'Set a SearXNG base URL on the Search page.';
+    return 'Set a SearXNG base URL on the Web search page.';
   }
   if (search.provider !== 'searxng' && !search.hasCredential) {
-    return `Add a credential for ${search.provider} on the Search page.`;
+    return `Add a credential for ${search.provider} on the Web search page.`;
   }
   return null;
 }
@@ -337,9 +338,9 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
       {draft.webSearch && missingSearchDependency && (
         <Notice tone="warning" title="Web search has an unmet dependency">
           This feature flag alone does not make search available. {missingSearchDependency}{' '}
-          <a className="text-[var(--accent-bright)] hover:underline" href="/admin/search">
+          <Link className="text-[var(--accent-bright)] hover:underline" to="/admin/search">
             Review search settings
-          </a>
+          </Link>
           .
         </Notice>
       )}
@@ -349,9 +350,9 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
           title={`Attachments use ${settings.storage.driver === 's3' ? 'S3' : 'local'} storage`}
         >
           Upload limits, allowed file types, and the active driver are managed on the{' '}
-          <a className="text-[var(--accent-bright)] hover:underline" href="/admin/storage">
+          <Link className="text-[var(--accent-bright)] hover:underline" to="/admin/storage">
             Storage page
-          </a>
+          </Link>
           . Enabling attachments does not validate or migrate that backend.
         </Notice>
       )}

@@ -9,6 +9,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
   EmptyState,
@@ -327,15 +328,17 @@ export function AdminBroadcastsPage() {
   const broadcasts = data?.broadcasts ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <AdminPageHeader
         title="Announcements"
         description="Tell people about planned maintenance, upcoming changes, or anything else they should see while using the instance."
         actions={
-          <Button variant="primary" onClick={() => setFormFor({ broadcast: null })}>
-            <Megaphone />
-            New announcement
-          </Button>
+          <EditOnly>
+            <Button variant="primary" onClick={() => setFormFor({ broadcast: null })}>
+              <Megaphone />
+              New announcement
+            </Button>
+          </EditOnly>
         }
       />
 
@@ -376,36 +379,38 @@ export function AdminBroadcastsPage() {
                 </p>
               </div>
 
-              {broadcast.dismissalCount > 0 && (
+              <EditOnly>
+                {broadcast.dismissalCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Show ${broadcast.title} again to everyone`}
+                    title="Show again to everyone who dismissed it"
+                    disabled={reshow.isPending}
+                    onClick={() => reshow.mutate(broadcast.id)}
+                  >
+                    <RotateCcw />
+                  </Button>
+                )}
+
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`Show ${broadcast.title} again to everyone`}
-                  title="Show again to everyone who dismissed it"
-                  disabled={reshow.isPending}
-                  onClick={() => reshow.mutate(broadcast.id)}
+                  aria-label={`Edit ${broadcast.title}`}
+                  onClick={() => setFormFor({ broadcast })}
                 >
-                  <RotateCcw />
+                  <Pencil />
                 </Button>
-              )}
 
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Edit ${broadcast.title}`}
-                onClick={() => setFormFor({ broadcast })}
-              >
-                <Pencil />
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Delete ${broadcast.title}`}
-                onClick={() => setDeleteFor(broadcast)}
-              >
-                <Trash2 />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Delete ${broadcast.title}`}
+                  onClick={() => setDeleteFor(broadcast)}
+                >
+                  <Trash2 />
+                </Button>
+              </EditOnly>
             </Row>
           ))}
         </RowList>

@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { useAdminAccess } from '~/components/admin/admin-access';
 import { MutationError } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import {
@@ -44,6 +45,8 @@ export function ConfirmDialog({
   onConfirm: () => Promise<unknown>;
   children?: ReactNode;
 }) {
+  // Triggers are hidden from read-only viewers; this is the backstop.
+  const { canEdit } = useAdminAccess();
   const action = useMutation({
     mutationFn: onConfirm,
     onSuccess: () => onOpenChange(false),
@@ -80,7 +83,7 @@ export function ConfirmDialog({
             <Button
               type="button"
               variant="danger"
-              disabled={action.isPending}
+              disabled={action.isPending || !canEdit}
               onClick={() => action.mutate()}
             >
               {action.isPending && <Spinner />}

@@ -1,5 +1,6 @@
 import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
@@ -195,7 +196,13 @@ export function AuthenticationSettingsForm({
           <Notice tone="warning" title="Email delivery is not configured">
             Verification remains required even when email delivery is unavailable. Unverified
             accounts cannot sign in until delivery is restored and they verify their address.
-            Configure and test email delivery before enabling this requirement.
+            <Link
+              className="text-[var(--accent-bright)] hover:underline"
+              to="/admin/settings/email"
+            >
+              Configure and test email delivery
+            </Link>{' '}
+            before enabling this requirement.
           </Notice>
         )}
 

@@ -2,6 +2,7 @@ import type { DiscoveredModel, Provider } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
   EmptyState,
@@ -51,13 +52,15 @@ export function AdminProvidersPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Providers & Keys"
+        title="Providers & keys"
         description="Configure upstream credentials. Access to a model here does not expose it to users — models must be added to the catalog separately."
         actions={
-          <Button variant="primary" onClick={() => setFormFor({ provider: null })}>
-            <Plus />
-            Add provider
-          </Button>
+          <EditOnly>
+            <Button variant="primary" onClick={() => setFormFor({ provider: null })}>
+              <Plus />
+              Add provider
+            </Button>
+          </EditOnly>
         }
       />
 
@@ -94,33 +97,35 @@ export function AdminProvidersPage() {
                 </p>
               </div>
 
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={discover.isPending}
-                onClick={() => discover.mutate(provider)}
-              >
-                {discover.isPending && discover.variables?.id === provider.id && <Spinner />}
-                Discover models
-              </Button>
+              <EditOnly>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={discover.isPending}
+                  onClick={() => discover.mutate(provider)}
+                >
+                  {discover.isPending && discover.variables?.id === provider.id && <Spinner />}
+                  Discover models
+                </Button>
 
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Edit ${provider.label}`}
-                onClick={() => setFormFor({ provider })}
-              >
-                <Pencil />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Edit ${provider.label}`}
+                  onClick={() => setFormFor({ provider })}
+                >
+                  <Pencil />
+                </Button>
 
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Delete ${provider.label}`}
-                onClick={() => setDeleteFor(provider)}
-              >
-                <Trash2 />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Delete ${provider.label}`}
+                  onClick={() => setDeleteFor(provider)}
+                >
+                  <Trash2 />
+                </Button>
+              </EditOnly>
             </Row>
           ))}
         </RowList>

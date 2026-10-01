@@ -6,9 +6,11 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { AdminTabs } from '~/components/admin/admin-tabs';
+import { EditOnly } from '~/components/admin/admin-access';
+import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
 import {
   AdminPageHeader,
   LoadError,
@@ -20,14 +22,17 @@ import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
+import {
+  DEFAULT_RATE_LIMIT_TAB,
+  type RateLimitTab,
+  validateRateLimitSearch,
+} from '~/lib/admin-search';
 import { api } from '~/lib/api-client';
 
 const TABS = [
   { id: 'roles', label: 'By role' },
   { id: 'reservations', label: 'Reservations' },
-] as const;
-
-type TabId = (typeof TABS)[number]['id'];
+] as const satisfies readonly AdminTab<RateLimitTab>[];
 
 interface RateLimitConfig {
   roles: Record<UserRole, RateLimitSettings>;
@@ -58,7 +63,14 @@ function RateLimitForm({ settings }: { settings: RateLimitConfig }) {
     }));
   }
 
-  const [tab, setTab] = useState<TabId>('roles');
+  const navigate = useNavigate();
+  const tab = validateRateLimitSearch(useSearch({ strict: false })).tab ?? DEFAULT_RATE_LIMIT_TAB;
+  const setTab = (next: RateLimitTab) =>
+    void navigate({
+      to: '/admin/rate-limits',
+      search: { tab: next === DEFAULT_RATE_LIMIT_TAB ? undefined : next },
+      replace: true,
+    });
 
   return (
     <div className="flex flex-col gap-8 pb-10">
@@ -222,28 +234,30 @@ function RateLimitForm({ settings }: { settings: RateLimitConfig }) {
         multiplied by the number of API replicas.
       </Notice>
 
-      <div className="flex items-center justify-end gap-3">
-        <MutationError
-          error={save.error}
-          message="Rate limits could not be saved."
-          className="mr-auto"
-        />
-        {saved && (
-          <span className="mr-auto flex items-center gap-1.5 text-[var(--success)] text-sm">
-            <CheckCircle2 className="size-4" aria-hidden="true" />
-            Saved
-          </span>
-        )}
-        <Button
-          type="button"
-          variant="primary"
-          disabled={save.isPending}
-          onClick={() => save.mutate()}
-        >
-          {save.isPending && <Spinner />}
-          Save limits
-        </Button>
-      </div>
+      <EditOnly>
+        <div className="flex items-center justify-end gap-3">
+          <MutationError
+            error={save.error}
+            message="Rate limits could not be saved."
+            className="mr-auto"
+          />
+          {saved && (
+            <span className="mr-auto flex items-center gap-1.5 text-[var(--success)] text-sm">
+              <CheckCircle2 className="size-4" aria-hidden="true" />
+              Saved
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="primary"
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            {save.isPending && <Spinner />}
+            Save limits
+          </Button>
+        </div>
+      </EditOnly>
     </div>
   );
 }
@@ -255,7 +269,7 @@ export function AdminRateLimitsPage() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <AdminPageHeader
         title="Rate limits"
         description="A quota bounds how much someone may use over a window. These bound how fast requests arrive and how many generations run at once, which is what stops one account exhausting the instance."

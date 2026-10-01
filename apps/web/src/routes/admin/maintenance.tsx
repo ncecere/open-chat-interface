@@ -2,6 +2,7 @@ import type { JobRun } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
   LoadError,
@@ -64,7 +65,7 @@ function JobHealth() {
   return (
     <div>
       {runError}
-      <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
         {runs.map((entry) => (
           <div
             key={entry.id}
@@ -85,16 +86,18 @@ function JobHealth() {
               </p>
             </div>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Run ${entry.jobName} now`}
-              disabled={run.isPending}
-              onClick={() => run.mutate(entry.jobName)}
-            >
-              <RefreshCw />
-            </Button>
+            <EditOnly>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Run ${entry.jobName} now`}
+                disabled={run.isPending}
+                onClick={() => run.mutate(entry.jobName)}
+              >
+                <RefreshCw />
+              </Button>
+            </EditOnly>
           </div>
         ))}
       </div>
@@ -115,25 +118,27 @@ function StorageReconcile() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={reconcile.isPending}
-          onClick={() => reconcile.mutate(false)}
-        >
-          {reconcile.isPending && <Spinner />}
-          Check for orphans
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={reconcile.isPending || !report || report.orphanedObjects === 0}
-          onClick={() => reconcile.mutate(true)}
-        >
-          Queue orphans for deletion
-        </Button>
-      </div>
+      <EditOnly>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={reconcile.isPending}
+            onClick={() => reconcile.mutate(false)}
+          >
+            {reconcile.isPending && <Spinner />}
+            Check for orphans
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={reconcile.isPending || !report || report.orphanedObjects === 0}
+            onClick={() => reconcile.mutate(true)}
+          >
+            Queue orphans for deletion
+          </Button>
+        </div>
+      </EditOnly>
 
       <MutationError
         error={reconcile.error}
@@ -173,7 +178,7 @@ function StorageReconcile() {
 
 export function AdminMaintenancePage() {
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <AdminPageHeader
         title="Maintenance"
         description="Background cleanup and storage integrity. Jobs hold a lock while running, so each one runs on a single replica at a time even when several are deployed."
@@ -181,6 +186,7 @@ export function AdminMaintenancePage() {
 
       <div className="flex flex-col gap-10 pb-10">
         <SettingsSection
+          editable={false}
           title="Background jobs"
           description="The most recent run of each scheduled job, and a way to run one immediately."
         >

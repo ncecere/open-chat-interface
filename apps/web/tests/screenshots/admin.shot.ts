@@ -10,26 +10,38 @@ import { capture, gotoAdmin, signIn } from './helpers';
  */
 const PAGES: { route: string; heading: string; name: string }[] = [
   { route: '/admin', heading: 'Overview', name: 'admin-overview' },
-  { route: '/admin/settings', heading: 'Instance settings', name: 'admin-settings' },
-  { route: '/admin/branding', heading: 'Branding', name: 'admin-branding' },
-  { route: '/admin/broadcasts', heading: 'Announcements', name: 'admin-announcements' },
 
   { route: '/admin/invites', heading: 'Invitations', name: 'admin-invitations' },
-  { route: '/admin/sso', heading: 'Auth & SSO', name: 'admin-sso' },
-  { route: '/admin/policies', heading: 'Acceptable use', name: 'admin-policies' },
-  { route: '/admin/providers', heading: 'Providers & Keys', name: 'admin-providers' },
-  { route: '/admin/models', heading: 'Model catalog', name: 'admin-models' },
-  { route: '/admin/usage', heading: 'Usage', name: 'admin-usage' },
-  { route: '/admin/quotas', heading: 'Usage quotas', name: 'admin-quotas' },
-  { route: '/admin/storage-limits', heading: 'Storage limits', name: 'admin-storage-limits' },
   { route: '/admin/rate-limits', heading: 'Rate limits', name: 'admin-rate-limits' },
-  { route: '/admin/retention', heading: 'Retention', name: 'admin-retention' },
-  { route: '/admin/reports', heading: 'Scheduled reports', name: 'admin-reports' },
-  { route: '/admin/search', heading: 'Search', name: 'admin-search' },
+  { route: '/admin/storage-limits', heading: 'Storage limits', name: 'admin-storage-limits' },
+
+  { route: '/admin/providers', heading: 'Providers & keys', name: 'admin-providers' },
+  { route: '/admin/models', heading: 'Model catalog', name: 'admin-models' },
+  { route: '/admin/quotas', heading: 'Usage budgets', name: 'admin-quotas' },
+
+  {
+    route: '/admin/settings/authentication',
+    heading: 'Authentication',
+    name: 'admin-settings-authentication',
+  },
+  { route: '/admin/sso', heading: 'Single sign-on', name: 'admin-sso' },
+  { route: '/admin/settings/email', heading: 'Email delivery', name: 'admin-settings-email' },
+  { route: '/admin/policies', heading: 'Acceptable use', name: 'admin-policies' },
+
   { route: '/admin/storage', heading: 'Storage', name: 'admin-storage' },
-  { route: '/admin/health', heading: 'Health', name: 'admin-health' },
+  { route: '/admin/retention', heading: 'Retention', name: 'admin-retention' },
   { route: '/admin/maintenance', heading: 'Maintenance', name: 'admin-maintenance' },
+  { route: '/admin/health', heading: 'Health', name: 'admin-health' },
+
+  { route: '/admin/usage', heading: 'Usage', name: 'admin-usage' },
+  { route: '/admin/reports', heading: 'Scheduled reports', name: 'admin-reports' },
   { route: '/admin/audit', heading: 'Audit log', name: 'admin-audit' },
+
+  // The General settings page keeps the historical image name.
+  { route: '/admin/settings/general', heading: 'General', name: 'admin-settings' },
+  { route: '/admin/branding', heading: 'Branding', name: 'admin-branding' },
+  { route: '/admin/broadcasts', heading: 'Announcements', name: 'admin-announcements' },
+  { route: '/admin/search', heading: 'Web search', name: 'admin-search' },
 ];
 
 /**
@@ -110,7 +122,7 @@ test.describe('administration', () => {
   });
 
   test('captures the single sign-on provider form', async ({ page }) => {
-    await gotoAdmin(page, '/admin/sso', 'Auth & SSO');
+    await gotoAdmin(page, '/admin/sso', 'Single sign-on');
     await page
       .getByRole('button', { name: /add provider/i })
       .first()

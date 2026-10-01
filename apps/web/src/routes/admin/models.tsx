@@ -9,6 +9,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cpu, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { EditableFieldset, EditOnly, useAdminAccess } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
   EmptyState,
@@ -51,6 +52,7 @@ function ModelRow({
   onRemove: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { canEdit } = useAdminAccess();
   const [expanded, setExpanded] = useState(false);
   const [displayName, setDisplayName] = useState(model.displayName);
 
@@ -87,7 +89,7 @@ function ModelRow({
       <Row className="gap-3">
         <Switch
           checked={model.enabled}
-          disabled={update.isPending}
+          disabled={update.isPending || !canEdit}
           onCheckedChange={(enabled) => update.mutate({ enabled })}
           aria-label={`Enable ${model.displayName}`}
         />
@@ -115,23 +117,25 @@ function ModelRow({
           ))}
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Edit ${model.displayName}`}
-          onClick={onEdit}
-        >
-          <Pencil />
-        </Button>
+        <EditOnly>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Edit ${model.displayName}`}
+            onClick={onEdit}
+          >
+            <Pencil />
+          </Button>
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Remove ${model.displayName}`}
-          onClick={onRemove}
-        >
-          <Trash2 />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove ${model.displayName}`}
+            onClick={onRemove}
+          >
+            <Trash2 />
+          </Button>
+        </EditOnly>
       </Row>
 
       <MutationError
@@ -141,7 +145,7 @@ function ModelRow({
       />
 
       {expanded && (
-        <div className="flex flex-col gap-4 border-t border-[var(--border-subtle)] p-4">
+        <EditableFieldset className="flex flex-col gap-4 border-t border-[var(--border-subtle)] p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Display name" htmlFor={`name-${model.id}`}>
               <Input
@@ -211,7 +215,7 @@ function ModelRow({
               })}
             </div>
           </div>
-        </div>
+        </EditableFieldset>
       )}
     </div>
   );
@@ -252,14 +256,16 @@ export function AdminModelsPage() {
         title="Model catalog"
         description="Add upstream models from configured providers, then control how users can access them."
         actions={
-          <Button
-            variant="primary"
-            disabled={!providers.data || providers.data.providers.length === 0}
-            onClick={openCreate}
-          >
-            <Plus />
-            Add model
-          </Button>
+          <EditOnly>
+            <Button
+              variant="primary"
+              disabled={!providers.data || providers.data.providers.length === 0}
+              onClick={openCreate}
+            >
+              <Plus />
+              Add model
+            </Button>
+          </EditOnly>
         }
       />
 

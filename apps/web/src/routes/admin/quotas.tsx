@@ -2,6 +2,7 @@ import { MICROS_PER_DOLLAR, type QuotaMetric, type QuotaPolicy } from '@oci/shar
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gauge, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, EmptyState, LoadError, Row, RowList } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { QuotaPolicyDialog } from '~/components/admin/quota-policy-dialog';
@@ -63,13 +64,15 @@ export function AdminQuotasPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Usage quotas"
+        title="Usage budgets"
         description="Create a policy, then apply it to the roles that should share it. A role can carry several policies at once, and every one of them is enforced. Scope a policy to specific models to give a family such as Anthropic its own budget."
         actions={
-          <Button variant="primary" onClick={() => setFormFor({ policy: null })}>
-            <Plus />
-            New policy
-          </Button>
+          <EditOnly>
+            <Button variant="primary" onClick={() => setFormFor({ policy: null })}>
+              <Plus />
+              New policy
+            </Button>
+          </EditOnly>
         }
       />
 
@@ -113,23 +116,25 @@ export function AdminQuotasPage() {
                 </p>
               </div>
 
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Edit ${policy.name}`}
-                onClick={() => setFormFor({ policy })}
-              >
-                <Pencil />
-              </Button>
+              <EditOnly>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Edit ${policy.name}`}
+                  onClick={() => setFormFor({ policy })}
+                >
+                  <Pencil />
+                </Button>
 
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Delete ${policy.name}`}
-                onClick={() => setDeleteFor(policy)}
-              >
-                <Trash2 />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Delete ${policy.name}`}
+                  onClick={() => setDeleteFor(policy)}
+                >
+                  <Trash2 />
+                </Button>
+              </EditOnly>
             </Row>
           ))}
         </RowList>

@@ -2,6 +2,7 @@ import { type StoragePolicy, USER_ROLES, type UserRole } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { EditableFieldset, EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
   LoadError,
@@ -60,7 +61,7 @@ function StoragePolicyRow({ role, policy }: { role: UserRole; policy: StoragePol
   });
 
   return (
-    <div className="border-[var(--border-subtle)] border-b py-5 last:border-0">
+    <EditableFieldset className="border-[var(--border-subtle)] border-b py-5 last:border-0">
       <div className="flex items-center justify-between gap-4">
         <h3 className="font-medium text-sm capitalize">{role}</h3>
         <div className="flex items-center gap-3">
@@ -131,18 +132,20 @@ function StoragePolicyRow({ role, policy }: { role: UserRole; policy: StoragePol
             Saved
           </span>
         )}
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          disabled={save.isPending}
-          onClick={() => save.mutate()}
-        >
-          {save.isPending && <Spinner />}
-          Save {role}
-        </Button>
+        <EditOnly>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            {save.isPending && <Spinner />}
+            Save {role}
+          </Button>
+        </EditOnly>
       </div>
-    </div>
+    </EditableFieldset>
   );
 }
 
@@ -167,14 +170,15 @@ export function AdminStorageLimitsPage() {
   const byRole = new Map((policies.data?.policies ?? []).map((policy) => [policy.role, policy]));
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div>
       <AdminPageHeader
         title="Storage limits"
-        description="How much each user in a role may store. These are allowances for people; the storage backend itself is configured under Platform → Storage."
+        description="How much each user in a role may store. These are allowances for people; the storage backend itself is configured under Data & storage → Storage."
       />
 
       <div className="flex flex-col gap-10 pb-10">
         <SettingsSection
+          editable={false}
           title="Allowance by role"
           description="Each user in a role gets this much on their own. Leave a field blank for no limit."
         >
@@ -194,6 +198,7 @@ export function AdminStorageLimitsPage() {
         </SettingsSection>
 
         <SettingsSection
+          editable={false}
           title="Storage in use"
           description="Deleted files still occupy disk until their trash window elapses and cleanup removes them."
         >

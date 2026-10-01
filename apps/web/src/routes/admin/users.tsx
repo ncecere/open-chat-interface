@@ -1,5 +1,6 @@
 import { type AdminUser, USER_ROLES } from '@oci/shared';
 import { useState } from 'react';
+import { useAdminAccess } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { QuotaOverrideDialog } from '~/components/admin/quota-override-dialog';
 import { Button } from '~/components/ui/button';
@@ -26,6 +27,7 @@ export function AdminUsersPage() {
   const views = useSavedUserViews(directory, directory.applyFilters);
   const selection = useUserSelection(directory.data?.users.map((user) => user.id) ?? []);
   const updateRole = useUserRoleMutation();
+  const { canEdit } = useAdminAccess();
   const [limitsFor, setLimitsFor] = useState<AdminUser | null>(null);
   const { data, isLoading, search, role, status, sort, direction, page, total, pageCount } =
     directory;
@@ -76,8 +78,9 @@ export function AdminUsersPage() {
         <LoadError title="Accounts could not be loaded." query={directory.query} className="mt-6" />
       ) : (
         <div className="mt-6">
-          <SavedUserViews views={views} />
-          <UserBulkToolbar selection={selection} />
+          {/* Saving a view and bulk changes are writes; auditors only browse. */}
+          {canEdit && <SavedUserViews views={views} />}
+          {canEdit && <UserBulkToolbar selection={selection} />}
           <MutationError
             error={updateRole.error}
             message="The role could not be changed."

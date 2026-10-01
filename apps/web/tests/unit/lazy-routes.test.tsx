@@ -39,7 +39,10 @@ const lazyModules = [
   ['routes/admin/health', ['AdminHealthPage']],
   ['routes/admin/providers', ['AdminProvidersPage']],
   ['routes/admin/models', ['AdminModelsPage']],
-  ['routes/admin/settings', ['AdminSettingsPage']],
+  [
+    'routes/admin/settings',
+    ['AdminGeneralSettingsPage', 'AdminAuthenticationSettingsPage', 'AdminEmailSettingsPage'],
+  ],
   ['routes/admin/invites', ['AdminInvitesPage']],
   ['routes/admin/branding', ['AdminBrandingPage']],
   ['routes/admin/sso', ['AdminSsoPage']],
@@ -257,6 +260,34 @@ describe('real router lazy admin and settings routes', () => {
     );
     expect(imported).toHaveBeenCalledWith('routes/admin/user-detail');
     expect(imported).toHaveBeenCalledWith('components/admin/admin-layout');
+  });
+
+  it.each([
+    ['/admin/settings/general', 'AdminGeneralSettingsPage'],
+    ['/admin/settings/authentication', 'AdminAuthenticationSettingsPage'],
+    ['/admin/settings/email', 'AdminEmailSettingsPage'],
+  ] as const)('serves the instance settings page %s from one lazy module', async (path, name) => {
+    await renderRoute(path);
+    expect(router.state.location.pathname).toBe(path);
+    expect(container.querySelector(`[data-page="${name}"]`)).not.toBeNull();
+    expect(imported.mock.calls.map(([module]) => module).sort()).toEqual(
+      ['components/admin/admin-layout', 'routes/admin/settings'].sort(),
+    );
+  });
+
+  it('redirects the old /admin/settings address to the General page', async () => {
+    await renderRoute('/admin/settings');
+    expect(router.state.location.pathname).toBe('/admin/settings/general');
+    expect(container.querySelector('[data-page="AdminGeneralSettingsPage"]')).not.toBeNull();
+  });
+
+  it('lets a read-only auditor into administration', async () => {
+    session.get.mockResolvedValue({ user: { id: 'auditor', role: 'auditor' } });
+    await renderRoute('/admin/users');
+    expect(router.state.location.pathname).toBe('/admin/users');
+    expect(
+      container.querySelector('[data-layout="AdminLayout"] [data-page="AdminUsersPage"]'),
+    ).not.toBeNull();
   });
 
   it('redirects a non-admin to chat without rendering the admin layout or page', async () => {
