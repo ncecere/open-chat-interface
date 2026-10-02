@@ -28,6 +28,26 @@ describe('search grounding message data', () => {
     });
   });
 
+  it('carries why a search failed, so the reply can say so', () => {
+    const grounding = searchGroundingOf(
+      message([
+        {
+          type: 'data-search-grounding',
+          data: {
+            query: 'nvidia share price',
+            results: [],
+            error: 'SerpApi rejected the web search API key (HTTP 401).',
+          },
+        } as UIMessage['parts'][number],
+      ]),
+    );
+    expect(grounding).toEqual({
+      query: 'nvidia share price',
+      results: [],
+      error: 'SerpApi rejected the web search API key (HTTP 401).',
+    });
+  });
+
   it('keeps older source-url messages readable without inventing snippets', () => {
     const grounding = searchGroundingOf(
       message([

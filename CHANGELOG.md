@@ -27,6 +27,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `docs/dev/tools-design.md`.
 - **SerpApi as a web search provider** (Google results, SafeSearch on), alongside
   SearXNG, Tavily, Brave Search and Exa.
+- **Test search** on the Web search page runs one sample search with the
+  provider and key or address on the page, saved or not, and shows whether it
+  worked or what the provider replied. Audited as `search.test`.
 - **Web search as a tool.** With a tool-capable model and **Search** on, the
   model decides when and what to search, may search more than once (up to 10
   results each) and cites results as sources. Other models keep the single
@@ -61,6 +64,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   pages instead of cards. The page opens on Conversations, and the open tab is
   kept in the address (`?tab=`).
 
+- **A failed web search no longer fails the reply.** When the search before a
+  reply fails, the reply goes ahead: the model is told the search failed and
+  asked to say that current sources could not be checked, and the reply shows
+  **Web search failed** with the reason. Search provider errors now name the
+  provider and the cause, for example "SerpApi rejected the web search API key
+  (HTTP 401)", and are logged without the query or key.
 - **The Web search page asks for exactly what the chosen provider needs:** an
   API key for hosted providers (labelled with that provider and where to find
   it) or the address of a SearXNG instance, and requires it before search can
@@ -68,6 +77,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   or an optional credential to SearXNG.
 
 ### Fixed
+
+- **Chat errors are shown as text.** A failed request showed the server's raw
+  JSON (`{"error":{"code":…}}`) above the composer; it now shows the message.
 
 - **Switching web search provider no longer keeps the previous provider's
   key.** The key was sent to the newly selected provider; the server now

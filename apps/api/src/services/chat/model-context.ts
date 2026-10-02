@@ -1,6 +1,12 @@
+import { ERROR_CODES } from '@oci/shared';
 import type { UIMessage } from 'ai';
-import { validationFailed } from '../../lib/errors.js';
-import { buildGroundingContext, normalizeSearchQuery, searchWeb } from '../search/index.js';
+import { AppError, validationFailed } from '../../lib/errors.js';
+import {
+  buildGroundingContext,
+  normalizeSearchQuery,
+  type SearchResult,
+  searchWeb,
+} from '../search/index.js';
 import { buildSystemPrompt } from '../system-prompt.js';
 import { hasTool } from '../tools/registry.js';
 import {
@@ -42,6 +48,25 @@ const asUI = (message: ContextMessage, toolsOffered: boolean): UIMessage => ({
 });
 
 /** Budget metadata first. Only selected file payloads reach the storage driver. */
+/**
+ * The search before a reply, for models without the search tool. A provider
+ * failure no longer fails the reply: the model is told the search failed and
+ * the reply shows why. Anything else (search switched off) still refuses.
+ */
+type PreSearch = { results: SearchResult[]; error?: string };
+
+async function searchOrFailure(query: string): Promise<PreSearch> {
+  try {
+    return { results: await searchWeb(query) };
+  } catch (error) {
+    if (error instanceof AppError && error.code !== ERROR_CODES.PROVIDER_ERROR) throw error;
+    return {
+      results: [],
+      error: error instanceof AppError ? error.message : 'The search provider failed.',
+    };
+  }
+}
+
 export async function buildModelContext(context: TurnContext, claimId: string) {
   const { input, user, resolved, thread } = context;
   const submitted = input.messages[0];
@@ -80,7 +105,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   const searchQuery = preSearch ? normalizeSearchQuery(textFromParts(stored.latest.parts)) : null;
   const [newCandidates, searchResults, baseSystem, project] = await Promise.all([
     inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
-    searchQuery ? searchWeb(searchQuery) : Promise.resolve([]),
+    searchQuery ? searchOrFailure(searchQuery) : Promise.resolve<PreSearch>({ results: [] }),
     buildSystemPrompt(user.id, user.name),
     loadProjectContext(thread.projectId, user),
   ]);
@@ -92,7 +117,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
         ...stored.latest,
         parts: [
           ...stored.latest.parts,
-          { type: 'text', text: buildGroundingContext(searchResults) },
+          { type: 'text', text: buildGroundingContext(searchResults.results, searchResults.error) },
         ],
       }
     : stored.latest;
@@ -211,7 +236,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
       first > 0 ||
       selected.limited ||
       projectFiles.omitted > 0,
-    sourceParts: searchResults.map((source, index) => ({
+    sourceParts: searchResults.results.map((source, index) => ({
       type: 'source-url' as const,
       sourceId: `search-${index + 1}`,
       url: source.url,
@@ -221,7 +246,11 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
       ? {
           type: 'data-search-grounding' as const,
           id: `search-grounding-${crypto.randomUUID()}`,
-          data: { query: searchQuery, results: searchResults },
+          data: {
+            query: searchQuery,
+            results: searchResults.results,
+            ...(searchResults.error ? { error: searchResults.error } : {}),
+          },
         }
       : null,
     projectSearchPart: projectFiles.searchPart,

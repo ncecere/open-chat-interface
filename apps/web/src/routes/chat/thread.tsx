@@ -12,7 +12,7 @@ import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
-import { ApiError } from '~/lib/api-client';
+import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getChatHistory } from '~/lib/chat-history';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -266,7 +266,7 @@ function ThreadConversation({
                     className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
                   >
                     {session.recovery.error ||
-                      session.error?.message ||
+                      (session.error && chatErrorText(session.error)) ||
                       replies.error ||
                       'Something went wrong generating a response.'}
                   </p>

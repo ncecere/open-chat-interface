@@ -1,7 +1,8 @@
 import type { SearchProviderKind } from '@oci/shared';
 import { decryptSecret } from '../../lib/crypto.js';
 import { providerError, validationFailed } from '../../lib/errors.js';
-import { getSetting } from '../settings.js';
+import { logger } from '../../lib/logger.js';
+import { getSetting, type SearchSettings } from '../settings.js';
 import { searchBrave } from './brave.js';
 import { searchExa } from './exa.js';
 import { searchSearxng } from './searxng.js';
@@ -21,38 +22,69 @@ export function normalizeSearchQuery(query: string): string {
   return query.replace(/\s+/g, ' ').trim().slice(0, 2_000);
 }
 
-export async function searchWeb(query: string): Promise<SearchResult[]> {
+/** One search against a provider with explicit settings. */
+export async function runSearch(
+  query: string,
+  config: {
+    provider: SearchProviderKind;
+    baseUrl: string | null;
+    apiKey: string | null;
+    maxResults: number;
+  },
+): Promise<SearchResult[]> {
   const normalizedQuery = normalizeSearchQuery(query);
   if (!normalizedQuery) throw validationFailed('A search query is required');
+  const adapter = adapters[config.provider];
+  if (!adapter) throw providerError('The configured web search provider is unsupported');
+  try {
+    return await adapter({
+      query: normalizedQuery,
+      maxResults: Math.min(Math.max(config.maxResults, 1), 20),
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch (error) {
+    // Never the query or the key: only which provider failed and how.
+    logger.warn(
+      { provider: config.provider, error: error instanceof Error ? error.message : 'unknown' },
+      'Web search failed',
+    );
+    throw error;
+  }
+}
 
+/** Decrypts the stored web search key; null when none is stored. */
+export function storedSearchKey(settings: Pick<SearchSettings, 'encryptedApiKey'>): string | null {
+  if (!settings.encryptedApiKey) return null;
+  try {
+    return decryptSecret(settings.encryptedApiKey);
+  } catch {
+    throw providerError('The web search API key could not be decrypted. Enter it again.');
+  }
+}
+
+/** A search with the instance's saved settings, as conversations use it. */
+export async function searchWeb(query: string): Promise<SearchResult[]> {
   const [features, settings] = await Promise.all([getSetting('features'), getSetting('search')]);
   if (!features.webSearch || !settings.enabled || !settings.provider) {
     throw validationFailed('Web search is disabled on this instance');
   }
-
-  const adapter = adapters[settings.provider];
-  if (!adapter) throw providerError('The configured web search provider is unsupported');
-
-  let apiKey: string | null = null;
-  if (settings.encryptedApiKey) {
-    try {
-      apiKey = decryptSecret(settings.encryptedApiKey);
-    } catch {
-      throw providerError('The web search credential could not be decrypted');
-    }
-  }
-
-  const timeout = AbortSignal.timeout(12_000);
-  return adapter({
-    query: normalizedQuery,
-    maxResults: Math.min(Math.max(settings.maxResults, 1), 20),
+  return runSearch(query, {
+    provider: settings.provider,
     baseUrl: settings.baseUrl,
-    apiKey,
-    signal: timeout,
+    apiKey: storedSearchKey(settings),
+    maxResults: settings.maxResults,
   });
 }
 
-export function buildGroundingContext(results: SearchResult[]): string {
+export function buildGroundingContext(results: SearchResult[], failure?: string): string {
+  if (failure) {
+    return [
+      `Web search failed: ${failure}`,
+      'Answer from general knowledge and say clearly that current sources could not be checked.',
+    ].join('\n');
+  }
   if (results.length === 0) {
     return [
       'Web search returned no results.',

@@ -290,6 +290,25 @@ export const adminOverviewSchema = z.object({
   }),
 });
 
+/**
+ * A trial search from the Web search page, before or after saving. Without a
+ * key, the saved key is used when it belongs to the same provider.
+ */
+export const searchTestSchema = z.object({
+  provider: z.enum(SEARCH_PROVIDER_KINDS),
+  baseUrl: z.string().max(2000).nullable().optional(),
+  apiKey: z.string().max(500).optional(),
+});
+export type SearchTestInput = z.infer<typeof searchTestSchema>;
+
+export interface SearchTestResult {
+  ok: boolean;
+  /** Results returned for the sample query, when it worked. */
+  results?: number;
+  /** What went wrong, in words for an administrator. */
+  message?: string;
+}
+
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type Invite = z.infer<typeof inviteSchema>;
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>;

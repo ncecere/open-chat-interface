@@ -41,6 +41,12 @@ chosen.
 If your administrator has not allowed the web search tool for your role, tool
 calling models fall back to the single search before the reply.
 
+If a search fails, for example because the search provider rejected the
+institution's key, you still get an answer. The reply shows **Web search
+failed** with the reason, and the model is told to say that current sources
+could not be checked. A model using the search tool sees the failure as the
+step's result and answers accordingly.
+
 ## When it helps and when it does not
 
 **Worth turning on:** anything recent, anything with a date attached, anything

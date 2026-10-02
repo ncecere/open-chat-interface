@@ -85,6 +85,11 @@ Hosted providers use their own fixed endpoints, so they ask for no address. A
 key belongs to one provider: switching provider removes the saved key, and the
 page asks for the new provider's key before search can be switched on.
 
+**Test search** runs one sample search with the provider and the key or address
+on the page, saved or not, and says whether it worked or what the provider
+replied, for example that it rejected the key. Nothing is saved, and each test
+is recorded in the audit log as `search.test` (provider and outcome only).
+
 People are offered search only when it can actually run: the switch is on, a
 provider is selected, and it has its key or address. Until all of those hold,
 search is removed from the composer rather than offered and failing. The page

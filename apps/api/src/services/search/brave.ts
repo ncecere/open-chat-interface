@@ -1,20 +1,27 @@
+import { SEARCH_PROVIDERS } from '@oci/shared';
 import { normalizeResults, requiredApiKey, searchFetch } from './http.js';
 import type { SearchAdapter } from './types.js';
 
+const NAME = SEARCH_PROVIDERS.brave.name;
+
 export const searchBrave: SearchAdapter = async ({ query, maxResults, apiKey, signal }) => {
-  const credential = requiredApiKey(apiKey, 'Brave');
+  const credential = requiredApiKey(apiKey, NAME);
   const endpoint = new URL('https://api.search.brave.com/res/v1/web/search');
   endpoint.searchParams.set('q', query);
   endpoint.searchParams.set('count', String(maxResults));
   endpoint.searchParams.set('safesearch', 'moderate');
 
-  const payload = (await searchFetch(endpoint, {
-    headers: {
-      accept: 'application/json',
-      'x-subscription-token': credential,
+  const payload = (await searchFetch(
+    endpoint,
+    {
+      headers: {
+        accept: 'application/json',
+        'x-subscription-token': credential,
+      },
+      signal,
     },
-    signal,
-  })) as {
+    NAME,
+  )) as {
     web?: { results?: Array<{ title?: string; url?: string; description?: string }> };
   };
 

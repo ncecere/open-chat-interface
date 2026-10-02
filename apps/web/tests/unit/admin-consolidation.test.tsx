@@ -323,6 +323,25 @@ describe('Web search', () => {
     });
   });
 
+  it('tests the provider on the page before saving and says what went wrong', async () => {
+    api.post.mockResolvedValueOnce({
+      ok: false,
+      message: 'SearXNG returned an error (HTTP 403).',
+    });
+    ({ root } = await renderAdmin(<AdminSearchPage />));
+    await click(button('Test search'));
+    expect(api.post).toHaveBeenCalledWith('/admin/settings/search/test', {
+      provider: 'searxng',
+      baseUrl: 'http://search.test',
+    });
+    expect(document.body.textContent).toContain('SearXNG returned an error (HTTP 403).');
+
+    api.post.mockResolvedValueOnce({ ok: true, results: 3 });
+    await click(button('Test search'));
+    expect(document.body.textContent).toContain('SearXNG works: a test search returned 3 results.');
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
   it('reports whether search can actually run', async () => {
     setupChecks = [
       {

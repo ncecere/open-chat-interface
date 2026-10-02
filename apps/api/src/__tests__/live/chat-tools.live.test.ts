@@ -378,6 +378,25 @@ describe.skipIf(!available)('live tool calling', () => {
       expect(reply.parts.filter((part) => part.type === 'source-url')).toHaveLength(2);
     });
 
+    it('goes ahead without results when the search before the reply fails, and says why', async () => {
+      state.capabilities = [];
+      state.searchDown = true;
+      const chat = await thread();
+      const model = script(textStep('I could not check current sources.'));
+      const { reply } = await turn(chat.id, 'What is the NVIDIA share price?');
+      const grounding = reply.parts.find((part) => part.type === 'data-search-grounding') as
+        | { data?: { results?: unknown[]; error?: string } }
+        | undefined;
+      expect(grounding?.data).toMatchObject({
+        results: [],
+        error: 'The web search provider did not respond',
+      });
+      expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain(
+        'Web search failed: The web search provider did not respond',
+      );
+      expect(reply.parts.filter((part) => part.type === 'source-url')).toHaveLength(0);
+    });
+
     it('falls back to the search before the reply when the role does not allow the tool', async () => {
       state.settings.set('roleTools', { roles: { user: { web_search: false } } });
       const chat = await thread();

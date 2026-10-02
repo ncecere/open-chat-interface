@@ -2,18 +2,21 @@ import {
   DEFAULT_MAX_TOOL_STEPS,
   type InstanceSettings,
   SEARCH_PROVIDERS,
+  type SearchTestResult,
+  searchTestSchema,
   updateInstanceSettingsSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { loadEnv } from '../../config/env.js';
 import { encryptSecret } from '../../lib/crypto.js';
-import { providerError, validationFailed } from '../../lib/errors.js';
+import { AppError, providerError, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
+import { runSearch, storedSearchKey } from '../../services/search/index.js';
 import { getSetting, updateSetting } from '../../services/settings.js';
 import { diffSettings, redactSecrets } from '../../services/settings-diff.js';
 import {
@@ -22,6 +25,9 @@ import {
   toPublicS3Settings,
 } from '../../services/storage/config.js';
 import { invalidateStorageDriver, testConfiguredS3Storage } from '../../services/storage/index.js';
+
+/** A neutral query that every provider answers. */
+const SEARCH_TEST_QUERY = 'Wikipedia';
 
 export const settingsRoutes = new Hono<AppBindings>();
 
@@ -160,6 +166,54 @@ settingsRoutes.post('/storage/test', async (c) => {
   });
 
   return c.json({ ok: true, mode });
+});
+
+/**
+ * Runs one sample search with the provider, address and key on the page, so
+ * an administrator can check them before or after saving. Nothing is stored.
+ */
+settingsRoutes.post('/search/test', async (c) => {
+  const actor = currentUser(c);
+  const input = await parseBody(c, searchTestSchema);
+  const stored = await getSetting('search');
+  const provider = SEARCH_PROVIDERS[input.provider];
+  const apiKey =
+    provider.needs !== 'apiKey'
+      ? null
+      : input.apiKey?.trim() ||
+        (stored.provider === input.provider ? storedSearchKey(stored) : null);
+  const baseUrl = provider.needs === 'baseUrl' ? input.baseUrl?.trim() || null : null;
+
+  let result: SearchTestResult;
+  try {
+    const results = await runSearch(SEARCH_TEST_QUERY, {
+      provider: input.provider,
+      baseUrl,
+      apiKey,
+      maxResults: 3,
+    });
+    result =
+      results.length > 0
+        ? { ok: true, results: results.length }
+        : {
+            ok: false,
+            message: `${provider.name} answered but returned no results for a test search.`,
+          };
+  } catch (error) {
+    result = {
+      ok: false,
+      message: error instanceof AppError ? error.message : `${provider.name} test search failed.`,
+    };
+  }
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'search.test',
+    targetType: 'instance',
+    metadata: { provider: input.provider, ok: result.ok },
+  });
+  return c.json(result);
 });
 
 settingsRoutes.patch('/', async (c) => {

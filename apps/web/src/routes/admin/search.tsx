@@ -3,6 +3,7 @@ import {
   SEARCH_PROVIDER_KINDS,
   SEARCH_PROVIDERS,
   type SearchProviderKind,
+  type SearchTestResult,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, KeyRound } from 'lucide-react';
@@ -175,6 +176,17 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   const patch = changedSearchSettings(saved, savedEnabled, draft, credentialAction, apiKey);
   const hasChanges = Object.keys(patch).length > 0;
 
+  const test = useMutation({
+    mutationFn: () =>
+      api.post<SearchTestResult>('/admin/settings/search/test', {
+        provider: draft.provider,
+        ...(providerInfo?.needs === 'baseUrl' ? { baseUrl: draft.baseUrl.trim() || null } : {}),
+        ...(providerInfo?.needs === 'apiKey' && credentialAction === 'replace' && apiKey.trim()
+          ? { apiKey: apiKey.trim() }
+          : {}),
+      }),
+  });
+
   const save = useMutation({
     mutationFn: (search: SearchPatch) =>
       api.patch<{ ok: boolean }>('/admin/settings', {
@@ -220,6 +232,7 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   function beginEdit() {
     setSuccessMessage(false);
     setErrorMessage(null);
+    test.reset();
   }
 
   return (
@@ -452,7 +465,28 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
                 <CheckCircle2 className="size-4" /> Search settings saved.
               </p>
             )}
+            {test.data?.ok && providerInfo && (
+              <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
+                <CheckCircle2 className="size-4" /> {providerInfo.name} works: a test search
+                returned {test.data.results} {test.data.results === 1 ? 'result' : 'results'}.
+              </p>
+            )}
+            {(test.data?.ok === false || test.error) && (
+              <p role="alert" className="text-sm text-[var(--danger)]">
+                {test.data?.message ??
+                  (test.error instanceof ApiError ? test.error.message : 'The test could not run.')}
+              </p>
+            )}
           </div>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!draft.provider || test.isPending || save.isPending}
+            onClick={() => test.mutate()}
+          >
+            {test.isPending && <Spinner />}
+            {test.isPending ? 'Testing…' : 'Test search'}
+          </Button>
           <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
             {save.isPending && <Spinner />}
             {save.isPending ? 'Saving…' : 'Save changes'}

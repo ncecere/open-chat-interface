@@ -51,14 +51,14 @@ describe('SerpApi search', () => {
 
   it('needs an API key and reports a refused key without echoing it', async () => {
     await expect(searchSerpapi(request({ apiKey: null }))).rejects.toThrow(
-      'SerpApi search is missing an API credential',
+      'SerpApi needs an API key. Add it on the Web search page.',
     );
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('{"error":"Invalid API key."}', { status: 401 })),
     );
     const failure = searchSerpapi(request());
-    await expect(failure).rejects.toThrow('Web search provider returned HTTP 401');
+    await expect(failure).rejects.toThrow('SerpApi rejected the web search API key (HTTP 401)');
     await expect(failure).rejects.not.toThrow('serpapi-test-key');
   });
 });
