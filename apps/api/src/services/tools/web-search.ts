@@ -45,9 +45,10 @@ export const webSearchTool: ToolDefinition = {
     ]);
     return role.webSearch && webSearchProblem(features, search) === null;
   },
-  async execute(input) {
+  async execute(input, { signal }) {
     const query = normalizeSearchQuery((input as { query: string }).query);
-    const results = await searchWeb(query);
+    // The call's signal: a stopped reply or the tool time limit ends the search.
+    const results = await searchWeb(query, signal);
     return {
       query,
       results: results.slice(0, WEB_SEARCH_MAX_RESULTS).map((result) => ({

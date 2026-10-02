@@ -1,6 +1,7 @@
 import { eq, schema } from '@oci/db';
 import {
   branchMessageSchema,
+  compactThreadSchema,
   createThreadSchema,
   forkMessageSchema,
   THREAD_SEARCH_DEFAULT_LIMIT,
@@ -11,8 +12,16 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
+import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import {
+  compactThreadNow,
+  latestCompaction,
+  latestReplyModel,
+  NOTHING_TO_COMPACT,
+  serializeCompaction,
+} from '../services/chat/compaction.js';
 import { exportFilename, exportThreadMarkdown } from '../services/export.js';
 import {
   emptyTrash,
@@ -21,6 +30,8 @@ import {
   restoreThread,
   softDeleteThread,
 } from '../services/lifecycle/trash.js';
+import { chatRateLimit } from '../services/limits/rate-limit.js';
+import { resolveModelForRole } from '../services/models.js';
 import {
   assertProjectsAllowed,
   getOwnedProject,
@@ -30,6 +41,7 @@ import { activateReply } from '../services/replies.js';
 import { searchThreads } from '../services/thread-search.js';
 import {
   assertBranchingAllowed,
+  assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
   forkFromMessage,
@@ -215,6 +227,43 @@ threadRoutes.patch('/:id/messages/:messageId/active', async (c) => {
   const thread = await getOwnedThread(c.req.param('id'), user.id);
   const result = await activateReply(thread.id, user.id, c.req.param('messageId'));
   return c.json(result);
+});
+
+/** The compaction in use: its summary and where the verbatim messages start. */
+threadRoutes.get('/:id/compaction', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  const compaction = await latestCompaction(thread.id, user.id);
+  c.header('cache-control', 'no-store');
+  return c.json({ compaction: compaction ? serializeCompaction(compaction) : null });
+});
+
+/**
+ * "Compact conversation": summarise the earlier turns now, optionally with
+ * instructions for the summary, using the given model (the composer's) or the
+ * latest reply's. Owner only (404 otherwise); 409 while a reply is generating;
+ * 422 when there is nothing to summarise yet. The summary call counts towards
+ * the person's usage and is refused when their allowance is spent.
+ */
+threadRoutes.post('/:id/compact', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  if (thread.temporary) await assertTemporaryChatAllowed(user.role);
+  const limit = await chatRateLimit(user.id, user.role);
+  if (!limit.allowed)
+    throw rateLimited(
+      'You are sending messages too quickly. Try again in a moment.',
+      limit.retryAfterSeconds,
+    );
+  const input = await parseBody(c, compactThreadSchema);
+  const slug = input.modelSlug ?? (await latestReplyModel(thread.id));
+  if (!slug) throw validationFailed(NOTHING_TO_COMPACT);
+  const model = await resolveModelForRole(slug, user.role);
+  const compaction = await compactThreadNow(user, thread.id, {
+    instructions: input.instructions,
+    model,
+  });
+  return c.json({ compaction: serializeCompaction(compaction) }, 201);
 });
 
 threadRoutes.get('/:id', async (c) => {

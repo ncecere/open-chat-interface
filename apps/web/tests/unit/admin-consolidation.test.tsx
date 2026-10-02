@@ -167,7 +167,7 @@ describe('Providers & Models', () => {
     ({ root } = await renderAdmin(<AdminModelsPage />));
     expect(document.querySelector('h1')?.textContent).toBe('Providers & Models');
     const tabs = [...document.querySelectorAll('[role="tab"]')];
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Providers', 'Models']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Providers', 'Models', 'Embeddings']);
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
     const headings = () => [...document.querySelectorAll('h2')].map((node) => node.textContent);
     expect(headings()).toContain('Providers');

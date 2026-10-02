@@ -78,9 +78,17 @@ export const projectFileSchema = attachmentSchema.extend({ index: projectFileInd
  * and how many passages came from each, never the passage text, so it is safe
  * in exports. `mode` is `search` when passages matched the message and
  * `opening` when nothing matched and each file's opening passages were used.
+ * `ranking` (v0.9) says how searched passages were ranked: `hybrid` when
+ * meaning-based (vector) results were merged with keyword results, `keyword`
+ * otherwise. Absent on replies from before v0.9, which were keyword-only.
+ * `reranked` (v0.9) is present only when a reranking model is configured:
+ * `true` when it reordered the candidates, `false` when it could not and the
+ * previous order was used.
  */
 export const projectSearchDataSchema = z.object({
   mode: z.enum(['search', 'opening']),
+  ranking: z.enum(['hybrid', 'keyword']).optional(),
+  reranked: z.boolean().optional(),
   files: z.array(
     z.object({
       name: z.string(),

@@ -2,6 +2,9 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
@@ -9,6 +12,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { notFound } from '../../lib/errors.js';
 import type { ListPage, StorageDriver, StoredObject } from './driver.js';
@@ -92,6 +96,102 @@ export class S3StorageDriver implements StorageDriver {
       }),
     );
     return { key, sizeBytes: size };
+  }
+
+  /**
+   * Uploads a stream of unknown length, holding at most one part in memory.
+   * Short streams become a single PUT; longer ones a multipart upload, which
+   * is aborted when the source fails so no partial object is ever visible.
+   * A source that throws (for example after its producer exited with an
+   * error) therefore never completes an object.
+   */
+  async putStream(
+    key: string,
+    source: AsyncIterable<Uint8Array>,
+    contentType: string,
+    options?: { partSizeBytes?: number },
+  ): Promise<StoredObject> {
+    // S3 parts are at least 5 MiB (except the last) and at most 10,000 per
+    // object, so 16 MiB parts allow objects up to about 156 GiB.
+    const partSize = Math.max(options?.partSizeBytes ?? 16 * 1024 * 1024, 5 * 1024 * 1024);
+    let pending: Buffer[] = [];
+    let pendingBytes = 0;
+    let total = 0;
+    let uploadId: string | undefined;
+    const parts: Array<{ ETag: string | undefined; PartNumber: number }> = [];
+
+    const flushPart = async () => {
+      const body = Buffer.concat(pending, pendingBytes);
+      pending = [];
+      pendingBytes = 0;
+      if (!uploadId) {
+        const created = await this.client.send(
+          new CreateMultipartUploadCommand({
+            Bucket: this.bucket,
+            Key: key,
+            ContentType: contentType,
+          }),
+        );
+        uploadId = created.UploadId;
+        if (!uploadId) throw new Error('S3 did not start a multipart upload');
+      }
+      const PartNumber = parts.length + 1;
+      const result = await this.client.send(
+        new UploadPartCommand({
+          Bucket: this.bucket,
+          Key: key,
+          UploadId: uploadId,
+          PartNumber,
+          Body: body,
+          ContentLength: body.byteLength,
+        }),
+      );
+      parts.push({ ETag: result.ETag, PartNumber });
+    };
+
+    try {
+      for await (const chunk of source) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        pending.push(buffer);
+        pendingBytes += buffer.byteLength;
+        total += buffer.byteLength;
+        if (pendingBytes >= partSize) await flushPart();
+      }
+
+      if (!uploadId) {
+        const body = Buffer.concat(pending, pendingBytes);
+        await this.client.send(
+          new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+            Body: body,
+            ContentLength: body.byteLength,
+            ContentType: contentType,
+          }),
+        );
+        return { key, sizeBytes: total };
+      }
+
+      if (pendingBytes > 0) await flushPart();
+      await this.client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: parts },
+        }),
+      );
+      return { key, sizeBytes: total };
+    } catch (error) {
+      if (uploadId) {
+        await this.client
+          .send(
+            new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId }),
+          )
+          .catch(() => undefined);
+      }
+      throw error;
+    }
   }
 
   async getStream(key: string): Promise<NodeJS.ReadableStream> {

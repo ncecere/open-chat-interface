@@ -3,18 +3,22 @@ import type { ProjectSearchData, UserRole } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { singleLine } from '../../lib/text.js';
+import { hybridRanking } from '../project-search/fusion.js';
 import {
   type ProjectPassage,
   projectSearchSummary,
   renderPassage,
   selectPassages,
 } from '../project-search/passages.js';
+import { rerankProjectCandidates } from '../project-search/rerank.js';
 import {
   indexedChunkCounts,
   openingProjectChunks,
   projectSearchTerms,
+  type RetrievedChunk,
   rankProjectChunks,
 } from '../project-search/retrieval.js';
+import { semanticProjectChunks } from '../project-search/semantic.js';
 import { roleFeatures } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import {
@@ -49,6 +53,8 @@ type ProjectContext = {
 export const PROJECT_PASSAGE_SHARE = 0.5;
 /** Ranked candidates fetched per turn; far more than any budget can take. */
 const PASSAGE_CANDIDATES = 160;
+
+const chunkKey = (chunk: RetrievedChunk) => `${chunk.attachmentId}:${chunk.ordinal}`;
 
 /**
  * Loads the project of a conversation, or null when there is nothing to add.
@@ -161,8 +167,10 @@ function fitWholeFiles(
  * trimmed to whatever room remains. The result never exceeds the budget.
  *
  * 1. If every file fits whole, they are all included whole, as in v0.7.
- * 2. Otherwise the indexed files are searched with the latest message and the
- *    best passages are included, up to `PROJECT_PASSAGE_SHARE` of the budget
+ * 2. Otherwise the indexed files are searched with the latest message (by
+ *    keyword, merged with meaning-based search when configured, then
+ *    reranked when a reranking model is configured) and the best passages
+ *    are included, in that order, up to `PROJECT_PASSAGE_SHARE` of the budget
  *    (or what room remains, if less). Files with nothing indexed (not yet
  *    indexed, or no text such as images) are still included whole, oldest
  *    first, when they fit; one that does not fit is skipped, never truncated,
@@ -201,8 +209,22 @@ export async function selectProjectFiles(
   };
   const operands = await projectSearchTerms(latestText);
   let mode: ProjectSearchData['mode'] = 'search';
+  let ranking: ProjectSearchData['ranking'] = 'keyword';
   let candidates = await rankProjectChunks(scope, operands, PASSAGE_CANDIDATES);
-  if (candidates.length === 0) {
+  // Meaning-based search (v0.9) joins in when it is configured and available;
+  // otherwise, or if it fails, the keyword ranking stands alone as in v0.8.
+  const semantic =
+    operands.length > 0 ? await semanticProjectChunks(scope, latestText, PASSAGE_CANDIDATES) : null;
+  if (semantic && semantic.length > 0) {
+    ranking = 'hybrid';
+    candidates = hybridRanking(candidates, semantic, chunkKey, PASSAGE_CANDIDATES);
+  }
+  // Reranking (v0.9) reorders the best search results when it is configured;
+  // any failure keeps the order above. The opening passages are not reranked.
+  let reranked: boolean | undefined;
+  if (candidates.length > 0) {
+    ({ candidates, reranked } = await rerankProjectCandidates(scope, latestText, candidates));
+  } else {
     mode = 'opening';
     candidates = await openingProjectChunks(scope, PASSAGE_CANDIDATES);
   }
@@ -229,7 +251,14 @@ export async function selectProjectFiles(
     searchPart: {
       type: 'data-project-search',
       id: `project-search-${crypto.randomUUID()}`,
-      data: projectSearchSummary(passages, mode),
+      data:
+        mode === 'search'
+          ? {
+              ...projectSearchSummary(passages, mode),
+              ranking,
+              ...(reranked !== undefined && { reranked }),
+            }
+          : projectSearchSummary(passages, mode),
     },
   };
 }

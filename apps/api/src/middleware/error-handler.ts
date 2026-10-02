@@ -4,6 +4,7 @@ import { HTTPException } from 'hono/http-exception';
 import { ZodError } from 'zod';
 import { AppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import { errors } from '../services/observability/metrics.js';
 
 export function errorHandler(error: Error, c: Context): Response {
   if (error instanceof AppError) {
@@ -36,6 +37,7 @@ export function errorHandler(error: Error, c: Context): Response {
   }
 
   logger.error({ err: error, path: c.req.path }, 'Unhandled error');
+  errors.inc({ source: 'http' });
 
   const body: ApiErrorBody = {
     error: { code: ERROR_CODES.INTERNAL_ERROR, message: 'An unexpected error occurred' },

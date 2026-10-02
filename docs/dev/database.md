@@ -110,8 +110,10 @@ releases:
    column must have a default or allow `NULL`, so inserts keep working.
 2. In the next release, drop it in a migration (`DROP COLUMN IF EXISTS`).
 
-Pending second steps:
+Pending second steps: none.
 
-| Column | Code removed in | Drop in |
+Completed:
+
+| Column | Code removed in | Dropped in |
 | --- | --- | --- |
-| `user_preference.boring_mode` | v0.8 | v0.9 |
+| `user_preference.boring_mode` | v0.8 | v0.9 (`0031_drop_boring_mode`) |

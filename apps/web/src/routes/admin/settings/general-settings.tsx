@@ -379,6 +379,63 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
   );
 }
 
+/** Whether long conversations are summarised instead of losing their oldest turns. */
+function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
+  const queryClient = useQueryClient();
+  const [saved, setSaved] = useState(initialEnabled ?? true);
+  const [draft, setDraft] = useState(initialEnabled ?? true);
+  const [successMessage, setSuccessMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: (autoCompact: boolean) =>
+      api.patch<{ ok: boolean }>('/admin/settings', { autoCompact }),
+    onSuccess: (_response, autoCompact) => {
+      setSaved(autoCompact);
+      setErrorMessage(null);
+      setSuccessMessage(true);
+      queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
+        current ? { ...current, autoCompact } : current,
+      );
+    },
+    onError: (error) => {
+      setSuccessMessage(false);
+      setErrorMessage(
+        error instanceof ApiError ? error.message : 'Unable to save the compaction setting.',
+      );
+    },
+  });
+
+  return (
+    <form
+      className="flex flex-col gap-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (draft !== saved) save.mutate(draft);
+      }}
+    >
+      <ToggleSetting
+        id="auto-compact"
+        label="Summarise long conversations"
+        description="When a conversation outgrows the model's input, its earlier messages are summarised by the conversation's model (counting towards the person's usage) instead of being left out. People can still compact a conversation themselves when this is off."
+        checked={draft}
+        disabled={save.isPending}
+        onCheckedChange={(checked) => {
+          setDraft(checked);
+          setErrorMessage(null);
+          setSuccessMessage(false);
+        }}
+      />
+      <SaveRow
+        hasChanges={draft !== saved}
+        isPending={save.isPending}
+        errorMessage={errorMessage}
+        successMessage={successMessage ? 'Compaction setting saved.' : null}
+      />
+    </form>
+  );
+}
+
 export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
   return (
     <div className="flex flex-col gap-8">
@@ -390,6 +447,7 @@ export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
           <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
           <DefaultEffortForm initialEffort={settings.defaultEffort} />
           <ToolStepLimitForm initialSteps={settings.maxToolSteps} />
+          <AutoCompactForm initialEnabled={settings.autoCompact} />
         </div>
       </SettingsSection>
 

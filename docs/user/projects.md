@@ -86,11 +86,30 @@ the parts of them that matter for your message instead:
 - The best-matching passages are given to the model, labelled with their file
   name and passage number, in the order they appear in the files. They use at
   most half of the model's context, so the recent conversation still fits.
-- If no word of your message appears in the files, the opening passages of
-  each file are used instead.
+- If your administrator has turned on **meaning-based search**, the files are
+  also searched by meaning: a passage that answers your question in other words
+  ("start the boiler" for "turn on the heating") can be found even when it
+  shares no word with your message. The two rankings are merged, so exact
+  names, codes and numbers still come first.
+- If nothing in the files matches your message (by keyword, or by meaning when
+  that is on), the opening passages of each file are used instead.
+
+Your administrator may also have turned on **reranking**. A reranking model
+then reads your message together with each of the best matches and puts the
+ones that actually answer it first, so the passages given to the model are
+more likely to be the right ones. The note on such a reply says so, for
+example "Searched project files and reranked the results". Each reranked message counts towards your usage, under
+a model name starting with `rerank:`. If the reranking model is slow or
+unavailable, the reply still comes, with passages in the usual order.
 
 A reply that used searched passages says so above its text, for example
-"Searched project files. Used passages from handbook.pdf (2 passages)". The
+"Searched project files. Used passages from handbook.pdf (2 passages)", or
+"Searched project files by meaning and keywords" when meaning-based search
+was used. If meaning-based search is unavailable for a moment, the reply still
+comes, searched by keyword only. With meaning-based search on, each passage of
+your files is processed by the instance's embeddings model once when it is
+indexed, and each question once when you ask it; both count towards your
+usage, under a model name starting with `embedding:`. The
 model does not see the rest of the files for that message, so ask about
 specific topics rather than for a summary of everything. A model with a larger
 context can take more of the files, or all of them.

@@ -117,6 +117,11 @@ export const instanceSettingsSchema = z.object({
     .min(MIN_TOOL_STEPS)
     .max(MAX_TOOL_STEPS)
     .default(DEFAULT_MAX_TOOL_STEPS),
+  /**
+   * Summarise a conversation's earlier turns when it outgrows the model's
+   * input, instead of dropping them. People can still compact by hand when off.
+   */
+  autoCompact: z.boolean().default(true),
   features: z.object({
     shareLinks: z.boolean(),
     temporaryChat: z.boolean(),

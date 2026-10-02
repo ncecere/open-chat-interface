@@ -10,6 +10,7 @@ import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
+import { useCompaction } from '~/hooks/use-compaction';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError, chatErrorText } from '~/lib/api-client';
@@ -221,6 +222,16 @@ function ThreadConversation({
 
   const scroll = useChatScroll(session.messages, session.streaming, target);
 
+  // A reply may have summarised earlier messages to fit the model; read the
+  // summary in use again whenever one finishes.
+  const compaction = useCompaction(threadId);
+  const { refetch: refetchCompaction } = compaction;
+  const wasStreaming = useRef(session.streaming);
+  useEffect(() => {
+    if (wasStreaming.current && !session.streaming) void refetchCompaction();
+    wasStreaming.current = session.streaming;
+  }, [refetchCompaction, session.streaming]);
+
   if (session.recovery.unavailable)
     return (
       <ConversationLoadError
@@ -253,6 +264,7 @@ function ThreadConversation({
               onFork={session.features?.branching ? forkAtMessage : undefined}
               onEdit={session.features?.branching ? editAndBranch : undefined}
               replySwitch={replies.switcher}
+              compaction={compaction.data}
             />
 
             {(session.error ||

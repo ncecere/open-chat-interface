@@ -277,7 +277,8 @@ entries are kept. Each field shows
   Check what your institution requires before shortening this. Access-control
   and security changes are kept regardless: account creation, edits and
   deletion, role changes (including bulk role, ban and unban), provider and
-  single sign-on changes, and sign-in policy changes.
+  single sign-on changes, sign-in policy changes, webhook endpoint changes and
+  backup settings changes.
 
 Retention is easier to introduce early and shorten later than to impose on an
 instance where people have accumulated two years of work.

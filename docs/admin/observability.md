@@ -1,0 +1,222 @@
+# Observability and events
+
+Three ways to watch an OCI instance from outside it:
+
+- **[Metrics](#metrics)**: a Prometheus endpoint, off unless a scrape token is
+  set.
+- **[Traces](#traces)**: OpenTelemetry over OTLP, off unless a collector is
+  configured.
+- **[Webhooks](#webhooks)**: selected audit events posted to your own HTTPS
+  endpoints, signed and retried.
+
+Metrics and traces are configured with environment variables on the API and
+shown, read-only, on **Data & storage → System health** under *Observability*.
+Webhooks are managed under **Tools & integrations → Webhooks**.
+
+None of them carries conversation content: no prompts, replies, tool inputs or
+results, file names or request bodies.
+
+## Metrics
+
+Set `METRICS_TOKEN` (at least 16 characters, for example from
+`openssl rand -hex 24`) and restart the API. It then serves Prometheus text
+format at `/metrics` on the API port, requiring the token as a Bearer
+credential. Without the variable, `/metrics` answers 404.
+
+`/metrics` is at the API's root, not under `/api`, so the bundled web proxy
+(Caddy) does not forward it: scrape each API replica directly on its own
+address, from inside your network. Values are per process; Prometheus adds them
+up across replicas.
+
+```yaml
+scrape_configs:
+  - job_name: oci-api
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/oci-metrics-token
+    static_configs:
+      - targets: ['api-1:3000', 'api-2:3000']
+```
+
+| Metric | Type | Labels |
+| --- | --- | --- |
+| `oci_http_requests_total` | counter | `method`, `route` (the route template, such as `/api/threads/:id`; `unmatched` when no route matched), `status` |
+| `oci_http_request_duration_seconds` | histogram | `method`, `route` (time until the response starts; a streamed reply is timed separately) |
+| `oci_chat_replies_total` | counter | `status`: `complete`, `error`, `cancelled` |
+| `oci_chat_reply_duration_seconds` | histogram | `status` |
+| `oci_tool_calls_total` | counter | `tool` (the tool id, such as `web_search` or `mcp__docs__search`), `outcome`: `ok`, `error`, `denied`, `refused` |
+| `oci_tool_call_duration_seconds` | histogram | `tool` |
+| `oci_job_runs_total` | counter | `job`, `outcome`: `success`, `error` |
+| `oci_job_duration_seconds` | histogram | `job` |
+| `oci_webhook_deliveries_total` | counter | `outcome`: `succeeded`, `retrying`, `failed` |
+| `oci_webhook_deliveries_pending` | gauge | Deliveries waiting for a first attempt or a retry |
+| `oci_storage_deletions_pending` | gauge | Stored objects queued for deletion |
+| `oci_backup_runs_total` | counter | `outcome`: `succeeded`, `failed` |
+| `oci_backup_duration_seconds` | histogram | |
+| `oci_backup_last_success_timestamp_seconds` | gauge | Absent until a backup succeeds |
+| `oci_errors_total` | counter | `source`: unexpected server errors |
+| `oci_build_info` | gauge | `version` |
+| `process_resident_memory_bytes`, `nodejs_heap_used_bytes`, `process_uptime_seconds` | gauge | |
+
+Labels never hold user ids, thread ids or raw paths, so the number of series
+stays bounded. The gauges read from the database at scrape time; if the
+database does not answer, they are left out of that scrape rather than failing
+it.
+
+Useful alerts:
+
+```yaml
+- alert: OciBackupStale
+  expr: time() - max(oci_backup_last_success_timestamp_seconds) > 26 * 3600
+- alert: OciReplyErrors
+  expr: sum(rate(oci_chat_replies_total{status="error"}[15m])) / sum(rate(oci_chat_replies_total[15m])) > 0.05
+- alert: OciWebhookBacklog
+  expr: max(oci_webhook_deliveries_pending) > 100
+```
+
+## Traces
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` to your collector's OTLP/HTTP base URL (for
+example `http://otel-collector:4318`; OCI appends `/v1/traces`) and restart the
+API. `OTEL_SERVICE_NAME` sets the service name (default `oci-api`). Without the
+endpoint, the OpenTelemetry SDK is not even loaded.
+
+| Span | Attributes |
+| --- | --- |
+| `GET /api/threads/:id` (one per request, named by route template) | `http.request.method`, `http.route`, `http.response.status_code` |
+| `chat.reply` | `oci.reply.status` |
+| `tool.call` | `oci.tool.id`, `oci.tool.outcome` |
+| `job <name>` | `oci.job.name`, `oci.job.items` |
+| `backup.run` | `oci.backup.trigger` |
+| `webhook.deliver` | `oci.webhook.event`, `http.response.status_code` |
+
+An incoming W3C `traceparent` header is honoured, so a request joins the
+caller's trace. Failed spans have an error status with a short description
+(`HTTP 500`, an error class name), never an error message, which could quote
+content. Outgoing calls to model providers and the database are not
+instrumented.
+
+Spans are batched and exported in the background; a collector that is down
+loses spans, never requests.
+
+## Webhooks
+
+**Tools & integrations → Webhooks** (`/admin/webhooks`). A webhook endpoint
+receives the [audit events](audit-reporting.md) you select, as they are
+recorded: for example `user.*` to follow account changes, or `backup.run` to
+alert on a failed backup.
+
+### Adding an endpoint
+
+Choose **Add endpoint** and enter:
+
+- **URL**: an `https://` address. OCI does not follow redirects.
+- **Audit actions**: one per line. `user.create` matches exactly; `user.*`
+  matches every action that starts with `user.`. Or turn on **Send every audit
+  event** (this includes `tool.call`, one per tool call, which can be a lot).
+- **Allow private network**: like [connectors](connectors.md#private-networks),
+  endpoints must be public HTTPS addresses unless this is on; it allows plain
+  `http://` and private, loopback and link-local addresses. Cloud metadata
+  addresses are always refused.
+
+Saving shows the endpoint's **signing secret once**. Copy it into the receiver;
+OCI stores it encrypted and never shows it again. **Rotate secret** replaces it
+and shows the new one once; from then on every request, including retries of
+earlier events, is signed with the new secret.
+
+**Send test** posts a signed `webhook.test` event straight away and shows what
+the endpoint answered. **Show deliveries** lists the last 50 deliveries with
+their status, attempts and last error. Auditors can see endpoints and their
+deliveries but not change them, send tests or see secrets.
+
+Creating, changing, rotating and deleting endpoints are audited as
+`webhook.create`, `webhook.update`, `webhook.rotate` and `webhook.delete`, and
+are kept regardless of audit-log retention.
+
+### What is sent
+
+A `POST` with a JSON body:
+
+```json
+{
+  "id": "6f0c1d2e-…",
+  "type": "user.role.change",
+  "createdAt": "2026-10-02T09:14:03.120Z",
+  "actor": { "id": "u_123", "email": "admin@example.com" },
+  "target": { "type": "user", "id": "u_456" },
+  "metadata": { "from": "user", "to": "auditor" }
+}
+```
+
+`id` is the audit entry's id, the same on every retry; deduplicate on it.
+`metadata` is exactly what the audit log shows for the entry. The IP address is
+left out. Headers:
+
+| Header | Value |
+| --- | --- |
+| `OCI-Webhook-Id` | The delivery's id |
+| `OCI-Webhook-Event` | The audit action, such as `user.role.change` |
+| `OCI-Webhook-Timestamp` | Unix seconds when this attempt was signed |
+| `OCI-Webhook-Signature` | `v1=` and the hex HMAC-SHA256 of `<timestamp>.<body>` with the endpoint's secret |
+
+### Verifying a request
+
+Compute the HMAC-SHA256 of the timestamp header, a full stop, and the raw
+request body (the exact bytes, before parsing), keyed with the secret
+(including its `whsec_` prefix), and compare it with the signature in constant
+time. Reject requests whose timestamp is more than five minutes from your
+clock, which stops replays.
+
+Node.js:
+
+```js
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function verifyOciWebhook(secret, headers, rawBody) {
+  const timestamp = headers['oci-webhook-timestamp'];
+  const signature = headers['oci-webhook-signature'] ?? '';
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const expected = Buffer.from(
+    `v1=${createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex')}`,
+  );
+  return signature
+    .split(',')
+    .map((value) => Buffer.from(value.trim()))
+    .some((value) => value.length === expected.length && timingSafeEqual(value, expected));
+}
+```
+
+Python:
+
+```python
+import hashlib, hmac, time
+
+def verify_oci_webhook(secret: str, headers, raw_body: bytes) -> bool:
+    timestamp = headers["OCI-Webhook-Timestamp"]
+    if abs(time.time() - int(timestamp)) > 300:
+        return False
+    digest = hmac.new(secret.encode(), timestamp.encode() + b"." + raw_body, hashlib.sha256)
+    expected = "v1=" + digest.hexdigest()
+    return any(hmac.compare_digest(expected, part.strip())
+               for part in headers["OCI-Webhook-Signature"].split(","))
+```
+
+Answer with any `2xx` status within ten seconds; the response body is ignored.
+
+### Delivery and retries
+
+Events are queued in the database when the audit entry is written and sent by
+the `webhooks.deliver` background job, which starts within a second of an event
+and runs every minute for retries. Delivery is at least once.
+
+| Outcome | What happens |
+| --- | --- |
+| `2xx` | Delivered. |
+| Any other status, a timeout (10 s) or a connection error | Retried after 1, 2, 4, 8, 16, 32 and 60 minutes; after 8 attempts the delivery is marked failed. |
+| Refused address, scheme or redirect | Failed at once: retrying cannot help. Fix the URL or *Allow private network*. |
+| Endpoint disabled or deleted | Pending deliveries are dropped (disabled: marked failed). |
+
+The endpoint's last failure shows on its card and in the *Webhooks* row of
+**System health**, which also warns when deliveries are more than 15 minutes
+overdue (background jobs not running). Finished deliveries are kept for 30
+days.

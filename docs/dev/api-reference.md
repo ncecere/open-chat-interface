@@ -7,7 +7,7 @@ Every route the API registers, grouped by the file that defines it.
 Administrative routes require the `admin` role; an `auditor` may call the
 read-only ones. See [identity and access](../admin/identity.md).
 
-Generated from 34 route files.
+Generated from 38 route files.
 
 ## `routes/admin/audit.ts`
 
@@ -17,6 +17,15 @@ Generated from 34 route files.
 | GET | `/api/admin/audit/actions` | Distinct actions present in the log, so the filter offers what exists. |
 | GET | `/api/admin/audit/export` | — |
 | GET | `/api/admin/audit/summary` | Counts by action over a window, for spotting a spike without reading rows. |
+
+## `routes/admin/backups.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/backups` | Settings, configuration problems, run history and what runs next. |
+| POST | `/api/admin/backups/run` | Starts a backup now, in the background. |
+| PATCH | `/api/admin/backups/settings` | Changes backup settings; only sent fields change. |
+| POST | `/api/admin/backups/test` | Writes, reads back and deletes a small object at the saved destination. |
 
 ## `routes/admin/broadcasts.ts`
 
@@ -40,6 +49,14 @@ Generated from 34 route files.
 | POST | `/api/admin/connectors/:id/refresh` | Lists the server's tools and stores them; new tools start disabled, vanished ones are marked missing. |
 | POST | `/api/admin/connectors/:id/test` | Checks that the server answers the MCP handshake and lists its tools. |
 | PATCH | `/api/admin/connectors/:id/tools/:toolId` | Switches one connector tool on or off, or changes its kind. |
+
+## `routes/admin/embeddings.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/embeddings` | The embeddings setting, pgvector's state and indexing progress; the provider key is never returned. |
+| PUT | `/api/admin/embeddings` | Saves the setting. |
+| POST | `/api/admin/embeddings/test` | Embeds a sample with the model on the page (or the saved one). |
 
 ## `routes/admin/health.ts`
 
@@ -132,6 +149,14 @@ Generated from 34 route files.
 | DELETE | `/api/admin/reports/:id` | — |
 | POST | `/api/admin/reports/run` | Sends every due report immediately. |
 
+## `routes/admin/reranking.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/reranking` | The reranking setting and the endpoint it will call; the provider key is never returned. |
+| PUT | `/api/admin/reranking` | Saves the setting. |
+| POST | `/api/admin/reranking/test` | Reranks a tiny sample with the model on the page (or the saved one). |
+
 ## `routes/admin/roles.ts`
 
 | Method | Path | Purpose |
@@ -194,6 +219,19 @@ Generated from 34 route files.
 | GET | `/api/admin/views` | — |
 | POST | `/api/admin/views` | — |
 | DELETE | `/api/admin/views/:id` | — |
+
+## `routes/admin/webhooks.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/webhooks` | Every webhook endpoint with its recent delivery state; secrets are never returned. |
+| POST | `/api/admin/webhooks` | Registers an endpoint and returns its signing secret, this one time. |
+| GET | `/api/admin/webhooks/:id` | One webhook endpoint with its delivery log. |
+| PATCH | `/api/admin/webhooks/:id` | Changes a webhook endpoint; only sent fields change. |
+| DELETE | `/api/admin/webhooks/:id` | Deletes the endpoint and its delivery log; pending deliveries are dropped. |
+| GET | `/api/admin/webhooks/:id/deliveries` | The endpoint's delivery log, newest first. |
+| POST | `/api/admin/webhooks/:id/rotate` | Replaces the signing secret and returns the new one, this one time. |
+| POST | `/api/admin/webhooks/:id/test` | Sends a signed `webhook.test` event now and reports what the endpoint answered. |
 
 ## `routes/attachments.ts`
 
@@ -312,6 +350,8 @@ Generated from 34 route files.
 | PATCH | `/api/threads/:id` | — |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
 | POST | `/api/threads/:id/branches` | — |
+| POST | `/api/threads/:id/compact` | "Compact conversation": summarise the earlier turns now, optionally with instructions for the summary, using the given model (the composer's) or the latest reply's. |
+| GET | `/api/threads/:id/compaction` | The compaction in use: its summary and where the verbatim messages start. |
 | GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
 | POST | `/api/threads/:id/forks` | — |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |

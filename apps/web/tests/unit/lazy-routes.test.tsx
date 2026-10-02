@@ -48,6 +48,8 @@ const lazyModules = [
   ['routes/admin/quotas', ['AdminQuotasPage']],
   ['routes/admin/search', ['AdminSearchPage']],
   ['routes/admin/connectors', ['AdminConnectorsPage']],
+  ['routes/admin/webhooks', ['AdminWebhooksPage']],
+  ['routes/admin/backups', ['AdminBackupsPage']],
   ['routes/admin/storage', ['AdminStoragePage']],
   ['routes/admin/retention', ['AdminRetentionPage']],
   ['routes/admin/policies', ['AdminPoliciesPage']],

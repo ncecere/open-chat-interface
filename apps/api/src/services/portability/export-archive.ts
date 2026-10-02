@@ -371,6 +371,19 @@ export async function* exportArchive(
       ),
     );
 
+    // Summaries made when the conversation outgrew its model, oldest first.
+    // Messages are never changed by them, so the transcript above is complete.
+    const compactions = await db
+      .select()
+      .from(schema.conversationCompaction)
+      .where(
+        and(
+          eq(schema.conversationCompaction.threadId, thread.id),
+          eq(schema.conversationCompaction.userId, owner.id),
+        ),
+      )
+      .orderBy(asc(schema.conversationCompaction.createdAt), asc(schema.conversationCompaction.id));
+
     const markdownPath = `conversations/${name}.md`;
     const jsonPath = `conversations/${name}.json`;
     writer.add(markdownPath, renderMarkdown(thread, messages.slice(0, MAX_EXPORT_MESSAGES)), {
@@ -384,6 +397,18 @@ export async function* exportArchive(
           thread: threadSummary(thread),
           messages: messages.map(serializeMessage),
           attachments,
+          compactions: compactions.map((compaction) => ({
+            id: compaction.id,
+            firstKeptMessageId: compaction.firstKeptMessageId,
+            summary: compaction.summary,
+            reason: compaction.reason,
+            messagesSummarized: compaction.messagesSummarized,
+            tokensSummarized: compaction.tokensSummarized,
+            modelSlug: compaction.modelSlug,
+            tokensIn: compaction.tokensIn,
+            tokensOut: compaction.tokensOut,
+            createdAt: compaction.createdAt.toISOString(),
+          })),
           truncatedMessages,
         },
         null,

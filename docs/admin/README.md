@@ -29,6 +29,10 @@ resolves it. [First run](first-run.md) walks through it.
    scheduled reports.
 9. [Connectors](connectors.md) — MCP servers whose tools models can call:
    authentication, approval, network safety.
+10. [Backups](backups.md) — scheduled database dumps and attachment manifests
+    to S3, verification, retention, restoring.
+11. [Observability and events](observability.md) — Prometheus metrics,
+    OpenTelemetry traces, signed webhooks for audit events.
 
 For deployment, backup, and upgrade, see [Operations](../OPERATIONS.md).
 
@@ -61,6 +65,7 @@ Pages are grouped by task. **Overview** sits above the groups.
 | --- | --- |
 | Web search | The switch for web search, its provider, and a test search |
 | Connectors | MCP servers whose tools models can call, and which of their tools are enabled |
+| [Webhooks](observability.md#webhooks) | HTTPS endpoints that receive selected audit events, signed and retried, with a delivery log |
 
 **Sign-in & security**
 
@@ -76,7 +81,8 @@ Pages are grouped by task. **Overview** sits above the groups.
 | --- | --- |
 | Storage | Where attachments live, and the upload policy |
 | Retention | How long conversations, usage history, and audit entries are kept |
-| System health | Whether dependencies are working, background jobs, storage reconciliation |
+| [Backups](backups.md) | Daily database dumps and attachment manifests to S3, verified, with retention |
+| System health | Whether dependencies are working, background jobs, storage reconciliation, [observability](observability.md) status |
 
 **Insights**
 

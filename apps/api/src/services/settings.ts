@@ -21,7 +21,10 @@ export type SettingKey =
   | 'retention'
   | 'rateLimits'
   | 'roleFeatures'
-  | 'roleTools';
+  | 'roleTools'
+  | 'embeddings'
+  | 'reranking'
+  | 'backups';
 
 export interface BrandingSettings {
   appName: string;
@@ -170,6 +173,8 @@ export interface ChatSettings {
   defaultEffort?: ReasoningEffort;
   /** Model steps per reply when tools are used. Absent before v0.8; read as the default (8). */
   maxToolSteps?: number;
+  /** Summarise earlier turns when a conversation outgrows the model. Absent before v0.9; read as on. */
+  autoCompact?: boolean;
 }
 
 /**
@@ -217,6 +222,43 @@ export interface StoredRoleFeatureSettings {
   roles?: Partial<Record<UserRole, Partial<RoleFeatures>>>;
 }
 
+/**
+ * Meaning-based search for project files (v0.9). Sparse: never saved means
+ * off. Normalised by `embeddingsSettings` in services/embeddings/config.ts.
+ */
+export interface StoredEmbeddingsSettings {
+  enabled?: boolean;
+  providerId?: string | null;
+  modelId?: string | null;
+  dimensions?: number | null;
+  inputPriceMicros?: number | null;
+}
+
+/**
+ * Reranking of project search results (v0.9). Sparse: never saved means off.
+ * Normalised by `rerankingSettings` in services/reranking/config.ts.
+ */
+export interface StoredRerankingSettings {
+  enabled?: boolean;
+  providerId?: string | null;
+  modelId?: string | null;
+  searchPriceMicros?: number | null;
+}
+
+/**
+ * Automated backups (v0.9). Sparse: never saved means off. Normalised by
+ * `backupSettings` in services/backups/settings.ts.
+ */
+export interface StoredBackupSettings {
+  enabled?: boolean;
+  hourUtc?: number;
+  destination?: 'storage' | 'separate';
+  prefix?: string;
+  s3?: Partial<S3StorageSettings>;
+  keepDaily?: number;
+  keepWeekly?: number;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -229,6 +271,9 @@ interface SettingsMap {
   rateLimits: StoredRateLimitSettings;
   roleFeatures: StoredRoleFeatureSettings;
   roleTools: StoredRoleToolSettings;
+  embeddings: StoredEmbeddingsSettings;
+  reranking: StoredRerankingSettings;
+  backups: StoredBackupSettings;
 }
 
 /**

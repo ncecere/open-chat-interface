@@ -2,12 +2,16 @@ import { DEFAULT_MAX_TOOL_STEPS } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import type { searchWeb } from '../search/index.js';
 import type { generationSettings } from './generation-settings.js';
+import { textParts } from './message-parts.js';
 import { buildModelContext } from './model-context.js';
 import { persistTurn } from './persist-turn.js';
 import type { ProjectSearchPart } from './project-context.js';
 import type { AcquiredRun } from './run-lifecycle.js';
 import { maxToolSteps } from './tool-loop.js';
 import type { TurnContext } from './turn-context.js';
+
+/** The model input rebuilt after compaction. */
+export type RecoveredContext = { uiMessages: UIMessage[]; system: string; contextLimited: boolean };
 
 export type PreparedTurn = TurnContext & {
   /** Model steps one reply may take when it uses tools. */
@@ -38,6 +42,12 @@ export type PreparedTurn = TurnContext & {
   } | null;
   /** Set when project files were searched; names and passage counts only. */
   projectSearchPart?: ProjectSearchPart | null;
+  /**
+   * After the provider reported the input too long: compact the conversation
+   * and rebuild the input. Null when nothing could be compacted (or automatic
+   * compaction is off). The reply calls it at most once.
+   */
+  recoverOverflow?: () => Promise<RecoveredContext | null>;
 };
 
 /** Budget/enrich outside transactions, then commit the unmodified prompt and file references. */
@@ -55,6 +65,32 @@ export async function prepareTurn(context: TurnContext, run: AcquiredRun): Promi
     model.latest.id,
     model.historicalReferences,
   );
+  // The prompt and its files are stored now, so a rebuild reads them back as
+  // a retry of this turn would, reusing this turn's search.
+  const recoverOverflow = async (): Promise<RecoveredContext | null> => {
+    const rebuilt = await buildModelContext(
+      {
+        ...context,
+        input: {
+          ...context.input,
+          trigger: 'regenerate-message',
+          attachmentIds: [],
+          messages: [
+            { id: persisted.promptMessageId, role: 'user', parts: textParts(model.latest.parts) },
+          ],
+        },
+      },
+      run.assistantMessage.id,
+      { compact: 'overflow', search: model.search },
+    );
+    return rebuilt.compacted
+      ? {
+          uiMessages: rebuilt.uiMessages,
+          system: rebuilt.system,
+          contextLimited: rebuilt.contextLimited,
+        }
+      : null;
+  };
   return {
     ...context,
     ...persisted,
@@ -68,5 +104,6 @@ export async function prepareTurn(context: TurnContext, run: AcquiredRun): Promi
     sourceParts: model.sourceParts,
     searchGroundingPart: model.searchGroundingPart,
     projectSearchPart: model.projectSearchPart,
+    recoverOverflow,
   };
 }

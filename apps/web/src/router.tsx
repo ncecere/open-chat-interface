@@ -398,6 +398,18 @@ const adminStorageRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/storage'), 'AdminStoragePage'),
 });
 
+const adminWebhooksRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/webhooks',
+  component: lazyRouteComponent(() => import('~/routes/admin/webhooks'), 'AdminWebhooksPage'),
+});
+
+const adminBackupsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/backups',
+  component: lazyRouteComponent(() => import('~/routes/admin/backups'), 'AdminBackupsPage'),
+});
+
 const adminRetentionRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/retention',
@@ -457,6 +469,8 @@ const routeTree = rootRoute.addChildren([
     adminQuotasRoute,
     adminSearchRoute,
     adminConnectorsRoute,
+    adminWebhooksRoute,
+    adminBackupsRoute,
     adminStorageRoute,
     adminStorageLimitsRoute,
     adminRateLimitsRoute,

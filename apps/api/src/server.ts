@@ -6,10 +6,19 @@ import { loadEnv } from './config/env.js';
 import { db } from './db/index.js';
 import { logger } from './lib/logger.js';
 import { startLifecycleJobs, stopJobs } from './services/jobs/index.js';
+import { initTracing, shutdownTracing } from './services/observability/tracing.js';
 import { purgeExpiredTemporaryThreads } from './services/threads.js';
 
 async function main() {
   const env = loadEnv();
+
+  // Loads the OpenTelemetry SDK only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+  await initTracing().catch((error) =>
+    logger.error(
+      { err: error instanceof Error ? error.message : String(error) },
+      'Failed to start tracing; continuing without it',
+    ),
+  );
 
   /**
    * A container deployment has no separate migration step, so a fresh stack
@@ -52,7 +61,9 @@ async function main() {
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'Shutting down');
     stopJobs();
-    server.close(() => process.exit(0));
+    server.close(() => {
+      void shutdownTracing().finally(() => process.exit(0));
+    });
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));

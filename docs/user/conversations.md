@@ -92,16 +92,53 @@ Opening another conversation will not send a pending new-chat prompt there.
 
 ## What the model can see
 
-The visible transcript is not always the entire input sent to a model. Older
-turns are omitted as needed to fit a bounded recent history. A notice above the
-reply tells you when earlier context was omitted; your stored messages are not
-deleted or rewritten.
+The visible transcript is not always the entire input sent to a model. When a
+conversation grows longer than the model can take in, its earlier messages are
+summarised (see [Long conversations](#long-conversations)). If they cannot be,
+older turns are left out to fit a bounded recent history, and a notice above
+the reply says that earlier context was omitted. Either way, your stored
+messages are not deleted or rewritten.
 
 Your latest request, system instructions, selected attachments and any current
 search grounding must fit together. If they do not, the request is refused
 before a new user turn is saved. Shorten it, remove files, or choose a model with
 more context. The application also has fixed safety ceilings, so choosing a
 larger model does not remove every limit.
+
+## Long conversations
+
+When a conversation outgrows the model's input, OCI summarises its earlier
+messages and sends the model that summary followed by your most recent
+exchanges, word for word, instead of leaving the earlier part out. A line
+appears above the first message the model still sees in full: **Earlier
+messages were summarised to fit the model**. Select it to read the summary the
+model received.
+
+- **Nothing is deleted.** Every message stays in the conversation, and in
+  search, exports and share links. Only what is sent to the model changes. A
+  full export (Settings → Your data) also includes the summaries.
+- **What the summary keeps:** the topic and your goal; facts, figures and
+  decisions; your preferences and constraints; open questions and next steps;
+  and details to keep exactly, such as names, numbers, code and quotations.
+  Reasoning is not included, and long tool results are shortened.
+- **When it happens:** before a reply, when the conversation no longer fits,
+  and once more if the model's provider reports that the input was too long
+  (the reply is then tried again, once). The most recent exchanges, up to about
+  half of what the model can take in, are always kept in full, and a
+  conversation is never cut in the middle of a question and its answer. A later
+  summary builds on the previous one.
+- **It counts towards your usage.** The summary is written by the
+  conversation's own model, like a reply.
+- **Compact it yourself.** **Compact conversation** (the folding icon at the top
+  right of a conversation) summarises the earlier messages now, keeping at most
+  the latest half. You can say what the summary should keep, for example "keep
+  every figure in the budget". It uses the model of the latest reply, and is
+  not available while a reply is being generated.
+- **Forks and edits** carry the summary over when everything it covers was
+  copied into the new conversation.
+
+Your administrator can turn automatic summaries off; then earlier messages are
+left out instead, as described above, and you can still compact by hand.
 
 ## Organising the sidebar
 

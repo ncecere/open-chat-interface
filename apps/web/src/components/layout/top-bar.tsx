@@ -1,6 +1,15 @@
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
-import { Download, FolderInput, History, PanelLeft, Plus, Search } from 'lucide-react';
+import {
+  Download,
+  FolderInput,
+  FoldVertical,
+  History,
+  PanelLeft,
+  Plus,
+  Search,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { CompactThreadDialog } from '~/components/chat/compact-thread-dialog';
 import { ShareThreadDialog } from '~/components/chat/share-thread-dialog';
 import { ThemeMenu } from '~/components/layout/theme-menu';
 import { MoveToProjectDialog } from '~/components/projects/project-dialogs';
@@ -92,6 +101,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         {params.threadId && data?.features.projects && (
           <MoveToProjectControl threadId={params.threadId} />
         )}
+        {params.threadId && <CompactConversationControl threadId={params.threadId} />}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -110,6 +120,26 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         <ThemeMenu />
       </div>
     </header>
+  );
+}
+
+/** Opens the Compact conversation dialog for the conversation on screen. */
+function CompactConversationControl({ threadId }: { threadId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Compact conversation"
+        title="Compact conversation"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+      >
+        <FoldVertical />
+      </Button>
+      <CompactThreadDialog threadId={threadId} open={open} onOpenChange={setOpen} />
+    </>
   );
 }
 

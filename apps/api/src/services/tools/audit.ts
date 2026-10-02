@@ -1,5 +1,6 @@
 import type { ToolKind } from '@oci/shared';
 import { recordAudit } from '../audit.js';
+import { observeToolCall } from '../observability/events.js';
 
 type ToolCallOutcome = 'ok' | 'error' | 'denied' | 'refused';
 export type ToolApprovalAnswer = 'approved' | 'denied' | 'not answered';
@@ -21,6 +22,7 @@ export async function recordToolCall(event: {
   durationMs: number | null;
   resultBytes: number | null;
 }): Promise<void> {
+  observeToolCall(event.toolId, event.outcome, event.durationMs);
   await recordAudit({
     actorUserId: event.userId,
     action: 'tool.call',

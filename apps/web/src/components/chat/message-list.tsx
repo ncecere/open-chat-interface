@@ -1,5 +1,7 @@
+import type { ConversationCompaction } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { memo, useState } from 'react';
+import { CompactionDivider } from '~/components/chat/compaction-divider';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
 import { MessageRow } from '~/components/chat/message-row';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
@@ -17,6 +19,8 @@ interface MessageListProps {
   replySwitch?: ReplySwitch;
   /** Answers an approval on the latest reply. */
   onAnswerApproval?: AnswerApproval;
+  /** When earlier messages were summarised: shown above the first kept message. */
+  compaction?: ConversationCompaction | null;
 }
 
 /** Transcript composition only; editing drafts and presentation belong to rows. */
@@ -28,6 +32,7 @@ export const MessageList = memo(function MessageList({
   onFork,
   replySwitch,
   onAnswerApproval,
+  compaction = null,
   searching = false,
 }: MessageListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,7 +51,10 @@ export const MessageList = memo(function MessageList({
 
   return (
     <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-8">
-      {messages.map((message, index) => (
+      {messages.flatMap((message, index) => [
+        ...(compaction?.firstKeptMessageId === message.id
+          ? [<CompactionDivider key={`compaction-${compaction.id}`} compaction={compaction} />]
+          : []),
         <MessageRow
           // Switching replies swaps the last message. Keying that row by its
           // prompt keeps it mounted, so focus stays on the switcher.
@@ -66,8 +74,8 @@ export const MessageList = memo(function MessageList({
           onAnswerApproval={index === messages.length - 1 ? onAnswerApproval : undefined}
           onFork={onFork}
           onEdit={onEdit}
-        />
-      ))}
+        />,
+      ])}
 
       {/* An empty assistant row is not visible progress. Keep feedback until
           text or reasoning arrives, including providers with hidden reasoning. */}

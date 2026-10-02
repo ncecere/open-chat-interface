@@ -1,3 +1,4 @@
+import { BACKUP_JOB, runScheduledBackup } from '../backups/run.js';
 import {
   applyThreadRetention,
   pruneAuditLog,
@@ -8,12 +9,14 @@ import {
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
 import { processPendingImports } from '../portability/imports.js';
+import { embedPendingProjectPassages } from '../project-search/embedding.js';
 import { indexPendingProjectFiles } from '../project-search/indexing.js';
 import { sweepAbandonedReservations } from '../quota/index.js';
 import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
 import { drainDeletedObjects, pruneDrainedObjects } from '../storage/reaper.js';
 import { purgeExpiredTemporaryThreads } from '../threads.js';
+import { processWebhookDeliveries } from '../webhooks/delivery.js';
 import { type JobDefinition, runExclusively, startJobs } from './runner.js';
 
 const MINUTE = 60 * 1000;
@@ -52,6 +55,14 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'projects.index-files',
       intervalMs: 5 * MINUTE,
       run: () => indexPendingProjectFiles(),
+    },
+    {
+      // Meaning-based search (v0.9): embeds passages that have no embedding
+      // from the current model, a bounded batch a tick. Does nothing unless an
+      // embeddings model is configured and pgvector is enabled.
+      name: 'projects.embed-passages',
+      intervalMs: 5 * MINUTE,
+      run: () => embedPendingProjectPassages(),
     },
     {
       name: 'quota.sweep-reservations',
@@ -111,6 +122,20 @@ export function lifecycleJobs(): JobDefinition[] {
       // by a crash between the blob write and the counter update.
       intervalMs: 24 * HOUR,
       run: () => recomputeStorageUsage(),
+    },
+    {
+      // Audit events kick this straight away; the tick sends retries as they
+      // fall due and anything queued while another replica held the lock.
+      name: 'webhooks.deliver',
+      intervalMs: MINUTE,
+      run: () => processWebhookDeliveries(),
+    },
+    {
+      // Checks whether today's backup slot is due; does nothing when backups
+      // are off. The lock keeps scheduled and manual backups from overlapping.
+      name: BACKUP_JOB,
+      intervalMs: 10 * MINUTE,
+      run: () => runScheduledBackup(),
     },
   ];
 }

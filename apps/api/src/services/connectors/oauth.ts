@@ -6,7 +6,7 @@ import {
   type OAuthClientProvider,
   type OAuthTokens,
 } from '@ai-sdk/mcp';
-import { and, eq, gt, isNull, schema } from '@oci/db';
+import { and, eq, gt, isNull, schema, sql } from '@oci/db';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { decryptSecret, encryptSecret, generateToken, hashToken } from '../../lib/crypto.js';
@@ -34,6 +34,10 @@ import { type ConnectorAccountRow, type ConnectorRow, findAccount } from './stor
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 /** Tokens this close to expiry are refreshed before a call. */
 const REFRESH_MARGIN_MS = 60_000;
+
+type AccountTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+/** Where an account's writes go: the pool, or the transaction holding its row lock. */
+type Executor = typeof db | AccountTransaction;
 
 export type ConnectReturn = 'settings' | 'admin';
 
@@ -300,16 +304,23 @@ const expiryOf = (tokens: OAuthTokens) =>
     ? new Date(Date.now() + tokens.expires_in * 1000)
     : null;
 
-async function saveConnection(accountId: string, connection: StoredConnection) {
-  await db
+/** Stores a connection and returns its ciphertext, which identifies this version of the tokens. */
+async function saveConnection(
+  accountId: string,
+  connection: StoredConnection,
+  executor: Executor = db,
+): Promise<string> {
+  const encryptedTokens = encryptSecret(JSON.stringify(connection));
+  await executor
     .update(schema.connectorAccount)
     .set({
-      encryptedTokens: encryptSecret(JSON.stringify(connection)),
+      encryptedTokens,
       expiresAt: expiryOf(connection.tokens),
       disconnectedReason: null,
       updatedAt: new Date(),
     })
     .where(eq(schema.connectorAccount.id, accountId));
+  return encryptedTokens;
 }
 
 /**
@@ -385,9 +396,18 @@ export async function completeConnect(
   return { connector, returnTo: pending.returnTo === 'admin' ? 'admin' : 'settings' };
 }
 
-/** Forgets a person's tokens and records why, so Settings can ask them to reconnect. */
-async function markDisconnected(accountId: string, reason: string) {
-  await db
+/**
+ * Forgets a person's tokens and records why, so Settings can ask them to
+ * reconnect. With `onlyTokens`, only if those are still the stored tokens:
+ * returns false when another refresh replaced them meanwhile.
+ */
+async function markDisconnected(
+  accountId: string,
+  reason: string,
+  executor: Executor = db,
+  onlyTokens?: string,
+): Promise<boolean> {
+  const changed = await executor
     .update(schema.connectorAccount)
     .set({
       encryptedTokens: null,
@@ -395,7 +415,16 @@ async function markDisconnected(accountId: string, reason: string) {
       disconnectedReason: reason,
       updatedAt: new Date(),
     })
-    .where(eq(schema.connectorAccount.id, accountId));
+    .where(
+      onlyTokens === undefined
+        ? eq(schema.connectorAccount.id, accountId)
+        : and(
+            eq(schema.connectorAccount.id, accountId),
+            eq(schema.connectorAccount.encryptedTokens, onlyTokens),
+          ),
+    )
+    .returning({ id: schema.connectorAccount.id });
+  return changed.length > 0;
 }
 
 /**
@@ -404,6 +433,11 @@ async function markDisconnected(accountId: string, reason: string) {
  * again, as a lost connection (there is nobody to redirect). A refresh that
  * failed only because the network did is not a refusal: the connection is
  * kept for the next try.
+ *
+ * A refusal only disconnects if the tokens it refused are still the stored
+ * ones. When a server rotates refresh tokens, a refresh with tokens another
+ * caller (on any replica) has already replaced is refused; the provider then
+ * carries on with the replacement instead of disconnecting the person.
  */
 class AccountProvider implements OAuthClientProvider {
   disconnected = false;
@@ -416,6 +450,9 @@ class AccountProvider implements OAuthClientProvider {
     private readonly connector: ConnectorRow,
     private readonly accountId: string,
     private connection: StoredConnection,
+    /** The stored ciphertext `connection` was read from. */
+    private storedTokens: string,
+    private readonly executor: Executor = db,
   ) {}
 
   /** The connector's guarded fetch, noting network failures. */
@@ -439,7 +476,7 @@ class AccountProvider implements OAuthClientProvider {
   }
   async saveTokens(tokens: OAuthTokens) {
     this.connection = { ...this.connection, tokens };
-    await saveConnection(this.accountId, this.connection);
+    this.storedTokens = await saveConnection(this.accountId, this.connection, this.executor);
   }
   async redirectToAuthorization() {
     if (this.networkFailed && !this.disconnected) {
@@ -465,11 +502,30 @@ class AccountProvider implements OAuthClientProvider {
   }
   private async disconnect() {
     if (this.disconnected) return;
-    this.disconnected = true;
-    await markDisconnected(this.accountId, 'expired');
+    if (await markDisconnected(this.accountId, 'expired', this.executor, this.storedTokens)) {
+      this.disconnected = true;
+      return;
+    }
+    // Replaced meanwhile: use the stored tokens, or stop if they are gone too.
+    const [row] = await this.executor
+      .select({ encryptedTokens: schema.connectorAccount.encryptedTokens })
+      .from(schema.connectorAccount)
+      .where(eq(schema.connectorAccount.id, this.accountId))
+      .limit(1);
+    if (!row?.encryptedTokens) {
+      this.disconnected = true;
+      return;
+    }
+    logger.info(
+      { connectorId: this.connector.id },
+      'Connector tokens were refreshed elsewhere; using those',
+    );
+    this.storedTokens = row.encryptedTokens;
+    this.connection = JSON.parse(decryptSecret(row.encryptedTokens)) as StoredConnection;
   }
 }
 
+/** In-process single flight; `refreshLocked` coordinates processes. */
 const refreshing = new Map<string, Promise<void>>();
 
 /** "Connect X in Settings" wording for a person without a usable connection. */
@@ -477,38 +533,80 @@ export function reconnectMessage(connector: Pick<ConnectorRow, 'name'>): string 
   return `Your ${connector.name} connection has expired or was refused. Connect ${connector.name} again in Settings → Connectors.`;
 }
 
+const needsRefresh = (expiresAt: Date | null) =>
+  expiresAt !== null && expiresAt.getTime() - REFRESH_MARGIN_MS <= Date.now();
+
 /**
- * Refreshes tokens that are about to expire, once per account at a time in
- * this process. A refresh the server refuses disconnects the account.
- * Returns whether a refresh ran, after which the stored tokens are re-read.
+ * Refreshes tokens that are about to expire. Callers in this process share one
+ * refresh per account; across processes, `refreshLocked` serializes them.
+ * A refresh the server refuses disconnects the account. Returns whether the
+ * tokens were (or may have been) replaced, after which they are re-read.
  */
 async function ensureFresh(
   connector: ConnectorRow,
   account: ConnectorAccountRow,
-  provider: AccountProvider,
-  connection: StoredConnection,
 ): Promise<boolean> {
-  if (!account.expiresAt || account.expiresAt.getTime() - REFRESH_MARGIN_MS > Date.now())
-    return false;
-  if (!connection.tokens.refresh_token) {
-    await markDisconnected(account.id, 'expired');
-    throw providerError(reconnectMessage(connector));
-  }
+  if (!needsRefresh(account.expiresAt)) return false;
   let running = refreshing.get(account.id);
   if (!running) {
-    running = (async () => {
-      const result = await auth(provider, { serverUrl: connector.url, fetchFn: provider.fetchFn });
-      if (provider.transient)
-        throw providerError(`Could not renew your ${connector.name} connection. Try again later.`);
-      if (result !== 'AUTHORIZED' || provider.disconnected) {
-        if (!provider.disconnected) await markDisconnected(account.id, 'expired');
-        throw providerError(reconnectMessage(connector));
-      }
-    })().finally(() => refreshing.delete(account.id));
+    running = refreshLocked(connector, account).finally(() => refreshing.delete(account.id));
     refreshing.set(account.id, running);
   }
   await running;
   return true;
+}
+
+/**
+ * One refresh across every replica: holds the account row with
+ * `SELECT … FOR UPDATE` for the duration, and re-reads it once the lock is
+ * held. If the tokens changed while waiting, another replica refreshed them
+ * and those are used rather than refreshing again, which a server that rotates
+ * refresh tokens would refuse. Writes go through the same transaction, so a
+ * disconnect is kept even though the caller then gets an error.
+ *
+ * The lock costs one pooled connection for the length of the refresh. Waiting
+ * for it is bounded by the connector time limit; a waiter that gives up is
+ * told to try again, and the account is left alone.
+ */
+async function refreshLocked(connector: ConnectorRow, seen: ConnectorAccountRow): Promise<void> {
+  const outcome = await db.transaction(async (tx): Promise<{ error: unknown } | null> => {
+    await tx.execute(
+      sql`select set_config('lock_timeout', ${String(CONNECTOR_LIMITS.timeoutMs)}, true)`,
+    );
+    const [row] = await tx
+      .select()
+      .from(schema.connectorAccount)
+      .where(eq(schema.connectorAccount.id, seen.id))
+      .for('update');
+    if (!row?.encryptedTokens)
+      return {
+        error: providerError(`Connect ${connector.name} in Settings → Connectors to use it.`),
+      };
+    if (row.encryptedTokens !== seen.encryptedTokens || !needsRefresh(row.expiresAt)) return null;
+    const connection = JSON.parse(decryptSecret(row.encryptedTokens)) as StoredConnection;
+    if (!connection.tokens.refresh_token) {
+      await markDisconnected(row.id, 'expired', tx);
+      return { error: providerError(reconnectMessage(connector)) };
+    }
+    const provider = new AccountProvider(connector, row.id, connection, row.encryptedTokens, tx);
+    try {
+      const result = await auth(provider, { serverUrl: connector.url, fetchFn: provider.fetchFn });
+      if (provider.transient)
+        return {
+          error: providerError(
+            `Could not renew your ${connector.name} connection. Try again later.`,
+          ),
+        };
+      if (result !== 'AUTHORIZED' || provider.disconnected) {
+        if (!provider.disconnected) await markDisconnected(row.id, 'expired', tx);
+        return { error: providerError(reconnectMessage(connector)) };
+      }
+      return null;
+    } catch (error) {
+      return { error };
+    }
+  });
+  if (outcome) throw outcome.error;
 }
 
 /**
@@ -537,15 +635,13 @@ export async function connectionAuthFor(
     const connection = JSON.parse(decryptSecret(account.encryptedTokens)) as StoredConnection;
     return {
       account,
-      connection,
-      provider: new AccountProvider(connector, account.id, connection),
+      provider: new AccountProvider(connector, account.id, connection, account.encryptedTokens),
     };
   };
-  let { account, connection, provider } = await load();
+  let { account, provider } = await load();
   try {
-    // A refresh (possibly another call's) replaced the tokens: use the stored ones.
-    if (await ensureFresh(connector, account, provider, connection))
-      ({ account, connection, provider } = await load());
+    // A refresh (possibly another call's or replica's) replaced the tokens: use the stored ones.
+    if (await ensureFresh(connector, account)) ({ account, provider } = await load());
   } catch (error) {
     if (error instanceof AppError) throw error;
     const network = findNetworkError(error);

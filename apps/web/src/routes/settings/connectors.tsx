@@ -6,9 +6,12 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
-import { CONNECT_OUTCOMES, startConnecting } from '~/lib/connectors';
-
-export const USER_CONNECTORS_QUERY_KEY = ['connectors'] as const;
+import {
+  CONNECT_OUTCOMES,
+  fetchUserConnectors,
+  startConnecting,
+  USER_CONNECTORS_QUERY_KEY,
+} from '~/lib/connectors';
 
 function ConnectorRow({ connector }: { connector: UserConnector }) {
   const queryClient = useQueryClient();
@@ -85,7 +88,7 @@ export function SettingsConnectorsPage() {
   const search = useSearch({ strict: false }) as { connected?: string; error?: string };
   const connectors = useQuery({
     queryKey: USER_CONNECTORS_QUERY_KEY,
-    queryFn: () => api.get<{ connectors: UserConnector[] }>('/connectors'),
+    queryFn: fetchUserConnectors,
   });
   const list = connectors.data?.connectors ?? [];
   const justConnected = search.connected

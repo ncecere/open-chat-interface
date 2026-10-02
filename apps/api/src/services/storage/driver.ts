@@ -36,6 +36,12 @@ export interface StorageDriver {
    */
   putFile?(key: string, path: string, contentType: string): Promise<StoredObject>;
   getStream?(key: string): Promise<NodeJS.ReadableStream>;
+  /** Uploads a stream of unknown length without holding it in memory (S3 only). */
+  putStream?(
+    key: string,
+    source: AsyncIterable<Uint8Array>,
+    contentType: string,
+  ): Promise<StoredObject>;
 }
 
 /** Namespaces objects by owner so a traversal cannot reach another user. */

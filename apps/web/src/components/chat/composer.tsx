@@ -1,6 +1,7 @@
 import { ArrowUp, Square } from 'lucide-react';
 import { type KeyboardEvent, memo, useLayoutEffect, useRef } from 'react';
 import { AttachmentChips } from '~/components/chat/attachment-chips';
+import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
 import type { PendingAttachment } from '~/hooks/use-attachments';
 import { cn } from '~/lib/utils';
@@ -66,6 +67,7 @@ export const Composer = memo(function Composer({
 
   return (
     <div className="mx-auto w-full max-w-[47rem] px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-3 md:pb-0">
+      <ComposerConnectHint selectedModel={selectedModel} />
       <div className="rounded-[1.25rem] border border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent-bright)] md:rounded-b-none md:border-b-0">
         <AttachmentChips items={attachments} onRemove={(id) => onRemoveAttachment?.(id)} />
 

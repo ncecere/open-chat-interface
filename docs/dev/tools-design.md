@@ -248,11 +248,30 @@ Where the connector build differs from, or decides something left open above
   may connect before any tool is allowed for their role.
 - **The "connect X" hint** lives in Settings → Connectors (which lists every
   OAuth connector with a tool allowed for the person's role) and in the
-  failed step's message when a connection expires mid-use. The composer was
-  left unchanged.
-- **Residual risks.** Refresh is single-flight per process only: with several
-  replicas, simultaneous refreshes for one person can race, and a server that
-  rotates refresh tokens then disconnects that person. Tool descriptions are
+  failed step's message when a connection expires mid-use. Since v0.9 the
+  composer also shows one dismissible note (`role="note"`) for the first
+  unconnected or expired connector while a `tool_calling` model is selected.
+  It reuses `GET /api/connectors` through the same react-query key as the
+  settings page, and fetches nothing for other models. Dismissals are kept
+  per connector id in `localStorage` (`oci:dismissed-connector-hints`).
+- **Refresh across replicas (v0.9).** Callers in one process share one
+  refresh per account; across processes, the refresh runs in a transaction
+  holding the `connector_account` row with `SELECT … FOR UPDATE`. After
+  acquiring the lock the row is re-read: if the tokens changed while waiting,
+  another replica refreshed and those are used, so only one refresh reaches
+  the server even when it rotates refresh tokens. Token writes go through the
+  same transaction. The lock holds one pooled connection for the refresh;
+  waiting is bounded by `lock_timeout` (the connector time limit), after which
+  the caller is told to try again. A refusal disconnects only if the refused
+  tokens are still the stored ones (compare-and-set on the ciphertext); a
+  caller holding replaced tokens, such as the MCP transport refreshing after a
+  401 mid-call (which does not take the lock), adopts the stored replacement
+  instead. Covered by the live test with two module instances refreshing at
+  once against the rotating test server.
+- **Residual risks.** A caller that refreshed with stale tokens after a 401
+  and was refused retries once with the stored replacement, rotating it again;
+  if that also races, the call fails with a try-again message, but the person
+  stays connected. Tool descriptions are
   server-written text that models read (prompt injection through a tool
   description is mitigated, not prevented, by administrator review at
   refresh).

@@ -51,6 +51,29 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_IMPORT_MAX_UPLOAD_BYTES),
+
+  /**
+   * Observability (v0.9). `/metrics` is served only when a scrape token is
+   * set, and requires it as a Bearer token. Traces are exported over OTLP/HTTP
+   * only when an endpoint is set; the SDK is not loaded otherwise.
+   */
+  METRICS_TOKEN: z
+    .string()
+    .optional()
+    .transform((value) => (value?.trim() ? value.trim() : undefined))
+    .refine((value) => value === undefined || value.length >= 16, {
+      message: 'METRICS_TOKEN must be at least 16 characters',
+    }),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z
+    .string()
+    .optional()
+    .transform((value) => (value?.trim() ? value.trim() : undefined))
+    .refine((value) => value === undefined || /^https?:\/\/[^\s]+$/i.test(value), {
+      message: 'OTEL_EXPORTER_OTLP_ENDPOINT must be an http(s) URL',
+    }),
+  OTEL_SERVICE_NAME: z.string().trim().min(1).default('oci-api'),
+  /** Directory holding pg_dump and pg_restore; found on PATH when unset. */
+  BACKUP_PG_BIN_DIR: z.string().trim().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

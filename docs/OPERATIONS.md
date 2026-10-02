@@ -96,6 +96,13 @@ replication/export mechanism; copying only database metadata is insufficient.
 Periodically restore both database and object data into an isolated environment
 and verify attachment downloads.
 
+From v0.9, OCI can run the database backup itself, daily, to S3-compatible
+storage, with a checksummed manifest of attachment objects and verification
+after every run: **Admin → Data & storage → Backups**
+([Backups](admin/backups.md)). The manifest lists attachment objects but does
+not copy them, so attachment storage still needs versioning or snapshots as
+above.
+
 ## Upgrade
 
 1. Read every changelog entry between the deployed and target versions.
@@ -202,6 +209,156 @@ OAuth connectors send people back to `APP_URL/api/connectors/oauth/callback`;
 `APP_URL` must be the address people use. Connectors make outbound HTTPS
 requests from the API, so allow egress to their servers (and their
 authorization servers) where egress is filtered.
+
+### Upgrading to v0.9
+
+#### Conversation compaction (migration 0028)
+
+Migration `0028_conversation_compaction` creates one new, empty table,
+`conversation_compaction`, cascading from the thread, the user and the message
+where a summary's kept messages begin. It rewrites and locks nothing existing,
+so it applies instantly, and v0.8 replicas never read it. From v0.9, long
+conversations are summarised instead of losing their oldest turns; each summary
+call is a usage event of its own (no message counted) for the conversation's
+model. Administrators can turn automatic summaries off under **General →
+Summarise long conversations**
+([Instance settings](admin/instance-settings.md#general)).
+
+#### Meaning-based search and pgvector (migration 0029)
+
+Migration `0029_embeddings` adds one small table
+(`project_file_embedding_failure`) and needs no extension; v0.8 replicas never
+read it. Meaning-based search for project files is optional and off until an
+administrator configures an embeddings model under **Providers & Models →
+Embeddings** ([Embeddings](admin/models-providers.md#embeddings)). It also
+needs the [pgvector](https://github.com/pgvector/pgvector) extension, which OCI
+detects but never creates: without it, project search stays keyword-only,
+exactly as in v0.8. **System health** shows the state in its *Meaning-based
+search* row.
+
+Once both are in place, OCI creates a `project_file_embedding` table at runtime
+(its `vector(n)` column depends on the model) under an advisory lock, and the
+`projects.embed-passages` job fills it in the background. The table is part of
+the database, so `pg_dump` backs it up; a restore needs pgvector on the target
+server.
+
+**Enabling pgvector.** If your PostgreSQL server has the pgvector package
+(managed services usually offer it; the `pgvector/pgvector:pg17` image includes
+it), enable it once in OCI's database as a superuser or, on a managed service,
+the role it allows to create extensions:
+
+```bash
+cd docker
+docker compose exec -T postgres psql --username=oci --dbname=oci \
+  -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+```
+
+**The bundled Compose stack uses `postgres:17-alpine`, which does not include
+pgvector.** There are two ways to get it.
+
+*Option 1: move to the Debian-based `pgvector/pgvector:pg17` image with a dump
+and restore.* Do not point the new image at the existing data volume. Alpine
+uses musl and Debian uses glibc, which sort text differently; a data directory
+created under one and opened under the other can silently corrupt text indexes
+(unique constraints may stop being enforced and lookups may miss rows).
+
+1. Stop the API (`docker compose stop api`) so nothing writes during the move.
+2. Dump the database, as in [Back up](#back-up):
+
+   ```bash
+   docker compose exec -T postgres \
+     pg_dump --format=custom --no-owner --username=oci oci > oci-before-pgvector.dump
+   ```
+
+3. Switch the `postgres` service to `image: pgvector/pgvector:pg17` **and** to a
+   new, empty volume (for example `postgres_data_pgvector:/var/lib/postgresql/data`,
+   declared under `volumes:`), keeping the same `POSTGRES_*` settings. Keep the
+   old volume until the new database is verified.
+4. Start the new server and restore into the database its entrypoint created:
+
+   ```bash
+   docker compose up -d postgres
+   docker compose exec -T postgres \
+     pg_restore --no-owner --role=oci --username=oci --dbname=oci < oci-before-pgvector.dump
+   docker compose exec -T postgres psql --username=oci --dbname=oci \
+     -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+   ```
+
+5. Start the API (`docker compose up -d`), sign in, and check conversations,
+   search and attachments before removing the old volume.
+
+*Option 2: build pgvector into the Alpine image you already run.* The data
+directory and its collation stay as they are, so no dump and restore is needed.
+A minimal Dockerfile:
+
+```dockerfile
+FROM postgres:17-alpine
+ARG PGVECTOR_VERSION=0.8.6
+RUN apk add --no-cache --virtual .build-deps build-base git \
+ && git clone --depth 1 --branch "v${PGVECTOR_VERSION}" \
+      https://github.com/pgvector/pgvector.git /tmp/pgvector \
+ && cd /tmp/pgvector \
+ && make OPTFLAGS="" with_llvm=no \
+ && make install with_llvm=no \
+ && cd / && rm -rf /tmp/pgvector \
+ && apk del .build-deps
+```
+
+Build it, set the `postgres` service's `image:` (or `build:`) to it, recreate the
+container on the same volume, and run the `CREATE EXTENSION` command above.
+`OPTFLAGS=""` keeps the build portable across CPUs; `with_llvm=no` skips the
+optional JIT bitcode, which would otherwise need clang and llvm.
+
+OCI never searches across projects, so vectors are compared by an exact scan of
+one project's passages; no vector index is created or needed.
+
+#### Reranking (no migration)
+
+Optional reranking of project search is an instance setting only; it needs no
+migration and no pgvector. It is off until an administrator chooses a
+reranking model under **Providers & Models → Embeddings → Reranking**
+([Reranking](admin/models-providers.md#reranking)). The API then calls the
+provider's `<base URL>/rerank` from the API containers once per searched
+message, so allow that egress if you restrict it. Each call waits at most five
+seconds; failures are logged as `Reranking project passages failed; using the
+previous order` and never fail a reply.
+
+#### Backups, webhooks and observability (migration 0030)
+
+Migration `0030_backups_webhooks` creates four new, empty tables
+(`backup_run`, `backup_object_checksum`, `webhook_endpoint`,
+`webhook_delivery`). It rewrites and locks nothing existing, and v0.8 replicas
+never read them.
+
+- **The API image now includes the PostgreSQL 17 client tools** (`pg_dump`,
+  `pg_restore`, from Alpine's `postgresql17-client`), used by automated
+  backups. They run as the image's non-root `oci` user. A PostgreSQL 18 server
+  needs newer tools; outside the image, set `BACKUP_PG_BIN_DIR` if they are not
+  on `PATH`. Automated backups are off until turned on under **Data & storage
+  → Backups** ([Backups](admin/backups.md)); the API needs egress to the
+  backup bucket.
+- **Metrics** are served at `/metrics` on each API replica only when
+  `METRICS_TOKEN` is set, and **traces** are exported only when
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set
+  ([Observability](admin/observability.md)). Neither changes anything by
+  default; the bundled Caddy proxy does not forward `/metrics`.
+- **Webhooks** under **Tools & integrations → Webhooks** send selected audit
+  events from the API to your endpoints; allow egress where it is filtered.
+  Delivery runs in the `webhooks.deliver` job, so it needs the background jobs
+  that already run on every replica.
+
+#### Dropped `user_preference.boring_mode` (migration 0031)
+
+Migration `0031_drop_boring_mode` drops the unused `user_preference.boring_mode`
+column, the second step of a two-release removal
+([Removing a column](dev/database.md#removing-a-column)). v0.8 no longer reads
+or writes it, so v0.8 replicas keep working while the migration applies and
+during a rolling replacement. The drop changes only the catalog (no table
+rewrite) under a brief exclusive lock on `user_preference`. v0.7 and earlier
+still read the column, so when upgrading straight from v0.7, stop the old
+replicas before migrating rather than replacing them one by one. The drop is
+not reversible by reverting images: running v0.7 again would need the column
+re-added (`boolean NOT NULL DEFAULT false`).
 
 ## Usage accounting after an interrupted run
 

@@ -70,6 +70,10 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'roleFeatures') return {};
     // Chat-wide settings (such as the tool step limit) keep their defaults.
     if (key === 'chat') return {};
+    // Meaning-based search is off: keyword search only, as in v0.8.
+    if (key === 'embeddings') return {};
+    // Reranking is off: the note carries no `reranked` field.
+    if (key === 'reranking') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));
@@ -284,6 +288,7 @@ describe.skipIf(!available)('live: searching large project files', () => {
       id: expect.stringMatching(/^project-search-/),
       data: {
         mode: 'search',
+        ranking: 'keyword',
         files: [{ name: 'handbook.txt', passages: expect.any(Number) }],
       },
     });

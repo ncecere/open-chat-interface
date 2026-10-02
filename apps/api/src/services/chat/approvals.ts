@@ -250,6 +250,17 @@ export async function setupApprovalContinuation(
           refused: claimed.answered.refused,
           existingParts: claimed.answered.parts,
         },
+        // Compaction applies to a continued reply as to a new one.
+        recoverOverflow: async () => {
+          const rebuilt = await buildModelContext(context, reply.id, { compact: 'overflow' });
+          return rebuilt.compacted
+            ? {
+                uiMessages: [...rebuilt.uiMessages, continuing],
+                system: rebuilt.system,
+                contextLimited: rebuilt.contextLimited,
+              }
+            : null;
+        },
       },
       run: {
         ...resources,

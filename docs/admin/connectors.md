@@ -177,9 +177,12 @@ everything on it except secrets, and change nothing.
 
 - A connection is opened per tool call and closed afterwards; there is no
   pooling.
-- Refreshing a person's expiring token is coordinated within one OCI process.
-  With several replicas, two simultaneous refreshes for the same person can
-  race; if the server rotates refresh tokens, the loser's refresh fails and
-  that person is asked to connect again.
+- Refreshing a person's expiring token is coordinated across every OCI
+  replica (since v0.9): one replica refreshes while the others wait for it and
+  then use the new token, so servers that rotate refresh tokens do not
+  disconnect people who use a connector from two places at once. A refresh
+  holds one database connection until the server answers. If a replica waits
+  longer than the connector time limit (30 seconds), that tool call fails
+  with "try again later" and the connection is kept.
 - Only Streamable HTTP servers are supported, not the older HTTP+SSE
   transport or local (stdio) servers.

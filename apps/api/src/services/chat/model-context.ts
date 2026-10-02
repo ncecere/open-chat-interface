@@ -1,6 +1,7 @@
 import { ERROR_CODES } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { AppError, validationFailed } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import {
   buildGroundingContext,
   normalizeSearchQuery,
@@ -19,9 +20,20 @@ import {
   withAttachmentContext,
 } from './attachment-context.js';
 import {
+  type ActiveCompaction,
+  autoCompactEnabled,
+  compactForTurn,
+  latestCompaction,
+  summaryMaxTokens,
+} from './compaction.js';
+import { withSummary } from './compaction-plan.js';
+import {
   addCost,
   assertFitsContext,
+  type ContextCost,
   contextBudget,
+  emptyCost,
+  fitsContext,
   historyGroups,
   MAX_CONTEXT_FILES,
   MESSAGE_OVERHEAD,
@@ -53,7 +65,7 @@ const asUI = (message: ContextMessage, toolsOffered: boolean): UIMessage => ({
  * failure no longer fails the reply: the model is told the search failed and
  * the reply shows why. Anything else (search switched off) still refuses.
  */
-type PreSearch = { results: SearchResult[]; error?: string };
+export type PreSearch = { results: SearchResult[]; error?: string };
 
 async function searchOrFailure(query: string): Promise<PreSearch> {
   try {
@@ -67,7 +79,31 @@ async function searchOrFailure(query: string): Promise<PreSearch> {
   }
 }
 
-export async function buildModelContext(context: TurnContext, claimId: string) {
+export type ModelContextOptions = {
+  /** The search made for an earlier attempt at this turn, reused instead of searching again. */
+  search?: PreSearch;
+  /**
+   * Rebuilding after the provider reported the input too long: compact first
+   * (when automatic compaction is on), keeping at most half of the history.
+   */
+  compact?: 'overflow';
+};
+
+/** Automatic compaction is best effort; a setting that cannot be read leaves it off. */
+async function compactionAllowed(threadId: string): Promise<boolean> {
+  try {
+    return await autoCompactEnabled();
+  } catch (error) {
+    logger.warn({ error, threadId }, 'Could not read the automatic compaction setting');
+    return false;
+  }
+}
+
+export async function buildModelContext(
+  context: TurnContext,
+  claimId: string,
+  options: ModelContextOptions = {},
+) {
   const { input, user, resolved, thread } = context;
   const submitted = input.messages[0];
   if (!submitted) throw validationFailed('A user message is required');
@@ -90,13 +126,20 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     throw validationFailed(`At most ${MAX_CONTEXT_FILES} files fit in model context`);
   if (input.trigger === 'regenerate-message' && input.attachmentIds.length)
     throw validationFailed('Attachments cannot be added while regenerating a response');
-  const stored = await loadContextHistory({
+  // A compacted conversation is sent as its summary plus the turns from the
+  // cut on; the turns before the cut are not even read.
+  const previous = await latestCompaction(thread.id, user.id);
+  const historyInput = {
     threadId: thread.id,
     userId: user.id,
     claimId,
     latest: incoming,
     regenerate: input.trigger === 'regenerate-message',
     attachmentIds: input.attachmentIds,
+  };
+  const stored = await loadContextHistory({
+    ...historyInput,
+    fromPosition: previous?.firstKeptPosition,
   });
   const toolsOffered = context.tools.definitions.length > 0;
   // With the web_search tool the model searches when it chooses; otherwise
@@ -105,7 +148,9 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   const searchQuery = preSearch ? normalizeSearchQuery(textFromParts(stored.latest.parts)) : null;
   const [newCandidates, searchResults, baseSystem, project] = await Promise.all([
     inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
-    searchQuery ? searchOrFailure(searchQuery) : Promise.resolve<PreSearch>({ results: [] }),
+    searchQuery
+      ? (options.search ?? searchOrFailure(searchQuery))
+      : Promise.resolve<PreSearch>({ results: [] }),
     buildSystemPrompt(user.id, user.name),
     loadProjectContext(thread.projectId, user),
   ]);
@@ -123,74 +168,138 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     : stored.latest;
   const systemCost = { ...textCost(system), units: textCost(system).units + MESSAGE_OVERHEAD };
   assertFitsContext(addCost(systemCost, messageCost(latest)), budget);
-  const groups = historyGroups(stored.history);
-  let fileCount = newCandidates.length + (stored.target ? attachmentIds(stored.target).length : 0);
-  if (fileCount > MAX_CONTEXT_FILES)
-    throw validationFailed('The requested turn has too many context files');
-  let first = groups.length;
-  for (let index = groups.length - 1; index >= 0; index--) {
-    const count = groups[index]!.reduce((sum, message) => sum + attachmentIds(message).length, 0);
-    if (fileCount + count > MAX_CONTEXT_FILES) break;
-    fileCount += count;
-    first = index;
-  }
-  const inspectedGroups = groups.slice(first);
-  const historical = await inspectHistoricalAttachments(
-    [...inspectedGroups.flat(), ...(stored.target ? [stored.target] : [])],
-    user.id,
-  );
   const supportsVision = resolved.capabilities.includes('vision');
-  const latestCandidates = stored.target
-    ? (historical.byMessage.get(stored.target.id) ?? [])
-    : newCandidates;
-  const filesCost = (id: string) => {
-    let cost = (historical.byMessage.get(id) ?? []).reduce(
-      (sum, file) => addCost(sum, attachmentCost(file, supportsVision)),
-      { units: 0, files: 0, imageBytes: 0 },
+  let projectFiles: Awaited<ReturnType<typeof selectProjectFiles>> | undefined;
+
+  /**
+   * History as it would be sent with `compaction`: the summary (when it fits
+   * beside the required context) and then whole turns, newest first, as the
+   * budget allows.
+   */
+  async function assemble(history: typeof stored, compaction: ActiveCompaction | null) {
+    const groups = historyGroups(history.history);
+    let fileCount =
+      newCandidates.length + (history.target ? attachmentIds(history.target).length : 0);
+    if (fileCount > MAX_CONTEXT_FILES)
+      throw validationFailed('The requested turn has too many context files');
+    let first = groups.length;
+    for (let index = groups.length - 1; index >= 0; index--) {
+      const count = groups[index]!.reduce((sum, message) => sum + attachmentIds(message).length, 0);
+      if (fileCount + count > MAX_CONTEXT_FILES) break;
+      fileCount += count;
+      first = index;
+    }
+    const inspectedGroups = groups.slice(first);
+    const historical = await inspectHistoricalAttachments(
+      [...inspectedGroups.flat(), ...(history.target ? [history.target] : [])],
+      user.id,
     );
-    if (historical.unavailable.has(id)) cost = addCost(cost, textCost(UNAVAILABLE_ATTACHMENT_TEXT));
-    return cost;
+    const filesCost = (id: string) => {
+      let cost = (historical.byMessage.get(id) ?? []).reduce(
+        (sum, file) => addCost(sum, attachmentCost(file, supportsVision)),
+        emptyCost(),
+      );
+      if (historical.unavailable.has(id))
+        cost = addCost(cost, textCost(UNAVAILABLE_ATTACHMENT_TEXT));
+      return cost;
+    };
+    let required = addCost(systemCost, messageCost(latest));
+    required = addCost(
+      required,
+      history.target
+        ? filesCost(history.target.id)
+        : newCandidates.reduce(
+            (sum, file) => addCost(sum, attachmentCost(file, supportsVision)),
+            emptyCost(),
+          ),
+    );
+    // Project files outrank history: they are chosen to fit after the required
+    // context, and history is trimmed to what remains. A file that does not fit
+    // is left out rather than truncated, and the reply is marked context-limited.
+    // Files too large to include whole are searched with the latest message.
+    projectFiles ??= await selectProjectFiles(
+      project,
+      required,
+      budget,
+      supportsVision,
+      textFromParts(history.latest.parts),
+    );
+    required = addCost(required, projectFiles.cost);
+    const beforeSummary = required;
+    // The summary stands for the turns before the cut. If even it does not fit
+    // beside the required context, those turns are left out unsummarised.
+    const summaryCost = compaction ? textCost(withSummary('', compaction.summary)) : emptyCost();
+    const summarised = compaction !== null && fitsContext(addCost(required, summaryCost), budget);
+    if (summarised) required = addCost(required, summaryCost);
+    const selected = selectContextSuffix(
+      inspectedGroups.map((items) => ({
+        items,
+        cost: items.reduce(
+          (sum, message) =>
+            addCost(sum, addCost(messageCost(asUI(message, toolsOffered)), filesCost(message.id))),
+          emptyCost(),
+        ),
+      })),
+      required,
+      budget,
+    );
+    const historyLimited = history.limited || first > 0 || selected.limited;
+    return {
+      history,
+      historical,
+      selected,
+      beforeSummary,
+      compaction: summarised ? compaction : null,
+      historyLimited,
+      limited:
+        historyLimited ||
+        groups.flat().length !== history.history.length ||
+        (compaction !== null && !summarised),
+    };
+  }
+
+  let view = await assemble(stored, previous);
+  let compacted = false;
+  if (
+    (options.compact === 'overflow' || view.historyLimited) &&
+    (await compactionAllowed(thread.id))
+  ) {
+    // Keep recent turns up to half the input budget, or less when the system
+    // prompt, project files and the new message leave less room for history
+    // beside a summary.
+    const room = budget.units - view.beforeSummary.units - summaryMaxTokens(budget) * 4;
+    const created = await compactForTurn({
+      context,
+      reason: options.compact === 'overflow' ? 'overflow' : 'automatic',
+      previous,
+      before: stored.target ?? null,
+      excludeIds: [claimId],
+      keepUnits: Math.max(0, Math.min(Math.floor(budget.units / 2), room)),
+      atMostHalf: options.compact === 'overflow',
+    });
+    if (created) {
+      compacted = true;
+      view = await assemble(
+        await loadContextHistory({ ...historyInput, fromPosition: created.firstKeptPosition }),
+        created,
+      );
+    }
+  }
+  const { selected, historical, history } = view;
+  const finalSystem = withSummary(system, view.compaction?.summary);
+  const finalSystemCost: ContextCost = {
+    ...textCost(finalSystem),
+    units: textCost(finalSystem).units + MESSAGE_OVERHEAD,
   };
-  let required = addCost(systemCost, messageCost(latest));
-  required = addCost(
-    required,
-    stored.target
-      ? filesCost(stored.target.id)
-      : newCandidates.reduce((sum, file) => addCost(sum, attachmentCost(file, supportsVision)), {
-          units: 0,
-          files: 0,
-          imageBytes: 0,
-        }),
-  );
-  // Project files outrank history: they are chosen to fit after the required
-  // context, and history is trimmed to what remains. A file that does not fit
-  // is left out rather than truncated, and the reply is marked context-limited.
-  // Files too large to include whole are searched with the latest message.
-  const projectFiles = await selectProjectFiles(
-    project,
-    required,
-    budget,
-    supportsVision,
-    textFromParts(stored.latest.parts),
-  );
-  required = addCost(required, projectFiles.cost);
-  const selected = selectContextSuffix(
-    inspectedGroups.map((items) => ({
-      items,
-      cost: items.reduce(
-        (sum, message) =>
-          addCost(sum, addCost(messageCost(asUI(message, toolsOffered)), filesCost(message.id))),
-        { units: 0, files: 0, imageBytes: 0 },
-      ),
-    })),
-    required,
-    budget,
-  );
+  const latestCandidates = history.target
+    ? (historical.byMessage.get(history.target.id) ?? [])
+    : newCandidates;
   const historicalCandidates = [
     ...selected.items,
-    ...(stored.target ? [stored.target] : []),
+    ...(history.target ? [history.target] : []),
   ].flatMap((message) => historical.byMessage.get(message.id) ?? []);
-  const allCandidates = [...newCandidates, ...historicalCandidates, ...projectFiles.files];
+  const files = projectFiles!;
+  const allCandidates = [...newCandidates, ...historicalCandidates, ...files.files];
   const loaded = await materializeAttachments(allCandidates, user.id, user.role, supportsVision);
   const historicalMessage = (message: ContextMessage) =>
     withAttachmentContext(
@@ -206,17 +315,17 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
         latest,
         latestCandidates.map((file) => loaded.get(file.id)!),
         supportsVision,
-        Boolean(stored.target && historical.unavailable.has(stored.target.id)),
+        Boolean(history.target && historical.unavailable.has(history.target.id)),
       ),
     ],
     project,
-    projectFiles.files.map((file) => loaded.get(file.id)!),
+    files.files.map((file) => loaded.get(file.id)!),
     supportsVision,
-    projectFiles.search,
+    files.search,
   );
   const actualCost = uiMessages.reduce(
     (sum, message) => addCost(sum, messageCost(message)),
-    systemCost,
+    finalSystemCost,
   );
   assertFitsContext({ ...actualCost, files: allCandidates.length }, budget);
   return {
@@ -227,15 +336,14 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
       messageId: file.messageId!,
     })),
     uiMessages,
-    system,
+    system: finalSystem,
     outputTokens: budget.outputTokens,
     generationSettings: generation,
-    contextLimited:
-      stored.limited ||
-      groups.flat().length !== stored.history.length ||
-      first > 0 ||
-      selected.limited ||
-      projectFiles.omitted > 0,
+    contextLimited: view.limited || files.omitted > 0,
+    /** Whether this call recorded a new compaction. */
+    compacted,
+    /** The search results, so a rebuilt context can reuse them. */
+    search: searchResults,
     sourceParts: searchResults.results.map((source, index) => ({
       type: 'source-url' as const,
       sourceId: `search-${index + 1}`,
@@ -253,6 +361,6 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
           },
         }
       : null,
-    projectSearchPart: projectFiles.searchPart,
+    projectSearchPart: files.searchPart,
   };
 }

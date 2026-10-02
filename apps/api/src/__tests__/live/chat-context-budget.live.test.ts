@@ -92,6 +92,8 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'storage') return { maxFilesPerMessage: state.maxFilesPerMessage };
     // No saved role overrides: built-in role defaults apply.
     if (key === 'roleFeatures') return {};
+    // These tests cover trimming without summaries (chat-compaction covers those).
+    if (key === 'chat') return { autoCompact: false };
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

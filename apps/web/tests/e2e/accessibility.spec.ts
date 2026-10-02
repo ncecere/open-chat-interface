@@ -226,6 +226,76 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('admin backups has no violations', async ({ page }) => {
+    // The real page against the live API: settings form, status and (empty) history.
+    await signIn(page);
+    await page.goto('/admin/backups');
+    await expect(page.getByRole('heading', { name: 'Backups', level: 1 })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Back up automatically' })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('admin webhooks has no violations', async ({ page }) => {
+    // A routed endpoint with a failing delivery, so the card and its log are scanned too.
+    await page.route('**/api/admin/webhooks', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          webhooks: [
+            {
+              id: 'w1',
+              url: 'https://hooks.example.test/oci',
+              description: 'SIEM',
+              actions: ['user.*', 'backup.run'],
+              allActions: false,
+              enabled: true,
+              allowPrivateNetwork: false,
+              secretRotatedAt: '2026-10-01T09:00:00.000Z',
+              lastSuccessAt: '2026-10-01T10:00:00.000Z',
+              lastFailureAt: '2026-10-01T11:00:00.000Z',
+              lastError: 'The endpoint answered HTTP 500.',
+              pendingDeliveries: 1,
+              createdAt: '2026-10-01T09:00:00.000Z',
+              updatedAt: '2026-10-01T09:00:00.000Z',
+            },
+          ],
+        }),
+      }),
+    );
+    await page.route('**/api/admin/webhooks/w1/deliveries', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          deliveries: [
+            {
+              id: 'd1',
+              event: 'user.create',
+              status: 'pending',
+              attempts: 1,
+              maxAttempts: 8,
+              nextAttemptAt: '2026-10-01T11:01:00.000Z',
+              lastAttemptAt: '2026-10-01T11:00:00.000Z',
+              lastStatusCode: 500,
+              lastError: 'The endpoint answered HTTP 500.',
+              deliveredAt: null,
+              createdAt: '2026-10-01T11:00:00.000Z',
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/admin/webhooks');
+    await expect(page.getByRole('heading', { name: 'Webhooks', level: 1 })).toBeVisible();
+    await page.getByRole('button', { name: 'Show deliveries' }).click();
+    await expect(page.getByRole('table')).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('settings connectors has no violations', async ({ page }) => {
     await page.route('**/api/connectors', (route) =>
       route.fulfill({

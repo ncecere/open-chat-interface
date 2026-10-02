@@ -1,4 +1,4 @@
-import type { JobRun } from '@oci/shared';
+import type { JobRun, ObservabilityStatus } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, Play, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
@@ -28,6 +28,8 @@ interface Check {
 interface HealthResponse {
   status: Status;
   checks: Check[];
+  /** Absent from servers older than v0.9. */
+  observability?: ObservabilityStatus;
 }
 
 interface StorageHealth {
@@ -109,6 +111,49 @@ function HealthChecks() {
         })}
       </ul>
     </div>
+  );
+}
+
+/** Metrics and traces are configured by environment variables; this only reports them. */
+function Observability() {
+  // Shares the health query, so this costs no extra request.
+  const health = useQuery({
+    queryKey: ['admin', 'health'],
+    queryFn: () => api.get<HealthResponse>('/admin/health'),
+    refetchInterval: 30_000,
+  });
+  const status = health.data?.observability;
+  if (!status) return null;
+  const rows = [
+    {
+      label: 'Prometheus metrics',
+      on: status.metrics,
+      detail: status.metrics
+        ? 'Served at /metrics on each API replica, for scrapers presenting METRICS_TOKEN.'
+        : 'Off. Set METRICS_TOKEN to serve /metrics.',
+    },
+    {
+      label: 'OpenTelemetry traces',
+      on: status.tracing,
+      detail: status.tracing
+        ? `Exported over OTLP to ${status.tracingEndpoint ?? 'the configured collector'}.`
+        : 'Off. Set OTEL_EXPORTER_OTLP_ENDPOINT to export traces.',
+    },
+  ];
+  return (
+    <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
+      {rows.map((row) => (
+        <li key={row.label} className="flex items-start justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="font-medium text-sm">{row.label}</p>
+            <p className="text-[var(--text-muted)] text-xs">{row.detail}</p>
+          </div>
+          <span className="shrink-0 text-xs text-[var(--text-secondary)]">
+            {row.on ? 'On' : 'Off'}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -346,6 +391,14 @@ export function AdminHealthPage() {
           description="Refreshed every 30 seconds while this page is open."
         >
           <HealthChecks />
+        </SettingsSection>
+
+        <SettingsSection
+          editable={false}
+          title="Observability"
+          description="Metrics and traces are set with environment variables on the API; see the administrator guide."
+        >
+          <Observability />
         </SettingsSection>
 
         <SettingsSection

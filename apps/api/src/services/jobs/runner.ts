@@ -1,6 +1,8 @@
 import { eq, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { observeJob } from '../observability/events.js';
+import { withSpan } from '../observability/tracing.js';
 import { withJobLock } from './lock.js';
 
 export interface JobDefinition {
@@ -24,8 +26,14 @@ async function runRecordedJob(job: JobDefinition): Promise<number> {
     .returning({ id: schema.jobRun.id });
 
   try {
-    const itemsProcessed = await job.run();
+    const itemsProcessed = await withSpan(`job ${job.name}`, { 'oci.job.name': job.name }, (span) =>
+      job.run().then((items) => {
+        span.setAttributes({ 'oci.job.items': items });
+        return items;
+      }),
+    );
     const durationMs = Date.now() - startedAt.getTime();
+    observeJob(job.name, 'success', durationMs);
 
     if (record) {
       await db
@@ -41,6 +49,7 @@ async function runRecordedJob(job: JobDefinition): Promise<number> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error({ job: job.name, error: message }, 'Background job failed');
+    observeJob(job.name, 'error', Date.now() - startedAt.getTime());
 
     if (record) {
       await db

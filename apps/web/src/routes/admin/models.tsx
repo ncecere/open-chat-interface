@@ -21,6 +21,7 @@ import {
   RowList,
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { EmbeddingsSection } from '~/components/admin/embeddings-section';
 import { ModelFormDialog } from '~/components/admin/model-form-dialog';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Badge } from '~/components/ui/badge';
@@ -320,6 +321,7 @@ function DefaultModelSelector({
 const TABS: readonly PillTab<ModelsTab>[] = [
   { id: 'providers', label: 'Providers' },
   { id: 'models', label: 'Models' },
+  { id: 'embeddings', label: 'Embeddings' },
 ];
 
 export function AdminModelsPage() {
@@ -379,10 +381,12 @@ export function AdminModelsPage() {
         <div
           id="models-panel"
           role="tabpanel"
-          aria-label={tab === 'providers' ? 'Providers' : 'Models'}
+          aria-label={TABS.find((entry) => entry.id === tab)?.label ?? 'Providers'}
         >
           {tab === 'providers' ? (
             <ProvidersSection />
+          ) : tab === 'embeddings' ? (
+            <EmbeddingsSection />
           ) : (
             <section aria-labelledby="catalog-heading" className="flex flex-col gap-5">
               <div className="flex flex-wrap items-start justify-between gap-4">

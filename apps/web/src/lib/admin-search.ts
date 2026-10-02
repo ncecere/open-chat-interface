@@ -19,7 +19,7 @@ export type StorageTab = (typeof STORAGE_TABS)[number];
 export const DEFAULT_STORAGE_TAB: StorageTab = 'driver';
 
 /** Mirrors USER_ROLES; kept local so the router does not pull in the shared package. */
-export const MODELS_TABS = ['providers', 'models'] as const;
+export const MODELS_TABS = ['providers', 'models', 'embeddings'] as const;
 export type ModelsTab = (typeof MODELS_TABS)[number];
 export const DEFAULT_MODELS_TAB: ModelsTab = 'providers';
 

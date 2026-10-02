@@ -3,6 +3,7 @@ import type { ProjectFileIndex } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { chunkText } from './chunking.js';
+import { embedUploadedProjectFile } from './embedding.js';
 
 /** Files chunked per run of the background job; the next tick continues. */
 const INDEX_FILES_PER_RUN = 50;
@@ -61,14 +62,17 @@ export async function indexProjectFile(attachmentId: string): Promise<boolean> {
 /**
  * Indexes a file just uploaded to a project. A failure is logged, not raised:
  * the upload has already succeeded, the file is used whole meanwhile, and the
- * background job retries it.
+ * background job retries it. With meaning-based search on, the start of the
+ * file is then embedded too (v0.9), on the same terms.
  */
 export async function indexUploadedProjectFile(attachmentId: string): Promise<void> {
   try {
     await indexProjectFile(attachmentId);
   } catch (error) {
     logger.warn({ error, attachmentId }, 'Project file indexing failed; the job will retry it');
+    return;
   }
+  await embedUploadedProjectFile(attachmentId);
 }
 
 /**

@@ -31,7 +31,7 @@ export interface RetrievedChunk {
 }
 
 /** A bound text[] literal: one parameter per element, never spliced as SQL. */
-function textArray(values: string[]) {
+export function textArray(values: string[]) {
   return sql`array[${sql.join(
     values.map((value) => sql`${value}`),
     sql`, `,
@@ -66,7 +66,7 @@ export async function projectSearchTerms(raw: string): Promise<string[]> {
  * already come from an owner- and project-scoped query; checking again here
  * keeps another person's or another project's chunks out even if they did not.
  */
-function scopedChunks(scope: { userId: string; projectId: string; fileIds: string[] }) {
+export function scopedChunks(scope: { userId: string; projectId: string; fileIds: string[] }) {
   return sql`
     select c.attachment_id, c.ordinal, c.start_offset, c.end_offset, c.content, c.search,
            a.filename
@@ -80,7 +80,7 @@ function scopedChunks(scope: { userId: string; projectId: string; fileIds: strin
   `;
 }
 
-type ChunkRow = {
+export type ChunkRow = {
   attachment_id: string;
   filename: string;
   ordinal: number;
@@ -89,7 +89,7 @@ type ChunkRow = {
   content: string;
 };
 
-function toChunk(row: ChunkRow): RetrievedChunk {
+export function toChunk(row: ChunkRow): RetrievedChunk {
   return {
     attachmentId: row.attachment_id,
     filename: row.filename,

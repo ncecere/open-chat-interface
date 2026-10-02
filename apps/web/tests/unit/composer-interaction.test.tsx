@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Composer } from '../../src/components/chat/composer';
 import { ThemeProvider } from '../../src/providers/theme-provider';
 
+// The connect hint needs a query client and router; it has its own tests.
+vi.mock('../../src/components/chat/composer-connect-hint', () => ({
+  ComposerConnectHint: () => null,
+}));
+
 type Props = ComponentProps<typeof Composer>;
 const model: CatalogModel = {
   id: 'reasoner',

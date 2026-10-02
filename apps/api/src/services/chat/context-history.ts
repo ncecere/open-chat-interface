@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, ne, schema, sql } from '@oci/db';
+import { and, desc, eq, gt, gte, inArray, ne, schema, sql } from '@oci/db';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { validationFailed } from '../../lib/errors.js';
@@ -7,9 +7,11 @@ import { regenerationContext } from './message-parts.js';
 import { activeMessage, RETRY_LATEST_ONLY } from './reply-path.js';
 
 export type ContextMessage = Pick<typeof schema.message.$inferSelect, 'id' | 'role' | 'parts'>;
-const payloadBytes = sql<number>`octet_length(${schema.message.parts}::text)`;
+export const payloadBytes = sql<number>`octet_length(${schema.message.parts}::text)`;
 // A concurrent metadata change must not turn a bounded read into an oversized payload.
-const boundedParts = sql<ContextMessage['parts']>`case when ${payloadBytes} <= ${MAX_HISTORY_BYTES}
+export const boundedParts = sql<
+  ContextMessage['parts']
+>`case when ${payloadBytes} <= ${MAX_HISTORY_BYTES}
   then ${schema.message.parts} else '[]'::jsonb end`;
 
 /** Transcript pagination is separate. Model preparation never loads the whole thread. */
@@ -20,6 +22,11 @@ export async function loadContextHistory(input: {
   latest: UIMessage;
   regenerate: boolean;
   attachmentIds: string[];
+  /**
+   * The position of a compaction's first kept message: earlier messages are
+   * represented by its summary and are not loaded.
+   */
+  fromPosition?: number | null;
 }) {
   let latest = input.latest;
   let target: (ContextMessage & { position: number; createdAt: Date; bytes: number }) | undefined;
@@ -79,6 +86,7 @@ export async function loadContextHistory(input: {
         // Only the active reply of each turn; a retried turn keeps the others
         // for switching back, but the model must see one answer per question.
         activeMessage(),
+        input.fromPosition == null ? undefined : gte(schema.message.position, input.fromPosition),
         target
           ? sql`(${schema.message.position}, ${schema.message.createdAt}, ${schema.message.id})
       < (${target.position}, ${target.createdAt.toISOString()}::timestamptz, ${target.id})`

@@ -43,6 +43,11 @@ COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY LICENSE /licenses/LICENSE
 
+# PostgreSQL 17 client tools (pg_dump, pg_restore) for automated backups. A
+# newer pg_dump can dump older servers, never the other way round, so this
+# matches the newest server the bundled compose files run.
+RUN apk add --no-cache postgresql17-client
+
 RUN addgroup -S oci && adduser -S oci -G oci && mkdir -p /data/storage && chown -R oci:oci /data
 USER oci
 

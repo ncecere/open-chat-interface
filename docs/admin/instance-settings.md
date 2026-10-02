@@ -29,6 +29,17 @@ says the limit was reached. A higher limit lets a model research more thoroughly
 cost of more usage per reply. API: `PATCH /api/admin/settings` with
 `maxToolSteps`.
 
+**Summarise long conversations** (on by default): when a conversation
+outgrows the model's input, its earlier messages are summarised by the
+conversation's own model and the summary is sent in their place, instead of
+leaving them out. The summary call counts towards the person's usage as its
+own usage event (no message is counted). It also governs the single retry
+after a provider reports an input as too long. Off, the oldest turns are left
+out as in v0.8, and people can still use **Compact conversation** themselves.
+Messages are never changed or deleted either way; see
+[Long conversations](../user/conversations.md#long-conversations). API:
+`PATCH /api/admin/settings` with `autoCompact`.
+
 **Features** turn capabilities off instance-wide: share links, temporary chats,
 conversation branching, and file attachments. Turning one off removes it from
 the interface rather than leaving a control that fails. Each role can be
