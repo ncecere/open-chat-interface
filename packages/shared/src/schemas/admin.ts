@@ -124,6 +124,12 @@ export const instanceSettingsSchema = z.object({
    * input, instead of dropping them. People can still compact by hand when off.
    */
   autoCompact: z.boolean().default(true),
+  /**
+   * When artifacts are available, ask models to draw diagrams as SVG artifacts
+   * following the Diagram Design style guide (MIT, Cathryn Lavery), mapped to
+   * the instance's accent colour.
+   */
+  diagramGuidance: z.boolean().default(true),
   features: z.object({
     shareLinks: z.boolean(),
     temporaryChat: z.boolean(),

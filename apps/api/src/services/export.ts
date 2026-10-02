@@ -1,5 +1,7 @@
 import { and, asc, eq, schema } from '@oci/db';
 import {
+  ARTIFACT_KIND_LABELS,
+  type ArtifactKind,
   isToolPart,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
@@ -7,12 +9,15 @@ import {
   toolLimitNote,
 } from '@oci/shared';
 import { db } from '../db/index.js';
+import { artifactsWithVersions } from './artifacts/store.js';
 import { activeMessage } from './chat/reply-path.js';
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
 export const MAX_EXPORT_MESSAGES = 2_000;
 
 interface ExportMessage {
+  /** Needed to show which artifacts a reply made; absent in older callers. */
+  id?: string;
   role: string;
   parts: Record<string, unknown>[];
   modelSlug: string | null;
@@ -84,6 +89,31 @@ function toolLinesFromParts(parts: Record<string, unknown>[]): string[] {
   return lines;
 }
 
+/** An artifact as Markdown exports reference it (the JSON export carries the content). */
+export interface ExportArtifactReference {
+  messageId: string;
+  title: string;
+  kind: ArtifactKind;
+  /** Versions made by each reply, so a reply that revised an artifact says so. */
+  versions: Array<{ version: number; messageId: string | null }>;
+}
+
+/** One line per artifact version a message made: "Artifact 'Report' (HTML, version 2)". */
+function artifactLines(
+  messageId: string | undefined,
+  artifacts: readonly ExportArtifactReference[],
+): string[] {
+  if (!messageId) return [];
+  return artifacts.flatMap((artifact) =>
+    artifact.versions
+      .filter((version) => version.messageId === messageId)
+      .map(
+        (version) =>
+          `_Artifact \u201c${artifact.title}\u201d (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${version.version})_`,
+      ),
+  );
+}
+
 /**
  * Renders one conversation as Markdown.
  *
@@ -95,6 +125,7 @@ function toolLinesFromParts(parts: Record<string, unknown>[]): string[] {
 export function renderMarkdown(
   thread: { title: string; createdAt: Date },
   messages: ExportMessage[],
+  artifacts: readonly ExportArtifactReference[] = [],
 ): string {
   const lines: string[] = [
     `# ${thread.title}`,
@@ -133,6 +164,9 @@ export function renderMarkdown(
     const text = textFromParts(message.parts);
     if (text) lines.push(text, '');
 
+    const made = artifactLines(message.id, artifacts);
+    if (made.length > 0) lines.push(...made, '');
+
     const sources = sourcesFromParts(message.parts);
     if (sources.length > 0) {
       lines.push('**Sources**', '');
@@ -166,7 +200,7 @@ export function exportFilename(title: string): string {
 }
 
 /** Ownership is enforced by the caller before this runs. */
-export async function exportThreadMarkdown(threadId: string): Promise<string> {
+export async function exportThreadMarkdown(threadId: string, userId: string): Promise<string> {
   const [thread] = await db
     .select({ title: schema.thread.title, createdAt: schema.thread.createdAt })
     .from(schema.thread)
@@ -177,6 +211,7 @@ export async function exportThreadMarkdown(threadId: string): Promise<string> {
 
   const messages = await db
     .select({
+      id: schema.message.id,
       role: schema.message.role,
       parts: schema.message.parts,
       modelSlug: schema.message.modelSlug,
@@ -189,5 +224,10 @@ export async function exportThreadMarkdown(threadId: string): Promise<string> {
     .orderBy(asc(schema.message.position))
     .limit(MAX_EXPORT_MESSAGES);
 
-  return renderMarkdown(thread, messages);
+  const artifacts = await artifactsWithVersions(
+    threadId,
+    userId,
+    messages.map((message) => message.id),
+  );
+  return renderMarkdown(thread, messages, artifacts);
 }

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!--
+      Host page for OCI's artifact sandbox (v0.9). Always framed with
+      sandbox="allow-scripts" and no allow-same-origin, so it runs in an opaque
+      origin. The policy below (also sent as a header by the bundled proxy)
+      allows inline code and data: images and fonts only: nothing can be
+      fetched. It accepts one document from the embedding OCI page and writes
+      it; see apps/web/src/lib/artifact-sandbox.ts.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; base-uri 'none'; form-action 'none'"
+    />
+    <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Artifact</title>
+    <script>
+      (() => {
+        // Refuse unless framed AND sandboxed: only a sandboxed document without
+        // allow-same-origin (or under a CSP sandbox) has the opaque origin
+        // "null". Opened directly, or framed without a sandbox by any page,
+        // this would run on OCI's own origin, so it writes nothing.
+        if (window.parent === window || window.origin !== 'null') return;
+        var written = false;
+        window.addEventListener('message', (event) => {
+          if (written || event.source !== window.parent) return;
+          var data = event.data;
+          if (data?.type !== 'oci-artifact' || typeof data.html !== 'string') return;
+          written = true;
+          document.open();
+          document.write(data.html);
+          document.close();
+        });
+        window.parent.postMessage({ type: 'oci-artifact-ready' }, '*');
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

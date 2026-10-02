@@ -3,6 +3,7 @@ import { auth } from '../auth/index.js';
 import { loadEnv } from '../config/env.js';
 import type { AppBindings } from '../middleware/context.js';
 import { adminRoutes } from './admin/index.js';
+import { artifactRoutes } from './artifacts.js';
 import { attachmentRoutes } from './attachments.js';
 import { authStatusRoutes } from './auth-status.js';
 import { brandingRoutes } from './branding.js';
@@ -66,6 +67,7 @@ export function createApiRoutes() {
   api.route('/projects', projectRoutes);
   api.route('/chat', chatRoutes);
   api.route('/attachments', attachmentRoutes);
+  api.route('/artifacts', artifactRoutes);
   api.route('/share-links', shareLinkRoutes);
   api.route('/connectors', connectorRoutes);
   api.route('/admin', adminRoutes);

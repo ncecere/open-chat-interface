@@ -1,3 +1,4 @@
+export * from './artifact.js';
 export * from './auth.js';
 export * from './chat.js';
 export * from './compaction.js';

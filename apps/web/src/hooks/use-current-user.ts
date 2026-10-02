@@ -38,6 +38,8 @@ export interface CurrentFeatures {
    * still switches it on in Settings → Memory. Absent before v0.9.
    */
   memory?: boolean;
+  /** Decided by the role alone (v0.9). Optional so an older API's response still renders. */
+  artifacts?: boolean;
 }
 
 interface CurrentChatDefaults {

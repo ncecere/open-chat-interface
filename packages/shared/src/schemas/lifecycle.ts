@@ -36,6 +36,11 @@ export const storageUsageSchema = z.object({
   /** Soft-deleted but not yet purged. Excluded from the allowance. */
   pendingBytes: z.number().int().nonnegative(),
   pendingFileCount: z.number().int().nonnegative(),
+  /**
+   * The part of `liveBytes` held by artifact versions (v0.9). Optional so a
+   * response from an older API still parses.
+   */
+  artifactBytes: z.number().int().nonnegative().optional(),
   maxTotalBytes: z.number().int().positive().nullable(),
   maxFileCount: z.number().int().positive().nullable(),
   maxFileBytes: z.number().int().positive().nullable(),

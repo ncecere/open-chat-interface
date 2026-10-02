@@ -19,8 +19,8 @@ For each role:
   provider) the role can see. Visibility is set per model on
   [Providers & Models](models-providers.md).
 - **Features** — editable switches for web search, file attachments, share
-  links, temporary chats, branching and projects, plus the reasoning levels the
-  role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
+  links, temporary chats, branching, projects and artifacts, plus the reasoning
+  levels the role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
 - **Fixed rules** — what is always true for the role and no setting changes:
   administrators have full access; auditors can view administration but not
   change it.
@@ -61,14 +61,15 @@ shown without effort control.
 Out of the box the switches reproduce the rules that were fixed before they
 were configurable: the `restricted` role cannot upload attachments, create
 share links or start temporary chats, and every other role can use everything
-the instance offers, at every reasoning level. Projects, added later, follow the
-same line and are off for `restricted` until you turn them on, and so does user
-memory (which is also off instance-wide by default). Saving sends only
+the instance offers, at every reasoning level. Projects, user memory and
+artifacts, added later, follow the same line and are off for `restricted`
+until you turn them on; user memory is also off instance-wide by default.
+Saving sends only
 the fields you changed, and each save is recorded in the audit log as
 `role.features.update` with the previous and new values. Auditors see the
 switches but cannot change them. API: `PUT /api/admin/roles/:role` with any of
 `webSearch`, `attachments`, `shareLinks`, `temporaryChat`, `branching`,
-`projects`, `memory` (booleans) and `reasoningEfforts` (a list that must include
+`projects`, `memory`, `artifacts` (booleans) and `reasoningEfforts` (a list that must include
 `instant`).
 
 ### Projects
@@ -142,6 +143,45 @@ offered only when all three are on, and never in temporary chats.
   people affected.
 - **Export.** A person's full export includes their notes as `memory.json`.
   Deleting an account deletes its notes.
+
+### Artifacts
+
+[Artifacts](../user/artifacts.md) (v0.9) keep HTML pages, SVG images, Mermaid
+diagrams and documents from replies as versioned objects. There is no
+instance-wide switch: the role's **Artifacts** switch alone decides (on for
+every role except `restricted`).
+
+- **What it controls.** With the switch on, finished replies' HTML, SVG and
+  Mermaid blocks are saved as artifacts; tool-capable models are offered
+  `create_artifact` and `update_artifact`; the system prompt gains a short
+  section on how to make them; and people can edit Markdown documents. With it
+  off, none of these happen and an edit is refused with `403` ("Artifacts are
+  not available for your role"); existing artifacts stay readable by their
+  owner.
+- **Artifact tools** change only OCI's own data in the current conversation,
+  so they need no approval and are not listed under the role's tools. Each call
+  is still a `tool.call` audit event (kind `read`).
+- **Sandbox.** HTML and SVG run in a frame with `sandbox="allow-scripts"` and
+  no `allow-same-origin`, under a Content-Security-Policy that allows no
+  network access, served from `/artifact-frame.html`. Share links use the same
+  frame. A reverse proxy in front of OCI must serve that one path with its own
+  policy and allow it to be framed by OCI itself (see
+  [Operations](../OPERATIONS.md#artifacts-migration-0032)).
+- **Limits.** A version is at most 512 KB, an artifact has at most 100
+  versions and a conversation at most 200 artifacts.
+- **Storage, retention, export.** Every version counts towards the owner's
+  [storage allowance](#storage-allowance) while the conversation is not in the
+  trash. Artifacts are deleted with their conversation (trash purge,
+  retention, temporary chats, account deletion), included with all versions in
+  the JSON export, and shared through the conversation's share link at the
+  shared version, with credentials redacted like message text.
+- **Diagram guidance.** **Editorial diagrams** on
+  [General settings](instance-settings.md#general) (on by default) asks models
+  to draw diagrams as SVG artifacts following the
+  [Diagram Design](https://github.com/cathrynlavery/diagram-design) style guide
+  (MIT, Cathryn Lavery), using the instance's accent colour. Turn it off to
+  keep only the general artifact guidance. API: `PATCH /api/admin/settings`
+  with `{ "diagramGuidance": false }`.
 
 ### Tools
 
@@ -264,6 +304,9 @@ stored files, and the largest single file. A blank total or file count means no
 limit; a blank per-file size falls back to the instance upload limit on
 [Storage](operations.md#storage). **Enforce allowance** switches the allowance off without losing the values; a
 role with nothing saved is unlimited. Set on **People → Roles & access**.
+
+Artifact versions count towards total storage (not towards the file count)
+while their conversation is not in the trash.
 
 Storage is a **gauge, not a flow**: it measures what somebody holds now, not
 what they have ever uploaded. In-progress uploads reserve space. Deleting files

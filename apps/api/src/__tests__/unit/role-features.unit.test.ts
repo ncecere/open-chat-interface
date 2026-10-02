@@ -37,7 +37,7 @@ const instance = {
 };
 
 describe('role feature defaults', () => {
-  it('match the rules that were previously fixed in code, with projects off for restricted', () => {
+  it('match the rules that were previously fixed in code, with projects and artifacts off for restricted', () => {
     expect(DEFAULT_ROLE_FEATURES.restricted).toEqual({
       webSearch: true,
       attachments: false,
@@ -46,6 +46,7 @@ describe('role feature defaults', () => {
       branching: true,
       projects: false,
       memory: false,
+      artifacts: false,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
     for (const role of ['admin', 'auditor', 'user'] as const) {
@@ -57,6 +58,7 @@ describe('role feature defaults', () => {
         branching: true,
         projects: true,
         memory: true,
+        artifacts: true,
         reasoningEfforts: [...REASONING_EFFORTS],
       });
     }
@@ -103,6 +105,7 @@ describe('combineFeatures', () => {
       projects: true,
       // The instance memory switch is off unless saved on.
       memory: false,
+      artifacts: true,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
   });
@@ -118,6 +121,12 @@ describe('combineFeatures', () => {
       combineFeatures({ ...instance, memory: true }, search, DEFAULT_ROLE_FEATURES.restricted)
         .memory,
     ).toBe(false);
+  });
+
+  it('takes artifacts from the role alone: there is no instance switch', () => {
+    const role = DEFAULT_ROLE_FEATURES.user;
+    expect(combineFeatures(instance, search, role).artifacts).toBe(true);
+    expect(combineFeatures(instance, search, { ...role, artifacts: false }).artifacts).toBe(false);
   });
 
   it('takes projects from the role alone: there is no instance switch', () => {

@@ -69,6 +69,11 @@ export default defineConfig({
         'src/services/tools/registry.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/tools/role-tools.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/tools/web-search.ts': { statements: 95, branches: 90, functions: 100 },
+        // v0.9 artifacts: ownership, size and storage admission, tools, the API and guidance.
+        'src/services/artifacts/store.ts': { statements: 90, branches: 78, functions: 100 },
+        'src/services/artifacts/guidance.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/tools/artifacts.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/routes/artifacts.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/chat/tool-loop.ts': { statements: 85, branches: 80, functions: 90 },
         'src/services/chat/approvals.ts': { statements: 85, branches: 75, functions: 85 },
         'src/services/chat/pending-approvals.ts': { statements: 95, branches: 90, functions: 100 },

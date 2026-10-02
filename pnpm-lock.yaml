@@ -196,6 +196,9 @@ importers:
       clsx:
         specifier: 2.1.1
         version: 2.1.1
+      d3:
+        specifier: 7.9.0
+        version: 7.9.0
       katex:
         specifier: 0.18.1
         version: 0.18.1

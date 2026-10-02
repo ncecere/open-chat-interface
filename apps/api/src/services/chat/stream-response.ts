@@ -8,6 +8,7 @@ import {
 } from 'ai';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { saveDetectedArtifacts } from '../artifacts/store.js';
 import {
   type ChatRunStatus,
   captureChatRun,
@@ -119,6 +120,21 @@ async function persistAssistant(
     await touchThread(thread.id);
   } catch (error) {
     persistenceFailure = { error };
+  }
+  // A finished reply's HTML, SVG and Mermaid blocks become artifacts. Best
+  // effort and idempotent: a failure leaves them as ordinary code blocks.
+  if (!persistenceFailure && status === 'complete') {
+    try {
+      await saveDetectedArtifacts({
+        userId: user.id,
+        role: user.role,
+        threadId: thread.id,
+        messageId: assistantMessage.id,
+        parts: responseMessage.parts,
+      });
+    } catch (error) {
+      logger.warn({ error, threadId: thread.id }, 'Saving detected artifacts failed');
+    }
   }
   // Attempt both operations, but never replace the initiating persistence error
   // with a secondary settlement error. Report the latter separately.

@@ -8,7 +8,12 @@ import {
   notOnLegalHold,
 } from '../compliance/holds.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
-import { attachmentTotals, lockStorageUsage } from '../storage/usage.js';
+import {
+  artifactBytes,
+  attachmentTotals,
+  lockStorageUsage,
+  threadArtifactBytes,
+} from '../storage/usage.js';
 import { lockLifecycleOwner } from './owner-lock.js';
 import { getRetentionSettings } from './settings.js';
 import { type DeleteReason, trashLockedThread } from './trash-thread.js';
@@ -102,17 +107,25 @@ export async function restoreThread(threadId: string, userId: string): Promise<v
       .orderBy(schema.attachment.id)
       .for('update', { of: schema.attachment });
 
-    if (attachments.length > 0) {
+    // The conversation's artifacts count towards storage again once restored.
+    const restoredArtifactBytes = await threadArtifactBytes(tx, threadId);
+    if (attachments.length > 0 || restoredArtifactBytes > 0) {
       await lockStorageUsage(tx, { organizationId: thread.organizationId, userId });
       const totals = await attachmentTotals(tx, userId);
+      // Already includes this conversation's artifacts: it is out of the trash above.
+      const artifacts = await artifactBytes(tx, userId);
+      const bytes = attachments.reduce((total, attachment) => total + attachment.sizeBytes, 0);
       assertStorageAllowanceForUsage(
-        { ...totals, ...limits },
+        { ...totals, liveBytes: totals.liveBytes + artifacts - restoredArtifactBytes, ...limits },
         {
-          incomingBytes: attachments.reduce((total, attachment) => total + attachment.sizeBytes, 0),
+          incomingBytes: bytes + restoredArtifactBytes,
           incomingFiles: attachments.length,
           checkFileSize: false,
         },
       );
+    }
+    if (attachments.length > 0) {
+      const totals = await attachmentTotals(tx, userId);
       await tx
         .update(schema.attachment)
         .set({ deletedAt: null, deletedReason: null })

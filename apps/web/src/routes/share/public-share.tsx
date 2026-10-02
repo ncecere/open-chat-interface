@@ -1,5 +1,8 @@
+import type { PublicArtifact } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, Link2Off, LockKeyhole, MessageSquareText } from 'lucide-react';
+import { PublicArtifactsProvider } from '~/components/artifacts/artifacts-provider';
+import { CreatedArtifactCards, ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { Wordmark } from '~/components/brand/wordmark';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { Markdown } from '~/components/chat/markdown';
@@ -40,9 +43,14 @@ interface PublicShareResponse {
     parts: PublicPart[];
     createdAt: string;
   }>;
+  /** Artifacts of the shared replies, at the shared version. Absent from older APIs. */
+  artifacts?: PublicArtifact[];
   snapshot: boolean;
   expiresAt: string | null;
 }
+
+/** The share page's Markdown safety, also used for artifacts opened in the panel. */
+const PUBLIC_MARKDOWN = { skipHtml: true, urlTransform: publicMarkdownUrl };
 
 function safeExternalUrl(value: string): string | null {
   try {
@@ -187,7 +195,9 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
       <Sources parts={message.parts} />
       {text && (
         <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
-          <Markdown
+          <ReplyMarkdown
+            messageId={message.id}
+            text={text}
             skipHtml
             urlTransform={publicMarkdownUrl}
             className={cn(
@@ -199,11 +209,10 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
               '[&_hr]:border-[var(--border-subtle)]',
               '[&_li::marker]:text-[var(--accent-bright)]',
             )}
-          >
-            {text}
-          </Markdown>
+          />
         </div>
       )}
+      <CreatedArtifactCards messageId={message.id} />
     </article>
   );
 }
@@ -298,11 +307,16 @@ export function PublicSharePage({ slug }: { slug: string }) {
         </section>
 
         {messages.length > 0 ? (
-          <div className="flex flex-col gap-7">
-            {messages.map((message) => (
-              <SharedMessage key={message.id} message={message} />
-            ))}
-          </div>
+          <PublicArtifactsProvider
+            artifacts={query.data.artifacts ?? []}
+            markdownProps={PUBLIC_MARKDOWN}
+          >
+            <div className="flex flex-col gap-7">
+              {messages.map((message) => (
+                <SharedMessage key={message.id} message={message} />
+              ))}
+            </div>
+          </PublicArtifactsProvider>
         ) : (
           <p className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 px-4 py-8 text-center text-sm text-[var(--text-muted)]">
             This shared conversation has no public messages.

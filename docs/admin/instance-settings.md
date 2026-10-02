@@ -40,6 +40,14 @@ Messages are never changed or deleted either way; see
 [Long conversations](../user/conversations.md#long-conversations). API:
 `PATCH /api/admin/settings` with `autoCompact`.
 
+**Editorial diagrams** (on by default): when a person's role allows
+[artifacts](../user/artifacts.md), models are asked to draw diagrams as SVG
+artifacts following the [Diagram Design](https://github.com/cathrynlavery/diagram-design)
+style guide (MIT, Cathryn Lavery), mapped to the instance's accent colour. Off,
+only the general artifact guidance remains. Artifacts themselves are switched
+per role ([Governance](governance.md#artifacts)). API: `PATCH
+/api/admin/settings` with `diagramGuidance`.
+
 **Features** turn capabilities off instance-wide: share links, temporary chats,
 conversation branching, file attachments and user memory. Turning one off removes it from
 the interface rather than leaving a control that fails. Each role can be

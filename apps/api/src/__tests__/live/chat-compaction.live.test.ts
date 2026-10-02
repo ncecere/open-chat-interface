@@ -783,7 +783,7 @@ describe.skipIf(!available)('live conversation compaction', () => {
     it('keeps the full history in exports and share links; the JSON export includes the summary', async () => {
       const { chat, seeded, record } = await compacted();
       const { exportThreadMarkdown } = await import('../../services/export.js');
-      const markdown = await exportThreadMarkdown(chat.id);
+      const markdown = await exportThreadMarkdown(chat.id, owner);
       expect(markdown).toContain('TURN-1-QUESTION');
       expect(markdown).not.toContain('FORK-SUMMARY');
 

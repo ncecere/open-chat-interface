@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ThreadArtifactsProvider } from '~/components/artifacts/artifacts-provider';
 import { Composer } from '~/components/chat/composer';
 import { ConversationLoadError } from '~/components/chat/conversation-load-error';
 import { MessageList } from '~/components/chat/message-list';
@@ -242,103 +243,110 @@ function ThreadConversation({
     );
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          ref={scroll.scrollRef}
-          onScroll={scroll.onScroll}
-          data-conversation-scroller
-          className="flex-1 overflow-y-auto"
-        >
-          <div ref={scroll.contentRef}>
-            <MessageList
-              messages={session.messages}
-              streaming={session.streaming}
-              // With tool calling the model decides whether to search, and its
-              // search shows as a tool step instead.
-              searching={
-                session.webSearch && !session.selectedModel?.capabilities.includes('tool_calling')
-              }
-              onAnswerApproval={session.answerApproval}
-              onRetry={retry}
-              onFork={session.features?.branching ? forkAtMessage : undefined}
-              onEdit={session.features?.branching ? editAndBranch : undefined}
-              replySwitch={replies.switcher}
-              compaction={compaction.data}
-            />
-
-            {(session.error ||
-              session.recovery.error ||
-              session.recovery.remotePending ||
-              replies.error) && (
-              <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
-                {(session.recovery.error || session.error || replies.error) && (
-                  <p
-                    role="alert"
-                    className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
-                  >
-                    {session.recovery.error ||
-                      (session.error && chatErrorText(session.error)) ||
-                      replies.error ||
-                      'Something went wrong generating a response.'}
-                  </p>
-                )}
-                {session.recovery.remotePending && (
-                  <p role="status" className="text-sm text-[var(--text-muted)]">
-                    A reply is pending on the server. You can stop it or wait for saved messages.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  className="text-sm underline"
-                  disabled={
-                    session.recovery.refreshing ||
-                    session.recovery.resuming ||
-                    session.status === 'streaming' ||
-                    session.status === 'submitted'
-                  }
-                  onClick={session.recovery.recover}
-                >
-                  Reload saved messages
-                </button>
-              </div>
-            )}
-          </div>
-          {/* Room below a just-sent question so it can sit at the top of the view. */}
-          <div ref={scroll.spacerRef} aria-hidden="true" />
-        </div>
-        {scroll.detached && (
-          <button
-            type="button"
-            onClick={scroll.jumpToLatest}
-            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors hover:text-[var(--text-primary)]"
+    <ThreadArtifactsProvider
+      threadId={threadId}
+      messages={session.messages}
+      streaming={session.streaming}
+      canEdit={session.features?.artifacts ?? false}
+    >
+      <div className="flex h-full flex-col">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div
+            ref={scroll.scrollRef}
+            onScroll={scroll.onScroll}
+            data-conversation-scroller
+            className="flex-1 overflow-y-auto"
           >
-            <ArrowDown className="size-4" aria-hidden="true" />
-            Jump to latest
-          </button>
-        )}
-      </div>
+            <div ref={scroll.contentRef}>
+              <MessageList
+                messages={session.messages}
+                streaming={session.streaming}
+                // With tool calling the model decides whether to search, and its
+                // search shows as a tool step instead.
+                searching={
+                  session.webSearch && !session.selectedModel?.capabilities.includes('tool_calling')
+                }
+                onAnswerApproval={session.answerApproval}
+                onRetry={retry}
+                onFork={session.features?.branching ? forkAtMessage : undefined}
+                onEdit={session.features?.branching ? editAndBranch : undefined}
+                replySwitch={replies.switcher}
+                compaction={compaction.data}
+              />
 
-      <Composer
-        value={session.draft}
-        onChange={session.setDraft}
-        onSubmit={submit}
-        onStop={stop}
-        streaming={session.streaming}
-        models={session.models}
-        selectedModel={session.selectedModel}
-        onSelectModel={session.selectModel}
-        effort={session.effort}
-        onEffortChange={session.setEffort}
-        webSearch={session.webSearch}
-        onWebSearchChange={session.setWebSearch}
-        webSearchAvailable={session.features?.webSearch ?? false}
-        attachmentsAvailable={session.features?.attachments ?? false}
-        attachments={session.attachments.items}
-        onAttachFiles={session.attachments.upload}
-        onRemoveAttachment={session.attachments.remove}
-      />
-    </div>
+              {(session.error ||
+                session.recovery.error ||
+                session.recovery.remotePending ||
+                replies.error) && (
+                <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
+                  {(session.recovery.error || session.error || replies.error) && (
+                    <p
+                      role="alert"
+                      className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+                    >
+                      {session.recovery.error ||
+                        (session.error && chatErrorText(session.error)) ||
+                        replies.error ||
+                        'Something went wrong generating a response.'}
+                    </p>
+                  )}
+                  {session.recovery.remotePending && (
+                    <p role="status" className="text-sm text-[var(--text-muted)]">
+                      A reply is pending on the server. You can stop it or wait for saved messages.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="text-sm underline"
+                    disabled={
+                      session.recovery.refreshing ||
+                      session.recovery.resuming ||
+                      session.status === 'streaming' ||
+                      session.status === 'submitted'
+                    }
+                    onClick={session.recovery.recover}
+                  >
+                    Reload saved messages
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* Room below a just-sent question so it can sit at the top of the view. */}
+            <div ref={scroll.spacerRef} aria-hidden="true" />
+          </div>
+          {scroll.detached && (
+            <button
+              type="button"
+              onClick={scroll.jumpToLatest}
+              className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors hover:text-[var(--text-primary)]"
+            >
+              <ArrowDown className="size-4" aria-hidden="true" />
+              Jump to latest
+            </button>
+          )}
+        </div>
+
+        <Composer
+          value={session.draft}
+          onChange={session.setDraft}
+          onSubmit={submit}
+          onStop={stop}
+          streaming={session.streaming}
+          models={session.models}
+          selectedModel={session.selectedModel}
+          onSelectModel={session.selectModel}
+          effort={session.effort}
+          onEffortChange={session.setEffort}
+          webSearch={session.webSearch}
+          onWebSearchChange={session.setWebSearch}
+          webSearchAvailable={session.features?.webSearch ?? false}
+          attachmentsAvailable={session.features?.attachments ?? false}
+          attachments={session.attachments.items}
+          onAttachFiles={session.attachments.upload}
+          onRemoveAttachment={session.attachments.remove}
+        />
+      </div>
+    </ThreadArtifactsProvider>
   );
 }
 

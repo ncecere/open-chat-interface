@@ -124,7 +124,8 @@ describe('integration with mocked DB: immutable branch ownership', () => {
         .fn()
         .mockReturnValueOnce(limitedQuery([sourceThread]))
         .mockReturnValueOnce(orderedQuery(sourceMessages))
-        // The source has no compaction to copy.
+        // The source has no compaction and no artifacts to copy.
+        .mockReturnValueOnce(orderedQuery([]))
         .mockReturnValueOnce(orderedQuery([])),
       insert: vi
         .fn()

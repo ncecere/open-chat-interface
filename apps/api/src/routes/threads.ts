@@ -174,7 +174,7 @@ threadRoutes.delete('/:id/permanent', async (c) => {
 threadRoutes.get('/:id/export', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
-  const markdown = await exportThreadMarkdown(thread.id);
+  const markdown = await exportThreadMarkdown(thread.id, user.id);
 
   return c.body(markdown, 200, {
     'content-type': 'text/markdown; charset=utf-8',

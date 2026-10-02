@@ -356,7 +356,7 @@ describe.skipIf(!available)('live reply switching', () => {
       .set({ title: 'Export subject' })
       .where(eq(schema.thread.id, chat.id));
     const { exportThreadMarkdown } = await import('../../services/export.js');
-    const markdown = await exportThreadMarkdown(chat.id);
+    const markdown = await exportThreadMarkdown(chat.id, owner);
     expect(markdown).toContain('NEW_REPLY');
     expect(markdown).not.toContain('OLD_REPLY');
 

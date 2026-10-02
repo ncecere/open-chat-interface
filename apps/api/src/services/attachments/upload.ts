@@ -8,7 +8,7 @@ import { getDefaultOrganizationId } from '../organization.js';
 import { getSetting } from '../settings.js';
 import { buildStorageKey, getStorageDriver } from '../storage/index.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
-import { attachmentTotals, lockStorageUsage } from '../storage/usage.js';
+import { admissionTotals, lockStorageUsage } from '../storage/usage.js';
 import { extractText } from './extract.js';
 import { validateUpload } from './validate.js';
 
@@ -95,7 +95,7 @@ export async function uploadAttachment(params: {
       }
       await lockStorageUsage(tx, owner);
       // Authoritative rows prevent legacy counter drift from weakening enforcement.
-      const totals = await attachmentTotals(tx, params.userId);
+      const totals = await admissionTotals(tx, params.userId);
       assertStorageAllowanceForUsage(
         { ...totals, ...limits },
         {

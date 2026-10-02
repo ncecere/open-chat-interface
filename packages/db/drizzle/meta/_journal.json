@@ -227,6 +227,13 @@
       "breakpoints": true
     },
     {
+      "idx": 32,
+      "version": "7",
+      "when": 1790539200012,
+      "tag": "0032_artifacts",
+      "breakpoints": true
+    },
+    {
       "idx": 33,
       "version": "7",
       "when": 1790539200013,

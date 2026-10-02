@@ -127,7 +127,28 @@ const KNOWN_TOOL_LABELS: Record<string, string> = {
   web_search: 'Web search',
   remember: 'Memory',
   forget: 'Memory',
+  create_artifact: 'Create artifact',
+  update_artifact: 'Update artifact',
 };
+
+/** Built-in tools that change only OCI's own artifacts (v0.9); see `ARTIFACT_TOOL_IDS`. */
+export const ARTIFACT_TOOL_IDS = ['create_artifact', 'update_artifact'] as const;
+
+/** The artifact a finished artifact tool step created or changed, from its result. */
+export function artifactOfToolPart(
+  part: PartLike,
+): { artifactId: string; title: string; version: number } | null {
+  const toolId = toolIdOfPart(part);
+  if (!(ARTIFACT_TOOL_IDS as readonly string[]).includes(toolId)) return null;
+  if (part.state !== 'output-available') return null;
+  const output = part.output as { artifactId?: unknown; title?: unknown; version?: unknown };
+  if (typeof output?.artifactId !== 'string' || typeof output.version !== 'number') return null;
+  return {
+    artifactId: output.artifactId,
+    title: typeof output.title === 'string' ? output.title : 'Artifact',
+    version: output.version,
+  };
+}
 
 export function toolLabel(toolId: string): string {
   return KNOWN_TOOL_LABELS[toolId] ?? toolId;
@@ -248,6 +269,19 @@ export function summarizeToolPart(part: PartLike): ToolStepSummary {
     else if (state === 'error') summary = remember ? 'Saving a memory failed' : 'Forgetting failed';
     else if (state === 'denied') summary = 'Memory was not changed';
     else summary = remember ? 'Saving a memory' : 'Forgetting a memory';
+  } else if ((ARTIFACT_TOOL_IDS as readonly string[]).includes(toolId)) {
+    const created = toolId === 'create_artifact';
+    const result = artifactOfToolPart(part);
+    const input = part.input as { title?: unknown } | undefined;
+    const title = result?.title ?? (typeof input?.title === 'string' ? input.title : null);
+    const target = title ? ` ${quote(title)}` : '';
+    if (state === 'done' && result)
+      summary = created
+        ? `Created artifact${target}`
+        : `Updated artifact${target} · version ${result.version}`;
+    else if (state === 'error') summary = `${created ? 'Creating' : 'Updating'} an artifact failed`;
+    else if (state === 'denied') summary = `${label} was not run`;
+    else summary = created ? `Creating artifact${target}` : 'Updating an artifact';
   } else if (state === 'done') summary = `Used ${label}`;
   else if (state === 'error') summary = `${label} failed`;
   else if (state === 'denied') summary = `${label} was not run`;

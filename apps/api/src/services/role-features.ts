@@ -29,6 +29,7 @@ const ROLE_FEATURE_DENIED: Record<RoleFeatureKey, string> = {
   branching: 'Branching is not available for your role',
   projects: 'Projects are not available for your role',
   memory: 'Memory is not available for your role',
+  artifacts: 'Artifacts are not available for your role',
 };
 
 /**
@@ -79,6 +80,8 @@ export function combineFeatures(
     projects: role.projects,
     // Each person must also opt in; see services/memory/access.ts.
     memory: role.memory && Boolean(instance.memory),
+    // Like projects, artifacts have no instance-wide switch: the role decides.
+    artifacts: role.artifacts,
     reasoningEfforts: [...role.reasoningEfforts],
   };
 }

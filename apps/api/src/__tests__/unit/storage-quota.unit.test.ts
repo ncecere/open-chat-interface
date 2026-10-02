@@ -19,18 +19,22 @@ const GB = 1024 * MB;
 
 /** Mirrors select().from().where().limit() for both lookups. */
 function tableQuery(rows: unknown[]) {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
+  const ends = {
     limit: () => Promise.resolve(rows),
     orderBy: () => Promise.resolve(rows),
+  };
+  const chain = {
+    from: () => chain,
+    innerJoin: () => chain,
+    // The artifact-bytes sum is awaited straight after `where`.
+    where: () => Object.assign(Promise.resolve(rows), ends),
   };
   return chain;
 }
 
-/** Storage usage is read first, then the role's policy. */
-function respondWith(usage: unknown[], policy: unknown[]) {
-  const queue = [usage, policy];
+/** Storage usage is read first, then artifact bytes, then the role's policy. */
+function respondWith(usage: unknown[], policy: unknown[], artifacts: unknown[] = []) {
+  const queue = [usage, artifacts, policy];
   mocks.select.mockImplementation(() => tableQuery(queue.shift() ?? []));
 }
 

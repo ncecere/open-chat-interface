@@ -38,6 +38,7 @@ const { requireAdmin } = await import('../../middleware/context.js');
 const { errorHandler } = await import('../../middleware/error-handler.js');
 const { invalidateSettingsCache, updateSetting } = await import('../../services/settings.js');
 const { assertAttachmentUseAllowed } = await import('../../services/attachments/index.js');
+const { assertArtifactsAllowed } = await import('../../services/artifacts/store.js');
 const { assertShareLinkManagementAllowed } = await import('../../services/share-links.js');
 const { assertTemporaryChatAllowed, createThread } = await import('../../services/threads.js');
 const { assertProjectsAllowed } = await import('../../services/projects.js');
@@ -145,6 +146,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
       branching: (await branchingStatus(role)) === 403 ? 403 : 'allowed',
       projects: await outcome(() => assertProjectsAllowed(role)),
       memory: await outcome(() => assertMemoryAvailable(role)),
+      artifacts: await outcome(() => assertArtifactsAllowed(role)),
     };
   }
 
@@ -223,7 +225,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
   });
 
   describe('defaults preserve the previous fixed rules', () => {
-    it('denies restricted attachments, share links, temporary chats, projects and memory only', async () => {
+    it('denies restricted attachments, share links, temporary chats, projects, memory and artifacts only', async () => {
       expect(await checks('restricted')).toEqual({
         attachments: 403,
         shareLinks: 403,
@@ -232,6 +234,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         branching: 'allowed',
         projects: 403,
         memory: 403,
+        artifacts: 403,
       });
       for (const role of ['admin', 'auditor', 'user'] as const) {
         expect(await checks(role)).toEqual({
@@ -242,6 +245,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
           branching: 'allowed',
           projects: 'allowed',
           memory: 'allowed',
+          artifacts: 'allowed',
         });
       }
     });
@@ -283,6 +287,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         branching: true,
         projects: false,
         memory: false,
+        artifacts: false,
       });
 
       const summary = rolesAccessSchema.parse(
@@ -298,6 +303,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         branching: true,
         projects: false,
         memory: false,
+        artifacts: false,
       });
       expect(restricted.fixedRules).toEqual([]);
       expect(summary.roles.find((entry) => entry.role === 'auditor')?.fixedRules).toEqual([
@@ -315,6 +321,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
       'branching',
       'projects',
       'memory',
+      'artifacts',
     ] as const)('%s follows the user role switch', async (feature) => {
       expect((await checks('user'))[feature]).toBe('allowed');
 
@@ -340,6 +347,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
           temporaryChat: true,
           projects: true,
           memory: true,
+          artifacts: true,
         }),
       );
       expect(await checks('restricted')).toEqual({
@@ -350,6 +358,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         branching: 'allowed',
         projects: 'allowed',
         memory: 'allowed',
+        artifacts: 'allowed',
       });
     });
 

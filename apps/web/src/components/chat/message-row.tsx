@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
 import { type Dispatch, memo, type SetStateAction } from 'react';
+import { ReplyMarkdown, ToolArtifactCards } from '~/components/artifacts/reply-content';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
 import { MessageAttachments } from '~/components/chat/message-attachments';
@@ -106,8 +107,9 @@ export const MessageRow = memo(function MessageRow({
         <ReasoningPanel text={reasoning} streaming={streaming} answerStarted={Boolean(text)} />
       )}
       <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
-        <Markdown className={MARKDOWN_PROSE}>{text}</Markdown>
+        <ReplyMarkdown messageId={message.id} text={text} className={MARKDOWN_PROSE} />
       </div>
+      <ToolArtifactCards message={message} />
       {grounding && <SearchGroundingDetails grounding={grounding} />}
       {(replySwitch || !streaming) && (
         <div className="flex flex-wrap items-center gap-1">

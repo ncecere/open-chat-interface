@@ -139,8 +139,12 @@ function script(...steps: unknown[]) {
   state.model = model;
   return model;
 }
+/** The memory tools offered on one provider call; other built-in tools (artifacts) are ignored. */
 const offered = (model: MockLanguageModelV4, call = 0) =>
-  (model.doStreamCalls[call]?.tools ?? []).map((tool) => ('name' in tool ? tool.name : '')).sort();
+  (model.doStreamCalls[call]?.tools ?? [])
+    .map((tool) => ('name' in tool ? tool.name : ''))
+    .filter((name) => name === 'remember' || name === 'forget')
+    .sort();
 /** The system prompt sent on one provider call. */
 function systemOf(model: MockLanguageModelV4, call = 0): string {
   const prompt = model.doStreamCalls[call]?.prompt ?? [];

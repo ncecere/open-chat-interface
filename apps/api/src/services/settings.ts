@@ -179,6 +179,8 @@ export interface ChatSettings {
   maxToolSteps?: number;
   /** Summarise earlier turns when a conversation outgrows the model. Absent before v0.9; read as on. */
   autoCompact?: boolean;
+  /** Diagram Design guidance in the artifacts prompt. Absent before v0.9; read as on. */
+  diagramGuidance?: boolean;
 }
 
 /**

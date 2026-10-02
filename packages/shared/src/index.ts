@@ -1,3 +1,4 @@
+export * from './artifacts.js';
 export * from './constants.js';
 export * from './errors.js';
 export * from './model-labs.js';

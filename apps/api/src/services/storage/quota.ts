@@ -10,9 +10,11 @@ import { validationFailed } from '../../lib/errors.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { getSetting } from '../settings.js';
 
+import { artifactBytes } from './usage.js';
+
 export { adjustStorageUsage, recomputeStorageUsage } from './usage.js';
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -74,15 +76,18 @@ export async function getStorageLimits(role: UserRole) {
   };
 }
 
-/** Live usage includes upload reservations; trashed files do not consume allowance. */
+/**
+ * Live usage includes upload reservations and artifact versions; trashed
+ * files and the artifacts of trashed conversations do not consume allowance.
+ */
 export async function getStorageUsage(userId: string, role: UserRole): Promise<StorageUsage> {
-  const [row] = await db
-    .select()
-    .from(schema.storageUsage)
-    .where(eq(schema.storageUsage.userId, userId))
-    .limit(1);
+  const [[row], artifacts] = await Promise.all([
+    db.select().from(schema.storageUsage).where(eq(schema.storageUsage.userId, userId)).limit(1),
+    artifactBytes(db, userId),
+  ]);
   return {
-    liveBytes: Number(row?.liveBytes ?? 0),
+    liveBytes: Number(row?.liveBytes ?? 0) + artifacts,
+    artifactBytes: artifacts,
     liveFileCount: row?.liveFileCount ?? 0,
     pendingBytes: Number(row?.pendingBytes ?? 0),
     pendingFileCount: row?.pendingFileCount ?? 0,
@@ -133,7 +138,7 @@ export async function assertStorageAllowance(
   assertStorageAllowanceForUsage(await getStorageUsage(params.userId, params.role), params);
 }
 
-/** Instance-wide totals, including unfinished upload reservations. */
+/** Instance-wide totals, including unfinished upload reservations and artifact versions. */
 export async function storageTotals(): Promise<{
   liveBytes: number;
   liveFileCount: number;
@@ -148,8 +153,13 @@ export async function storageTotals(): Promise<{
       pendingFileCount: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is not null)::int`,
     })
     .from(schema.attachment);
+  const [artifacts] = await db
+    .select({
+      bytes: sql<number>`coalesce(sum(${schema.artifactVersion.sizeBytes}), 0)::bigint`,
+    })
+    .from(schema.artifactVersion);
   return {
-    liveBytes: Number(row?.liveBytes ?? 0),
+    liveBytes: Number(row?.liveBytes ?? 0) + Number(artifacts?.bytes ?? 0),
     liveFileCount: Number(row?.liveFileCount ?? 0),
     pendingBytes: Number(row?.pendingBytes ?? 0),
     pendingFileCount: Number(row?.pendingFileCount ?? 0),

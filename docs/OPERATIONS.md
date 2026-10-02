@@ -360,6 +360,28 @@ replicas before migrating rather than replacing them one by one. The drop is
 not reversible by reverting images: running v0.7 again would need the column
 re-added (`boolean NOT NULL DEFAULT false`).
 
+#### Artifacts (migration 0032)
+
+Migration `0032_artifacts` creates two new, empty tables, `artifact` and
+`artifact_version`, cascading from the thread, the user and the reply that
+made them; it rewrites and locks nothing existing, and v0.8 replicas never read
+them. Artifact versions count towards each person's storage allowance.
+
+HTML and SVG artifacts run in a sandboxed frame loaded from
+`/artifact-frame.html`, a static file of the web image. The bundled Caddy
+configuration serves that one path with its own Content-Security-Policy
+(`sandbox allow-scripts`, inline code and `data:` images only, no network,
+`frame-ancestors 'self'`) and without `X-Frame-Options: DENY`; every other
+response keeps the application policy. **If you run your own reverse proxy**
+and it adds a policy or `X-Frame-Options` to every response, exempt that path
+in the same way, or artifact previews stay blank (the rest of OCI is
+unaffected). Send the same policy for it, including `sandbox allow-scripts`
+and `frame-ancestors 'self'`. The page also protects itself: it writes nothing
+unless it is framed with an opaque (sandboxed) origin, so a proxy that sends
+no policy for it cannot make it run code on OCI's origin. The
+switches are per role (**Artifacts**) and, for the diagram guidance, on
+**General** ([Governance](admin/governance.md#artifacts)).
+
 #### User memory (migration 0033)
 
 Migration `0033_user_memory` creates one new, empty table, `user_memory`

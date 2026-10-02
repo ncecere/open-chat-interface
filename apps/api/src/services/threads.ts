@@ -3,6 +3,7 @@ import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
 import { containsPattern } from '../lib/like.js';
+import { copyArtifactsToFork } from './artifacts/store.js';
 import { copyCompactionToFork } from './chat/compaction-fork.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
 import { notOnLegalHold } from './compliance/holds.js';
@@ -214,11 +215,18 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
         })),
       )
       .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
+    const copied = new Map(copies.map((copy) => [copy.sourceId!, copy.id]));
     await copyCompactionToFork(tx, {
       sourceThreadId: sourceThread.id,
       threadId: fork.id,
       userId,
-      copied: new Map(copies.map((copy) => [copy.sourceId!, copy.id])),
+      copied,
+    });
+    await copyArtifactsToFork(tx, {
+      sourceThreadId: sourceThread.id,
+      threadId: fork.id,
+      userId,
+      copied,
     });
 
     return fork;
@@ -301,11 +309,18 @@ export async function branchFromUserMessage(
           })),
         )
         .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
+      const copied = new Map(copies.map((copy) => [copy.sourceId!, copy.id]));
       await copyCompactionToFork(tx, {
         sourceThreadId: sourceThread.id,
         threadId: branch.id,
         userId,
-        copied: new Map(copies.map((copy) => [copy.sourceId!, copy.id])),
+        copied,
+      });
+      await copyArtifactsToFork(tx, {
+        sourceThreadId: sourceThread.id,
+        threadId: branch.id,
+        userId,
+        copied,
       });
     }
 

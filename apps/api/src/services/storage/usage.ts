@@ -34,6 +34,48 @@ export async function attachmentTotals(tx: StorageTransaction, userId: string) {
   };
 }
 
+type Reader = Pick<StorageTransaction, 'select'>;
+
+/**
+ * Bytes held by the person's artifact versions in conversations that are not
+ * in the trash (v0.9). Summed from the rows rather than kept in a counter, so
+ * cascading deletes (thread, account, retention) can never leave it stale.
+ */
+export async function artifactBytes(tx: Reader, userId: string): Promise<number> {
+  const [row] = await tx
+    .select({
+      bytes: sql<number>`coalesce(sum(${schema.artifactVersion.sizeBytes}), 0)::bigint`,
+    })
+    .from(schema.artifactVersion)
+    .innerJoin(schema.artifact, eq(schema.artifact.id, schema.artifactVersion.artifactId))
+    .innerJoin(schema.thread, eq(schema.thread.id, schema.artifact.threadId))
+    .where(and(eq(schema.artifact.userId, userId), sql`${schema.thread.deletedAt} is null`));
+  return Number(row?.bytes ?? 0);
+}
+
+/** Bytes held by one conversation's artifact versions. */
+export async function threadArtifactBytes(tx: Reader, threadId: string): Promise<number> {
+  const [row] = await tx
+    .select({
+      bytes: sql<number>`coalesce(sum(${schema.artifactVersion.sizeBytes}), 0)::bigint`,
+    })
+    .from(schema.artifactVersion)
+    .innerJoin(schema.artifact, eq(schema.artifact.id, schema.artifactVersion.artifactId))
+    .where(eq(schema.artifact.threadId, threadId));
+  return Number(row?.bytes ?? 0);
+}
+
+/**
+ * What admission checks against: attachments (including reservations) plus
+ * artifact versions. Artifacts add bytes, not files: the file-count limit is
+ * about uploaded files.
+ */
+export async function admissionTotals(tx: StorageTransaction, userId: string) {
+  const files = await attachmentTotals(tx, userId);
+  const artifacts = await artifactBytes(tx, userId);
+  return { ...files, liveBytes: files.liveBytes + artifacts };
+}
+
 /** Counters and the attachment mutation always commit together. */
 export async function adjustStorageUsage(
   tx: Pick<StorageTransaction, 'insert'>,

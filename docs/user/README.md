@@ -17,11 +17,13 @@ way regardless of which model you pick.
    and files.
 5. [Searching the web](web-search.md) — grounding an answer in sources.
 6. [Tools](tools.md) — tool steps in a reply, and approving actions.
-7. [Connectors](connectors.md) — connecting your account to services models can
+7. [Artifacts](artifacts.md) — pages, images, diagrams and documents kept as
+   versioned objects you can open, copy and download.
+8. [Connectors](connectors.md) — connecting your account to services models can
    use.
-8. [Sharing](sharing.md) — publishing a conversation read-only.
-9. [Settings](settings.md) — your account, personalisation, history, models.
-10. [Memory](memory.md) — notes about you that models can use in every
+9. [Sharing](sharing.md) — publishing a conversation read-only.
+10. [Settings](settings.md) — your account, personalisation, history, models.
+11. [Memory](memory.md) — notes about you that models can use in every
     conversation, and how to see, change and delete them.
 11. [Limits](limits.md) — what a usage warning means and what to do about it.
 12. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
@@ -53,7 +55,8 @@ instance:
   cost.
 - **How long conversations are kept** before they are removed.
 - **Whether attachments, web search, sharing, temporary chats, branching,
-  projects or memory are available**, for the whole instance or for your role.
+  projects, memory or artifacts are available**, for the whole instance or for
+  your role.
 - **Which tools models may use for your role**, and how many steps a reply
   may take.
 - **Which reasoning levels you can choose**, and which one a new conversation

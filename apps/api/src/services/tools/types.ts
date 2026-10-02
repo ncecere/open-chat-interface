@@ -55,7 +55,7 @@ export interface ToolDefinition {
   /** Returns a JSON-serialisable result; the registry caps its size. */
   execute: (
     input: unknown,
-    options: { signal: AbortSignal; caller: ToolCaller },
+    options: { signal: AbortSignal; caller: ToolCaller; toolCallId?: string },
   ) => Promise<unknown>;
   /** Links in a finished result to show as the reply's sources, in order. */
   sources?: (output: unknown) => ToolSource[];

@@ -3,6 +3,7 @@ import { EXPORT_ARCHIVE_VERSION } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
+import { artifactsWithVersions } from '../artifacts/store.js';
 import { activeMessage } from '../chat/reply-path.js';
 import { exportableParts, MAX_EXPORT_MESSAGES, renderMarkdown, safeTitleSlug } from '../export.js';
 import { getStorageDriver } from '../storage/index.js';
@@ -231,6 +232,8 @@ function readme(summary: ExportSummary, createdAt: Date): string {
     '                 per conversation, including archived ones. Conversations',
     '                 in the trash and temporary chats are not included.',
     '                 Markdown leaves out model reasoning; the JSON keeps it.',
+    '                 Artifacts (with every version) are in the JSON; the',
+    '                 Markdown names them.',
     'attachments/     Files you attached, in a folder per conversation.',
     '                 Files uploaded but never sent are under attachments/unsent/.',
     "projects/        Each project's files, in a folder per project. Project names",
@@ -389,11 +392,22 @@ export async function* exportArchive(
       )
       .orderBy(asc(schema.conversationCompaction.createdAt), asc(schema.conversationCompaction.id));
 
+    // Artifacts the exported replies created, with every version (v0.9).
+    const artifacts = await artifactsWithVersions(
+      thread.id,
+      owner.id,
+      messages.map((message) => message.id),
+    );
+
     const markdownPath = `conversations/${name}.md`;
     const jsonPath = `conversations/${name}.json`;
-    writer.add(markdownPath, renderMarkdown(thread, messages.slice(0, MAX_EXPORT_MESSAGES)), {
-      mtime: thread.updatedAt,
-    });
+    writer.add(
+      markdownPath,
+      renderMarkdown(thread, messages.slice(0, MAX_EXPORT_MESSAGES), artifacts),
+      {
+        mtime: thread.updatedAt,
+      },
+    );
     writer.add(
       jsonPath,
       JSON.stringify(
@@ -413,6 +427,24 @@ export async function* exportArchive(
             tokensIn: compaction.tokensIn,
             tokensOut: compaction.tokensOut,
             createdAt: compaction.createdAt.toISOString(),
+          })),
+          artifacts: artifacts.map((artifact) => ({
+            id: artifact.id,
+            messageId: artifact.messageId,
+            sourceKey: artifact.sourceKey,
+            title: artifact.title,
+            kind: artifact.kind,
+            currentVersion: artifact.currentVersion,
+            createdAt: artifact.createdAt.toISOString(),
+            updatedAt: artifact.updatedAt.toISOString(),
+            versions: artifact.versions.map((version) => ({
+              version: version.version,
+              content: version.content,
+              sizeBytes: version.sizeBytes,
+              source: version.source,
+              messageId: version.messageId,
+              createdAt: version.createdAt.toISOString(),
+            })),
           })),
           truncatedMessages,
         },

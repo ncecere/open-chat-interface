@@ -17,6 +17,8 @@ export const roleFeaturesSchema = z.object({
   branching: z.boolean(),
   projects: z.boolean(),
   memory: z.boolean(),
+  /** Absent in settings saved before v0.9; the default applies. */
+  artifacts: z.boolean(),
   reasoningEfforts: z.array(z.enum(REASONING_EFFORTS)),
 });
 
@@ -34,6 +36,7 @@ export const updateRoleFeaturesSchema = z
     branching: z.boolean().optional(),
     projects: z.boolean().optional(),
     memory: z.boolean().optional(),
+    artifacts: z.boolean().optional(),
     reasoningEfforts: z
       .array(z.enum(REASONING_EFFORTS))
       .max(REASONING_EFFORTS.length)
@@ -93,6 +96,7 @@ export const roleAccessSchema = z.object({
     projects: z.boolean(),
     /** Instance switch and role; each person still opts in themselves. */
     memory: z.boolean(),
+    artifacts: z.boolean(),
   }),
   /** The role's own, editable switches and reasoning levels. */
   roleFeatures: roleFeaturesSchema,

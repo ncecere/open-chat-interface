@@ -4,6 +4,7 @@ import { AppError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { memoryTools } from '../memory/tools.js';
 import { getSetting } from '../settings.js';
+import { ARTIFACT_TOOLS } from './artifacts.js';
 import { recordToolCall, type ToolApprovalAnswer } from './audit.js';
 import { registeredTools } from './catalog.js';
 import { resolveRoleToolAllowed } from './role-tools.js';
@@ -60,6 +61,11 @@ export async function resolveTurnTools(turn: {
   // `remember` and `forget` follow the role's `memory` switch (with the
   // instance switch and the person's opt-in), not a per-tool role setting.
   for (const definition of memoryTools) {
+    if (await definition.available(input)) offered.push(definition);
+  }
+  // Artifact tools follow the role's `artifacts` switch, not the tool list:
+  // they change only this conversation's artifacts (see tools/artifacts.ts).
+  for (const definition of ARTIFACT_TOOLS) {
     if (await definition.available(input)) offered.push(definition);
   }
   return { definitions: offered };
@@ -139,7 +145,11 @@ export function buildSdkTools(
             });
           let raw: unknown;
           try {
-            raw = await definition.execute(input, { signal, caller });
+            raw = await definition.execute(input, {
+              signal,
+              caller,
+              toolCallId: options.toolCallId,
+            });
           } catch (error) {
             await audit('error', null);
             if (!(error instanceof AppError))

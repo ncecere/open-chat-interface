@@ -66,6 +66,12 @@ const defaults: Record<string, unknown> = {
   },
   search: { enabled: false, provider: null, baseUrl: null, encryptedApiKey: null, maxResults: 5 },
   chat: { defaultSystemPrompt: null },
+  // The artifact tools (v0.9) have their own suite; keep this one's tool sets exact.
+  roleFeatures: {
+    roles: Object.fromEntries(
+      ['admin', 'auditor', 'user', 'restricted'].map((role) => [role, { artifacts: false }]),
+    ),
+  },
 };
 vi.mock('../../services/settings.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/settings.js')>()),
