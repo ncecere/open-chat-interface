@@ -125,6 +125,7 @@ portabilityRoutes.get('/export', async (c) => {
   });
 });
 
+/** The person's imports and their progress, newest first. */
 portabilityRoutes.get('/imports', async (c) => {
   const user = currentUser(c);
   const rows = await listImports(user.id);
@@ -253,6 +254,7 @@ portabilityRoutes.post('/imports', async (c) => {
   }
 });
 
+/** Removes a queued or finished import and its stored upload; 409 while it is running. */
 portabilityRoutes.delete('/imports/:id', async (c) => {
   const user = currentUser(c);
   await deleteImport(c.req.param('id'), user.id);

@@ -7,7 +7,7 @@ Every route the API registers, grouped by the file that defines it.
 Administrative routes require the `admin` role; an `auditor` may call the
 read-only ones. See [identity and access](../admin/identity.md).
 
-Generated from 28 route files.
+Generated from 32 route files.
 
 ## `routes/admin/audit.ts`
 
@@ -32,7 +32,7 @@ Generated from 28 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/health` | Operational state in one place. |
+| GET | `/api/admin/health` | Operational state in one place. |
 
 ## `routes/admin/invites.ts`
 
@@ -46,6 +46,7 @@ Generated from 28 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| GET | `/api/admin/lifecycle/config-sources` | Which retention and rate-limit values come from saved settings, environment variables or built-in defaults. |
 | GET | `/api/admin/lifecycle/jobs` | Answers "did cleanup actually run?", the first thing an admin asks. |
 | POST | `/api/admin/lifecycle/jobs/:name/run` | — |
 | GET | `/api/admin/lifecycle/rate-limits` | — |
@@ -56,7 +57,7 @@ Generated from 28 route files.
 | GET | `/api/admin/lifecycle/storage-policies` | — |
 | PUT | `/api/admin/lifecycle/storage-policies/:role` | — |
 | DELETE | `/api/admin/lifecycle/storage-policies/:role` | — |
-| POST | `/api/admin/lifecycle/storage-reconcile` | Compares storage against the database. Read-only by default: deleting |
+| POST | `/api/admin/lifecycle/storage-reconcile` | Compares storage against the database. |
 
 ## `routes/admin/models.ts`
 
@@ -118,6 +119,13 @@ Generated from 28 route files.
 | DELETE | `/api/admin/reports/:id` | — |
 | POST | `/api/admin/reports/run` | Sends every due report immediately. |
 
+## `routes/admin/roles.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/roles` | One summary per role; most parts change through their own endpoints. |
+| PUT | `/api/admin/roles/:role` | Changes a role's feature switches and allowed reasoning levels. |
+
 ## `routes/admin/settings.ts`
 
 | Method | Path | Purpose |
@@ -126,7 +134,12 @@ Generated from 28 route files.
 | PATCH | `/api/admin/settings` | — |
 | POST | `/api/admin/settings/logo` | Uploads an instance logo. |
 | POST | `/api/admin/settings/storage/test` | — |
-| GET | `/apifile` | — |
+
+## `routes/admin/setup.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/setup-status` | Configuration checklist for the admin overview; read-only, safe for auditors. |
 
 ## `routes/admin/sso.ts`
 
@@ -144,7 +157,7 @@ Generated from 28 route files.
 | GET | `/api/admin/usage/limits` | Where limits are biting, which is usually a configuration signal. |
 | GET | `/api/admin/usage/overview` | Activity and volume: what people are doing, without reference to cost. |
 | GET | `/api/admin/usage/spend` | Spend, split by model and by person. |
-| GET | `/api/admin/usage/storage` | Object storage consumption. Not time-ranged: storage is a gauge. |
+| GET | `/api/admin/usage/storage` | Object storage consumption. |
 
 ## `routes/admin/users.ts`
 
@@ -155,6 +168,7 @@ Generated from 28 route files.
 | GET | `/api/admin/users/:id` | — |
 | PATCH | `/api/admin/users/:id` | — |
 | DELETE | `/api/admin/users/:id` | — |
+| GET | `/api/admin/users/:id/limits` | The limits one person is held to right now: each budget with its current usage and reset time, and storage use against the role's allowance. |
 | POST | `/api/admin/users/:id/revoke-sessions` | — |
 | POST | `/api/admin/users/bulk` | — |
 
@@ -182,7 +196,7 @@ Generated from 28 route files.
 | --- | --- | --- |
 | POST | `/api/auth/accept-invite` | — |
 | POST | `/api/auth/accept-invite/validate` | — |
-| GET | `/api/auth/status` | Public bootstrap payload for the login screen: which auth methods exist and |
+| GET | `/api/auth/status` | Public bootstrap payload for the login screen: which auth methods exist and how the instance is branded. |
 
 ## `routes/branding.ts`
 
@@ -195,7 +209,7 @@ Generated from 28 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/chat` | — |
-| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration. |
+| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. |
 | GET | `/api/chat/:threadId/stream` | Replays the active SSE stream after authenticating the thread owner. |
 | DELETE | `/api/chat/:threadId/stream` | Explicit stop request; also reaches a producer running in another API process via Redis. |
 
@@ -232,11 +246,33 @@ Generated from 28 route files.
 | --- | --- | --- |
 | GET | `/api/models` | — |
 
+## `routes/portability.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/me/export` | Downloads every conversation, its JSON record, and attached files as one ZIP, streamed as it is written. |
+| GET | `/api/me/imports` | The person's imports and their progress, newest first. |
+| POST | `/api/me/imports` | Accepts a ChatGPT or Claude export (`.zip`, or the `conversations.json` inside it) and queues it for background processing. |
+| DELETE | `/api/me/imports/:id` | Removes a queued or finished import and its stored upload; 409 while it is running. |
+
+## `routes/projects.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/projects` | The signed-in person's projects by name, with conversation and file counts. |
+| POST | `/api/projects` | Creates a project, up to the per-person limit. |
+| GET | `/api/projects/:id` | One of the person's projects; 404 for anyone else's. |
+| PATCH | `/api/projects/:id` | Renames a project or changes its instructions; only the sent fields change. |
+| DELETE | `/api/projects/:id` | Conversations are detached and kept; files are deleted and their storage released. |
+| GET | `/api/projects/:id/files` | The project's files, oldest first. |
+| POST | `/api/projects/:id/files` | Uploads through the same validation and storage path as chat attachments, so it also needs attachments to be allowed for the role and the instance, shares the upload rate limit, and counts against the storage allowance. |
+| DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright; its storage is released immediately. |
+
 ## `routes/share-links.ts`
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/share-links/:slug` | Anonymous, read-only endpoint. It is deliberately the only public route in this module. |
+| GET | `/api/share-links/:slug` | Anonymous, read-only endpoint. |
 | DELETE | `/api/share-links/links/:linkId` | — |
 | GET | `/api/share-links/threads/:threadId` | — |
 | POST | `/api/share-links/threads/:threadId` | — |
@@ -249,12 +285,14 @@ Generated from 28 route files.
 | POST | `/api/threads` | — |
 | GET | `/api/threads/:id` | — |
 | PATCH | `/api/threads/:id` | — |
-| DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. Automatic retention |
+| DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
 | POST | `/api/threads/:id/branches` | — |
 | GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
 | POST | `/api/threads/:id/forks` | — |
+| PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |
 | DELETE | `/api/threads/:id/permanent` | Destroys a trashed thread now, without waiting out the grace window. |
 | POST | `/api/threads/:id/restore` | — |
+| GET | `/api/threads/search` | Full-text search over titles and message text, best match first. |
 | GET | `/api/threads/trash` | Trash listing is a fixed path, so it must be declared before `/:id`. |
 | DELETE | `/api/threads/trash` | — |
 

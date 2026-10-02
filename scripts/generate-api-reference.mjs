@@ -16,6 +16,12 @@ import path from 'node:path';
 const API_ROOT = 'apps/api/src/routes';
 const OUTPUT = 'docs/dev/api-reference.md';
 
+/** `const userRoutes = new Hono<AppBindings>()` — a router this file creates. */
+const ROUTER = /(?:const|let)\s+(\w+)\s*=\s*new Hono\b/g;
+
+/** `import { healthRoutes as adminHealthRoutes } from './health.js'` */
+const IMPORT = /import\s*\{([^}]*)\}\s*from\s*'(\.[^']+)'/g;
+
 /** `adminRoutes.route('/audit', auditRoutes)` — a sub-router and its prefix. */
 const MOUNT = /(\w+)\.route\(\s*'([^']+)'\s*,\s*(\w+)/g;
 
@@ -46,13 +52,17 @@ function describedAt(source, index) {
   const opened = before.lastIndexOf('/**');
   if (opened === -1) return '';
 
-  return (
-    before
-      .slice(opened + 3, before.length - 2)
-      .split('\n')
-      .map((line) => line.replace(/^\s*\*\s?/, '').trim())
-      .filter(Boolean)[0] ?? ''
-  );
+  // The first sentence of the first paragraph, which may wrap over lines.
+  const lines = before
+    .slice(opened + 3, before.length - 2)
+    .split('\n')
+    .map((line) => line.replace(/^\s*\*\s?/, '').trim());
+  const start = lines.findIndex(Boolean);
+  if (start === -1) return '';
+  const end = lines.indexOf('', start);
+  const paragraph = lines.slice(start, end === -1 ? undefined : end).join(' ');
+  const sentence = paragraph.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? paragraph;
+  return sentence.replaceAll('|', '\\|');
 }
 
 async function collect(dir) {
@@ -68,19 +78,42 @@ async function collect(dir) {
 }
 
 const files = await collect(API_ROOT);
+/** Child router id -> { prefix, parent router id }. Ids are `file#name`. */
 const mounts = new Map();
 const handlers = [];
 
+/**
+ * Routers are identified by file and name, not by name alone: two files may
+ * export a router with the same name (the public and admin `healthRoutes`).
+ * Only routers created with `new Hono` count, so `.get('content-type')` on a
+ * header map or `.on('close')` on a stream are not mistaken for routes.
+ */
 for (const file of files) {
   const source = await readFile(file, 'utf8');
+  const routers = new Set([...source.matchAll(ROUTER)].map((match) => match[1]));
+
+  const imported = new Map();
+  for (const match of source.matchAll(IMPORT)) {
+    const target = path.join(path.dirname(file), match[2].replace(/\.js$/, '.ts'));
+    for (const specifier of match[1].split(',')) {
+      const [name, local = name] = specifier
+        .replace(/^\s*type\s+/, '')
+        .split(/\s+as\s+/)
+        .map((part) => part.trim());
+      if (name) imported.set(local, `${target}#${name}`);
+    }
+  }
 
   for (const match of source.matchAll(MOUNT)) {
-    mounts.set(match[3], { prefix: match[2], parent: match[1] });
+    if (!routers.has(match[1])) continue;
+    const child = imported.get(match[3]) ?? `${file}#${match[3]}`;
+    mounts.set(child, { prefix: match[2], parent: `${file}#${match[1]}` });
   }
 
   for (const match of source.matchAll(HANDLER)) {
+    if (!routers.has(match[1])) continue;
     handlers.push({
-      router: match[1],
+      router: `${file}#${match[1]}`,
       method: match[2] === 'on' ? 'GET/POST' : match[2].toUpperCase(),
       routePath: match[3],
       file: path.relative('apps/api/src', file),

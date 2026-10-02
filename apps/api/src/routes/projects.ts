@@ -46,11 +46,13 @@ projectRoutes.use('*', async (c, next) => {
   await next();
 });
 
+/** The signed-in person's projects by name, with conversation and file counts. */
 projectRoutes.get('/', async (c) => {
   const user = currentUser(c);
   return c.json({ projects: await listProjects(user.id) });
 });
 
+/** Creates a project, up to the per-person limit. */
 projectRoutes.post('/', async (c) => {
   const user = currentUser(c);
   const input = await parseBody(c, createProjectSchema);
@@ -62,11 +64,13 @@ projectRoutes.post('/', async (c) => {
   return c.json({ project }, 201);
 });
 
+/** One of the person's projects; 404 for anyone else's. */
 projectRoutes.get('/:id', async (c) => {
   const user = currentUser(c);
   return c.json({ project: await getProjectSummary(c.req.param('id'), user.id) });
 });
 
+/** Renames a project or changes its instructions; only the sent fields change. */
 projectRoutes.patch('/:id', async (c) => {
   const user = currentUser(c);
   const patch = await parseBody(c, updateProjectSchema);
@@ -80,6 +84,7 @@ projectRoutes.delete('/:id', async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+/** The project's files, oldest first. */
 projectRoutes.get('/:id/files', async (c) => {
   const user = currentUser(c);
   return c.json({ files: await listProjectFiles(c.req.param('id'), user.id) });
