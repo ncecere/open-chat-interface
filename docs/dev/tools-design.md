@@ -19,7 +19,7 @@ code against them and later work can change them deliberately.
 | Question | Decision |
 | --- | --- |
 | Which models get tools | Models whose catalog entry has the `tool_calling` capability. Administrators already edit capability tags; this makes the tag change behaviour (roadmap principle 2). |
-| Step limit | At most **8** model steps per reply by default, adjustable on General settings (1–20). Reaching it ends the reply with a visible note. |
+| Step limit | At most **8** tool-using steps per reply by default, adjustable on General settings (1–20). Reaching it adds one final step with the tools withdrawn, so the reply still ends with an answer, and a visible note. |
 | Unanswered approvals | No timer. An approval waits until the person answers it. Sending a new message instead denies every unanswered approval in that conversation with the reason "not answered", so the model never sees a dangling call. |
 | Temporary chats | Tools are allowed under the same rules. Audit events record metadata only (see below), so nothing from the chat's content outlives it. |
 | Project-file search | Keyword search (PostgreSQL full-text) over chunks of extracted text. No embeddings provider is needed. Meaning-based search can be added later behind the same interface. |

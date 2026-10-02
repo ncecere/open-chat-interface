@@ -87,7 +87,7 @@ describe('tool steps', () => {
       ),
     );
     expect(container.querySelector('[role="note"]')?.textContent).toBe(
-      'This reply reached the limit of 8 steps and stopped.',
+      'This reply reached the limit of 8 tool steps, so it answered with what it had found.',
     );
   });
 

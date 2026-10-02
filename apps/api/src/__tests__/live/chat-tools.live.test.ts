@@ -474,20 +474,47 @@ describe.skipIf(!available)('live tool calling', () => {
       expect(prompt).toContain('Tool step: web_search was called with');
     });
 
-    it('ends the reply at the step limit with a visible note', async () => {
+    it('answers without tools after the step limit, with a visible note', async () => {
       state.settings.set('chat', { defaultSystemPrompt: null, maxToolSteps: 2 });
       const chat = await thread();
       const model = script(
         toolStep([['s1', 'web_search', { query: 'one' }]]),
         toolStep([['s2', 'web_search', { query: 'two' }]]),
-        toolStep([['s3', 'web_search', { query: 'three' }]]),
+        textStep('Here is what I found.'),
       );
       const { reply } = await turn(chat.id, 'Search a lot');
-      expect(model.doStreamCalls).toHaveLength(2);
+      expect(model.doStreamCalls).toHaveLength(3);
+      // The last step is for answering: no tools are offered.
+      expect(model.doStreamCalls[1]?.tools?.length).toBeGreaterThan(0);
+      expect(model.doStreamCalls[2]?.tools ?? []).toHaveLength(0);
+      expect(reply.parts).toContainEqual({
+        type: 'text',
+        text: 'Here is what I found.',
+        state: 'done',
+      });
       expect(reply.parts).toContainEqual(
         expect.objectContaining({ type: 'data-tool-limit', data: { reason: 'steps', steps: 2 } }),
       );
       expect(reply.status).toBe('complete');
+    });
+
+    it('tells the model which input was wrong when it sends another tool’s arguments', async () => {
+      const chat = await thread();
+      // gpt-oss was trained with a browser tool that opens results by id and cursor.
+      const model = script(
+        toolStep([['s1', 'web_search', { id: 0, cursor: 0 }]]),
+        textStep('Searching properly now.'),
+      );
+      const { reply } = await turn(chat.id, 'Open the first result');
+      const [step] = toolParts(reply.parts);
+      expect(step).toMatchObject({ state: 'output-error' });
+      expect((step as { errorText?: string }).errorText).toMatch(
+        /^The input for web_search was not valid: query/,
+      );
+      // The model is told which field was wrong, too.
+      const prompt = JSON.stringify(model.doStreamCalls[1]?.prompt);
+      expect(prompt).toContain('Invalid input for tool web_search');
+      expect(prompt).toContain('query');
     });
 
     it('settles usage across every step of a finished reply', async () => {

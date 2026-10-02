@@ -28,9 +28,10 @@ summary of what came back. Sources a tool found — web search results, or
 documents a connector linked to — appear above the answer, the same way as web
 search sources always have.
 
-A reply can take at most a set number of steps (8 unless your administrator
-changed it). If a reply reaches that limit, or your usage allowance runs out
-part-way through, it stops and says so under the tool steps. Ask a narrower
+A reply can use tools for a set number of steps (8 unless your administrator
+changed it). If it reaches that limit, the model answers with what it has found
+so far and a note says so. If your usage allowance runs out part-way through,
+the reply stops and says so under the tool steps. Ask a narrower
 question, or continue in a new message.
 
 ## Approvals

@@ -10,6 +10,7 @@ import {
   InvalidToolInputError,
   type LanguageModelUsage,
   NoSuchToolError,
+  type PrepareStepFunction,
   type StepResult,
   type StopCondition,
   type ToolSet,
@@ -44,10 +45,58 @@ export function stepsTaken(parts: readonly unknown[]): number {
 /** Text shown for a failed tool step: our own wording, never an internal error. */
 export function toolStreamErrorText(error: unknown): string {
   if (error instanceof ToolFailure) return error.message;
-  if (NoSuchToolError.isInstance(error) || typeof error === 'string')
+  if (InvalidToolInputError.isInstance(error))
+    return invalidInputText(error.toolName, issuesOf(error.cause));
+  if (typeof error === 'string') {
+    // The SDK reports a call it could not parse as its error message.
+    const invalid = /^(?:AI_InvalidToolInputError: )?Invalid input for tool ([\w.-]+):/.exec(error);
+    if (invalid?.[1]) return invalidInputText(invalid[1], issuesInText(error));
     return 'This tool is not available in this conversation.';
-  if (InvalidToolInputError.isInstance(error)) return 'The tool input was not valid.';
+  }
+  if (NoSuchToolError.isInstance(error)) return 'This tool is not available in this conversation.';
   return 'An error occurred.';
+}
+
+type Issue = { path?: unknown[]; message?: string };
+
+/**
+ * Which fields were wrong, in words a model can correct from. Models trained
+ * with other tools sometimes send their own arguments (an id and cursor to
+ * open a result, say) instead of the schema's.
+ */
+function invalidInputText(toolName: string, issues: Issue[]): string {
+  const detail = issues.length
+    ? `${issues
+        .slice(0, 3)
+        .map((issue) =>
+          issue.path?.length
+            ? `${issue.path.join('.')}: ${issue.message ?? 'invalid'}`
+            : (issue.message ?? 'invalid'),
+        )
+        .join('; ')}.`
+    : 'check the required fields and try again.';
+  return `The input for ${toolName} was not valid: ${detail}`;
+}
+
+function issuesOf(cause: unknown): Issue[] {
+  for (let current = cause, depth = 0; current && depth < 4; depth++) {
+    const issues = (current as { issues?: unknown }).issues;
+    if (Array.isArray(issues)) return issues as Issue[];
+    current = (current as { cause?: unknown }).cause;
+  }
+  return [];
+}
+
+/** Issues from the SDK's message, which ends "Error message: [ …issues as JSON… ]". */
+function issuesInText(message: string): Issue[] {
+  const start = message.indexOf('Error message: [');
+  if (start === -1) return [];
+  try {
+    const parsed = JSON.parse(message.slice(start + 'Error message: '.length));
+    return Array.isArray(parsed) ? (parsed as Issue[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 type Usage = Pick<LanguageModelUsage, 'inputTokens' | 'outputTokens'>;
@@ -99,8 +148,21 @@ export function createToolLoop(options: {
       ).units;
   };
 
+  /**
+   * After the last step that may use tools, one more step runs with the tools
+   * withdrawn, so a reply that reaches the limit still ends with an answer
+   * built from what it found rather than stopping mid-search.
+   */
+  const prepareStep: PrepareStepFunction<ToolSet> = ({ stepNumber }) => {
+    if (stepNumber < stepLimit) return undefined;
+    limit = 'steps';
+    return { activeTools: [], toolChoice: 'none' };
+  };
+
   const stopWhen: StopCondition<ToolSet> = async ({ steps }) => {
-    if (steps.length >= stepLimit) {
+    // The answering step has no tools; this only guards against a provider
+    // that calls one anyway.
+    if (steps.length > stepLimit) {
       limit = 'steps';
       return true;
     }
@@ -149,6 +211,7 @@ export function createToolLoop(options: {
 
   return {
     stopWhen,
+    prepareStep,
     onStepFinish,
     settlement,
     get limit() {

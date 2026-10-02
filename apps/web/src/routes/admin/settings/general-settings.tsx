@@ -348,7 +348,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
       <Field
         label="Tool step limit"
         htmlFor="max-tool-steps"
-        hint={`Model steps one reply may take when it uses tools, from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}. Reaching it ends the reply with a note. Default ${DEFAULT_MAX_TOOL_STEPS}.`}
+        hint={`Steps one reply may spend using tools, from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}. A reply that reaches it answers with what it found, with a note. Default ${DEFAULT_MAX_TOOL_STEPS}.`}
       >
         <Input
           id="max-tool-steps"

@@ -173,6 +173,7 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
             tools: sdkTools,
             toolApproval: toolApprovalPolicy(turn.tools),
             stopWhen: loop.stopWhen,
+            prepareStep: loop.prepareStep,
             onStepFinish: loop.onStepFinish,
           }
         : {}),

@@ -20,6 +20,9 @@ const adapters = {
   searchapi: searchSearchapi,
 } satisfies Record<SearchProviderKind, SearchAdapter>;
 
+/** Hosted providers sometimes take several seconds; the tool call itself allows 30. */
+const SEARCH_TIMEOUT_MS = 20_000;
+
 export function normalizeSearchQuery(query: string): string {
   return query.replace(/\s+/g, ' ').trim().slice(0, 2_000);
 }
@@ -44,7 +47,7 @@ export async function runSearch(
       maxResults: Math.min(Math.max(config.maxResults, 1), 20),
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
     });
   } catch (error) {
     // Never the query or the key: only which provider failed and how.

@@ -14,9 +14,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Roles & access has a **Tools** section with a switch per tool and role
   (`PUT /api/admin/roles/:role/tools`, audited as `role.tools.update`): built-in
   read tools are on for every role except `restricted`, connector tools are off
-  until allowed. A reply takes at most **8** model steps by default (General
-  settings, 1–20) and says so when it stops at the limit, or when the person's
-  allowance runs out between steps. Tools that change something elsewhere ask
+  until allowed. A reply spends at most **8** steps using tools by default (General
+  settings, 1–20); a reply that reaches it gets one final step with the tools
+  withdrawn, so it still answers with what it found, and a note says so. A
+  reply also stops when the person's allowance runs out between steps. A tool
+  call with invalid input is answered with which fields were wrong, so the
+  model can correct it. Tools that change something elsewhere ask
   for approval: the reply waits with **Approve** and **Deny**, and answering
   (`POST /api/chat/:threadId/approvals`) continues the same reply. Sending a
   new message instead denies open approvals as "not answered". Each call is

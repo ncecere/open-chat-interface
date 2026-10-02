@@ -26,6 +26,8 @@ export const webSearchTool: ToolDefinition = {
   label: 'Web search',
   description: [
     'Search the web for current information.',
+    'Each call runs a new search for the given query and returns results with a title, URL and snippet;',
+    'it cannot open or browse a result, so answer from the snippets.',
     'Use it when the answer depends on recent events or facts you are unsure of.',
     'Cite factual claims with markdown links to the returned URLs, and do not invent sources.',
   ].join(' '),

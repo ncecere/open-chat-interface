@@ -119,7 +119,7 @@ export function toolLimitNote(reason: ToolLimitReason, steps?: number): string {
     return 'This reply stopped using tools because your usage allowance ran out.';
   if (reason === 'context')
     return 'This reply stopped using tools because the results no longer fit the model’s input limit.';
-  return `This reply reached the limit of ${steps ?? DEFAULT_MAX_TOOL_STEPS} steps and stopped.`;
+  return `This reply reached the limit of ${steps ?? DEFAULT_MAX_TOOL_STEPS} tool steps, so it answered with what it had found.`;
 }
 
 /** Labels for tools this release knows about; unknown ids fall back to the id. */

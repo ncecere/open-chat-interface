@@ -83,7 +83,15 @@ describe('tool registry', () => {
       toolStreamErrorText(
         new InvalidToolInputError({ toolName: 'x', toolInput: '{}', cause: new Error('bad') }),
       ),
-    ).toBe('The tool input was not valid.');
+    ).toBe('The input for x was not valid: check the required fields and try again.');
+    // The SDK's message for a call it could not parse names the tool and fields.
+    expect(
+      toolStreamErrorText(
+        'AI_InvalidToolInputError: Invalid input for tool web_search: AI_TypeValidationError: Type validation failed: Value: {"id":0}.\nError message: [{"path":["query"],"message":"Invalid input: expected string, received undefined"}]',
+      ),
+    ).toBe(
+      'The input for web_search was not valid: query: Invalid input: expected string, received undefined.',
+    );
     expect(toolStreamErrorText(new Error('internal'))).toBe('An error occurred.');
   });
 
@@ -228,7 +236,9 @@ describe('reply loop helpers', () => {
   });
 
   it('describes a limit note for each reason', () => {
-    expect(toolLimitNote('steps', 3)).toBe('This reply reached the limit of 3 steps and stopped.');
+    expect(toolLimitNote('steps', 3)).toBe(
+      'This reply reached the limit of 3 tool steps, so it answered with what it had found.',
+    );
     expect(toolLimitNote('allowance')).toContain('allowance ran out');
     expect(toolLimitNote('context')).toContain('input limit');
   });
@@ -407,7 +417,9 @@ describe('history and summaries', () => {
       },
     ]);
     expect(markdown).toContain("_Searched the web for 'opening hours' · 1 result_");
-    expect(markdown).toContain('_This reply reached the limit of 4 steps and stopped._');
+    expect(markdown).toContain(
+      '_This reply reached the limit of 4 tool steps, so it answered with what it had found._',
+    );
     expect(markdown).not.toContain('RAW');
   });
 
