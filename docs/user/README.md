@@ -23,7 +23,8 @@ way regardless of which model you pick.
 ## The parts of the screen
 
 **The sidebar** holds your conversations, newest first, with pinned ones at the
-top. Search finds a conversation by its title or its contents.
+top. Search finds a conversation by its title or by what was said in it, and
+opens it at the matching message.
 
 **The composer** at the bottom is where you type. The controls along its edge
 choose the model, turn web search on, and attach a file.

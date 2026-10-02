@@ -3,6 +3,7 @@ import { PanelLeft, Search, UserRoundPlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
 import { ThreadList } from '~/components/layout/thread-list';
+import { ThreadSearchResults } from '~/components/layout/thread-search-results';
 import { UserMenu } from '~/components/layout/user-menu';
 import { Button } from '~/components/ui/button';
 import { useAuthStatus } from '~/hooks/use-auth-status';
@@ -87,16 +88,27 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && search) {
+              event.stopPropagation();
+              setSearch('');
+            }
+          }}
           placeholder="Search your threads..."
           aria-label="Search your threads"
+          aria-describedby="thread-search-hint"
           className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
         />
       </div>
 
+      <p id="thread-search-hint" className="sr-only">
+        Searches titles and message text. Results appear below.
+      </p>
+
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3">
-        <ThreadList search={search} />
+        {search.trim() ? <ThreadSearchResults query={search} /> : <ThreadList search="" />}
       </nav>
 
       <div className="hidden items-center gap-1 p-2 md:flex">

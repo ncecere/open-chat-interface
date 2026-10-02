@@ -87,6 +87,12 @@ export const message = pgTable(
     // this the count scans the whole table once per row returned, which at two
     // million messages takes the page from milliseconds to minutes.
     index('message_user_idx').on(t.userId),
+    // Conversation search over `text` parts only (migration 0023). Queries
+    // must use exactly this expression; see services/thread-search.ts.
+    index('message_text_search_idx').using(
+      'gin',
+      sql`to_tsvector('simple'::regconfig, jsonb_path_query_array(${t.parts}, '$[*] ? (@.type == "text").text'::jsonpath))`,
+    ),
   ],
 );
 

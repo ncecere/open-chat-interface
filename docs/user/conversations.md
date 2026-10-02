@@ -94,7 +94,23 @@ larger model does not remove every limit.
 - **Pin** a conversation to hold it at the top, above the date groupings.
 - **Archive** one to remove it from the list without deleting it. Archived
   conversations remain under [Settings → History](settings.md#history).
-- **Search** matches titles and contents, not just titles.
+- **Search** finds conversations by title and by what was said in them. See
+  [Finding a conversation](#finding-a-conversation).
+
+## Finding a conversation
+
+Type in the sidebar's search box, or press `Cmd/Ctrl + K`, to search your
+conversations. Results show each conversation's title with the best-matching
+lines underneath, matched words highlighted, best match first.
+
+- Every word you type must appear, and each matches the start of a word:
+  `migr plan` finds "migration planning". Punctuation and symbols are ignored.
+- Search covers titles, your messages and the replies you were shown. It does
+  not search reasoning, web search sources, or the contents of attached files.
+- Archived conversations are included and marked **Archived**. Conversations
+  in the trash and temporary chats are not.
+- Choosing a result opens the conversation at the matching message, briefly
+  highlighted, instead of at the end. **Jump to latest** takes you to the end.
 
 ## Where conversations go
 

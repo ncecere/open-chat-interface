@@ -8,7 +8,7 @@ import { Composer } from '~/components/chat/composer';
 import { ConversationLoadError } from '~/components/chat/conversation-load-error';
 import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
-import { useChatScroll } from '~/hooks/use-chat-scroll';
+import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError } from '~/lib/api-client';
@@ -90,6 +90,7 @@ function ThreadConversation({
   carriedEffort,
   carriedSearch,
   temporary,
+  target,
 }: {
   threadId: string;
   initialMessages: UIMessage[];
@@ -97,6 +98,7 @@ function ThreadConversation({
   carriedEffort?: ReasoningEffort;
   carriedSearch: boolean;
   temporary: boolean;
+  target?: ChatScrollTarget;
 }) {
   const pendingBranch = peekPendingBranch(threadId);
   const session = useChatSession({
@@ -196,7 +198,7 @@ function ThreadConversation({
     [branchMessage, threadId, selectedModelSlug, navigate],
   );
 
-  const scroll = useChatScroll(session.messages, session.streaming);
+  const scroll = useChatScroll(session.messages, session.streaming, target);
 
   if (session.recovery.unavailable)
     return (
@@ -297,12 +299,19 @@ function ThreadConversation({
   );
 }
 
-export function ChatThreadPage({ threadId }: { threadId: string }) {
+export function ChatThreadPage({
+  threadId,
+  target,
+}: {
+  threadId: string;
+  /** A message to open at, from conversation search; otherwise the end. */
+  target?: ChatScrollTarget;
+}) {
   // Query, recovery, and handover state all belong to this conversation.
-  return <ThreadLoader key={threadId} threadId={threadId} />;
+  return <ThreadLoader key={threadId} threadId={threadId} target={target} />;
 }
 
-function ThreadLoader({ threadId }: { threadId: string }) {
+function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScrollTarget }) {
   // Read once on mount so a re-render cannot lose the handover.
   const [carriedAttachments] = useState(() =>
     sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingAttachments() : [],
@@ -357,6 +366,7 @@ function ThreadLoader({ threadId }: { threadId: string }) {
       carriedEffort={carriedEffort}
       carriedSearch={carriedSearch}
       temporary={data.thread.temporary}
+      target={target}
     />
   );
 }

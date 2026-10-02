@@ -162,6 +162,13 @@
       "when": 1790539200002,
       "tag": "0022_conversation_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790539200003,
+      "tag": "0023_message_text_search",
+      "breakpoints": true
     }
   ]
 }

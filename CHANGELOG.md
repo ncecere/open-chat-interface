@@ -41,6 +41,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   removes one. Migration `0022_conversation_imports` adds the
   `conversation_import` table and `thread.import_source`/`import_source_id`.
   New dependencies: `fflate`, `@streamparser/json`, `busboy` (all MIT).
+- **Full-text conversation search.** The sidebar search and the command palette
+  now search message text as well as titles, with prefix matching (every word
+  must appear), best match first and up to three highlighted lines per
+  conversation. Only `text` parts are searched — not reasoning, sources or
+  attachment contents. Archived conversations are included and flagged;
+  trashed and temporary ones are not. Choosing a result opens the
+  conversation at the matching message (`/chat/:id?message=:messageId`),
+  centred, briefly highlighted (a still outline under reduced motion) and
+  focused, instead of at the end. New `GET /api/threads/search?q=&limit=`
+  (default 20, at most 50) returns thread summaries, a rank, a marked title
+  and `{messageId, role, snippet}` matches; matches are marked with the
+  control characters U+0001/U+0002, never HTML. `GET /api/threads?search=`
+  (title substring) is unchanged. Migration `0023_message_text_search` adds a
+  GIN index on message text; on a large instance it takes time to build and
+  blocks writes to `message` while it does — see the upgrade notes in
+  `docs/OPERATIONS.md`.
 
 ## [0.6.1] - 2026-10-01
 

@@ -15,6 +15,33 @@ export const threadSummarySchema = z.object({
   updatedAt: z.string(),
 });
 
+/**
+ * Conversation search marks matched words with these control characters rather
+ * than HTML, so a snippet is always plain text and clients build highlighting
+ * from text nodes. They are stripped from stored text before highlighting, so
+ * a message cannot forge them.
+ */
+export const SEARCH_HIGHLIGHT_START = '\u0001';
+export const SEARCH_HIGHLIGHT_END = '\u0002';
+export const THREAD_SEARCH_DEFAULT_LIMIT = 20;
+export const THREAD_SEARCH_MAX_LIMIT = 50;
+
+export const threadSearchMatchSchema = z.object({
+  messageId: z.string(),
+  role: z.enum(['user', 'assistant']),
+  /** Plain text with SEARCH_HIGHLIGHT_START/END around matched words. */
+  snippet: z.string(),
+});
+
+export const threadSearchResultSchema = z.object({
+  thread: threadSummarySchema,
+  rank: z.number(),
+  /** The title with matched words marked; identical to the title when only message text matched. */
+  titleHighlight: z.string(),
+  /** Up to three best-matching messages, best first. Empty when only the title matched. */
+  matches: z.array(threadSearchMatchSchema),
+});
+
 export const searchGroundingDataSchema = z.object({
   query: z.string(),
   results: z.array(
@@ -109,6 +136,8 @@ export const sendMessageSchema = z
   .strict();
 
 export type ThreadSummary = z.infer<typeof threadSummarySchema>;
+export type ThreadSearchMatch = z.infer<typeof threadSearchMatchSchema>;
+export type ThreadSearchResult = z.infer<typeof threadSearchResultSchema>;
 export type ForkMessageInput = z.infer<typeof forkMessageSchema>;
 export type BranchMessageInput = z.infer<typeof branchMessageSchema>;
 export type ChatMessage = z.infer<typeof messageSchema>;

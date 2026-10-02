@@ -3,6 +3,9 @@ import {
   branchMessageSchema,
   createThreadSchema,
   forkMessageSchema,
+  THREAD_SEARCH_DEFAULT_LIMIT,
+  THREAD_SEARCH_MAX_LIMIT,
+  type ThreadSearchResult,
   updateThreadSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
@@ -18,6 +21,7 @@ import {
   restoreThread,
   softDeleteThread,
 } from '../services/lifecycle/trash.js';
+import { searchThreads } from '../services/thread-search.js';
 import {
   assertBranchingAllowed,
   branchFromUserMessage,
@@ -38,6 +42,21 @@ const listQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+});
+
+/**
+ * Raw input is accepted up to a generous bound so a pasted sentence is not an
+ * error; the search itself reads only the first 200 characters.
+ */
+const searchQuerySchema = z.object({
+  q: z.string().max(2000),
+  // A larger limit is clamped rather than refused.
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(THREAD_SEARCH_DEFAULT_LIMIT)
+    .transform((value) => Math.min(value, THREAD_SEARCH_MAX_LIMIT)),
 });
 
 function serializeThread(thread: typeof schema.thread.$inferSelect) {
@@ -74,6 +93,25 @@ threadRoutes.post('/', async (c) => {
     temporary: input.temporary,
   });
   return c.json({ thread: serializeThread(thread) }, 201);
+});
+
+/**
+ * Full-text search over titles and message text, best match first. Declared
+ * before `/:id`. The older `GET /threads?search=` (title substring) remains for
+ * existing callers.
+ */
+threadRoutes.get('/search', async (c) => {
+  const user = currentUser(c);
+  const { q, limit } = parseQuery(c, searchQuerySchema);
+  const hits = await searchThreads(user.id, q, { limit });
+  const results: ThreadSearchResult[] = hits.map((hit) => ({
+    thread: serializeThread(hit.thread),
+    rank: hit.rank,
+    titleHighlight: hit.titleHighlight,
+    matches: hit.matches,
+  }));
+  c.header('cache-control', 'no-store');
+  return c.json({ results });
 });
 
 /** Trash listing is a fixed path, so it must be declared before `/:id`. */

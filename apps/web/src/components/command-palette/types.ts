@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 export interface CommandPaletteProps {
   open: boolean;
@@ -12,6 +13,10 @@ export interface PaletteItem {
   label: string;
   keywords?: string;
   icon: LucideIcon;
+  /** Richer rendering than the label, such as a search result's snippets. */
+  content?: ReactNode;
+  /** Keep focus where the selection put it instead of restoring it on close. */
+  keepFocusOnClose?: boolean;
   onSelect: () => void | Promise<void>;
 }
 

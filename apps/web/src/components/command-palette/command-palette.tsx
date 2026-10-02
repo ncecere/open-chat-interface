@@ -22,6 +22,8 @@ export function CommandPalette(props: CommandPaletteProps) {
     selectItem,
     handleInputKeyDown,
     showThreadProgress,
+    threadAnnouncement,
+    consumeKeepFocus,
   } = useCommandPaletteState(props);
   let optionIndex = -1;
   return (
@@ -40,8 +42,14 @@ export function CommandPalette(props: CommandPaletteProps) {
             event.preventDefault();
             inputRef.current?.focus();
           }}
+          onCloseAutoFocus={(event) => {
+            if (consumeKeepFocus()) event.preventDefault();
+          }}
         >
           <DialogPrimitive.Title className="sr-only">Search</DialogPrimitive.Title>
+          <p role="status" aria-live="polite" className="sr-only">
+            {threadAnnouncement}
+          </p>
 
           <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--border-subtle)] px-4">
             <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
@@ -94,15 +102,23 @@ export function CommandPalette(props: CommandPaletteProps) {
                       onPointerMove={() => setSelectedIndex(index)}
                       onClick={() => void selectItem(item)}
                       className={cn(
-                        'flex min-h-9 w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm',
+                        'flex min-h-9 w-full gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm',
+                        item.content ? 'items-start' : 'items-center',
                         'transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
                         selected
                           ? 'border-[var(--border-strong)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
                           : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]',
                       )}
                     >
-                      <Icon className="text-[var(--text-muted)]" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <Icon
+                        className={cn('text-[var(--text-muted)]', item.content && 'mt-0.5')}
+                        aria-hidden="true"
+                      />
+                      {item.content ? (
+                        <span className="flex min-w-0 flex-1 flex-col">{item.content}</span>
+                      ) : (
+                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      )}
                     </button>
                   );
                 })}
