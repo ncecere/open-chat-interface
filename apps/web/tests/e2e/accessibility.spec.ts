@@ -168,6 +168,76 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('a project page has no violations', async ({ page }) => {
+    await signIn(page);
+    // Created through the real API with the signed-in session's cookies.
+    const created = await page.request.post('/api/projects', {
+      data: { name: `Accessibility project ${Date.now()}`, instructions: 'Answer clearly.' },
+    });
+    expect(created.status()).toBe(201);
+    const { project } = (await created.json()) as { project: { id: string; name: string } };
+
+    await page.goto(`/projects/${project.id}`);
+    await expect(page.getByRole('heading', { level: 1, name: project.name })).toBeVisible();
+    await expect(page.getByText('No conversations yet.')).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('the move to project dialog has no violations while open', async ({ page }) => {
+    await signIn(page);
+    const created = await page.request.post('/api/threads', { data: { title: 'To be moved' } });
+    expect(created.status()).toBe(201);
+    const { thread } = (await created.json()) as { thread: { id: string } };
+
+    await page.goto(`/chat/${thread.id}`);
+    await page.getByRole('button', { name: 'Move to project' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Move to project' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('radio', { name: 'No project' })).toBeChecked();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('the reply switcher on a retried turn has no violations', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    const reply = (id: string, text: string) => ({
+      id,
+      role: 'assistant',
+      parts: [{ type: 'text', text }],
+      metadata: { status: 'complete', createdAt: created },
+    });
+    const replies = [reply('a11y-reply-1', 'First answer'), reply('a11y-reply-2', 'Second answer')];
+    await page.route('**/api/chat/a11y-replies/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-replies', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'A question' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            replies[1],
+          ],
+          replies,
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-replies');
+    const group = page.getByRole('group', { name: 'Replies' });
+    await expect(group.getByRole('status')).toHaveText('Reply 2 of 2');
+    await group.getByRole('button', { name: 'Previous reply' }).focus();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/quotas');

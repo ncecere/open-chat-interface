@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, schema, sql } from '@oci/db';
+import { and, asc, eq, gt, inArray, ne, schema, sql } from '@oci/db';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { conflict, validationFailed } from '../../lib/errors.js';
@@ -9,6 +9,7 @@ import {
   type ModelAttachment,
 } from './attachment-context.js';
 import { textFromParts } from './message-parts.js';
+import { activeMessage, RETRY_LATEST_ONLY } from './reply-path.js';
 import type { AcquiredRun } from './run-lifecycle.js';
 import { lockChatThread } from './thread-claim.js';
 import type { TurnContext } from './turn-context.js';
@@ -144,6 +145,45 @@ export async function persistTurn(
           .where(eq(schema.thread.id, thread.id));
       }
       position++;
+    } else {
+      // A retry: the new reply becomes the turn's active one. Recheck under the
+      // thread lock that the target is still the latest user turn.
+      const [target] = await tx
+        .select({ position: schema.message.position })
+        .from(schema.message)
+        .where(
+          and(
+            eq(schema.message.id, promptMessageId),
+            eq(schema.message.threadId, thread.id),
+            eq(schema.message.role, 'user'),
+          ),
+        );
+      if (!target)
+        throw validationFailed('The regeneration target must be a user message in this thread');
+      const [later] = await tx
+        .select({ id: schema.message.id })
+        .from(schema.message)
+        .where(
+          and(
+            eq(schema.message.threadId, thread.id),
+            eq(schema.message.role, 'user'),
+            gt(schema.message.position, target.position),
+          ),
+        )
+        .limit(1);
+      if (later) throw validationFailed(RETRY_LATEST_ONLY);
+      await tx
+        .update(schema.message)
+        .set({ supersededAt: new Date() })
+        .where(
+          and(
+            eq(schema.message.threadId, thread.id),
+            eq(schema.message.role, 'assistant'),
+            ne(schema.message.id, claim.id),
+            gt(schema.message.position, target.position),
+            activeMessage(),
+          ),
+        );
     }
     await tx
       .update(schema.message)

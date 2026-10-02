@@ -5,6 +5,21 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 const FOLLOW_THRESHOLD_PX = 64;
 /** Breathing room above a question pinned to the top of the view. */
 const PIN_OFFSET_PX = 16;
+/**
+ * How long an opened search match is held in the centre while late layout
+ * (images, diagrams, code highlighting) settles, unless the reader scrolls.
+ */
+const TARGET_HOLD_MS = 1500;
+/** How long a search match stays highlighted. */
+const TARGET_HIGHLIGHT_MS = 2400;
+/** Frames to wait for the view to become focusable (a closing drawer or dialog). */
+const FOCUS_ATTEMPTS = 20;
+
+/** A message to open at instead of the end. `key` changes on each request. */
+export interface ChatScrollTarget {
+  messageId: string;
+  key: string;
+}
 
 function userMessageCount(messages: UIMessage[]): number {
   let count = 0;
@@ -23,6 +38,10 @@ function userMessageCount(messages: UIMessage[]): number {
  *   reply grows, so the question stays put until the reply reaches the bottom.
  * - Scrolling up stops following; `jumpToLatest` resumes it.
  *
+ * - Opened at a message (conversation search), the view centres that message
+ *   instead, highlights it briefly and moves focus to it. Everything else
+ *   then behaves as above; jumping to latest or sending resumes following.
+ *
  * Both behaviours are one mechanism: "stay at the bottom" plus a spacer sized
  * so the bottom is the pinned question. Scrolls are instant so programmatic
  * movement never looks like the reader scrolling away.
@@ -32,7 +51,11 @@ function userMessageCount(messages: UIMessage[]): number {
  * the reply settles, and that must not count as another send. The pinned
  * question is likewise found by its position among user messages.
  */
-export function useChatScroll(messages: UIMessage[], streaming: boolean) {
+export function useChatScroll(
+  messages: UIMessage[],
+  streaming: boolean,
+  target?: ChatScrollTarget,
+) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -42,6 +65,9 @@ export function useChatScroll(messages: UIMessage[], streaming: boolean) {
   const userCount = useRef<number | null>(null);
   const lastScrollTop = useRef(0);
   const [detached, setDetached] = useState(false);
+  /** The opened search match, held in the centre until this time. */
+  const anchor = useRef<{ messageId: string; until: number } | null>(null);
+  const handledTarget = useRef<string | null>(null);
 
   /** Size the spacer so the pinned question can sit at the top of the view. */
   const measure = useCallback(() => {
@@ -67,11 +93,42 @@ export function useChatScroll(messages: UIMessage[], streaming: boolean) {
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
   }, []);
 
+  const findMessage = useCallback((messageId: string) => {
+    const content = contentRef.current;
+    if (!content) return null;
+    for (const row of content.querySelectorAll<HTMLElement>('[data-message-id]')) {
+      if (row.dataset.messageId === messageId) return row;
+    }
+    return null;
+  }, []);
+
+  /** Centres a message, or aligns its top when it is taller than the view. */
+  const centre = useCallback((element: HTMLElement) => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const top =
+      element.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop;
+    const room = Math.max(0, scroller.clientHeight - element.getBoundingClientRect().height);
+    scroller.scrollTop = Math.max(0, top - room / 2);
+    lastScrollTop.current = scroller.scrollTop;
+  }, []);
+
   /** Re-measure and, while following, keep the end of the conversation in view. */
   const settle = useCallback(() => {
     measure();
+    const held = anchor.current;
+    if (held) {
+      const element = performance.now() < held.until ? findMessage(held.messageId) : null;
+      if (element) {
+        centre(element);
+        return;
+      }
+      anchor.current = null;
+    }
     if (following.current) scrollToBottom();
-  }, [measure, scrollToBottom]);
+  }, [measure, scrollToBottom, findMessage, centre]);
 
   // Decide what each change to the transcript means before the browser paints.
   useLayoutEffect(() => {
@@ -84,11 +141,82 @@ export function useChatScroll(messages: UIMessage[], streaming: boolean) {
     } else if (count > userCount.current) {
       pinnedIndex.current = count - 1;
       following.current = true;
+      anchor.current = null;
       setDetached(false);
     }
     userCount.current = count;
     settle();
   }, [messages, streaming, settle]);
+
+  // Open at the requested message rather than the end. Runs after the effect
+  // above in the same commit, so the end is never painted first.
+  const targetId = target?.messageId;
+  const targetKey = target ? `${target.messageId} ${target.key}` : null;
+  useLayoutEffect(() => {
+    if (!targetId || !targetKey || handledTarget.current === targetKey) return;
+    const scroller = scrollRef.current;
+    const element = findMessage(targetId);
+    // An unknown message (deleted, or another conversation's) keeps the default.
+    if (!scroller || !element) return;
+    handledTarget.current = targetKey;
+
+    measure();
+    centre(element);
+    const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    following.current = distance <= FOLLOW_THRESHOLD_PX;
+    setDetached(!following.current);
+    anchor.current = { messageId: targetId, until: performance.now() + TARGET_HOLD_MS };
+
+    // Highlight briefly; the stylesheet swaps the fade for a still outline
+    // under prefers-reduced-motion.
+    element.setAttribute('data-search-target', '');
+    const clearHighlight = window.setTimeout(
+      () => element.removeAttribute('data-search-target'),
+      TARGET_HIGHLIGHT_MS,
+    );
+
+    // Move focus to the message so screen readers continue from it. A closing
+    // drawer or dialog can leave the view inert, or restore focus elsewhere,
+    // for a frame or two, so retry briefly.
+    if (!element.hasAttribute('tabindex')) element.setAttribute('tabindex', '-1');
+    let attempts = 0;
+    let frame = 0;
+    const focus = () => {
+      attempts += 1;
+      if (!element.isConnected) return;
+      if (!element.closest('[inert]')) element.focus({ preventScroll: true });
+      if (document.activeElement !== element && attempts < FOCUS_ATTEMPTS) {
+        frame = requestAnimationFrame(focus);
+      }
+    };
+    frame = requestAnimationFrame(focus);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(clearHighlight);
+      element.removeAttribute('data-search-target');
+      // Lets a remount (or StrictMode's rehearsal) apply the same request again.
+      handledTarget.current = null;
+    };
+  }, [targetId, targetKey, findMessage, measure, centre]);
+
+  // The reader taking over ends the hold on a search match at once.
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const release = () => {
+      anchor.current = null;
+    };
+    const options = { passive: true } as const;
+    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const) {
+      scroller.addEventListener(type, release, options);
+    }
+    return () => {
+      for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const) {
+        scroller.removeEventListener(type, release);
+      }
+    };
+  }, []);
 
   // Content and window size change during streaming, images and edits.
   useEffect(() => {
@@ -127,6 +255,7 @@ export function useChatScroll(messages: UIMessage[], streaming: boolean) {
   }, []);
 
   const jumpToLatest = useCallback(() => {
+    anchor.current = null;
     following.current = true;
     setDetached(false);
     scrollToBottom();

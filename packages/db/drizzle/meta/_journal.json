@@ -155,6 +155,34 @@
       "when": 1790539200001,
       "tag": "0021_usage_settlement",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790539200002,
+      "tag": "0022_conversation_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790539200003,
+      "tag": "0023_message_text_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790539200004,
+      "tag": "0024_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790539200005,
+      "tag": "0025_reply_alternates",
+      "breakpoints": true
     }
   ]
 }

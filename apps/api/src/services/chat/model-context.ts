@@ -25,6 +25,12 @@ import {
 import { type ContextMessage, loadContextHistory } from './context-history.js';
 import { generationSettings } from './generation-settings.js';
 import { textFromParts, textParts } from './message-parts.js';
+import {
+  loadProjectContext,
+  selectProjectFiles,
+  withProjectFiles,
+  withProjectInstructions,
+} from './project-context.js';
 import type { TurnContext } from './turn-context.js';
 
 const asUI = (message: ContextMessage): UIMessage => ({
@@ -68,11 +74,15 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   const searchQuery = input.webSearch
     ? normalizeSearchQuery(textFromParts(stored.latest.parts))
     : null;
-  const [newCandidates, searchResults, system] = await Promise.all([
+  const [newCandidates, searchResults, baseSystem, project] = await Promise.all([
     inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
     searchQuery ? searchWeb(searchQuery) : Promise.resolve([]),
     buildSystemPrompt(user.id, user.name),
+    loadProjectContext(thread.projectId, user),
   ]);
+  // Project instructions follow the instance prompt and the person's own
+  // customisation, so the system prompt's cost below already includes them.
+  const system = withProjectInstructions(baseSystem, project);
   const latest: UIMessage = input.webSearch
     ? {
         ...stored.latest,
@@ -123,6 +133,11 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
           imageBytes: 0,
         }),
   );
+  // Project files outrank history: they are chosen to fit after the required
+  // context, and history is trimmed to what remains. A file that does not fit
+  // is left out rather than truncated, and the reply is marked context-limited.
+  const projectFiles = selectProjectFiles(project, required, budget, supportsVision);
+  required = addCost(required, projectFiles.cost);
   const selected = selectContextSuffix(
     inspectedGroups.map((items) => ({
       items,
@@ -138,7 +153,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     ...selected.items,
     ...(stored.target ? [stored.target] : []),
   ].flatMap((message) => historical.byMessage.get(message.id) ?? []);
-  const allCandidates = [...newCandidates, ...historicalCandidates];
+  const allCandidates = [...newCandidates, ...historicalCandidates, ...projectFiles.files];
   const loaded = await materializeAttachments(allCandidates, user.id, user.role, supportsVision);
   const historicalMessage = (message: ContextMessage) =>
     withAttachmentContext(
@@ -147,15 +162,20 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
       supportsVision,
       historical.unavailable.has(message.id),
     );
-  const uiMessages = [
-    ...selected.items.map(historicalMessage).filter((message) => message.parts.length),
-    withAttachmentContext(
-      latest,
-      latestCandidates.map((file) => loaded.get(file.id)!),
-      supportsVision,
-      Boolean(stored.target && historical.unavailable.has(stored.target.id)),
-    ),
-  ];
+  const uiMessages = withProjectFiles(
+    [
+      ...selected.items.map(historicalMessage).filter((message) => message.parts.length),
+      withAttachmentContext(
+        latest,
+        latestCandidates.map((file) => loaded.get(file.id)!),
+        supportsVision,
+        Boolean(stored.target && historical.unavailable.has(stored.target.id)),
+      ),
+    ],
+    project,
+    projectFiles.files.map((file) => loaded.get(file.id)!),
+    supportsVision,
+  );
   const actualCost = uiMessages.reduce(
     (sum, message) => addCost(sum, messageCost(message)),
     systemCost,
@@ -176,7 +196,8 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
       stored.limited ||
       groups.flat().length !== stored.history.length ||
       first > 0 ||
-      selected.limited,
+      selected.limited ||
+      projectFiles.omitted > 0,
     sourceParts: searchResults.map((source, index) => ({
       type: 'source-url' as const,
       sourceId: `search-${index + 1}`,

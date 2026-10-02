@@ -13,15 +13,20 @@ way regardless of which model you pick.
 2. [Conversations](conversations.md) — choosing a model, editing, branching,
    temporary chats.
 3. [Attachments](attachments.md) — sending images and documents.
-4. [Searching the web](web-search.md) — grounding an answer in sources.
-5. [Sharing](sharing.md) — publishing a conversation read-only.
-6. [Settings](settings.md) — your account, personalisation, history, models.
-7. [Limits](limits.md) — what a usage warning means and what to do about it.
+4. [Projects](projects.md) — grouping conversations under shared instructions
+   and files.
+5. [Searching the web](web-search.md) — grounding an answer in sources.
+6. [Sharing](sharing.md) — publishing a conversation read-only.
+7. [Settings](settings.md) — your account, personalisation, history, models.
+8. [Limits](limits.md) — what a usage warning means and what to do about it.
+9. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
+   or Claude.
 
 ## The parts of the screen
 
-**The sidebar** holds your conversations, newest first, with pinned ones at the
-top. Search finds a conversation by its title or its contents.
+**The sidebar** holds your projects and your conversations, newest first, with
+pinned ones at the top. Search finds a conversation by its title or by what was said in it, and
+opens it at the matching message.
 
 **The composer** at the bottom is where you type. The controls along its edge
 choose the model, turn web search on, and attach a file.
@@ -42,7 +47,10 @@ instance:
 - **How much you may use**, whether that is measured in messages, tokens, or
   cost.
 - **How long conversations are kept** before they are removed.
-- **Whether attachments, web search, or sharing are available at all.**
+- **Whether attachments, web search, sharing, temporary chats, branching or
+  projects are available**, for the whole instance or for your role.
+- **Which reasoning levels you can choose**, and which one a new conversation
+  starts at.
 
 If something described here is missing from your instance, it has been turned
 off rather than broken.

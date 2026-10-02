@@ -10,19 +10,21 @@ The **Search** control sits beside the model name in the composer. It applies to
 the message you are about to send, not to the conversation as a whole, so you
 can use it for one question and not the next.
 
-If the control is absent, either the instance has web search turned off or the
-model you have chosen cannot use tools. The picker's filter will show you which
-models can.
+If the control is absent, web search is not available to you: an administrator
+has not turned it on, has turned it off for your role, or its search provider is
+not fully set up.
+It does not depend on which model you have chosen.
 
 ## What you get back
 
-An answer grounded in search results carries its sources. Each claim that came
-from a page links to it, and the panel above the reply lists what was searched
-for and what came back.
+Before the model starts writing, OCI runs one web search using your message as
+the query and gives the model the results. The model is asked to link the
+sources it relies on, so claims that came from a page usually link to it.
 
-That panel is worth opening when the answer matters. It shows the queries the
-model actually ran, which is often narrower or broader than what you asked, and
-lets you judge whether the sources are ones you would have chosen.
+The panel above the reply shows the query that was searched and the results
+the model was given. It is worth opening when the answer matters: your message
+may not have made a good search query, and the panel lets you judge whether the
+sources are ones you would have chosen.
 
 ## When it helps and when it does not
 

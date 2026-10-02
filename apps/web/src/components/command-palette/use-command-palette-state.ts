@@ -1,7 +1,15 @@
 import { useNavigate } from '@tanstack/react-router';
 import { MessageSquareText, Plus } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useCreateThread, useThreads } from '~/hooks/use-threads';
+import { createElement, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { SearchResultContent } from '~/components/layout/thread-search-results';
+import {
+  SEARCH_DEBOUNCE_MS,
+  searchResultsAnnouncement,
+  searchResultTarget,
+  useThreadSearch,
+} from '~/hooks/use-thread-search';
+import { useCreateThread } from '~/hooks/use-threads';
+import { stripHighlights } from '~/lib/search-highlight';
 import type { CommandPaletteProps, PaletteGroup, PaletteItem } from './types';
 import { usePaletteActions } from './use-palette-actions';
 
@@ -24,13 +32,14 @@ export function useCommandPaletteState({
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const keepFocusOnClose = useRef(false);
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const normalizedDebouncedQuery = debouncedQuery.trim();
   const searchIsSettled = query.trim() === normalizedDebouncedQuery;
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setDebouncedQuery(query.trim()), 180);
+    const timeout = window.setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timeout);
   }, [query]);
 
@@ -42,25 +51,32 @@ export function useCommandPaletteState({
     }
   }, [open]);
 
-  const { data: threads = [], isFetching: isSearchingThreads } = useThreads(
-    normalizedDebouncedQuery || undefined,
-  );
+  // Titles and message text, best match first; a result opens at its match.
+  const {
+    data: threads = [],
+    isFetching: isSearchingThreads,
+    isError: threadSearchFailed,
+    isPlaceholderData: threadsAreStale,
+  } = useThreadSearch(normalizedDebouncedQuery);
 
   const actionGroups = usePaletteActions({ sidebarOpen, onSidebarOpenChange });
 
   const groups = useMemo<PaletteGroup[]>(() => {
     const nextGroups: PaletteGroup[] = [];
 
-    if (normalizedQuery && searchIsSettled && threads.length > 0) {
+    // Results for an earlier query are never offered, so Enter cannot open a stale match.
+    if (normalizedQuery && searchIsSettled && !threadsAreStale && threads.length > 0) {
       nextGroups.push({
         id: 'threads',
         label: 'Threads',
-        items: threads.map((thread) => ({
-          id: `thread-${thread.id}`,
-          label: thread.title,
+        items: threads.map((result) => ({
+          id: `thread-${result.thread.id}`,
+          label: stripHighlights(result.titleHighlight) || result.thread.title,
           keywords: 'thread conversation',
           icon: MessageSquareText,
-          onSelect: () => navigate({ to: '/chat/$threadId', params: { threadId: thread.id } }),
+          content: createElement(SearchResultContent, { result }),
+          keepFocusOnClose: result.matches.length > 0,
+          onSelect: () => navigate(searchResultTarget(result)),
         })),
       });
     }
@@ -93,7 +109,16 @@ export function useCommandPaletteState({
     }
 
     return nextGroups;
-  }, [actionGroups, createThread, navigate, normalizedQuery, query, searchIsSettled, threads]);
+  }, [
+    actionGroups,
+    createThread,
+    navigate,
+    normalizedQuery,
+    query,
+    searchIsSettled,
+    threads,
+    threadsAreStale,
+  ]);
 
   const items = groups.flatMap((group) => group.items);
   const itemIds = items.map((item) => item.id).join('|');
@@ -117,6 +142,9 @@ export function useCommandPaletteState({
 
     try {
       await item.onSelect();
+      // The conversation moves focus to the matched message; restoring focus
+      // to whatever opened the palette would take it straight back.
+      keepFocusOnClose.current = Boolean(item.keepFocusOnClose);
       onOpenChange(false);
     } catch {
       // Mutation hooks retain the request error; keep the palette open for retry.
@@ -157,6 +185,21 @@ export function useCommandPaletteState({
   }
 
   const showThreadProgress = normalizedQuery.length > 0 && (!searchIsSettled || isSearchingThreads);
+  const threadAnnouncement = !normalizedQuery
+    ? ''
+    : threadSearchFailed
+      ? 'Conversation search failed.'
+      : showThreadProgress
+        ? ''
+        : searchResultsAnnouncement(threads.length);
+
+  /** Read once by the dialog's close handler, then reset. */
+  function consumeKeepFocus() {
+    const keep = keepFocusOnClose.current;
+    keepFocusOnClose.current = false;
+    return keep;
+  }
+
   return {
     inputRef,
     query,
@@ -169,5 +212,7 @@ export function useCommandPaletteState({
     selectItem,
     handleInputKeyDown,
     showThreadProgress,
+    threadAnnouncement,
+    consumeKeepFocus,
   };
 }

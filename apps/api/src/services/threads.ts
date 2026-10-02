@@ -2,19 +2,28 @@ import { and, asc, type Database, desc, eq, ilike, isNull, lte, schema, sql } fr
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
+import { containsPattern } from '../lib/like.js';
+import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
+import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 
 export const TEMPORARY_THREAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function assertTemporaryChatAllowed(role: UserRole): Promise<void> {
-  if (role === 'restricted') {
-    throw forbidden('Your role does not allow temporary chats');
-  }
+  await assertRoleFeature(role, 'temporaryChat');
 
   const features = await getSetting('features');
   if (!features.temporaryChat) {
     throw validationFailed('Temporary chat is disabled on this instance');
   }
+}
+
+/** Forks and edit-branches need both the role and the instance to allow branching. */
+export async function assertBranchingAllowed(role: UserRole): Promise<void> {
+  await assertRoleFeature(role, 'branching');
+
+  const features = await getSetting('features');
+  if (!features.branching) throw forbidden('Conversation branching is disabled');
 }
 
 /**
@@ -34,7 +43,7 @@ export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<nu
 
 export async function listThreads(
   userId: string,
-  options?: { search?: string; archived?: boolean },
+  options?: { search?: string; archived?: boolean; projectId?: string },
 ) {
   // Expiry cleanup belongs to the background job runner. Doing it here made an
   // ordinary read perform unbounded deletion work on someone else's rows.
@@ -47,7 +56,12 @@ export async function listThreads(
   ];
 
   if (options?.search) {
-    conditions.push(ilike(schema.thread.title, `%${options.search}%`));
+    conditions.push(ilike(schema.thread.title, containsPattern(options.search)));
+  }
+
+  // The caller checks that the project is the user's own.
+  if (options?.projectId) {
+    conditions.push(eq(schema.thread.projectId, options.projectId));
   }
 
   return db
@@ -64,19 +78,37 @@ export async function createThread(options: {
   role: UserRole;
   title?: string;
   temporary?: boolean;
+  /** Start inside one of the user's projects; needs the role's projects feature. */
+  projectId?: string;
 }) {
   if (options.temporary) await assertTemporaryChatAllowed(options.role);
+  if (options.projectId) {
+    await assertRoleFeature(options.role, 'projects');
+    if (options.temporary) throw validationFailed('Temporary chats cannot be added to a project');
+  }
 
-  const [thread] = await db
-    .insert(schema.thread)
-    .values({
-      organizationId: options.organizationId,
-      userId: options.userId,
-      title: options.title?.trim() || 'New Chat',
-      temporary: options.temporary ?? false,
-      expiresAt: options.temporary ? new Date(Date.now() + TEMPORARY_THREAD_TTL_MS) : null,
-    })
-    .returning();
+  const values = {
+    organizationId: options.organizationId,
+    userId: options.userId,
+    title: options.title?.trim() || 'New Chat',
+    temporary: options.temporary ?? false,
+    expiresAt: options.temporary ? new Date(Date.now() + TEMPORARY_THREAD_TTL_MS) : null,
+    projectId: options.projectId ?? null,
+  };
+  const projectId = options.projectId;
+
+  const [thread] = projectId
+    ? await db.transaction(async (tx) => {
+        // Another person's project is reported as missing, never joined.
+        const [project] = await tx
+          .select({ id: schema.project.id })
+          .from(schema.project)
+          .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, options.userId)))
+          .for('key share');
+        if (!project) throw notFound('Project not found');
+        return tx.insert(schema.thread).values(values).returning();
+      })
+    : await db.insert(schema.thread).values(values).returning();
 
   if (!thread) throw new Error('Failed to create thread');
   return thread;
@@ -124,8 +156,7 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
       .from(schema.message)
       .where(eq(schema.message.threadId, sourceThread.id))
       .orderBy(asc(schema.message.position));
-    const selectedIndex = sourceMessages.findIndex((message) => message.id === input.messageId);
-    const selected = sourceMessages[selectedIndex];
+    const selected = sourceMessages.find((message) => message.id === input.messageId);
     if (!selected) throw notFound('Message not found');
     if (selected.status === 'streaming') {
       throw validationFailed('A response cannot be forked while it is still streaming');
@@ -141,12 +172,16 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
         expiresAt: sourceThread.expiresAt,
+        // A fork or edit stays in the project its source belongs to.
+        projectId: sourceThread.projectId,
         lastMessageAt: new Date(),
       })
       .returning();
     if (!fork) throw new Error('Failed to create fork');
 
-    const copiedMessages = sourceMessages.slice(0, selectedIndex + 1);
+    // The fork reads as the conversation did through the selected message:
+    // one reply per turn, never the alternatives a retry left behind.
+    const copiedMessages = pathThrough(sourceMessages, selected.id) ?? [];
     await tx.insert(schema.message).values(
       copiedMessages.map((message) => ({
         threadId: fork.id,
@@ -213,13 +248,17 @@ export async function branchFromUserMessage(
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
         expiresAt: sourceThread.expiresAt,
+        // A fork or edit stays in the project its source belongs to.
+        projectId: sourceThread.projectId,
         lastMessageAt: new Date(),
       })
       .returning();
 
     if (!branch) throw new Error('Failed to create branch');
 
-    const priorMessages = sourceMessages.slice(0, selectedIndex);
+    const priorMessages = sourceMessages
+      .slice(0, selectedIndex)
+      .filter((message) => message.supersededAt === null);
     if (priorMessages.length > 0) {
       await tx.insert(schema.message).values(
         priorMessages.map((message) => ({
@@ -263,12 +302,30 @@ export async function branchFromUserMessage(
   });
 }
 
+/** The conversation as it reads: one active reply per turn, in order. */
 export async function listMessages(threadId: string) {
   return db
     .select()
     .from(schema.message)
-    .where(eq(schema.message.threadId, threadId))
+    .where(and(eq(schema.message.threadId, threadId), activeMessage()))
     .orderBy(asc(schema.message.position));
+}
+
+/**
+ * The active conversation plus, when the latest turn was retried, every reply
+ * to it (oldest first) so the reader can switch between them. Superseded
+ * replies to earlier turns are never returned: they cannot be switched to.
+ */
+export async function listConversation(threadId: string) {
+  const rows = await db
+    .select()
+    .from(schema.message)
+    .where(eq(schema.message.threadId, threadId))
+    .orderBy(asc(schema.message.position), asc(schema.message.createdAt), asc(schema.message.id));
+  return {
+    messages: rows.filter((row) => row.supersededAt === null),
+    replies: latestTurnReplies(rows),
+  };
 }
 
 /** Allocating this position requires holding the thread row lock in the same transaction. */

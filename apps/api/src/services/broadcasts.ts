@@ -110,8 +110,9 @@ export async function listBroadcasts(): Promise<Broadcast[]> {
       startsAt: schema.broadcast.startsAt,
       endsAt: schema.broadcast.endsAt,
       createdAt: schema.broadcast.createdAt,
-      dismissalCount: sql<number>`(select count(*) from ${schema.broadcastDismissal}
-        where ${schema.broadcastDismissal.broadcastId} = ${schema.broadcast.id})::int`,
+      // Qualified by hand: Drizzle drops qualifiers in a single-table select.
+      dismissalCount: sql<number>`(select count(*) from "broadcast_dismissal" as dismissal
+        where dismissal.broadcast_id = "broadcast"."id")::int`,
     })
     .from(schema.broadcast)
     .where(eq(schema.broadcast.organizationId, organizationId))

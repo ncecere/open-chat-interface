@@ -1,16 +1,15 @@
 import { and, desc, eq, isNull, schema } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { forbidden, notFound, validationFailed } from '../../lib/errors.js';
+import { notFound, validationFailed } from '../../lib/errors.js';
+import { assertRoleFeature } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { adjustStorageUsage } from '../storage/usage.js';
 
 export { type UploadResult, uploadAttachment } from './upload.js';
 
 export async function assertAttachmentUseAllowed(role: UserRole): Promise<void> {
-  if (role === 'restricted') {
-    throw forbidden('Your role does not allow file uploads');
-  }
+  await assertRoleFeature(role, 'attachments');
 
   const features = await getSetting('features');
   if (!features.attachments) {
@@ -35,6 +34,7 @@ export async function getOwnedAttachment(id: string, userId: string) {
   return row;
 }
 
+/** Message attachments and staged uploads; project files are listed by their project. */
 export async function listAttachments(userId: string) {
   return db
     .select()
@@ -44,6 +44,7 @@ export async function listAttachments(userId: string) {
         eq(schema.attachment.userId, userId),
         isNull(schema.attachment.deletedAt),
         eq(schema.attachment.uploadPending, false),
+        isNull(schema.attachment.projectId),
       ),
     )
     .orderBy(desc(schema.attachment.createdAt))
@@ -56,6 +57,9 @@ export async function listAttachments(userId: string) {
  * The blob is not touched here. Hard deletion happens when the grace window
  * elapses, at which point the delete trigger enqueues the object for the
  * storage reaper, so there is exactly one path to object removal.
+ *
+ * Project files are not found here: they are removed through their project
+ * (`DELETE /projects/:id/files/:fileId`), which deletes them outright.
  */
 export async function deleteAttachment(id: string, userId: string): Promise<void> {
   // Allocation can happen once between discovering its thread and locking the
@@ -77,6 +81,7 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
             eq(schema.attachment.id, id),
             eq(schema.attachment.userId, userId),
             eq(schema.attachment.uploadPending, false),
+            isNull(schema.attachment.projectId),
           ),
         )
         .for('update');

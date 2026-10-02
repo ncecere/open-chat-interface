@@ -138,7 +138,16 @@ export async function reconcileStorage(options?: {
       .from(schema.attachment)
       .where(inArray(schema.attachment.storageKey, keys));
 
-    const knownKeys = new Set(known.map((row) => row.storageKey));
+    // Import uploads awaiting processing are referenced by their import row.
+    const importUploads = await db
+      .select({ storageKey: schema.conversationImport.storageKey })
+      .from(schema.conversationImport)
+      .where(inArray(schema.conversationImport.storageKey, keys));
+
+    const knownKeys = new Set([
+      ...known.map((row) => row.storageKey),
+      ...importUploads.flatMap((row) => (row.storageKey ? [row.storageKey] : [])),
+    ]);
     const orphans = candidates.filter((object) => !knownKeys.has(object.key));
     report.orphanedObjects += orphans.length;
 

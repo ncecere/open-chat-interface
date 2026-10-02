@@ -5,6 +5,7 @@ import {
   lazyRouteComponent,
   Outlet,
   redirect,
+  useRouterState,
 } from '@tanstack/react-router';
 import { AppShell } from '~/components/layout/app-shell';
 import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
@@ -18,6 +19,7 @@ import {
   validateUsersSearch,
 } from '~/lib/admin-search';
 import { ApiError, api } from '~/lib/api-client';
+import { validateChatHomeSearch, validateChatThreadSearch } from '~/lib/chat-search-params';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
@@ -114,15 +116,41 @@ const authenticatedRoute = createRoute({
 const chatHomeRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/',
-  component: ChatHomePage,
+  validateSearch: validateChatHomeSearch,
+  component: function ChatHomeRoute() {
+    const { project } = chatHomeRoute.useSearch();
+    return <ChatHomePage projectId={project} />;
+  },
+});
+
+const ProjectPage = lazyRouteComponent(() => import('~/routes/projects/project'), 'ProjectPage');
+
+const projectRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/projects/$projectId',
+  component: function ProjectRoute() {
+    const { projectId } = projectRoute.useParams();
+    return <ProjectPage projectId={projectId} />;
+  },
 });
 
 const chatThreadRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/chat/$threadId',
+  validateSearch: validateChatThreadSearch,
   component: function ChatThreadRoute() {
     const { threadId } = chatThreadRoute.useParams();
-    return <ChatThreadPage threadId={threadId} />;
+    const { message } = chatThreadRoute.useSearch();
+    // Changes on every navigation, so choosing the same result again re-centres it.
+    const navigationKey = useRouterState({
+      select: (state) => state.location.state.__TSR_key ?? state.location.href,
+    });
+    return (
+      <ChatThreadPage
+        threadId={threadId}
+        target={message ? { messageId: message, key: navigationKey } : undefined}
+      />
+    );
   },
 });
 
@@ -390,7 +418,7 @@ const routeTree = rootRoute.addChildren([
   resetPasswordRoute,
   acceptInviteRoute,
   publicShareRoute,
-  authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute]),
+  authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute, projectRoute]),
   settingsRoute.addChildren(settingsTabRoutes),
   adminRoute.addChildren([
     adminOverviewRoute,

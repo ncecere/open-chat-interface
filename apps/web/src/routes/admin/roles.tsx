@@ -9,7 +9,7 @@ import {
 } from '@oci/shared';
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Check, CheckCircle2, Minus } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
@@ -25,6 +25,7 @@ import {
   ConfigSourceBadge,
   useConfigSources,
 } from '~/components/admin/config-source';
+import { RoleFeaturesForm } from '~/components/admin/role-features-form';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -48,13 +49,6 @@ const TABS = (Object.keys(ROLE_LABELS) as UserRole[]).map((id) => ({
   id,
   label: ROLE_LABELS[id],
 })) satisfies readonly AdminTab<RoleTab>[];
-
-const FEATURE_LABELS: Record<keyof RoleAccess['features'], string> = {
-  attachments: 'File attachments',
-  shareLinks: 'Share links',
-  temporaryChat: 'Temporary chats',
-  webSearch: 'Web search',
-};
 
 const RATE_FIELDS: Array<{ key: keyof RateLimitSettings; label: string; max: number }> = [
   { key: 'maxConcurrentStreams', label: 'Concurrent responses', max: 100 },
@@ -86,6 +80,10 @@ function invalidateAccess(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: ['admin', 'storage-policies'] }),
     queryClient.invalidateQueries({ queryKey: CONFIG_SOURCES_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+    // A role's features and reasoning levels shape the composer, including
+    // the administrator's own.
+    queryClient.invalidateQueries({ queryKey: ['me'] }),
+    queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
   ]);
 }
 
@@ -144,32 +142,6 @@ function RoleSummary({ access }: { access: RoleAccess }) {
           </dd>
         </div>
       </dl>
-
-      <div>
-        <h3 className="font-medium text-sm">Features</h3>
-        <p className="mt-1 text-[var(--text-muted)] text-xs">
-          Instance features as they apply to the {label} role. Switch them on or off under
-          Appearance &amp; features.
-        </p>
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-          {(Object.keys(FEATURE_LABELS) as Array<keyof RoleAccess['features']>).map((key) => {
-            const on = access.features[key];
-            const Icon = on ? Check : Minus;
-            return (
-              <li key={key} className="flex items-center gap-2 text-sm">
-                <Icon
-                  className={
-                    on ? 'size-4 text-[var(--success)]' : 'size-4 text-[var(--text-muted)]'
-                  }
-                  aria-hidden="true"
-                />
-                <span>{FEATURE_LABELS[key]}</span>
-                <span className="text-[var(--text-muted)] text-xs">{on ? 'On' : 'Off'}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
 
       {access.fixedRules.length > 0 && (
         <div>
@@ -660,6 +632,7 @@ function InstanceWideSection() {
 }
 
 function RolePanel({ access }: { access: RoleAccess }) {
+  const queryClient = useQueryClient();
   const label = ROLE_LABELS[access.role].toLowerCase();
   return (
     <div className="flex flex-col gap-10">
@@ -669,6 +642,17 @@ function RolePanel({ access }: { access: RoleAccess }) {
         description={`What someone with the ${label} role can do today.`}
       >
         <RoleSummary access={access} />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Features"
+        description={`What people with the ${label} role may use, and which reasoning levels they may choose.`}
+      >
+        <RoleFeaturesForm
+          access={access}
+          roleLabel={label}
+          onSaved={() => invalidateAccess(queryClient)}
+        />
       </SettingsSection>
 
       <SettingsSection

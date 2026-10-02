@@ -7,6 +7,133 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Feature entitlements per role.** On Roles & access each role has switches
+  for web search, file attachments, share links, temporary chats and branching,
+  and a choice of allowed reasoning levels (Instant is always allowed). A
+  feature is available only when both the instance-wide switch and the role's
+  allow it; the server enforces each one, including web search on a chat turn
+  and reasoning levels in `/models` and chat validation. Saved through
+  `PUT /api/admin/roles/:role` (changed fields only, audited as
+  `role.features.update`, read-only for auditors). Defaults match the previous
+  fixed rules, so restricted accounts still cannot upload, share or start
+  temporary chats until an administrator changes it. Refusals now read "…is
+  not available for your role". No database migration.
+- **Default reasoning level** on General settings (`defaultEffort` in
+  `PATCH /api/admin/settings`, exposed to clients in `/api/me`). New
+  conversations start at it, clamped to what the selected model and the
+  person's role allow, falling back to Instant.
+- **Full-text conversation search.** The sidebar search and the command palette
+  now search message text as well as titles, with prefix matching (every word
+  must appear), best match first and up to three highlighted lines per
+  conversation. Only `text` parts are searched — not reasoning, sources or
+  attachment contents. Archived conversations are included and flagged;
+  trashed and temporary ones are not. Choosing a result opens the
+  conversation at the matching message (`/chat/:id?message=:messageId`),
+  centred, briefly highlighted (a still outline under reduced motion) and
+  focused, instead of at the end. New `GET /api/threads/search?q=&limit=`
+  (default 20, at most 50) returns thread summaries, a rank, a marked title
+  and `{messageId, role, snippet}` matches; matches are marked with the
+  control characters U+0001/U+0002, never HTML. `GET /api/threads?search=`
+  (title substring) is unchanged. Migration `0023_message_text_search` adds a
+  GIN index on message text; on a large instance it takes time to build and
+  blocks writes to `message` while it does — see the upgrade notes in
+  `docs/OPERATIONS.md`.
+- **Projects.** Group conversations under shared instructions and files. The
+  sidebar has a Projects section; each project has a page (`/projects/:id`)
+  with its name, instructions (up to 8,000 characters), files (up to 20) and
+  conversations, and **New chat in project**. **Move to project** (top right
+  of a conversation) moves a conversation in or out. Project instructions are
+  added to the system prompt after the instance prompt and the person's
+  personalisation, clearly delimited; project files' extracted text joins the
+  context through the attachment path and context budget, ahead of older
+  history, and a file that does not fit is left out rather than truncated
+  (the reply is marked context-limited). Nothing from a project is stored in
+  the conversation or exposed through share links. Project files are
+  attachments (`attachment.project_id`), so validation, extraction, storage
+  drivers and the storage allowance apply; removing one or deleting its
+  project deletes it at once and frees its storage. Deleting a project keeps
+  its conversations and detaches them. A per-role **Projects** switch on Roles
+  & access (off for `restricted` by default; no instance-wide switch) gates
+  every project request with `403`; when off, existing projects are kept but
+  contribute nothing to conversations. API: `GET/POST /api/projects`,
+  `GET/PATCH/DELETE /api/projects/:id`, `GET/POST /api/projects/:id/files`,
+  `DELETE /api/projects/:id/files/:fileId`, `projectId` on
+  `POST /api/threads`, `PATCH /api/threads/:id` and
+  `GET /api/threads?projectId=`, and `projectId` in thread summaries. Limits:
+  100 projects per person. The full export includes projects (manifest entry
+  plus files under `projects/<name>/`). Migration `0024_projects` adds the
+  `project` table and nullable `thread.project_id` (ON DELETE SET NULL) and
+  `attachment.project_id` (ON DELETE CASCADE).
+- **Mermaid diagrams.** ```` ```mermaid ```` blocks render as diagrams in
+  conversations and on public share pages, in an editorial style after
+  [Diagram Design](https://github.com/cathrynlavery/diagram-design) (MIT):
+  flat shapes, hairline strokes, monospace edge labels, and the instance
+  accent reserved for a node marked `:::focus`. Diagrams follow the light or
+  dark theme. Mermaid loads only when the first diagram appears and runs with
+  strict security (no HTML labels, click handlers or scripts). New dependency:
+  `mermaid` (MIT).
+- **Wrap long code lines** (Settings → Customization), saved in the browser.
+- **Switch between retried replies.** Retrying keeps the earlier replies to
+  that question; on the latest reply, **Previous reply** / **Next reply**
+  ("‹ 2 / 3 ›", announced as "Reply 2 of 3") switch between them. The chosen
+  reply is the one shown after a reload and the one the model, exports
+  (single conversation and full export), share links and search see; the
+  others are kept but left out. Switching is available only on the latest
+  turn and not while a reply is generating; editing an earlier message still
+  starts a new conversation. Like Retry, it needs no branching permission.
+  Retry is now refused (`422`) for any question but the latest. API:
+  `PATCH /api/threads/:id/messages/:messageId/active` (owner only; `404` for
+  other people's threads, `409` while a reply is generating, `422` for a
+  reply to an earlier turn), and `GET /api/chat/:threadId/messages` returns
+  `replies`, every reply to the latest turn when there is more than one.
+  Usage and quotas still count every reply generated. Forks and edits copy
+  only the chosen replies. Migration `0025_reply_alternates` adds nullable
+  `message.superseded_at` and marks all but the newest reply to each turn as
+  replaced, matching what people saw after retrying.
+- **Export everything and import from ChatGPT or Claude** (Settings → History →
+  Your data). `GET /api/me/export` streams a ZIP of every active and archived
+  conversation (Markdown plus a complete JSON record with reasoning), the
+  person's attached files, `manifest.json` and `README.txt`; trashed and
+  temporary chats are excluded. One export at a time per person, audited as
+  `user.export`. `POST /api/me/imports` accepts a ChatGPT or Claude export
+  `.zip` (including ChatGPT's split 2026 layout and nested Privacy Portal
+  archives) or a bare `conversations.json`, up to `IMPORT_MAX_UPLOAD_BYTES`
+  (default 512 MB), and processes it in the background (`imports.process`
+  job, resumed after restarts). Only the visible branch is imported, with
+  titles, timestamps and reasoning; re-importing skips conversations already
+  present. Imports are streamed, bounded against zip bombs and unsafe paths,
+  do not count towards usage limits, and are audited as `user.import`.
+  `GET /api/me/imports` lists them and `DELETE /api/me/imports/:id` cancels or
+  removes one. Migration `0022_conversation_imports` adds the
+  `conversation_import` table and `thread.import_source`/`import_source_id`.
+  New dependencies: `fflate`, `@streamparser/json`, `busboy` (all MIT).
+
+### Fixed
+
+- **A retried reply no longer leaves both answers in the model's context.**
+  After a retry, the next question was sent with the original reply and the
+  retried one back to back, so the model saw two answers to one question.
+  Only the chosen reply is sent now, including for existing conversations
+  (see migration `0025_reply_alternates`).
+- **Counts that always read 0:** messages per conversation in the Trash,
+  dismissals per announcement and acceptances per usage-policy version. The
+  queries compared a table's id with itself.
+- **`%` and `_` in searches are matched literally** in conversation titles,
+  the administrator user list and the audit log, instead of acting as
+  wildcards ("50%" no longer matches "500").
+- **The generated API reference** (`docs/dev/api-reference.md`) no longer
+  lists stream events and header lookups as routes, lists the admin health
+  route at `/api/admin/health`, and shows each route's full first sentence.
+
+### Removed
+
+- **The unused Canvas and MCP feature switches.** Neither controlled anything
+  or appeared in the interface. Stored values are ignored and disappear the
+  next time features are saved. Artifacts and MCP connectors will bring their
+  own per-role switches.
+
 ## [0.6.1] - 2026-10-01
 
 Providers & Models split into tabs. No database migrations; deploy the API and

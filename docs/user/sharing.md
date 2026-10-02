@@ -20,7 +20,8 @@ Not included:
 
 - **Your reasoning panels.** The thinking a model did on the way to an answer is
   yours, not part of the published answer.
-- **Your attachments**, unless your instance is configured otherwise.
+- **Your attachments.** Files you attached stay private; the shared page shows
+  the messages without them.
 - **Anything about your account** beyond a display name.
 
 ## Revoking
@@ -39,5 +40,5 @@ content when the conversation expires, even before background cleanup runs.
 The link needs no account, so treat it as public. If a conversation contains
 anything you would not put on a public page, it should not be shared this way.
 
-Your administrator can turn sharing off entirely; if you cannot find the option,
-that is why.
+Your administrator can turn sharing off entirely, or for your role; if you
+cannot find the option, that is why.

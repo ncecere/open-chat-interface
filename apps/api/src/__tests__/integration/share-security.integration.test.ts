@@ -146,6 +146,7 @@ describe('integration with mocked DB: share ownership and expiry', () => {
             { type: 'text', text: 'Public answer' },
             { type: 'reasoning', text: 'Private reasoning' },
           ],
+          supersededAt: null,
           createdAt,
         },
       ]),

@@ -8,8 +8,9 @@ import { Composer } from '~/components/chat/composer';
 import { ConversationLoadError } from '~/components/chat/conversation-load-error';
 import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
-import { useChatScroll } from '~/hooks/use-chat-scroll';
+import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
+import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError } from '~/lib/api-client';
 import { getChatHistory } from '~/lib/chat-history';
@@ -27,7 +28,8 @@ interface PendingBranchResponse {
   threadId: string;
   messageId: string;
   modelSlug: string | null;
-  effort: ReasoningEffort;
+  /** Absent when the branched message recorded none; the default level applies. */
+  effort?: ReasoningEffort;
 }
 
 function peekPendingBranch(threadId: string): PendingBranchResponse | null {
@@ -40,7 +42,7 @@ function peekPendingBranch(threadId: string): PendingBranchResponse | null {
       value.threadId !== threadId ||
       typeof value.messageId !== 'string' ||
       (value.modelSlug !== null && typeof value.modelSlug !== 'string') ||
-      !['instant', 'low', 'medium', 'high'].includes(value.effort ?? '')
+      (value.effort !== undefined && !REASONING_EFFORTS.includes(value.effort))
     ) {
       return null;
     }
@@ -85,17 +87,22 @@ function peekPendingAttachments(): Attachment[] {
 function ThreadConversation({
   threadId,
   initialMessages,
+  initialReplies,
   carriedAttachments,
   carriedEffort,
   carriedSearch,
   temporary,
+  target,
 }: {
   threadId: string;
   initialMessages: UIMessage[];
+  /** Every reply to the latest turn when it was retried; otherwise empty. */
+  initialReplies: UIMessage[];
   carriedAttachments: Attachment[];
   carriedEffort?: ReasoningEffort;
   carriedSearch: boolean;
   temporary: boolean;
+  target?: ChatScrollTarget;
 }) {
   const pendingBranch = peekPendingBranch(threadId);
   const session = useChatSession({
@@ -162,8 +169,25 @@ function ThreadConversation({
     session.recovery.unavailable,
   ]);
 
-  const retry = useCallback(() => regenerate(), [regenerate]);
-  const submit = useCallback(() => send(), [send]);
+  const replies = useReplySwitcher({
+    threadId,
+    initialMessages,
+    initialReplies,
+    messages: session.messages,
+    setMessages: session.setMessages,
+    streaming: session.streaming,
+  });
+  const { remember: rememberReply, settled: replySettled } = replies;
+  // A switch being saved must land before a reply is generated from context.
+  const retry = useCallback(async () => {
+    await replySettled();
+    rememberReply();
+    await regenerate();
+  }, [regenerate, rememberReply, replySettled]);
+  const submit = useCallback(async () => {
+    await replySettled();
+    await send();
+  }, [send, replySettled]);
 
   const forkAtMessage = useCallback(
     async (messageId: string) => {
@@ -177,7 +201,8 @@ function ThreadConversation({
     async (messageId: string, text: string) => {
       const result = await branchMessage({ threadId, messageId, text });
       const modelSlug = result.message.modelSlug ?? selectedModelSlug ?? null;
-      const effort = result.message.effort ?? 'instant';
+      // Without a recorded level the new thread starts at the instance default.
+      const effort = result.message.effort ?? undefined;
 
       if (modelSlug) localStorage.setItem(MODEL_STORAGE_KEY, modelSlug);
       sessionStorage.setItem(
@@ -194,7 +219,7 @@ function ThreadConversation({
     [branchMessage, threadId, selectedModelSlug, navigate],
   );
 
-  const scroll = useChatScroll(session.messages, session.streaming);
+  const scroll = useChatScroll(session.messages, session.streaming, target);
 
   if (session.recovery.unavailable)
     return (
@@ -222,17 +247,22 @@ function ThreadConversation({
               onRetry={retry}
               onFork={session.features?.branching ? forkAtMessage : undefined}
               onEdit={session.features?.branching ? editAndBranch : undefined}
+              replySwitch={replies.switcher}
             />
 
-            {(session.error || session.recovery.error || session.recovery.remotePending) && (
+            {(session.error ||
+              session.recovery.error ||
+              session.recovery.remotePending ||
+              replies.error) && (
               <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
-                {(session.recovery.error || session.error) && (
+                {(session.recovery.error || session.error || replies.error) && (
                   <p
                     role="alert"
                     className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
                   >
                     {session.recovery.error ||
                       session.error?.message ||
+                      replies.error ||
                       'Something went wrong generating a response.'}
                   </p>
                 )}
@@ -295,12 +325,19 @@ function ThreadConversation({
   );
 }
 
-export function ChatThreadPage({ threadId }: { threadId: string }) {
+export function ChatThreadPage({
+  threadId,
+  target,
+}: {
+  threadId: string;
+  /** A message to open at, from conversation search; otherwise the end. */
+  target?: ChatScrollTarget;
+}) {
   // Query, recovery, and handover state all belong to this conversation.
-  return <ThreadLoader key={threadId} threadId={threadId} />;
+  return <ThreadLoader key={threadId} threadId={threadId} target={target} />;
 }
 
-function ThreadLoader({ threadId }: { threadId: string }) {
+function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScrollTarget }) {
   // Read once on mount so a re-render cannot lose the handover.
   const [carriedAttachments] = useState(() =>
     sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingAttachments() : [],
@@ -351,10 +388,12 @@ function ThreadLoader({ threadId }: { threadId: string }) {
       key={threadId}
       threadId={threadId}
       initialMessages={data.messages}
+      initialReplies={data.replies}
       carriedAttachments={carriedAttachments}
       carriedEffort={carriedEffort}
       carriedSearch={carriedSearch}
       temporary={data.thread.temporary}
+      target={target}
     />
   );
 }

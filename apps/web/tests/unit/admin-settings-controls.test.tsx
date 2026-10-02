@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { InstanceSettings } from '@oci/shared';
+import { type InstanceSettings, updateInstanceSettingsSchema } from '@oci/shared';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -30,7 +30,7 @@ function submitButton(form: HTMLFormElement): HTMLButtonElement {
   return form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 }
 
-it('offers only enforced features and sends the full features object', async () => {
+it('lists the instance feature switches and sends the full features object', async () => {
   const settings = {
     colorTheme: 'neutral',
     defaultSystemPrompt: null,
@@ -44,8 +44,6 @@ it('offers only enforced features and sends the full features object', async () 
     features: {
       shareLinks: true,
       temporaryChat: true,
-      canvas: true,
-      mcp: true,
       webSearch: false,
       attachments: true,
       branching: true,
@@ -53,10 +51,6 @@ it('offers only enforced features and sends the full features object', async () 
   } as unknown as InstanceSettings;
   ({ root } = await renderAdmin(<GeneralSettings settings={settings} />));
 
-  expect(document.getElementById('feature-canvas')).toBeNull();
-  expect(document.getElementById('feature-mcp')).toBeNull();
-  expect(document.body.textContent).not.toContain('MCP tools');
-  expect(document.body.textContent).not.toContain('Canvas');
   // Moved: web search to its own page, the default model to Providers &
   // models, and the accent to Branding.
   expect(document.getElementById('feature-webSearch')).toBeNull();
@@ -72,8 +66,6 @@ it('offers only enforced features and sends the full features object', async () 
     features: {
       shareLinks: false,
       temporaryChat: true,
-      canvas: true,
-      mcp: true,
       webSearch: false,
       attachments: true,
       branching: true,
@@ -106,4 +98,46 @@ it('keeps session length but drops the unused session extension field', async ()
   await settle();
   await click(submitButton(lifetime.closest('form')!));
   expect(api.patch).toHaveBeenCalledWith('/admin/settings', { sessionLifetimeDays: 14 });
+});
+
+it('saves the default reasoning level on its own', async () => {
+  const settings = {
+    defaultSystemPrompt: 'Keep it short.',
+    defaultEffort: 'instant',
+    storage: { driver: 'local' },
+    features: {
+      shareLinks: false,
+      temporaryChat: true,
+      webSearch: false,
+      attachments: false,
+      branching: true,
+    },
+  } as unknown as InstanceSettings;
+  ({ root } = await renderAdmin(<GeneralSettings settings={settings} />));
+
+  const select = document.getElementById('default-effort') as HTMLSelectElement;
+  expect(select.value).toBe('instant');
+  expect([...select.options].map((option) => option.textContent)).toEqual([
+    'Instant',
+    'Low',
+    'Medium',
+    'High',
+  ]);
+  const save = submitButton(select.closest('form')!);
+  expect(save.disabled).toBe(true);
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(
+      select,
+      'medium',
+    );
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await settle();
+  await click(save);
+
+  // Only the level is sent, so the system prompt and features stay as stored.
+  expect(api.patch).toHaveBeenCalledExactlyOnceWith('/admin/settings', { defaultEffort: 'medium' });
+  const parsed = updateInstanceSettingsSchema.safeParse(api.patch.mock.calls[0]?.[1]);
+  expect(parsed.success && parsed.data).toEqual({ defaultEffort: 'medium' });
 });

@@ -3,12 +3,14 @@ import {
   branchMessageSchema,
   createThreadSchema,
   forkMessageSchema,
+  THREAD_SEARCH_DEFAULT_LIMIT,
+  THREAD_SEARCH_MAX_LIMIT,
+  type ThreadSearchResult,
   updateThreadSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { forbidden } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
 import { exportFilename, exportThreadMarkdown } from '../services/export.js';
@@ -19,8 +21,15 @@ import {
   restoreThread,
   softDeleteThread,
 } from '../services/lifecycle/trash.js';
-import { getSetting } from '../services/settings.js';
 import {
+  assertProjectsAllowed,
+  getOwnedProject,
+  moveThreadToProject,
+} from '../services/projects.js';
+import { activateReply } from '../services/replies.js';
+import { searchThreads } from '../services/thread-search.js';
+import {
+  assertBranchingAllowed,
   branchFromUserMessage,
   createThread,
   forkFromMessage,
@@ -39,6 +48,23 @@ const listQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  /** Only conversations in this project (the caller's own). */
+  projectId: z.string().min(1).max(200).optional(),
+});
+
+/**
+ * Raw input is accepted up to a generous bound so a pasted sentence is not an
+ * error; the search itself reads only the first 200 characters.
+ */
+const searchQuerySchema = z.object({
+  q: z.string().max(2000),
+  // A larger limit is clamped rather than refused.
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(THREAD_SEARCH_DEFAULT_LIMIT)
+    .transform((value) => Math.min(value, THREAD_SEARCH_MAX_LIMIT)),
 });
 
 function serializeThread(thread: typeof schema.thread.$inferSelect) {
@@ -51,6 +77,7 @@ function serializeThread(thread: typeof schema.thread.$inferSelect) {
     expiresAt: thread.expiresAt?.toISOString() ?? null,
     parentThreadId: thread.parentThreadId,
     branchedFromMessageId: thread.branchedFromMessageId,
+    projectId: thread.projectId,
     lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
     createdAt: thread.createdAt.toISOString(),
     updatedAt: thread.updatedAt.toISOString(),
@@ -59,8 +86,12 @@ function serializeThread(thread: typeof schema.thread.$inferSelect) {
 
 threadRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const { search, archived } = parseQuery(c, listQuerySchema);
-  const threads = await listThreads(user.id, { search, archived });
+  const { search, archived, projectId } = parseQuery(c, listQuerySchema);
+  if (projectId) {
+    await assertProjectsAllowed(user.role);
+    await getOwnedProject(projectId, user.id);
+  }
+  const threads = await listThreads(user.id, { search, archived, projectId });
   return c.json({ threads: threads.map(serializeThread) });
 });
 
@@ -73,8 +104,28 @@ threadRoutes.post('/', async (c) => {
     role: user.role,
     title: input.title,
     temporary: input.temporary,
+    projectId: input.projectId,
   });
   return c.json({ thread: serializeThread(thread) }, 201);
+});
+
+/**
+ * Full-text search over titles and message text, best match first. Declared
+ * before `/:id`. The older `GET /threads?search=` (title substring) remains for
+ * existing callers.
+ */
+threadRoutes.get('/search', async (c) => {
+  const user = currentUser(c);
+  const { q, limit } = parseQuery(c, searchQuerySchema);
+  const hits = await searchThreads(user.id, q, { limit });
+  const results: ThreadSearchResult[] = hits.map((hit) => ({
+    thread: serializeThread(hit.thread),
+    rank: hit.rank,
+    titleHighlight: hit.titleHighlight,
+    matches: hit.matches,
+  }));
+  c.header('cache-control', 'no-store');
+  return c.json({ results });
 });
 
 /** Trash listing is a fixed path, so it must be declared before `/:id`. */
@@ -124,8 +175,7 @@ threadRoutes.post('/:id/forks', async (c) => {
   const user = currentUser(c);
   await getOwnedThread(c.req.param('id'), user.id);
 
-  const features = await getSetting('features');
-  if (!features.branching) throw forbidden('Conversation branching is disabled');
+  await assertBranchingAllowed(user.role);
 
   const input = await parseBody(c, forkMessageSchema);
   const fork = await forkFromMessage(c.req.param('id'), user.id, input);
@@ -136,8 +186,7 @@ threadRoutes.post('/:id/branches', async (c) => {
   const user = currentUser(c);
   await getOwnedThread(c.req.param('id'), user.id);
 
-  const features = await getSetting('features');
-  if (!features.branching) throw forbidden('Conversation branching is disabled');
+  await assertBranchingAllowed(user.role);
 
   const input = await parseBody(c, branchMessageSchema);
   const result = await branchFromUserMessage(c.req.param('id'), user.id, input);
@@ -153,6 +202,19 @@ threadRoutes.post('/:id/branches', async (c) => {
     },
     201,
   );
+});
+
+/**
+ * Chooses which reply to the latest turn is active: the one shown, sent to the
+ * model as context, exported and shared. Refused (409) while a reply in this
+ * thread is generating, and (422) for any reply but one to the latest turn.
+ * Like retrying, it needs no branching permission: nothing new is created.
+ */
+threadRoutes.patch('/:id/messages/:messageId/active', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  const result = await activateReply(thread.id, user.id, c.req.param('messageId'));
+  return c.json(result);
 });
 
 threadRoutes.get('/:id', async (c) => {
@@ -183,15 +245,23 @@ threadRoutes.get('/:id', async (c) => {
 threadRoutes.patch('/:id', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
-  const patch = await parseBody(c, updateThreadSchema);
+  const { projectId, ...patch } = await parseBody(c, updateThreadSchema);
 
-  const [updated] = await db
-    .update(schema.thread)
-    .set(patch)
-    .where(eq(schema.thread.id, thread.id))
-    .returning();
-
-  return c.json({ thread: updated ? serializeThread(updated) : null });
+  // Moving into or out of a project checks the role and the project's owner
+  // before anything is written.
+  let updated: typeof schema.thread.$inferSelect | undefined;
+  if (projectId !== undefined) {
+    await assertProjectsAllowed(user.role);
+    updated = await moveThreadToProject(thread.id, user.id, projectId);
+  }
+  if (Object.keys(patch).length > 0) {
+    [updated] = await db
+      .update(schema.thread)
+      .set(patch)
+      .where(eq(schema.thread.id, thread.id))
+      .returning();
+  }
+  return c.json({ thread: serializeThread(updated ?? thread) });
 });
 
 /**

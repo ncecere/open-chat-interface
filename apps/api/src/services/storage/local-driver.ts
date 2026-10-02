@@ -1,4 +1,5 @@
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { notFound } from '../../lib/errors.js';
 import type { ListPage, StorageDriver, StoredObject } from './driver.js';
@@ -36,6 +37,23 @@ export class LocalStorageDriver implements StorageDriver {
     } catch {
       throw notFound('Attachment file is missing from storage');
     }
+  }
+
+  async putFile(key: string, path: string, _contentType: string): Promise<StoredObject> {
+    const target = this.resolveKey(key);
+    await mkdir(dirname(target), { recursive: true });
+    await copyFile(path, target);
+    return { key, sizeBytes: (await stat(target)).size };
+  }
+
+  async getStream(key: string): Promise<NodeJS.ReadableStream> {
+    const target = this.resolveKey(key);
+    try {
+      await stat(target);
+    } catch {
+      throw notFound('Stored file is missing from storage');
+    }
+    return createReadStream(target, { highWaterMark: 64 * 1024 });
   }
 
   async delete(key: string): Promise<void> {

@@ -1,3 +1,4 @@
+import { DEFAULT_IMPORT_MAX_UPLOAD_BYTES } from '@oci/shared';
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -44,6 +45,12 @@ const envSchema = z.object({
   QUOTA_RESERVE_TOKENS: z.string().optional(),
   /** IANA zone used to present usage reporting. Enforcement is unaffected. */
   DISPLAY_TIMEZONE: z.string().optional(),
+  /** Largest ChatGPT or Claude export a person may upload for import. */
+  IMPORT_MAX_UPLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_IMPORT_MAX_UPLOAD_BYTES),
 });
 
 export type Env = z.infer<typeof envSchema>;

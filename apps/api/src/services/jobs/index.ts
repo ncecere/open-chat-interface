@@ -7,6 +7,7 @@ import {
   pruneUsageEvents,
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
+import { processPendingImports } from '../portability/imports.js';
 import { sweepAbandonedReservations } from '../quota/index.js';
 import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
@@ -36,6 +37,13 @@ export function lifecycleJobs(): JobDefinition[] {
       // Frequent: this is what actually frees disk after a deletion.
       intervalMs: 5 * MINUTE,
       run: () => drainDeletedObjects(),
+    },
+    {
+      // Uploads also kick this immediately; the tick resumes anything a
+      // restart interrupted and anything queued while another import ran.
+      name: 'imports.process',
+      intervalMs: MINUTE,
+      run: () => processPendingImports(),
     },
     {
       name: 'quota.sweep-reservations',

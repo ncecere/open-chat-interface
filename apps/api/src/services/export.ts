@@ -1,8 +1,9 @@
-import { asc, eq, schema } from '@oci/db';
+import { and, asc, eq, schema } from '@oci/db';
 import { db } from '../db/index.js';
+import { activeMessage } from './chat/reply-path.js';
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
-const MAX_EXPORT_MESSAGES = 2_000;
+export const MAX_EXPORT_MESSAGES = 2_000;
 
 interface ExportMessage {
   role: string;
@@ -44,7 +45,7 @@ function sourcesFromParts(parts: Record<string, unknown>[]): Array<{ title: stri
  * it never presented. Attachments appear by name only, since the bytes live in
  * object storage and a Markdown file cannot carry them.
  */
-function renderMarkdown(
+export function renderMarkdown(
   thread: { title: string; createdAt: Date },
   messages: ExportMessage[],
 ): string {
@@ -97,8 +98,8 @@ function renderMarkdown(
   return lines.join('\n');
 }
 
-/** A filesystem-safe name derived from the conversation title. */
-export function exportFilename(title: string): string {
+/** A filesystem-safe slug derived from a title, or `fallback` when nothing is left. */
+export function safeTitleSlug(title: string, fallback = 'conversation'): string {
   const safe = title
     .replace(/[^\w\s-]/g, '')
     .trim()
@@ -106,7 +107,12 @@ export function exportFilename(title: string): string {
     .slice(0, 60)
     .toLowerCase();
 
-  return `${safe || 'conversation'}-${new Date().toISOString().slice(0, 10)}.md`;
+  return safe || fallback;
+}
+
+/** A filesystem-safe name derived from the conversation title. */
+export function exportFilename(title: string): string {
+  return `${safeTitleSlug(title)}-${new Date().toISOString().slice(0, 10)}.md`;
 }
 
 /** Ownership is enforced by the caller before this runs. */
@@ -128,7 +134,8 @@ export async function exportThreadMarkdown(threadId: string): Promise<string> {
       createdAt: schema.message.createdAt,
     })
     .from(schema.message)
-    .where(eq(schema.message.threadId, threadId))
+    // The conversation as it reads: replies a retry replaced are left out.
+    .where(and(eq(schema.message.threadId, threadId), activeMessage()))
     .orderBy(asc(schema.message.position))
     .limit(MAX_EXPORT_MESSAGES);
 

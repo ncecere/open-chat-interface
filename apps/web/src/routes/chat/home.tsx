@@ -1,14 +1,16 @@
-import type { CatalogModel, ReasoningEffort } from '@oci/shared';
+import type { CatalogModel } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
+import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
 import { useAttachments } from '~/hooks/use-attachments';
+import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
-import { coerceReasoningEffort, reasoningEffortForRequest } from '~/lib/reasoning';
+import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -25,17 +27,20 @@ const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
 /**
  * Landing page. Sending here creates a thread first, then hands the prompt to
  * the thread view so the streaming connection belongs to a real thread ID.
+ *
+ * With `projectId` (from "New chat in project"), the new conversation is
+ * created inside that project. A project chat is never temporary.
  */
-export function ChatHomePage() {
+export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const { data } = useCurrentUser();
   const { data: models = EMPTY_MODELS } = useModels();
   const navigate = useNavigate();
   const { mutateAsync: createThread } = useCreateThread();
-  const { temporary } = useTemporaryChat();
+  const { temporary: temporaryMode } = useTemporaryChat();
+  const temporary = temporaryMode && !projectId;
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraft] = useState('');
-  const [effort, setEffort] = useState<ReasoningEffort>('instant');
   const [webSearch, setWebSearch] = useState(false);
   const [modelSlug, setModelSlug] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
@@ -47,6 +52,8 @@ export function ChatHomePage() {
     models.find((model) => model.isDefault) ??
     models[0] ??
     null;
+  // The administrator's default, clamped to what this model and role allow.
+  const [effort, setEffort] = useComposerEffort(selectedModel);
 
   const firstName = data?.user.name.split(' ')[0];
   const prompts =
@@ -55,7 +62,6 @@ export function ChatHomePage() {
 
   const selectModel = useCallback((model: CatalogModel) => {
     setModelSlug(model.slug);
-    setEffort((current) => coerceReasoningEffort(model, current));
     localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
   }, []);
 
@@ -64,7 +70,9 @@ export function ChatHomePage() {
       const content = text.trim();
       if (!content || !selectedModel) return;
 
-      const { thread } = await createThread({ temporary });
+      const { thread } = await createThread(
+        projectId ? { temporary: false, projectId } : { temporary },
+      );
       // Invalidate the old destination before changing any payload fields.
       sessionStorage.removeItem(PENDING_THREAD_KEY);
       sessionStorage.setItem(PENDING_KEY, content);
@@ -89,7 +97,16 @@ export function ChatHomePage() {
       sessionStorage.setItem(PENDING_THREAD_KEY, thread.id);
       await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
     },
-    [selectedModel, createThread, temporary, effort, webSearch, attachmentItems, navigate],
+    [
+      selectedModel,
+      createThread,
+      temporary,
+      projectId,
+      effort,
+      webSearch,
+      attachmentItems,
+      navigate,
+    ],
   );
 
   const submit = useCallback(() => startThread(draft), [startThread, draft]);
@@ -120,6 +137,7 @@ export function ChatHomePage() {
               This conversation stays out of history and expires automatically after 24 hours.
             </p>
           )}
+          {projectId && <ProjectChatNotice projectId={projectId} />}
 
           <div className="mt-7 hidden flex-wrap gap-2.5 md:flex">
             {SUGGESTION_CATEGORIES.map((category) => {

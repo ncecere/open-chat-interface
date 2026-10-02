@@ -2,6 +2,7 @@ import { and, count, desc, eq, gte, ilike, lte, or, schema, sql } from '@oci/db'
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../../db/index.js';
+import { containsPattern, prefixPattern } from '../../lib/like.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { parseQuery } from '../../middleware/validate.js';
 
@@ -31,15 +32,15 @@ function buildWhere(filters: Omit<AuditFilters, 'limit' | 'offset'>) {
   const clauses = [
     filters.search
       ? or(
-          ilike(schema.auditLog.actorEmail, `%${filters.search}%`),
-          ilike(schema.auditLog.action, `%${filters.search}%`),
-          ilike(schema.auditLog.targetId, `%${filters.search}%`),
-          ilike(schema.auditLog.ipAddress, `%${filters.search}%`),
+          ilike(schema.auditLog.actorEmail, containsPattern(filters.search)),
+          ilike(schema.auditLog.action, containsPattern(filters.search)),
+          ilike(schema.auditLog.targetId, containsPattern(filters.search)),
+          ilike(schema.auditLog.ipAddress, containsPattern(filters.search)),
         )
       : undefined,
     // Matches a family as well as an exact action, so "auth." finds every
     // authentication event without naming each one.
-    filters.action ? ilike(schema.auditLog.action, `${filters.action}%`) : undefined,
+    filters.action ? ilike(schema.auditLog.action, prefixPattern(filters.action)) : undefined,
     filters.actorEmail ? eq(schema.auditLog.actorEmail, filters.actorEmail) : undefined,
     filters.from ? gte(schema.auditLog.createdAt, new Date(filters.from)) : undefined,
     filters.to ? lte(schema.auditLog.createdAt, new Date(filters.to)) : undefined,

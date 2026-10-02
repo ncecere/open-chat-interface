@@ -1,5 +1,11 @@
 import { and, eq, schema } from '@oci/db';
-import { COLOR_THEMES, type ColorTheme, type UserRole } from '@oci/shared';
+import {
+  COLOR_THEMES,
+  type ColorTheme,
+  type ReasoningEffort,
+  type RoleFeatures,
+  type UserRole,
+} from '@oci/shared';
 import { db } from '../db/index.js';
 import { getDefaultOrganizationId } from './organization.js';
 
@@ -12,7 +18,8 @@ export type SettingKey =
   | 'smtp'
   | 'chat'
   | 'retention'
-  | 'rateLimits';
+  | 'rateLimits'
+  | 'roleFeatures';
 
 export interface BrandingSettings {
   appName: string;
@@ -62,8 +69,6 @@ export interface AuthSettings {
 export interface FeatureSettings {
   shareLinks: boolean;
   temporaryChat: boolean;
-  canvas: boolean;
-  mcp: boolean;
   webSearch: boolean;
   attachments: boolean;
   branching: boolean;
@@ -85,8 +90,14 @@ export function normalizeAuthSettings(value: AuthSettings): AuthSettings {
 
 /** Drops the retired persona flag from settings written by older releases. */
 export function normalizeFeatureSettings(value: FeatureSettings): FeatureSettings {
-  const normalized = { ...value } as FeatureSettings & { personas?: boolean };
-  delete normalized.personas;
+  // Retired switches that never controlled anything. Dropping them on read
+  // also removes them from storage the next time features are saved.
+  const {
+    personas: _personas,
+    canvas: _canvas,
+    mcp: _mcp,
+    ...normalized
+  } = value as FeatureSettings & { personas?: boolean; canvas?: boolean; mcp?: boolean };
   return normalized;
 }
 
@@ -153,6 +164,8 @@ export interface SmtpSettings {
 
 export interface ChatSettings {
   defaultSystemPrompt: string | null;
+  /** Absent on settings written before it was configurable; read as `instant`. */
+  defaultEffort?: ReasoningEffort;
 }
 
 /**
@@ -184,6 +197,14 @@ export interface StoredRateLimitSettings {
   reserve?: { costMicros?: number; tokens?: number };
 }
 
+/**
+ * Per-role feature overrides. Sparse like the rate limits: a role or field
+ * that was never saved falls back to `DEFAULT_ROLE_FEATURES`.
+ */
+export interface StoredRoleFeatureSettings {
+  roles?: Partial<Record<UserRole, Partial<RoleFeatures>>>;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -194,6 +215,7 @@ interface SettingsMap {
   chat: ChatSettings;
   retention: StoredRetentionSettings;
   rateLimits: StoredRateLimitSettings;
+  roleFeatures: StoredRoleFeatureSettings;
 }
 
 /**

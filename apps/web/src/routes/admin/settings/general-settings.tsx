@@ -1,8 +1,9 @@
-import type { InstanceSettings } from '@oci/shared';
+import { type InstanceSettings, REASONING_EFFORTS, type ReasoningEffort } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
+import { EFFORT_LABELS } from '~/components/admin/role-features-form';
 import { Field } from '~/components/ui/field';
 import { Textarea } from '~/components/ui/input';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
@@ -12,9 +13,7 @@ type Features = InstanceSettings['features'];
 type FeatureKey = keyof Features;
 
 /**
- * Only features the server enforces are listed. Canvas and MCP remain in the
- * stored settings but nothing reads them yet, so they are not offered. Web
- * search is switched on the Web search page, together with its provider.
+ * Web search is switched on the Web search page, together with its provider.
  *
  * The server replaces the stored features object on every write, so the whole
  * object is sent: unlisted values go back exactly as they were loaded.
@@ -134,6 +133,75 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
   );
 }
 
+function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }) {
+  const queryClient = useQueryClient();
+  const [saved, setSaved] = useState<ReasoningEffort>(initialEffort ?? 'instant');
+  const [draft, setDraft] = useState<ReasoningEffort>(initialEffort ?? 'instant');
+  const [successMessage, setSuccessMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: (defaultEffort: ReasoningEffort) =>
+      api.patch<{ ok: boolean }>('/admin/settings', { defaultEffort }),
+    onSuccess: (_response, defaultEffort) => {
+      setSaved(defaultEffort);
+      setErrorMessage(null);
+      setSuccessMessage(true);
+      queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
+        current ? { ...current, defaultEffort } : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (error) => {
+      setSuccessMessage(false);
+      setErrorMessage(
+        error instanceof ApiError ? error.message : 'Unable to save the default reasoning level.',
+      );
+    },
+  });
+
+  return (
+    <form
+      className="flex flex-col gap-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (draft !== saved) save.mutate(draft);
+      }}
+    >
+      <Field
+        label="Default reasoning level"
+        htmlFor="default-effort"
+        hint="Where new conversations start. When the selected model or a person's role does not allow it, the composer uses Instant instead. Allowed levels per role are set on Roles & access."
+      >
+        <select
+          id="default-effort"
+          className="h-9 w-full max-w-xs rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-3 text-sm text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          value={draft}
+          disabled={save.isPending}
+          onChange={(event) => {
+            setDraft(event.target.value as ReasoningEffort);
+            setErrorMessage(null);
+            setSuccessMessage(false);
+          }}
+        >
+          {REASONING_EFFORTS.map((effort) => (
+            <option key={effort} value={effort}>
+              {EFFORT_LABELS[effort]}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <SaveRow
+        hasChanges={draft !== saved}
+        isPending={save.isPending}
+        errorMessage={errorMessage}
+        successMessage={successMessage ? 'Default reasoning level saved.' : null}
+      />
+    </form>
+  );
+}
+
 function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(settings.features);
@@ -235,12 +303,15 @@ export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
         title="Model behavior"
         description="Instructions applied to every conversation. The default model is chosen on Providers & Models."
       >
-        <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
+        <div className="flex flex-col gap-8">
+          <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
+          <DefaultEffortForm initialEffort={settings.defaultEffort} />
+        </div>
       </SettingsSection>
 
       <SettingsSection
         title="Features"
-        description="Set instance-wide availability for optional chat capabilities. Web search is switched on with its provider on the Web search page; the accent color is on Branding."
+        description="Set instance-wide availability for optional chat capabilities. Each role can be narrowed further on Roles & access. Web search is switched on with its provider on the Web search page; the accent color is on Branding."
       >
         <FeatureSettingsForm settings={settings} />
       </SettingsSection>

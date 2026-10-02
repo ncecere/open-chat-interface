@@ -120,6 +120,54 @@ and verify attachment downloads.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
 
+### Upgrading to v0.7 (migrations 0022–0025)
+
+Migrations `0022_conversation_imports` and `0024_projects` create new tables
+and add nullable columns to `thread` and `attachment`, with no table rewrite.
+Their new constraints and partial indexes read `thread` and `attachment` once,
+which is quick. Migrations 0023 and 0025 do more work and are described below.
+
+### Conversation search index (migration 0023)
+
+Migration `0023_message_text_search` builds a GIN full-text index,
+`message_text_search_idx`, over the text of every stored message. Migrations
+run inside one transaction, so the index cannot be built `CONCURRENTLY`:
+
+- On a large `message` table the build takes time, roughly proportional to
+  the amount of stored message text, and the migration does not finish until
+  it does. Allow for it in the maintenance window and in any readiness or
+  start-up timeout when `RUN_MIGRATIONS=true`.
+- While it builds, writes to `message` are blocked. Chat turns wait (and may
+  time out) until the migration commits; reads are unaffected. For a
+  multi-replica deployment, run the `migrate` job before replacing API
+  replicas, as above, during a quiet period.
+- The index needs disk space while building and afterwards. Check free space
+  on the PostgreSQL volume first; the index is typically a sizeable fraction
+  of the message text it covers.
+
+To build it ahead of the upgrade without blocking writes, an operator can run
+the same statement with `CONCURRENTLY` from a direct (non-pooled) connection
+before deploying. The migration's `IF NOT EXISTS` then finds it and does
+nothing. The expression must match exactly, or search cannot use it:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "message_text_search_idx" ON "message"
+  USING gin (to_tsvector('simple'::regconfig, jsonb_path_query_array("parts", '$[*] ? (@.type == "text").text'::jsonpath)));
+```
+
+If a concurrent build fails it leaves an `INVALID` index behind; drop it
+(`DROP INDEX CONCURRENTLY message_text_search_idx;`) and retry, because the
+migration will otherwise skip it.
+
+### Retried replies (migration 0025)
+
+Migration `0025_reply_alternates` adds a nullable `message.superseded_at`
+(no table rewrite) and backfills it: for every turn that was retried, all but
+the newest reply are marked as replaced, so the model, exports, share links
+and search stop seeing both answers. The backfill reads `message` once with a
+sort and updates only those older replies; it holds row locks on them until
+the migration commits. Re-running it changes nothing.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

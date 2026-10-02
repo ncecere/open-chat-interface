@@ -2,6 +2,7 @@ import type { UIMessage } from 'ai';
 import { memo, useState } from 'react';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
 import { MessageRow } from '~/components/chat/message-row';
+import type { ReplySwitch } from '~/components/chat/reply-switcher';
 import { SearchLoading } from '~/components/chat/search-grounding';
 
 interface MessageListProps {
@@ -11,6 +12,8 @@ interface MessageListProps {
   searching?: boolean;
   onEdit?: (messageId: string, text: string) => Promise<void>;
   onFork?: (messageId: string) => Promise<void>;
+  /** Switching between the latest turn's replies; shown on the last reply only. */
+  replySwitch?: ReplySwitch;
 }
 
 /** Transcript composition only; editing drafts and presentation belong to rows. */
@@ -20,11 +23,13 @@ export const MessageList = memo(function MessageList({
   onRetry,
   onEdit,
   onFork,
+  replySwitch,
   searching = false,
 }: MessageListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const last = messages.at(-1);
   const lastIsAssistant = last?.role === 'assistant';
+  const switchable = Boolean(replySwitch) && lastIsAssistant;
   const lastText = lastIsAssistant ? textOf(last) : '';
   const lastReasoning = lastIsAssistant ? reasoningOf(last) : '';
   const hasVisibleContent = Boolean(lastText || lastReasoning);
@@ -34,7 +39,13 @@ export const MessageList = memo(function MessageList({
     <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-8">
       {messages.map((message, index) => (
         <MessageRow
-          key={message.id}
+          // Switching replies swaps the last message. Keying that row by its
+          // prompt keeps it mounted, so focus stays on the switcher.
+          key={
+            switchable && index === messages.length - 1
+              ? `replies-of-${messages[index - 1]?.id}`
+              : message.id
+          }
           message={message}
           // Only the active assistant streams; user actions stay disabled
           // throughout generation. Historical assistants need no token updates.
@@ -42,6 +53,7 @@ export const MessageList = memo(function MessageList({
           editing={editingId === message.id}
           onEditingChange={setEditingId}
           onRetry={index === messages.length - 1 ? onRetry : undefined}
+          replySwitch={switchable && index === messages.length - 1 ? replySwitch : undefined}
           onFork={onFork}
           onEdit={onEdit}
         />

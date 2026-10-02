@@ -61,8 +61,6 @@ let settings: Record<string, unknown>;
 const features = {
   shareLinks: true,
   temporaryChat: false,
-  canvas: false,
-  mcp: true,
   webSearch: false,
   attachments: true,
   branching: true,

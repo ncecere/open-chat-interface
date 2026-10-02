@@ -1,5 +1,5 @@
 import type { ProviderKind, ReasoningEffort } from '@oci/shared';
-import { validationFailed } from '../lib/errors.js';
+import { forbidden, validationFailed } from '../lib/errors.js';
 
 export type SdkReasoningEffort = 'none' | 'low' | 'medium' | 'high';
 
@@ -17,11 +17,18 @@ export interface ReasoningCallSettings {
  * this model. UI controls are not a security or correctness boundary: clients
  * can call the chat endpoint directly or retain stale state after a model
  * switch.
+ *
+ * `roleEfforts` are the levels the caller's role may choose. A level the role
+ * withholds is refused as a permission problem before the model is consulted.
  */
 export function assertReasoningEffortSupported(
   effort: ReasoningEffort | undefined,
   supportedEfforts: ReasoningEffort[],
+  roleEfforts?: readonly ReasoningEffort[],
 ): void {
+  if (effort && roleEfforts && !roleEfforts.includes(effort)) {
+    throw forbidden(`Reasoning effort "${effort}" is not available for your role`);
+  }
   if (effort && !supportedEfforts.includes(effort)) {
     throw validationFailed(`Reasoning effort "${effort}" is not supported by this model`);
   }

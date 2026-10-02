@@ -18,13 +18,12 @@ For each role:
 - **Models** — how many of the available models (enabled, on an enabled
   provider) the role can see. Visibility is set per model on
   [Providers & Models](models-providers.md).
-- **Features** — file attachments, share links, temporary chats and web
-  search, as they apply to this role. They are switched on or off under
-  **Appearance & features**; web search shows as on only when it can actually
-  run.
-- **Fixed rules** — what is always true for the role and no setting changes.
-  Restricted accounts cannot upload attachments, create share links or start
-  temporary chats; auditors can view administration but not change it.
+- **Features** — editable switches for web search, file attachments, share
+  links, temporary chats, branching and projects, plus the reasoning levels the
+  role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
+- **Fixed rules** — what is always true for the role and no setting changes:
+  administrators have full access; auditors can view administration but not
+  change it.
 - **Rate limits** and **Storage allowance** — editable here; see below.
 - **Usage budgets** — the budgets assigned to the role, read-only, with a link
   to [Usage budgets](#usage-budgets) to change them.
@@ -32,6 +31,77 @@ For each role:
 Below the role tabs, **Instance-wide** holds the limits that apply to everybody
 regardless of role: sign-in attempts per minute (counted per IP address and per
 account), and the cost and tokens reserved while a response generates.
+
+### Features and reasoning levels
+
+Each role has its own switches for **web search**, **file attachments**,
+**share links**, **temporary chats**, **branching** (forking a conversation
+or editing an earlier message into a new branch) and **projects**. A role switch
+can only narrow what the instance offers. Somebody can use a feature when both
+of these are on:
+
+- the instance-wide switch, under **Appearance & features → General** (or, for
+  web search, the [Web search](operations.md#web-search) page, which also needs
+  a working provider);
+- the switch for their role, here.
+
+When the role's switch is on but the instance's is off, the page says so under
+the switch. The server enforces both; hiding a control in the interface is a
+convenience, not the boundary. A request for a feature the role does not allow
+is refused with `403` and a message such as "Attachments are not available for
+your role"; a feature switched off instance-wide is refused as before.
+
+**Reasoning levels** choose which effort levels (Low, Medium, High) the role
+may pick on models that offer effort control. Instant is always allowed. The
+model picker offers, and the server accepts, only levels that both the model
+and the role allow; a model whose only levels are withheld from the role is
+shown without effort control.
+
+Out of the box the switches reproduce the rules that were fixed before they
+were configurable: the `restricted` role cannot upload attachments, create
+share links or start temporary chats, and every other role can use everything
+the instance offers, at every reasoning level. Projects, added later, follow the
+same line and are off for `restricted` until you turn them on. Saving sends only
+the fields you changed, and each save is recorded in the audit log as
+`role.features.update` with the previous and new values. Auditors see the
+switches but cannot change them. API: `PUT /api/admin/roles/:role` with any of
+`webSearch`, `attachments`, `shareLinks`, `temporaryChat`, `branching`,
+`projects` (booleans) and `reasoningEfforts` (a list that must include
+`instant`).
+
+### Projects
+
+[Projects](../user/projects.md) let a person group conversations under shared
+instructions (up to 8,000 characters) and files (up to 20 per project; 100
+projects per person). There is no instance-wide switch: the role's **Projects**
+switch alone decides. Governance follows the features projects reuse:
+
+- **Files** are attachments. Uploading needs file attachments to be allowed
+  for the role and the instance, uses the upload rate limit, and counts against
+  the [storage allowance](#storage-allowance). Removing a file, or deleting its
+  project, deletes it at once (not to the trash) and frees its allowance; the
+  stored object is removed by the usual storage reaper. Project files are never
+  reported as stale uploads or treated as orphans by storage reconciliation.
+- **Context**: project instructions are appended to the system prompt after the
+  instance prompt and the person's personalisation, delimited and marked as
+  subordinate to them. File text is budgeted like any attachment and left out
+  when it does not fit the model's context.
+- **Switching projects off for a role** keeps existing projects and their files
+  (still counted against storage) but refuses every project request with `403`
+  ("Projects are not available for your role"), and stops their instructions
+  and files being added to conversations, which carry on as ordinary ones.
+  Without file attachments, instructions still apply but files are not used.
+- **Retention** applies to conversations, not projects: an inactive
+  conversation in a project is trashed as usual, and the project stays.
+  Deleting a project detaches its conversations; it never deletes them.
+- **Audit**: like conversations and share links, creating, changing and
+  deleting projects is personal content and is not written to the audit log.
+- **Export** includes each project's name, instructions and files.
+- Deleting an account deletes its projects and their files.
+
+The level a new conversation starts at is set instance-wide as **Default
+reasoning level** on [General settings](instance-settings.md). When the chosen
+model or the person's role does not allow it, the composer starts at Instant.
 
 ### Where a value comes from
 

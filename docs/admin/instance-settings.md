@@ -15,9 +15,18 @@ Leave it blank to use the built-in default; a person's own customisation is
 appended after it. Keep it short. A long prompt is charged on every message and
 is the first thing to suspect when replies drift from what people expect.
 
+**Default reasoning level** is where the effort control starts in a new
+conversation: Instant, Low, Medium or High. People can still change it per
+message. When the selected model, or the levels allowed for the person's role
+on [Roles & access](governance.md#features-and-reasoning-levels), do not
+include it, the composer starts at Instant instead.
+
 **Features** turn capabilities off instance-wide: share links, temporary chats,
 conversation branching, and file attachments. Turning one off removes it from
-the interface rather than leaving a control that fails.
+the interface rather than leaving a control that fails. Each role can be
+narrowed further on
+[Roles & access](governance.md#features-and-reasoning-levels); a feature is
+available only when both allow it.
 
 Two things that used to live here have moved:
 

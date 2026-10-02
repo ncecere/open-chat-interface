@@ -15,7 +15,7 @@ section.
 | `admin` | Everything, including changing any setting |
 | `auditor` | Read every administrative page, change nothing |
 | `user` | Use the instance normally |
-| `restricted` | Use it with tighter limits and fewer features |
+| `restricted` | Use it with tighter limits and, by default, fewer features |
 
 `auditor` exists so a compliance reviewer does not need write access to do their
 job. It is enforced on the request method, not on a list of pages, so a new

@@ -28,8 +28,6 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
   features: {
     shareLinks: true,
     temporaryChat: true,
-    canvas: false,
-    mcp: false,
     webSearch: false,
     attachments: true,
     branching: true,

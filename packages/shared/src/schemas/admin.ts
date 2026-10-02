@@ -3,6 +3,7 @@ import {
   COLOR_THEMES,
   QUOTA_METRICS,
   QUOTA_WINDOW_KINDS,
+  REASONING_EFFORTS,
   REGISTRATION_MODES,
   SEARCH_PROVIDER_KINDS,
   STORAGE_DRIVERS,
@@ -103,11 +104,14 @@ export const instanceSettingsSchema = z.object({
   sessionLifetimeDays: z.number().int().min(1).max(365).default(30),
   sessionRefreshDays: z.number().int().min(1).max(365).default(1),
   defaultSystemPrompt: z.string().nullable(),
+  /**
+   * Reasoning level a new conversation starts at. Clients lower it to what the
+   * selected model and the person's role allow, falling back to instant.
+   */
+  defaultEffort: z.enum(REASONING_EFFORTS).default('instant'),
   features: z.object({
     shareLinks: z.boolean(),
     temporaryChat: z.boolean(),
-    canvas: z.boolean(),
-    mcp: z.boolean(),
     webSearch: z.boolean(),
     attachments: z.boolean(),
     branching: z.boolean(),

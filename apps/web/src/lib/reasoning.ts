@@ -1,15 +1,21 @@
-import { type CatalogModel, effectiveSupportedEfforts, type ReasoningEffort } from '@oci/shared';
+import {
+  type CatalogModel,
+  clampReasoningEffort,
+  effectiveSupportedEfforts,
+  type ReasoningEffort,
+} from '@oci/shared';
 
-/** Keeps composer state valid when the selected model changes. */
+/**
+ * Keeps composer state valid when the selected model changes. The catalog
+ * already lists only the levels the person's role may use, so this also keeps
+ * a withheld level from being shown or sent.
+ */
 export function coerceReasoningEffort(
   model: CatalogModel | null,
   effort: ReasoningEffort,
 ): ReasoningEffort {
   if (!model) return 'instant';
-  const supportedEfforts = effectiveSupportedEfforts(model);
-  if (supportedEfforts.length === 0) return 'instant';
-  if (supportedEfforts.includes(effort)) return effort;
-  return supportedEfforts.includes('instant') ? 'instant' : (supportedEfforts[0] ?? 'instant');
+  return clampReasoningEffort(effort, effectiveSupportedEfforts(model));
 }
 
 /** Unsupported models must omit effort rather than sending stale UI state. */

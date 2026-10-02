@@ -156,10 +156,12 @@ async function storageCheck(): Promise<Check> {
     .select({ total: count() })
     .from(schema.attachment)
     // Never attached to a message and older than a day: an upload whose
-    // request was abandoned, still occupying storage.
+    // request was abandoned, still occupying storage. Project files belong to
+    // their project instead of a message and are not stale.
     .where(
       and(
         isNull(schema.attachment.messageId),
+        isNull(schema.attachment.projectId),
         isNull(schema.attachment.deletedAt),
         lt(schema.attachment.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
       ),

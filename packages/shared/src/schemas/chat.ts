@@ -10,9 +10,38 @@ export const threadSummarySchema = z.object({
   expiresAt: z.string().nullable(),
   parentThreadId: z.string().nullable(),
   branchedFromMessageId: z.string().nullable(),
+  /** The project this conversation belongs to, if any. */
+  projectId: z.string().nullable(),
   lastMessageAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+});
+
+/**
+ * Conversation search marks matched words with these control characters rather
+ * than HTML, so a snippet is always plain text and clients build highlighting
+ * from text nodes. They are stripped from stored text before highlighting, so
+ * a message cannot forge them.
+ */
+export const SEARCH_HIGHLIGHT_START = '\u0001';
+export const SEARCH_HIGHLIGHT_END = '\u0002';
+export const THREAD_SEARCH_DEFAULT_LIMIT = 20;
+export const THREAD_SEARCH_MAX_LIMIT = 50;
+
+export const threadSearchMatchSchema = z.object({
+  messageId: z.string(),
+  role: z.enum(['user', 'assistant']),
+  /** Plain text with SEARCH_HIGHLIGHT_START/END around matched words. */
+  snippet: z.string(),
+});
+
+export const threadSearchResultSchema = z.object({
+  thread: threadSummarySchema,
+  rank: z.number(),
+  /** The title with matched words marked; identical to the title when only message text matched. */
+  titleHighlight: z.string(),
+  /** Up to three best-matching messages, best first. Empty when only the title matched. */
+  matches: z.array(threadSearchMatchSchema),
 });
 
 export const searchGroundingDataSchema = z.object({
@@ -57,6 +86,8 @@ export const createThreadSchema = z
   .object({
     title: z.string().trim().max(200).optional(),
     temporary: z.boolean().default(false),
+    /** Start the conversation inside one of the caller's projects. */
+    projectId: z.string().min(1).max(200).optional(),
   })
   .strict();
 
@@ -64,6 +95,8 @@ export const updateThreadSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
+  /** Move into one of the caller's projects, or `null` to take it out. */
+  projectId: z.string().min(1).max(200).nullable().optional(),
 });
 
 export const forkMessageSchema = z.object({ messageId: z.string().min(1).max(200) }).strict();
@@ -109,6 +142,8 @@ export const sendMessageSchema = z
   .strict();
 
 export type ThreadSummary = z.infer<typeof threadSummarySchema>;
+export type ThreadSearchMatch = z.infer<typeof threadSearchMatchSchema>;
+export type ThreadSearchResult = z.infer<typeof threadSearchResultSchema>;
 export type ForkMessageInput = z.infer<typeof forkMessageSchema>;
 export type BranchMessageInput = z.infer<typeof branchMessageSchema>;
 export type ChatMessage = z.infer<typeof messageSchema>;
