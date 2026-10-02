@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-01
+
+Organise and find: per-role feature switches, full-text search, projects,
+Mermaid diagrams, a switcher for retried replies, and full export plus import
+from ChatGPT and Claude. Migrations 0022–0025 run on upgrade; 0023 builds a
+search index that blocks writes to `message` while it builds on a large
+instance (see the v0.7 upgrade notes in `docs/OPERATIONS.md`). Deploy the API
+and web images as a pair.
+
 ### Added
 
 - **Feature entitlements per role.** On Roles & access each role has switches
@@ -645,7 +654,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.6.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.7.0...main
+[0.7.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.7.0
 [0.6.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.6.1
 [0.6.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.5.0
