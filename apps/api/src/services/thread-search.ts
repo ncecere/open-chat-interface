@@ -6,11 +6,12 @@ import {
   THREAD_SEARCH_MAX_LIMIT,
 } from '@oci/shared';
 import { db } from '../db/index.js';
+import { containsPattern } from '../lib/like.js';
 
 type SQL = ReturnType<typeof sql.raw>;
 
 /** Longer input is cut, not refused: a pasted paragraph still searches its opening words. */
-export const SEARCH_QUERY_MAX_CHARS = 200;
+const SEARCH_QUERY_MAX_CHARS = 200;
 /** More terms only narrow an AND query further and make it slower. */
 const MAX_TERMS = 12;
 const MATCHES_PER_THREAD = 3;
@@ -61,7 +62,7 @@ function tsqueryOperand(lexeme: string): string {
  * Operators and punctuation are never interpreted: the raw text is only ever a
  * bound parameter to `to_tsvector`. Returns null when nothing searchable is left.
  */
-export async function parseSearchQuery(raw: string): Promise<string | null> {
+async function parseSearchQuery(raw: string): Promise<string | null> {
   const text = stripControls(raw.normalize('NFC').slice(0, SEARCH_QUERY_MAX_CHARS)).trim();
   if (!text) return null;
 
@@ -77,10 +78,6 @@ export async function parseSearchQuery(raw: string): Promise<string | null> {
   lexemes = lexemes.slice(0, MAX_TERMS);
 
   return lexemes.length > 0 ? lexemes.map(tsqueryOperand).join(' & ') : null;
-}
-
-function likePattern(value: string): string {
-  return `%${value.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
 }
 
 const SNIPPET_OPTIONS = [
@@ -99,7 +96,7 @@ const TITLE_OPTIONS = [
   'HighlightAll=true',
 ].join(', ');
 
-export function clampSearchLimit(limit: number | undefined): number {
+function clampSearchLimit(limit: number | undefined): number {
   if (!limit || !Number.isFinite(limit)) return THREAD_SEARCH_DEFAULT_LIMIT;
   return Math.min(THREAD_SEARCH_MAX_LIMIT, Math.max(1, Math.trunc(limit)));
 }
@@ -116,7 +113,7 @@ export function threadSearchStatement(
 ) {
   const query = sql`${tsquery}::tsquery`;
   const titleVector = sql`to_tsvector('simple'::regconfig, t.title)`;
-  const pattern = likePattern(stripControls(rawQuery).trim().slice(0, SEARCH_QUERY_MAX_CHARS));
+  const pattern = containsPattern(stripControls(rawQuery).trim().slice(0, SEARCH_QUERY_MAX_CHARS));
   const titleMatches = sql`(${titleVector} @@ ${query} or t.title ilike ${pattern} escape '\\')`;
 
   return sql`
@@ -201,7 +198,7 @@ function tidySnippet(snippet: string): string {
 
 export type ThreadRow = typeof schema.thread.$inferSelect;
 
-export interface ThreadSearchHit {
+interface ThreadSearchHit {
   thread: ThreadRow;
   rank: number;
   titleHighlight: string;

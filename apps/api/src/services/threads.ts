@@ -2,6 +2,7 @@ import { and, asc, type Database, desc, eq, ilike, isNull, lte, schema, sql } fr
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
+import { containsPattern } from '../lib/like.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
@@ -55,7 +56,7 @@ export async function listThreads(
   ];
 
   if (options?.search) {
-    conditions.push(ilike(schema.thread.title, `%${options.search}%`));
+    conditions.push(ilike(schema.thread.title, containsPattern(options.search)));
   }
 
   // The caller checks that the project is the user's own.

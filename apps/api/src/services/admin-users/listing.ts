@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, ilike, or, schema, sql } from '@oci/db';
 import { type AdminUser, USER_ROLES } from '@oci/shared';
 import { z } from 'zod';
 import { db } from '../../db/index.js';
+import { containsPattern } from '../../lib/like.js';
 
 /** Sorting and filtering describe the whole user base, not just the loaded page. */
 export const listQuerySchema = z.object({
@@ -57,7 +58,10 @@ export async function listUsers({
 }: z.infer<typeof listQuerySchema>) {
   const filters = [
     search
-      ? or(ilike(schema.user.email, `%${search}%`), ilike(schema.user.name, `%${search}%`))
+      ? or(
+          ilike(schema.user.email, containsPattern(search)),
+          ilike(schema.user.name, containsPattern(search)),
+        )
       : undefined,
     role ? eq(schema.user.role, role) : undefined,
     status === 'banned' ? eq(schema.user.banned, true) : undefined,
