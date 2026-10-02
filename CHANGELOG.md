@@ -7,6 +7,88 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Long conversations are compacted instead of cut off.** When history would
+  exceed the model's input budget, older turns are summarised by the
+  conversation's own model into a structured summary (topic, facts and
+  decisions, preferences, open questions, critical details) while recent
+  turns are kept verbatim, after the approach of the
+  [pi coding agent](https://pi.dev). Later compactions build on the previous
+  summary, and cuts fall only between user turns. **Compact conversation**
+  does it on request, with optional instructions; a provider context-length
+  error triggers one compaction and one retry. Nothing is deleted: a divider
+  marks where messages were summarised and expands to the summary, and
+  exports, search and share links keep the full history. Each summary is a
+  usage event. General settings has an on/off switch (on by default).
+  Migration `0028_conversation_compaction`.
+- **Meaning-based search for project files.** With an embeddings model
+  configured under **Providers & Models → Embeddings** and the pgvector
+  extension enabled by the operator, project search merges keyword and vector
+  rankings, so paraphrases are found while exact names and codes still match.
+  Without either, search stays keyword-only as in v0.8. Passages are embedded
+  on upload and by a background job; embedding calls are usage events. OCI
+  never creates the extension. Migration `0029_embeddings`.
+- **Optional reranking** of project-file passages through any
+  Cohere-compatible `/rerank` endpoint (LiteLLM, vLLM, Jina, Cohere), with or
+  without pgvector. A failure or timeout keeps the previous order.
+- **Artifacts.** HTML pages, SVG images, Mermaid diagrams and documents from
+  replies are kept as versioned artifacts, and tool-capable models can create
+  and revise them (`create_artifact`, `update_artifact`). They open in a side
+  panel with preview, source, versions, copy and download; Markdown documents
+  can be edited directly. HTML and SVG run in a sandboxed frame with an opaque
+  origin and no network access, also on share links. The frame page writes
+  nothing unless it is sandboxed, so it stays safe behind a proxy that sends
+  no policy for it; operators with their own proxy should still send the
+  documented headers for `/artifact-frame.html`. Per-role switch, a
+  General settings switch for Diagram Design guidance (MIT, Cathryn Lavery),
+  storage accounting, export and forks. Migration `0032_artifacts`.
+- **Export as DOCX, PDF, XLSX or PPTX** from replies and Markdown artifacts,
+  generated server-side in a worker thread. XLSX takes the reply's tables;
+  PPTX makes a slide per heading; PDFs cover Western European characters.
+  Owner only, size- and rate-limited, audited without content.
+- **User memory**, opt-in at three levels: the instance (off by default), the
+  role and each person (Settings → Memory). Tool-capable models get `remember`
+  and `forget`, never in temporary chats, and the reply shows "Memory updated"
+  with Undo. Notes join the system prompt within a budget, are exported, can
+  expire through a retention setting, and are audited without their text.
+  Migration `0033_user_memory`.
+- **Compliance export and legal hold.** Audit events, and optionally
+  conversation content, are exported on a schedule as verified JSON Lines
+  objects to S3, exactly once per event across restarts. Legal holds keep a
+  named person's data: retention, trash purging, temporary-chat expiry, audit
+  pruning and memory retention skip them, and their account cannot be deleted
+  by any path. Data & storage → Compliance. Migration `0034_compliance`.
+- **Automated backups.** Scheduled `pg_dump` streamed to S3, verified by
+  reading it back (`pg_restore --list` and checksums), with daily and weekly
+  retention and a manifest of attachment objects. Data & storage → Backups.
+  The API image now includes the PostgreSQL client tools.
+- **Observability and webhooks.** A Prometheus `/metrics` endpoint, served
+  only when `METRICS_TOKEN` is set; OpenTelemetry traces when
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set (no content in spans); signed
+  (HMAC-SHA256), retried webhooks for audit events under Tools & integrations
+  → Webhooks. Migration `0030_backups_webhooks`.
+- **A composer hint** to connect an account when a connector's tools are
+  allowed but the person has not connected.
+
+### Changed
+
+- **A timed-out web search is retried once** within the tool's time limit.
+- **Connector token refresh is coordinated across API replicas**, so a
+  rotating refresh token is used once and every caller gets the new token.
+
+### Removed
+
+- **`user_preference.boring_mode`**, unused since v0.8 (migration
+  `0031_drop_boring_mode`).
+
+### Known limitations
+
+- Legal hold does not yet pause project deletion or usage-event pruning, and
+  deletions are not exported as compliance events.
+- Backups list attachment objects in a manifest rather than copying them; use
+  bucket versioning or volume snapshots for attachment data.
+
 ## [0.8.0] - 2026-10-02
 
 Tools and connected knowledge: tool calling with per-role switches, approval
