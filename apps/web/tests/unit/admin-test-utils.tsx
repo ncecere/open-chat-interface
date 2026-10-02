@@ -138,6 +138,16 @@ export function roleAccessFixture(
       projects: role !== 'restricted',
       reasoningEfforts: ['instant', 'low', 'medium', 'high'],
     },
+    // Built-in default: read tools on for every role except restricted.
+    tools: [
+      {
+        id: 'web_search',
+        label: 'Web search',
+        kind: 'read',
+        source: 'builtin',
+        allowed: role !== 'restricted',
+      },
+    ],
     fixedRules: role === 'auditor' ? ['Can view administration but cannot change it.'] : [],
     ...overrides,
   };

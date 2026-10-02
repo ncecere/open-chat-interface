@@ -1,7 +1,11 @@
 import { useChat } from '@ai-sdk/react';
 import type { Attachment, CatalogModel, ReasoningEffort } from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { DefaultChatTransport, type UIMessage } from 'ai';
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  type UIMessage,
+} from 'ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useChatRecovery } from '~/hooks/use-chat-recovery';
@@ -10,6 +14,7 @@ import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
+import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
 const MODEL_STORAGE_KEY = 'oci.model';
 const EMPTY_MODELS: CatalogModel[] = [];
@@ -148,6 +153,16 @@ export function useChatSession(options: {
           api: `/api/chat/${encodeURIComponent(options.threadId)}/stream`,
         }),
         prepareSendMessagesRequest: ({ messages, body, trigger }) => {
+          // Answering a reply's approvals continues that same reply on the
+          // server rather than sending a new message.
+          const answered = messages.at(-1);
+          const responses = approvalResponsesOf(answered);
+          if (answered && responses.length) {
+            return {
+              api: `/api/chat/${encodeURIComponent(options.threadId)}/approvals`,
+              body: { messageId: answered.id, responses },
+            };
+          }
           const latestUser = messages.findLast((message) => message.role === 'user');
           const textParts = latestUser?.parts.flatMap((part) =>
             part.type === 'text' ? [{ type: 'text' as const, text: part.text }] : [],
@@ -180,6 +195,8 @@ export function useChatSession(options: {
     // Recovery serializes reconnect and canonical hydration to avoid two
     // writers appending a replay to an already-complete saved assistant.
     resume: false,
+    // Once every open approval on the latest reply is answered, send them.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onFinish: ({ isAbort, isDisconnect, isError, finishReason }) => {
       // Do not reload an entire transcript after every healthy reply. An
       // accepted but interrupted/unfinished stream needs canonical recovery.
@@ -192,7 +209,7 @@ export function useChatSession(options: {
     },
   });
 
-  const { stop: stopChat, sendMessage } = chat;
+  const { stop: stopChat, sendMessage, setMessages, addToolApprovalResponse } = chat;
   acceptSubmission.current = (submission, promptId) => {
     consumeFiles(submission.attachmentIds);
     if (promptId && promptId !== submission.clientMessageId)
@@ -270,6 +287,9 @@ export function useChatSession(options: {
       }));
 
       setDraft('');
+      // The server denies unanswered approvals as "not answered" when a new
+      // message arrives; show the same without waiting for a reload.
+      setMessages(denyUnansweredApprovals);
       await sendMessage(
         {
           parts: [{ type: 'text', text: content }, ...cards],
@@ -285,14 +305,23 @@ export function useChatSession(options: {
       attachmentItems,
       carriedAttachments,
       sendMessage,
+      setMessages,
       recovery.remotePending,
       recovery.resuming,
       recovery.unavailable,
     ],
   );
 
+  /** Answers one approval; the reply continues once all of its approvals are answered. */
+  const answerApproval = useCallback(
+    (approvalId: string, approved: boolean) =>
+      addToolApprovalResponse({ id: approvalId, approved }),
+    [addToolApprovalResponse],
+  );
+
   return {
     ...chat,
+    answerApproval,
     stop,
     streaming:
       chat.status === 'streaming' ||

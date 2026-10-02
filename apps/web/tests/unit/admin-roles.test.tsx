@@ -2,6 +2,7 @@
 import {
   updateRateLimitSettingsSchema,
   updateRoleFeaturesSchema,
+  updateRoleToolsSchema,
   upsertStoragePolicySchema,
 } from '@oci/shared';
 import type { Root } from 'react-dom/client';
@@ -157,6 +158,26 @@ describe('Roles & access', () => {
     expect(isDisabled(featureSwitch('user', 'attachments'))).toBe(true);
     expect(isDisabled(input('role-user-effort-low'))).toBe(true);
     expect(findButton('Save features')).toBeUndefined();
+  });
+
+  it('saves only the changed tool allows for the selected role', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=restricted' }));
+    const toggle = document.getElementById('role-restricted-tool-web_search') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(document.body.textContent).toContain('Looks things up. Runs without asking.');
+    await click(toggle);
+    await click(button('Save tools'));
+    expect(api.put).toHaveBeenCalledWith('/admin/roles/restricted/tools', {
+      tools: { web_search: true },
+    });
+    expect(updateRoleToolsSchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
+  });
+
+  it('shows tools read-only to an auditor', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { role: 'auditor' }));
+    const toggle = document.getElementById('role-user-tool-web_search') as HTMLButtonElement;
+    expect(isDisabled(toggle)).toBe(true);
+    expect(findButton('Save tools')).toBeUndefined();
   });
 
   it('shows where each rate limit value comes from', async () => {

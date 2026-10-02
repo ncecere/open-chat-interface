@@ -103,6 +103,48 @@ The level a new conversation starts at is set instance-wide as **Default
 reasoning level** on [General settings](instance-settings.md). When the chosen
 model or the person's role does not allow it, the composer starts at Instant.
 
+### Tools
+
+Models with the `tool_calling` capability can call **tools** during a reply
+(see [Tools](../user/tools.md) for what people see). The **Tools** section of
+a role lists every tool OCI can offer with a switch per role. A tool is
+offered to a model only when all of these hold:
+
+- the model's catalogue entry has the `tool_calling` capability (edit it on
+  [Providers & Models](models-providers.md));
+- the role's switch for the tool is on;
+- the tool is switched on for the instance, and for the message where the
+  composer has a switch. Web search (`web_search`) needs the instance's web
+  search to be on and configured, the role's **Web search** feature, and the
+  person's **Search** switch for that message.
+
+Each tool is `read` (looks something up; runs without asking) or `write`
+(changes something elsewhere; the person approves every call). The switches
+are stored sparsely, so a tool added later inherits a default: built-in read
+tools are on for every role except `restricted`; write and connector tools are
+off until you allow them. Saving sends only the tools you changed and is
+recorded as `role.tools.update` with the previous and new values. Auditors see
+the switches but cannot change them. API: `PUT /api/admin/roles/:role/tools`
+with `{ "tools": { "web_search": true } }`.
+
+With a tool-calling model and Search on, the model searches when it chooses,
+possibly several times, instead of OCI running one search before the reply.
+Models without tool calling, and roles whose `web_search` switch is off, keep
+the single search before the reply.
+
+Every tool call writes a `tool.call` audit event: the tool id, its kind,
+whether it needed approval and the answer (`approved`, `denied`,
+`not answered`), the outcome (`ok`, `error`, `denied`, `refused`), duration
+and result size. Inputs and results are never written to the audit log; they
+live in the conversation and follow its retention, including for temporary
+chats. A call to a tool outside the reply's tool set is refused and recorded as
+`refused`.
+
+A reply's steps are limited by **Tool step limit** on
+[General settings](instance-settings.md#general). Each step after the first
+checks the person's remaining [usage budget](#usage-budgets) and ends the reply
+if it is spent; usage is settled for the whole reply, across all its steps.
+
 ### Where a value comes from
 
 Each rate limit and instance-wide value carries a label:

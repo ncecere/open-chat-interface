@@ -26,6 +26,7 @@ import {
   useConfigSources,
 } from '~/components/admin/config-source';
 import { RoleFeaturesForm } from '~/components/admin/role-features-form';
+import { RoleToolsForm } from '~/components/admin/role-tools-form';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -649,6 +650,17 @@ function RolePanel({ access }: { access: RoleAccess }) {
         description={`What people with the ${label} role may use, and which reasoning levels they may choose.`}
       >
         <RoleFeaturesForm
+          access={access}
+          roleLabel={label}
+          onSaved={() => invalidateAccess(queryClient)}
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Tools"
+        description={`Which tools the ${label} role’s models may call during a reply. Write tools always ask for approval.`}
+      >
+        <RoleToolsForm
           access={access}
           roleLabel={label}
           onSaved={() => invalidateAccess(queryClient)}

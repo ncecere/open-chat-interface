@@ -138,6 +138,45 @@ Administrators register remote MCP servers (Streamable HTTP) on a new
 - Tool results that carry links or document references are shown as sources,
   so answers cite the document they came from.
 
+## Implementation notes (tool foundation and web search)
+
+Where the build differs from, or decides something left open above:
+
+- **Awaiting approval is derived from the parts, not a status.** A reply that
+  waits stays `complete`; it is awaiting approval while a tool part is in the
+  SDK's `approval-requested` state. Status describes the generation run, and
+  every reader of it (retention, replay, the reply switcher, search, exports)
+  keeps working unchanged. No migration was needed.
+- **Continuing after an approval** re-claims the same message (`streaming`)
+  under the thread lock and runs as `<message id>:<suffix>`: its own stream
+  slot, resumable stream and usage reservation, with a message count of 0 so
+  the reply is not counted twice. A failure before the model starts puts the
+  reply back to waiting. Every open approval of the reply must be answered in
+  one request. An approved call to a tool that is no longer offered is refused
+  (sent to the model as a denial) rather than run.
+- **Usage.** In the pinned AI SDK (7.0.55) `result.usage` already totals all
+  steps of a finished reply. The under-count was a reply stopped or failing
+  mid-loop, whose SDK total is empty: finished steps' tokens were lost. The
+  loop now tallies each step and settles a stopped reply's finished steps as a
+  lower bound, leaving the usage marked unknown with the estimate held.
+- **Allowance between steps** is checked when a step with tool results ends,
+  before the next model call (an SDK stop condition), so a spent allowance
+  ends the reply with a note. The loop also ends, with its own note, when the
+  accumulated tool results would exceed the model's input budget.
+- **Step limit across an approval** counts the reply's earlier steps, but a
+  continuation always gets at least one model step to use the answer.
+- **Earlier turns' tool steps** reach the model as tool calls and results
+  when the current turn offers tools, and as a short text note otherwise,
+  because providers refuse tool history in a request without tools.
+  Unfinished steps are left out.
+- **Web search tool** is offered when the role's `web_search` tool switch,
+  the role's Web search feature, the instance's web search and the message's
+  Search switch all allow it. Otherwise the v0.7 search before the reply runs.
+  Built-in tools have no separate instance switch: web search's existing one
+  applies.
+- **Test-only tools** are added by replacing the catalogue module with
+  `vi.mock`; production code has no registration API.
+
 ## Not in v0.8
 
 Tools inside artifacts, code execution, assistants that bundle tools, and

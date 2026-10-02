@@ -1,4 +1,9 @@
-import { USER_ROLES, type UserRole, updateRoleFeaturesSchema } from '@oci/shared';
+import {
+  USER_ROLES,
+  type UserRole,
+  updateRoleFeaturesSchema,
+  updateRoleToolsSchema,
+} from '@oci/shared';
 import { Hono } from 'hono';
 import { notFound } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
@@ -7,6 +12,7 @@ import { recordAudit } from '../../services/audit.js';
 import { roleFeatures, updateRoleFeatures } from '../../services/role-features.js';
 import { getRolesAccess } from '../../services/roles-access.js';
 import { diffSettings } from '../../services/settings-diff.js';
+import { roleTools, updateRoleTools } from '../../services/tools/role-tools.js';
 
 export const rolesRoutes = new Hono<AppBindings>();
 
@@ -44,4 +50,36 @@ rolesRoutes.put('/:role', async (c) => {
   });
 
   return c.json({ role, roleFeatures: next });
+});
+
+/**
+ * Allows or withholds tools for one role. Only sent tools change; a tool never
+ * saved keeps its default. Auditors are refused by the admin method guard.
+ */
+rolesRoutes.put('/:role/tools', async (c) => {
+  const actor = currentUser(c);
+  const role = c.req.param('role');
+  if (!USER_ROLES.includes(role as UserRole)) throw notFound('Role not found');
+
+  const patch = await parseBody(c, updateRoleToolsSchema);
+  const previous = await roleTools(role as UserRole);
+  const next = await updateRoleTools(role as UserRole, patch);
+  const allowed = (tools: typeof next) =>
+    Object.fromEntries(
+      tools.filter((tool) => tool.id in patch.tools).map((tool) => [tool.id, tool.allowed]),
+    );
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'role.tools.update',
+    targetType: 'role',
+    targetId: role,
+    metadata: {
+      tools: Object.keys(patch.tools),
+      changes: diffSettings(allowed(previous), allowed(next)),
+    },
+  });
+
+  return c.json({ role, tools: next });
 });

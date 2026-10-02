@@ -1,4 +1,8 @@
-import { type InstanceSettings, updateInstanceSettingsSchema } from '@oci/shared';
+import {
+  DEFAULT_MAX_TOOL_STEPS,
+  type InstanceSettings,
+  updateInstanceSettingsSchema,
+} from '@oci/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { loadEnv } from '../../config/env.js';
@@ -55,6 +59,7 @@ async function currentSettingsSnapshot(): Promise<Record<string, unknown>> {
     ...authSettings,
     defaultSystemPrompt: chat.defaultSystemPrompt,
     defaultEffort: chat.defaultEffort ?? 'instant',
+    maxToolSteps: chat.maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS,
     features,
     // Redacted here rather than at the diff, because these arrive as whole
     // objects and carry encrypted credentials inside them.
@@ -90,6 +95,7 @@ settingsRoutes.get('/', async (c) => {
     sessionRefreshDays: authSettings.sessionRefreshDays,
     defaultSystemPrompt: chat.defaultSystemPrompt,
     defaultEffort: chat.defaultEffort ?? 'instant',
+    maxToolSteps: chat.maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS,
     features,
     storage: {
       driver: storage.driver,
@@ -205,12 +211,17 @@ settingsRoutes.patch('/', async (c) => {
     });
   }
 
-  if (patch.defaultSystemPrompt !== undefined || patch.defaultEffort !== undefined) {
+  if (
+    patch.defaultSystemPrompt !== undefined ||
+    patch.defaultEffort !== undefined ||
+    patch.maxToolSteps !== undefined
+  ) {
     await updateSetting('chat', {
       ...(patch.defaultSystemPrompt !== undefined && {
         defaultSystemPrompt: patch.defaultSystemPrompt,
       }),
       ...(patch.defaultEffort !== undefined && { defaultEffort: patch.defaultEffort }),
+      ...(patch.maxToolSteps !== undefined && { maxToolSteps: patch.maxToolSteps }),
     });
   }
 

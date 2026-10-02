@@ -5,7 +5,15 @@ import type { UsageReservation } from './reservation.js';
 
 export type UsageTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type UsageEvent = typeof schema.usageEvent.$inferSelect;
-export type TokenReport = { tokensIn?: number | null; tokensOut?: number | null } | null;
+export type TokenReport = {
+  tokensIn?: number | null;
+  tokensOut?: number | null;
+  /**
+   * A lower bound, not the full figure: a multi-step reply stopped mid-step
+   * reports its finished steps. Recorded, but the usage stays unknown.
+   */
+  partial?: boolean;
+} | null;
 type Amounts = { messageCount: number; tokensIn: number; tokensOut: number; costMicros: number };
 
 function tokenCount(value: number | null | undefined): number {
@@ -76,7 +84,11 @@ export async function settleLockedEvent(
   usage: TokenReport,
   source: 'producer' | 'sweep' = 'producer',
 ) {
-  const known = source === 'producer' && usage?.tokensIn != null && usage.tokensOut != null;
+  const known =
+    source === 'producer' &&
+    usage?.tokensIn != null &&
+    usage.tokensOut != null &&
+    usage.partial !== true;
   const reportedIn = tokenCount(usage?.tokensIn);
   const reportedOut = tokenCount(usage?.tokensOut);
   if (!event.pending && !event.usageUnknown) return;

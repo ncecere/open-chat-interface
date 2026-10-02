@@ -32,7 +32,22 @@ export function textCost(text: string): ContextCost {
 export function messageCost(message: UIMessage): ContextCost {
   let cost = { ...emptyCost(), units: MESSAGE_OVERHEAD };
   for (const part of message.parts) {
-    if (part.type === 'text') cost = addCost(cost, textCost(part.text));
+    if (part.type === 'text' || part.type === 'reasoning')
+      cost = addCost(cost, textCost(part.text));
+    else if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
+      // A tool step reaches the model as its call and its (capped) result.
+      const step = part as { input?: unknown; output?: unknown; errorText?: unknown };
+      cost = addCost(
+        cost,
+        textCost(JSON.stringify([step.input ?? null, step.output ?? null, step.errorText ?? null])),
+      );
+    } else if (
+      // Display-only parts of a reply being continued; the SDK does not send them.
+      part.type === 'step-start' ||
+      part.type === 'source-url' ||
+      part.type.startsWith('data-')
+    )
+      continue;
     else if (
       part.type === 'file' &&
       part.url.startsWith('data:') &&

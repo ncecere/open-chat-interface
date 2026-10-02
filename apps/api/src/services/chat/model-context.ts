@@ -2,6 +2,7 @@ import type { UIMessage } from 'ai';
 import { validationFailed } from '../../lib/errors.js';
 import { buildGroundingContext, normalizeSearchQuery, searchWeb } from '../search/index.js';
 import { buildSystemPrompt } from '../system-prompt.js';
+import { hasTool } from '../tools/registry.js';
 import {
   attachmentCost,
   attachmentIds,
@@ -24,7 +25,7 @@ import {
 } from './context-budget.js';
 import { type ContextMessage, loadContextHistory } from './context-history.js';
 import { generationSettings } from './generation-settings.js';
-import { textFromParts, textParts } from './message-parts.js';
+import { historyParts, textFromParts } from './message-parts.js';
 import {
   loadProjectContext,
   selectProjectFiles,
@@ -33,10 +34,11 @@ import {
 } from './project-context.js';
 import type { TurnContext } from './turn-context.js';
 
-const asUI = (message: ContextMessage): UIMessage => ({
+/** Text and finished tool steps; tool parts stay tool parts only when this turn offers tools. */
+const asUI = (message: ContextMessage, toolsOffered: boolean): UIMessage => ({
   id: message.id,
   role: message.role,
-  parts: textParts(message.parts),
+  parts: historyParts(message.parts, toolsOffered),
 });
 
 /** Budget metadata first. Only selected file payloads reach the storage driver. */
@@ -71,9 +73,11 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     regenerate: input.trigger === 'regenerate-message',
     attachmentIds: input.attachmentIds,
   });
-  const searchQuery = input.webSearch
-    ? normalizeSearchQuery(textFromParts(stored.latest.parts))
-    : null;
+  const toolsOffered = context.tools.definitions.length > 0;
+  // With the web_search tool the model searches when it chooses; otherwise
+  // v0.7's single search before the reply still applies.
+  const preSearch = input.webSearch && !hasTool(context.tools, 'web_search');
+  const searchQuery = preSearch ? normalizeSearchQuery(textFromParts(stored.latest.parts)) : null;
   const [newCandidates, searchResults, baseSystem, project] = await Promise.all([
     inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
     searchQuery ? searchWeb(searchQuery) : Promise.resolve([]),
@@ -83,7 +87,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   // Project instructions follow the instance prompt and the person's own
   // customisation, so the system prompt's cost below already includes them.
   const system = withProjectInstructions(baseSystem, project);
-  const latest: UIMessage = input.webSearch
+  const latest: UIMessage = preSearch
     ? {
         ...stored.latest,
         parts: [
@@ -149,7 +153,8 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     inspectedGroups.map((items) => ({
       items,
       cost: items.reduce(
-        (sum, message) => addCost(sum, addCost(messageCost(asUI(message)), filesCost(message.id))),
+        (sum, message) =>
+          addCost(sum, addCost(messageCost(asUI(message, toolsOffered)), filesCost(message.id))),
         { units: 0, files: 0, imageBytes: 0 },
       ),
     })),
@@ -164,7 +169,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   const loaded = await materializeAttachments(allCandidates, user.id, user.role, supportsVision);
   const historicalMessage = (message: ContextMessage) =>
     withAttachmentContext(
-      asUI(message),
+      asUI(message, toolsOffered),
       (historical.byMessage.get(message.id) ?? []).map((file) => loaded.get(file.id)!),
       supportsVision,
       historical.unavailable.has(message.id),
@@ -182,6 +187,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     project,
     projectFiles.files.map((file) => loaded.get(file.id)!),
     supportsVision,
+    projectFiles.search,
   );
   const actualCost = uiMessages.reduce(
     (sum, message) => addCost(sum, messageCost(message)),

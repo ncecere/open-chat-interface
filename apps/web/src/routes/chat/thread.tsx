@@ -243,7 +243,12 @@ function ThreadConversation({
             <MessageList
               messages={session.messages}
               streaming={session.streaming}
-              searching={session.webSearch}
+              // With tool calling the model decides whether to search, and its
+              // search shows as a tool step instead.
+              searching={
+                session.webSearch && !session.selectedModel?.capabilities.includes('tool_calling')
+              }
+              onAnswerApproval={session.answerApproval}
               onRetry={retry}
               onFork={session.features?.branching ? forkAtMessage : undefined}
               onEdit={session.features?.branching ? editAndBranch : undefined}

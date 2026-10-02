@@ -10,6 +10,7 @@ import {
   THEME_MODES,
   USER_ROLES,
 } from '../constants.js';
+import { DEFAULT_MAX_TOOL_STEPS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from '../tools.js';
 import { patchSchema } from './patch.js';
 
 export const adminUserSchema = z.object({
@@ -109,6 +110,13 @@ export const instanceSettingsSchema = z.object({
    * selected model and the person's role allow, falling back to instant.
    */
   defaultEffort: z.enum(REASONING_EFFORTS).default('instant'),
+  /** Model steps one reply may take when it uses tools; reaching it ends the reply with a note. */
+  maxToolSteps: z
+    .number()
+    .int()
+    .min(MIN_TOOL_STEPS)
+    .max(MAX_TOOL_STEPS)
+    .default(DEFAULT_MAX_TOOL_STEPS),
   features: z.object({
     shareLinks: z.boolean(),
     temporaryChat: z.boolean(),

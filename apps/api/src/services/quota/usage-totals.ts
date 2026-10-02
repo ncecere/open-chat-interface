@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, schema, sql } from '@oci/db';
+import { and, eq, gte, inArray, ne, schema, sql } from '@oci/db';
 import type { db } from '../../db/index.js';
 import type { WindowTotals } from './policy.js';
 
@@ -8,11 +8,14 @@ export async function windowTotalsIncludingPending(
   userId: string,
   start: Date,
   modelSlugs: string[],
+  /** Leave out one event, e.g. the run asking whether it may take another step. */
+  excludeEventId?: string,
 ): Promise<WindowTotals> {
   const conditions = [
     eq(schema.usageEvent.userId, userId),
     gte(schema.usageEvent.occurredAt, start),
   ];
+  if (excludeEventId) conditions.push(ne(schema.usageEvent.id, excludeEventId));
   if (modelSlugs.length) conditions.push(inArray(schema.usageEvent.modelSlug, modelSlugs));
   const [totals] = await executor
     .select({

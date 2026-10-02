@@ -132,9 +132,56 @@ describe('unit: context budget', () => {
       messageCost({
         id: 'test',
         role: 'assistant',
-        parts: [{ type: 'reasoning', text: 'unbudgeted' }],
+        parts: [
+          { type: 'source-document', sourceId: 's', mediaType: 'text/plain', title: 'unbudgeted' },
+        ],
       }),
     ).toThrow('Unsupported model input part');
+  });
+
+  it('charges reasoning and tool steps of a continued reply, and nothing for display-only parts', () => {
+    const toolStep = {
+      type: 'tool-web_search',
+      toolCallId: 'c1',
+      state: 'output-available',
+      input: { query: 'q' },
+      output: { results: [] },
+    } as const;
+    expect(
+      messageCost({
+        id: 'a',
+        role: 'assistant',
+        parts: [
+          { type: 'step-start' },
+          { type: 'source-url', sourceId: 's', url: 'https://example.test' },
+          { type: 'data-tool-limit', data: { reason: 'steps' } },
+        ],
+      }),
+    ).toEqual(cost(MESSAGE_OVERHEAD));
+    expect(
+      messageCost({ id: 'a', role: 'assistant', parts: [{ type: 'reasoning', text: 'abcd' }] }),
+    ).toEqual(cost(MESSAGE_OVERHEAD + 20));
+    expect(messageCost({ id: 'a', role: 'assistant', parts: [toolStep] })).toEqual(
+      cost(
+        MESSAGE_OVERHEAD + textCost(JSON.stringify([{ query: 'q' }, { results: [] }, null])).units,
+      ),
+    );
+    expect(
+      messageCost({
+        id: 'a',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'dynamic-tool',
+            toolName: 'x',
+            toolCallId: 'c2',
+            state: 'output-error',
+            input: {},
+            errorText: 'no',
+          },
+        ],
+      }),
+    ).toEqual(cost(MESSAGE_OVERHEAD + textCost(JSON.stringify([{}, null, 'no'])).units));
   });
 
   it('charges UTF-8 bytes plus part overhead, not character count divided by four', () => {

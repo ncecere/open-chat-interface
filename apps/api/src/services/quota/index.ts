@@ -5,9 +5,11 @@ import { getReserveAmounts } from '../lifecycle/settings.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import {
   buildAllowance,
+  calculateCostMicros,
   type EvaluablePolicy,
   type ModelPricing,
   policyCoversModel,
+  usedForMetric,
   type WindowTotals,
 } from './policy.js';
 import { reserveQuota, type UsageReservation } from './reservation.js';
@@ -152,6 +154,7 @@ export async function reserveQuotaForRun(params: {
   role: UserRole;
   modelSlug: string;
   runId?: string;
+  messageCount?: number;
 }): Promise<UsageReservation> {
   const all = await loadPoliciesForRole(params.role, params.userId);
   // Only policies that govern this model constrain this run; a model in no
@@ -163,6 +166,49 @@ export async function reserveQuotaForRun(params: {
   ]);
 
   return reserveQuota({ ...params, policies, pricing, reserve });
+}
+
+/**
+ * Whether a run may not take another model step: some policy governing its
+ * model would be spent counting what the run has used so far. The run's own
+ * reservation is left out (it is an estimate) and its measured tokens are
+ * counted instead. A message policy is spent only beyond its limit, because
+ * this run's message was admitted within it.
+ */
+export async function allowanceExhausted(params: {
+  userId: string;
+  role: UserRole;
+  modelSlug: string;
+  runId: string;
+  tokensIn: number;
+  tokensOut: number;
+  /** 0 for a reply continued after an approval: its message is already counted. */
+  messageCount?: number;
+}): Promise<boolean> {
+  const policies = (await loadPoliciesForRole(params.role, params.userId)).filter((policy) =>
+    policyCoversModel(policy, params.modelSlug),
+  );
+  if (policies.length === 0) return false;
+  const pricing = await modelPricing(params.modelSlug);
+  const ownCost = calculateCostMicros(pricing, params.tokensIn, params.tokensOut);
+  for (const policy of policies) {
+    const { start } = resolveWindow(policy);
+    const others = await windowTotalsIncludingPending(
+      db,
+      params.userId,
+      start,
+      policy.modelSlugs,
+      params.runId,
+    );
+    const used = usedForMetric(policy.metric, {
+      messages: others.messages + (params.messageCount ?? 1),
+      tokens: others.tokens + params.tokensIn + params.tokensOut,
+      costMicros: others.costMicros + ownCost,
+    });
+    if (policy.metric === 'messages' ? used > policy.limitValue : used >= policy.limitValue)
+      return true;
+  }
+  return false;
 }
 
 /** Per-policy consumption for the usage meter in settings. */

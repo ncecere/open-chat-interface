@@ -238,6 +238,62 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('a tool step and an approval card have no violations', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    await page.route('**/api/chat/a11y-tools/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-tools', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-tools-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Look it up and send a note' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            {
+              id: 'a11y-tools-reply',
+              role: 'assistant',
+              parts: [
+                { type: 'step-start' },
+                {
+                  type: 'tool-web_search',
+                  toolCallId: 'a11y-search',
+                  state: 'output-available',
+                  input: { query: 'opening hours' },
+                  output: { query: 'opening hours', results: [] },
+                },
+                { type: 'step-start' },
+                {
+                  type: 'tool-send_note',
+                  toolCallId: 'a11y-note',
+                  title: 'Send note',
+                  state: 'approval-requested',
+                  input: { to: 'Ada' },
+                  approval: { id: 'a11y-approval' },
+                },
+              ],
+              metadata: { status: 'complete', createdAt: created },
+            },
+          ],
+          replies: [],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-tools');
+    const card = page.getByRole('region', { name: 'Allow Send note?' });
+    await expect(card.getByRole('button', { name: 'Approve' })).toBeVisible();
+    await page
+      .getByRole('button', { name: "Searched the web for 'opening hours' · 0 results" })
+      .click();
+    await card.getByRole('button', { name: 'Deny' }).focus();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/quotas');

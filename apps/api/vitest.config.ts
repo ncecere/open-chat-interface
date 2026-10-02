@@ -61,6 +61,13 @@ export default defineConfig({
         'src/services/quota/sweep.ts': { statements: 90, branches: 80, functions: 100 },
         'src/services/quota/windows.ts': { statements: 95, branches: 70, functions: 100 },
         'src/services/share-links.ts': { statements: 55, branches: 70, functions: 80 },
+        // v0.8 tools: the tool set, approvals and the audit/usage paths of the loop.
+        'src/services/tools/registry.ts': { statements: 95, branches: 95, functions: 100 },
+        'src/services/tools/role-tools.ts': { statements: 95, branches: 95, functions: 100 },
+        'src/services/tools/web-search.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/chat/tool-loop.ts': { statements: 85, branches: 80, functions: 90 },
+        'src/services/chat/approvals.ts': { statements: 85, branches: 75, functions: 85 },
+        'src/services/chat/pending-approvals.ts': { statements: 95, branches: 90, functions: 100 },
       },
     },
   },

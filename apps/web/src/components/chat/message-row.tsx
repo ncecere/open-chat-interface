@@ -18,6 +18,7 @@ import {
   SearchSourcesPanel,
   searchGroundingOf,
 } from '~/components/chat/search-grounding';
+import { type AnswerApproval, ToolSteps } from '~/components/chat/tool-steps';
 
 interface MessageRowProps {
   message: UIMessage;
@@ -28,6 +29,8 @@ interface MessageRowProps {
   onEdit?: (messageId: string, text: string) => Promise<void>;
   onFork?: (messageId: string) => Promise<void>;
   replySwitch?: ReplySwitch;
+  /** Answers this reply's open approvals; only the latest reply can be answered. */
+  onAnswerApproval?: AnswerApproval;
 }
 
 /**
@@ -45,6 +48,7 @@ export const MessageRow = memo(function MessageRow({
   onEdit,
   onFork,
   replySwitch,
+  onAnswerApproval,
 }: MessageRowProps) {
   const text = textOf(message);
 
@@ -96,6 +100,7 @@ export const MessageRow = memo(function MessageRow({
         </p>
       )}
       <ProjectSearchNote message={message} />
+      <ToolSteps message={message} onAnswer={onAnswerApproval} disabled={streaming} />
       {grounding && <SearchSourcesPanel grounding={grounding} />}
       {reasoning && (
         <ReasoningPanel text={reasoning} streaming={streaming} answerStarted={Boolean(text)} />

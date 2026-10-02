@@ -97,6 +97,11 @@ export async function reserveQuota(params: {
   role: UserRole;
   modelSlug: string;
   runId?: string;
+  /**
+   * Messages this run counts as. A reply continued after an approval is part
+   * of a message that was already counted, so it reserves with 0.
+   */
+  messageCount?: number;
   policies: EvaluablePolicy[];
   pricing: ModelPricing;
   reserve: ReserveAmounts;
@@ -131,7 +136,7 @@ export async function reserveQuota(params: {
           userId: params.userId,
           modelSlug: params.modelSlug,
           occurredAt: now,
-          messageCount: 1,
+          messageCount: params.messageCount ?? 1,
           tokensIn: 0,
           tokensOut: 0,
           costMicros: 0,

@@ -65,7 +65,7 @@ export async function acquireRun(context: TurnContext): Promise<AcquiredRun> {
 /** Every admitted run has a durable usage identity, including unlimited runs. */
 export async function settleUsage(
   reservation: UsageReservation,
-  usage: { inputTokens?: number | null; outputTokens?: number | null } | null,
+  usage: { inputTokens?: number | null; outputTokens?: number | null; partial?: boolean } | null,
 ): Promise<void> {
   await settleReservation(
     reservation,
@@ -73,6 +73,7 @@ export async function settleUsage(
       ? {
           tokensIn: usage.inputTokens,
           tokensOut: usage.outputTokens,
+          ...(usage.partial ? { partial: true } : {}),
         }
       : null,
   );

@@ -19,7 +19,8 @@ export type SettingKey =
   | 'chat'
   | 'retention'
   | 'rateLimits'
-  | 'roleFeatures';
+  | 'roleFeatures'
+  | 'roleTools';
 
 export interface BrandingSettings {
   appName: string;
@@ -166,6 +167,8 @@ export interface ChatSettings {
   defaultSystemPrompt: string | null;
   /** Absent on settings written before it was configurable; read as `instant`. */
   defaultEffort?: ReasoningEffort;
+  /** Model steps per reply when tools are used. Absent before v0.8; read as the default (8). */
+  maxToolSteps?: number;
 }
 
 /**
@@ -201,6 +204,14 @@ export interface StoredRateLimitSettings {
  * Per-role feature overrides. Sparse like the rate limits: a role or field
  * that was never saved falls back to `DEFAULT_ROLE_FEATURES`.
  */
+/**
+ * Per-role tool allow, sparse: a tool never saved for a role falls back to
+ * `defaultToolAllowed`, so tools registered later inherit a default.
+ */
+export interface StoredRoleToolSettings {
+  roles?: Partial<Record<UserRole, Record<string, boolean>>>;
+}
+
 export interface StoredRoleFeatureSettings {
   roles?: Partial<Record<UserRole, Partial<RoleFeatures>>>;
 }
@@ -216,6 +227,7 @@ interface SettingsMap {
   retention: StoredRetentionSettings;
   rateLimits: StoredRateLimitSettings;
   roleFeatures: StoredRoleFeatureSettings;
+  roleTools: StoredRoleToolSettings;
 }
 
 /**

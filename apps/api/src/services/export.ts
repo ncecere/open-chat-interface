@@ -1,4 +1,11 @@
 import { and, asc, eq, schema } from '@oci/db';
+import {
+  isToolPart,
+  summarizeToolPart,
+  TOOL_LIMIT_REASONS,
+  type ToolLimitReason,
+  toolLimitNote,
+} from '@oci/shared';
 import { db } from '../db/index.js';
 import { activeMessage } from './chat/reply-path.js';
 
@@ -35,6 +42,46 @@ function sourcesFromParts(parts: Record<string, unknown>[]): Array<{ title: stri
     if (part.type !== 'source-url' || typeof part.url !== 'string') return [];
     return [{ title: typeof part.title === 'string' ? part.title : part.url, url: part.url }];
   });
+}
+
+/**
+ * Tool steps as exports carry them: the tool, its inputs and a one-line
+ * summary, never the raw result (which can hold whole pages of fetched text).
+ */
+export function exportableParts(parts: Record<string, unknown>[]): Record<string, unknown>[] {
+  return parts.map((part) => {
+    if (!isToolPart(part)) return part;
+    const step = summarizeToolPart(part);
+    const approval = part.approval as { approved?: unknown; reason?: unknown } | undefined;
+    return {
+      type: part.type,
+      ...(part.type === 'dynamic-tool' ? { toolName: part.toolName } : {}),
+      toolCallId: part.toolCallId,
+      state: part.state,
+      input: part.input ?? null,
+      summary: step.summary,
+      ...(approval && typeof approval.approved === 'boolean'
+        ? {
+            approval: {
+              approved: approval.approved,
+              ...(typeof approval.reason === 'string' ? { reason: approval.reason } : {}),
+            },
+          }
+        : {}),
+    };
+  });
+}
+
+function toolLinesFromParts(parts: Record<string, unknown>[]): string[] {
+  const lines = parts.filter(isToolPart).map((part) => `_${summarizeToolPart(part).summary}_`);
+  const limit = parts.find((part) => part.type === 'data-tool-limit')?.data as
+    | { reason?: unknown; steps?: unknown }
+    | undefined;
+  if (limit && TOOL_LIMIT_REASONS.includes(limit.reason as ToolLimitReason))
+    lines.push(
+      `_${toolLimitNote(limit.reason as ToolLimitReason, typeof limit.steps === 'number' ? limit.steps : undefined)}_`,
+    );
+  return lines;
 }
 
 /**
@@ -79,6 +126,9 @@ export function renderMarkdown(
     if (attachments.length > 0) {
       lines.push(`_Attached: ${attachments.join(', ')}_`, '');
     }
+
+    const steps = toolLinesFromParts(message.parts);
+    if (steps.length > 0) lines.push(...steps, '');
 
     const text = textFromParts(message.parts);
     if (text) lines.push(text, '');

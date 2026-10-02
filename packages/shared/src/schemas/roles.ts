@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { QUOTA_METRICS, QUOTA_WINDOW_KINDS, REASONING_EFFORTS, USER_ROLES } from '../constants.js';
+import { roleToolSchema } from '../tools.js';
 import { rateLimitSettingsSchema, storagePolicySchema } from './lifecycle.js';
 
 export const CONFIG_SOURCES = ['database', 'environment', 'default'] as const;
@@ -91,6 +92,11 @@ export const roleAccessSchema = z.object({
   }),
   /** The role's own, editable switches and reasoning levels. */
   roleFeatures: roleFeaturesSchema,
+  /**
+   * Every registered tool and whether this role may use it. Changed through
+   * `PUT /admin/roles/:role/tools`.
+   */
+  tools: z.array(roleToolSchema),
   /** Fixed rules for the role that no setting changes. */
   fixedRules: z.array(z.string()),
 });

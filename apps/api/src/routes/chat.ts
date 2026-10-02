@@ -1,9 +1,10 @@
-import { sendMessageSchema } from '@oci/shared';
+import { answerToolApprovalsSchema, sendMessageSchema } from '@oci/shared';
 import { UI_MESSAGE_STREAM_HEADERS } from 'ai';
 import { Hono } from 'hono';
 import { AppError, rateLimited } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
+import { setupApprovalContinuation } from '../services/chat/approvals.js';
 import { readOwnedRunState } from '../services/chat/run-state.js';
 import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
@@ -30,6 +31,26 @@ chatRoutes.post('/', async (c) => {
 
   const input = await parseBody(c, sendMessageSchema);
   const { turn, run } = await setupTurn(user, input);
+  return streamResponse(turn, run);
+});
+
+/**
+ * Answers a reply's open tool approvals and continues the same assistant
+ * message under the durable claim, streaming like a new reply. 404 for another
+ * person's thread, 409 while a reply is generating, 422 when the reply is not
+ * the latest or is not waiting on exactly these approvals.
+ */
+chatRoutes.post('/:threadId/approvals', async (c) => {
+  const user = currentUser(c);
+  const limit = await chatRateLimit(user.id, user.role);
+  if (!limit.allowed) {
+    throw rateLimited(
+      'You are sending messages too quickly. Try again in a moment.',
+      limit.retryAfterSeconds,
+    );
+  }
+  const input = await parseBody(c, answerToolApprovalsSchema);
+  const { turn, run } = await setupApprovalContinuation(user, c.req.param('threadId'), input);
   return streamResponse(turn, run);
 });
 
