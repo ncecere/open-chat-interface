@@ -172,6 +172,28 @@ function RetentionForm({
             />
             <ConfigSourceBadge id="audit-days-source" source={sources?.auditLogRetentionDays} />
           </Field>
+
+          <Field
+            label="Memory retention (days)"
+            htmlFor="memory-days"
+            hint="Memories not updated for this long are deleted. Leave blank to keep them until the person deletes them."
+          >
+            <Input
+              id="memory-days"
+              aria-describedby={sources ? 'memory-days-source' : undefined}
+              type="number"
+              min="1"
+              placeholder="Never"
+              value={draft.memoryRetentionDays ?? ''}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  memoryRetentionDays: event.target.value ? Number(event.target.value) : null,
+                }))
+              }
+            />
+            <ConfigSourceBadge id="memory-days-source" source={sources?.memoryRetentionDays} />
+          </Field>
         </div>
 
         <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">

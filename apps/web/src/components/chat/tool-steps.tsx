@@ -1,6 +1,7 @@
 import {
   connectorSlugOfToolId,
   isToolPart,
+  memoryChangeOf,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
   type ToolLimitReason,
@@ -11,6 +12,7 @@ import type { UIMessage } from 'ai';
 import { ChevronDown, Globe2, ShieldQuestion, Wrench } from 'lucide-react';
 import { memo, useEffect, useId, useRef, useState } from 'react';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
+import { MemoryNote } from '~/components/chat/memory-note';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
@@ -286,21 +288,32 @@ export const ToolSteps = memo(function ToolSteps({
     <div className="mb-4 space-y-2">
       {steps.length > 0 && (
         <ul className="space-y-2" aria-label="Tool steps">
-          {steps.map(({ part, step }) => (
-            <li key={step.toolCallId} className="min-w-0">
-              {step.state === 'awaiting-approval' ||
-              (step.state === 'approved' && part.state === 'approval-responded') ||
-              (step.state === 'denied' && part.state === 'approval-responded') ? (
-                <ApprovalCard part={part} step={step} onAnswer={wrapped} disabled={disabled} />
-              ) : (
-                <ToolStepRow
-                  part={part}
-                  step={step}
-                  focusOnMount={answeredHere.current.has(step.toolCallId)}
-                />
-              )}
-            </li>
-          ))}
+          {steps.map(({ part, step }) => {
+            // A saved or removed memory is shown with its text and Undo.
+            const memory = memoryChangeOf(part);
+            return (
+              <li key={step.toolCallId} className="min-w-0">
+                {memory ? (
+                  <MemoryNote
+                    messageId={message.id}
+                    toolCallId={step.toolCallId}
+                    change={memory}
+                    canUndo={!disabled}
+                  />
+                ) : step.state === 'awaiting-approval' ||
+                  (step.state === 'approved' && part.state === 'approval-responded') ||
+                  (step.state === 'denied' && part.state === 'approval-responded') ? (
+                  <ApprovalCard part={part} step={step} onAnswer={wrapped} disabled={disabled} />
+                ) : (
+                  <ToolStepRow
+                    part={part}
+                    step={step}
+                    focusOnMount={answeredHere.current.has(step.toolCallId)}
+                  />
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
       {limit && (

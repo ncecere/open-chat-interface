@@ -8,6 +8,7 @@ export const ROLE_FEATURE_KEYS = [
   'temporaryChat',
   'branching',
   'projects',
+  'memory',
 ] as const;
 export type RoleFeatureKey = (typeof ROLE_FEATURE_KEYS)[number];
 
@@ -27,6 +28,7 @@ const ALL_FEATURES: RoleFeatures = {
   temporaryChat: true,
   branching: true,
   projects: true,
+  memory: true,
   reasoningEfforts: [...REASONING_EFFORTS],
 };
 
@@ -35,7 +37,8 @@ const ALL_FEATURES: RoleFeatures = {
  * configurable: restricted accounts cannot upload, share or start temporary
  * chats; every other role can use everything the instance offers. Projects
  * arrived later and follow the same line: off for restricted accounts until an
- * administrator turns them on.
+ * administrator turns them on. So does user memory (v0.9), which is also off
+ * instance-wide until an administrator turns it on.
  */
 export const DEFAULT_ROLE_FEATURES: Record<UserRole, RoleFeatures> = Object.fromEntries(
   USER_ROLES.map((role) => [
@@ -47,6 +50,7 @@ export const DEFAULT_ROLE_FEATURES: Record<UserRole, RoleFeatures> = Object.from
           shareLinks: false,
           temporaryChat: false,
           projects: false,
+          memory: false,
           reasoningEfforts: [...REASONING_EFFORTS],
         }
       : { ...ALL_FEATURES, reasoningEfforts: [...REASONING_EFFORTS] },

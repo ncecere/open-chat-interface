@@ -58,6 +58,7 @@ const lazyModules = [
   ['routes/admin/audit', ['AdminAuditPage']],
   ['routes/settings/account', ['SettingsAccountPage']],
   ['routes/settings/customization', ['SettingsCustomizationPage']],
+  ['routes/settings/memory', ['SettingsMemoryPage']],
   ['routes/settings/history', ['SettingsHistoryPage']],
   ['routes/settings/models', ['SettingsModelsPage']],
   ['routes/settings/connectors', ['SettingsConnectorsPage']],

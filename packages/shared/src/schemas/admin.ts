@@ -128,6 +128,12 @@ export const instanceSettingsSchema = z.object({
     webSearch: z.boolean(),
     attachments: z.boolean(),
     branching: z.boolean(),
+    /**
+     * User memory (v0.9), off by default. Each role and each person must also
+     * allow it. Absent from settings saved before v0.9 (and from an older
+     * API's response), which read as off.
+     */
+    memory: z.boolean().default(false),
   }),
   storage: z.object({
     driver: z.enum(STORAGE_DRIVERS),
@@ -156,8 +162,13 @@ export const instanceSettingsSchema = z.object({
 
 // Defaults belong to reads of older stored settings, never to a partial write.
 export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
-  .omit({ smtp: true, search: true, storage: true })
+  .omit({ smtp: true, search: true, storage: true, features: true })
   .extend({
+    // `memory` arrived in v0.9: a client that does not know it must not
+    // switch it off by leaving it out of the (otherwise whole) object.
+    features: instanceSettingsSchema.shape.features
+      .extend({ memory: z.boolean().optional() })
+      .optional(),
     storage: instanceSettingsSchema.shape.storage
       // localPath is reported for reference only; it is fixed by the
       // deployment and must not be writable through the admin API.

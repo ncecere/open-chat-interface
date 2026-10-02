@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, schema } from '@oci/db';
+import { and, asc, desc, eq, inArray, isNull, schema } from '@oci/db';
 import { EXPORT_ARCHIVE_VERSION } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
@@ -47,6 +47,7 @@ interface ExportedAttachment {
 
 interface ExportSummary {
   conversations: number;
+  memories: number;
   projects: number;
   messages: number;
   attachments: number;
@@ -234,10 +235,13 @@ function readme(summary: ExportSummary, createdAt: Date): string {
     '                 Files uploaded but never sent are under attachments/unsent/.',
     "projects/        Each project's files, in a folder per project. Project names",
     '                 and instructions are in manifest.json.',
+    'memory.json      What OCI remembers about you (Settings > Memory), newest',
+    '                 first, whether or not memory is switched on.',
     'manifest.json    Counts, versions, and an index of every conversation.',
     '',
     `Conversations: ${summary.conversations}`,
     `Projects: ${summary.projects}`,
+    `Memories: ${summary.memories}`,
     `Messages: ${summary.messages}`,
     `Attachments: ${summary.attachments}`,
     summary.omittedAttachments > 0
@@ -274,6 +278,7 @@ export async function* exportArchive(
   const names = conversationNames(threads);
   const summary: ExportSummary = {
     conversations: 0,
+    memories: 0,
     projects: 0,
     messages: 0,
     attachments: 0,
@@ -283,8 +288,8 @@ export async function* exportArchive(
   };
   const index: Array<Record<string, unknown>> = [];
   const omitted: Array<{ id: string; filename: string; reason: string }> = [];
-  // Room for the manifest, README and at least the remaining conversation files.
-  const entryBudget = () => ZIP_MAX_ENTRIES - writer.entries - 2;
+  // Room for the manifest, README, memory file and the remaining conversation files.
+  const entryBudget = () => ZIP_MAX_ENTRIES - writer.entries - 3;
 
   async function* writeAttachments(
     directory: string,
@@ -461,6 +466,34 @@ export async function* exportArchive(
     summary.projects += 1;
   }
 
+  // Memories (v0.9): every entry, newest first, whatever the switches say:
+  // the person's data is theirs to take even after memory was switched off.
+  const memories = await db
+    .select()
+    .from(schema.userMemory)
+    .where(eq(schema.userMemory.userId, owner.id))
+    .orderBy(desc(schema.userMemory.updatedAt), desc(schema.userMemory.id));
+  summary.memories = memories.length;
+  writer.add(
+    'memory.json',
+    JSON.stringify(
+      {
+        exportVersion: EXPORT_ARCHIVE_VERSION,
+        memories: memories.map((memory) => ({
+          id: memory.id,
+          content: memory.content,
+          source: memory.source,
+          threadId: memory.threadId,
+          messageId: memory.messageId,
+          createdAt: memory.createdAt.toISOString(),
+          updatedAt: memory.updatedAt.toISOString(),
+        })),
+      },
+      null,
+      2,
+    ),
+  );
+
   writer.add(
     'manifest.json',
     JSON.stringify(
@@ -472,6 +505,7 @@ export async function* exportArchive(
         counts: {
           conversations: summary.conversations,
           projects: summary.projects,
+          memories: summary.memories,
           messages: summary.messages,
           attachments: summary.attachments,
           attachmentBytes: summary.attachmentBytes,

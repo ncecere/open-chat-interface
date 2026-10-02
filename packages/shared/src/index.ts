@@ -11,6 +11,7 @@ export * from './schemas/compaction.js';
 export * from './schemas/connectors.js';
 export * from './schemas/embeddings.js';
 export * from './schemas/lifecycle.js';
+export * from './schemas/memory.js';
 export * from './schemas/model.js';
 export * from './schemas/onboarding.js';
 export * from './schemas/operations.js';

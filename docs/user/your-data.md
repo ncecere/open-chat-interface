@@ -20,6 +20,8 @@ The archive contains:
   and the list of attached files.
 - `attachments/` — the files you attached, in a folder per conversation. Files
   you uploaded but never sent are in `attachments/unsent/`.
+- `memory.json` — every [memory](memory.md) note, newest first, whether or
+  not memory is switched on.
 - `manifest.json` — when the export was made, the OCI version, how many
   conversations, messages and files it contains, and an index of every
   conversation.

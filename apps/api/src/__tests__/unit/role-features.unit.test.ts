@@ -45,6 +45,7 @@ describe('role feature defaults', () => {
       temporaryChat: false,
       branching: true,
       projects: false,
+      memory: false,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
     for (const role of ['admin', 'auditor', 'user'] as const) {
@@ -55,6 +56,7 @@ describe('role feature defaults', () => {
         temporaryChat: true,
         branching: true,
         projects: true,
+        memory: true,
         reasoningEfforts: [...REASONING_EFFORTS],
       });
     }
@@ -99,8 +101,23 @@ describe('combineFeatures', () => {
       temporaryChat: true,
       branching: false,
       projects: true,
+      // The instance memory switch is off unless saved on.
+      memory: false,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
+  });
+
+  it('offers memory only when the instance switch and the role both allow it', () => {
+    const role = DEFAULT_ROLE_FEATURES.user;
+    expect(combineFeatures({ ...instance, memory: true }, search, role).memory).toBe(true);
+    expect(
+      combineFeatures({ ...instance, memory: true }, search, { ...role, memory: false }).memory,
+    ).toBe(false);
+    expect(combineFeatures({ ...instance, memory: false }, search, role).memory).toBe(false);
+    expect(
+      combineFeatures({ ...instance, memory: true }, search, DEFAULT_ROLE_FEATURES.restricted)
+        .memory,
+    ).toBe(false);
   });
 
   it('takes projects from the role alone: there is no instance switch', () => {

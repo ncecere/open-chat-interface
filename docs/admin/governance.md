@@ -36,7 +36,8 @@ account), and the cost and tokens reserved while a response generates.
 
 Each role has its own switches for **web search**, **file attachments**,
 **share links**, **temporary chats**, **branching** (forking a conversation
-or editing an earlier message into a new branch) and **projects**. A role switch
+or editing an earlier message into a new branch), **projects** and **user
+memory**. A role switch
 can only narrow what the instance offers. Somebody can use a feature when both
 of these are on:
 
@@ -61,12 +62,13 @@ Out of the box the switches reproduce the rules that were fixed before they
 were configurable: the `restricted` role cannot upload attachments, create
 share links or start temporary chats, and every other role can use everything
 the instance offers, at every reasoning level. Projects, added later, follow the
-same line and are off for `restricted` until you turn them on. Saving sends only
+same line and are off for `restricted` until you turn them on, and so does user
+memory (which is also off instance-wide by default). Saving sends only
 the fields you changed, and each save is recorded in the audit log as
 `role.features.update` with the previous and new values. Auditors see the
 switches but cannot change them. API: `PUT /api/admin/roles/:role` with any of
 `webSearch`, `attachments`, `shareLinks`, `temporaryChat`, `branching`,
-`projects` (booleans) and `reasoningEfforts` (a list that must include
+`projects`, `memory` (booleans) and `reasoningEfforts` (a list that must include
 `instant`).
 
 ### Projects
@@ -102,6 +104,44 @@ switch alone decides. Governance follows the features projects reuse:
 The level a new conversation starts at is set instance-wide as **Default
 reasoning level** on [General settings](instance-settings.md). When the chosen
 model or the person's role does not allow it, the composer starts at Instant.
+
+### User memory
+
+[Memory](../user/memory.md) is a list of short notes about a person (at most
+200, each up to 500 characters) that OCI adds to their system prompt. It takes
+three switches, all off for a new instance: **User memory** under
+**Appearance & features → General** (instance-wide, off by default), the
+role's **User memory** switch here (on for every role except `restricted`, but
+only effective while the instance switch is on), and each person's own **Use
+memory** in Settings → Memory (off by default). Notes are read and the tools
+offered only when all three are on, and never in temporary chats.
+
+- **How notes are made.** People write them in Settings → Memory. With a
+  `tool_calling` model, the built-in `remember` and `forget` tools let the
+  model save and remove notes. They are not listed under the role's tools
+  below: the role's **User memory** switch governs them. They need no
+  approval, although they write data, because they change only the person's
+  own notes inside OCI, the person opted in, and every change is shown in the
+  reply with an **Undo** and listed in Settings.
+- **Context.** Notes are appended to the system prompt after the instance
+  prompt, the person's personalisation and any project instructions, newest
+  first, in a delimited section that presents them as notes about the person,
+  not instructions. They take at most 5% of the model's input budget and never
+  more than 8 KiB; older notes that do not fit are left out. A compaction
+  summary follows them and is budgeted after them.
+- **Switching it off** (instance or role) stops notes being read or written
+  at once. People keep their notes and can still list, delete and export them;
+  adding and editing are refused with `403`.
+- **Retention.** **Memory retention** on [Retention](#retention) deletes notes
+  not updated for that many days. Off by default.
+- **Audit.** `memory.add`, `memory.update` and `memory.delete` record counts,
+  the source (`tool` or `person`), how the change was made (`tool`,
+  `settings`, `undo` or `retention`) and ids, never the text.
+  `memory.settings.update` records a person switching memory on or off.
+  Retention writes one `memory.delete` per run with the number of notes and
+  people affected.
+- **Export.** A person's full export includes their notes as `memory.json`.
+  Deleting an account deletes its notes.
 
 ### Tools
 
@@ -273,6 +313,9 @@ entries are kept. Each field shows
 - **Usage history** — per-message usage rows. Daily totals are kept regardless.
 - **Reporting timezone** — where a day starts and ends on the Usage page. Budgets
   reset on their own timezone, which this does not change.
+- **Memory retention** — [user memory](#user-memory) notes not updated for
+  this long are deleted by a daily job; blank (the default) keeps them until
+  the person deletes them.
 - **Audit log** — how long the record of administrative action survives.
   Check what your institution requires before shortening this. Access-control
   and security changes are kept regardless: account creation, edits and

@@ -112,6 +112,12 @@ export default defineConfig({
         'src/services/project-search/fusion.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/project-search/semantic.ts': { statements: 95, branches: 95, functions: 100 },
         'src/routes/admin/embeddings.ts': { statements: 95, branches: 90, functions: 100 },
+        // v0.9 user memory: every switch, temporary chats, ownership, limits and the prompt budget.
+        'src/services/memory/access.ts': { statements: 100, branches: 95, functions: 100 },
+        'src/services/memory/prompt.ts': { statements: 88, branches: 80, functions: 100 },
+        'src/services/memory/store.ts': { statements: 90, branches: 80, functions: 100 },
+        'src/services/memory/tools.ts': { statements: 98, branches: 95, functions: 100 },
+        'src/routes/memory.ts': { statements: 98, branches: 95, functions: 100 },
         // v0.9 reranking: provider credentials, the outbound client, usage, fallback.
         'src/services/reranking/client.ts': { statements: 95, branches: 95, functions: 75 },
         'src/services/reranking/config.ts': { statements: 95, branches: 95, functions: 100 },

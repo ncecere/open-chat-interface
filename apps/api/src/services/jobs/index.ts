@@ -8,6 +8,7 @@ import {
   pruneUsageEvents,
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
+import { applyMemoryRetention } from '../memory/store.js';
 import { processPendingImports } from '../portability/imports.js';
 import { embedPendingProjectPassages } from '../project-search/embedding.js';
 import { indexPendingProjectFiles } from '../project-search/indexing.js';
@@ -83,6 +84,12 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'retention.threads',
       intervalMs: 6 * HOUR,
       run: () => applyThreadRetention(),
+    },
+    {
+      // User memory (v0.9): does nothing unless memory retention is set.
+      name: 'retention.memories',
+      intervalMs: 24 * HOUR,
+      run: () => applyMemoryRetention(),
     },
     {
       name: 'retention.usage-events',

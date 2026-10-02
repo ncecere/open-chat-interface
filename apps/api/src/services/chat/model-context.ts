@@ -2,6 +2,7 @@ import { ERROR_CODES } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { AppError, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
+import { loadMemorySection, withMemories } from '../memory/prompt.js';
 import {
   buildGroundingContext,
   normalizeSearchQuery,
@@ -146,17 +147,24 @@ export async function buildModelContext(
   // v0.7's single search before the reply still applies.
   const preSearch = input.webSearch && !hasTool(context.tools, 'web_search');
   const searchQuery = preSearch ? normalizeSearchQuery(textFromParts(stored.latest.parts)) : null;
-  const [newCandidates, searchResults, baseSystem, project] = await Promise.all([
+  const [newCandidates, searchResults, baseSystem, project, memories] = await Promise.all([
     inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
     searchQuery
       ? (options.search ?? searchOrFailure(searchQuery))
       : Promise.resolve<PreSearch>({ results: [] }),
     buildSystemPrompt(user.id, user.name),
     loadProjectContext(thread.projectId, user),
+    // Empty unless memory is on for this person and the chat is not temporary.
+    loadMemorySection(
+      { userId: user.id, role: user.role, temporary: thread.temporary },
+      budget.units,
+    ),
   ]);
   // Project instructions follow the instance prompt and the person's own
-  // customisation, so the system prompt's cost below already includes them.
-  const system = withProjectInstructions(baseSystem, project);
+  // customisation, then the person's memories (at most a fixed share of the
+  // input budget), so the system prompt's cost below already includes them
+  // and a compaction summary is budgeted after them.
+  const system = withMemories(withProjectInstructions(baseSystem, project), memories);
   const latest: UIMessage = preSearch
     ? {
         ...stored.latest,

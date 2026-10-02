@@ -123,7 +123,11 @@ export function toolLimitNote(reason: ToolLimitReason, steps?: number): string {
 }
 
 /** Labels for tools this release knows about; unknown ids fall back to the id. */
-const KNOWN_TOOL_LABELS: Record<string, string> = { web_search: 'Web search' };
+const KNOWN_TOOL_LABELS: Record<string, string> = {
+  web_search: 'Web search',
+  remember: 'Memory',
+  forget: 'Memory',
+};
 
 export function toolLabel(toolId: string): string {
   return KNOWN_TOOL_LABELS[toolId] ?? toolId;
@@ -223,6 +227,27 @@ export function summarizeToolPart(part: PartLike): ToolStepSummary {
     } else if (state === 'error') summary = `Web search${target} failed`;
     else if (state === 'denied') summary = `Web search${target} was not run`;
     else summary = `Searching the web${target}`;
+  } else if (toolId === 'remember' || toolId === 'forget') {
+    const output = part.output as { content?: unknown } | undefined;
+    const input = part.input as { content?: unknown } | undefined;
+    const text =
+      typeof output?.content === 'string'
+        ? output.content
+        : typeof input?.content === 'string'
+          ? input.content
+          : '';
+    const target = text.trim() ? ` ${quote(text)}` : '';
+    const remember = toolId === 'remember';
+    if (state === 'done')
+      summary =
+        (output as { action?: unknown } | undefined)?.action === 'exists'
+          ? `Already remembered${target}`
+          : remember
+            ? `Remembered${target}`
+            : `Forgot${target}`;
+    else if (state === 'error') summary = remember ? 'Saving a memory failed' : 'Forgetting failed';
+    else if (state === 'denied') summary = 'Memory was not changed';
+    else summary = remember ? 'Saving a memory' : 'Forgetting a memory';
   } else if (state === 'done') summary = `Used ${label}`;
   else if (state === 'error') summary = `${label} failed`;
   else if (state === 'denied') summary = `${label} was not run`;

@@ -50,6 +50,12 @@ export const retentionSettingsSchema = z.object({
   exemptPinnedThreads: z.boolean(),
   usageEventRetentionDays: z.number().int().min(1).max(3_650),
   auditLogRetentionDays: z.number().int().min(1).max(3_650),
+  /**
+   * User memory (v0.9): memories not updated for this many days are deleted
+   * by the lifecycle job. Null (the default) keeps them until the person
+   * deletes them.
+   */
+  memoryRetentionDays: z.number().int().min(1).max(3_650).nullable(),
   /** IANA zone for reporting only; limits reset on their own policy's zone. */
   displayTimezone: z.string().min(1).max(64),
 });

@@ -10,6 +10,7 @@ import { chatRoutes } from './chat.js';
 import { connectorRoutes } from './connectors.js';
 import { healthRoutes } from './health.js';
 import { meRoutes } from './me.js';
+import { memoryRoutes } from './memory.js';
 import { modelCatalogRoutes } from './models.js';
 import { portabilityRoutes } from './portability.js';
 import { projectRoutes } from './projects.js';
@@ -59,6 +60,7 @@ export function createApiRoutes() {
 
   api.route('/me', meRoutes);
   api.route('/me', portabilityRoutes);
+  api.route('/memory', memoryRoutes);
   api.route('/models', modelCatalogRoutes);
   api.route('/threads', threadRoutes);
   api.route('/projects', projectRoutes);

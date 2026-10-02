@@ -12,6 +12,7 @@ import { useTheme } from '~/providers/theme-provider';
 const TABS = [
   { to: '/settings', label: 'Account', exact: true },
   { to: '/settings/customization', label: 'Customization' },
+  { to: '/settings/memory', label: 'Memory' },
   { to: '/settings/history', label: 'History & Sync' },
   { to: '/settings/models', label: 'Models' },
   { to: '/settings/connectors', label: 'Connectors' },

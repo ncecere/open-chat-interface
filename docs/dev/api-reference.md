@@ -7,7 +7,7 @@ Every route the API registers, grouped by the file that defines it.
 Administrative routes require the `admin` role; an `auditor` may call the
 read-only ones. See [identity and access](../admin/identity.md).
 
-Generated from 38 route files.
+Generated from 39 route files.
 
 ## `routes/admin/audit.ts`
 
@@ -302,6 +302,18 @@ Generated from 38 route files.
 | POST | `/api/me/onboarding/skip` | — |
 | PATCH | `/api/me/preferences` | — |
 | GET | `/api/me/usage` | — |
+
+## `routes/memory.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/memory` | The person's switch, whether memory is offered to them, their notes newest first, and the limits. |
+| POST | `/api/memory` | Adds a note; an existing identical note is returned with `created: false`. |
+| DELETE | `/api/memory` | Deletes every note the person has. |
+| PATCH | `/api/memory/:id` | Changes the text of one of the person's notes. |
+| DELETE | `/api/memory/:id` | Deletes one of the person's notes. |
+| PUT | `/api/memory/settings` | Switches the person's own memory on or off; on needs the instance and role to allow it. |
+| POST | `/api/memory/undo` | Reverses one `remember` or `forget` step of the person's own reply. |
 
 ## `routes/models.ts`
 

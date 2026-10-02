@@ -37,6 +37,7 @@ export async function resolveTurnContext(
     userId: user.id,
     capabilities: resolved.capabilities,
     webSearch: input.webSearch,
+    temporary: thread.temporary,
   });
   return { user, input, thread, resolved, tools };
 }

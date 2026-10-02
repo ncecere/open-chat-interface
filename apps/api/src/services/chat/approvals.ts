@@ -115,6 +115,7 @@ export async function setupApprovalContinuation(
     userId: user.id,
     capabilities: resolved.capabilities,
     webSearch: reply.webSearchUsed,
+    temporary: thread.temporary,
   });
   const [prompt] = await db
     .select({ parts: schema.message.parts })

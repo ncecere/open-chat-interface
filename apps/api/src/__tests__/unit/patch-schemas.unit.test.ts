@@ -16,6 +16,20 @@ describe('partial-update schemas', () => {
     });
   });
 
+  it('leave the memory switch unchanged when a features patch omits it', () => {
+    const features = {
+      shareLinks: true,
+      temporaryChat: true,
+      webSearch: false,
+      attachments: true,
+      branching: true,
+    };
+    expect(updateInstanceSettingsSchema.parse({ features })).toEqual({ features });
+    expect(updateInstanceSettingsSchema.parse({ features: { ...features, memory: true } })).toEqual(
+      { features: { ...features, memory: true } },
+    );
+  });
+
   it('still apply defaults when creating', () => {
     expect(
       upsertModelSchema.parse({

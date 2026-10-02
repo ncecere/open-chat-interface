@@ -360,6 +360,20 @@ replicas before migrating rather than replacing them one by one. The drop is
 not reversible by reverting images: running v0.7 again would need the column
 re-added (`boolean NOT NULL DEFAULT false`).
 
+#### User memory (migration 0033)
+
+Migration `0033_user_memory` creates one new, empty table, `user_memory`
+(cascading from the user; its conversation and message references become null
+when those are deleted), and adds `user_preference.memory_enabled`
+(`boolean NOT NULL DEFAULT false`), a catalog-only change under a brief
+exclusive lock on `user_preference`. v0.8 replicas name their columns, so they
+neither read nor write either and keep working during a rolling upgrade. Memory
+stays off until an administrator switches on **General → User memory**
+([Instance settings](admin/instance-settings.md#general)); each person must
+then opt in. Notes are part of the database backup and of each person's
+export; the `retention.memories` job deletes old ones only when **Memory
+retention** is set ([User memory](admin/governance.md#user-memory)).
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

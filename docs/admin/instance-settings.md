@@ -41,11 +41,19 @@ Messages are never changed or deleted either way; see
 `PATCH /api/admin/settings` with `autoCompact`.
 
 **Features** turn capabilities off instance-wide: share links, temporary chats,
-conversation branching, and file attachments. Turning one off removes it from
+conversation branching, file attachments and user memory. Turning one off removes it from
 the interface rather than leaving a control that fails. Each role can be
 narrowed further on
 [Roles & access](governance.md#features-and-reasoning-levels); a feature is
 available only when both allow it.
+
+**User memory** is off by default. Switched on, people can opt in (Settings →
+Memory) to short notes about themselves that are added to their conversations
+and that models with tools can save and remove. Each role must also allow it;
+see [User memory](governance.md#user-memory) for limits, context budget,
+retention and audit. API: `PATCH /api/admin/settings` with
+`features.memory`; a client that leaves `memory` out of `features` leaves it
+unchanged.
 
 Two things that used to live here have moved:
 

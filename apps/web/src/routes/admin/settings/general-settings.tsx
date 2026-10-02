@@ -61,6 +61,12 @@ const FEATURE_SECTIONS: Array<{
         label: 'File attachments',
         description: 'Permit file uploads and attaching supported files to model messages.',
       },
+      {
+        key: 'memory',
+        label: 'User memory',
+        description:
+          'Let people opt in to short notes about themselves that are included in their conversations. Models with tools can save and remove notes; people see, edit and delete every note in Settings → Memory. Off by default.',
+      },
     ],
   },
 ];

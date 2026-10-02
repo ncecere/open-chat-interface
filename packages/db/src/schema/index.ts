@@ -4,6 +4,7 @@ export * from './compaction.js';
 export * from './connector.js';
 export * from './embeddings.js';
 export * from './lifecycle.js';
+export * from './memory.js';
 export * from './operations.js';
 export * from './organization.js';
 export * from './portability.js';

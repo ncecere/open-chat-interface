@@ -21,8 +21,10 @@ way regardless of which model you pick.
    use.
 8. [Sharing](sharing.md) — publishing a conversation read-only.
 9. [Settings](settings.md) — your account, personalisation, history, models.
-10. [Limits](limits.md) — what a usage warning means and what to do about it.
-11. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
+10. [Memory](memory.md) — notes about you that models can use in every
+    conversation, and how to see, change and delete them.
+11. [Limits](limits.md) — what a usage warning means and what to do about it.
+12. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
     or Claude.
 
 ## The parts of the screen
@@ -50,8 +52,8 @@ instance:
 - **How much you may use**, whether that is measured in messages, tokens, or
   cost.
 - **How long conversations are kept** before they are removed.
-- **Whether attachments, web search, sharing, temporary chats, branching or
-  projects are available**, for the whole instance or for your role.
+- **Whether attachments, web search, sharing, temporary chats, branching,
+  projects or memory are available**, for the whole instance or for your role.
 - **Which tools models may use for your role**, and how many steps a reply
   may take.
 - **Which reasoning levels you can choose**, and which one a new conversation

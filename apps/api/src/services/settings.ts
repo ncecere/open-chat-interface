@@ -77,6 +77,8 @@ export interface FeatureSettings {
   webSearch: boolean;
   attachments: boolean;
   branching: boolean;
+  /** User memory (v0.9). Absent before v0.9; read as off. */
+  memory: boolean;
 }
 
 /**
@@ -93,7 +95,7 @@ export function normalizeAuthSettings(value: AuthSettings): AuthSettings {
   };
 }
 
-/** Drops the retired persona flag from settings written by older releases. */
+/** Drops retired flags and reads a missing memory switch (before v0.9) as off. */
 export function normalizeFeatureSettings(value: FeatureSettings): FeatureSettings {
   // Retired switches that never controlled anything. Dropping them on read
   // also removes them from storage the next time features are saved.
@@ -103,7 +105,8 @@ export function normalizeFeatureSettings(value: FeatureSettings): FeatureSetting
     mcp: _mcp,
     ...normalized
   } = value as FeatureSettings & { personas?: boolean; canvas?: boolean; mcp?: boolean };
-  return normalized;
+  // Memory is off unless an administrator switched it on.
+  return { ...normalized, memory: normalized.memory === true };
 }
 
 export interface S3StorageSettings {
@@ -187,6 +190,8 @@ export interface StoredRetentionSettings {
   exemptPinnedThreads?: boolean;
   usageEventRetentionDays?: number;
   auditLogRetentionDays?: number;
+  /** User memory (v0.9): delete memories not updated for this many days; null keeps them. */
+  memoryRetentionDays?: number | null;
   /** Presentation only; policy timezones govern when limits actually reset. */
   displayTimezone?: string;
 }

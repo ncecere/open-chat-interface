@@ -271,6 +271,11 @@ export const userPreference = pgTable(
      * so a returning user is never asked again after finishing it once.
      */
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
+    /**
+     * The person's own opt-in to user memory (migration 0033), off by default.
+     * Memory is used only when this, the instance switch and the role allow it.
+     */
+    memoryEnabled: boolean('memory_enabled').notNull().default(false),
     ...timestamps(),
   },
   (t) => [index('user_preference_user_idx').on(t.userId)],

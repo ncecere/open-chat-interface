@@ -225,6 +225,13 @@
       "when": 1790539200011,
       "tag": "0031_drop_boring_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790539200013,
+      "tag": "0033_user_memory",
+      "breakpoints": true
     }
   ]
 }

@@ -51,6 +51,11 @@ The **Your data** section at the bottom downloads all of your conversations and
 files at once, and imports history from ChatGPT or Claude. See
 [Your data](your-data.md).
 
+## Memory
+
+Your own switch for memory, and every note OCI keeps about you, to add, edit
+and delete. See [Memory](memory.md).
+
 ## Models
 
 ![The models available to you](../images/user-settings-models.png)

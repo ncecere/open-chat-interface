@@ -14,12 +14,26 @@ describe('legacy feature settings', () => {
       mcp: false,
     };
 
-    expect(normalizeFeatureSettings(stored)).toEqual({
+    expect(normalizeFeatureSettings(stored as never)).toEqual({
       shareLinks: true,
       temporaryChat: true,
       webSearch: true,
       attachments: true,
       branching: true,
+      // Saved before v0.9: memory reads as off.
+      memory: false,
     });
+  });
+
+  it('keeps a saved memory switch', () => {
+    const stored = {
+      shareLinks: false,
+      temporaryChat: false,
+      webSearch: false,
+      attachments: false,
+      branching: false,
+      memory: true,
+    };
+    expect(normalizeFeatureSettings(stored).memory).toBe(true);
   });
 });

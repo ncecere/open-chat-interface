@@ -195,6 +195,10 @@ const SETTINGS_TABS = [
     component: lazyRouteComponent(() => import('~/routes/settings/history'), 'SettingsHistoryPage'),
   },
   {
+    path: '/settings/memory',
+    component: lazyRouteComponent(() => import('~/routes/settings/memory'), 'SettingsMemoryPage'),
+  },
+  {
     path: '/settings/models',
     component: lazyRouteComponent(() => import('~/routes/settings/models'), 'SettingsModelsPage'),
   },
