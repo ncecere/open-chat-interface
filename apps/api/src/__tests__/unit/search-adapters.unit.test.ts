@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { searchSearchapi } from '../../services/search/searchapi.js';
 import { searchSerpapi } from '../../services/search/serpapi.js';
 
 const request = (overrides: Partial<Parameters<typeof searchSerpapi>[0]> = {}) => ({
@@ -60,5 +61,53 @@ describe('SerpApi search', () => {
     const failure = searchSerpapi(request());
     await expect(failure).rejects.toThrow('SerpApi rejected the web search API key (HTTP 401)');
     await expect(failure).rejects.not.toThrow('serpapi-test-key');
+  });
+});
+
+describe('SearchApi search', () => {
+  it('sends the key in a header, never the URL, and maps organic results', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            organic_results: [
+              {
+                title: 'Library hours',
+                link: 'https://lib.example.edu/hours',
+                snippet: 'Open 8–22',
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(searchSearchapi(request({ apiKey: 'searchapi-key' }))).resolves.toEqual([
+      { title: 'Library hours', url: 'https://lib.example.edu/hours', snippet: 'Open 8–22' },
+    ]);
+    const [target, init] = fetch.mock.calls[0] as unknown as [URL, RequestInit];
+    const url = new URL(String(target));
+    expect(url.origin + url.pathname).toBe('https://www.searchapi.io/api/v1/search');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      engine: 'google',
+      q: 'library opening hours',
+      safe: 'active',
+    });
+    expect(String(target)).not.toContain('searchapi-key');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer searchapi-key');
+  });
+
+  it('names SearchApi when its key is missing or rejected', async () => {
+    await expect(searchSearchapi(request({ apiKey: null }))).rejects.toThrow(
+      'SearchApi needs an API key.',
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":"Invalid API key."}', { status: 401 })),
+    );
+    await expect(searchSearchapi(request())).rejects.toThrow(
+      'SearchApi rejected the web search API key (HTTP 401)',
+    );
   });
 });

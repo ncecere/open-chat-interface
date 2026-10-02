@@ -79,7 +79,11 @@ Choose a provider and the page asks for exactly what it needs:
 | Tavily | API key | app.tavily.com, under API keys (starts with `tvly-`). |
 | Brave Search | API key | The subscription token at api-dashboard.search.brave.com. |
 | Exa | API key | dashboard.exa.ai, under API keys. |
-| SerpApi (Google results) | API key | serpapi.com/manage-api-key. Searches use SafeSearch. |
+| SerpApi (Google results) | API key | serpapi.com/manage-api-key (64 characters). Searches use SafeSearch. |
+| SearchApi (Google results) | API key | The searchapi.io dashboard (24 characters). Searches use SafeSearch. |
+
+SerpApi and SearchApi are different companies with similar names; a key from
+one is rejected by the other. **Test search** tells you which way round it is.
 
 Hosted providers use their own fixed endpoints, so they ask for no address. A
 key belongs to one provider: switching provider removes the saved key, and the

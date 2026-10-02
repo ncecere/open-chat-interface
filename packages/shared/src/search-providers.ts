@@ -53,6 +53,15 @@ export const SEARCH_PROVIDERS: Record<SearchProviderKind, SearchProviderInfo> = 
     label: 'SerpApi (Google results)',
     needs: 'apiKey',
     fieldLabel: 'SerpApi API key',
-    fieldHint: 'Your private API key, shown at serpapi.com/manage-api-key.',
+    fieldHint:
+      'Your private API key, shown at serpapi.com/manage-api-key (64 characters). Not the same service as SearchApi.',
+  },
+  searchapi: {
+    name: 'SearchApi',
+    label: 'SearchApi (Google results)',
+    needs: 'apiKey',
+    fieldLabel: 'SearchApi API key',
+    fieldHint:
+      'Your API key from the searchapi.io dashboard (24 characters). Not the same service as SerpApi.',
   },
 };

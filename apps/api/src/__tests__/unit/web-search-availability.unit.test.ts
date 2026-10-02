@@ -42,5 +42,11 @@ describe('web search availability', () => {
       webSearchProblem({ webSearch: true }, search({ provider: 'serpapi', encryptedApiKey: null })),
     ).toBe('SerpApi needs an API key');
     expect(webSearchProblem({ webSearch: true }, search({ provider: 'serpapi' }))).toBeNull();
+    expect(
+      webSearchProblem(
+        { webSearch: true },
+        search({ provider: 'searchapi', encryptedApiKey: null }),
+      ),
+    ).toBe('SearchApi needs an API key');
   });
 });

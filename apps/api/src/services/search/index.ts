@@ -5,6 +5,7 @@ import { logger } from '../../lib/logger.js';
 import { getSetting, type SearchSettings } from '../settings.js';
 import { searchBrave } from './brave.js';
 import { searchExa } from './exa.js';
+import { searchSearchapi } from './searchapi.js';
 import { searchSearxng } from './searxng.js';
 import { searchSerpapi } from './serpapi.js';
 import { searchTavily } from './tavily.js';
@@ -16,6 +17,7 @@ const adapters = {
   brave: searchBrave,
   exa: searchExa,
   serpapi: searchSerpapi,
+  searchapi: searchSearchapi,
 } satisfies Record<SearchProviderKind, SearchAdapter>;
 
 export function normalizeSearchQuery(query: string): string {

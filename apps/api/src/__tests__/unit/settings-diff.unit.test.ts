@@ -81,4 +81,12 @@ describe('diffSettings with nested secrets', () => {
     );
     expect(JSON.stringify(changes)).not.toContain('stored-key');
   });
+
+  it('keeps an absent secret absent when redacted twice', () => {
+    // The settings route redacts its snapshot, and the diff redacts again.
+    const snapshot = redactSecrets({ provider: 'searxng', encryptedApiKey: null });
+    expect(redactSecrets(snapshot)).toEqual({ provider: 'searxng', encryptedApiKey: '[unset]' });
+    const changes = diffSettings({ search: snapshot }, { search: { provider: 'serpapi' } });
+    expect(changes[0]?.before).toEqual({ provider: 'searxng', encryptedApiKey: '[unset]' });
+  });
 });

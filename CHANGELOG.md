@@ -25,8 +25,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   show one-line summaries without raw results. Models without tool calling
   behave exactly as before. See `docs/user/tools.md` and
   `docs/dev/tools-design.md`.
-- **SerpApi as a web search provider** (Google results, SafeSearch on), alongside
-  SearXNG, Tavily, Brave Search and Exa.
+- **SerpApi and SearchApi as web search providers** (Google results, SafeSearch
+  on), alongside SearXNG, Tavily, Brave Search and Exa. SearchApi's key is sent
+  in a header rather than the URL.
 - **Test search** on the Web search page runs one sample search with the
   provider and key or address on the page, saved or not, and shows whether it
   worked or what the provider replied. Audited as `search.test`.
@@ -78,6 +79,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **The audit log recorded a cleared secret as set.** Settings snapshots were
+  redacted twice, and the second pass read the `[unset]` marker as a value, so
+  a change's "before" could show a key as `[set]` when none was stored.
 - **Chat errors are shown as text.** A failed request showed the server's raw
   JSON (`{"error":{"code":…}}`) above the composer; it now shows the message.
 
