@@ -20,7 +20,7 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 };
 
 /** Only tools whose switch differs from what is saved. Exported for tests. */
-export function roleToolChanges(
+function roleToolChanges(
   saved: RoleAccess['tools'],
   draft: Record<string, boolean>,
 ): UpdateRoleToolsInput['tools'] {

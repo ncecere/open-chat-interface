@@ -1,7 +1,7 @@
 import type { ToolKind } from '@oci/shared';
 import { recordAudit } from '../audit.js';
 
-export type ToolCallOutcome = 'ok' | 'error' | 'denied' | 'refused';
+type ToolCallOutcome = 'ok' | 'error' | 'denied' | 'refused';
 export type ToolApprovalAnswer = 'approved' | 'denied' | 'not answered';
 
 /**

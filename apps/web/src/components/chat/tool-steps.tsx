@@ -156,7 +156,7 @@ function ToolStepRow({
  * connector and the exact inputs. Answers are announced, and focus stays on
  * the card's status once the buttons go.
  */
-export function ApprovalCard({
+function ApprovalCard({
   part,
   step,
   onAnswer,

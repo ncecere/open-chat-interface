@@ -6,7 +6,7 @@ import type { ChatTransaction } from './thread-claim.js';
 type Part = Record<string, unknown>;
 
 /** Parts of a reply that still wait for an answer, or were answered but never ran. */
-export const openApprovalCondition = () =>
+const openApprovalCondition = () =>
   sql<boolean>`${schema.message.parts} @? '$[*] ? (@.state == "approval-requested" || @.state == "approval-responded")'`;
 
 export function openApprovals(

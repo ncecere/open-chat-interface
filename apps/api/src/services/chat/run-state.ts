@@ -7,7 +7,7 @@ export type OwnedRunState = 'streaming' | 'terminal' | 'missing';
  * The assistant message a run writes. A first run's ID is the message ID; a
  * reply continued after an approval runs as `<message id>:<suffix>`.
  */
-export function runMessageId(runId: string): string {
+function runMessageId(runId: string): string {
   return runId.split(':', 1)[0]!;
 }
 

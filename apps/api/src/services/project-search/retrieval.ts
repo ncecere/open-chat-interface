@@ -1,5 +1,6 @@
 import { sql } from '@oci/db';
 import { db } from '../../db/index.js';
+import { stripControls, tsqueryOperand } from '../../lib/text.js';
 
 /**
  * Keyword retrieval over one project's file chunks.
@@ -37,18 +38,6 @@ function textArray(values: string[]) {
   )}]::text[]`;
 }
 
-/** Removes control characters from typed text. */
-function stripControls(value: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point
-  return value.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ');
-}
-
-/** Quotes a lexeme as a tsquery operand. Lexemes come from Postgres, never from raw input. */
-function tsqueryOperand(lexeme: string): string {
-  const quoted = `'${lexeme.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`;
-  return [...lexeme].length >= PREFIX_MIN_CHARS ? `${quoted}:*` : quoted;
-}
-
 /**
  * The searchable words of a message as single-term tsquery operands, in the
  * order they first appear. Empty when nothing searchable is left.
@@ -69,7 +58,7 @@ export async function projectSearchTerms(raw: string): Promise<string[]> {
       return length > 1 && length <= MAX_LEXEME_CHARS;
     })
     .slice(0, MAX_TERMS)
-    .map(tsqueryOperand);
+    .map((lexeme) => tsqueryOperand(lexeme, [...lexeme].length >= PREFIX_MIN_CHARS));
 }
 
 /**

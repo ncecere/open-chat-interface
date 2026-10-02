@@ -7,6 +7,7 @@ import {
 } from '@oci/shared';
 import { db } from '../db/index.js';
 import { containsPattern } from '../lib/like.js';
+import { stripControls, tsqueryOperand } from '../lib/text.js';
 
 type SQL = ReturnType<typeof sql.raw>;
 
@@ -43,17 +44,6 @@ function messageSearchText(alias: string): SQL {
   );
 }
 
-/** Removes the highlight markers and other control characters from stored or typed text. */
-function stripControls(value: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point
-  return value.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ');
-}
-
-/** Quotes a lexeme as a tsquery operand. Lexemes come from Postgres, never from raw input. */
-function tsqueryOperand(lexeme: string): string {
-  return `'${lexeme.replaceAll('\\', '\\\\').replaceAll("'", "''")}':*`;
-}
-
 /**
  * Turns free text into a prefix query: every word must appear, each matched as
  * a prefix (`plan` finds "planning"). The words are split by Postgres's own
@@ -77,7 +67,9 @@ async function parseSearchQuery(raw: string): Promise<string | null> {
   if (longer.length > 0) lexemes = longer;
   lexemes = lexemes.slice(0, MAX_TERMS);
 
-  return lexemes.length > 0 ? lexemes.map(tsqueryOperand).join(' & ') : null;
+  return lexemes.length > 0
+    ? lexemes.map((lexeme) => tsqueryOperand(lexeme, true)).join(' & ')
+    : null;
 }
 
 const SNIPPET_OPTIONS = [

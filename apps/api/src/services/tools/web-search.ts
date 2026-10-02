@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { clip } from '../../lib/text.js';
 import { roleFeatures } from '../role-features.js';
 import { webSearchProblem } from '../search/availability.js';
 import { normalizeSearchQuery, searchWeb } from '../search/index.js';
@@ -6,18 +7,15 @@ import { getSetting } from '../settings.js';
 import type { ToolDefinition, ToolSource } from './types.js';
 
 /** Bounds on what one search returns to the model and stores in the reply. */
-export const WEB_SEARCH_MAX_RESULTS = 10;
+const WEB_SEARCH_MAX_RESULTS = 10;
 const MAX_TITLE_CHARS = 300;
 const MAX_SNIPPET_CHARS = 600;
 const MAX_URL_CHARS = 2_000;
 
-export interface WebSearchToolResult {
+interface WebSearchToolResult {
   query: string;
   results: Array<{ title: string; url: string; snippet: string }>;
 }
-
-const clip = (value: string, max: number) =>
-  value.length > max ? `${value.slice(0, max - 1)}…` : value;
 
 /**
  * The `web_search` tool: the same providers, instance switch and role switch as

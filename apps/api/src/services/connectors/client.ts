@@ -6,7 +6,7 @@ import { assertAllowedUrl, createGuardedFetch, findNetworkError } from './networ
 import { recordContact, recordFailure } from './store.js';
 
 /** Where and how to reach one connector's server. */
-export interface ConnectionTarget {
+interface ConnectionTarget {
   id: string;
   name: string;
   url: string;

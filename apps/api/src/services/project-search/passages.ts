@@ -1,4 +1,5 @@
 import type { ProjectSearchData } from '@oci/shared';
+import { singleLine } from '../../lib/text.js';
 import { textCost } from '../chat/context-budget.js';
 import type { RetrievedChunk } from './retrieval.js';
 
@@ -16,17 +17,13 @@ export interface ProjectPassage {
   chunks: number;
 }
 
-function displayName(name: string): string {
-  return name.replace(/\s+/g, ' ').trim();
-}
-
 /** The model-facing text of a passage: labelled with its file and passage number. */
 export function renderPassage(passage: ProjectPassage): string {
   const label =
     passage.first === passage.last
       ? `Passage ${passage.first}`
       : `Passages ${passage.first}–${passage.last}`;
-  return `${label} of project file "${displayName(passage.filename)}":\n\n${passage.text}`;
+  return `${label} of project file "${singleLine(passage.filename)}":\n\n${passage.text}`;
 }
 
 /** What one chunk costs on its own, label included. Stitching only makes it cheaper. */

@@ -2,6 +2,7 @@ import { and, eq, schema } from '@oci/db';
 import type { ProjectSearchData, UserRole } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
+import { singleLine } from '../../lib/text.js';
 import {
   type ProjectPassage,
   projectSearchSummary,
@@ -78,10 +79,6 @@ export async function loadProjectContext(
   return { id: projectId, userId: user.id, ...project, files };
 }
 
-function displayName(name: string): string {
-  return name.replace(/\s+/g, ' ').trim();
-}
-
 /**
  * Project instructions go after the instance prompt and the person's own
  * customisation, clearly delimited so the model can tell where they start
@@ -93,7 +90,7 @@ export function withProjectInstructions(system: string, project: ProjectContext 
   return [
     system,
     [
-      `This conversation belongs to the project "${displayName(project.name)}". Follow the project's instructions below unless they conflict with the instructions above.`,
+      `This conversation belongs to the project "${singleLine(project.name)}". Follow the project's instructions below unless they conflict with the instructions above.`,
       '<project_instructions>',
       instructions,
       '</project_instructions>',
@@ -102,7 +99,7 @@ export function withProjectInstructions(system: string, project: ProjectContext 
 }
 
 function projectFilesHeader(name: string): string {
-  return `Files from the project "${displayName(name)}". They are reference material for every conversation in the project, not files attached to this message.`;
+  return `Files from the project "${singleLine(name)}". They are reference material for every conversation in the project, not files attached to this message.`;
 }
 
 function projectPassagesHeader(name: string, mode: ProjectSearchData['mode']): string {
@@ -120,7 +117,7 @@ export type ProjectSearchPart = {
   data: ProjectSearchData;
 };
 
-export type ProjectFileSelection = {
+type ProjectFileSelection = {
   /** Files included whole. */
   files: AttachmentCandidate[];
   /** Searched passages, already rendered, when the files were too large to include whole. */

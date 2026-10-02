@@ -33,7 +33,7 @@ const AUTH_MODE_HINTS: Record<ConnectorAuthMode, string> = {
 type SecretAction = 'keep' | 'replace' | 'clear';
 
 /** Where authorization servers send people back, for registering an OAuth client. */
-export function connectorRedirectUrl(connector: AdminConnector | null): string {
+function connectorRedirectUrl(connector: AdminConnector | null): string {
   return connector?.oauthRedirectUrl ?? `${window.location.origin}/api/connectors/oauth/callback`;
 }
 

@@ -19,14 +19,14 @@ export const CHUNK_OVERLAP_CHARS = 200;
 /** Far above what extraction produces today (200,000 characters, ~200 chunks). */
 export const MAX_CHUNKS_PER_FILE = 2000;
 
-export interface TextChunk {
+interface TextChunk {
   ordinal: number;
   start: number;
   end: number;
   content: string;
 }
 
-export interface ChunkOptions {
+interface ChunkOptions {
   targetChars?: number;
   overlapChars?: number;
   maxChunks?: number;

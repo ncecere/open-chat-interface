@@ -4,6 +4,7 @@ import { connectorToolId } from '@oci/shared';
 import { jsonSchema } from 'ai';
 import { db } from '../../db/index.js';
 import { providerError } from '../../lib/errors.js';
+import { clip } from '../../lib/text.js';
 import type { ToolDefinition, ToolSource, ToolTurnInput } from '../tools/types.js';
 import { withMcpClient } from './client.js';
 import { CONNECTOR_LIMITS } from './limits.js';
@@ -65,9 +66,6 @@ export function connectorToolLabel(tool: Pick<ConnectorToolRow, 'title' | 'name'
   return (tool.title?.trim() || tool.name).slice(0, 120);
 }
 
-const clip = (value: string, max: number) =>
-  value.length > max ? `${value.slice(0, max - 1)}…` : value;
-
 /** The person's connected connectors, looked up once per turn. */
 function connectedFor(turn: ToolTurnInput): Promise<Set<string>> {
   const key = 'connector-accounts';
@@ -79,10 +77,7 @@ function connectedFor(turn: ToolTurnInput): Promise<Set<string>> {
   return lookup;
 }
 
-export function connectorToolDefinition(
-  connector: ConnectorRow,
-  tool: ConnectorToolRow,
-): ToolDefinition {
+function connectorToolDefinition(connector: ConnectorRow, tool: ConnectorToolRow): ToolDefinition {
   const label = connectorToolLabel(tool);
   return {
     id: connectorToolId(connector.slug, tool.toolKey),
@@ -140,7 +135,7 @@ async function callConnectorTool(
 }
 
 /** What a connector tool returns to the model: sources first, then bounded text. */
-export interface ConnectorToolResult {
+interface ConnectorToolResult {
   sources: ToolSource[];
   text: string;
   truncated?: true;

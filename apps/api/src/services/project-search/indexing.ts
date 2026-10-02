@@ -5,7 +5,7 @@ import { logger } from '../../lib/logger.js';
 import { chunkText } from './chunking.js';
 
 /** Files chunked per run of the background job; the next tick continues. */
-export const INDEX_FILES_PER_RUN = 50;
+const INDEX_FILES_PER_RUN = 50;
 const INSERT_BATCH = 200;
 
 /**

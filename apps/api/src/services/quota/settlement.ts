@@ -5,7 +5,7 @@ import type { UsageReservation } from './reservation.js';
 
 export type UsageTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type UsageEvent = typeof schema.usageEvent.$inferSelect;
-export type TokenReport = {
+type TokenReport = {
   tokensIn?: number | null;
   tokensOut?: number | null;
   /**

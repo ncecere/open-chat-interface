@@ -17,7 +17,7 @@ export interface TurnTools {
   definitions: ToolDefinition[];
 }
 
-export const NO_TOOLS: TurnTools = { definitions: [] };
+const NO_TOOLS: TurnTools = { definitions: [] };
 
 export const hasTool = (tools: TurnTools, id: string) =>
   tools.definitions.some((definition) => definition.id === id);

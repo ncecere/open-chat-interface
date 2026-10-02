@@ -31,7 +31,7 @@ import { type ConnectorAccountRow, type ConnectorRow, findAccount } from './stor
  *   bound to that person and valid for ten minutes, and used once.
  */
 
-export const OAUTH_STATE_TTL_MS = 10 * 60_000;
+const OAUTH_STATE_TTL_MS = 10 * 60_000;
 /** Tokens this close to expiry are refreshed before a call. */
 const REFRESH_MARGIN_MS = 60_000;
 

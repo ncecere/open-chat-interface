@@ -30,7 +30,7 @@ export class ConnectorNetworkError extends Error {
   }
 }
 
-export interface NetworkPolicy {
+interface NetworkPolicy {
   /** Plain HTTP and private addresses are allowed (administrator's explicit choice). */
   allowPrivateNetwork: boolean;
   /** Largest response body accepted, in bytes. */
@@ -39,7 +39,7 @@ export interface NetworkPolicy {
   idleTimeoutMs?: number;
 }
 
-export const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 
 /**
