@@ -126,14 +126,16 @@ export function roleAccessFixture(
       temporaryChat: role !== 'restricted',
       webSearch: false,
       branching: true,
+      projects: role !== 'restricted',
     },
-    // The built-in defaults: restricted cannot upload, share or go temporary.
+    // The built-in defaults: restricted cannot upload, share, go temporary or use projects.
     roleFeatures: {
       webSearch: true,
       attachments: role !== 'restricted',
       shareLinks: role !== 'restricted',
       temporaryChat: role !== 'restricted',
       branching: true,
+      projects: role !== 'restricted',
       reasoningEfforts: ['instant', 'low', 'medium', 'high'],
     },
     fixedRules: role === 'auditor' ? ['Can view administration but cannot change it.'] : [],

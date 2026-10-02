@@ -21,6 +21,11 @@ import {
   restoreThread,
   softDeleteThread,
 } from '../services/lifecycle/trash.js';
+import {
+  assertProjectsAllowed,
+  getOwnedProject,
+  moveThreadToProject,
+} from '../services/projects.js';
 import { searchThreads } from '../services/thread-search.js';
 import {
   assertBranchingAllowed,
@@ -42,6 +47,8 @@ const listQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  /** Only conversations in this project (the caller's own). */
+  projectId: z.string().min(1).max(200).optional(),
 });
 
 /**
@@ -69,6 +76,7 @@ function serializeThread(thread: typeof schema.thread.$inferSelect) {
     expiresAt: thread.expiresAt?.toISOString() ?? null,
     parentThreadId: thread.parentThreadId,
     branchedFromMessageId: thread.branchedFromMessageId,
+    projectId: thread.projectId,
     lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
     createdAt: thread.createdAt.toISOString(),
     updatedAt: thread.updatedAt.toISOString(),
@@ -77,8 +85,12 @@ function serializeThread(thread: typeof schema.thread.$inferSelect) {
 
 threadRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const { search, archived } = parseQuery(c, listQuerySchema);
-  const threads = await listThreads(user.id, { search, archived });
+  const { search, archived, projectId } = parseQuery(c, listQuerySchema);
+  if (projectId) {
+    await assertProjectsAllowed(user.role);
+    await getOwnedProject(projectId, user.id);
+  }
+  const threads = await listThreads(user.id, { search, archived, projectId });
   return c.json({ threads: threads.map(serializeThread) });
 });
 
@@ -91,6 +103,7 @@ threadRoutes.post('/', async (c) => {
     role: user.role,
     title: input.title,
     temporary: input.temporary,
+    projectId: input.projectId,
   });
   return c.json({ thread: serializeThread(thread) }, 201);
 });
@@ -218,15 +231,23 @@ threadRoutes.get('/:id', async (c) => {
 threadRoutes.patch('/:id', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
-  const patch = await parseBody(c, updateThreadSchema);
+  const { projectId, ...patch } = await parseBody(c, updateThreadSchema);
 
-  const [updated] = await db
-    .update(schema.thread)
-    .set(patch)
-    .where(eq(schema.thread.id, thread.id))
-    .returning();
-
-  return c.json({ thread: updated ? serializeThread(updated) : null });
+  // Moving into or out of a project checks the role and the project's owner
+  // before anything is written.
+  let updated: typeof schema.thread.$inferSelect | undefined;
+  if (projectId !== undefined) {
+    await assertProjectsAllowed(user.role);
+    updated = await moveThreadToProject(thread.id, user.id, projectId);
+  }
+  if (Object.keys(patch).length > 0) {
+    [updated] = await db
+      .update(schema.thread)
+      .set(patch)
+      .where(eq(schema.thread.id, thread.id))
+      .returning();
+  }
+  return c.json({ thread: serializeThread(updated ?? thread) });
 });
 
 /**

@@ -41,7 +41,7 @@ export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<nu
 
 export async function listThreads(
   userId: string,
-  options?: { search?: string; archived?: boolean },
+  options?: { search?: string; archived?: boolean; projectId?: string },
 ) {
   // Expiry cleanup belongs to the background job runner. Doing it here made an
   // ordinary read perform unbounded deletion work on someone else's rows.
@@ -55,6 +55,11 @@ export async function listThreads(
 
   if (options?.search) {
     conditions.push(ilike(schema.thread.title, `%${options.search}%`));
+  }
+
+  // The caller checks that the project is the user's own.
+  if (options?.projectId) {
+    conditions.push(eq(schema.thread.projectId, options.projectId));
   }
 
   return db
@@ -71,19 +76,37 @@ export async function createThread(options: {
   role: UserRole;
   title?: string;
   temporary?: boolean;
+  /** Start inside one of the user's projects; needs the role's projects feature. */
+  projectId?: string;
 }) {
   if (options.temporary) await assertTemporaryChatAllowed(options.role);
+  if (options.projectId) {
+    await assertRoleFeature(options.role, 'projects');
+    if (options.temporary) throw validationFailed('Temporary chats cannot be added to a project');
+  }
 
-  const [thread] = await db
-    .insert(schema.thread)
-    .values({
-      organizationId: options.organizationId,
-      userId: options.userId,
-      title: options.title?.trim() || 'New Chat',
-      temporary: options.temporary ?? false,
-      expiresAt: options.temporary ? new Date(Date.now() + TEMPORARY_THREAD_TTL_MS) : null,
-    })
-    .returning();
+  const values = {
+    organizationId: options.organizationId,
+    userId: options.userId,
+    title: options.title?.trim() || 'New Chat',
+    temporary: options.temporary ?? false,
+    expiresAt: options.temporary ? new Date(Date.now() + TEMPORARY_THREAD_TTL_MS) : null,
+    projectId: options.projectId ?? null,
+  };
+  const projectId = options.projectId;
+
+  const [thread] = projectId
+    ? await db.transaction(async (tx) => {
+        // Another person's project is reported as missing, never joined.
+        const [project] = await tx
+          .select({ id: schema.project.id })
+          .from(schema.project)
+          .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, options.userId)))
+          .for('key share');
+        if (!project) throw notFound('Project not found');
+        return tx.insert(schema.thread).values(values).returning();
+      })
+    : await db.insert(schema.thread).values(values).returning();
 
   if (!thread) throw new Error('Failed to create thread');
   return thread;
@@ -148,6 +171,8 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
         expiresAt: sourceThread.expiresAt,
+        // A fork or edit stays in the project its source belongs to.
+        projectId: sourceThread.projectId,
         lastMessageAt: new Date(),
       })
       .returning();
@@ -220,6 +245,8 @@ export async function branchFromUserMessage(
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
         expiresAt: sourceThread.expiresAt,
+        // A fork or edit stays in the project its source belongs to.
+        projectId: sourceThread.projectId,
         lastMessageAt: new Date(),
       })
       .returning();

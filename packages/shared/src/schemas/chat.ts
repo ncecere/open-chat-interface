@@ -10,6 +10,8 @@ export const threadSummarySchema = z.object({
   expiresAt: z.string().nullable(),
   parentThreadId: z.string().nullable(),
   branchedFromMessageId: z.string().nullable(),
+  /** The project this conversation belongs to, if any. */
+  projectId: z.string().nullable(),
   lastMessageAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -84,6 +86,8 @@ export const createThreadSchema = z
   .object({
     title: z.string().trim().max(200).optional(),
     temporary: z.boolean().default(false),
+    /** Start the conversation inside one of the caller's projects. */
+    projectId: z.string().min(1).max(200).optional(),
   })
   .strict();
 
@@ -91,6 +95,8 @@ export const updateThreadSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
+  /** Move into one of the caller's projects, or `null` to take it out. */
+  projectId: z.string().min(1).max(200).nullable().optional(),
 });
 
 export const forkMessageSchema = z.object({ messageId: z.string().min(1).max(200) }).strict();

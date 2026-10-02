@@ -39,13 +39,14 @@ const instance = {
 };
 
 describe('role feature defaults', () => {
-  it('match the rules that were previously fixed in code', () => {
+  it('match the rules that were previously fixed in code, with projects off for restricted', () => {
     expect(DEFAULT_ROLE_FEATURES.restricted).toEqual({
       webSearch: true,
       attachments: false,
       shareLinks: false,
       temporaryChat: false,
       branching: true,
+      projects: false,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
     for (const role of ['admin', 'auditor', 'user'] as const) {
@@ -55,6 +56,7 @@ describe('role feature defaults', () => {
         shareLinks: true,
         temporaryChat: true,
         branching: true,
+        projects: true,
         reasoningEfforts: [...REASONING_EFFORTS],
       });
     }
@@ -98,8 +100,15 @@ describe('combineFeatures', () => {
       shareLinks: true,
       temporaryChat: true,
       branching: false,
+      projects: true,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
+  });
+
+  it('takes projects from the role alone: there is no instance switch', () => {
+    const role = DEFAULT_ROLE_FEATURES.user;
+    expect(combineFeatures(instance, search, role).projects).toBe(true);
+    expect(combineFeatures(instance, search, { ...role, projects: false }).projects).toBe(false);
   });
 
   it('offers web search only when a provider can run', () => {

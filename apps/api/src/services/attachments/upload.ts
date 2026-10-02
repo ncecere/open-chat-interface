@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, isNull, schema } from '@oci/db';
+import { and, count, eq, isNull, schema } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { notFound } from '../../lib/errors.js';
+import { notFound, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { getSetting } from '../settings.js';
@@ -36,13 +36,21 @@ async function releaseUpload(id: string, userId: string): Promise<void> {
     );
 }
 
-/** Reserve in PostgreSQL first, do I/O outside transactions, then publish metadata. */
+/**
+ * Reserve in PostgreSQL first, do I/O outside transactions, then publish metadata.
+ *
+ * With `project`, the file is reserved as one of that project's files instead
+ * of a staged message upload. The project row is locked (after the owner and
+ * before the storage counter, the order project deletion uses) so concurrent
+ * uploads cannot exceed `maxFiles` and a deleted project cannot gain a file.
+ */
 export async function uploadAttachment(params: {
   userId: string;
   role: UserRole;
   filename: string;
   declaredMimeType: string;
   bytes: Buffer;
+  project?: { id: string; maxFiles: number };
 }): Promise<UploadResult> {
   const storage = await getSetting('storage');
   const file = await validateUpload({
@@ -67,6 +75,24 @@ export async function uploadAttachment(params: {
         .where(eq(schema.user.id, params.userId))
         .for('key share');
       if (!user) throw notFound('Storage owner no longer exists');
+      if (params.project) {
+        const [project] = await tx
+          .select({ id: schema.project.id })
+          .from(schema.project)
+          .where(
+            and(eq(schema.project.id, params.project.id), eq(schema.project.userId, params.userId)),
+          )
+          .for('update');
+        if (!project) throw notFound('Project not found');
+        // Reservations still uploading count, so parallel uploads cannot overshoot.
+        const [files] = await tx
+          .select({ value: count() })
+          .from(schema.attachment)
+          .where(eq(schema.attachment.projectId, params.project.id));
+        if ((files?.value ?? 0) >= params.project.maxFiles) {
+          throw validationFailed(`A project can hold at most ${params.project.maxFiles} files`);
+        }
+      }
       await lockStorageUsage(tx, owner);
       // Authoritative rows prevent legacy counter drift from weakening enforcement.
       const totals = await attachmentTotals(tx, params.userId);
@@ -87,6 +113,7 @@ export async function uploadAttachment(params: {
           sizeBytes: file.bytes.byteLength,
           storageKey,
           uploadPending: true,
+          projectId: params.project?.id ?? null,
         })
         .returning();
       if (!reserved) throw new Error('Failed to reserve upload');

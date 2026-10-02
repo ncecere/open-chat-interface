@@ -14,6 +14,7 @@ export const roleFeaturesSchema = z.object({
   shareLinks: z.boolean(),
   temporaryChat: z.boolean(),
   branching: z.boolean(),
+  projects: z.boolean(),
   reasoningEfforts: z.array(z.enum(REASONING_EFFORTS)),
 });
 
@@ -29,6 +30,7 @@ export const updateRoleFeaturesSchema = z
     shareLinks: z.boolean().optional(),
     temporaryChat: z.boolean().optional(),
     branching: z.boolean().optional(),
+    projects: z.boolean().optional(),
     reasoningEfforts: z
       .array(z.enum(REASONING_EFFORTS))
       .max(REASONING_EFFORTS.length)
@@ -85,6 +87,7 @@ export const roleAccessSchema = z.object({
     temporaryChat: z.boolean(),
     webSearch: z.boolean(),
     branching: z.boolean(),
+    projects: z.boolean(),
   }),
   /** The role's own, editable switches and reasoning levels. */
   roleFeatures: roleFeaturesSchema,

@@ -7,6 +7,7 @@ export const ROLE_FEATURE_KEYS = [
   'shareLinks',
   'temporaryChat',
   'branching',
+  'projects',
 ] as const;
 export type RoleFeatureKey = (typeof ROLE_FEATURE_KEYS)[number];
 
@@ -25,13 +26,16 @@ const ALL_FEATURES: RoleFeatures = {
   shareLinks: true,
   temporaryChat: true,
   branching: true,
+  projects: true,
   reasoningEfforts: [...REASONING_EFFORTS],
 };
 
 /**
  * Built-in values, matching the rules that were fixed in code before they were
  * configurable: restricted accounts cannot upload, share or start temporary
- * chats; every other role can use everything the instance offers.
+ * chats; every other role can use everything the instance offers. Projects
+ * arrived later and follow the same line: off for restricted accounts until an
+ * administrator turns them on.
  */
 export const DEFAULT_ROLE_FEATURES: Record<UserRole, RoleFeatures> = Object.fromEntries(
   USER_ROLES.map((role) => [
@@ -42,6 +46,7 @@ export const DEFAULT_ROLE_FEATURES: Record<UserRole, RoleFeatures> = Object.from
           attachments: false,
           shareLinks: false,
           temporaryChat: false,
+          projects: false,
           reasoningEfforts: [...REASONING_EFFORTS],
         }
       : { ...ALL_FEATURES, reasoningEfforts: [...REASONING_EFFORTS] },

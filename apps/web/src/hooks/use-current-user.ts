@@ -32,6 +32,8 @@ export interface CurrentFeatures {
   webSearch: boolean;
   attachments: boolean;
   branching: boolean;
+  /** Decided by the role alone; projects have no instance-wide switch. */
+  projects: boolean;
 }
 
 export interface CurrentChatDefaults {

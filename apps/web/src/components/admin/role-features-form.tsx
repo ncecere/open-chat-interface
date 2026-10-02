@@ -40,6 +40,11 @@ export const ROLE_FEATURE_LABELS: Record<RoleFeatureKey, { label: string; descri
     label: 'Branching',
     description: 'Fork a conversation or edit an earlier message into a new branch.',
   },
+  projects: {
+    label: 'Projects',
+    description:
+      'Group conversations under shared instructions and files. Project files also need file attachments. There is no instance-wide switch.',
+  },
 };
 
 export const EFFORT_LABELS: Record<ReasoningEffort, string> = {

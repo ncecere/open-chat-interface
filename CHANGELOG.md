@@ -9,6 +9,33 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- **Projects.** Group conversations under shared instructions and files. The
+  sidebar has a Projects section; each project has a page (`/projects/:id`)
+  with its name, instructions (up to 8,000 characters), files (up to 20) and
+  conversations, and **New chat in project**. **Move to project** (top right
+  of a conversation) moves a conversation in or out. Project instructions are
+  added to the system prompt after the instance prompt and the person's
+  personalisation, clearly delimited; project files' extracted text joins the
+  context through the attachment path and context budget, ahead of older
+  history, and a file that does not fit is left out rather than truncated
+  (the reply is marked context-limited). Nothing from a project is stored in
+  the conversation or exposed through share links. Project files are
+  attachments (`attachment.project_id`), so validation, extraction, storage
+  drivers and the storage allowance apply; removing one or deleting its
+  project deletes it at once and frees its storage. Deleting a project keeps
+  its conversations and detaches them. A per-role **Projects** switch on Roles
+  & access (off for `restricted` by default; no instance-wide switch) gates
+  every project request with `403`; when off, existing projects are kept but
+  contribute nothing to conversations. API: `GET/POST /api/projects`,
+  `GET/PATCH/DELETE /api/projects/:id`, `GET/POST /api/projects/:id/files`,
+  `DELETE /api/projects/:id/files/:fileId`, `projectId` on
+  `POST /api/threads`, `PATCH /api/threads/:id` and
+  `GET /api/threads?projectId=`, and `projectId` in thread summaries. Limits:
+  100 projects per person. The full export includes projects (manifest entry
+  plus files under `projects/<name>/`). Migration `0024_projects` adds the
+  `project` table and nullable `thread.project_id` (ON DELETE SET NULL) and
+  `attachment.project_id` (ON DELETE CASCADE).
+
 - **Feature entitlements per role.** On Roles & access each role has switches
   for web search, file attachments, share links, temporary chats and branching,
   and a choice of allowed reasoning levels (Instant is always allowed). A

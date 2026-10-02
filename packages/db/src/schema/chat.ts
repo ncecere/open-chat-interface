@@ -1,10 +1,48 @@
 import type { ReasoningEffort } from '@oci/shared';
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
 import { user } from './auth.js';
 import { organization } from './organization.js';
+
+/**
+ * A person's project: conversations grouped under shared instructions and
+ * files. Deleting a project never deletes its conversations; they are detached
+ * (`thread.project_id` is set null). Its files are attachments with
+ * `attachment.project_id` set, which cascade away with it so the attachment
+ * delete triggers release storage and queue the blobs (migration 0024).
+ */
+export const project = pgTable(
+  'project',
+  {
+    id: primaryId(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** Added to the system prompt of every conversation in the project. */
+    instructions: text('instructions').notNull().default(''),
+    ...timestamps(),
+  },
+  (t) => [
+    index('project_user_idx').on(t.userId, t.updatedAt),
+    check('project_name_length', sql`char_length(${t.name}) between 1 and 100`),
+    check('project_instructions_length', sql`char_length(${t.instructions}) <= 8000`),
+  ],
+);
 
 export const thread = pgTable(
   'thread',
@@ -37,10 +75,13 @@ export const thread = pgTable(
     importSource: text('import_source').$type<'chatgpt' | 'claude'>(),
     /** The source's conversation id, which makes re-importing idempotent. */
     importSourceId: text('import_source_id'),
+    /** Null when the conversation is in no project, including after its project is deleted. */
+    projectId: text('project_id').references(() => project.id, { onDelete: 'set null' }),
     ...timestamps(),
   },
   (t) => [
     index('thread_user_updated_idx').on(t.userId, t.updatedAt),
+    index('thread_project_idx').on(t.projectId, t.updatedAt).where(sql`${t.projectId} is not null`),
     uniqueIndex('thread_import_source_unique')
       .on(t.userId, t.importSource, t.importSourceId)
       .where(sql`${t.importSourceId} is not null`),
@@ -113,6 +154,11 @@ export const attachment = pgTable(
      * look unsent and therefore re-sendable.
      */
     messageId: text('message_id').references(() => message.id, { onDelete: 'cascade' }),
+    /**
+     * Set for a project file, which belongs to the project instead of a message
+     * and dies with it. A file is never both (enforced by a check constraint).
+     */
+    projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
     filename: text('filename').notNull(),
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
@@ -131,6 +177,8 @@ export const attachment = pgTable(
     index('attachment_user_idx').on(t.userId),
     index('attachment_message_idx').on(t.messageId),
     index('attachment_deleted_idx').on(t.deletedAt),
+    index('attachment_project_idx').on(t.projectId).where(sql`${t.projectId} is not null`),
+    check('attachment_single_owner', sql`${t.projectId} is null or ${t.messageId} is null`),
   ],
 );
 

@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, or, schema, sql } from '@oci/db';
+import { and, asc, eq, gt, inArray, isNull, or, schema, sql } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
@@ -75,6 +75,8 @@ export async function inspectIncomingAttachments(ids: string[], userId: string, 
         inArray(schema.attachment.id, uniqueIds),
         eq(schema.attachment.userId, userId),
         eq(schema.attachment.uploadPending, false),
+        // A project file joins context through its project, never as a message upload.
+        isNull(schema.attachment.projectId),
         sql`octet_length(${schema.attachment.mimeType}) <= 256`,
       ),
     );
@@ -83,6 +85,31 @@ export async function inspectIncomingAttachments(ids: string[], userId: string, 
     throw validationFailed('Attachments must be available and not already sent');
   const byId = new Map(rows.map((row) => [row.id, row]));
   return uniqueIds.map((id) => byId.get(id)!);
+}
+
+/**
+ * A project's ready files as context candidates, oldest first, without loading
+ * payloads. Costed and selected by the caller like any other attachment, then
+ * loaded through `materializeAttachments`.
+ */
+export async function inspectProjectFiles(
+  projectId: string,
+  userId: string,
+): Promise<AttachmentCandidate[]> {
+  return db
+    .select(candidateColumns)
+    .from(schema.attachment)
+    .where(
+      and(
+        eq(schema.attachment.projectId, projectId),
+        eq(schema.attachment.userId, userId),
+        eq(schema.attachment.uploadPending, false),
+        isNull(schema.attachment.deletedAt),
+        sql`octet_length(${schema.attachment.mimeType}) <= 256`,
+      ),
+    )
+    .orderBy(asc(schema.attachment.createdAt), asc(schema.attachment.id))
+    .limit(MAX_CONTEXT_FILES);
 }
 
 /** Called only after selection. Ready payloads are immutable in normal application writes. */

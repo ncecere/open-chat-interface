@@ -40,6 +40,7 @@ const { invalidateSettingsCache, updateSetting } = await import('../../services/
 const { assertAttachmentUseAllowed } = await import('../../services/attachments/index.js');
 const { assertShareLinkManagementAllowed } = await import('../../services/share-links.js');
 const { assertTemporaryChatAllowed, createThread } = await import('../../services/threads.js');
+const { assertProjectsAllowed } = await import('../../services/projects.js');
 const { resolveTurnContext } = await import('../../services/chat/turn-context.js');
 
 type Actor = AuthenticatedUser;
@@ -142,6 +143,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         resolveTurnContext(actors[role], turnInput(thread.id, { webSearch: true })),
       ),
       branching: (await branchingStatus(role)) === 403 ? 403 : 'allowed',
+      projects: await outcome(() => assertProjectsAllowed(role)),
     };
   }
 
@@ -220,13 +222,14 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
   });
 
   describe('defaults preserve the previous fixed rules', () => {
-    it('denies restricted attachments, share links and temporary chats only', async () => {
+    it('denies restricted attachments, share links, temporary chats and projects only', async () => {
       expect(await checks('restricted')).toEqual({
         attachments: 403,
         shareLinks: 403,
         temporaryChat: 403,
         webSearch: 'allowed',
         branching: 'allowed',
+        projects: 403,
       });
       for (const role of ['admin', 'auditor', 'user'] as const) {
         expect(await checks(role)).toEqual({
@@ -235,6 +238,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
           temporaryChat: 'allowed',
           webSearch: 'allowed',
           branching: 'allowed',
+          projects: 'allowed',
         });
       }
     });
@@ -274,6 +278,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         temporaryChat: false,
         webSearch: true,
         branching: true,
+        projects: false,
       });
 
       const summary = rolesAccessSchema.parse(
@@ -287,6 +292,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         temporaryChat: false,
         webSearch: true,
         branching: true,
+        projects: false,
       });
       expect(restricted.fixedRules).toEqual([]);
       expect(summary.roles.find((entry) => entry.role === 'auditor')?.fixedRules).toEqual([
@@ -296,29 +302,38 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
   });
 
   describe('toggling a role feature changes enforcement', () => {
-    it.each(['attachments', 'shareLinks', 'temporaryChat', 'webSearch', 'branching'] as const)(
-      '%s follows the user role switch',
-      async (feature) => {
-        expect((await checks('user'))[feature]).toBe('allowed');
+    it.each([
+      'attachments',
+      'shareLinks',
+      'temporaryChat',
+      'webSearch',
+      'branching',
+      'projects',
+    ] as const)('%s follows the user role switch', async (feature) => {
+      expect((await checks('user'))[feature]).toBe('allowed');
 
-        await json(await putRole('user', { [feature]: false }));
-        expect((await checks('user'))[feature]).toBe(403);
-        const me = await json<{ features: Record<string, boolean> }>(
-          await call(actors.user, 'GET', '/me'),
-        );
-        expect(me.features[feature]).toBe(false);
+      await json(await putRole('user', { [feature]: false }));
+      expect((await checks('user'))[feature]).toBe(403);
+      const me = await json<{ features: Record<string, boolean> }>(
+        await call(actors.user, 'GET', '/me'),
+      );
+      expect(me.features[feature]).toBe(false);
 
-        // Other roles keep their own values.
-        expect((await checks('admin'))[feature]).toBe('allowed');
+      // Other roles keep their own values.
+      expect((await checks('admin'))[feature]).toBe('allowed');
 
-        await json(await putRole('user', { [feature]: true }));
-        expect((await checks('user'))[feature]).toBe('allowed');
-      },
-    );
+      await json(await putRole('user', { [feature]: true }));
+      expect((await checks('user'))[feature]).toBe('allowed');
+    });
 
     it('lets an administrator open restricted features without a code change', async () => {
       await json(
-        await putRole('restricted', { attachments: true, shareLinks: true, temporaryChat: true }),
+        await putRole('restricted', {
+          attachments: true,
+          shareLinks: true,
+          temporaryChat: true,
+          projects: true,
+        }),
       );
       expect(await checks('restricted')).toEqual({
         attachments: 'allowed',
@@ -326,6 +341,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         temporaryChat: 'allowed',
         webSearch: 'allowed',
         branching: 'allowed',
+        projects: 'allowed',
       });
     });
 

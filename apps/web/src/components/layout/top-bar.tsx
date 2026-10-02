@@ -1,10 +1,12 @@
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
-import { Download, History, PanelLeft, Plus, Search } from 'lucide-react';
-import { useEffect } from 'react';
+import { Download, FolderInput, History, PanelLeft, Plus, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { ShareThreadDialog } from '~/components/chat/share-thread-dialog';
 import { ThemeMenu } from '~/components/layout/theme-menu';
+import { MoveToProjectDialog } from '~/components/projects/project-dialogs';
 import { Button } from '~/components/ui/button';
 import { useCurrentUser } from '~/hooks/use-current-user';
+import { useThreads } from '~/hooks/use-threads';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -87,6 +89,9 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         {params.threadId && data?.features.shareLinks && (
           <ShareThreadDialog threadId={params.threadId} />
         )}
+        {params.threadId && data?.features.projects && (
+          <MoveToProjectControl threadId={params.threadId} />
+        )}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -105,5 +110,35 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         <ThemeMenu />
       </div>
     </header>
+  );
+}
+
+/** Opens the Move to project dialog for the conversation on screen. */
+function MoveToProjectControl({ threadId }: { threadId: string }) {
+  const [open, setOpen] = useState(false);
+  // The sidebar's list is already cached; archived conversations are not in
+  // it and simply start from "No project" until moved.
+  const { data: threads } = useThreads();
+  const current = threads?.find((thread) => thread.id === threadId)?.projectId ?? null;
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Move to project"
+        title="Move to project"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+      >
+        <FolderInput />
+      </Button>
+      <MoveToProjectDialog
+        threadId={threadId}
+        currentProjectId={current}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
   );
 }

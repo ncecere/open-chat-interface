@@ -46,6 +46,7 @@ interface ExportedAttachment {
 
 export interface ExportSummary {
   conversations: number;
+  projects: number;
   messages: number;
   attachments: number;
   attachmentBytes: number;
@@ -61,6 +62,7 @@ function threadSummary(thread: ThreadRow) {
     archived: thread.archived,
     parentThreadId: thread.parentThreadId,
     branchedFromMessageId: thread.branchedFromMessageId,
+    projectId: thread.projectId,
     importSource: thread.importSource,
     importSourceId: thread.importSourceId,
     lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
@@ -144,6 +146,49 @@ async function attachmentsForMessages(
   return rows;
 }
 
+const attachmentColumns = {
+  id: schema.attachment.id,
+  messageId: schema.attachment.messageId,
+  filename: schema.attachment.filename,
+  mimeType: schema.attachment.mimeType,
+  sizeBytes: schema.attachment.sizeBytes,
+  storageKey: schema.attachment.storageKey,
+  createdAt: schema.attachment.createdAt,
+};
+
+/** A project's ready files, oldest first. */
+async function projectAttachments(userId: string, projectId: string): Promise<AttachmentRow[]> {
+  return db
+    .select(attachmentColumns)
+    .from(schema.attachment)
+    .where(
+      and(
+        eq(schema.attachment.userId, userId),
+        eq(schema.attachment.projectId, projectId),
+        isNull(schema.attachment.deletedAt),
+        eq(schema.attachment.uploadPending, false),
+      ),
+    )
+    .orderBy(asc(schema.attachment.createdAt), asc(schema.attachment.id));
+}
+
+/** Project folder names: readable and unique without regard to case. */
+function projectFolderNames(projects: Array<{ id: string; name: string }>): Map<string, string> {
+  const used = new Set<string>();
+  const names = new Map<string, string>();
+  for (const project of projects) {
+    const slug = safeTitleSlug(project.name);
+    const base = slug === 'conversation' ? 'project' : slug;
+    let candidate = base;
+    for (let counter = 2; used.has(candidate.toLowerCase()); counter += 1) {
+      candidate = `${base}-${counter}`;
+    }
+    used.add(candidate.toLowerCase());
+    names.set(project.id, candidate);
+  }
+  return names;
+}
+
 /** Uploaded but never sent: still the person's files, so they belong in the export. */
 async function unsentAttachments(userId: string): Promise<AttachmentRow[]> {
   return db
@@ -161,6 +206,8 @@ async function unsentAttachments(userId: string): Promise<AttachmentRow[]> {
       and(
         eq(schema.attachment.userId, userId),
         isNull(schema.attachment.messageId),
+        // Project files are exported with their project.
+        isNull(schema.attachment.projectId),
         isNull(schema.attachment.deletedAt),
         eq(schema.attachment.uploadPending, false),
       ),
@@ -183,9 +230,12 @@ function readme(summary: ExportSummary, createdAt: Date): string {
     '                 Markdown leaves out model reasoning; the JSON keeps it.',
     'attachments/     Files you attached, in a folder per conversation.',
     '                 Files uploaded but never sent are under attachments/unsent/.',
+    "projects/        Each project's files, in a folder per project. Project names",
+    '                 and instructions are in manifest.json.',
     'manifest.json    Counts, versions, and an index of every conversation.',
     '',
     `Conversations: ${summary.conversations}`,
+    `Projects: ${summary.projects}`,
     `Messages: ${summary.messages}`,
     `Attachments: ${summary.attachments}`,
     summary.omittedAttachments > 0
@@ -222,6 +272,7 @@ export async function* exportArchive(
   const names = conversationNames(threads);
   const summary: ExportSummary = {
     conversations: 0,
+    projects: 0,
     messages: 0,
     attachments: 0,
     attachmentBytes: 0,
@@ -234,7 +285,7 @@ export async function* exportArchive(
   const entryBudget = () => ZIP_MAX_ENTRIES - writer.entries - 2;
 
   async function* writeAttachments(
-    folder: string,
+    directory: string,
     rows: AttachmentRow[],
   ): AsyncGenerator<Uint8Array, ExportedAttachment[]> {
     const allocator = new NameAllocator();
@@ -264,7 +315,7 @@ export async function* exportArchive(
           entry.omittedReason = 'missing';
         }
         if (bytes) {
-          const path = `attachments/${folder}/${allocator.allocate(safeEntrySegment(row.filename))}`;
+          const path = `${directory}/${allocator.allocate(safeEntrySegment(row.filename))}`;
           writer.add(path, bytes, {
             compress: !COMPRESSED_TYPES.test(row.mimeType),
             mtime: row.createdAt,
@@ -304,7 +355,7 @@ export async function* exportArchive(
     }
 
     const attachments = yield* writeAttachments(
-      name,
+      `attachments/${name}`,
       await attachmentsForMessages(
         owner.id,
         messages.map((message) => message.id),
@@ -339,13 +390,42 @@ export async function* exportArchive(
       id: thread.id,
       title: thread.title,
       archived: thread.archived,
+      projectId: thread.projectId,
       messages: messages.length,
       markdown: markdownPath,
       json: jsonPath,
     });
   }
 
-  const unsent = yield* writeAttachments('unsent', await unsentAttachments(owner.id));
+  const unsent = yield* writeAttachments('attachments/unsent', await unsentAttachments(owner.id));
+
+  // Projects: name, instructions and files. Conversations point back through
+  // their `projectId`; a project's files sit under projects/<name>/.
+  const projects = await db
+    .select()
+    .from(schema.project)
+    .where(eq(schema.project.userId, owner.id))
+    .orderBy(asc(schema.project.createdAt), asc(schema.project.id));
+  const projectFolders = projectFolderNames(projects);
+  const exportedConversations = new Set(index.map((entry) => entry.id));
+  const projectIndex: Array<Record<string, unknown>> = [];
+  for (const project of projects) {
+    const folder = `projects/${projectFolders.get(project.id) as string}`;
+    const files = yield* writeAttachments(folder, await projectAttachments(owner.id, project.id));
+    projectIndex.push({
+      id: project.id,
+      name: project.name,
+      instructions: project.instructions,
+      folder,
+      conversations: threads
+        .filter((thread) => thread.projectId === project.id && exportedConversations.has(thread.id))
+        .map((thread) => thread.id),
+      files,
+      createdAt: project.createdAt.toISOString(),
+      updatedAt: project.updatedAt.toISOString(),
+    });
+    summary.projects += 1;
+  }
 
   writer.add(
     'manifest.json',
@@ -357,6 +437,7 @@ export async function* exportArchive(
         createdAt: createdAt.toISOString(),
         counts: {
           conversations: summary.conversations,
+          projects: summary.projects,
           messages: summary.messages,
           attachments: summary.attachments,
           attachmentBytes: summary.attachmentBytes,
@@ -365,6 +446,7 @@ export async function* exportArchive(
         truncated: summary.truncated,
         excluded: ['trashed conversations', 'temporary chats', 'deleted attachments'],
         conversations: index,
+        projects: projectIndex,
         unsentAttachments: unsent,
         omittedAttachments: omitted,
       },

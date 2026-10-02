@@ -1,8 +1,9 @@
 import type { ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
-import { Archive, ChevronDown, GitFork, Pin, PinOff } from 'lucide-react';
+import { Archive, ChevronDown, Folder, GitFork, Pin, PinOff } from 'lucide-react';
 import { useState } from 'react';
 import { Spinner } from '~/components/ui/spinner';
+import { useProjects, useProjectsAvailable } from '~/hooks/use-projects';
 import { useThreads, useUpdateThread } from '~/hooks/use-threads';
 import { cn } from '~/lib/utils';
 
@@ -30,7 +31,16 @@ function groupThreads(threads: ThreadSummary[]) {
   return groups.filter((group) => group.threads.length > 0);
 }
 
-function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean }) {
+function ThreadRow({
+  thread,
+  active,
+  projectName,
+}: {
+  thread: ThreadSummary;
+  active: boolean;
+  /** Shown lightly after the title when the conversation is in a project. */
+  projectName?: string;
+}) {
   const update = useUpdateThread();
 
   return (
@@ -54,10 +64,17 @@ function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean 
       <Link
         to="/chat/$threadId"
         params={{ threadId: thread.id }}
-        className="min-w-0 flex-1 truncate px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
-        title={thread.title}
+        className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
+        title={projectName ? `${thread.title} (${projectName})` : thread.title}
       >
-        {thread.title}
+        <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+        {projectName && (
+          <span className="flex max-w-[40%] shrink-0 items-center gap-1 text-[0.6875rem] text-[var(--text-muted)]">
+            <Folder className="size-3 shrink-0" aria-hidden="true" />
+            <span className="sr-only">, in project </span>
+            <span className="truncate">{projectName}</span>
+          </span>
+        )}
       </Link>
 
       <div
@@ -92,6 +109,9 @@ function ThreadRow({ thread, active }: { thread: ThreadSummary; active: boolean 
 
 export function ThreadList({ search }: { search: string }) {
   const { data: threads, isLoading } = useThreads(search || undefined);
+  const projectsAvailable = useProjectsAvailable();
+  const { data: projects } = useProjects(projectsAvailable);
+  const projectNames = new Map(projects?.map((project) => [project.id, project.name]));
   const params = useParams({ strict: false }) as { threadId?: string };
   const [pinnedOpen, setPinnedOpen] = useState(true);
 
@@ -150,6 +170,7 @@ export function ThreadList({ search }: { search: string }) {
                     key={thread.id}
                     thread={thread}
                     active={params.threadId === thread.id}
+                    projectName={thread.projectId ? projectNames.get(thread.projectId) : undefined}
                   />
                 ))}
               </div>

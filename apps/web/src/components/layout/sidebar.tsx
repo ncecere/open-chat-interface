@@ -2,6 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { PanelLeft, Search, UserRoundPlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
+import { SidebarProjects } from '~/components/layout/sidebar-projects';
 import { ThreadList } from '~/components/layout/thread-list';
 import { ThreadSearchResults } from '~/components/layout/thread-search-results';
 import { UserMenu } from '~/components/layout/user-menu';
@@ -108,7 +109,14 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3">
-        {search.trim() ? <ThreadSearchResults query={search} /> : <ThreadList search="" />}
+        {search.trim() ? (
+          <ThreadSearchResults query={search} />
+        ) : (
+          <>
+            <SidebarProjects />
+            <ThreadList search="" />
+          </>
+        )}
       </nav>
 
       <div className="hidden items-center gap-1 p-2 md:flex">

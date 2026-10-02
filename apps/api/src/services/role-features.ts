@@ -28,6 +28,7 @@ export const ROLE_FEATURE_DENIED: Record<RoleFeatureKey, string> = {
   shareLinks: 'Public share links are not available for your role',
   temporaryChat: 'Temporary chats are not available for your role',
   branching: 'Branching is not available for your role',
+  projects: 'Projects are not available for your role',
 };
 
 /**
@@ -60,7 +61,7 @@ export function resolveRoleFeatures(
 /**
  * Combines the instance switches with a role's. Web search additionally needs
  * a provider that can actually run, so the composer never offers a search
- * that would fail.
+ * that would fail. Projects have no instance-wide switch: the role decides.
  */
 export function combineFeatures(
   instance: Partial<FeatureSettings>,
@@ -75,6 +76,7 @@ export function combineFeatures(
     shareLinks: role.shareLinks && Boolean(instance.shareLinks),
     temporaryChat: role.temporaryChat && Boolean(instance.temporaryChat),
     branching: role.branching && Boolean(instance.branching),
+    projects: role.projects,
     reasoningEfforts: [...role.reasoningEfforts],
   };
 }

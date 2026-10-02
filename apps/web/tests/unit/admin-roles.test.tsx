@@ -100,6 +100,10 @@ describe('Roles & access', () => {
     expect(featureSwitch('restricted', 'temporaryChat').getAttribute('aria-checked')).toBe('false');
     expect(featureSwitch('restricted', 'webSearch').getAttribute('aria-checked')).toBe('true');
     expect(featureSwitch('restricted', 'branching').getAttribute('aria-checked')).toBe('true');
+    expect(featureSwitch('restricted', 'projects').getAttribute('aria-checked')).toBe('false');
+    expect(
+      document.getElementById('role-restricted-feature-projects-description')?.textContent,
+    ).toContain('Group conversations under shared instructions and files');
     // On for the role but off instance-wide: the page says why it is unavailable.
     expect(
       document.getElementById('role-restricted-feature-webSearch-description')?.textContent,

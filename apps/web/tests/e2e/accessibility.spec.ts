@@ -168,6 +168,39 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('a project page has no violations', async ({ page }) => {
+    await signIn(page);
+    // Created through the real API with the signed-in session's cookies.
+    const created = await page.request.post('/api/projects', {
+      data: { name: `Accessibility project ${Date.now()}`, instructions: 'Answer clearly.' },
+    });
+    expect(created.status()).toBe(201);
+    const { project } = (await created.json()) as { project: { id: string; name: string } };
+
+    await page.goto(`/projects/${project.id}`);
+    await expect(page.getByRole('heading', { level: 1, name: project.name })).toBeVisible();
+    await expect(page.getByText('No conversations yet.')).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('the move to project dialog has no violations while open', async ({ page }) => {
+    await signIn(page);
+    const created = await page.request.post('/api/threads', { data: { title: 'To be moved' } });
+    expect(created.status()).toBe(201);
+    const { thread } = (await created.json()) as { thread: { id: string } };
+
+    await page.goto(`/chat/${thread.id}`);
+    await page.getByRole('button', { name: 'Move to project' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Move to project' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('radio', { name: 'No project' })).toBeChecked();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/quotas');

@@ -12,6 +12,7 @@ export * from './schemas/model.js';
 export * from './schemas/onboarding.js';
 export * from './schemas/patch.js';
 export * from './schemas/portability.js';
+export * from './schemas/projects.js';
 export * from './schemas/roles.js';
 export * from './schemas/setup.js';
 export * from './schemas/sso.js';

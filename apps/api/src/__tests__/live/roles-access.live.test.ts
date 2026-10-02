@@ -114,8 +114,14 @@ describe.skipIf(!available)('live: roles and access summary', () => {
         temporaryChat: false,
         webSearch: false,
         branching: false,
+        projects: false,
       },
-      roleFeatures: { attachments: false, shareLinks: false, temporaryChat: false },
+      roleFeatures: {
+        attachments: false,
+        shareLinks: false,
+        temporaryChat: false,
+        projects: false,
+      },
       fixedRules: [],
     });
     expect(byRole.restricted?.rateLimits.chatRequestsPerMinute).toBe(4);

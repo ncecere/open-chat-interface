@@ -10,3 +10,14 @@ export function validateChatThreadSearch(search: Record<string, unknown>): ChatT
   const message = search.message;
   return typeof message === 'string' && MESSAGE_ID.test(message) ? { message } : {};
 }
+
+export interface ChatHomeSearch {
+  /** Start the new conversation inside this project. */
+  project?: string;
+}
+
+/** Project ids are generated UUIDs; anything else is ignored. */
+export function validateChatHomeSearch(search: Record<string, unknown>): ChatHomeSearch {
+  const project = search.project;
+  return typeof project === 'string' && MESSAGE_ID.test(project) ? { project } : {};
+}
