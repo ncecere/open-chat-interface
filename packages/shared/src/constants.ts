@@ -97,6 +97,10 @@ export const PROTECTED_AUDIT_ACTIONS = [
   'provider.create',
   'provider.update',
   'provider.delete',
+  // Connectors hold credentials for systems outside OCI.
+  'connector.create',
+  'connector.update',
+  'connector.delete',
   'sso.create',
   'sso.update',
   'sso.delete',

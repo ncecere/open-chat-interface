@@ -28,8 +28,9 @@ code against them and later work can change them deliberately.
 
 One module (`apps/api/src/services/tools/`) declares every tool OCI can offer:
 
-- an id (`web_search`, `mcp.<connector>.<tool>`), a label and a description
-  for the model;
+- an id (`web_search`, `mcp__<connector>__<tool>` — see the connector
+  implementation notes for why not `mcp.<connector>.<tool>`), a label and a
+  description for the model;
 - an input schema (Zod for built-in tools, JSON Schema for MCP tools);
 - a **kind**: `read` (looks something up) or `write` (changes something
   elsewhere). Write tools always need approval; read tools never do.
@@ -176,6 +177,88 @@ Where the build differs from, or decides something left open above:
   applies.
 - **Test-only tools** are added by replacing the catalogue module with
   `vi.mock`; production code has no registration API.
+
+## Implementation notes (MCP connectors)
+
+Where the connector build differs from, or decides something left open above
+(administrator view: [docs/admin/connectors.md](../admin/connectors.md)):
+
+- **Tool ids are `mcp__<slug>__<tool>`, not `mcp.<connector>.<tool>`.** The id
+  is also the function name sent to the provider, and OpenAI and Anthropic
+  accept only `^[A-Za-z0-9_-]{1,64}$`: a dotted id would be refused by the
+  provider on the first turn that offered it. A connector's slug is at most 24
+  characters with no underscores (so the first `__` ends it) and is fixed at
+  creation. A tool's key is its MCP name with other characters replaced by
+  `_`, shortened with a hash when it would exceed 64 characters or collide;
+  keys are stored, so a tool keeps its id across refreshes. `TOOL_ID_PATTERN`
+  and `connectorSlugOfToolId` in `@oci/shared` follow this shape.
+- **The catalogue is asynchronous and database-backed.** `registeredTools()`
+  returns the built-in tools plus every enabled tool of every enabled
+  connector, cached for 10 seconds and cleared in-process by every
+  administrator change (other replicas converge within the TTL). Execution
+  re-reads the connector and tool, so a tool switched off is never run.
+  `resolveTurnTools`, the role-tools service and Roles & access await it.
+- **Turn input gains the person.** `ToolTurnInput` carries `userId` (an OAuth
+  connector's tools are offered only to people who connected) and a per-turn
+  `memo`, so the connected-accounts lookup runs once per turn.
+- **Sources from any tool.** `ToolDefinition.sources(output)` replaces the
+  reply loop's web-search special case; connector results list `resource_link`
+  and embedded resources with web addresses as sources.
+- **Kinds.** The default comes from `readOnlyHint` (`write` when absent). An
+  administrator may mark any tool `write`. Marking `read` a tool the server
+  does not declare read-only requires `confirmReadOnly: true` (the UI asks
+  first) and is recorded (`readOnlyConfirmed`, and `read_confirmed` on the
+  tool). A refresh after which the server no longer declares a tool read-only
+  returns it to `write` unless that confirmation exists.
+- **Untrusted results.** Results reach the model only as tool results. The
+  server's `initialize` instructions are ignored, and models see the
+  description and schema stored at the administrator's last refresh, never
+  live `tools/list` output. A result with `isError` fails the step (audited
+  as `error`) with the server's message clipped to 300 characters. Text is
+  kept up to 12,000 characters; images and binary content are named, not
+  included.
+- **Connections are per call.** Each tool call opens an MCP client (Streamable
+  HTTP, JSON-RPC `initialize`, `tools/call`) and closes it; no pooling.
+- **Network safety.** All connector and OAuth traffic uses a guarded fetch
+  built on `node:http(s)` with a custom socket `lookup`: the resolved
+  addresses are checked inside the connection, so the address checked is the
+  address connected to and DNS rebinding has no window. Each request uses a
+  fresh socket (no keep-alive pool shared between connectors). Redirects are
+  refused outright rather than only cross-host ones. Cloud metadata addresses
+  are refused even with *Allow private network*. Responses are limited to
+  2 MB and 30 seconds of idle time; IP literals are checked before connecting
+  because sockets skip lookup for them.
+- **OAuth uses `@ai-sdk/mcp`'s `auth()`** with database-backed providers:
+  protected-resource and authorization-server discovery, dynamic client
+  registration (stored on the connector as a `dynamic` client), PKCE, the
+  `resource` indicator and refresh. The pending attempt (hashed state, code
+  verifier, client) lives in `connector_account.pending_*` rather than a
+  fourth table: one attempt per person and connector, ten minutes, bound to
+  the signed-in person, consumed before the code exchange. The authorization
+  server and token endpoint are pinned on the connector the first time anyone
+  connects and a different one is refused until an administrator changes the
+  connector's URL, authentication mode or client ID — which also deletes every
+  person's connection, since their tokens were issued for the old setup.
+  A refresh the server refuses (or a token the server rejects and cannot
+  refresh) disconnects the account and asks the person to reconnect; a refresh
+  that fails only at the network level keeps it. Disconnecting revokes the
+  token (RFC 7009) when the authorization server advertises an endpoint.
+- **Administrators' own connection.** Test connection and Refresh tools on an
+  OAuth connector use the acting administrator's connection; administrators
+  may connect before any tool is allowed for their role.
+- **The "connect X" hint** lives in Settings → Connectors (which lists every
+  OAuth connector with a tool allowed for the person's role) and in the
+  failed step's message when a connection expires mid-use. The composer was
+  left unchanged.
+- **Residual risks.** Refresh is single-flight per process only: with several
+  replicas, simultaneous refreshes for one person can race, and a server that
+  rotates refresh tokens then disconnects that person. Tool descriptions are
+  server-written text that models read (prompt injection through a tool
+  description is mitigated, not prevented, by administrator review at
+  refresh).
+- **Test server.** Live tests use a small hand-written MCP server and OAuth
+  authorization server (`apps/api/test/mcp-server.ts`) on 127.0.0.1, so no
+  `@modelcontextprotocol/sdk` dependency was added.
 
 ## Not in v0.8
 

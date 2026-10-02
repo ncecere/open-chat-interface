@@ -21,7 +21,6 @@ import { allowanceExhausted } from '../quota/index.js';
 import { getSetting } from '../settings.js';
 import { recordToolCall } from '../tools/audit.js';
 import { ToolFailure, type TurnTools, toolDefinition } from '../tools/registry.js';
-import { webSearchSources } from '../tools/web-search.js';
 import { contextBudget, messageCost, textCost } from './context-budget.js';
 
 /** The administrator's step limit, clamped to the allowed range. */
@@ -162,7 +161,8 @@ export function createToolLoop(options: {
 }
 
 /**
- * Adds a source for every new result URL after a web search, records denied
+ * Adds a source for every new link in a finished tool result (web search
+ * results, connector resource links), records denied
  * and refused calls (executed calls are recorded by the registry), and ends a
  * reply that hit a limit with a visible note before `finish`.
  */
@@ -236,12 +236,9 @@ function decorateToolStream(options: {
       }
       if (chunk.type === 'tool-output-denied')
         audit(chunk.toolCallId, options.refused.has(chunk.toolCallId) ? 'refused' : 'denied');
-      if (
-        chunk.type === 'tool-output-available' &&
-        !chunk.preliminary &&
-        toolNames.get(chunk.toolCallId) === 'web_search'
-      ) {
-        for (const source of webSearchSources(chunk.output)) {
+      if (chunk.type === 'tool-output-available' && !chunk.preliminary) {
+        const definition = toolDefinition(options.tools, toolNames.get(chunk.toolCallId) ?? '');
+        for (const source of definition?.sources?.(chunk.output) ?? []) {
           if (seen.has(source.url)) continue;
           seen.add(source.url);
           controller.enqueue({

@@ -186,6 +186,23 @@ admin health page; a run reports how many files it indexed. Chunks take
 roughly as much space as the extracted text of the files they cover, plus the
 index.
 
+### MCP connectors (v0.8, migration 0027)
+
+Migration `0027_connectors` creates three new, empty tables, `connector`,
+`connector_tool` and `connector_account`, cascading from the organization,
+the connector and the user. It rewrites and locks nothing existing, so it
+applies instantly. Nothing is offered to models until an administrator adds a
+connector, enables its tools and allows them for a role
+([Connectors](admin/connectors.md)).
+
+Connector credentials and people's OAuth tokens are encrypted with
+`ENCRYPTION_KEY`, like provider keys: rotating that key makes them unreadable,
+so re-enter shared credentials and ask people to connect again afterwards.
+OAuth connectors send people back to `APP_URL/api/connectors/oauth/callback`;
+`APP_URL` must be the address people use. Connectors make outbound HTTPS
+requests from the API, so allow egress to their servers (and their
+authorization servers) where egress is filtered.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

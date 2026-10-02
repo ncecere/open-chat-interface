@@ -7,6 +7,7 @@ export * from './schemas/admin.js';
 export * from './schemas/auth.js';
 export * from './schemas/broadcast.js';
 export * from './schemas/chat.js';
+export * from './schemas/connectors.js';
 export * from './schemas/lifecycle.js';
 export * from './schemas/model.js';
 export * from './schemas/onboarding.js';

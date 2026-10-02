@@ -1,13 +1,17 @@
+import { connectorTools } from '../connectors/tools.js';
 import type { ToolDefinition } from './types.js';
 import { webSearchTool } from './web-search.js';
 
 /**
- * Every tool this instance can offer. There is deliberately no registration
- * API: tests that need another tool (for example a write tool to exercise
- * approvals) replace this module with `vi.mock`, so production code has no way
- * to add tools at runtime. MCP connector tools will be appended here from the
- * connector store.
+ * Every tool this instance can offer: the built-in tools, then each enabled
+ * tool of each enabled MCP connector (read from the connector store with a
+ * short cache that administrator changes clear).
+ *
+ * There is deliberately no registration API: connector tools come only from
+ * what administrators configured, and tests that need another tool (for
+ * example a write tool to exercise approvals) replace this module with
+ * `vi.mock`.
  */
-export function registeredTools(): ToolDefinition[] {
-  return [webSearchTool];
+export async function registeredTools(): Promise<ToolDefinition[]> {
+  return [webSearchTool, ...(await connectorTools())];
 }

@@ -61,6 +61,11 @@ room to read the descriptions properly.
 You cannot add models here. Which appear is decided by your administrator, and
 may depend on your role.
 
+## Connectors
+
+Services that need your own sign-in before models can use their tools, with
+**Connect** and **Disconnect**. See [Connectors](connectors.md).
+
 ## Attachments
 
 ![Your attachments](../images/user-settings-attachments.png)

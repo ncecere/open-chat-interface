@@ -34,6 +34,7 @@ export async function resolveTurnContext(
   if (!input.messages[0]) throw validationFailed('A user message is required');
   const tools = await resolveTurnTools({
     role: user.role,
+    userId: user.id,
     capabilities: resolved.capabilities,
     webSearch: input.webSearch,
   });

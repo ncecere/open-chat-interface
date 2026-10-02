@@ -119,8 +119,8 @@ vi.mock('../../services/search/index.js', async (importOriginal) => ({
 vi.mock('../../services/tools/catalog.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../services/tools/catalog.js')>();
   return {
-    registeredTools: () => [
-      ...original.registeredTools(),
+    registeredTools: async () => [
+      ...(await original.registeredTools()),
       {
         id: 'send_note',
         label: 'Send note',

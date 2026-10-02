@@ -11,15 +11,36 @@ import { USER_ROLES, type UserRole } from './constants.js';
 export const TOOL_KINDS = ['read', 'write'] as const;
 export type ToolKind = (typeof TOOL_KINDS)[number];
 
-/** Built-in tool ids, and the shape of a connector tool id (`mcp.<connector>.<tool>`). */
+/**
+ * Built-in tool ids, and the shape of a connector tool id
+ * (`mcp__<connector>__<tool>`). Every id is also the function name sent to the
+ * provider, so it keeps to the characters and length OpenAI and Anthropic
+ * accept (`^[A-Za-z0-9_-]{1,64}$`). A connector slug has no underscores, so
+ * the first `__` after `mcp__` always ends it.
+ */
 export const TOOL_ID_PATTERN =
-  /^(?:[a-z][a-z0-9_]{0,63}|mcp\.[a-z0-9_-]{1,64}\.[A-Za-z0-9_-]{1,64})$/;
+  /^(?:[a-z][a-z0-9_]{0,63}|mcp__[a-z0-9-]{1,24}__[A-Za-z0-9_-]{1,57})$/;
+export const MAX_TOOL_ID_LENGTH = 64;
+
+/** A connector's slug: lowercase letters, digits and inner hyphens, at most 24 characters. */
+export const CONNECTOR_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,22}[a-z0-9])?$/;
+
+/** `mcp__<slug>__<key>`: the id of a connector tool. */
+export function connectorToolId(slug: string, key: string): string {
+  return `mcp__${slug}__${key}`;
+}
+
+/** The connector slug a tool id belongs to, or null for a built-in tool. */
+export function connectorSlugOfToolId(toolId: string): string | null {
+  const match = /^mcp__([a-z0-9-]{1,24})__./.exec(toolId);
+  return match?.[1] ?? null;
+}
 
 export interface ToolDescriptor {
   id: string;
   label: string;
   kind: ToolKind;
-  /** `builtin` tools ship with OCI; connector tools come from MCP servers (later). */
+  /** `builtin` tools ship with OCI; connector tools come from MCP servers. */
   source: 'builtin' | 'connector';
 }
 
@@ -44,7 +65,10 @@ export function defaultToolAllowed(role: UserRole, tool: Pick<ToolDescriptor, 'k
 export const updateRoleToolsSchema = z
   .object({
     tools: z
-      .record(z.string().regex(TOOL_ID_PATTERN, 'Unknown tool id'), z.boolean())
+      .record(
+        z.string().max(MAX_TOOL_ID_LENGTH).regex(TOOL_ID_PATTERN, 'Unknown tool id'),
+        z.boolean(),
+      )
       .refine((tools) => Object.keys(tools).length > 0, { message: 'Send at least one change.' })
       .refine((tools) => Object.keys(tools).length <= 200, { message: 'Too many tools.' }),
   })
@@ -57,6 +81,8 @@ export const roleToolSchema = z.object({
   kind: z.enum(TOOL_KINDS),
   source: z.enum(['builtin', 'connector']),
   allowed: z.boolean(),
+  /** The connector's name, for grouping connector tools; absent for built-in tools. */
+  connector: z.string().nullable().optional(),
 });
 export type RoleTool = z.infer<typeof roleToolSchema>;
 

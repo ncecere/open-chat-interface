@@ -3,7 +3,7 @@ import { roleFeatures } from '../role-features.js';
 import { webSearchProblem } from '../search/availability.js';
 import { normalizeSearchQuery, searchWeb } from '../search/index.js';
 import { getSetting } from '../settings.js';
-import type { ToolDefinition } from './types.js';
+import type { ToolDefinition, ToolSource } from './types.js';
 
 /** Bounds on what one search returns to the model and stores in the reply. */
 export const WEB_SEARCH_MAX_RESULTS = 10;
@@ -57,10 +57,11 @@ export const webSearchTool: ToolDefinition = {
       })),
     } satisfies WebSearchToolResult;
   },
+  sources: (output) => webSearchSources(output),
 };
 
 /** Sources to show for a completed `web_search` result, in result order. */
-export function webSearchSources(output: unknown): Array<{ url: string; title: string }> {
+export function webSearchSources(output: unknown): ToolSource[] {
   const results = (output as { results?: unknown } | null)?.results;
   if (!Array.isArray(results)) return [];
   return results.flatMap((result) => {

@@ -17,10 +17,12 @@ way regardless of which model you pick.
    and files.
 5. [Searching the web](web-search.md) — grounding an answer in sources.
 6. [Tools](tools.md) — tool steps in a reply, and approving actions.
-7. [Sharing](sharing.md) — publishing a conversation read-only.
-8. [Settings](settings.md) — your account, personalisation, history, models.
-9. [Limits](limits.md) — what a usage warning means and what to do about it.
-10. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
+7. [Connectors](connectors.md) — connecting your account to services models can
+   use.
+8. [Sharing](sharing.md) — publishing a conversation read-only.
+9. [Settings](settings.md) — your account, personalisation, history, models.
+10. [Limits](limits.md) — what a usage warning means and what to do about it.
+11. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
     or Claude.
 
 ## The parts of the screen

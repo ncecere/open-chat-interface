@@ -12,6 +12,8 @@ import { z } from 'zod';
 const mocks = vi.hoisted(() => ({
   audits: [] as unknown[],
   chat: {} as Record<string, unknown>,
+  roleTools: {} as Record<string, unknown>,
+  updates: [] as unknown[],
 }));
 vi.mock('../../services/audit.js', () => ({
   recordAudit: async (event: unknown) => {
@@ -19,15 +21,21 @@ vi.mock('../../services/audit.js', () => ({
   },
 }));
 vi.mock('../../services/settings.js', () => ({
-  getSetting: async (key: string) => (key === 'chat' ? mocks.chat : {}),
-  updateSetting: async () => ({}),
+  getSetting: async (key: string) =>
+    key === 'chat' ? mocks.chat : key === 'roleTools' ? mocks.roleTools : {},
+  updateSetting: async (key: string, patch: unknown) => {
+    mocks.updates.push([key, patch]);
+    return {};
+  },
 }));
 vi.mock('../../lib/logger.js', () => ({ logger: { warn: vi.fn(), error: vi.fn() } }));
 
 const { AppError } = await import('../../lib/errors.js');
 const { buildSdkTools, capToolResult, MAX_TOOL_RESULT_CHARS, ToolFailure, toolErrorText } =
   await import('../../services/tools/registry.js');
-const { resolveRoleToolAllowed } = await import('../../services/tools/role-tools.js');
+const { forgetRoleTools, resolveRoleToolAllowed } = await import(
+  '../../services/tools/role-tools.js'
+);
 const { webSearchSources } = await import('../../services/tools/web-search.js');
 const { maxToolSteps, stepsTaken, toolStreamErrorText } = await import(
   '../../services/chat/tool-loop.js'
@@ -130,7 +138,7 @@ describe('tool registry', () => {
   it('defaults built-in read tools on except for restricted, and honours saved choices', () => {
     const read = { id: 'web_search', kind: 'read' as const, source: 'builtin' as const };
     const write = { id: 'send', kind: 'write' as const, source: 'builtin' as const };
-    const connector = { id: 'mcp.crm.find', kind: 'read' as const, source: 'connector' as const };
+    const connector = { id: 'mcp__crm__find', kind: 'read' as const, source: 'connector' as const };
     expect(resolveRoleToolAllowed('user', read, undefined)).toBe(true);
     expect(resolveRoleToolAllowed('restricted', read, undefined)).toBe(false);
     expect(resolveRoleToolAllowed('user', write, undefined)).toBe(false);
@@ -144,7 +152,46 @@ describe('tool registry', () => {
     expect(defaultToolAllowed('auditor', read)).toBe(true);
     expect(updateRoleToolsSchema.safeParse({ tools: {} }).success).toBe(false);
     expect(updateRoleToolsSchema.safeParse({ tools: { 'Bad Id': true } }).success).toBe(false);
-    expect(updateRoleToolsSchema.safeParse({ tools: { 'mcp.crm.find': true } }).success).toBe(true);
+    expect(updateRoleToolsSchema.safeParse({ tools: { mcp__crm__find: true } }).success).toBe(true);
+    // Dots are not allowed in OpenAI or Anthropic function names, so ids never contain them.
+    expect(updateRoleToolsSchema.safeParse({ tools: { 'mcp.crm.find': true } }).success).toBe(
+      false,
+    );
+    expect(
+      updateRoleToolsSchema.safeParse({ tools: { [`mcp__crm__${'x'.repeat(60)}`]: true } }).success,
+    ).toBe(false);
+  });
+
+  it("forgets every role's saved choice for a deleted connector's tools", async () => {
+    mocks.roleTools = {
+      roles: {
+        user: { mcp__docs__search: true, web_search: false },
+        admin: { mcp__docs__search: false },
+        restricted: { mcp__wiki__search: true },
+        auditor: undefined,
+      },
+    };
+    mocks.updates = [];
+    await forgetRoleTools('mcp__docs__');
+    expect(mocks.updates).toEqual([
+      [
+        'roleTools',
+        {
+          roles: {
+            user: { web_search: false },
+            admin: {},
+            restricted: { mcp__wiki__search: true },
+            auditor: {},
+          },
+        },
+      ],
+    ]);
+    // Nothing saved for the connector: nothing written.
+    mocks.updates = [];
+    await forgetRoleTools('mcp__crm__');
+    mocks.roleTools = {};
+    await forgetRoleTools('mcp__crm__');
+    expect(mocks.updates).toEqual([]);
   });
 
   it('turns web search results into sources, skipping anything that is not a web link', () => {

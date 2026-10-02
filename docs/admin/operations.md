@@ -22,6 +22,7 @@ reported. The checks refresh every 30 seconds while the page is open; the old
 | Background jobs | Failures in the last day | One started over an hour ago and never finished |
 | Email delivery | Not configured | — |
 | Attachment storage | Uploads never attached to a message | — |
+| Connectors | An enabled [connector](connectors.md)'s latest exchange failed | — |
 
 The summary takes the worst individual result, so a green banner above a failing
 row cannot happen.

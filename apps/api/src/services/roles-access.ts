@@ -6,6 +6,7 @@ import { getDefaultOrganizationId } from './organization.js';
 import { combineFeatures, resolveRoleFeatures } from './role-features.js';
 import { getSetting } from './settings.js';
 import { listStoragePolicies } from './storage/quota.js';
+import { registeredTools } from './tools/catalog.js';
 import { describeRoleTools } from './tools/role-tools.js';
 
 /**
@@ -36,6 +37,7 @@ export async function getRolesAccess(): Promise<RolesAccess> {
     search,
     storedRoleFeatures,
     storedRoleTools,
+    tools,
     users,
     budgets,
     models,
@@ -47,6 +49,7 @@ export async function getRolesAccess(): Promise<RolesAccess> {
     getSetting('search'),
     getSetting('roleFeatures'),
     getSetting('roleTools'),
+    registeredTools(),
     db
       .select({ role: schema.user.role, value: count() })
       .from(schema.user)
@@ -99,7 +102,7 @@ export async function getRolesAccess(): Promise<RolesAccess> {
       },
       features: effective,
       roleFeatures: own,
-      tools: describeRoleTools(role, storedRoleTools),
+      tools: describeRoleTools(role, storedRoleTools, tools),
       fixedRules: FIXED_RULES[role],
     };
   });

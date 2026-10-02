@@ -1,4 +1,5 @@
 import {
+  connectorSlugOfToolId,
   isToolPart,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
@@ -36,12 +37,6 @@ export function toolLimitOf(message: UIMessage): string | null {
     reason as ToolLimitReason,
     typeof part?.data?.steps === 'number' ? part.data.steps : undefined,
   );
-}
-
-/** `mcp.<connector>.<tool>` names its connector; built-in tools have none. */
-function connectorOf(toolId: string): string | null {
-  const match = /^mcp\.([^.]+)\./.exec(toolId);
-  return match?.[1] ?? null;
 }
 
 const formatInput = (input: unknown) => {
@@ -177,7 +172,8 @@ export function ApprovalCard({
   const status = useRef<HTMLParagraphElement>(null);
   const [announcement, setAnnouncement] = useState('');
   const answered = step.state === 'approved' || step.state === 'denied';
-  const connector = connectorOf(step.toolId);
+  // `mcp__<connector>__<tool>` names its connector; built-in tools have none.
+  const connector = connectorSlugOfToolId(step.toolId);
 
   // Announced after mount: live regions ignore content present when they appear.
   useEffect(() => {

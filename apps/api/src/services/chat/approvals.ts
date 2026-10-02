@@ -112,6 +112,7 @@ export async function setupApprovalContinuation(
   const resolved = await resolveModelForRole(reply.modelSlug, user.role);
   const tools = await resolveTurnTools({
     role: user.role,
+    userId: user.id,
     capabilities: resolved.capabilities,
     webSearch: reply.webSearchUsed,
   });

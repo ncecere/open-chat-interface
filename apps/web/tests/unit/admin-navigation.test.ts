@@ -40,6 +40,7 @@ describe('admin navigation catalogue', () => {
           'Branding /admin/branding',
           'Announcements /admin/broadcasts',
           'Web search /admin/search',
+          'Connectors /admin/connectors',
         ],
       ],
     ]);

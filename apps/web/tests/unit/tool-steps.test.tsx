@@ -44,7 +44,7 @@ const searched = {
   },
 };
 const awaiting = {
-  type: 'tool-mcp.crm.create_note',
+  type: 'tool-mcp__crm__create_note',
   toolCallId: 'w1',
   state: 'approval-requested',
   input: { account: 'Acme', text: 'Call back Monday' },
@@ -97,7 +97,7 @@ describe('tool steps', () => {
     const card = container.querySelector('section[data-testid="tool-approval"]')!;
     const heading = card.querySelector('h3')!;
     expect(card.getAttribute('aria-labelledby')).toBe(heading.id);
-    expect(card.textContent).toContain('mcp.crm.create_note');
+    expect(card.textContent).toContain('mcp__crm__create_note');
     expect(card.textContent).toContain('Connector');
     expect(card.textContent).toContain('crm');
     expect(card.querySelector('pre')?.textContent).toContain('"text": "Call back Monday"');
@@ -140,7 +140,7 @@ describe('tool steps', () => {
     };
     await act(() => root.render(<ToolSteps message={reply(denied)} />));
     expect(container.querySelector('section[data-testid="tool-approval"]')).toBeNull();
-    expect(container.textContent).toContain('mcp.crm.create_note was not run (not answered)');
+    expect(container.textContent).toContain('mcp__crm__create_note was not run (not answered)');
   });
 
   it('counts a tool step as visible progress in the conversation', async () => {

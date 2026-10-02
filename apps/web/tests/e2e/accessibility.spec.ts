@@ -168,6 +168,107 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('admin connectors has no violations', async ({ page }) => {
+    // A routed connector with a read and a write tool, so the tool controls are scanned too.
+    const connectorTool = (id: string, name: string, kind: string, enabled: boolean) => ({
+      id,
+      toolId: `mcp__docs__${name}`,
+      name,
+      title: null,
+      description: `The ${name} tool.`,
+      kind,
+      serverKind: kind,
+      enabled,
+      missing: false,
+      lastSeenAt: '2026-10-01T10:00:00.000Z',
+    });
+    await page.route('**/api/admin/connectors', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          connectors: [
+            {
+              id: 'c1',
+              name: 'Docs',
+              slug: 'docs',
+              url: 'https://mcp.example.test/mcp',
+              authMode: 'shared',
+              sharedHeaderName: 'Authorization',
+              hasSharedCredential: true,
+              oauthClientId: null,
+              hasOauthClientSecret: false,
+              oauthClientSource: null,
+              oauthScopes: '',
+              enabled: true,
+              allowPrivateNetwork: false,
+              accountCount: 0,
+              lastContactAt: '2026-10-01T10:00:00.000Z',
+              lastErrorAt: '2026-10-01T11:00:00.000Z',
+              lastError: 'Docs did not respond in time.',
+              oauthRedirectUrl: 'https://oci.example.test/api/connectors/oauth/callback',
+              createdAt: '2026-10-01T09:00:00.000Z',
+              updatedAt: '2026-10-01T09:00:00.000Z',
+              tools: [
+                connectorTool('t1', 'search', 'read', true),
+                connectorTool('t2', 'create_page', 'write', false),
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/admin/connectors');
+    await expect(page.getByRole('heading', { name: 'Connectors', level: 1 })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'search' })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('settings connectors has no violations', async ({ page }) => {
+    await page.route('**/api/connectors', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          connectors: [
+            {
+              id: 'c1',
+              name: 'Docs',
+              slug: 'docs',
+              connected: true,
+              needsReconnect: false,
+              toolCount: 2,
+            },
+            {
+              id: 'c2',
+              name: 'CRM',
+              slug: 'crm',
+              connected: false,
+              needsReconnect: true,
+              toolCount: 1,
+            },
+            {
+              id: 'c3',
+              name: 'Wiki',
+              slug: 'wiki',
+              connected: false,
+              needsReconnect: false,
+              toolCount: 3,
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/settings/connectors');
+    await expect(page.getByRole('heading', { name: 'Connectors', level: 1 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect Wiki', exact: true })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a project page has no violations', async ({ page }) => {
     await signIn(page);
     // Created through the real API with the signed-in session's cookies.

@@ -27,6 +27,8 @@ resolves it. [First run](first-run.md) walks through it.
    search.
 8. [Audit and reporting](audit-reporting.md) — the audit log, exports, usage,
    scheduled reports.
+9. [Connectors](connectors.md) — MCP servers whose tools models can call:
+   authentication, approval, network safety.
 
 For deployment, backup, and upgrade, see [Operations](../OPERATIONS.md).
 
@@ -85,6 +87,7 @@ Pages are grouped by task. **Overview** sits above the groups.
 | Branding | Name, logo, accent colour, default theme, sign-in message |
 | Announcements | A banner shown to everybody |
 | Web search | The switch for web search, and its provider |
+| Connectors | MCP servers whose tools models can call, and which of their tools are enabled |
 
 ### Old addresses
 

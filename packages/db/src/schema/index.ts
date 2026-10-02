@@ -1,5 +1,6 @@
 export * from './auth.js';
 export * from './chat.js';
+export * from './connector.js';
 export * from './lifecycle.js';
 export * from './organization.js';
 export * from './portability.js';

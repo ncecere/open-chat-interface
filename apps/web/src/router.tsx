@@ -194,6 +194,13 @@ const SETTINGS_TABS = [
     component: lazyRouteComponent(() => import('~/routes/settings/models'), 'SettingsModelsPage'),
   },
   {
+    path: '/settings/connectors',
+    component: lazyRouteComponent(
+      () => import('~/routes/settings/connectors'),
+      'SettingsConnectorsPage',
+    ),
+  },
+  {
     path: '/settings/attachments',
     component: lazyRouteComponent(
       () => import('~/routes/settings/attachments'),
@@ -373,6 +380,12 @@ const adminSearchRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/search'), 'AdminSearchPage'),
 });
 
+const adminConnectorsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/connectors',
+  component: lazyRouteComponent(() => import('~/routes/admin/connectors'), 'AdminConnectorsPage'),
+});
+
 const adminStorageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/storage',
@@ -438,6 +451,7 @@ const routeTree = rootRoute.addChildren([
     adminSsoRoute,
     adminQuotasRoute,
     adminSearchRoute,
+    adminConnectorsRoute,
     adminStorageRoute,
     adminStorageLimitsRoute,
     adminRateLimitsRoute,

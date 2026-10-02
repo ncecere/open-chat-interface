@@ -6,7 +6,7 @@ import { getSetting } from '../settings.js';
 import { recordToolCall, type ToolApprovalAnswer } from './audit.js';
 import { registeredTools } from './catalog.js';
 import { resolveRoleToolAllowed } from './role-tools.js';
-import type { ToolCaller, ToolDefinition } from './types.js';
+import type { ToolCaller, ToolDefinition, ToolTurnInput } from './types.js';
 
 /** A stored or streamed tool result above this many characters is cut down. */
 export const MAX_TOOL_RESULT_CHARS = 16_000;
@@ -27,21 +27,29 @@ export const toolDefinition = (tools: TurnTools, id: string) =>
 
 /**
  * The tool set for one turn: tools enabled on the instance (and, where the
- * composer has a switch, for this message), allowed for the person's role and
- * usable by the model (`tool_calling`). A model without tool calling gets none
- * and behaves exactly as in v0.7.
+ * composer has a switch, for this message), allowed for the person's role,
+ * usable by the model (`tool_calling`) and, for an OAuth connector, connected
+ * by this person. A model without tool calling gets none and behaves exactly
+ * as in v0.7.
  */
 export async function resolveTurnTools(turn: {
   role: UserRole;
+  userId: string;
   capabilities: readonly string[];
   webSearch: boolean;
 }): Promise<TurnTools> {
   if (!turn.capabilities.includes('tool_calling')) return NO_TOOLS;
-  const stored = await getSetting('roleTools');
+  const [stored, registered] = await Promise.all([getSetting('roleTools'), registeredTools()]);
+  const input: ToolTurnInput = {
+    role: turn.role,
+    userId: turn.userId,
+    webSearch: turn.webSearch,
+    memo: new Map(),
+  };
   const offered: ToolDefinition[] = [];
-  for (const definition of registeredTools()) {
+  for (const definition of registered) {
     if (!resolveRoleToolAllowed(turn.role, definition, stored)) continue;
-    if (!(await definition.available({ role: turn.role, webSearch: turn.webSearch }))) continue;
+    if (!(await definition.available(input))) continue;
     offered.push(definition);
   }
   return { definitions: offered };

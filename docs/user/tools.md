@@ -12,6 +12,11 @@ Whether a model uses tools depends on three things:
 - **The tool's own switch.** Web search, for example, is only offered when
   **Search** is on for the message you send.
 
+Tools can also come from **connectors**: other services your institution has
+connected, such as a document store or a ticketing system. Some need you to
+connect your own account first under **Settings → Connectors**; until you do,
+their tools are not offered. See [Connectors](connectors.md).
+
 ## What a tool step looks like
 
 Each tool call appears in the reply as a short line, for example:
@@ -19,8 +24,9 @@ Each tool call appears in the reply as a short line, for example:
 > Searched the web for 'library opening hours' · 5 results
 
 Select the line to see what the model asked the tool for (its inputs) and a
-summary of what came back. Sources a tool found appear above the answer, the
-same way as web search sources always have.
+summary of what came back. Sources a tool found — web search results, or
+documents a connector linked to — appear above the answer, the same way as web
+search sources always have.
 
 A reply can take at most a set number of steps (8 unless your administrator
 changed it). If a reply reaches that limit, or your usage allowance runs out
@@ -33,7 +39,7 @@ Tools that only look things up run without asking. Tools that **change
 something elsewhere** — sending a message, creating a record — always ask you
 first. The reply pauses and shows a card with:
 
-- the tool, and the connected system it belongs to, if any;
+- the tool, and the connector it belongs to, if any;
 - the exact inputs it will run with.
 
 Choose **Approve** to let it run, or **Deny** to refuse. Either way the model

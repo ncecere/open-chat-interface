@@ -7,6 +7,7 @@ import { attachmentRoutes } from './attachments.js';
 import { authStatusRoutes } from './auth-status.js';
 import { brandingRoutes } from './branding.js';
 import { chatRoutes } from './chat.js';
+import { connectorRoutes } from './connectors.js';
 import { healthRoutes } from './health.js';
 import { meRoutes } from './me.js';
 import { modelCatalogRoutes } from './models.js';
@@ -64,6 +65,7 @@ export function createApiRoutes() {
   api.route('/chat', chatRoutes);
   api.route('/attachments', attachmentRoutes);
   api.route('/share-links', shareLinkRoutes);
+  api.route('/connectors', connectorRoutes);
   api.route('/admin', adminRoutes);
 
   return api;

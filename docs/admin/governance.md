@@ -116,13 +116,18 @@ offered to a model only when all of these hold:
 - the tool is switched on for the instance, and for the message where the
   composer has a switch. Web search (`web_search`) needs the instance's web
   search to be on and configured, the role's **Web search** feature, and the
-  person's **Search** switch for that message.
+  person's **Search** switch for that message. A connector tool
+  (`mcp__<connector>__<tool>`) needs its connector and the tool enabled on
+  [Connectors](connectors.md) and, for a connector where each person signs
+  in, the person's own connection.
 
 Each tool is `read` (looks something up; runs without asking) or `write`
 (changes something elsewhere; the person approves every call). The switches
 are stored sparsely, so a tool added later inherits a default: built-in read
 tools are on for every role except `restricted`; write and connector tools are
-off until you allow them. Saving sends only the tools you changed and is
+off until you allow them. Connector tools appear in this section once enabled
+on [Connectors](connectors.md), grouped under their connector's name, and
+their allows are removed when the connector is deleted. Saving sends only the tools you changed and is
 recorded as `role.tools.update` with the previous and new values. Auditors see
 the switches but cannot change them. API: `PUT /api/admin/roles/:role/tools`
 with `{ "tools": { "web_search": true } }`.
