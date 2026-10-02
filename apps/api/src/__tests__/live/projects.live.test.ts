@@ -84,6 +84,7 @@ const { errorHandler } = await import('../../middleware/error-handler.js');
 const { LocalStorageDriver } = await import('../../services/storage/local-driver.js');
 const { drainDeletedObjects, reconcileStorage } = await import('../../services/storage/reaper.js');
 const { purgeExpiredTrash } = await import('../../services/lifecycle/trash.js');
+const { uploadProjectFile } = await import('../../services/projects.js');
 const { applyThreadRetention } = await import('../../services/lifecycle/retention.js');
 type AppBindings = import('../../middleware/context.js').AppBindings;
 
@@ -522,6 +523,39 @@ describe.skipIf(!available)('live: projects', () => {
       expect((await call(owner, 'DELETE', `/projects/${project.id}/files/${file.id}`)).status).toBe(
         404,
       );
+    });
+
+    it('refuses a file for a project that is gone or not the uploader’s, reserving nothing', async () => {
+      // The route checks ownership first; this is the check inside the upload
+      // transaction that stops a project deleted mid-upload gaining a file.
+      const project = await createProject(owner, 'Short-lived');
+      await json(await call(owner, 'DELETE', `/projects/${project.id}`));
+      const stranger = await createProject(owner, 'Someone else’s');
+      const before = await usage(owner);
+      const intruder = await seedUser(live.db, state.organizationId, {
+        email: 'project-intruder@example.test',
+      });
+      for (const [userId, projectId] of [
+        [owner, project.id],
+        [intruder, stranger.id],
+      ] as const) {
+        await expect(
+          uploadProjectFile({
+            userId,
+            role: 'user',
+            projectId,
+            filename: 'late.txt',
+            declaredMimeType: 'text/plain',
+            bytes: Buffer.from('arrived after the project went away'),
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+      }
+      expect(await usage(owner)).toEqual(before);
+      const [leftover] = await live.db
+        .select({ pending: sql<number>`count(*)::int` })
+        .from(schema.attachment)
+        .where(eq(schema.attachment.filename, 'late.txt'));
+      expect(leftover?.pending).toBe(0);
     });
 
     it('needs attachments to be allowed to upload', async () => {
