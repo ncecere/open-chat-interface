@@ -120,6 +120,13 @@ and verify attachment downloads.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
 
+### Upgrading to v0.7 (migrations 0022–0025)
+
+Migrations `0022_conversation_imports` and `0024_projects` create new tables
+and add nullable columns to `thread` and `attachment`, with no table rewrite.
+Their new constraints and partial indexes read `thread` and `attachment` once,
+which is quick. Migrations 0023 and 0025 do more work and are described below.
+
 ### Conversation search index (migration 0023)
 
 Migration `0023_message_text_search` builds a GIN full-text index,
