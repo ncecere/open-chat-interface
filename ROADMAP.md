@@ -74,7 +74,8 @@ version. For OCI, ◐ means partial and is explained in the item below.
 | Search inside conversation content | ✓ | ✓ | ✓ | ◐ titles only |
 | Prompt library and slash commands | ◐ | ✓ | ✓ | — |
 | User memory with controls | ✓ | ✓ | ✓ | — |
-| Knowledge bases (RAG) with citations | ✓ | ✓ | ✓ | — |
+| Large project files searched instead of cut off | ◐ | ✓ | ✓ | — |
+| Organisation documents searched where they live, with citations | ✓ | ◐ | ◐ | — |
 | Model tool calling | ✓ | ✓ | ✓ | — |
 | MCP connectors with admin governance | ✓ | ✓ | ✓ | — |
 | Custom assistants / skills | ✓ | ✓ | ✓ | — |
@@ -140,11 +141,11 @@ the same governance.
 
 | Item | Why | Notes |
 | --- | --- | --- |
-| **Tool-calling foundation** | Prerequisite for search-as-a-tool, knowledge, MCP, assistants and code execution. | A tool registry with per-role allow, an approval step for actions that change things, budget accounting for tool calls, and audit events. Show tool use in the conversation. |
+| **Tool-calling foundation** | Prerequisite for search-as-a-tool, project-file search, MCP, assistants and code execution. | A tool registry with per-role allow, an approval step for actions that change things, budget accounting for tool calls, and audit events. Show tool use in the conversation. |
 | **Web search as a tool** | Today one query is run before every reply. | The model decides when and what to search, can search more than once, and cites results. The existing providers remain. |
-| **Knowledge bases (RAG)** | Answers grounded in institutional documents are the most requested capability after chat itself. | pgvector with hybrid keyword-and-vector search and citations. Personal, project and role-scoped collections. Ingestion runs as background jobs; embeddings provider configured like chat providers; storage limits and embedding cost count against budgets. Optional OCR. |
+| **Large project files** | v0.7 projects put every file in front of the model on every message, so large projects are cut off and every message pays for all of it. Claude already switches to search in this situation. | Files load in full while they fit the context; beyond that, OCI searches them for the passages relevant to each message and cites file and passage. Indexed in PostgreSQL (full-text, optionally pgvector) by background jobs; embedding cost counts against budgets. The conversation shows when search is in use. |
 | **User memory** | Expected from every hosted product. | Opt-in and off by default; every entry visible, editable, deletable and exportable; never used in temporary chats; per-role entitlement and retention. |
-| **MCP connectors** | The standard way to reach other systems. | Remote MCP over Streamable HTTP with OAuth. Administrators allowlist servers and individual tools per role; credentials are held per person; write actions ask for approval; all calls are audited. |
+| **MCP connectors** | The standard way to reach other systems, and where institutional knowledge comes from: documents are searched where they already live rather than copied into OCI, as ChatGPT's company knowledge and Claude's enterprise search do. | Remote MCP over Streamable HTTP with OAuth, so searches respect each person's existing permissions in systems such as SharePoint and Google Drive; answers cite the source document. Administrators allowlist servers and individual tools per role; credentials are held per person; write actions ask for approval; all calls are audited. |
 | **Artifacts** | Documents, diagrams and small apps are easier to read and reuse in a side panel than in a message. | Sandboxed preview for HTML, SVG and Mermaid with a strict Content-Security-Policy; editable documents; versions; share and export. Editorial diagrams: models draw self-contained SVG following the [Diagram Design](https://github.com/cathrynlavery/diagram-design) style guide (MIT, with attribution), mapped to the instance's colours — flat, hairline strokes, one accent for the focal element. |
 | **File output** | People need answers as documents. | Export a reply or artifact as DOCX, PDF, XLSX or PPTX. |
 | **Compliance export** | eDiscovery, records requests and security monitoring. | Stream audit events and, where policy allows, conversation content as JSONL to storage or a SIEM; legal hold that pauses retention for named people. |
@@ -157,14 +158,14 @@ the same governance.
 
 | Item | Why | Notes |
 | --- | --- | --- |
-| **Assistants** | Packages of instructions, knowledge and tools are how hosted products now let teams share expertise; custom GPTs are being replaced by skills and plugins. | A model plus instructions, knowledge and allowlisted tools, shared by role or group. Published assistants go through administrator review. |
+| **Assistants** | Packages of instructions, knowledge and tools are how hosted products now let teams share expertise; custom GPTs are being replaced by skills and plugins. | A model plus instructions, files and allowlisted tools (including knowledge connectors), shared by role or group. Published assistants go through administrator review. |
 | **Code execution** | Data analysis on spreadsheets and CSVs, charts and generated files. | An optional, isolated sandbox service with time, memory and network limits; outputs saved as attachments; per-role entitlement and budget. |
-| **Deep research** | Multi-step, cited reports. | Built on search and knowledge tools, with a visible plan, the ability to steer, a budget cap per run and export. |
+| **Deep research** | Multi-step, cited reports. | Built on web search and connector tools, with a visible plan, the ability to steer, a budget cap per run and export. |
 | **Image generation** | Requested for teaching material and communications. | Through provider APIs (OpenAI, Google), priced per image in budgets, with per-role entitlement and the acceptable-use policy applied. |
 | **Voice** | Dictation and read-aloud help accessibility as much as convenience. | Speech-to-text dictation and text-to-speech playback first; real-time voice later. |
 | **Model comparison** | Helps people choose models, and helps administrators curate the catalog. | Send one prompt to two models side by side and record which answer was preferred, reported on Usage. |
 | **Groups and finer roles** | Departments need their own limits, prompts and assistants. | Groups alongside roles, custom roles, and delegated administrators who manage one group. Shared projects with view and edit permissions. |
-| **Data classification** | Institutions must keep sensitive data (for example student or health records) away from unapproved models and connectors. | Label models, knowledge bases and connectors with the data classes they are approved for; warn or block when a conversation crosses them. |
+| **Data classification** | Institutions must keep sensitive data (for example student or health records) away from unapproved models and connectors. | Label models and connectors with the data classes they are approved for; warn or block when a conversation crosses them. |
 | **Scheduled prompts** | Recurring summaries and checks. | A prompt that runs on a schedule with the owner's permissions and budget, delivering by email or notification. |
 | **Interface translations** | Institutions serve people in many languages. | Translation framework and right-to-left support first; translations contributed per language. |
 | **Prompt library** | Saves retyping and spreads good practice. | Personal and administrator-published prompts with `{{variables}}`, inserted with `/`, optionally limited to roles. |
@@ -196,6 +197,10 @@ Ideas with merit that need more evidence or design before they are scheduled.
 - **A programmatic API with personal or service keys.** OCI is a chat
   interface; integrations that need model access should go through a model
   gateway such as LiteLLM.
+- **Knowledge bases managed inside OCI.** Institutional documents are searched
+  where they already live, through connectors that respect each person's
+  permissions, instead of being uploaded, synced and governed as a second copy.
+  Project files cover personal reference material.
 - **Consumer billing and payments.** Institutions fund usage; budgets and
   reports cover allocation.
 
