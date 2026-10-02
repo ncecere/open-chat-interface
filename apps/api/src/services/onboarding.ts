@@ -117,8 +117,9 @@ export async function listPolicies(): Promise<UsagePolicy[]> {
       body: schema.usagePolicy.body,
       publishedAt: schema.usagePolicy.publishedAt,
       createdAt: schema.usagePolicy.createdAt,
-      acceptanceCount: sql<number>`(select count(*) from ${schema.usagePolicyAcceptance}
-        where ${schema.usagePolicyAcceptance.policyId} = ${schema.usagePolicy.id})::int`,
+      // Qualified by hand: Drizzle drops qualifiers in a single-table select.
+      acceptanceCount: sql<number>`(select count(*) from "usage_policy_acceptance" as acceptance
+        where acceptance.policy_id = "usage_policy"."id")::int`,
     })
     .from(schema.usagePolicy)
     .where(eq(schema.usagePolicy.organizationId, organizationId))

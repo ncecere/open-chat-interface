@@ -143,7 +143,9 @@ export async function listTrashedThreads(userId: string): Promise<TrashedThread[
       title: schema.thread.title,
       deletedAt: schema.thread.deletedAt,
       deletedReason: schema.thread.deletedReason,
-      messageCount: sql<number>`(select count(*) from ${schema.message} where ${schema.message.threadId} = ${schema.thread.id})::int`,
+      // Qualified by hand: in a single-table select Drizzle drops column
+      // qualifiers, so `id` here would resolve to message.id and count nothing.
+      messageCount: sql<number>`(select count(*) from "message" as trashed_message where trashed_message.thread_id = "thread"."id")::int`,
     })
     .from(schema.thread)
     .where(and(eq(schema.thread.userId, userId), isNotNull(schema.thread.deletedAt)))
