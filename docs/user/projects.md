@@ -21,10 +21,13 @@ You can have up to 100 projects.
 
 ## The project page
 
-Open a project from the sidebar. Its page has:
+Open a project from the sidebar. **New chat in project**, at the top, starts a
+conversation inside the project. Below it, the page has four tabs:
 
-- **Name and instructions.** Instructions can be up to 8,000 characters. Select
-  **Save changes** after editing.
+- **Conversations** in the project, most recent first. The page opens on this
+  tab.
+- **Instructions**, up to 8,000 characters. Select **Save changes** after
+  editing.
 - **Files.** Upload up to 20 files. They are checked and stored like
   [attachments](attachments.md), count towards your storage allowance, and need
   file attachments to be available to you. Each file shows whether it can be
@@ -36,9 +39,10 @@ Open a project from the sidebar. Its page has:
   - **Waiting to be indexed**: the file was added before your institution
     upgraded and has not been prepared yet. This happens automatically in the
     background, usually within minutes; until then the file is used whole.
-- **Conversations** in the project, most recent first.
-- **New chat in project**, which starts a conversation inside the project.
-- **Delete project.**
+- **Settings**: rename the project, or delete it.
+
+The open tab is part of the page address, so a reload or a shared link opens
+the same tab.
 
 ## Starting and moving conversations
 

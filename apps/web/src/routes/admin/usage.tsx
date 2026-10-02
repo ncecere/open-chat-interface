@@ -1,10 +1,10 @@
 import { MICROS_PER_DOLLAR } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
 import { AdminPageHeader, LoadError, Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Badge } from '~/components/ui/badge';
+import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
 import { Spinner } from '~/components/ui/spinner';
 import {
   DEFAULT_USAGE_RANGE,
@@ -100,11 +100,11 @@ const TABS = [
   { id: 'spend', label: 'Spend' },
   { id: 'limits', label: 'Limits' },
   { id: 'storage', label: 'Storage' },
-] as const satisfies readonly AdminTab<UsageTab>[];
+] as const satisfies readonly PillTab<UsageTab>[];
 
 type RangeTabId = `${UsageRange}`;
 
-const RANGE_TABS: readonly AdminTab<RangeTabId>[] = USAGE_RANGES.map((range) => ({
+const RANGE_TABS: readonly PillTab<RangeTabId>[] = USAGE_RANGES.map((range) => ({
   id: `${range}` as RangeTabId,
   label: `${range} days`,
 }));
@@ -574,7 +574,7 @@ export function AdminUsagePage() {
           // Storage is a gauge rather than a flow, so a range would not mean
           // anything on that tab.
           tab === 'storage' ? undefined : (
-            <AdminTabs
+            <PillTabs
               tabs={RANGE_TABS}
               active={String(days) as RangeTabId}
               onChange={(range) => show({ range: Number(range) as UsageRange })}
@@ -585,7 +585,7 @@ export function AdminUsagePage() {
         }
       />
 
-      <AdminTabs
+      <PillTabs
         tabs={TABS}
         active={tab}
         onChange={(next) => show({ tab: next })}

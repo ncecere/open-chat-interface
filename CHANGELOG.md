@@ -52,6 +52,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   shows connector status. Migration `0027_connectors`. New dependency:
   `@ai-sdk/mcp` (Apache-2.0).
 
+### Changed
+
+- **The project page uses tabs.** Conversations, Instructions, Files and
+  Settings (rename and delete) are pill tabs, laid out like the user settings
+  pages instead of cards. The page opens on Conversations, and the open tab is
+  kept in the address (`?tab=`).
+
 ### Fixed
 
 - **A reply stopped part-way through recorded no token usage.** It now

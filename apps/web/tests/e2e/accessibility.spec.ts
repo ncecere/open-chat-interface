@@ -282,8 +282,22 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     await expect(page.getByRole('heading', { level: 1, name: project.name })).toBeVisible();
     await expect(page.getByText('No conversations yet.')).toBeVisible();
 
-    const results = await scan(page);
-    expect(describeViolations(results), describeViolations(results)).toBe('');
+    // Every tab, reached with the keyboard as the tabs pattern prescribes.
+    for (const [name, ready] of [
+      ['Conversations', 'No conversations yet.'],
+      ['Instructions', 'Answer clearly.'],
+      ['Files', 'No files yet.'],
+      ['Settings', 'Delete project'],
+    ] as const) {
+      if (name !== 'Conversations') await page.keyboard.press('ArrowRight');
+      else await page.getByRole('tab', { name }).focus();
+      await expect(page.getByRole('tab', { name, selected: true })).toBeFocused();
+      if (name === 'Instructions')
+        await expect(page.getByRole('textbox', { name: 'Instructions' })).toHaveValue(ready);
+      else await expect(page.getByText(ready).first()).toBeVisible();
+      const results = await scan(page);
+      expect(describeViolations(results), `${name}: ${describeViolations(results)}`).toBe('');
+    }
   });
 
   test('the move to project dialog has no violations while open', async ({ page }) => {

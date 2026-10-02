@@ -19,7 +19,11 @@ import {
   validateUsersSearch,
 } from '~/lib/admin-search';
 import { ApiError, api } from '~/lib/api-client';
-import { validateChatHomeSearch, validateChatThreadSearch } from '~/lib/chat-search-params';
+import {
+  validateChatHomeSearch,
+  validateChatThreadSearch,
+  validateProjectSearch,
+} from '~/lib/chat-search-params';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
@@ -128,6 +132,7 @@ const ProjectPage = lazyRouteComponent(() => import('~/routes/projects/project')
 const projectRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/projects/$projectId',
+  validateSearch: validateProjectSearch,
   component: function ProjectRoute() {
     const { projectId } = projectRoute.useParams();
     return <ProjectPage projectId={projectId} />;
