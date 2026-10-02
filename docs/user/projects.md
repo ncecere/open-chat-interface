@@ -27,7 +27,15 @@ Open a project from the sidebar. Its page has:
   **Save changes** after editing.
 - **Files.** Upload up to 20 files. They are checked and stored like
   [attachments](attachments.md), count towards your storage allowance, and need
-  file attachments to be available to you.
+  file attachments to be available to you. Each file shows whether it can be
+  searched (see [Large projects](#large-projects)):
+  - **Searchable · *n* passages**: its text was split into *n* passages that
+    can be searched.
+  - **No text to search**: nothing could be read from it, such as an image or
+    a scanned PDF. It is always given to the model whole, as far as it fits.
+  - **Waiting to be indexed**: the file was added before your institution
+    upgraded and has not been prepared yet. This happens automatically in the
+    background, usually within minutes; until then the file is used whole.
 - **Conversations** in the project, most recent first.
 - **New chat in project**, which starts a conversation inside the project.
 - **Delete project.**
@@ -59,20 +67,47 @@ With every message in a project conversation, the model receives:
   given to the model before older parts of the conversation, so when space is
   short the oldest messages are left out first.
 
-A file too large for the selected model's context is left out rather than cut
-off, and the reply is marked as having limited context. Choose a model with a
-larger context, or split the file, if that happens.
+When all of the project's files fit in the selected model's context, they are
+given to the model whole. When they do not, see [Large projects](#large-projects).
+
+## Large projects
+
+When a project's files are too large to give the model in full, the model gets
+the parts of them that matter for your message instead:
+
+- Your message is searched for in the project's files, by keyword. Passages
+  that contain more of your words, and rarer ones, rank higher; common words
+  such as "the" count for little. Use the words you expect to find in the
+  files, such as names, terms and numbers.
+- The best-matching passages are given to the model, labelled with their file
+  name and passage number, in the order they appear in the files. They use at
+  most half of the model's context, so the recent conversation still fits.
+- If no word of your message appears in the files, the opening passages of
+  each file are used instead.
+
+A reply that used searched passages says so above its text, for example
+"Searched project files. Used passages from handbook.pdf (2 passages)". The
+model does not see the rest of the files for that message, so ask about
+specific topics rather than for a summary of everything. A model with a larger
+context can take more of the files, or all of them.
+
+Search only covers your own project's files, never another project's or
+anyone else's. Files with no text to search, and files still waiting to be
+indexed, are given whole if they fit; a file that does not fit is left out
+rather than cut off, and the reply is marked as having limited context.
 
 Nothing from the project is written into the conversation itself. Exports and
 share links show the conversation as it was written; a shared conversation
-never includes the project's instructions or files. Like any attachment, a
+never includes the project's instructions or files. The note on a searched
+reply names the files and counts the passages but never contains their text;
+it is kept with the reply in your own data export and left out of share links. Like any attachment, a
 project file's contents go to the provider of the model you chose for that
 message.
 
 ## Deleting
 
-**Removing a file** deletes it straight away and frees its storage. It is not
-moved to the trash.
+**Removing a file** deletes it straight away, with its searchable passages,
+and frees its storage. It is not moved to the trash.
 
 **Deleting a project** keeps its conversations: they simply leave the project.
 Its files are deleted and their storage freed. This cannot be undone.

@@ -34,6 +34,7 @@ const FILE: ProjectFile = {
   url: '/api/attachments/file-1/content',
   thumbnailUrl: null,
   createdAt: '2026-01-01T00:00:00.000Z',
+  index: { status: 'indexed', passages: 3 },
 };
 const THREAD: ThreadSummary = {
   id: 'thread-1',
@@ -52,15 +53,17 @@ const THREAD: ThreadSummary = {
 
 let features: Record<string, boolean>;
 let projectResponse: () => Promise<unknown>;
+let files: ProjectFile[];
 let root: Root | undefined;
 
 beforeEach(() => {
   features = { projects: true, attachments: true };
   projectResponse = async () => ({ project: PROJECT });
+  files = [FILE];
   api.get.mockReset().mockImplementation(async (path: string) => {
     if (path === '/me') return { user: { id: 'me', name: 'Pat' }, features };
     if (path === '/projects/project-1') return projectResponse();
-    if (path === '/projects/project-1/files') return { files: [FILE] };
+    if (path === '/projects/project-1/files') return { files };
     if (path === '/threads?projectId=project-1') return { threads: [THREAD] };
     throw new Error(`Unexpected GET ${path}`);
   });
@@ -122,6 +125,33 @@ describe('project page', () => {
       (link) => link.textContent?.trim() === 'New chat in project',
     );
     expect(newChat?.getAttribute('href')).toBe('/?project=project-1');
+  });
+
+  it('shows whether each file is indexed for search and explains large projects', async () => {
+    files = [
+      FILE,
+      {
+        ...FILE,
+        id: 'file-2',
+        filename: 'one.txt',
+        index: { status: 'indexed', passages: 1 },
+      },
+      { ...FILE, id: 'file-3', filename: 'photo.png', index: { status: 'no-text', passages: 0 } },
+      { ...FILE, id: 'file-4', filename: 'old.pdf', index: { status: 'pending', passages: 0 } },
+    ];
+    await render();
+
+    const rows = [...document.querySelectorAll('[aria-label="Project files"] li')];
+    const status = (name: string) =>
+      rows.find((row) => row.textContent?.includes(name))?.querySelector('[data-index-status]')
+        ?.textContent;
+    expect(status('outline.md')).toBe('Searchable · 3 passages');
+    expect(status('one.txt')).toBe('Searchable · 1 passage');
+    expect(status('photo.png')).toBe('No text to search');
+    expect(status('old.pdf')).toBe('Waiting to be indexed');
+    expect(document.body.textContent).toContain(
+      'When the files are too large to give in full, they are searched with each message',
+    );
   });
 
   it('saves only the changed fields', async () => {

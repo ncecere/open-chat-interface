@@ -11,6 +11,7 @@ import {
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
 import { ReasoningPanel } from '~/components/chat/message-reasoning';
+import { ProjectSearchNote } from '~/components/chat/project-search-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
 import {
   SearchGroundingDetails,
@@ -94,6 +95,7 @@ export const MessageRow = memo(function MessageRow({
           Earlier conversation context was omitted to fit the input limit.
         </p>
       )}
+      <ProjectSearchNote message={message} />
       {grounding && <SearchSourcesPanel grounding={grounding} />}
       {reasoning && (
         <ReasoningPanel text={reasoning} streaming={streaming} answerStarted={Boolean(text)} />

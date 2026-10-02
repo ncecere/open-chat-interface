@@ -168,6 +168,24 @@ and search stop seeing both answers. The backfill reads `message` once with a
 sort and updates only those older replies; it holds row locks on them until
 the migration commits. Re-running it changes nothing.
 
+### Project file search (v0.8, migration 0026)
+
+Migration `0026_project_file_chunks` creates two new, empty tables,
+`project_file_index` and `project_file_chunk` (with a GIN full-text index),
+both cascading from `attachment`. It rewrites and locks nothing existing, so
+it applies instantly.
+
+Project files uploaded before the upgrade are split into searchable chunks
+afterwards by the `projects.index-files` background job: every 5 minutes, up
+to 50 files per run, oldest first, each in its own transaction. It is safe to
+interrupt (a restart loses at most the file in progress, which the next run
+redoes) and safe to run on several replicas (a file is never indexed twice).
+Until a file is indexed it is used whole, as in v0.7, and the project page
+shows it as "Waiting to be indexed". Progress is visible in the job runs on the
+admin health page; a run reports how many files it indexed. Chunks take
+roughly as much space as the extracted text of the files they cover, plus the
+index.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

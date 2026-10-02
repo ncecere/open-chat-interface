@@ -57,10 +57,41 @@ export const projectSummarySchema = z.object({
   updatedAt: z.string(),
 });
 
+/**
+ * Whether a project file can be searched when a project is too large to give
+ * the model whole. `pending` files are waiting for the background indexing
+ * job and are used whole meanwhile, as far as they fit; `no-text` files (such
+ * as images) have nothing to search and are always used whole.
+ */
+export const projectFileIndexSchema = z.object({
+  status: z.enum(['indexed', 'pending', 'no-text']),
+  /** Searchable passages the file was split into. */
+  passages: z.number().int().nonnegative(),
+});
+
 /** A project file is an attachment owned by the project rather than a message. */
-export const projectFileSchema = attachmentSchema;
+export const projectFileSchema = attachmentSchema.extend({ index: projectFileIndexSchema });
+
+/**
+ * The `data-project-search` part on a reply whose project files were too large
+ * to include whole, so passages were chosen instead. It names the files used
+ * and how many passages came from each, never the passage text, so it is safe
+ * in exports. `mode` is `search` when passages matched the message and
+ * `opening` when nothing matched and each file's opening passages were used.
+ */
+export const projectSearchDataSchema = z.object({
+  mode: z.enum(['search', 'opening']),
+  files: z.array(
+    z.object({
+      name: z.string(),
+      passages: z.number().int().positive(),
+    }),
+  ),
+});
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type ProjectFile = z.infer<typeof projectFileSchema>;
+export type ProjectFileIndex = z.infer<typeof projectFileIndexSchema>;
+export type ProjectSearchData = z.infer<typeof projectSearchDataSchema>;

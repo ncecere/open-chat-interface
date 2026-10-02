@@ -136,7 +136,14 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   // Project files outrank history: they are chosen to fit after the required
   // context, and history is trimmed to what remains. A file that does not fit
   // is left out rather than truncated, and the reply is marked context-limited.
-  const projectFiles = selectProjectFiles(project, required, budget, supportsVision);
+  // Files too large to include whole are searched with the latest message.
+  const projectFiles = await selectProjectFiles(
+    project,
+    required,
+    budget,
+    supportsVision,
+    textFromParts(stored.latest.parts),
+  );
   required = addCost(required, projectFiles.cost);
   const selected = selectContextSuffix(
     inspectedGroups.map((items) => ({
@@ -211,5 +218,6 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
           data: { query: searchQuery, results: searchResults },
         }
       : null,
+    projectSearchPart: projectFiles.searchPart,
   };
 }

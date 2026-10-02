@@ -123,6 +123,7 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
         if (turn.contextLimited)
           writer.write({ type: 'data-context-window', data: { limited: true } });
         if (searchGroundingPart) writer.write(searchGroundingPart);
+        if (turn.projectSearchPart) writer.write(turn.projectSearchPart);
         for (const source of sourceParts) writer.write(source);
         writer.merge(
           result.toUIMessageStream({

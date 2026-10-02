@@ -3,6 +3,7 @@ import type { searchWeb } from '../search/index.js';
 import type { generationSettings } from './generation-settings.js';
 import { buildModelContext } from './model-context.js';
 import { persistTurn } from './persist-turn.js';
+import type { ProjectSearchPart } from './project-context.js';
 import type { AcquiredRun } from './run-lifecycle.js';
 import type { TurnContext } from './turn-context.js';
 
@@ -19,6 +20,8 @@ export type PreparedTurn = TurnContext & {
     id: string;
     data: { query: string; results: Awaited<ReturnType<typeof searchWeb>> };
   } | null;
+  /** Set when project files were searched; names and passage counts only. */
+  projectSearchPart?: ProjectSearchPart | null;
 };
 
 /** Budget/enrich outside transactions, then commit the unmodified prompt and file references. */
@@ -43,5 +46,6 @@ export async function prepareTurn(context: TurnContext, run: AcquiredRun): Promi
     contextLimited: model.contextLimited,
     sourceParts: model.sourceParts,
     searchGroundingPart: model.searchGroundingPart,
+    projectSearchPart: model.projectSearchPart,
   };
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createDatabase, eq, runMigrations, schema, sql } from '@oci/db';
 import type { SendMessageInput } from '@oci/shared';
 import { convertToModelMessages } from 'ai';
@@ -477,8 +478,19 @@ describe.skipIf(!available)('live migration 0025 reply backfill', () => {
 
   it('keeps the newest reply of every turn active and supersedes the rest', async () => {
     await live.db.execute(sql`alter table message drop column superseded_at`);
+    // The migrator only applies migrations newer than the latest recorded one,
+    // so forget 0025 and everything after it. Later migrations are written to
+    // be re-runnable (IF NOT EXISTS), so applying them again is harmless.
+    const journal = JSON.parse(
+      readFileSync(
+        new URL('../../../../../packages/db/drizzle/meta/_journal.json', import.meta.url),
+        'utf8',
+      ),
+    ) as { entries: Array<{ tag: string; when: number }> };
+    const reply = journal.entries.find((entry) => entry.tag === '0025_reply_alternates');
+    if (!reply) throw new Error('Migration 0025 is missing from the journal');
     await live.db.execute(sql`delete from drizzle.__drizzle_migrations
-      where created_at = (select max(created_at) from drizzle.__drizzle_migrations)`);
+      where created_at >= ${reply.when}::bigint`);
     const ids = new Map<string, string>();
     async function seed(label: string, rows: Array<[name: string, role: string, at?: number]>) {
       const [thread] = await live.db.execute<{ id: string }>(sql`

@@ -2,6 +2,7 @@ import {
   MAX_FILES_PER_PROJECT,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
+  type ProjectFile,
   type ProjectSummary,
 } from '@oci/shared';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -45,6 +46,18 @@ function formatDate(value: string): string {
 
 const SECTION =
   'rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/30 p-4 sm:p-5';
+
+/** Whether a file can be searched when the project is too large to send whole. */
+function indexStatusLabel(index: ProjectFile['index'] | undefined): string {
+  switch (index?.status) {
+    case 'indexed':
+      return `Searchable · ${index.passages} ${index.passages === 1 ? 'passage' : 'passages'}`;
+    case 'no-text':
+      return 'No text to search';
+    default:
+      return 'Waiting to be indexed';
+  }
+}
 
 /**
  * One project: its name and instructions, its files, its conversations, and
@@ -250,8 +263,10 @@ function ProjectFiles({
             Files
           </h2>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
-            Their text is given to the model in every conversation in this project, as far as it
-            fits. {count} of {MAX_FILES_PER_PROJECT} files. Files count toward your storage.
+            Their text is given to the model in every conversation in this project. When the files
+            are too large to give in full, they are searched with each message and the passages that
+            match best are used instead. {count} of {MAX_FILES_PER_PROJECT} files. Files count
+            toward your storage.
           </p>
         </div>
         {attachmentsAvailable && (
@@ -314,6 +329,12 @@ function ProjectFiles({
               >
                 {file.filename}
               </a>
+              <span
+                className="shrink-0 text-xs text-[var(--text-muted)]"
+                data-index-status={file.index?.status ?? 'pending'}
+              >
+                {indexStatusLabel(file.index)}
+              </span>
               <span className="hidden shrink-0 text-xs text-[var(--text-muted)] sm:inline">
                 {formatBytes(file.sizeBytes)}
               </span>
