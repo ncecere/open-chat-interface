@@ -89,7 +89,6 @@ version. For OCI, ◐ means partial and is explained in the item below.
 | SCIM provisioning | ✓ | ✓ | — | — |
 | Multi-factor authentication | ✓ | ◐ | ✓ | — |
 | Compliance / eDiscovery export | ✓ | — | — | ◐ audit CSV |
-| API with personal keys | ✓ | ✓ | ◐ | — |
 | OpenTelemetry / webhooks | — | ✓ | ✓ | — |
 | Interface translations | ✓ | ✓ | ✓ | — |
 | Installable app (PWA) | ✓ | ✓ | ✓ | — |
@@ -148,7 +147,6 @@ the same governance.
 | **MCP connectors** | The standard way to reach other systems. | Remote MCP over Streamable HTTP with OAuth. Administrators allowlist servers and individual tools per role; credentials are held per person; write actions ask for approval; all calls are audited. |
 | **Artifacts** | Documents, diagrams and small apps are easier to read and reuse in a side panel than in a message. | Sandboxed preview for HTML, SVG and Mermaid with a strict Content-Security-Policy; editable documents; versions; share and export. Editorial diagrams: models draw self-contained SVG following the [Diagram Design](https://github.com/cathrynlavery/diagram-design) style guide (MIT, with attribution), mapped to the instance's colours — flat, hairline strokes, one accent for the focal element. |
 | **File output** | People need answers as documents. | Export a reply or artifact as DOCX, PDF, XLSX or PPTX. |
-| **API with personal keys** | Lets institutions build integrations, such as a learning-management system, without a separate gateway. | OpenAI-compatible chat endpoint authenticated by personal or service keys, subject to the same model visibility, budgets, rate limits and audit. |
 | **Compliance export** | eDiscovery, records requests and security monitoring. | Stream audit events and, where policy allows, conversation content as JSONL to storage or a SIEM; legal hold that pauses retention for named people. |
 | **SCIM provisioning** | Large institutions provision and deprovision accounts centrally. | SCIM 2.0 users and groups; groups mapped to roles. LDAP sign-in as an optional addition. |
 | **Observability and events** | Operators need metrics and integrations beyond the health page. | OpenTelemetry traces and metrics, a Prometheus endpoint, and signed webhooks for selected events. |
@@ -195,6 +193,9 @@ Ideas with merit that need more evidence or design before they are scheduled.
   hard to govern today; revisit once tool approval and audit are proven.
 - **Group chats and channels.** ChatGPT has stopped creating new group chats,
   and shared projects cover most collaborative use.
+- **A programmatic API with personal or service keys.** OCI is a chat
+  interface; integrations that need model access should go through a model
+  gateway such as LiteLLM.
 - **Consumer billing and payments.** Institutions fund usage; budgets and
   reports cover allocation.
 
