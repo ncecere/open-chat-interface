@@ -112,8 +112,6 @@ export const instanceSettingsSchema = z.object({
   features: z.object({
     shareLinks: z.boolean(),
     temporaryChat: z.boolean(),
-    canvas: z.boolean(),
-    mcp: z.boolean(),
     webSearch: z.boolean(),
     attachments: z.boolean(),
     branching: z.boolean(),

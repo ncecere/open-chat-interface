@@ -30,7 +30,7 @@ function submitButton(form: HTMLFormElement): HTMLButtonElement {
   return form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 }
 
-it('offers only enforced features and sends the full features object', async () => {
+it('lists the instance feature switches and sends the full features object', async () => {
   const settings = {
     colorTheme: 'neutral',
     defaultSystemPrompt: null,
@@ -44,8 +44,6 @@ it('offers only enforced features and sends the full features object', async () 
     features: {
       shareLinks: true,
       temporaryChat: true,
-      canvas: true,
-      mcp: true,
       webSearch: false,
       attachments: true,
       branching: true,
@@ -53,10 +51,6 @@ it('offers only enforced features and sends the full features object', async () 
   } as unknown as InstanceSettings;
   ({ root } = await renderAdmin(<GeneralSettings settings={settings} />));
 
-  expect(document.getElementById('feature-canvas')).toBeNull();
-  expect(document.getElementById('feature-mcp')).toBeNull();
-  expect(document.body.textContent).not.toContain('MCP tools');
-  expect(document.body.textContent).not.toContain('Canvas');
   // Moved: web search to its own page, the default model to Providers &
   // models, and the accent to Branding.
   expect(document.getElementById('feature-webSearch')).toBeNull();
@@ -72,8 +66,6 @@ it('offers only enforced features and sends the full features object', async () 
     features: {
       shareLinks: false,
       temporaryChat: true,
-      canvas: true,
-      mcp: true,
       webSearch: false,
       attachments: true,
       branching: true,
@@ -116,8 +108,6 @@ it('saves the default reasoning level on its own', async () => {
     features: {
       shareLinks: false,
       temporaryChat: true,
-      canvas: false,
-      mcp: false,
       webSearch: false,
       attachments: false,
       branching: true,

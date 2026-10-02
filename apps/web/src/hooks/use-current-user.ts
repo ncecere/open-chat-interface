@@ -27,8 +27,6 @@ export interface UserPreferences {
 export interface CurrentFeatures {
   shareLinks: boolean;
   temporaryChat: boolean;
-  canvas: boolean;
-  mcp: boolean;
   webSearch: boolean;
   attachments: boolean;
   branching: boolean;

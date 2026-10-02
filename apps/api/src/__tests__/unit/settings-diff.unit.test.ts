@@ -30,9 +30,12 @@ describe('diffSettings', () => {
   });
 
   it('compares nested objects whole', () => {
-    const changes = diffSettings({ features: { canvas: false } }, { features: { canvas: true } });
+    const changes = diffSettings(
+      { features: { branching: false } },
+      { features: { branching: true } },
+    );
     expect(changes).toHaveLength(1);
-    expect(changes[0]?.after).toEqual({ canvas: true });
+    expect(changes[0]?.after).toEqual({ branching: true });
   });
 });
 

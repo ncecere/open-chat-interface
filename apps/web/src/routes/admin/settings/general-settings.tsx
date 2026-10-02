@@ -13,9 +13,7 @@ type Features = InstanceSettings['features'];
 type FeatureKey = keyof Features;
 
 /**
- * Only features the server enforces are listed. Canvas and MCP remain in the
- * stored settings but nothing reads them yet, so they are not offered. Web
- * search is switched on the Web search page, together with its provider.
+ * Web search is switched on the Web search page, together with its provider.
  *
  * The server replaces the stored features object on every write, so the whole
  * object is sent: unlisted values go back exactly as they were loaded.

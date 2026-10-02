@@ -48,8 +48,6 @@ type Actor = AuthenticatedUser;
 const ALL_ON = {
   shareLinks: true,
   temporaryChat: true,
-  canvas: false,
-  mcp: false,
   webSearch: true,
   attachments: true,
   branching: true,
@@ -508,7 +506,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
 
     it.each([
       ['an empty body', {}],
-      ['an unknown field', { canvas: true }],
+      ['an unknown field', { personas: true }],
       ['a non-boolean switch', { attachments: 'yes' }],
       ['levels without instant', { reasoningEfforts: ['low'] }],
       ['repeated levels', { reasoningEfforts: ['instant', 'low', 'low'] }],

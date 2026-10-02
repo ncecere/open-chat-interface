@@ -31,8 +31,6 @@ const search = {
 const instance = {
   shareLinks: true,
   temporaryChat: true,
-  canvas: false,
-  mcp: false,
   webSearch: true,
   attachments: true,
   branching: true,
