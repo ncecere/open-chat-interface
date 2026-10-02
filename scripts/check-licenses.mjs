@@ -15,6 +15,17 @@ const allowedLicenses = new Set([
   'Unlicense',
   '(AFL-2.1 OR BSD-3-Clause)',
   '(MPL-2.0 OR Apache-2.0)',
+  // Blue Oak Model License 1.0.0: an OSI-approved permissive licence (sax, via
+  // docx's XML reader, used for DOCX export).
+  'BlueOak-1.0.0',
+  // pako: MIT and the permissive zlib licence together (via jszip).
+  '(MIT AND Zlib)',
+  // jszip (used by the DOCX and PPTX generators) is dual-licensed; OCI uses
+  // it under the MIT option.
+  '(MIT OR GPL-3.0-or-later)',
+  // Python Software Foundation License 2.0, OSI-approved and permissive:
+  // argparse, needed only by markdown-it's command-line entry point.
+  'PSF-2.0',
 ]);
 
 const result = spawnSync('pnpm', ['licenses', 'list', '--prod', '--json'], {

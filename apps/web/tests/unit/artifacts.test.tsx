@@ -12,7 +12,9 @@ import {
   PublicArtifactsProvider,
   ThreadArtifactsProvider,
 } from '../../src/components/artifacts/artifacts-provider';
+import { CreatedArtifactCards } from '../../src/components/artifacts/reply-content';
 import { MessageRow } from '../../src/components/chat/message-row';
+import { ApiError } from '../../src/lib/api-client';
 import { ARTIFACT_FRAME_URL } from '../../src/lib/artifact-sandbox';
 import {
   button,
@@ -24,7 +26,7 @@ import {
   settle,
 } from './admin-test-utils';
 
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), download: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/lib/api-client')>()),
   api,
@@ -331,6 +333,60 @@ describe('the artifact panel', () => {
     expect(artifactFilename('Plan: Q3 / Q4!', 'markdown')).toBe('plan-q3-q4.md');
     expect(artifactFilename('***', 'html')).toBe('artifact.html');
   });
+
+  it('exports a document as a file, the version shown', async () => {
+    Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:doc'), revokeObjectURL: vi.fn() });
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    api.download.mockResolvedValue({ blob: new Blob(['PK']), filename: 'plan-v2.docx' });
+    await mount(conversation());
+    await click(button('Open artifact: Plan'));
+    const exportButton = button('Export as…');
+    expect(exportButton.getAttribute('aria-haspopup')).toBe('menu');
+    exportButton.focus();
+    await act(async () => {
+      exportButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await settle();
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    // "# Plan v2" has no table, so no spreadsheet.
+    expect(items.map((entry) => entry.textContent)).toEqual([
+      'Word document (.docx)',
+      'PDF (.pdf)',
+      'Presentation (.pptx)',
+    ]);
+    await click(items[0]!);
+    expect(api.download).toHaveBeenCalledWith('/artifacts/art-doc/export?format=docx');
+    expect(names).toEqual(['plan-v2.docx']);
+
+    // An older version exports as that version; a refusal is shown in the panel.
+    api.download.mockRejectedValue(
+      new ApiError(422, 'VALIDATION_FAILED', 'This content is too long or complex.'),
+    );
+    await click(button('Versions'));
+    await click([...dialog()!.querySelectorAll<HTMLElement>('ol button')][1]!);
+    const again = button('Export as…');
+    again.focus();
+    await act(async () => {
+      again.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await settle();
+    await click(document.querySelectorAll<HTMLElement>('[role="menuitem"]')[1]!);
+    expect(api.download).toHaveBeenLastCalledWith('/artifacts/art-doc/export?format=pdf&version=1');
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toContain(
+      'This content is too long or complex.',
+    );
+  });
+
+  it('offers file export for documents only', async () => {
+    await mount(conversation());
+    await click(button('Open artifact: Chart'));
+    expect(findButton('Export as…')).toBeUndefined();
+  });
 });
 
 describe('the sandboxed frame', () => {
@@ -409,6 +465,7 @@ describe('artifacts on share links', () => {
           editing={false}
           onEditingChange={() => {}}
         />
+        <CreatedArtifactCards messageId="reply-1" />
       </PublicArtifactsProvider>,
     );
     await click(button('Open artifact: Chart'));
@@ -419,5 +476,11 @@ describe('artifacts on share links', () => {
     expect(frame?.getAttribute('src')).toBe(ARTIFACT_FRAME_URL);
     expect(findButton('Edit')).toBeUndefined();
     expect(api.get).not.toHaveBeenCalled();
+
+    // Nor is a shared document exported as a file: that needs the owner.
+    await pressEscape();
+    await click(button('Open artifact: Plan'));
+    expect(dialog()?.textContent).toContain('# Shared plan');
+    expect(findButton('Export as\u2026')).toBeUndefined();
   });
 });

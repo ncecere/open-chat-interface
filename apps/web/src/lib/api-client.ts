@@ -41,7 +41,7 @@ export function sameOriginApiUrl(path: string, origin: string): string {
   return `${url.pathname}${url.search}`;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function send(path: string, init?: RequestInit): Promise<Response> {
   const url = sameOriginApiUrl(path, window.location.origin);
   // This executes in the browser and sameOriginApiUrl returns only a path on
   // window.location.origin; it cannot initiate a server-side request.
@@ -71,9 +71,47 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
     throw new ApiError(response.status, code, message, details);
   }
+  return response;
+}
 
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await send(path, init);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
+
+/**
+ * The file name a `Content-Disposition` header suggests (`filename*=UTF-8''…`
+ * first, then `filename="…"`), reduced to a bare name; null when there is none.
+ */
+export function dispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  let name: string | null = null;
+  const extended = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/.exec(header)?.[1];
+  if (extended) {
+    try {
+      name = decodeURIComponent(extended.trim());
+    } catch {
+      name = null;
+    }
+  }
+  if (name === null) {
+    const plain = /(?:^|;)\s*filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;\s]+))/i.exec(header);
+    const value = plain?.[1] ?? plain?.[2];
+    if (value !== undefined) name = value.replace(/\\(.)/g, '$1');
+  }
+  // Never a path: only the last segment, without control characters.
+  const bare = name?.split(/[/\\]/).pop()?.replace(CONTROL_CHARACTERS, '').trim();
+  return bare && bare !== '.' && bare !== '..' ? bare : null;
+}
+
+export interface DownloadedFile {
+  blob: Blob;
+  /** The name from `Content-Disposition`, when the response has one. */
+  filename: string | null;
 }
 
 export const api = {
@@ -85,4 +123,26 @@ export const api = {
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** A file response as a blob; failures are ApiErrors with the API's message. */
+  download: async (path: string): Promise<DownloadedFile> => {
+    const response = await send(path);
+    return {
+      blob: await response.blob(),
+      filename: dispositionFilename(response.headers.get('content-disposition')),
+    };
+  },
 };
+
+/** Saves a blob through a temporary object URL and link, as a download named `filename`. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // Revoked later: some browsers start reading the URL only after click() returns.
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}

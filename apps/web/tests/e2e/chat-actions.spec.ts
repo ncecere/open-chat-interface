@@ -163,7 +163,7 @@ test('assistant actions show attribution and create a true fork', async ({ page 
         .locator('button')
         .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
     )
-    .toEqual(['Copy message', 'Fork conversation here', 'Retry']);
+    .toEqual(['Copy message', 'Export as…', 'Fork conversation here', 'Retry']);
 
   await Promise.all([
     page.waitForURL('**/chat/child-thread'),

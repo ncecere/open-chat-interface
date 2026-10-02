@@ -3,45 +3,44 @@ import {
   ARTIFACT_KIND_LABELS,
   type ArtifactDetail,
   type ArtifactVersionDetail,
+  type DocumentFormat,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Download, Pencil } from 'lucide-react';
-import { type KeyboardEvent, useId, useState } from 'react';
+import { type KeyboardEvent, useCallback, useId, useState } from 'react';
 import { ArtifactFrame } from '~/components/artifacts/artifact-frame';
 import { type ArtifactRef, useArtifacts } from '~/components/artifacts/artifacts-context';
+import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { Button } from '~/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/dialog';
 import { PillTabs } from '~/components/ui/pill-tabs';
-import { ApiError, api } from '~/lib/api-client';
+import { ApiError, api, saveBlob } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 type View = 'preview' | 'source' | 'versions';
 
-/** A file name for a download: the title, made safe, with the kind's extension. */
-export function artifactFilename(title: string, kind: ArtifactRef['kind']): string {
-  const base =
+/** The title made safe for a file name, without an extension. */
+function filenameBase(title: string): string {
+  return (
     title
       .normalize('NFKD')
       .replace(/[^\w\s-]/g, '')
       .trim()
       .replace(/\s+/g, '-')
       .slice(0, 60)
-      .toLowerCase() || 'artifact';
-  return `${base}.${ARTIFACT_FILE_TYPES[kind].extension}`;
+      .toLowerCase() || 'artifact'
+  );
+}
+
+/** A file name for a download: the title, made safe, with the kind's extension. */
+export function artifactFilename(title: string, kind: ArtifactRef['kind']): string {
+  return `${filenameBase(title)}.${ARTIFACT_FILE_TYPES[kind].extension}`;
 }
 
 function download(title: string, kind: ArtifactRef['kind'], content: string) {
   const blob = new Blob([content], { type: `${ARTIFACT_FILE_TYPES[kind].mimeType};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = artifactFilename(title, kind);
-  link.rel = 'noopener';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  saveBlob(blob, artifactFilename(title, kind));
 }
 
 function formatDate(value: string): string {
@@ -149,6 +148,17 @@ function ArtifactPanelBody({
   const loadError = owner && (older !== null ? version.isError : detail.isError);
   const canEdit =
     owner && Boolean(context?.canEdit) && artifact.kind === 'markdown' && older === null;
+  // File output: the API turns Markdown documents into files; other kinds are
+  // downloaded as they are. Owners only (never on a share page).
+  const canExport = owner && artifact.kind === 'markdown';
+  const exportPath = useCallback(
+    (format: DocumentFormat) =>
+      `/artifacts/${encodeURIComponent(id)}/export?format=${format}${
+        older !== null ? `&version=${older}` : ''
+      }`,
+    [id, older],
+  );
+  const exporting = useDocumentExport(exportPath, filenameBase(title));
 
   const tabs = [
     { id: 'preview' as const, label: 'Preview' },
@@ -194,6 +204,13 @@ function ArtifactPanelBody({
             <Download aria-hidden="true" />
             Download
           </Button>
+          {canExport && (
+            <ExportMenu
+              markdown={content ?? ''}
+              state={exporting}
+              disabled={content === undefined || editing}
+            />
+          )}
           {canEdit && !editing && (
             <Button
               type="button"
@@ -210,6 +227,7 @@ function ArtifactPanelBody({
         <span className="sr-only" role="status" aria-live="polite">
           {copied ? 'Copied to the clipboard' : ''}
         </span>
+        {canExport && <ExportNotice state={exporting} className="basis-full" />}
       </header>
 
       {editing && canEdit && content !== undefined ? (

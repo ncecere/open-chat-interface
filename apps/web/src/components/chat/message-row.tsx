@@ -23,6 +23,8 @@ import { type AnswerApproval, ToolSteps } from '~/components/chat/tool-steps';
 
 interface MessageRowProps {
   message: UIMessage;
+  /** The saved conversation; finished replies then offer "Export as…". */
+  threadId?: string;
   streaming: boolean;
   editing: boolean;
   onEditingChange: Dispatch<SetStateAction<string | null>>;
@@ -42,6 +44,7 @@ interface MessageRowProps {
  */
 export const MessageRow = memo(function MessageRow({
   message,
+  threadId,
   streaming,
   editing,
   onEditingChange,
@@ -121,6 +124,11 @@ export const MessageRow = memo(function MessageRow({
                 onFork && metadata.status !== 'streaming' ? () => onFork(message.id) : undefined
               }
               onRetry={onRetry}
+              exportTarget={
+                threadId && metadata.status !== 'streaming'
+                  ? { threadId, messageId: message.id }
+                  : undefined
+              }
               modelSlug={metadata.modelSlug}
               effort={metadata.effort}
               searched={Boolean(grounding)}

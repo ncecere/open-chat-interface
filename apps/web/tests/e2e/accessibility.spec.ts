@@ -398,6 +398,42 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('the export menu on a reply has no violations while open', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    await page.route('**/api/chat/a11y-export/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-export', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-export-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'A table, please' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            {
+              id: 'a11y-export-reply',
+              role: 'assistant',
+              parts: [{ type: 'text', text: '| Region | Sales |\n| --- | --- |\n| North | 12 |' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-export');
+    const reply = page.getByRole('article', { name: 'Assistant message' });
+    await expect(reply.getByRole('table')).toBeVisible();
+    await reply.getByRole('button', { name: 'Export as\u2026' }).click();
+    const menu = page.getByRole('menu');
+    await expect(menu.getByRole('menuitem', { name: 'Spreadsheet (.xlsx)' })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('the reply switcher on a retried turn has no violations', async ({ page }) => {
     const created = '2026-01-01T00:00:00.000Z';
     const reply = (id: string, text: string) => ({

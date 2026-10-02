@@ -7,7 +7,7 @@ Every route the API registers, grouped by the file that defines it.
 Administrative routes require the `admin` role; an `auditor` may call the
 read-only ones. See [identity and access](../admin/identity.md).
 
-Generated from 39 route files.
+Generated from 41 route files.
 
 ## `routes/admin/audit.ts`
 
@@ -36,6 +36,18 @@ Generated from 39 route files.
 | PUT | `/api/admin/broadcasts/:id` | — |
 | DELETE | `/api/admin/broadcasts/:id` | — |
 | POST | `/api/admin/broadcasts/:id/reshow` | Clears everyone's dismissals, so an updated announcement is shown again. |
+
+## `routes/admin/compliance.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/compliance` | Settings, configuration problems, cursors, run history and holds. |
+| GET | `/api/admin/compliance/holds` | Active holds, then lifted ones. |
+| POST | `/api/admin/compliance/holds` | Places a hold on one person. |
+| POST | `/api/admin/compliance/holds/:id/lift` | Lifts an active hold. |
+| POST | `/api/admin/compliance/run` | Starts an export now, in the background. |
+| PATCH | `/api/admin/compliance/settings` | Changes export settings; only sent fields change. |
+| POST | `/api/admin/compliance/test` | Writes, reads back and deletes a small object at the saved destination. |
 
 ## `routes/admin/connectors.ts`
 
@@ -233,6 +245,16 @@ Generated from 39 route files.
 | POST | `/api/admin/webhooks/:id/rotate` | Replaces the signing secret and returns the new one, this one time. |
 | POST | `/api/admin/webhooks/:id/test` | Sends a signed `webhook.test` event now and reports what the endpoint answered. |
 
+## `routes/artifacts.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/artifacts` | `GET /api/artifacts?threadId=…`: every artifact of one conversation, oldest first. |
+| GET | `/api/artifacts/:id` | The artifact, its versions (newest first) and the current version's content. |
+| GET | `/api/artifacts/:id/export` | Downloads a Markdown artifact (the current version, or `?version=`) as DOCX, PDF, XLSX or PPTX. |
+| POST | `/api/artifacts/:id/versions` | A person's edit of a Markdown document, saved as a new version. |
+| GET | `/api/artifacts/:id/versions/:version` | — |
+
 ## `routes/attachments.ts`
 
 | Method | Path | Purpose |
@@ -367,6 +389,7 @@ Generated from 39 route files.
 | GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
 | POST | `/api/threads/:id/forks` | — |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |
+| GET | `/api/threads/:id/messages/:messageId/export` | Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX. |
 | DELETE | `/api/threads/:id/permanent` | Destroys a trashed thread now, without waiting out the grace window. |
 | POST | `/api/threads/:id/restore` | — |
 | GET | `/api/threads/search` | Full-text search over titles and message text, best match first. |

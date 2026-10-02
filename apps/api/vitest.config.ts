@@ -74,6 +74,16 @@ export default defineConfig({
         'src/services/artifacts/guidance.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/tools/artifacts.ts': { statements: 95, branches: 90, functions: 100 },
         'src/routes/artifacts.ts': { statements: 95, branches: 95, functions: 100 },
+        // v0.9 file output: owner-only lookup, limits and allowance, untrusted Markdown in,
+        // generated files out. render-worker.ts runs in a worker thread, which coverage
+        // does not see; the worker tests in documents-render exercise it.
+        'src/services/documents/export.ts': { statements: 98, branches: 95, functions: 100 },
+        'src/services/documents/render.ts': { statements: 93, branches: 78, functions: 90 },
+        'src/services/documents/model.ts': { statements: 91, branches: 83, functions: 100 },
+        'src/services/documents/docx.ts': { statements: 94, branches: 87, functions: 100 },
+        'src/services/documents/pdf.ts': { statements: 92, branches: 77, functions: 100 },
+        'src/services/documents/xlsx.ts': { statements: 98, branches: 88, functions: 100 },
+        'src/services/documents/pptx.ts': { statements: 95, branches: 85, functions: 100 },
         'src/services/chat/tool-loop.ts': { statements: 85, branches: 80, functions: 90 },
         'src/services/chat/approvals.ts': { statements: 85, branches: 75, functions: 85 },
         'src/services/chat/pending-approvals.ts': { statements: 95, branches: 90, functions: 100 },

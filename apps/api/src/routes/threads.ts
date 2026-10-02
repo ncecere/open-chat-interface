@@ -3,6 +3,7 @@ import {
   branchMessageSchema,
   compactThreadSchema,
   createThreadSchema,
+  DOCUMENT_FORMATS,
   forkMessageSchema,
   THREAD_SEARCH_DEFAULT_LIMIT,
   THREAD_SEARCH_MAX_LIMIT,
@@ -12,9 +13,11 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
+import { clientIp } from '../lib/client-ip.js';
 import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import { recordAudit } from '../services/audit.js';
 import {
   compactThreadNow,
   latestCompaction,
@@ -22,6 +25,7 @@ import {
   NOTHING_TO_COMPACT,
   serializeCompaction,
 } from '../services/chat/compaction.js';
+import { consumeFileExport, exportReply } from '../services/documents/export.js';
 import { exportFilename, exportThreadMarkdown } from '../services/export.js';
 import {
   emptyTrash,
@@ -78,6 +82,8 @@ const searchQuerySchema = z.object({
     .default(THREAD_SEARCH_DEFAULT_LIMIT)
     .transform((value) => Math.min(value, THREAD_SEARCH_MAX_LIMIT)),
 });
+
+const documentQuerySchema = z.object({ format: z.enum(DOCUMENT_FORMATS) });
 
 function serializeThread(thread: typeof schema.thread.$inferSelect) {
   return {
@@ -174,12 +180,48 @@ threadRoutes.delete('/:id/permanent', async (c) => {
 threadRoutes.get('/:id/export', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
+  // Shares the hourly allowance with document exports (file output, v0.9).
+  await consumeFileExport(user.id);
   const markdown = await exportThreadMarkdown(thread.id, user.id);
 
   return c.body(markdown, 200, {
     'content-type': 'text/markdown; charset=utf-8',
     'content-disposition': `attachment; filename="${exportFilename(thread.title)}"`,
     'cache-control': 'no-store',
+  });
+});
+
+/**
+ * Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX.
+ *
+ * XLSX holds its tables (422 when it has none). Owner only: 404 for anyone else, for
+ * conversations in the trash, user messages and replaced replies. Counts
+ * towards the hourly download allowance and is audited as `message.export`
+ * with the format and size only.
+ */
+threadRoutes.get('/:id/messages/:messageId/export', async (c) => {
+  const user = currentUser(c);
+  const { format } = parseQuery(c, documentQuerySchema);
+  const file = await exportReply({
+    userId: user.id,
+    threadId: c.req.param('id'),
+    messageId: c.req.param('messageId'),
+    format,
+  });
+  await recordAudit({
+    actorUserId: user.id,
+    actorEmail: user.email,
+    action: 'message.export',
+    targetType: 'message',
+    targetId: file.messageId,
+    metadata: { format, threadId: file.threadId, sizeBytes: file.bytes.byteLength },
+    ipAddress: clientIp(c),
+  });
+  return c.body(file.bytes, 200, {
+    'content-type': file.contentType,
+    'content-disposition': file.disposition,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
   });
 });
 

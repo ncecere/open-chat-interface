@@ -420,6 +420,27 @@ The export is off until turned on under **Data & storage → Compliance**
 its bucket, like backups. Conversation content is exported only if an
 administrator also turns that on.
 
+#### File output (no migration)
+
+Replies and Markdown artifacts can be downloaded as DOCX, PDF, XLSX or PPTX
+([Exporting as files](user/exporting.md)). The API image gains four runtime
+dependencies, all MIT and pure JavaScript (no headless browser, no native
+code): `docx`, `pdfkit`, `pptxgenjs` and `markdown-it`; spreadsheets are
+written with `fflate`, already a dependency. Nothing reaches the network:
+images are never fetched and PDFs use the built-in standard fonts.
+
+Each document is generated in a worker thread of the API process, started for
+the request and stopped after it, with a 512 MB heap limit and a 60-second time
+limit (content that exceeds either is refused with a 422, not retried). A
+replica runs at most two at once and one per person; further requests get a
+429 asking to retry shortly. Budget up to two CPU cores and about 1.2 GB of
+extra memory per API replica for exports at peak, on top of what it uses today; the
+event loop is not blocked while a file is generated. Downloads count towards a
+per-person allowance of 60 an hour, shared with single-conversation Markdown
+downloads (which had no limit before), in the existing rate-limit store. Each
+export is audited as `message.export` or `artifact.export` with the format and
+size, never the content.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

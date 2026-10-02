@@ -33,7 +33,9 @@ The panel has three views:
   Select one to look at it.
 
 **Copy** puts the version you are looking at on the clipboard; **Download**
-saves it as a file (`.html`, `.svg`, `.mmd` or `.md`). Press Escape or select
+saves it as a file (`.html`, `.svg`, `.mmd` or `.md`). For documents,
+**Export as…** saves the version as a Word document, PDF, presentation or
+spreadsheet ([Exporting as files](exporting.md)). Press Escape or select
 Close to go back to the conversation. After clicking inside a preview, press
 Tab to move out of it first: the preview is sealed off from the rest of OCI,
 so it does not pass on key presses.

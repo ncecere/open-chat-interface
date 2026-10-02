@@ -260,6 +260,7 @@ function ThreadConversation({
             <div ref={scroll.contentRef}>
               <MessageList
                 messages={session.messages}
+                threadId={threadId}
                 streaming={session.streaming}
                 // With tool calling the model decides whether to search, and its
                 // search shows as a tool step instead.

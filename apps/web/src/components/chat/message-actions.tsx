@@ -1,7 +1,10 @@
+import type { DocumentFormat } from '@oci/shared';
 import { Check, Copy, GitFork, Globe2, Pencil, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
+import { cn } from '~/lib/utils';
 
 function ModelAttribution({ slug, effort }: { slug: string | null; effort: string | null }) {
   const { data: models } = useModels();
@@ -16,11 +19,34 @@ function ModelAttribution({ slug, effort }: { slug: string | null; effort: strin
   );
 }
 
+/** The reply a file export is made from: a finished assistant message of a saved conversation. */
+export interface ReplyExportTarget {
+  threadId: string;
+  messageId: string;
+}
+
+function ReplyExport({ target, text }: { target: ReplyExportTarget; text: string }) {
+  const { threadId, messageId } = target;
+  const pathFor = useCallback(
+    (format: DocumentFormat) =>
+      `/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/export?format=${format}`,
+    [threadId, messageId],
+  );
+  const state = useDocumentExport(pathFor, 'reply');
+  return (
+    <>
+      <ExportMenu markdown={text} state={state} compact />
+      <ExportNotice state={state} className="order-last basis-full pl-1 pt-1" />
+    </>
+  );
+}
+
 export function MessageActions({
   text,
   onRetry,
   onEdit,
   onFork,
+  exportTarget,
   modelSlug,
   effort,
   searched,
@@ -29,6 +55,8 @@ export function MessageActions({
   onRetry?: () => void;
   onEdit?: () => void;
   onFork?: () => Promise<void>;
+  /** Offers "Export as…" (DOCX, PDF, PPTX and, with tables, XLSX). */
+  exportTarget?: ReplyExportTarget;
   modelSlug?: string | null;
   effort?: string | null;
   searched?: boolean;
@@ -36,7 +64,13 @@ export function MessageActions({
   const [copied, setCopied] = useState(false);
 
   return (
-    <div className="mt-2 flex min-h-8 flex-wrap items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+    <div
+      className={cn(
+        'mt-2 flex min-h-8 flex-wrap items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100',
+        // Stay visible while a menu is open (focus is in the portal) or an export reports back.
+        'sm:has-[[aria-expanded=true]]:opacity-100 sm:has-[[role=alert]]:opacity-100',
+      )}
+    >
       <Button
         variant="ghost"
         size="icon-sm"
@@ -49,6 +83,7 @@ export function MessageActions({
       >
         {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
       </Button>
+      {exportTarget && text.trim() && <ReplyExport target={exportTarget} text={text} />}
       {onFork && (
         <Button
           variant="ghost"

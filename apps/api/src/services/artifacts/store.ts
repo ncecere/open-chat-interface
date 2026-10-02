@@ -401,6 +401,49 @@ export async function getArtifactVersion(
   return { ...serializeVersion(row.version), content: row.version.content };
 }
 
+/**
+ * One version of an artifact the person owns (the current one when `version`
+ * is omitted), with what a file export needs; null when there is none or the
+ * conversation is in the trash.
+ */
+export async function artifactVersionForExport(
+  artifactId: string,
+  userId: string,
+  version?: number,
+): Promise<{
+  id: string;
+  threadId: string;
+  title: string;
+  kind: ArtifactKind;
+  version: number;
+  content: string;
+} | null> {
+  const [row] = await db
+    .select({
+      id: schema.artifact.id,
+      threadId: schema.artifact.threadId,
+      title: schema.artifact.title,
+      kind: schema.artifact.kind,
+      version: schema.artifactVersion.version,
+      content: schema.artifactVersion.content,
+    })
+    .from(schema.artifact)
+    .innerJoin(
+      schema.artifactVersion,
+      and(
+        eq(schema.artifactVersion.artifactId, schema.artifact.id),
+        version === undefined
+          ? eq(schema.artifactVersion.version, schema.artifact.currentVersion)
+          : eq(schema.artifactVersion.version, version),
+      ),
+    )
+    .where(
+      and(eq(schema.artifact.id, artifactId), eq(schema.artifact.userId, userId), inLiveThread()),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 /** The text a renderer reads from a message: its text parts, joined as the web client joins them. */
 export function replyText(parts: readonly unknown[]): string {
   return parts

@@ -10,6 +10,8 @@ import { type AnswerApproval, toolLimitOf, toolStepsOf } from '~/components/chat
 
 interface MessageListProps {
   messages: UIMessage[];
+  /** The saved conversation, for exporting replies as files. */
+  threadId?: string;
   streaming: boolean;
   onRetry: () => void;
   searching?: boolean;
@@ -26,6 +28,7 @@ interface MessageListProps {
 /** Transcript composition only; editing drafts and presentation belong to rows. */
 export const MessageList = memo(function MessageList({
   messages,
+  threadId,
   streaming,
   onRetry,
   onEdit,
@@ -64,6 +67,7 @@ export const MessageList = memo(function MessageList({
               : message.id
           }
           message={message}
+          threadId={threadId}
           // Only the active assistant streams; user actions stay disabled
           // throughout generation. Historical assistants need no token updates.
           streaming={streaming && (message.role === 'user' || index === messages.length - 1)}

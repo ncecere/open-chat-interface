@@ -19,14 +19,16 @@ way regardless of which model you pick.
 6. [Tools](tools.md) — tool steps in a reply, and approving actions.
 7. [Artifacts](artifacts.md) — pages, images, diagrams and documents kept as
    versioned objects you can open, copy and download.
-8. [Connectors](connectors.md) — connecting your account to services models can
+8. [Exporting as files](exporting.md) — saving a reply or a document as a Word
+   document, PDF, presentation or spreadsheet.
+9. [Connectors](connectors.md) — connecting your account to services models can
    use.
-9. [Sharing](sharing.md) — publishing a conversation read-only.
-10. [Settings](settings.md) — your account, personalisation, history, models.
-11. [Memory](memory.md) — notes about you that models can use in every
+10. [Sharing](sharing.md) — publishing a conversation read-only.
+11. [Settings](settings.md) — your account, personalisation, history, models.
+12. [Memory](memory.md) — notes about you that models can use in every
     conversation, and how to see, change and delete them.
-11. [Limits](limits.md) — what a usage warning means and what to do about it.
-12. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
+13. [Limits](limits.md) — what a usage warning means and what to do about it.
+14. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
     or Claude.
 
 ## The parts of the screen
