@@ -1,6 +1,7 @@
 import {
   DEFAULT_MAX_TOOL_STEPS,
   type InstanceSettings,
+  SEARCH_PROVIDERS,
   updateInstanceSettingsSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
@@ -258,11 +259,18 @@ settingsRoutes.patch('/', async (c) => {
 
   if (patch.search) {
     const { apiKey, ...rest } = patch.search;
+    const stored = await getSetting('search');
+    const provider = rest.provider === undefined ? stored.provider : rest.provider;
+    const needs = provider ? SEARCH_PROVIDERS[provider].needs : null;
+    const switched = rest.provider !== undefined && rest.provider !== stored.provider;
     await updateSetting('search', {
       ...rest,
-      ...(apiKey !== undefined && {
-        encryptedApiKey: apiKey ? encryptSecret(apiKey) : null,
-      }),
+      // Store only what the selected provider uses. A key belongs to one
+      // provider, so switching drops it rather than sending it elsewhere.
+      ...(needs !== 'baseUrl' && { baseUrl: null }),
+      ...((switched || needs !== 'apiKey') && { encryptedApiKey: null }),
+      ...(apiKey !== undefined &&
+        needs === 'apiKey' && { encryptedApiKey: apiKey ? encryptSecret(apiKey) : null }),
     });
   }
 

@@ -264,6 +264,65 @@ describe('Web search', () => {
     expect(api.patch).toHaveBeenCalledWith('/admin/settings', { search: { maxResults: 8 } });
   });
 
+  const labels = () => [...document.querySelectorAll('label')].map((label) => label.textContent);
+
+  it('asks SearXNG only for its address', async () => {
+    ({ root } = await renderAdmin(<AdminSearchPage />));
+    expect(labels()).toContain('SearXNG address');
+    expect(document.getElementById('search-api-key')).toBeNull();
+    expect(document.body.textContent).not.toContain('API key');
+  });
+
+  it('asks a hosted provider only for its key, and needs it to turn search on', async () => {
+    settings = {
+      ...settings,
+      search: { ...settings.search, provider: 'tavily', baseUrl: null, hasCredential: false },
+    };
+    ({ root } = await renderAdmin(<AdminSearchPage />));
+    expect(labels()).toContain('Tavily API key');
+    expect(document.getElementById('search-base-url')).toBeNull();
+    expect(document.body.textContent).toContain('It starts with tvly-.');
+
+    await click(document.getElementById('search-enabled') as HTMLButtonElement);
+    await click(button('Save changes'));
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Enter the Tavily API key to enable search.');
+
+    const key = document.getElementById('search-api-key') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        key,
+        'tvly-test',
+      );
+      key.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    await click(button('Save changes'));
+    expect(api.patch).toHaveBeenCalledWith('/admin/settings', {
+      search: { enabled: true, apiKey: 'tvly-test' },
+      features: { ...features, webSearch: true },
+    });
+  });
+
+  it('offers SerpApi and keeps a saved key without asking for it again', async () => {
+    settings = {
+      ...settings,
+      search: { ...settings.search, provider: 'serpapi', baseUrl: null, hasCredential: true },
+    };
+    ({ root } = await renderAdmin(<AdminSearchPage />));
+    expect(document.body.textContent).toContain('SerpApi API key saved');
+    expect(document.getElementById('search-api-key')).toBeNull();
+    expect(button('Replace')).toBeTruthy();
+    expect(button('Remove')).toBeTruthy();
+
+    await click(document.getElementById('search-enabled') as HTMLButtonElement);
+    await click(button('Save changes'));
+    expect(api.patch).toHaveBeenCalledWith('/admin/settings', {
+      search: { enabled: true },
+      features: { ...features, webSearch: true },
+    });
+  });
+
   it('reports whether search can actually run', async () => {
     setupChecks = [
       {

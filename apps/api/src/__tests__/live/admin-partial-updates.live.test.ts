@@ -175,6 +175,54 @@ describe.skipIf(!available)('live: partial administrative updates', () => {
     expect(audit?.metadata).toMatchObject({ keys: ['colorTheme'] });
   });
 
+  it('stores only what the search provider uses and drops a key when switching', async () => {
+    async function stored() {
+      const [row] = await live.db
+        .select({ value: schema.instanceSetting.value })
+        .from(schema.instanceSetting)
+        .where(
+          and(
+            eq(schema.instanceSetting.organizationId, state.organizationId),
+            eq(schema.instanceSetting.key, 'search'),
+          ),
+        );
+      const value = row?.value as {
+        provider: string;
+        baseUrl: string | null;
+        encryptedApiKey: string | null;
+      };
+      return {
+        provider: value.provider,
+        baseUrl: value.baseUrl,
+        hasKey: Boolean(value.encryptedApiKey),
+      };
+    }
+    const search = (body: Record<string, unknown>) =>
+      send(app, 'PATCH', '/settings', { search: body });
+
+    // A hosted provider uses a key and a fixed endpoint: an address is not kept.
+    await search({ provider: 'tavily', apiKey: 'tvly-test', baseUrl: 'https://unused.example' });
+    expect(await stored()).toEqual({ provider: 'tavily', baseUrl: null, hasKey: true });
+    await search({ maxResults: 7 });
+    expect(await stored()).toMatchObject({ hasKey: true });
+
+    // Switching never carries one provider's key to another.
+    await search({ provider: 'serpapi' });
+    expect(await stored()).toEqual({ provider: 'serpapi', baseUrl: null, hasKey: false });
+    await search({ apiKey: 'serpapi-test' });
+    expect(await stored()).toMatchObject({ hasKey: true });
+
+    // SearXNG uses an address and no key.
+    await search({ provider: 'searxng', baseUrl: 'https://search.example.edu' });
+    expect(await stored()).toEqual({
+      provider: 'searxng',
+      baseUrl: 'https://search.example.edu',
+      hasKey: false,
+    });
+    await search({ apiKey: 'ignored' });
+    expect(await stored()).toMatchObject({ hasKey: false });
+  });
+
   it('keeps a report window when the report is paused', async () => {
     const created = await send(app, 'POST', '/reports', {
       name: 'Weekly usage',

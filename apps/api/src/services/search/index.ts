@@ -1,9 +1,11 @@
+import type { SearchProviderKind } from '@oci/shared';
 import { decryptSecret } from '../../lib/crypto.js';
 import { providerError, validationFailed } from '../../lib/errors.js';
 import { getSetting } from '../settings.js';
 import { searchBrave } from './brave.js';
 import { searchExa } from './exa.js';
 import { searchSearxng } from './searxng.js';
+import { searchSerpapi } from './serpapi.js';
 import { searchTavily } from './tavily.js';
 import type { SearchAdapter, SearchResult } from './types.js';
 
@@ -12,7 +14,8 @@ const adapters = {
   tavily: searchTavily,
   brave: searchBrave,
   exa: searchExa,
-} satisfies Record<string, SearchAdapter>;
+  serpapi: searchSerpapi,
+} satisfies Record<SearchProviderKind, SearchAdapter>;
 
 export function normalizeSearchQuery(query: string): string {
   return query.replace(/\s+/g, ' ').trim().slice(0, 2_000);

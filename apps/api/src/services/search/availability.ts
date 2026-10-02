@@ -1,3 +1,4 @@
+import { SEARCH_PROVIDERS } from '@oci/shared';
 import type { FeatureSettings, SearchSettings } from '../settings.js';
 
 /**
@@ -13,6 +14,8 @@ export function webSearchProblem(
 ): string | null {
   if (!features.webSearch || !search.enabled) return 'web search is only partly switched on';
   if (!search.provider) return 'no search provider is selected';
-  if (search.provider === 'searxng') return search.baseUrl ? null : 'SearXNG needs a base URL';
-  return search.encryptedApiKey ? null : 'the provider needs an API credential';
+  const provider = SEARCH_PROVIDERS[search.provider];
+  if (provider.needs === 'baseUrl')
+    return search.baseUrl ? null : `${provider.name} needs its address`;
+  return search.encryptedApiKey ? null : `${provider.name} needs an API key`;
 }

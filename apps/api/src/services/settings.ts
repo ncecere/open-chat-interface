@@ -4,6 +4,7 @@ import {
   type ColorTheme,
   type ReasoningEffort,
   type RoleFeatures,
+  type SearchProviderKind,
   type UserRole,
 } from '@oci/shared';
 import { db } from '../db/index.js';
@@ -148,7 +149,7 @@ export function normalizeStorageSettings(value: StorageSettings): StorageSetting
 
 export interface SearchSettings {
   enabled: boolean;
-  provider: 'searxng' | 'tavily' | 'brave' | 'exa' | null;
+  provider: SearchProviderKind | null;
   baseUrl: string | null;
   encryptedApiKey: string | null;
   maxResults: number;

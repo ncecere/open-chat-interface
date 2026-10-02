@@ -217,7 +217,7 @@ describe.skipIf(!available)('live: administrator setup status', () => {
     await updateSetting('search', { enabled: true, provider: 'tavily', encryptedApiKey: null });
     status = await getSetupStatus();
     expect(check(status, 'web-search').detail).toBe(
-      'Web search is unavailable: the provider needs an API credential.',
+      'Web search is unavailable: Tavily needs an API key.',
     );
     await updateSetting('search', { provider: 'searxng', baseUrl: 'http://127.0.0.1:1' });
     expect(check(await getSetupStatus(), 'web-search').status).toBe('complete');

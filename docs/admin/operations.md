@@ -71,11 +71,24 @@ back up.
 web search grounding, its credential, and the one switch that turns search on or
 off. There is no separate web search toggle among the General features any more.
 
+Choose a provider and the page asks for exactly what it needs:
+
+| Provider | Asks for | Where to find it |
+| --- | --- | --- |
+| SearXNG (self-hosted) | Its address | Your SearXNG instance, with JSON output enabled (`search.formats: [html, json]`). No key. |
+| Tavily | API key | app.tavily.com, under API keys (starts with `tvly-`). |
+| Brave Search | API key | The subscription token at api-dashboard.search.brave.com. |
+| Exa | API key | dashboard.exa.ai, under API keys. |
+| SerpApi (Google results) | API key | serpapi.com/manage-api-key. Searches use SafeSearch. |
+
+Hosted providers use their own fixed endpoints, so they ask for no address. A
+key belongs to one provider: switching provider removes the saved key, and the
+page asks for the new provider's key before search can be switched on.
+
 People are offered search only when it can actually run: the switch is on, a
-provider is selected, and that provider has its credential — or, for SearXNG, a
-base URL. Until all of those hold, search is removed from the composer rather
-than offered and failing. The page says whether search is available, and why
-not.
+provider is selected, and it has its key or address. Until all of those hold,
+search is removed from the composer rather than offered and failing. The page
+says whether search is available, and why not.
 
 ## Maintenance
 

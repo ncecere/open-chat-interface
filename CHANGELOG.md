@@ -25,6 +25,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   show one-line summaries without raw results. Models without tool calling
   behave exactly as before. See `docs/user/tools.md` and
   `docs/dev/tools-design.md`.
+- **SerpApi as a web search provider** (Google results, SafeSearch on), alongside
+  SearXNG, Tavily, Brave Search and Exa.
 - **Web search as a tool.** With a tool-capable model and **Search** on, the
   model decides when and what to search, may search more than once (up to 10
   results each) and cites results as sources. Other models keep the single
@@ -59,7 +61,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   pages instead of cards. The page opens on Conversations, and the open tab is
   kept in the address (`?tab=`).
 
+- **The Web search page asks for exactly what the chosen provider needs:** an
+  API key for hosted providers (labelled with that provider and where to find
+  it) or the address of a SearXNG instance, and requires it before search can
+  be switched on. It no longer offers a base URL that hosted providers ignored,
+  or an optional credential to SearXNG.
+
 ### Fixed
+
+- **Switching web search provider no longer keeps the previous provider's
+  key.** The key was sent to the newly selected provider; the server now
+  removes it on a switch and stores only what the selected provider uses.
 
 - **A reply stopped part-way through recorded no token usage.** It now
   records the usage of the steps that finished, still marked as incomplete.
