@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-02
+
+Tools and connected knowledge: tool calling with per-role switches, approval
+and audit; web search as a tool, with SerpApi and SearchApi providers; search
+over large project files; and MCP connectors with per-person OAuth. Migrations
+0026 and 0027 only add new tables; existing project files are indexed by a
+background job after the upgrade. Deploy the API and web images as a pair.
+
 ### Added
 
 - **Tool calling.** Models tagged `tool_calling` in the catalog can call
@@ -751,7 +759,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.7.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.8.0...main
+[0.8.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.7.0
 [0.6.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.6.1
 [0.6.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.6.0
