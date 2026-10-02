@@ -6,7 +6,7 @@ import { activateReply } from '~/lib/chat-history';
 type SetMessages = (update: (current: UIMessage[]) => UIMessage[]) => void;
 
 /** The latest user turn and the reply to it on screen, if there is one. */
-export function latestTurn(messages: UIMessage[]) {
+function latestTurn(messages: UIMessage[]) {
   const promptIndex = messages.findLastIndex((message) => message.role === 'user');
   const prompt = messages[promptIndex];
   if (!prompt) return null;
@@ -16,7 +16,7 @@ export function latestTurn(messages: UIMessage[]) {
 }
 
 /** The turn's known replies in order, with the one on screen in its live form. */
-export function withActiveReply(known: UIMessage[], active: UIMessage | null): UIMessage[] {
+function withActiveReply(known: UIMessage[], active: UIMessage | null): UIMessage[] {
   if (!active) return known;
   return known.some((reply) => reply.id === active.id)
     ? known.map((reply) => (reply.id === active.id ? active : reply))

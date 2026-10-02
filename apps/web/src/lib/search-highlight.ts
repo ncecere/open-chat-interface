@@ -1,6 +1,6 @@
 import { SEARCH_HIGHLIGHT_END, SEARCH_HIGHLIGHT_START } from '@oci/shared';
 
-export interface HighlightSegment {
+interface HighlightSegment {
   /** Offset in the marker-free text; stable, so it doubles as a React key. */
   start: number;
   text: string;

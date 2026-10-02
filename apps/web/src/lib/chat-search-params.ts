@@ -1,4 +1,4 @@
-export interface ChatThreadSearch {
+interface ChatThreadSearch {
   /** A message to open at instead of the end, set by conversation search. */
   message?: string;
 }
@@ -11,7 +11,7 @@ export function validateChatThreadSearch(search: Record<string, unknown>): ChatT
   return typeof message === 'string' && MESSAGE_ID.test(message) ? { message } : {};
 }
 
-export interface ChatHomeSearch {
+interface ChatHomeSearch {
   /** Start the new conversation inside this project. */
   project?: string;
 }

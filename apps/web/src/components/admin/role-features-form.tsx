@@ -19,7 +19,7 @@ import { api } from '~/lib/api-client';
 
 type RoleFeatures = RoleAccess['roleFeatures'];
 
-export const ROLE_FEATURE_LABELS: Record<RoleFeatureKey, { label: string; description: string }> = {
+const ROLE_FEATURE_LABELS: Record<RoleFeatureKey, { label: string; description: string }> = {
   webSearch: {
     label: 'Web search',
     description: 'Ground answers in current web results from the configured provider.',
@@ -62,10 +62,7 @@ function sameEfforts(a: readonly ReasoningEffort[], b: readonly ReasoningEffort[
  * Only fields that differ from what is saved, so one change never pins another
  * field's inherited default. Exported for tests.
  */
-export function roleFeatureChanges(
-  saved: RoleFeatures,
-  draft: RoleFeatures,
-): UpdateRoleFeaturesInput {
+function roleFeatureChanges(saved: RoleFeatures, draft: RoleFeatures): UpdateRoleFeaturesInput {
   const changes: UpdateRoleFeaturesInput = {};
   for (const key of ROLE_FEATURE_KEYS) {
     if (draft[key] !== saved[key]) changes[key] = draft[key];

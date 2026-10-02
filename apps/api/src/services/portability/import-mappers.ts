@@ -24,7 +24,7 @@ export interface ImportedConversation {
   messages: ImportedMessage[];
 }
 
-export interface MapResult {
+interface MapResult {
   conversation: ImportedConversation | null;
   /** Unrecognised content or block types seen in this conversation. */
   unknownTypes: string[];

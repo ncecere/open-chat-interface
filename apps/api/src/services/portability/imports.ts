@@ -28,9 +28,9 @@ import {
 type ImportRow = typeof schema.conversationImport.$inferSelect;
 
 /** A running import that has not reported progress for this long is presumed dead. */
-export const IMPORT_STALE_MS = 10 * 60 * 1000;
+const IMPORT_STALE_MS = 10 * 60 * 1000;
 /** Claims before a repeatedly crashing import is given up on. */
-export const IMPORT_MAX_ATTEMPTS = 3;
+const IMPORT_MAX_ATTEMPTS = 3;
 const HEARTBEAT_MS = 15_000;
 const MESSAGE_BATCH = 500;
 
@@ -218,7 +218,7 @@ export async function deleteImport(id: string, userId: string): Promise<void> {
  * which is safe because applying an import is idempotent. A person's second
  * import never starts while their first is genuinely running.
  */
-export async function claimNextImport(now = new Date()): Promise<ImportRow | null> {
+async function claimNextImport(now = new Date()): Promise<ImportRow | null> {
   const staleBefore = new Date(now.getTime() - IMPORT_STALE_MS).toISOString();
   const [row] = await db
     .update(schema.conversationImport)
@@ -270,7 +270,7 @@ interface Progress {
  * a conversation imported before, or still in the trash, is skipped rather
  * than duplicated or overwritten, so messages added here since are never lost.
  */
-export async function insertImportedConversation(
+async function insertImportedConversation(
   owner: { userId: string; organizationId: string },
   conversation: ImportedConversation,
 ): Promise<'imported' | 'skipped'> {
@@ -443,7 +443,7 @@ async function finishImport(
 }
 
 /** Processes one claimed import from its stored upload. Never throws. */
-export async function processImport(
+async function processImport(
   row: ImportRow,
   limits: ReaderLimits = DEFAULT_READER_LIMITS,
 ): Promise<void> {

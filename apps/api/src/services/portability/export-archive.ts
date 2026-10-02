@@ -8,7 +8,7 @@ import { MAX_EXPORT_MESSAGES, renderMarkdown, safeTitleSlug } from '../export.js
 import { getStorageDriver } from '../storage/index.js';
 import { NameAllocator, safeEntrySegment, ZIP_MAX_ENTRIES, ZipStreamWriter } from './zip-writer.js';
 
-export interface ExportLimits {
+interface ExportLimits {
   /** Attachment bytes included before further files are listed but left out. */
   maxAttachmentBytes: number;
   /** Conversations included; more are reported as truncated. */
@@ -21,7 +21,7 @@ export interface ExportLimits {
  * Bounds that keep a plain (non-ZIP64) archive valid and a single download
  * reasonable. Anything left out is named in the manifest, never dropped quietly.
  */
-export const DEFAULT_EXPORT_LIMITS: ExportLimits = {
+const DEFAULT_EXPORT_LIMITS: ExportLimits = {
   maxAttachmentBytes: 2 * 1024 * 1024 * 1024,
   maxConversations: 20_000,
   maxMessagesPerConversation: 50_000,
@@ -45,7 +45,7 @@ interface ExportedAttachment {
   omittedReason?: 'missing' | 'size-limit' | 'entry-limit';
 }
 
-export interface ExportSummary {
+interface ExportSummary {
   conversations: number;
   projects: number;
   messages: number;
@@ -83,24 +83,34 @@ function serializeMessage({
   };
 }
 
-/** Conversation file stems: readable, dated, and unique without regard to case. */
-function conversationNames(threads: ThreadRow[]): Map<string, string> {
+/** Maps each id to its stem, adding -2, -3… so no two are equal ignoring case. */
+function uniqueNames<T extends { id: string }>(
+  items: T[],
+  stem: (item: T) => string,
+): Map<string, string> {
   const used = new Set<string>();
   const names = new Map<string, string>();
-  for (const thread of threads) {
-    const base = `${safeTitleSlug(thread.title)}-${thread.createdAt.toISOString().slice(0, 10)}`;
+  for (const item of items) {
+    const base = stem(item);
     let candidate = base;
     for (let counter = 2; used.has(candidate.toLowerCase()); counter += 1) {
       candidate = `${base}-${counter}`;
     }
     used.add(candidate.toLowerCase());
-    names.set(thread.id, candidate);
+    names.set(item.id, candidate);
   }
   return names;
 }
 
+/** Conversation file stems: readable and dated. */
+const conversationNames = (threads: ThreadRow[]) =>
+  uniqueNames(
+    threads,
+    (thread) => `${safeTitleSlug(thread.title)}-${thread.createdAt.toISOString().slice(0, 10)}`,
+  );
+
 /** Threads the export covers: live and archived, never trashed or temporary. */
-export async function exportableThreads(userId: string, limit: number) {
+async function exportableThreads(userId: string, limit: number) {
   return db
     .select()
     .from(schema.thread)
@@ -176,22 +186,9 @@ async function projectAttachments(userId: string, projectId: string): Promise<At
     .orderBy(asc(schema.attachment.createdAt), asc(schema.attachment.id));
 }
 
-/** Project folder names: readable and unique without regard to case. */
-function projectFolderNames(projects: Array<{ id: string; name: string }>): Map<string, string> {
-  const used = new Set<string>();
-  const names = new Map<string, string>();
-  for (const project of projects) {
-    const slug = safeTitleSlug(project.name);
-    const base = slug === 'conversation' ? 'project' : slug;
-    let candidate = base;
-    for (let counter = 2; used.has(candidate.toLowerCase()); counter += 1) {
-      candidate = `${base}-${counter}`;
-    }
-    used.add(candidate.toLowerCase());
-    names.set(project.id, candidate);
-  }
-  return names;
-}
+/** Project folder names: readable. */
+const projectFolderNames = (projects: Array<{ id: string; name: string }>) =>
+  uniqueNames(projects, (project) => safeTitleSlug(project.name, 'project'));
 
 /** Uploaded but never sent: still the person's files, so they belong in the export. */
 async function unsentAttachments(userId: string): Promise<AttachmentRow[]> {

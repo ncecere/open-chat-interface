@@ -18,7 +18,7 @@ import { addCost, type ContextCost, emptyCost, fitsContext, textCost } from './c
  * the system prompt) and its files (as model-only context parts). Nothing here
  * is ever written to the stored conversation.
  */
-export type ProjectContext = {
+type ProjectContext = {
   name: string;
   instructions: string;
   /** Candidates only; payloads are loaded after budget selection. */
@@ -77,7 +77,7 @@ export function withProjectInstructions(system: string, project: ProjectContext 
   ].join('\n\n');
 }
 
-export function projectFilesHeader(name: string): string {
+function projectFilesHeader(name: string): string {
   return `Files from the project "${displayName(name)}". They are reference material for every conversation in the project, not files attached to this message.`;
 }
 

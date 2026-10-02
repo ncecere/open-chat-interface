@@ -28,7 +28,7 @@ export const DEFAULT_READER_LIMITS: ReaderLimits = {
   maxManifestBytes: 4 * 1024 * 1024,
 };
 
-export interface ReadReport {
+interface ReadReport {
   container: 'zip' | 'json';
   /** Every entry name seen, nested archive entries prefixed with their archive. */
   entries: string[];

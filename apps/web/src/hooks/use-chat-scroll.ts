@@ -11,7 +11,7 @@ const PIN_OFFSET_PX = 16;
  */
 const TARGET_HOLD_MS = 1500;
 /** How long a search match stays highlighted. */
-export const TARGET_HIGHLIGHT_MS = 2400;
+const TARGET_HIGHLIGHT_MS = 2400;
 /** Frames to wait for the view to become focusable (a closing drawer or dialog). */
 const FOCUS_ATTEMPTS = 20;
 

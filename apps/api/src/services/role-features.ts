@@ -18,11 +18,10 @@ import {
 } from './settings.js';
 
 /** Features as one person experiences them: instance switch AND role switch. */
-export type EffectiveFeatures = Record<RoleFeatureKey, boolean> &
-  Pick<RoleFeatures, 'reasoningEfforts'>;
+type EffectiveFeatures = Record<RoleFeatureKey, boolean> & Pick<RoleFeatures, 'reasoningEfforts'>;
 
 /** Wording shared by every check that refuses a feature because of the role. */
-export const ROLE_FEATURE_DENIED: Record<RoleFeatureKey, string> = {
+const ROLE_FEATURE_DENIED: Record<RoleFeatureKey, string> = {
   webSearch: 'Web search is not available for your role',
   attachments: 'Attachments are not available for your role',
   shareLinks: 'Public share links are not available for your role',
@@ -84,16 +83,6 @@ export function combineFeatures(
 /** The role's own switches; the single source every role check reads. */
 export async function roleFeatures(role: UserRole): Promise<RoleFeatures> {
   return resolveRoleFeatures(role, await getSetting('roleFeatures'));
-}
-
-/** What someone in this role can use right now. */
-export async function effectiveFeatures(role: UserRole): Promise<EffectiveFeatures> {
-  const [features, search, own] = await Promise.all([
-    getSetting('features'),
-    getSetting('search'),
-    roleFeatures(role),
-  ]);
-  return combineFeatures(features, search, own);
 }
 
 /**

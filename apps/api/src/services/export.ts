@@ -5,7 +5,7 @@ import { activeMessage } from './chat/reply-path.js';
 /** Bounds a pathological thread rather than streaming an unbounded response. */
 export const MAX_EXPORT_MESSAGES = 2_000;
 
-export interface ExportMessage {
+interface ExportMessage {
   role: string;
   parts: Record<string, unknown>[];
   modelSlug: string | null;
@@ -98,8 +98,8 @@ export function renderMarkdown(
   return lines.join('\n');
 }
 
-/** A filesystem-safe slug derived from a conversation title. */
-export function safeTitleSlug(title: string): string {
+/** A filesystem-safe slug derived from a title, or `fallback` when nothing is left. */
+export function safeTitleSlug(title: string, fallback = 'conversation'): string {
   const safe = title
     .replace(/[^\w\s-]/g, '')
     .trim()
@@ -107,7 +107,7 @@ export function safeTitleSlug(title: string): string {
     .slice(0, 60)
     .toLowerCase();
 
-  return safe || 'conversation';
+  return safe || fallback;
 }
 
 /** A filesystem-safe name derived from the conversation title. */

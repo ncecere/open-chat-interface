@@ -34,7 +34,7 @@ export interface CurrentFeatures {
   projects: boolean;
 }
 
-export interface CurrentChatDefaults {
+interface CurrentChatDefaults {
   /** The administrator's starting level, before clamping to the model. */
   defaultEffort: ReasoningEffort;
   /** Levels this person's role may choose. */
