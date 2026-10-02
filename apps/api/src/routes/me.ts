@@ -23,7 +23,6 @@ meRoutes.use('*', requireAuth);
 
 const preferenceSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']).optional(),
-  boringMode: z.boolean().optional(),
   mainFont: z.string().max(60).optional(),
   codeFont: z.string().max(60).optional(),
   density: z.enum(['comfortable', 'compact']).optional(),

@@ -124,6 +124,7 @@ describe.skipIf(!available)('live chat and historical file lock ordering', () =>
         // Constructing a model is local; claimThread never invokes inference.
         languageModel: createOpenAI({ apiKey: 'unused' })('lock-fixture'),
       },
+      tools: { definitions: [] },
     };
     const holder = await pool.sql.reserve();
     let claim: ReturnType<typeof outcome<{ id: string }>> | undefined;

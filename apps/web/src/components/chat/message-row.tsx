@@ -11,12 +11,14 @@ import {
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
 import { ReasoningPanel } from '~/components/chat/message-reasoning';
+import { ProjectSearchNote } from '~/components/chat/project-search-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
 import {
   SearchGroundingDetails,
   SearchSourcesPanel,
   searchGroundingOf,
 } from '~/components/chat/search-grounding';
+import { type AnswerApproval, ToolSteps } from '~/components/chat/tool-steps';
 
 interface MessageRowProps {
   message: UIMessage;
@@ -27,6 +29,8 @@ interface MessageRowProps {
   onEdit?: (messageId: string, text: string) => Promise<void>;
   onFork?: (messageId: string) => Promise<void>;
   replySwitch?: ReplySwitch;
+  /** Answers this reply's open approvals; only the latest reply can be answered. */
+  onAnswerApproval?: AnswerApproval;
 }
 
 /**
@@ -44,6 +48,7 @@ export const MessageRow = memo(function MessageRow({
   onEdit,
   onFork,
   replySwitch,
+  onAnswerApproval,
 }: MessageRowProps) {
   const text = textOf(message);
 
@@ -94,6 +99,8 @@ export const MessageRow = memo(function MessageRow({
           Earlier conversation context was omitted to fit the input limit.
         </p>
       )}
+      <ProjectSearchNote message={message} />
+      <ToolSteps message={message} onAnswer={onAnswerApproval} disabled={streaming} />
       {grounding && <SearchSourcesPanel grounding={grounding} />}
       {reasoning && (
         <ReasoningPanel text={reasoning} streaming={streaming} answerStarted={Boolean(text)} />

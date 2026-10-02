@@ -4,6 +4,7 @@ import { reasoningOf, textOf } from '~/components/chat/message-content';
 import { MessageRow } from '~/components/chat/message-row';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
 import { SearchLoading } from '~/components/chat/search-grounding';
+import { type AnswerApproval, toolLimitOf, toolStepsOf } from '~/components/chat/tool-steps';
 
 interface MessageListProps {
   messages: UIMessage[];
@@ -14,6 +15,8 @@ interface MessageListProps {
   onFork?: (messageId: string) => Promise<void>;
   /** Switching between the latest turn's replies; shown on the last reply only. */
   replySwitch?: ReplySwitch;
+  /** Answers an approval on the latest reply. */
+  onAnswerApproval?: AnswerApproval;
 }
 
 /** Transcript composition only; editing drafts and presentation belong to rows. */
@@ -24,6 +27,7 @@ export const MessageList = memo(function MessageList({
   onEdit,
   onFork,
   replySwitch,
+  onAnswerApproval,
   searching = false,
 }: MessageListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -32,7 +36,12 @@ export const MessageList = memo(function MessageList({
   const switchable = Boolean(replySwitch) && lastIsAssistant;
   const lastText = lastIsAssistant ? textOf(last) : '';
   const lastReasoning = lastIsAssistant ? reasoningOf(last) : '';
-  const hasVisibleContent = Boolean(lastText || lastReasoning);
+  // A tool step is visible progress too, for example "Searching the web…".
+  const hasVisibleContent = Boolean(
+    lastText ||
+      lastReasoning ||
+      (lastIsAssistant && (toolStepsOf(last).length > 0 || toolLimitOf(last))),
+  );
   const waitingLabel = lastReasoning ? 'Thinking' : 'Generating response';
 
   return (
@@ -54,6 +63,7 @@ export const MessageList = memo(function MessageList({
           onEditingChange={setEditingId}
           onRetry={index === messages.length - 1 ? onRetry : undefined}
           replySwitch={switchable && index === messages.length - 1 ? replySwitch : undefined}
+          onAnswerApproval={index === messages.length - 1 ? onAnswerApproval : undefined}
           onFork={onFork}
           onEdit={onEdit}
         />

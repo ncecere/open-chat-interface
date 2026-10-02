@@ -10,7 +10,16 @@ export function validateSearchEndpoint(endpoint: URL): URL {
   return endpoint;
 }
 
-export async function searchFetch(endpoint: URL, init: RequestInit): Promise<unknown> {
+/**
+ * Calls a search provider. Failures name the provider and say what went wrong
+ * in words people can act on; they reach the conversation and the Web search
+ * page's test, so they never include the query or a credential.
+ */
+export async function searchFetch(
+  endpoint: URL,
+  init: RequestInit,
+  provider: string,
+): Promise<unknown> {
   const trustedEndpoint = validateSearchEndpoint(endpoint);
   let response: Response;
 
@@ -20,25 +29,36 @@ export async function searchFetch(endpoint: URL, init: RequestInit): Promise<unk
     // nosemgrep: nodejs_scan.javascript-ssrf-rule-node_ssrf
     response = await fetch(trustedEndpoint, init);
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw providerError('Web search timed out');
+    if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+      throw providerError(`${provider} did not answer in time.`);
     }
-    throw providerError('Web search provider could not be reached');
+    throw providerError(`${provider} could not be reached.`);
   }
 
   if (!response.ok) {
-    throw providerError(`Web search provider returned HTTP ${response.status}`);
+    await response.body?.cancel().catch(() => undefined);
+    if (response.status === 401 || response.status === 403) {
+      throw providerError(
+        `${provider} rejected the web search API key (HTTP ${response.status}). An administrator needs to check it on the Web search page.`,
+      );
+    }
+    if (response.status === 429) {
+      throw providerError(
+        `${provider} refused the search because a rate limit or quota was reached (HTTP 429).`,
+      );
+    }
+    throw providerError(`${provider} returned an error (HTTP ${response.status}).`);
   }
 
   try {
     return await response.json();
   } catch {
-    throw providerError('Web search provider returned an invalid response');
+    throw providerError(`${provider} returned a response that is not valid search results.`);
   }
 }
 
 export function requiredApiKey(apiKey: string | null, provider: string): string {
-  if (!apiKey) throw providerError(`${provider} search is missing an API credential`);
+  if (!apiKey) throw providerError(`${provider} needs an API key. Add it on the Web search page.`);
   return apiKey;
 }
 

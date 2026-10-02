@@ -1,7 +1,14 @@
+import { ERROR_CODES } from '@oci/shared';
 import type { UIMessage } from 'ai';
-import { validationFailed } from '../../lib/errors.js';
-import { buildGroundingContext, normalizeSearchQuery, searchWeb } from '../search/index.js';
+import { AppError, validationFailed } from '../../lib/errors.js';
+import {
+  buildGroundingContext,
+  normalizeSearchQuery,
+  type SearchResult,
+  searchWeb,
+} from '../search/index.js';
 import { buildSystemPrompt } from '../system-prompt.js';
+import { hasTool } from '../tools/registry.js';
 import {
   attachmentCost,
   attachmentIds,
@@ -24,7 +31,7 @@ import {
 } from './context-budget.js';
 import { type ContextMessage, loadContextHistory } from './context-history.js';
 import { generationSettings } from './generation-settings.js';
-import { textFromParts, textParts } from './message-parts.js';
+import { historyParts, textFromParts } from './message-parts.js';
 import {
   loadProjectContext,
   selectProjectFiles,
@@ -33,13 +40,33 @@ import {
 } from './project-context.js';
 import type { TurnContext } from './turn-context.js';
 
-const asUI = (message: ContextMessage): UIMessage => ({
+/** Text and finished tool steps; tool parts stay tool parts only when this turn offers tools. */
+const asUI = (message: ContextMessage, toolsOffered: boolean): UIMessage => ({
   id: message.id,
   role: message.role,
-  parts: textParts(message.parts),
+  parts: historyParts(message.parts, toolsOffered),
 });
 
 /** Budget metadata first. Only selected file payloads reach the storage driver. */
+/**
+ * The search before a reply, for models without the search tool. A provider
+ * failure no longer fails the reply: the model is told the search failed and
+ * the reply shows why. Anything else (search switched off) still refuses.
+ */
+type PreSearch = { results: SearchResult[]; error?: string };
+
+async function searchOrFailure(query: string): Promise<PreSearch> {
+  try {
+    return { results: await searchWeb(query) };
+  } catch (error) {
+    if (error instanceof AppError && error.code !== ERROR_CODES.PROVIDER_ERROR) throw error;
+    return {
+      results: [],
+      error: error instanceof AppError ? error.message : 'The search provider failed.',
+    };
+  }
+}
+
 export async function buildModelContext(context: TurnContext, claimId: string) {
   const { input, user, resolved, thread } = context;
   const submitted = input.messages[0];
@@ -71,24 +98,26 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     regenerate: input.trigger === 'regenerate-message',
     attachmentIds: input.attachmentIds,
   });
-  const searchQuery = input.webSearch
-    ? normalizeSearchQuery(textFromParts(stored.latest.parts))
-    : null;
+  const toolsOffered = context.tools.definitions.length > 0;
+  // With the web_search tool the model searches when it chooses; otherwise
+  // v0.7's single search before the reply still applies.
+  const preSearch = input.webSearch && !hasTool(context.tools, 'web_search');
+  const searchQuery = preSearch ? normalizeSearchQuery(textFromParts(stored.latest.parts)) : null;
   const [newCandidates, searchResults, baseSystem, project] = await Promise.all([
     inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
-    searchQuery ? searchWeb(searchQuery) : Promise.resolve([]),
+    searchQuery ? searchOrFailure(searchQuery) : Promise.resolve<PreSearch>({ results: [] }),
     buildSystemPrompt(user.id, user.name),
     loadProjectContext(thread.projectId, user),
   ]);
   // Project instructions follow the instance prompt and the person's own
   // customisation, so the system prompt's cost below already includes them.
   const system = withProjectInstructions(baseSystem, project);
-  const latest: UIMessage = input.webSearch
+  const latest: UIMessage = preSearch
     ? {
         ...stored.latest,
         parts: [
           ...stored.latest.parts,
-          { type: 'text', text: buildGroundingContext(searchResults) },
+          { type: 'text', text: buildGroundingContext(searchResults.results, searchResults.error) },
         ],
       }
     : stored.latest;
@@ -136,13 +165,21 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   // Project files outrank history: they are chosen to fit after the required
   // context, and history is trimmed to what remains. A file that does not fit
   // is left out rather than truncated, and the reply is marked context-limited.
-  const projectFiles = selectProjectFiles(project, required, budget, supportsVision);
+  // Files too large to include whole are searched with the latest message.
+  const projectFiles = await selectProjectFiles(
+    project,
+    required,
+    budget,
+    supportsVision,
+    textFromParts(stored.latest.parts),
+  );
   required = addCost(required, projectFiles.cost);
   const selected = selectContextSuffix(
     inspectedGroups.map((items) => ({
       items,
       cost: items.reduce(
-        (sum, message) => addCost(sum, addCost(messageCost(asUI(message)), filesCost(message.id))),
+        (sum, message) =>
+          addCost(sum, addCost(messageCost(asUI(message, toolsOffered)), filesCost(message.id))),
         { units: 0, files: 0, imageBytes: 0 },
       ),
     })),
@@ -157,7 +194,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
   const loaded = await materializeAttachments(allCandidates, user.id, user.role, supportsVision);
   const historicalMessage = (message: ContextMessage) =>
     withAttachmentContext(
-      asUI(message),
+      asUI(message, toolsOffered),
       (historical.byMessage.get(message.id) ?? []).map((file) => loaded.get(file.id)!),
       supportsVision,
       historical.unavailable.has(message.id),
@@ -175,6 +212,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
     project,
     projectFiles.files.map((file) => loaded.get(file.id)!),
     supportsVision,
+    projectFiles.search,
   );
   const actualCost = uiMessages.reduce(
     (sum, message) => addCost(sum, messageCost(message)),
@@ -198,7 +236,7 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
       first > 0 ||
       selected.limited ||
       projectFiles.omitted > 0,
-    sourceParts: searchResults.map((source, index) => ({
+    sourceParts: searchResults.results.map((source, index) => ({
       type: 'source-url' as const,
       sourceId: `search-${index + 1}`,
       url: source.url,
@@ -208,8 +246,13 @@ export async function buildModelContext(context: TurnContext, claimId: string) {
       ? {
           type: 'data-search-grounding' as const,
           id: `search-grounding-${crypto.randomUUID()}`,
-          data: { query: searchQuery, results: searchResults },
+          data: {
+            query: searchQuery,
+            results: searchResults.results,
+            ...(searchResults.error ? { error: searchResults.error } : {}),
+          },
         }
       : null,
+    projectSearchPart: projectFiles.searchPart,
   };
 }

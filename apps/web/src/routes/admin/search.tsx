@@ -1,4 +1,10 @@
-import { type InstanceSettings, SEARCH_PROVIDER_KINDS, type SearchProviderKind } from '@oci/shared';
+import {
+  type InstanceSettings,
+  SEARCH_PROVIDER_KINDS,
+  SEARCH_PROVIDERS,
+  type SearchProviderKind,
+  type SearchTestResult,
+} from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useState } from 'react';
@@ -27,13 +33,6 @@ interface SearchDraft {
   maxResults: string;
 }
 
-const PROVIDER_LABELS: Record<SearchProviderKind, string> = {
-  searxng: 'SearXNG',
-  tavily: 'Tavily',
-  brave: 'Brave Search',
-  exa: 'Exa',
-};
-
 /**
  * Search runs only when both the chat feature and the search service are on,
  * so the page offers one switch that drives both.
@@ -51,32 +50,52 @@ function makeDraft(settings: SearchSettings, enabled: boolean): SearchDraft {
   };
 }
 
-function validateDraft(draft: SearchDraft, credentialAction: CredentialAction, apiKey: string) {
+/** Whether the stored key belongs to the provider now selected. */
+function keyApplies(saved: SearchSettings, draft: SearchDraft): boolean {
+  return saved.hasCredential && saved.provider === draft.provider;
+}
+
+function validateDraft(
+  saved: SearchSettings,
+  draft: SearchDraft,
+  credentialAction: CredentialAction,
+  apiKey: string,
+) {
   const errors: { baseUrl?: string; maxResults?: string; provider?: string; apiKey?: string } = {};
+  const provider = draft.provider ? SEARCH_PROVIDERS[draft.provider] : null;
   const baseUrl = draft.baseUrl.trim();
   const maxResults = Number(draft.maxResults);
 
-  if (draft.enabled && draft.provider === null) {
+  if (draft.enabled && !provider) {
     errors.provider = 'Choose a provider before enabling search.';
   }
 
-  if (baseUrl) {
-    try {
-      const url = new URL(baseUrl);
-      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-        errors.baseUrl = 'Enter an HTTP or HTTPS URL.';
+  if (provider?.needs === 'baseUrl') {
+    if (baseUrl) {
+      try {
+        const url = new URL(baseUrl);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+          errors.baseUrl = 'Enter an HTTP or HTTPS address.';
+        }
+      } catch {
+        errors.baseUrl = 'Enter a full address, starting with https://.';
       }
-    } catch {
-      errors.baseUrl = 'Enter a valid absolute URL.';
+    } else if (draft.enabled) {
+      errors.baseUrl = `Enter the ${provider.fieldLabel} to enable search.`;
+    }
+  }
+
+  if (provider?.needs === 'apiKey') {
+    const keepsKey = keyApplies(saved, draft) && credentialAction === 'keep';
+    if (credentialAction === 'replace' && apiKey.length > 500) {
+      errors.apiKey = 'The key must be 500 characters or fewer.';
+    } else if (draft.enabled && !keepsKey && !apiKey.trim()) {
+      errors.apiKey = `Enter the ${provider.fieldLabel} to enable search.`;
     }
   }
 
   if (!Number.isInteger(maxResults) || maxResults <= 0) {
     errors.maxResults = 'Max results must be a positive whole number.';
-  }
-
-  if (credentialAction === 'replace' && apiKey.length > 500) {
-    errors.apiKey = 'The credential must be 500 characters or fewer.';
   }
 
   return errors;
@@ -90,7 +109,8 @@ function changedSearchSettings(
   apiKey: string,
 ): SearchPatch {
   const patch: SearchPatch = {};
-  const baseUrl = draft.baseUrl.trim() || null;
+  const needs = draft.provider ? SEARCH_PROVIDERS[draft.provider].needs : null;
+  const baseUrl = needs === 'baseUrl' ? draft.baseUrl.trim() || null : null;
   const maxResults = Number(draft.maxResults);
 
   if (savedEnabled !== draft.enabled) patch.enabled = draft.enabled;
@@ -100,8 +120,10 @@ function changedSearchSettings(
     patch.maxResults = maxResults;
   }
 
-  if (credentialAction === 'clear' && saved.hasCredential) patch.apiKey = null;
-  if (credentialAction === 'replace' && apiKey.trim()) patch.apiKey = apiKey.trim();
+  if (needs === 'apiKey') {
+    if (credentialAction === 'clear' && keyApplies(saved, draft)) patch.apiKey = null;
+    if (credentialAction === 'replace' && apiKey.trim()) patch.apiKey = apiKey.trim();
+  }
 
   return patch;
 }
@@ -147,10 +169,23 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const validation = validateDraft(draft, credentialAction, apiKey);
+  const validation = validateDraft(saved, draft, credentialAction, apiKey);
+  const providerInfo = draft.provider ? SEARCH_PROVIDERS[draft.provider] : null;
+  const savedKeyApplies = keyApplies(saved, draft);
   const isValid = Object.keys(validation).length === 0;
   const patch = changedSearchSettings(saved, savedEnabled, draft, credentialAction, apiKey);
   const hasChanges = Object.keys(patch).length > 0;
+
+  const test = useMutation({
+    mutationFn: () =>
+      api.post<SearchTestResult>('/admin/settings/search/test', {
+        provider: draft.provider,
+        ...(providerInfo?.needs === 'baseUrl' ? { baseUrl: draft.baseUrl.trim() || null } : {}),
+        ...(providerInfo?.needs === 'apiKey' && credentialAction === 'replace' && apiKey.trim()
+          ? { apiKey: apiKey.trim() }
+          : {}),
+      }),
+  });
 
   const save = useMutation({
     mutationFn: (search: SearchPatch) =>
@@ -197,6 +232,7 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   function beginEdit() {
     setSuccessMessage(false);
     setErrorMessage(null);
+    test.reset();
   }
 
   return (
@@ -250,9 +286,13 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
                 onChange={(next) => {
                   beginEdit();
                   const provider = next === 'off' ? null : (next as SearchProviderKind);
+                  // Each provider needs its own address or key; nothing carries over.
+                  setApiKey('');
+                  setCredentialAction('keep');
                   setDraft((current) => ({
                     ...current,
                     provider,
+                    baseUrl: provider === saved.provider ? (saved.baseUrl ?? '') : '',
                     enabled: provider === null ? false : current.enabled,
                   }));
                 }}
@@ -260,7 +300,7 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
                   { value: 'off', label: 'Off / no provider' },
                   ...SEARCH_PROVIDER_KINDS.map((provider) => ({
                     value: provider,
-                    label: PROVIDER_LABELS[provider],
+                    label: SEARCH_PROVIDERS[provider].label,
                   })),
                 ]}
               />
@@ -292,127 +332,125 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
             </Field>
           </div>
 
-          <Field
-            label="Base URL (optional)"
-            htmlFor="search-base-url"
-            hint={
-              showValidation && validation.baseUrl
-                ? validation.baseUrl
-                : 'Override the provider’s default endpoint, for example for a self-hosted SearXNG instance.'
-            }
-          >
-            <Input
-              id="search-base-url"
-              type="url"
-              value={draft.baseUrl}
-              placeholder="https://search.example.com"
-              disabled={save.isPending}
-              aria-invalid={showValidation && Boolean(validation.baseUrl)}
-              onChange={(event) => {
-                beginEdit();
-                setDraft((current) => ({ ...current, baseUrl: event.target.value }));
-              }}
-            />
-          </Field>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection
-        title="API credential"
-        description="Credentials are encrypted by the server and are never returned to this page."
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 rounded-xl border border-[var(--border-subtle)] p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 gap-3">
-              <KeyRound
-                className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]"
-                aria-hidden="true"
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">
-                  {saved.hasCredential ? 'Credential configured' : 'No credential configured'}
-                </p>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  {saved.hasCredential
-                    ? 'Leave it unchanged to keep the stored credential.'
-                    : 'SearXNG may not require a credential; hosted providers generally do.'}
-                </p>
-              </div>
-            </div>
-            {saved.hasCredential && credentialAction === 'keep' && (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    beginEdit();
-                    setCredentialAction('replace');
-                  }}
-                >
-                  Replace
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    beginEdit();
-                    setApiKey('');
-                    setCredentialAction('clear');
-                  }}
-                >
-                  Clear
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {(credentialAction === 'replace' || !saved.hasCredential) && (
+          {providerInfo?.needs === 'baseUrl' && (
             <Field
-              label={saved.hasCredential ? 'Replacement credential' : 'API credential (optional)'}
-              htmlFor="search-api-key"
+              label={providerInfo.fieldLabel}
+              htmlFor="search-base-url"
               hint={
-                showValidation && validation.apiKey
-                  ? validation.apiKey
-                  : 'A blank field is never sent and does not clear a stored credential.'
+                showValidation && validation.baseUrl ? validation.baseUrl : providerInfo.fieldHint
               }
             >
               <Input
-                id="search-api-key"
-                type="password"
-                value={apiKey}
-                maxLength={501}
-                autoComplete="new-password"
+                id="search-base-url"
+                type="url"
+                value={draft.baseUrl}
+                placeholder="https://search.example.edu"
                 disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(validation.apiKey)}
+                aria-invalid={showValidation && Boolean(validation.baseUrl)}
                 onChange={(event) => {
                   beginEdit();
-                  setApiKey(event.target.value);
-                  setCredentialAction('replace');
+                  setDraft((current) => ({ ...current, baseUrl: event.target.value }));
                 }}
               />
             </Field>
           )}
-
-          {credentialAction === 'clear' && (
-            <div role="alert" className="rounded-lg bg-[var(--warning)]/10 p-3 text-sm">
-              <p className="font-medium">The stored credential will be cleared when you save.</p>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="mt-1 h-auto p-0"
-                onClick={() => {
-                  beginEdit();
-                  setCredentialAction('keep');
-                }}
-              >
-                Keep existing credential
-              </Button>
-            </div>
-          )}
         </div>
       </SettingsSection>
+
+      {providerInfo?.needs === 'apiKey' && (
+        <SettingsSection
+          title="API key"
+          description="Keys are encrypted by the server and are never shown again."
+        >
+          <div className="flex flex-col gap-4">
+            {savedKeyApplies && credentialAction !== 'replace' && (
+              <div className="flex flex-col gap-3 rounded-xl border border-[var(--border-subtle)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 gap-3">
+                  <KeyRound
+                    className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]"
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{providerInfo.fieldLabel} saved</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Leave it unchanged to keep using it.
+                    </p>
+                  </div>
+                </div>
+                {credentialAction === 'keep' && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        beginEdit();
+                        setCredentialAction('replace');
+                      }}
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        beginEdit();
+                        setApiKey('');
+                        setCredentialAction('clear');
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(!savedKeyApplies || credentialAction === 'replace') && (
+              <Field
+                label={savedKeyApplies ? `New ${providerInfo.fieldLabel}` : providerInfo.fieldLabel}
+                htmlFor="search-api-key"
+                hint={
+                  showValidation && validation.apiKey ? validation.apiKey : providerInfo.fieldHint
+                }
+              >
+                <Input
+                  id="search-api-key"
+                  type="password"
+                  value={apiKey}
+                  maxLength={501}
+                  autoComplete="new-password"
+                  disabled={save.isPending}
+                  aria-invalid={showValidation && Boolean(validation.apiKey)}
+                  onChange={(event) => {
+                    beginEdit();
+                    setApiKey(event.target.value);
+                    setCredentialAction('replace');
+                  }}
+                />
+              </Field>
+            )}
+
+            {credentialAction === 'clear' && (
+              <div role="alert" className="rounded-lg bg-[var(--warning)]/10 p-3 text-sm">
+                <p className="font-medium">The saved key will be removed when you save.</p>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="mt-1 h-auto p-0"
+                  onClick={() => {
+                    beginEdit();
+                    setCredentialAction('keep');
+                  }}
+                >
+                  Keep the saved key
+                </Button>
+              </div>
+            )}
+          </div>
+        </SettingsSection>
+      )}
 
       <EditOnly>
         <div className="flex min-h-9 flex-col gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
@@ -427,7 +465,28 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
                 <CheckCircle2 className="size-4" /> Search settings saved.
               </p>
             )}
+            {test.data?.ok && providerInfo && (
+              <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
+                <CheckCircle2 className="size-4" /> {providerInfo.name} works: a test search
+                returned {test.data.results} {test.data.results === 1 ? 'result' : 'results'}.
+              </p>
+            )}
+            {(test.data?.ok === false || test.error) && (
+              <p role="alert" className="text-sm text-[var(--danger)]">
+                {test.data?.message ??
+                  (test.error instanceof ApiError ? test.error.message : 'The test could not run.')}
+              </p>
+            )}
           </div>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!draft.provider || test.isPending || save.isPending}
+            onClick={() => test.mutate()}
+          >
+            {test.isPending && <Spinner />}
+            {test.isPending ? 'Testing…' : 'Test search'}
+          </Button>
           <Button type="submit" variant="primary" disabled={!hasChanges || save.isPending}>
             {save.isPending && <Spinner />}
             {save.isPending ? 'Saving…' : 'Save changes'}

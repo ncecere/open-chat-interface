@@ -1,13 +1,13 @@
 import { type KeyboardEvent, useRef } from 'react';
 import { cn } from '~/lib/utils';
 
-export interface AdminTab<T extends string> {
+export interface PillTab<T extends string> {
   id: T;
   label: string;
 }
 
 /**
- * The segmented control admin pages use to divide one subject into facets.
+ * The pill-shaped segmented control pages use to divide one subject into facets.
  *
  * Extracted because the same markup, ARIA wiring, and active styling had begun
  * to appear on several pages; a shared control keeps a tab strip behaving the
@@ -21,14 +21,14 @@ export interface AdminTab<T extends string> {
  * tabs and select them. Selection follows focus because switching a facet is
  * cheap and reversible.
  */
-export function AdminTabs<T extends string>({
+export function PillTabs<T extends string>({
   tabs,
   active,
   onChange,
   label,
   controls,
 }: {
-  tabs: readonly AdminTab<T>[];
+  tabs: readonly PillTab<T>[];
   active: T;
   onChange: (id: T) => void;
   label: string;

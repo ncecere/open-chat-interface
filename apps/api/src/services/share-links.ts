@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
-import { ERROR_CODES, type UserRole } from '@oci/shared';
+import { ERROR_CODES, isToolPart, summarizeToolPart, type UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { AppError, notFound, validationFailed } from '../lib/errors.js';
 import { pathThrough } from './chat/reply-path.js';
@@ -198,7 +198,9 @@ function sanitizeSourceUrl(value: unknown): string | null {
 
 export type PublicMessagePart =
   | { type: 'text'; text: string }
-  | { type: 'source-url'; sourceId: string; url: string; title?: string };
+  | { type: 'source-url'; sourceId: string; url: string; title?: string }
+  /** A tool step as one summary line; never its inputs' secrets or raw result. */
+  | { type: 'tool-step'; toolId: string; summary: string };
 
 /**
  * Strict allowlist for public message parts. Reasoning, system/tool data,
@@ -217,6 +219,19 @@ export function sanitizePublicParts(parts: unknown): PublicMessagePart[] {
         {
           type: 'text',
           text: redactCredentials(candidate.text.slice(0, MAX_TEXT_PART_LENGTH)),
+        },
+      ];
+    }
+
+    if (isToolPart(candidate)) {
+      const step = summarizeToolPart(candidate);
+      // Steps still running or waiting on the owner's answer say nothing useful publicly.
+      if (step.state === 'running' || step.state === 'awaiting-approval') return [];
+      return [
+        {
+          type: 'tool-step',
+          toolId: redactCredentials(step.toolId.slice(0, 200)),
+          summary: redactCredentials(step.summary.slice(0, MAX_SOURCE_TITLE_LENGTH)),
         },
       ];
     }

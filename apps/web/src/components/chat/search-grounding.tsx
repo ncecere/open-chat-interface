@@ -1,6 +1,6 @@
 import type { SearchGroundingData } from '@oci/shared';
 import type { UIMessage } from 'ai';
-import { ChevronDown, ChevronRight, Globe2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Globe2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { cn } from '~/lib/utils';
@@ -14,6 +14,8 @@ interface MessageSource {
 export interface SearchGroundingView {
   query: string | null;
   results: SearchGroundingData['results'];
+  /** Why the search failed; the reply went ahead without results. */
+  error?: string;
 }
 
 function sourcePartsOf(message: UIMessage): MessageSource[] {
@@ -38,6 +40,9 @@ export function searchGroundingOf(message: UIMessage): SearchGroundingView | nul
           typeof result.url === 'string' &&
           typeof result.snippet === 'string',
       ),
+      ...(typeof details.data.error === 'string' && details.data.error
+        ? { error: details.data.error }
+        : {}),
     };
   }
 
@@ -101,6 +106,18 @@ export function SearchLoading() {
 
 export function SearchSourcesPanel({ grounding }: { grounding: SearchGroundingView }) {
   const [open, setOpen] = useState(false);
+
+  if (grounding.error) {
+    return (
+      <div role="note" className="mb-7 text-[0.8125rem]">
+        <p className="flex items-center gap-2 font-semibold text-[var(--text-primary)]">
+          <TriangleAlert className="size-4 text-[var(--warning)]" aria-hidden="true" />
+          Web search failed
+        </p>
+        <p className="mt-1 pl-6 text-[var(--text-muted)]">{grounding.error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-7">

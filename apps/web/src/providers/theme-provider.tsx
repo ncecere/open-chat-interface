@@ -10,7 +10,6 @@ import {
 } from 'react';
 
 const THEME_STORAGE_KEY = 'oci.theme';
-const BORING_STORAGE_KEY = 'oci.boring';
 const CODE_WRAP_STORAGE_KEY = 'oci.codeWrap';
 /**
  * The instance color theme is administrator-owned, but caching it avoids a
@@ -29,12 +28,10 @@ const FALLBACK_THEME: ThemeMode = 'dark';
 interface ThemeContextValue {
   theme: ThemeMode;
   resolvedTheme: 'light' | 'dark';
-  boringMode: boolean;
   /** Wrap long lines in code blocks instead of scrolling them sideways. */
   codeWrap: boolean;
   colorTheme: ColorTheme;
   setTheme: (theme: ThemeMode) => void;
-  setBoringMode: (enabled: boolean) => void;
   setCodeWrap: (enabled: boolean) => void;
   setColorTheme: (theme: ColorTheme) => void;
   /**
@@ -71,9 +68,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [userTheme, setUserTheme] = useState<ThemeMode | null>(readStoredTheme);
   const [instanceTheme, setInstanceTheme] = useState<ThemeMode>(readInstanceTheme);
   const theme = userTheme ?? instanceTheme;
-  const [boringMode, setBoringState] = useState(
-    () => localStorage.getItem(BORING_STORAGE_KEY) === 'true',
-  );
   const [codeWrap, setCodeWrapState] = useState(
     () => localStorage.getItem(CODE_WRAP_STORAGE_KEY) === 'true',
   );
@@ -94,10 +88,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     root.classList.toggle('dark', resolvedTheme === 'dark');
     root.classList.toggle('light', resolvedTheme === 'light');
-    root.classList.toggle('boring', boringMode);
     root.classList.toggle('code-wrap', codeWrap);
     root.dataset.colorTheme = colorTheme;
-  }, [resolvedTheme, boringMode, codeWrap, colorTheme]);
+  }, [resolvedTheme, codeWrap, colorTheme]);
 
   const setTheme = useCallback((next: ThemeMode) => {
     localStorage.setItem(THEME_STORAGE_KEY, next);
@@ -107,11 +100,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setInstanceDefaultTheme = useCallback((next: ThemeMode) => {
     localStorage.setItem(INSTANCE_THEME_STORAGE_KEY, next);
     setInstanceTheme(next);
-  }, []);
-
-  const setBoringMode = useCallback((enabled: boolean) => {
-    localStorage.setItem(BORING_STORAGE_KEY, String(enabled));
-    setBoringState(enabled);
   }, []);
 
   const setCodeWrap = useCallback((enabled: boolean) => {
@@ -128,11 +116,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     () => ({
       theme,
       resolvedTheme,
-      boringMode,
       codeWrap,
       colorTheme,
       setTheme,
-      setBoringMode,
       setCodeWrap,
       setColorTheme,
       setInstanceDefaultTheme,
@@ -140,11 +126,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [
       theme,
       resolvedTheme,
-      boringMode,
       codeWrap,
       colorTheme,
       setTheme,
-      setBoringMode,
       setCodeWrap,
       setColorTheme,
       setInstanceDefaultTheme,

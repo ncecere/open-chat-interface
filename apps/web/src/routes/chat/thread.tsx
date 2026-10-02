@@ -12,7 +12,7 @@ import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
-import { ApiError } from '~/lib/api-client';
+import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getChatHistory } from '~/lib/chat-history';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -243,7 +243,12 @@ function ThreadConversation({
             <MessageList
               messages={session.messages}
               streaming={session.streaming}
-              searching={session.webSearch}
+              // With tool calling the model decides whether to search, and its
+              // search shows as a tool step instead.
+              searching={
+                session.webSearch && !session.selectedModel?.capabilities.includes('tool_calling')
+              }
+              onAnswerApproval={session.answerApproval}
               onRetry={retry}
               onFork={session.features?.branching ? forkAtMessage : undefined}
               onEdit={session.features?.branching ? editAndBranch : undefined}
@@ -261,7 +266,7 @@ function ThreadConversation({
                     className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
                   >
                     {session.recovery.error ||
-                      session.error?.message ||
+                      (session.error && chatErrorText(session.error)) ||
                       replies.error ||
                       'Something went wrong generating a response.'}
                   </p>

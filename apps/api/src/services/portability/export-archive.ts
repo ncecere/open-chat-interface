@@ -4,7 +4,7 @@ import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { activeMessage } from '../chat/reply-path.js';
-import { MAX_EXPORT_MESSAGES, renderMarkdown, safeTitleSlug } from '../export.js';
+import { exportableParts, MAX_EXPORT_MESSAGES, renderMarkdown, safeTitleSlug } from '../export.js';
 import { getStorageDriver } from '../storage/index.js';
 import { NameAllocator, safeEntrySegment, ZIP_MAX_ENTRIES, ZipStreamWriter } from './zip-writer.js';
 
@@ -78,6 +78,7 @@ function serializeMessage({
 }: typeof schema.message.$inferSelect) {
   return {
     ...message,
+    parts: exportableParts(message.parts),
     createdAt: message.createdAt.toISOString(),
     updatedAt: message.updatedAt.toISOString(),
   };

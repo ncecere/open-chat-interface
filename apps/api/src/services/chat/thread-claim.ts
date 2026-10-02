@@ -2,6 +2,7 @@ import { and, eq, isNull, schema } from '@oci/db';
 import { db } from '../../db/index.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { nextPosition } from '../threads.js';
+import { denyOpenApprovals } from './pending-approvals.js';
 import type { TurnContext } from './turn-context.js';
 
 export type ChatTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -43,7 +44,7 @@ export async function lockChatThread(tx: ChatTransaction, threadId: string, user
  */
 export async function claimThread(context: TurnContext, runId: string): Promise<{ id: string }> {
   const { thread, user, resolved, input } = context;
-  return db.transaction(async (tx) => {
+  const { claim, auditDenials } = await db.transaction(async (tx) => {
     await lockChatThread(tx, thread.id, user.id);
     const [active] = await tx
       .select({ id: schema.message.id })
@@ -57,6 +58,9 @@ export async function claimThread(context: TurnContext, runId: string): Promise<
       )
       .limit(1);
     if (active) throw conflict('A response is already being generated for this thread');
+    // Sending a message instead of answering denies open approvals, so the
+    // model never sees a dangling call.
+    const auditDenials = await denyOpenApprovals(tx, thread.id, user.id);
     const [claim] = await tx
       .insert(schema.message)
       .values({
@@ -73,6 +77,8 @@ export async function claimThread(context: TurnContext, runId: string): Promise<
       })
       .returning({ id: schema.message.id });
     if (!claim) throw new Error('Failed to claim thread');
-    return claim;
+    return { claim, auditDenials };
   });
+  await auditDenials();
+  return claim;
 }

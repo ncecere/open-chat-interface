@@ -1,3 +1,4 @@
+import { isToolPart, toolIdOfPart } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { validationFailed } from '../../lib/errors.js';
 
@@ -12,6 +13,64 @@ export function textParts(parts: unknown): Array<{ type: 'text'; text: string }>
       ? [{ type: 'text' as const, text: (part as { text: string }).text }]
       : [],
   );
+}
+
+type HistoryPart = UIMessage['parts'][number];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/**
+ * A finished tool step as later turns see it: only the fields the model needs,
+ * never provider metadata. Unfinished steps (a stopped reply, an approval that
+ * was never answered) are left out so no call is ever left dangling.
+ */
+function finishedToolStep(part: Record<string, unknown>): Record<string, unknown> | null {
+  if (!isToolPart(part) || part.type === 'dynamic-tool') return null;
+  const base = { type: part.type, toolCallId: part.toolCallId, input: part.input ?? {} };
+  if (part.state === 'output-available')
+    return { ...base, state: 'output-available', output: part.output ?? null };
+  if (part.state === 'output-error')
+    return {
+      ...base,
+      state: 'output-error',
+      errorText: typeof part.errorText === 'string' ? part.errorText : 'The tool failed.',
+    };
+  if (part.state === 'output-denied') {
+    const reason = (part.approval as { reason?: unknown } | undefined)?.reason;
+    return {
+      ...base,
+      state: 'output-error',
+      errorText: `The person did not approve this call${typeof reason === 'string' ? ` (${reason})` : ''}.`,
+    };
+  }
+  return null;
+}
+
+function toolStepText(step: Record<string, unknown>): string {
+  const toolId = toolIdOfPart(step);
+  const result =
+    step.state === 'output-available' ? JSON.stringify(step.output) : String(step.errorText);
+  return `[Tool step: ${toolId} was called with ${JSON.stringify(step.input)}. Result: ${result}]`;
+}
+
+/**
+ * Parts of a stored message for model context: text, plus finished tool steps.
+ * When this turn offers tools they stay tool parts; otherwise they become a
+ * short text note, because providers refuse tool history without tools.
+ */
+export function historyParts(parts: unknown, toolsOffered: boolean): HistoryPart[] {
+  if (!Array.isArray(parts)) return [];
+  return parts.flatMap((part): HistoryPart[] => {
+    if (!isRecord(part)) return [];
+    if (part.type === 'text' && typeof part.text === 'string')
+      return [{ type: 'text', text: part.text }];
+    const step = finishedToolStep(part);
+    if (!step) return [];
+    return toolsOffered
+      ? [step as unknown as HistoryPart]
+      : [{ type: 'text', text: toolStepText(step) }];
+  });
 }
 
 export function textFromParts(parts: unknown): string {

@@ -14,6 +14,7 @@ const TABS = [
   { to: '/settings/customization', label: 'Customization' },
   { to: '/settings/history', label: 'History & Sync' },
   { to: '/settings/models', label: 'Models' },
+  { to: '/settings/connectors', label: 'Connectors' },
   { to: '/settings/attachments', label: 'Attachments' },
   { to: '/settings/shortcuts', label: 'Shortcuts' },
   { to: '/settings/contact', label: 'Contact Us' },

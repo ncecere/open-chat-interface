@@ -467,7 +467,12 @@ describe.skipIf(!available)('live: projects', () => {
         201,
       );
       const file = uploaded.files[0]!;
-      expect(file).toMatchObject({ filename: 'brief.txt', mimeType: 'text/plain' });
+      // Chunked for search as part of the upload.
+      expect(file).toMatchObject({
+        filename: 'brief.txt',
+        mimeType: 'text/plain',
+        index: { status: 'indexed', passages: 1 },
+      });
       expect(await usage(owner)).toEqual({
         bytes: before.bytes + Buffer.byteLength('The brief says hello.'),
         files: before.files + 1,
@@ -477,6 +482,7 @@ describe.skipIf(!available)('live: projects', () => {
         await call(owner, 'GET', `/projects/${project.id}/files`),
       );
       expect(listed.files.map((entry) => entry.id)).toEqual([file.id]);
+      expect(listed.files[0]?.index).toEqual({ status: 'indexed', passages: 1 });
 
       const [row] = await live.db
         .select()

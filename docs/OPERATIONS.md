@@ -168,6 +168,41 @@ and search stop seeing both answers. The backfill reads `message` once with a
 sort and updates only those older replies; it holds row locks on them until
 the migration commits. Re-running it changes nothing.
 
+### Project file search (v0.8, migration 0026)
+
+Migration `0026_project_file_chunks` creates two new, empty tables,
+`project_file_index` and `project_file_chunk` (with a GIN full-text index),
+both cascading from `attachment`. It rewrites and locks nothing existing, so
+it applies instantly.
+
+Project files uploaded before the upgrade are split into searchable chunks
+afterwards by the `projects.index-files` background job: every 5 minutes, up
+to 50 files per run, oldest first, each in its own transaction. It is safe to
+interrupt (a restart loses at most the file in progress, which the next run
+redoes) and safe to run on several replicas (a file is never indexed twice).
+Until a file is indexed it is used whole, as in v0.7, and the project page
+shows it as "Waiting to be indexed". Progress is visible in the job runs on the
+admin health page; a run reports how many files it indexed. Chunks take
+roughly as much space as the extracted text of the files they cover, plus the
+index.
+
+### MCP connectors (v0.8, migration 0027)
+
+Migration `0027_connectors` creates three new, empty tables, `connector`,
+`connector_tool` and `connector_account`, cascading from the organization,
+the connector and the user. It rewrites and locks nothing existing, so it
+applies instantly. Nothing is offered to models until an administrator adds a
+connector, enables its tools and allows them for a role
+([Connectors](admin/connectors.md)).
+
+Connector credentials and people's OAuth tokens are encrypted with
+`ENCRYPTION_KEY`, like provider keys: rotating that key makes them unreadable,
+so re-enter shared credentials and ask people to connect again afterwards.
+OAuth connectors send people back to `APP_URL/api/connectors/oauth/callback`;
+`APP_URL` must be the address people use. Connectors make outbound HTTPS
+requests from the API, so allow egress to their servers (and their
+authorization servers) where egress is filtered.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

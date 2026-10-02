@@ -20,7 +20,14 @@ interface PublicSourcePart {
   title?: string;
 }
 
-type PublicPart = PublicTextPart | PublicSourcePart;
+/** A tool step as one summary line; the API never sends inputs or results. */
+interface PublicToolStepPart {
+  type: 'tool-step';
+  toolId: string;
+  summary: string;
+}
+
+type PublicPart = PublicTextPart | PublicSourcePart | PublicToolStepPart;
 
 interface PublicShareResponse {
   thread: {
@@ -134,13 +141,33 @@ function Sources({ parts }: { parts: PublicPart[] }) {
   );
 }
 
+function ToolStepSummaries({ parts }: { parts: PublicPart[] }) {
+  const steps = parts.filter((part): part is PublicToolStepPart => part.type === 'tool-step');
+  if (steps.length === 0) return null;
+  return (
+    <ul className="mb-3 space-y-1 text-xs text-[var(--text-muted)]" aria-label="Tool steps">
+      {steps.map((step, index) => (
+        // Summaries carry no stable id; the list is static once loaded.
+        // biome-ignore lint/suspicious/noArrayIndexKey: never reordered.
+        <li key={`${step.toolId}-${index}`} className="break-words">
+          {step.summary}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function SharedMessage({ message }: { message: PublicShareResponse['messages'][number] }) {
   const text = message.parts
     .filter((part): part is PublicTextPart => part.type === 'text')
     .map((part) => part.text)
     .join('\n');
 
-  if (!text && !message.parts.some((part) => part.type === 'source-url')) return null;
+  if (
+    !text &&
+    !message.parts.some((part) => part.type === 'source-url' || part.type === 'tool-step')
+  )
+    return null;
 
   if (message.role === 'user') {
     return (
@@ -156,6 +183,7 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
 
   return (
     <article aria-label="Assistant message">
+      <ToolStepSummaries parts={message.parts} />
       <Sources parts={message.parts} />
       {text && (
         <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">

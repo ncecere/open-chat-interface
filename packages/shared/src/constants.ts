@@ -32,7 +32,14 @@ export type ThemeMode = (typeof THEME_MODES)[number];
 export const COLOR_THEMES = ['neutral', 'blue', 'violet', 'emerald'] as const;
 export type ColorTheme = (typeof COLOR_THEMES)[number];
 
-export const SEARCH_PROVIDER_KINDS = ['searxng', 'tavily', 'brave', 'exa'] as const;
+export const SEARCH_PROVIDER_KINDS = [
+  'searxng',
+  'tavily',
+  'brave',
+  'exa',
+  'serpapi',
+  'searchapi',
+] as const;
 export type SearchProviderKind = (typeof SEARCH_PROVIDER_KINDS)[number];
 
 export const STORAGE_DRIVERS = ['local', 's3'] as const;
@@ -97,6 +104,10 @@ export const PROTECTED_AUDIT_ACTIONS = [
   'provider.create',
   'provider.update',
   'provider.delete',
+  // Connectors hold credentials for systems outside OCI.
+  'connector.create',
+  'connector.update',
+  'connector.delete',
   'sso.create',
   'sso.update',
   'sso.delete',

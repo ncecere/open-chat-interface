@@ -18,7 +18,7 @@ const THEME_OPTIONS = [
 ] as const;
 
 export function ThemeMenu() {
-  const { theme, setTheme, boringMode, setBoringMode } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   return (
     <DropdownMenu>
@@ -37,13 +37,6 @@ export function ThemeMenu() {
             {theme === option.value && <Check className="text-[var(--accent-bright)]" />}
           </DropdownMenuItem>
         ))}
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem onSelect={() => setBoringMode(!boringMode)}>
-          <span className="flex-1">Boring mode</span>
-          {boringMode && <Check className="text-[var(--accent-bright)]" />}
-        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 

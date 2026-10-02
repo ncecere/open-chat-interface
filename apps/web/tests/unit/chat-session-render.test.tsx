@@ -11,6 +11,8 @@ const { chat, models, queryClient } = vi.hoisted(() => ({
     messages: [],
     sendMessage: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
+    setMessages: vi.fn(),
+    addToolApprovalResponse: vi.fn(async () => {}),
     regenerate: vi.fn(),
   },
   models: [

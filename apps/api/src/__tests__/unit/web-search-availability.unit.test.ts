@@ -26,10 +26,10 @@ describe('web search availability', () => {
       'no search provider is selected',
     );
     expect(webSearchProblem({ webSearch: true }, search({ encryptedApiKey: null }))).toBe(
-      'the provider needs an API credential',
+      'Tavily needs an API key',
     );
     expect(webSearchProblem({ webSearch: true }, search({ provider: 'searxng' }))).toBe(
-      'SearXNG needs a base URL',
+      'SearXNG needs its address',
     );
     expect(
       webSearchProblem(
@@ -38,5 +38,15 @@ describe('web search availability', () => {
       ),
     ).toBeNull();
     expect(webSearchProblem({ webSearch: true }, search())).toBeNull();
+    expect(
+      webSearchProblem({ webSearch: true }, search({ provider: 'serpapi', encryptedApiKey: null })),
+    ).toBe('SerpApi needs an API key');
+    expect(webSearchProblem({ webSearch: true }, search({ provider: 'serpapi' }))).toBeNull();
+    expect(
+      webSearchProblem(
+        { webSearch: true },
+        search({ provider: 'searchapi', encryptedApiKey: null }),
+      ),
+    ).toBe('SearchApi needs an API key');
   });
 });

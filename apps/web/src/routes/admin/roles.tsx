@@ -12,7 +12,6 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { CheckCircle2 } from 'lucide-react';
 import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
-import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
 import {
   AdminPageHeader,
   LoadError,
@@ -26,9 +25,11 @@ import {
   useConfigSources,
 } from '~/components/admin/config-source';
 import { RoleFeaturesForm } from '~/components/admin/role-features-form';
+import { RoleToolsForm } from '~/components/admin/role-tools-form';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
+import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
@@ -48,7 +49,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
 const TABS = (Object.keys(ROLE_LABELS) as UserRole[]).map((id) => ({
   id,
   label: ROLE_LABELS[id],
-})) satisfies readonly AdminTab<RoleTab>[];
+})) satisfies readonly PillTab<RoleTab>[];
 
 const RATE_FIELDS: Array<{ key: keyof RateLimitSettings; label: string; max: number }> = [
   { key: 'maxConcurrentStreams', label: 'Concurrent responses', max: 100 },
@@ -656,6 +657,17 @@ function RolePanel({ access }: { access: RoleAccess }) {
       </SettingsSection>
 
       <SettingsSection
+        title="Tools"
+        description={`Which tools the ${label} role’s models may call during a reply. Write tools always ask for approval.`}
+      >
+        <RoleToolsForm
+          access={access}
+          roleLabel={label}
+          onSaved={() => invalidateAccess(queryClient)}
+        />
+      </SettingsSection>
+
+      <SettingsSection
         title="Rate limits"
         description="How many responses one person may generate at once, and how fast requests may arrive."
       >
@@ -704,7 +716,7 @@ export function AdminRolesPage() {
       />
 
       <div className="flex flex-col gap-8 pb-10">
-        <AdminTabs
+        <PillTabs
           tabs={TABS}
           active={role}
           onChange={setRole}

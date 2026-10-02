@@ -168,6 +168,107 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('admin connectors has no violations', async ({ page }) => {
+    // A routed connector with a read and a write tool, so the tool controls are scanned too.
+    const connectorTool = (id: string, name: string, kind: string, enabled: boolean) => ({
+      id,
+      toolId: `mcp__docs__${name}`,
+      name,
+      title: null,
+      description: `The ${name} tool.`,
+      kind,
+      serverKind: kind,
+      enabled,
+      missing: false,
+      lastSeenAt: '2026-10-01T10:00:00.000Z',
+    });
+    await page.route('**/api/admin/connectors', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          connectors: [
+            {
+              id: 'c1',
+              name: 'Docs',
+              slug: 'docs',
+              url: 'https://mcp.example.test/mcp',
+              authMode: 'shared',
+              sharedHeaderName: 'Authorization',
+              hasSharedCredential: true,
+              oauthClientId: null,
+              hasOauthClientSecret: false,
+              oauthClientSource: null,
+              oauthScopes: '',
+              enabled: true,
+              allowPrivateNetwork: false,
+              accountCount: 0,
+              lastContactAt: '2026-10-01T10:00:00.000Z',
+              lastErrorAt: '2026-10-01T11:00:00.000Z',
+              lastError: 'Docs did not respond in time.',
+              oauthRedirectUrl: 'https://oci.example.test/api/connectors/oauth/callback',
+              createdAt: '2026-10-01T09:00:00.000Z',
+              updatedAt: '2026-10-01T09:00:00.000Z',
+              tools: [
+                connectorTool('t1', 'search', 'read', true),
+                connectorTool('t2', 'create_page', 'write', false),
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/admin/connectors');
+    await expect(page.getByRole('heading', { name: 'Connectors', level: 1 })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'search' })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('settings connectors has no violations', async ({ page }) => {
+    await page.route('**/api/connectors', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          connectors: [
+            {
+              id: 'c1',
+              name: 'Docs',
+              slug: 'docs',
+              connected: true,
+              needsReconnect: false,
+              toolCount: 2,
+            },
+            {
+              id: 'c2',
+              name: 'CRM',
+              slug: 'crm',
+              connected: false,
+              needsReconnect: true,
+              toolCount: 1,
+            },
+            {
+              id: 'c3',
+              name: 'Wiki',
+              slug: 'wiki',
+              connected: false,
+              needsReconnect: false,
+              toolCount: 3,
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/settings/connectors');
+    await expect(page.getByRole('heading', { name: 'Connectors', level: 1 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect Wiki', exact: true })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a project page has no violations', async ({ page }) => {
     await signIn(page);
     // Created through the real API with the signed-in session's cookies.
@@ -181,8 +282,22 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     await expect(page.getByRole('heading', { level: 1, name: project.name })).toBeVisible();
     await expect(page.getByText('No conversations yet.')).toBeVisible();
 
-    const results = await scan(page);
-    expect(describeViolations(results), describeViolations(results)).toBe('');
+    // Every tab, reached with the keyboard as the tabs pattern prescribes.
+    for (const [name, ready] of [
+      ['Conversations', 'No conversations yet.'],
+      ['Instructions', 'Answer clearly.'],
+      ['Files', 'No files yet.'],
+      ['Settings', 'Delete project'],
+    ] as const) {
+      if (name !== 'Conversations') await page.keyboard.press('ArrowRight');
+      else await page.getByRole('tab', { name }).focus();
+      await expect(page.getByRole('tab', { name, selected: true })).toBeFocused();
+      if (name === 'Instructions')
+        await expect(page.getByRole('textbox', { name: 'Instructions' })).toHaveValue(ready);
+      else await expect(page.getByText(ready).first()).toBeVisible();
+      const results = await scan(page);
+      expect(describeViolations(results), `${name}: ${describeViolations(results)}`).toBe('');
+    }
   });
 
   test('the move to project dialog has no violations while open', async ({ page }) => {
@@ -233,6 +348,62 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     const group = page.getByRole('group', { name: 'Replies' });
     await expect(group.getByRole('status')).toHaveText('Reply 2 of 2');
     await group.getByRole('button', { name: 'Previous reply' }).focus();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('a tool step and an approval card have no violations', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    await page.route('**/api/chat/a11y-tools/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-tools', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-tools-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Look it up and send a note' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            {
+              id: 'a11y-tools-reply',
+              role: 'assistant',
+              parts: [
+                { type: 'step-start' },
+                {
+                  type: 'tool-web_search',
+                  toolCallId: 'a11y-search',
+                  state: 'output-available',
+                  input: { query: 'opening hours' },
+                  output: { query: 'opening hours', results: [] },
+                },
+                { type: 'step-start' },
+                {
+                  type: 'tool-send_note',
+                  toolCallId: 'a11y-note',
+                  title: 'Send note',
+                  state: 'approval-requested',
+                  input: { to: 'Ada' },
+                  approval: { id: 'a11y-approval' },
+                },
+              ],
+              metadata: { status: 'complete', createdAt: created },
+            },
+          ],
+          replies: [],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-tools');
+    const card = page.getByRole('region', { name: 'Allow Send note?' });
+    await expect(card.getByRole('button', { name: 'Approve' })).toBeVisible();
+    await page
+      .getByRole('button', { name: "Searched the web for 'opening hours' · 0 results" })
+      .click();
+    await card.getByRole('button', { name: 'Deny' }).focus();
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');

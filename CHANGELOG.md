@@ -7,6 +7,103 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Tool calling.** Models tagged `tool_calling` in the catalog can call
+  tools during a reply when the instance and the person's role allow them.
+  Roles & access has a **Tools** section with a switch per tool and role
+  (`PUT /api/admin/roles/:role/tools`, audited as `role.tools.update`): built-in
+  read tools are on for every role except `restricted`, connector tools are off
+  until allowed. A reply spends at most **8** steps using tools by default (General
+  settings, 1–20); a reply that reaches it gets one final step with the tools
+  withdrawn, so it still answers with what it found, and a note says so. A
+  reply also stops when the person's allowance runs out between steps. A tool
+  call with invalid input is answered with which fields were wrong, so the
+  model can correct it. Tools that change something elsewhere ask
+  for approval: the reply waits with **Approve** and **Deny**, and answering
+  (`POST /api/chat/:threadId/approvals`) continues the same reply. Sending a
+  new message instead denies open approvals as "not answered". Each call is
+  audited as `tool.call` with metadata only, never inputs or results. Tool
+  steps appear in the reply as collapsible lines; share links and both exports
+  show one-line summaries without raw results. Models without tool calling
+  behave exactly as before. See `docs/user/tools.md` and
+  `docs/dev/tools-design.md`.
+- **SerpApi and SearchApi as web search providers** (Google results, SafeSearch
+  on), alongside SearXNG, Tavily, Brave Search and Exa. SearchApi's key is sent
+  in a header rather than the URL.
+- **Test search** on the Web search page runs one sample search with the
+  provider and key or address on the page, saved or not, and shows whether it
+  worked or what the provider replied. Audited as `search.test`.
+- **Web search as a tool.** With a tool-capable model and **Search** on, the
+  model decides when and what to search, may search more than once (up to 10
+  results each) and cites results as sources. Other models keep the single
+  search before the reply. Providers and switches are unchanged.
+- **Large project files are searched instead of left out.** Project files are
+  split into indexed passages. When a project's files do not fit the context,
+  each message includes the passages that best match it, labelled with file
+  name and passage number, and the reply notes that project files were
+  searched. Small projects are still included whole. The project page shows
+  whether each file is searchable. Migration `0026_project_file_chunks`; the
+  `projects.index-files` job indexes existing project files after the upgrade.
+- **MCP connectors.** Administrators add remote MCP servers (Streamable HTTP)
+  under **Connectors**, with no authentication, a shared credential stored
+  encrypted, or OAuth per person; test the connection; refresh the server's
+  tools; and enable individual tools as read or write (a tool counts as read
+  only when the server marks it read-only, unless an administrator confirms
+  otherwise). People connect their own accounts under **Settings →
+  Connectors**, so the connected system applies their own permissions.
+  Connector tools join the tool registry, so role switches, approval for write
+  tools and audit apply; links in results become sources. Outbound requests
+  are HTTPS only, refuse private, loopback, link-local and cloud-metadata
+  addresses unless "Allow private network" is set (metadata addresses always),
+  follow no redirects, and are limited to 30 seconds and 2 MB. All
+  administrator and connect/disconnect actions are audited. System health
+  shows connector status. Migration `0027_connectors`. New dependency:
+  `@ai-sdk/mcp` (Apache-2.0).
+
+### Changed
+
+- **The project page uses tabs.** Conversations, Instructions, Files and
+  Settings (rename and delete) are pill tabs, laid out like the user settings
+  pages instead of cards. The page opens on Conversations, and the open tab is
+  kept in the address (`?tab=`).
+
+- **A failed web search no longer fails the reply.** When the search before a
+  reply fails, the reply goes ahead: the model is told the search failed and
+  asked to say that current sources could not be checked, and the reply shows
+  **Web search failed** with the reason. Search provider errors now name the
+  provider and the cause, for example "SerpApi rejected the web search API key
+  (HTTP 401)", and are logged without the query or key.
+- **The Web search page asks for exactly what the chosen provider needs:** an
+  API key for hosted providers (labelled with that provider and where to find
+  it) or the address of a SearXNG instance, and requires it before search can
+  be switched on. It no longer offers a base URL that hosted providers ignored,
+  or an optional credential to SearXNG.
+
+### Fixed
+
+- **The audit log recorded a cleared secret as set.** Settings snapshots were
+  redacted twice, and the second pass read the `[unset]` marker as a value, so
+  a change's "before" could show a key as `[set]` when none was stored.
+- **Chat errors are shown as text.** A failed request showed the server's raw
+  JSON (`{"error":{"code":…}}`) above the composer; it now shows the message.
+
+- **Switching web search provider no longer keeps the previous provider's
+  key.** The key was sent to the newly selected provider; the server now
+  removes it on a switch and stores only what the selected provider uses.
+
+- **A reply stopped part-way through recorded no token usage.** It now
+  records the usage of the steps that finished, still marked as incomplete.
+
+### Removed
+
+- **Boring mode** (theme menu and Settings → Customization). It only replaced
+  an instance colour theme's accent with the neutral one, which is already the
+  default, so it looked like it did nothing. The unused
+  `user_preference.boring_mode` column is left in place for this release so
+  that API replicas still on v0.7 keep working during a rolling upgrade; it
+  will be dropped in the next one.
+
 ## [0.7.0] - 2026-10-01
 
 Organise and find: per-role feature switches, full-text search, projects,

@@ -11,7 +11,6 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Check, Cpu, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EditableFieldset, EditOnly, useAdminAccess } from '~/components/admin/admin-access';
-import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
 import {
   AdminPageHeader,
   EmptyState,
@@ -29,6 +28,7 @@ import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
+import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
@@ -317,7 +317,7 @@ function DefaultModelSelector({
   );
 }
 
-const TABS: readonly AdminTab<ModelsTab>[] = [
+const TABS: readonly PillTab<ModelsTab>[] = [
   { id: 'providers', label: 'Providers' },
   { id: 'models', label: 'Models' },
 ];
@@ -368,7 +368,7 @@ export function AdminModelsPage() {
       />
 
       <div className="flex flex-col gap-8 pb-10">
-        <AdminTabs
+        <PillTabs
           tabs={TABS}
           active={tab}
           onChange={setTab}

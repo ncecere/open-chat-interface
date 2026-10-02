@@ -21,6 +21,14 @@ message. When the selected model, or the levels allowed for the person's role
 on [Roles & access](governance.md#features-and-reasoning-levels), do not
 include it, the composer starts at Instant instead.
 
+**Tool step limit** is how many steps one reply may spend using
+[tools](governance.md#tools): 1 to 20, default 8. Each search or other tool
+call usually costs a step. A reply that reaches the limit gets one more step
+with the tools withdrawn, so it still answers with what it found, and a note
+says the limit was reached. A higher limit lets a model research more thoroughly at the
+cost of more usage per reply. API: `PATCH /api/admin/settings` with
+`maxToolSteps`.
+
 **Features** turn capabilities off instance-wide: share links, temporary chats,
 conversation branching, and file attachments. Turning one off removes it from
 the interface rather than leaving a control that fails. Each role can be

@@ -19,7 +19,11 @@ import {
   validateUsersSearch,
 } from '~/lib/admin-search';
 import { ApiError, api } from '~/lib/api-client';
-import { validateChatHomeSearch, validateChatThreadSearch } from '~/lib/chat-search-params';
+import {
+  validateChatHomeSearch,
+  validateChatThreadSearch,
+  validateProjectSearch,
+} from '~/lib/chat-search-params';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
@@ -128,6 +132,7 @@ const ProjectPage = lazyRouteComponent(() => import('~/routes/projects/project')
 const projectRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/projects/$projectId',
+  validateSearch: validateProjectSearch,
   component: function ProjectRoute() {
     const { projectId } = projectRoute.useParams();
     return <ProjectPage projectId={projectId} />;
@@ -192,6 +197,13 @@ const SETTINGS_TABS = [
   {
     path: '/settings/models',
     component: lazyRouteComponent(() => import('~/routes/settings/models'), 'SettingsModelsPage'),
+  },
+  {
+    path: '/settings/connectors',
+    component: lazyRouteComponent(
+      () => import('~/routes/settings/connectors'),
+      'SettingsConnectorsPage',
+    ),
   },
   {
     path: '/settings/attachments',
@@ -373,6 +385,12 @@ const adminSearchRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/search'), 'AdminSearchPage'),
 });
 
+const adminConnectorsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/connectors',
+  component: lazyRouteComponent(() => import('~/routes/admin/connectors'), 'AdminConnectorsPage'),
+});
+
 const adminStorageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/storage',
@@ -438,6 +456,7 @@ const routeTree = rootRoute.addChildren([
     adminSsoRoute,
     adminQuotasRoute,
     adminSearchRoute,
+    adminConnectorsRoute,
     adminStorageRoute,
     adminStorageLimitsRoute,
     adminRateLimitsRoute,

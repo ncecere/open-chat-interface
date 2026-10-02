@@ -212,10 +212,13 @@ test('a new chat started from a project page belongs to that project', async ({ 
 
   await expect(page).toHaveURL(/\/projects\/project-e2e-1$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Dissertation' })).toBeVisible();
-  await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue(
+  // The page opens on Conversations; the instructions have their own tab.
+  await expect(page.getByText('No conversations yet.')).toBeVisible();
+  await page.getByRole('tab', { name: 'Instructions' }).click();
+  await expect(page).toHaveURL(/\/projects\/project-e2e-1\?tab=instructions$/);
+  await expect(page.getByRole('textbox', { name: 'Instructions' })).toHaveValue(
     'Use British spelling.',
   );
-  await expect(page.getByText('No conversations yet.')).toBeVisible();
 
   // Start a chat inside it.
   await page.getByRole('link', { name: 'New chat in project' }).click();

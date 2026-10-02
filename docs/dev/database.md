@@ -98,3 +98,20 @@ disabled (the repository Dockerfile already does). This is a history check, not
 physical-schema validation or proof that unknown newer migrations are compatible
 with an older binary. See
 [Operations](../OPERATIONS.md#upgrade).
+
+## Removing a column
+
+Migrations run before API replicas are replaced, so for a while the previous
+release's code runs against the new schema. That code names every column it
+selects, so dropping a column it still reads breaks it. Remove a column in two
+releases:
+
+1. Stop reading and writing it, and remove it from the Drizzle schema. The
+   column must have a default or allow `NULL`, so inserts keep working.
+2. In the next release, drop it in a migration (`DROP COLUMN IF EXISTS`).
+
+Pending second steps:
+
+| Column | Code removed in | Drop in |
+| --- | --- | --- |
+| `user_preference.boring_mode` | v0.8 | v0.9 |

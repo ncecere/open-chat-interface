@@ -10,6 +10,7 @@ import {
   THEME_MODES,
   USER_ROLES,
 } from '../constants.js';
+import { DEFAULT_MAX_TOOL_STEPS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from '../tools.js';
 import { patchSchema } from './patch.js';
 
 export const adminUserSchema = z.object({
@@ -109,6 +110,13 @@ export const instanceSettingsSchema = z.object({
    * selected model and the person's role allow, falling back to instant.
    */
   defaultEffort: z.enum(REASONING_EFFORTS).default('instant'),
+  /** Model steps one reply may take when it uses tools; reaching it ends the reply with a note. */
+  maxToolSteps: z
+    .number()
+    .int()
+    .min(MIN_TOOL_STEPS)
+    .max(MAX_TOOL_STEPS)
+    .default(DEFAULT_MAX_TOOL_STEPS),
   features: z.object({
     shareLinks: z.boolean(),
     temporaryChat: z.boolean(),
@@ -281,6 +289,25 @@ export const adminOverviewSchema = z.object({
     redis: z.enum(['ok', 'error', 'disabled']),
   }),
 });
+
+/**
+ * A trial search from the Web search page, before or after saving. Without a
+ * key, the saved key is used when it belongs to the same provider.
+ */
+export const searchTestSchema = z.object({
+  provider: z.enum(SEARCH_PROVIDER_KINDS),
+  baseUrl: z.string().max(2000).nullable().optional(),
+  apiKey: z.string().max(500).optional(),
+});
+export type SearchTestInput = z.infer<typeof searchTestSchema>;
+
+export interface SearchTestResult {
+  ok: boolean;
+  /** Results returned for the sample query, when it worked. */
+  results?: number;
+  /** What went wrong, in words for an administrator. */
+  message?: string;
+}
 
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type Invite = z.infer<typeof inviteSchema>;

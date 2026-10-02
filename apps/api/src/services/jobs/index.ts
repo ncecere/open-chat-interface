@@ -8,6 +8,7 @@ import {
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
 import { processPendingImports } from '../portability/imports.js';
+import { indexPendingProjectFiles } from '../project-search/indexing.js';
 import { sweepAbandonedReservations } from '../quota/index.js';
 import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
@@ -44,6 +45,13 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'imports.process',
       intervalMs: MINUTE,
       run: () => processPendingImports(),
+    },
+    {
+      // Uploads index their own file; this chunks files added before v0.8
+      // and retries any upload whose indexing failed, a bounded batch a tick.
+      name: 'projects.index-files',
+      intervalMs: 5 * MINUTE,
+      run: () => indexPendingProjectFiles(),
     },
     {
       name: 'quota.sweep-reservations',

@@ -2,7 +2,7 @@
 import { act, useState } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
-import { AdminTabs } from '../../src/components/admin/admin-tabs';
+import { PillTabs } from '../../src/components/ui/pill-tabs';
 import { cleanup, renderAdmin } from './admin-test-utils';
 
 let root: Root | undefined;
@@ -21,7 +21,7 @@ function Harness() {
   const [active, setActive] = useState<(typeof TABS)[number]['id']>('one');
   return (
     <>
-      <AdminTabs tabs={TABS} active={active} onChange={setActive} label="Facets" />
+      <PillTabs tabs={TABS} active={active} onChange={setActive} label="Facets" />
       <output>{active}</output>
     </>
   );

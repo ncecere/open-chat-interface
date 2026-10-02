@@ -7,7 +7,7 @@ Every route the API registers, grouped by the file that defines it.
 Administrative routes require the `admin` role; an `auditor` may call the
 read-only ones. See [identity and access](../admin/identity.md).
 
-Generated from 32 route files.
+Generated from 34 route files.
 
 ## `routes/admin/audit.ts`
 
@@ -27,6 +27,19 @@ Generated from 32 route files.
 | PUT | `/api/admin/broadcasts/:id` | — |
 | DELETE | `/api/admin/broadcasts/:id` | — |
 | POST | `/api/admin/broadcasts/:id/reshow` | Clears everyone's dismissals, so an updated announcement is shown again. |
+
+## `routes/admin/connectors.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/connectors` | Lists every connector with its tools; secrets are reported only as set or not set. |
+| POST | `/api/admin/connectors` | Registers an MCP server. |
+| GET | `/api/admin/connectors/:id` | Returns one connector with its tools. |
+| PATCH | `/api/admin/connectors/:id` | Changes a connector; only sent fields change. |
+| DELETE | `/api/admin/connectors/:id` | Deletes a connector with its tools, everyone's connections and its role allows. |
+| POST | `/api/admin/connectors/:id/refresh` | Lists the server's tools and stores them; new tools start disabled, vanished ones are marked missing. |
+| POST | `/api/admin/connectors/:id/test` | Checks that the server answers the MCP handshake and lists its tools. |
+| PATCH | `/api/admin/connectors/:id/tools/:toolId` | Switches one connector tool on or off, or changes its kind. |
 
 ## `routes/admin/health.ts`
 
@@ -125,6 +138,7 @@ Generated from 32 route files.
 | --- | --- | --- |
 | GET | `/api/admin/roles` | One summary per role; most parts change through their own endpoints. |
 | PUT | `/api/admin/roles/:role` | Changes a role's feature switches and allowed reasoning levels. |
+| PUT | `/api/admin/roles/:role/tools` | Allows or withholds tools for one role. |
 
 ## `routes/admin/settings.ts`
 
@@ -133,6 +147,7 @@ Generated from 32 route files.
 | GET | `/api/admin/settings` | — |
 | PATCH | `/api/admin/settings` | — |
 | POST | `/api/admin/settings/logo` | Uploads an instance logo. |
+| POST | `/api/admin/settings/search/test` | Runs one sample search with the provider, address and key on the page, so an administrator can check them before or after saving. |
 | POST | `/api/admin/settings/storage/test` | — |
 
 ## `routes/admin/setup.ts`
@@ -209,9 +224,19 @@ Generated from 32 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/chat` | — |
+| POST | `/api/chat/:threadId/approvals` | Answers a reply's open tool approvals and continues the same assistant message under the durable claim, streaming like a new reply. |
 | GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. |
 | GET | `/api/chat/:threadId/stream` | Replays the active SSE stream after authenticating the thread owner. |
 | DELETE | `/api/chat/:threadId/stream` | Explicit stop request; also reaches a producer running in another API process via Redis. |
+
+## `routes/connectors.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/connectors` | Lists the OAuth connectors the signed-in person may use, and whether each is connected. |
+| DELETE | `/api/connectors/:id/account` | Disconnects the signed-in person: deletes their tokens and asks the server to revoke them. |
+| POST | `/api/connectors/:id/connect` | Starts connecting the signed-in person's account and returns the sign-in URL to open. |
+| GET | `/api/connectors/oauth/callback` | Receives the authorization server's redirect. |
 
 ## `routes/health.ts`
 

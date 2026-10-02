@@ -13,7 +13,6 @@ export interface CurrentUser {
 
 export interface UserPreferences {
   theme: string;
-  boringMode: boolean;
   mainFont: string;
   codeFont: string;
   density: string;

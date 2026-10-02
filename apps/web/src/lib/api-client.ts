@@ -17,6 +17,20 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+/**
+ * The text of a failed chat request. The AI SDK puts the response body in the
+ * error message, so an API error arrives as JSON; show only its message.
+ */
+export function chatErrorText(error: Error): string {
+  try {
+    const body = JSON.parse(error.message) as Partial<ApiErrorBody>;
+    if (typeof body.error?.message === 'string' && body.error.message) return body.error.message;
+  } catch {
+    // Not an API error body: the message is already text.
+  }
+  return error.message;
+}
+
 export function sameOriginApiUrl(path: string, origin: string): string {
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\') || path.includes('#')) {
     throw new TypeError('API path must be a same-origin absolute path');

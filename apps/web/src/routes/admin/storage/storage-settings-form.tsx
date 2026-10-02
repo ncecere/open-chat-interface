@@ -1,7 +1,6 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { CheckCircle2 } from 'lucide-react';
 import { EditOnly } from '~/components/admin/admin-access';
-import { type AdminTab, AdminTabs } from '~/components/admin/admin-tabs';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
 import { Spinner } from '~/components/ui/spinner';
 import { DEFAULT_STORAGE_TAB, type StorageTab, validateStorageSearch } from '~/lib/admin-search';
 import { DriverPanel, DriverWarning } from './driver-panel';
@@ -23,7 +23,7 @@ const STORAGE_TABS = [
   { id: 'driver', label: 'Storage driver' },
   { id: 's3', label: 'S3 connection' },
   { id: 'uploads', label: 'Upload policy' },
-] as const satisfies readonly AdminTab<StorageTab>[];
+] as const satisfies readonly PillTab<StorageTab>[];
 
 export function StorageSettingsForm({ initialSettings }: { initialSettings: StorageSettings }) {
   // The tab lives in the URL; switching only toggles `hidden`, so every panel
@@ -60,7 +60,7 @@ export function StorageSettingsForm({ initialSettings }: { initialSettings: Stor
           submitChanges();
         }}
       >
-        <AdminTabs tabs={STORAGE_TABS} active={tab} onChange={setTab} label="Storage sections" />
+        <PillTabs tabs={STORAGE_TABS} active={tab} onChange={setTab} label="Storage sections" />
 
         {/* All panels stay mounted and share one draft and one save across tabs. */}
         <div hidden={tab !== 'driver'} id="panel-driver" role="tabpanel">

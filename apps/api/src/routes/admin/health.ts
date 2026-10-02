@@ -180,6 +180,46 @@ async function storageCheck(): Promise<Check> {
 }
 
 /**
+ * Enabled connectors whose latest exchange failed: their last failure is newer
+ * than their last success. A warning, since the rest of OCI keeps working.
+ */
+async function connectorCheck(): Promise<Check> {
+  const rows = await db
+    .select({
+      name: schema.connector.name,
+      lastContactAt: schema.connector.lastContactAt,
+      lastErrorAt: schema.connector.lastErrorAt,
+      lastError: schema.connector.lastError,
+    })
+    .from(schema.connector)
+    .where(eq(schema.connector.enabled, true))
+    .orderBy(schema.connector.name);
+  if (rows.length === 0)
+    return { id: 'connectors', label: 'Connectors', status: 'ok', detail: 'None enabled' };
+  const failing = rows.filter(
+    (row) =>
+      row.lastErrorAt &&
+      (!row.lastContactAt || row.lastErrorAt.getTime() > row.lastContactAt.getTime()),
+  );
+  if (failing.length === 0)
+    return {
+      id: 'connectors',
+      label: 'Connectors',
+      status: 'ok',
+      detail: `${rows.length} enabled; no failures since their last successful contact`,
+    };
+  const [first] = failing;
+  return {
+    id: 'connectors',
+    label: 'Connectors',
+    status: 'warn',
+    detail: `${failing.length} of ${rows.length} failing. ${first!.name}: ${first!.lastError ?? 'error'}${
+      failing.length > 1 ? ` (and ${failing.length - 1} more)` : ''
+    }`,
+  };
+}
+
+/**
  * Operational state in one place.
  *
  * Each of these previously surfaced as a user complaint: nobody can send a
@@ -196,6 +236,7 @@ healthRoutes.get('/', async (c) => {
     jobCheck(),
     emailCheck(),
     storageCheck(),
+    connectorCheck(),
   ]);
 
   const recentJobs = await db

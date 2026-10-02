@@ -53,6 +53,8 @@ export const searchGroundingDataSchema = z.object({
       snippet: z.string(),
     }),
   ),
+  /** Set when the search failed; the reply went ahead without results. */
+  error: z.string().optional(),
 });
 
 export const attachmentSchema = z.object({

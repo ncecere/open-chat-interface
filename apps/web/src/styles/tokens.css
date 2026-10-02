@@ -8,7 +8,6 @@
  * Layering:
  *   1. `:root`/`.dark` and `.light` define the neutral surfaces and text.
  *   2. `[data-color-theme]` blocks override only the accent family.
- *   3. `.boring` forces the neutral accent regardless of the selected theme.
  */
 
 @theme {
@@ -330,40 +329,6 @@
 
   --accent-send: oklch(50.8% 0.118 165.612);
   --accent-send-hover: oklch(43.2% 0.095 166.913);
-}
-
-/*
- * Boring mode is a per-user preference that strips accent color. It wins over
- * the instance color theme, so it is declared last.
- */
-.boring {
-  --accent: oklch(92.2% 0 0);
-  --accent-bright: oklch(87% 0 0);
-  --accent-soft: oklch(26.9% 0 0);
-  --accent-foreground: oklch(20.5% 0 0);
-
-  --accent-button: oklch(92.2% 0 0);
-  --accent-button-hover: oklch(85% 0 0);
-  --accent-button-border: oklch(92.2% 0 0);
-  --accent-button-foreground: oklch(20.5% 0 0);
-
-  --accent-send: oklch(92.2% 0 0);
-  --accent-send-hover: oklch(85% 0 0);
-}
-
-.light.boring {
-  --accent: oklch(20.5% 0 0);
-  --accent-bright: oklch(37.1% 0 0);
-  --accent-soft: oklch(94% 0 0);
-  --accent-foreground: oklch(98.5% 0 0);
-
-  --accent-button: oklch(20.5% 0 0);
-  --accent-button-hover: oklch(30% 0 0);
-  --accent-button-border: oklch(20.5% 0 0);
-  --accent-button-foreground: oklch(98.5% 0 0);
-
-  --accent-send: oklch(20.5% 0 0);
-  --accent-send-hover: oklch(30% 0 0);
 }
 
 @theme inline {

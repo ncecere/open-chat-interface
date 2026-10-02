@@ -73,6 +73,8 @@ const turn = {
   generationSettings: { maxOutputTokens: 4096 },
   sourceParts: [],
   searchGroundingPart: null,
+  tools: { definitions: [] },
+  maxToolSteps: 8,
 } as unknown as PreparedTurn;
 const reservation = {
   id: 'reservation',

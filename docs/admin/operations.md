@@ -22,6 +22,7 @@ reported. The checks refresh every 30 seconds while the page is open; the old
 | Background jobs | Failures in the last day | One started over an hour ago and never finished |
 | Email delivery | Not configured | — |
 | Attachment storage | Uploads never attached to a message | — |
+| Connectors | An enabled [connector](connectors.md)'s latest exchange failed | — |
 
 The summary takes the worst individual result, so a green banner above a failing
 row cannot happen.
@@ -66,15 +67,37 @@ back up.
 
 ![Web search](../images/admin-search.png)
 
-**Appearance & features → Web search** (`/admin/search`). The provider used for
+**Tools & integrations → Web search** (`/admin/search`). The provider used for
 web search grounding, its credential, and the one switch that turns search on or
 off. There is no separate web search toggle among the General features any more.
 
+Choose a provider and the page asks for exactly what it needs:
+
+| Provider | Asks for | Where to find it |
+| --- | --- | --- |
+| SearXNG (self-hosted) | Its address | Your SearXNG instance, with JSON output enabled (`search.formats: [html, json]`). No key. |
+| Tavily | API key | app.tavily.com, under API keys (starts with `tvly-`). |
+| Brave Search | API key | The subscription token at api-dashboard.search.brave.com. |
+| Exa | API key | dashboard.exa.ai, under API keys. |
+| SerpApi (Google results) | API key | serpapi.com/manage-api-key (64 characters). Searches use SafeSearch. |
+| SearchApi (Google results) | API key | The searchapi.io dashboard (24 characters). Searches use SafeSearch. |
+
+SerpApi and SearchApi are different companies with similar names; a key from
+one is rejected by the other. **Test search** tells you which way round it is.
+
+Hosted providers use their own fixed endpoints, so they ask for no address. A
+key belongs to one provider: switching provider removes the saved key, and the
+page asks for the new provider's key before search can be switched on.
+
+**Test search** runs one sample search with the provider and the key or address
+on the page, saved or not, and says whether it worked or what the provider
+replied, for example that it rejected the key. Nothing is saved, and each test
+is recorded in the audit log as `search.test` (provider and outcome only).
+
 People are offered search only when it can actually run: the switch is on, a
-provider is selected, and that provider has its credential — or, for SearXNG, a
-base URL. Until all of those hold, search is removed from the composer rather
-than offered and failing. The page says whether search is available, and why
-not.
+provider is selected, and it has its key or address. Until all of those hold,
+search is removed from the composer rather than offered and failing. The page
+says whether search is available, and why not.
 
 ## Maintenance
 

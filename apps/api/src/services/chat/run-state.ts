@@ -4,6 +4,14 @@ import { db } from '../../db/index.js';
 export type OwnedRunState = 'streaming' | 'terminal' | 'missing';
 
 /**
+ * The assistant message a run writes. A first run's ID is the message ID; a
+ * reply continued after an approval runs as `<message id>:<suffix>`.
+ */
+function runMessageId(runId: string): string {
+  return runId.split(':', 1)[0]!;
+}
+
+/**
  * Read only the exact assistant's durable status, never its payload. Unlike
  * getOwnedThread, this does not expire/delete a thread as a side effect.
  */
@@ -26,7 +34,7 @@ export async function readOwnedRunState(
         .innerJoin(schema.thread, eq(schema.thread.id, schema.message.threadId))
         .where(
           and(
-            eq(schema.message.id, identity.runId),
+            eq(schema.message.id, runMessageId(identity.runId)),
             eq(schema.message.threadId, identity.threadId),
             eq(schema.message.userId, identity.userId),
             eq(schema.message.role, 'assistant'),

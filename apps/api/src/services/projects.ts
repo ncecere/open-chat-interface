@@ -12,6 +12,7 @@ import { db } from '../db/index.js';
 import { notFound, validationFailed } from '../lib/errors.js';
 import { type UploadResult, uploadAttachment } from './attachments/upload.js';
 import { lockLifecycleOwner } from './lifecycle/owner-lock.js';
+import { indexUploadedProjectFile, projectFileIndexStatus } from './project-search/indexing.js';
 import { assertRoleFeature } from './role-features.js';
 
 /**
@@ -88,6 +89,8 @@ export function serializeProjectFile(row: {
   mimeType: string;
   sizeBytes: number;
   createdAt: Date | string;
+  /** Null or absent until the file has been chunked for search. */
+  chunkCount?: number | null;
 }): ProjectFile {
   return {
     id: row.id,
@@ -97,6 +100,7 @@ export function serializeProjectFile(row: {
     url: `/api/attachments/${row.id}/content`,
     thumbnailUrl: null,
     createdAt: typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString(),
+    index: projectFileIndexStatus(row.chunkCount),
   };
 }
 
@@ -219,8 +223,19 @@ export async function deleteProject(
 export async function listProjectFiles(projectId: string, userId: string) {
   await getOwnedProject(projectId, userId);
   const rows = await db
-    .select()
+    .select({
+      id: schema.attachment.id,
+      filename: schema.attachment.filename,
+      mimeType: schema.attachment.mimeType,
+      sizeBytes: schema.attachment.sizeBytes,
+      createdAt: schema.attachment.createdAt,
+      chunkCount: schema.projectFileIndex.chunkCount,
+    })
     .from(schema.attachment)
+    .leftJoin(
+      schema.projectFileIndex,
+      eq(schema.projectFileIndex.attachmentId, schema.attachment.id),
+    )
     .where(
       and(
         eq(schema.attachment.projectId, projectId),
@@ -236,7 +251,9 @@ export async function listProjectFiles(projectId: string, userId: string) {
 /**
  * Adds one file through the ordinary upload path: the same validation, type
  * detection, text extraction, storage driver and storage allowance as a chat
- * attachment, plus the per-project file limit.
+ * attachment, plus the per-project file limit. The file is then chunked for
+ * search; if that fails the upload still stands and the `projects.index-files`
+ * job retries it.
  */
 export async function uploadProjectFile(params: {
   userId: string;
@@ -245,8 +262,8 @@ export async function uploadProjectFile(params: {
   filename: string;
   declaredMimeType: string;
   bytes: Buffer;
-}): Promise<UploadResult> {
-  return uploadAttachment({
+}): Promise<UploadResult & { chunkCount: number | null }> {
+  const uploaded = await uploadAttachment({
     userId: params.userId,
     role: params.role,
     filename: params.filename,
@@ -254,6 +271,12 @@ export async function uploadProjectFile(params: {
     bytes: params.bytes,
     project: { id: params.projectId, maxFiles: MAX_FILES_PER_PROJECT },
   });
+  await indexUploadedProjectFile(uploaded.id);
+  const [index] = await db
+    .select({ chunkCount: schema.projectFileIndex.chunkCount })
+    .from(schema.projectFileIndex)
+    .where(eq(schema.projectFileIndex.attachmentId, uploaded.id));
+  return { ...uploaded, chunkCount: index?.chunkCount ?? null };
 }
 
 /**

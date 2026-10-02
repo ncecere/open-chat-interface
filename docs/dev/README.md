@@ -19,6 +19,7 @@ and [Release process](../RELEASING.md) for GitHub Actions and GHCR publishing.
 11. [Browser performance evidence](browser-performance.md) — isolated production-build comparisons, startup chunk adjustment, measured tradeoffs, and reproducible harness.
 12. [Historical verification evidence](email-verification-provenance.md) — provenance limits, safe aggregate inspection, and owner decisions before account-access changes.
 13. [Release validation checkpoint](release-validation.md) — full live-service/browser results, corrected onboarding coverage, isolated source-built MinIO, and remaining gates.
+14. [Tools and connected knowledge](tools-design.md) — the v0.8 design: tool registry, approvals, web search as a tool, project-file search and MCP connectors.
 
 ## The shape of it
 

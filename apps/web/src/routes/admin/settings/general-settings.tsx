@@ -1,11 +1,18 @@
-import { type InstanceSettings, REASONING_EFFORTS, type ReasoningEffort } from '@oci/shared';
+import {
+  DEFAULT_MAX_TOOL_STEPS,
+  type InstanceSettings,
+  MAX_TOOL_STEPS,
+  MIN_TOOL_STEPS,
+  REASONING_EFFORTS,
+  type ReasoningEffort,
+} from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { EFFORT_LABELS } from '~/components/admin/role-features-form';
 import { Field } from '~/components/ui/field';
-import { Textarea } from '~/components/ui/input';
+import { Input, Textarea } from '~/components/ui/input';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
 
@@ -296,6 +303,82 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
   );
 }
 
+/** How many model steps one reply may take when it uses tools. */
+function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
+  const queryClient = useQueryClient();
+  const [saved, setSaved] = useState(initialSteps ?? DEFAULT_MAX_TOOL_STEPS);
+  const [draft, setDraft] = useState(String(initialSteps ?? DEFAULT_MAX_TOOL_STEPS));
+  const [successMessage, setSuccessMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const value = Number(draft);
+  const valid = /^\d+$/.test(draft) && value >= MIN_TOOL_STEPS && value <= MAX_TOOL_STEPS;
+
+  const save = useMutation({
+    mutationFn: (maxToolSteps: number) =>
+      api.patch<{ ok: boolean }>('/admin/settings', { maxToolSteps }),
+    onSuccess: (_response, maxToolSteps) => {
+      setSaved(maxToolSteps);
+      setErrorMessage(null);
+      setSuccessMessage(true);
+      queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
+        current ? { ...current, maxToolSteps } : current,
+      );
+    },
+    onError: (error) => {
+      setSuccessMessage(false);
+      setErrorMessage(
+        error instanceof ApiError ? error.message : 'Unable to save the tool step limit.',
+      );
+    },
+  });
+
+  return (
+    <form
+      className="flex flex-col gap-5"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!valid) {
+          setErrorMessage(`Enter a whole number from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}.`);
+          return;
+        }
+        if (value !== saved) save.mutate(value);
+      }}
+    >
+      <Field
+        label="Tool step limit"
+        htmlFor="max-tool-steps"
+        hint={`Steps one reply may spend using tools, from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}. A reply that reaches it answers with what it found, with a note. Default ${DEFAULT_MAX_TOOL_STEPS}.`}
+      >
+        <Input
+          id="max-tool-steps"
+          type="number"
+          inputMode="numeric"
+          min={MIN_TOOL_STEPS}
+          max={MAX_TOOL_STEPS}
+          step={1}
+          className="max-w-32"
+          value={draft}
+          aria-invalid={!valid}
+          disabled={save.isPending}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setErrorMessage(null);
+            setSuccessMessage(false);
+          }}
+        />
+      </Field>
+
+      <SaveRow
+        hasChanges={draft !== String(saved)}
+        isPending={save.isPending}
+        errorMessage={errorMessage}
+        successMessage={successMessage ? 'Tool step limit saved.' : null}
+      />
+    </form>
+  );
+}
+
 export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
   return (
     <div className="flex flex-col gap-8">
@@ -306,6 +389,7 @@ export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
         <div className="flex flex-col gap-8">
           <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
           <DefaultEffortForm initialEffort={settings.defaultEffort} />
+          <ToolStepLimitForm initialSteps={settings.maxToolSteps} />
         </div>
       </SettingsSection>
 

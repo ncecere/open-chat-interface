@@ -49,8 +49,8 @@ export function diffSettings(
       // replaced. The value itself has no business being here.
       changes.push({
         key,
-        before: previous ? '[set]' : '[unset]',
-        after: next ? '[set]' : '[unset]',
+        before: redactedSecret(previous),
+        after: redactedSecret(next),
       });
       continue;
     }
@@ -72,6 +72,14 @@ export function diffSettings(
  * Recursively strips secret-looking values from a nested settings object,
  * for the branches that arrive as one object rather than as flat keys.
  */
+const REDACTED = new Set(['[set]', '[unset]']);
+
+/** Presence only. Already-redacted markers stay as they are, so redacting twice is safe. */
+function redactedSecret(entry: unknown): string {
+  if (typeof entry === 'string' && REDACTED.has(entry)) return entry;
+  return entry ? '[set]' : '[unset]';
+}
+
 export function redactSecrets(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactSecrets);
   if (typeof value !== 'object' || value === null) return value;
@@ -79,7 +87,7 @@ export function redactSecrets(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
       key,
-      isSecret(key) ? (entry ? '[set]' : '[unset]') : redactSecrets(entry),
+      isSecret(key) ? redactedSecret(entry) : redactSecrets(entry),
     ]),
   );
 }
