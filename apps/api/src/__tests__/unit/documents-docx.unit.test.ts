@@ -109,7 +109,7 @@ describe('DOCX output', () => {
       (_, index) => `${'  '.repeat(index)}- level ${index}`,
     );
     const { document } = await render(
-      [long, '', ...nested, '', '>'.repeat(50) + ' deep'].join('\n'),
+      [long, '', ...nested, '', `${'>'.repeat(50)} deep`].join('\n'),
     );
     expect(document).toContain(long);
     expect(document).toContain('level 29');

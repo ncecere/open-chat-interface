@@ -55,7 +55,7 @@ export async function withGenerationSlot<T>(userId: string, work: () => Promise<
   }
 }
 
-export interface DocumentFile {
+interface DocumentFile {
   bytes: Uint8Array<ArrayBuffer>;
   contentType: string;
   disposition: string;
@@ -123,7 +123,7 @@ export async function exportReply(params: {
   return { ...file, threadId: thread.id, messageId: message.id };
 }
 
-export const ONLY_MARKDOWN_ARTIFACTS =
+const ONLY_MARKDOWN_ARTIFACTS =
   'Only documents (Markdown artifacts) can be exported as files. Download HTML, SVG and Mermaid artifacts as they are.';
 
 /** A Markdown artifact (the current version, or `version`) as a document. */

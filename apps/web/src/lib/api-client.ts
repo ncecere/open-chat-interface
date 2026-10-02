@@ -108,7 +108,7 @@ export function dispositionFilename(header: string | null): string | null {
   return bare && bare !== '.' && bare !== '..' ? bare : null;
 }
 
-export interface DownloadedFile {
+interface DownloadedFile {
   blob: Blob;
   /** The name from `Content-Disposition`, when the response has one. */
   filename: string | null;

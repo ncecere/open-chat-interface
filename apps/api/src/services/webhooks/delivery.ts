@@ -52,7 +52,7 @@ export function retryDelayMs(attempts: number): number {
   );
 }
 
-export interface AuditEntry {
+interface AuditEntry {
   id: string;
   action: string;
   createdAt: Date;
@@ -86,7 +86,7 @@ export function webhookPayload(entry: AuditEntry): string {
 let kickTimer: NodeJS.Timeout | null = null;
 
 /** Sends soon rather than at the next tick; collapses bursts into one run. */
-export function scheduleWebhookDelivery(): void {
+function scheduleWebhookDelivery(): void {
   if (kickTimer) return;
   kickTimer = setTimeout(() => {
     kickTimer = null;
@@ -138,7 +138,7 @@ type AttemptResult =
 const PERMANENT_REASONS = new Set(['protocol', 'address', 'redirect']);
 
 /** One signed POST. Exported for the test-delivery button. */
-export async function sendWebhook(
+async function sendWebhook(
   endpoint: { url: string; allowPrivateNetwork: boolean; encryptedSecret: string },
   delivery: { id: string; event: string; body: string },
 ): Promise<AttemptResult> {

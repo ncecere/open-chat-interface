@@ -24,7 +24,7 @@ export const DOCUMENT_TOO_LARGE = `The document would be larger than ${
   MAX_DOCUMENT_EXPORT_OUTPUT_BYTES / 1024 ** 2
 } MB.`;
 
-export function assertExportableText(markdown: string): void {
+function assertExportableText(markdown: string): void {
   if (!markdown.trim()) throw validationFailed('There is no text to export.');
   if (Buffer.byteLength(markdown, 'utf8') > MAX_DOCUMENT_EXPORT_INPUT_BYTES)
     throw validationFailed(
@@ -54,7 +54,7 @@ export async function prepareDocument(format: DocumentFormat, title: string, mar
   return model;
 }
 
-export type PreparedDocument = Awaited<ReturnType<typeof prepareDocument>>;
+type PreparedDocument = Awaited<ReturnType<typeof prepareDocument>>;
 
 export async function renderDocument(
   format: DocumentFormat,
@@ -93,13 +93,13 @@ export function documentDisposition(base: string, format: DocumentFormat): strin
   return `attachment; filename="${base}.${DOCUMENT_FORMAT_INFO[format].extension}"`;
 }
 
-export interface WorkerLimits {
+interface WorkerLimits {
   timeoutMs: number;
   /** The worker's old-generation heap. */
   heapMb: number;
 }
 
-export const WORKER_LIMITS: WorkerLimits = { timeoutMs: 60_000, heapMb: 512 };
+const WORKER_LIMITS: WorkerLimits = { timeoutMs: 60_000, heapMb: 512 };
 
 interface WorkerResult {
   ok: boolean;

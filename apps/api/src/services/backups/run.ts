@@ -608,7 +608,7 @@ export async function runScheduledBackup(now = new Date()): Promise<number> {
 }
 
 /** A manual backup under the job lock; resolves when it has finished. Null if one was already running. */
-export async function runManualBackup(actor: Actor): Promise<number | null> {
+async function runManualBackup(actor: Actor): Promise<number | null> {
   return runExclusively({
     name: BACKUP_JOB,
     intervalMs: 0,
@@ -635,7 +635,7 @@ export async function startManualBackup(actor: Actor): Promise<'started' | 'runn
 
 const isoOrNull = (value: Date | null) => value?.toISOString() ?? null;
 
-export function toBackupRunView(row: RunRow): BackupRun {
+function toBackupRunView(row: RunRow): BackupRun {
   return {
     id: row.id,
     trigger: row.trigger,
@@ -657,11 +657,11 @@ export function toBackupRunView(row: RunRow): BackupRun {
   };
 }
 
-export async function recentBackupRuns(limit = 20): Promise<RunRow[]> {
+async function recentBackupRuns(limit = 20): Promise<RunRow[]> {
   return db.select().from(schema.backupRun).orderBy(desc(schema.backupRun.startedAt)).limit(limit);
 }
 
-export async function lastSuccessfulBackup(): Promise<RunRow | null> {
+async function lastSuccessfulBackup(): Promise<RunRow | null> {
   const [row] = await db
     .select()
     .from(schema.backupRun)

@@ -9,7 +9,6 @@ export {
   HELD_ACCOUNT_DELETION_MESSAGE,
   HELD_PERMANENT_DELETION_MESSAGE,
   isLegalHoldViolation,
-  LEGAL_HOLD_SQLSTATE,
 } from './hold-errors.js';
 
 /**

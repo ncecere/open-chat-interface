@@ -2,7 +2,7 @@ import { ARTIFACT_KIND_LABELS, type ArtifactKind } from '@oci/shared';
 import { ChevronRight, FileCode2, FileImage, FileText, Workflow } from 'lucide-react';
 import type { ArtifactRef } from '~/components/artifacts/artifacts-context';
 
-export const ARTIFACT_ICONS: Record<ArtifactKind, typeof FileCode2> = {
+const ARTIFACT_ICONS: Record<ArtifactKind, typeof FileCode2> = {
   html: FileCode2,
   svg: FileImage,
   mermaid: Workflow,
@@ -10,7 +10,7 @@ export const ARTIFACT_ICONS: Record<ArtifactKind, typeof FileCode2> = {
 };
 
 /** "HTML · version 2" */
-export function artifactMeta(artifact: Pick<ArtifactRef, 'kind' | 'version'>): string {
+function artifactMeta(artifact: Pick<ArtifactRef, 'kind' | 'version'>): string {
   return `${ARTIFACT_KIND_LABELS[artifact.kind]} · version ${artifact.version}`;
 }
 

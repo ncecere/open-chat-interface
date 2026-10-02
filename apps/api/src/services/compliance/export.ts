@@ -654,7 +654,7 @@ export async function runScheduledComplianceExport(now = new Date()): Promise<nu
 }
 
 /** A manual export under the job lock. Null if one was already running. */
-export async function runManualComplianceExport(actor: Actor): Promise<number | null> {
+async function runManualComplianceExport(actor: Actor): Promise<number | null> {
   return runExclusively({
     name: COMPLIANCE_JOB,
     intervalMs: 0,
@@ -684,7 +684,7 @@ export async function startManualComplianceExport(actor: Actor): Promise<'starte
 
 const num = (value: number | string | null) => (value === null ? null : Number(value));
 
-export function toComplianceRunView(row: RunRow): ComplianceRun {
+function toComplianceRunView(row: RunRow): ComplianceRun {
   return {
     id: row.id,
     trigger: row.trigger,
@@ -718,7 +718,7 @@ export function toComplianceRunView(row: RunRow): ComplianceRun {
   };
 }
 
-export async function recentComplianceRuns(limit = 20): Promise<RunRow[]> {
+async function recentComplianceRuns(limit = 20): Promise<RunRow[]> {
   return db
     .select()
     .from(schema.complianceExportRun)
@@ -726,7 +726,7 @@ export async function recentComplianceRuns(limit = 20): Promise<RunRow[]> {
     .limit(limit);
 }
 
-export async function lastSuccessfulComplianceRun(): Promise<RunRow | null> {
+async function lastSuccessfulComplianceRun(): Promise<RunRow | null> {
   const [row] = await db
     .select()
     .from(schema.complianceExportRun)

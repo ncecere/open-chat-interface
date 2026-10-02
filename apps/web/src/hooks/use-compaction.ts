@@ -2,7 +2,7 @@ import type { ConversationCompaction } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '~/lib/api-client';
 
-export const compactionQueryKey = (threadId: string) => ['thread', threadId, 'compaction'] as const;
+const compactionQueryKey = (threadId: string) => ['thread', threadId, 'compaction'] as const;
 
 /** The summary in use for a conversation, if its earlier messages were summarised. */
 export function useCompaction(threadId: string, enabled = true) {

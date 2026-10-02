@@ -7,7 +7,7 @@ import { db } from '../../db/index.js';
  * retention can consult it without loading the exporter.
  */
 
-export type ComplianceStream = 'audit' | 'messages';
+type ComplianceStream = 'audit' | 'messages';
 
 /** The stream's cursor, or null when the stream has never been started. */
 export async function exportCursor(stream: ComplianceStream): Promise<number | null> {

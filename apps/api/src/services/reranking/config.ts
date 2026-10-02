@@ -22,7 +22,7 @@ export async function rerankingSettings(
 }
 
 /** A setting complete enough to rerank with: on, with a provider and a model. */
-export type ActiveRerankingSettings = RerankingSettings & {
+type ActiveRerankingSettings = RerankingSettings & {
   enabled: true;
   providerId: string;
   modelId: string;

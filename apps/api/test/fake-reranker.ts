@@ -32,7 +32,7 @@ function words(text: string): string[] {
   return text.toLowerCase().match(/[a-z]+/g) ?? [];
 }
 
-export function overlapScore(query: string, document: string): number {
+function overlapScore(query: string, document: string): number {
   const wanted = new Set(words(query));
   return words(document).filter((word) => wanted.has(word)).length;
 }

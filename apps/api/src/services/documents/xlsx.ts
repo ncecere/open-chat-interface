@@ -39,7 +39,7 @@ export function columnName(index: number): string {
   return name;
 }
 
-export type CellValue =
+type CellValue =
   | { kind: 'text'; text: string }
   | { kind: 'number'; value: number; percent: boolean };
 

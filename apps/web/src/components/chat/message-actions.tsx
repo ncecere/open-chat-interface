@@ -20,7 +20,7 @@ function ModelAttribution({ slug, effort }: { slug: string | null; effort: strin
 }
 
 /** The reply a file export is made from: a finished assistant message of a saved conversation. */
-export interface ReplyExportTarget {
+interface ReplyExportTarget {
   threadId: string;
   messageId: string;
 }

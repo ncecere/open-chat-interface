@@ -38,7 +38,7 @@ export interface ResolvedBackupSettings {
   keepWeekly: number;
 }
 
-export const DEFAULT_BACKUP_PREFIX = 'oci-backups/';
+const DEFAULT_BACKUP_PREFIX = 'oci-backups/';
 
 export function normalizeBackupSettings(stored: StoredBackupSettings): ResolvedBackupSettings {
   return {
@@ -126,7 +126,7 @@ const sameEndpoint = (a: string | null, b: string | null) =>
   (a ?? '').replace(/\/+$/, '').toLowerCase() === (b ?? '').replace(/\/+$/, '').toLowerCase();
 
 /** A destination as backups and compliance exports both configure it. */
-export interface S3DestinationSettings {
+interface S3DestinationSettings {
   destination: 'storage' | 'separate';
   prefix: string;
   s3: S3StorageSettings;

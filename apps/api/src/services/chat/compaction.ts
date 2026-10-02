@@ -6,8 +6,8 @@ import { db } from '../../db/index.js';
 import { AppError, conflict, providerError, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { isImage } from '../attachments/validate.js';
-import { getDefaultOrganizationId } from '../organization.js';
 import {
+  modelPricing,
   releaseReservation,
   reserveQuota,
   reserveQuotaForRun,
@@ -48,7 +48,7 @@ type SummaryModel = Pick<
 >;
 type SpanMessage = { id: string; role: 'user' | 'assistant'; parts: unknown };
 /** A stored message's place in the thread, for "before this message" bounds. */
-export type MessageBound = { position: number; createdAt: Date; id: string };
+type MessageBound = { position: number; createdAt: Date; id: string };
 
 /** Messages read for one compaction: newest first, then trimmed to these bounds. */
 const MAX_SPAN_MESSAGES = 2000;
@@ -195,7 +195,7 @@ async function attachmentUnits(messageIds: string[]): Promise<Map<string, number
   return units;
 }
 
-export type CompactionPlan = {
+type CompactionPlan = {
   previous: ActiveCompaction | null;
   summarized: SpanMessage[];
   firstKeptMessageId: string;
@@ -209,7 +209,7 @@ export type CompactionPlan = {
  * a request always summarises something once there are two turns). Null when
  * the cut would not move past the previous one.
  */
-export async function planCompaction(input: {
+async function planCompaction(input: {
   threadId: string;
   userId: string;
   previous: ActiveCompaction | null;
@@ -267,7 +267,7 @@ type Tally = {
  * The summary: the previous summary carried forward, updated with each chunk
  * of transcript in turn. One call for any ordinary backlog.
  */
-export async function summarize(
+async function summarize(
   plan: CompactionPlan,
   model: SummaryModel,
   instructions: string | null | undefined,
@@ -308,26 +308,6 @@ export async function summarize(
     summary = text;
   }
   return summary!;
-}
-
-async function modelPricing(slug: string) {
-  const [row] = await db
-    .select({
-      inputPriceMicros: schema.model.inputPriceMicros,
-      outputPriceMicros: schema.model.outputPriceMicros,
-    })
-    .from(schema.model)
-    .where(
-      and(
-        eq(schema.model.organizationId, await getDefaultOrganizationId()),
-        eq(schema.model.slug, slug),
-      ),
-    )
-    .limit(1);
-  return {
-    inputPriceMicros: row?.inputPriceMicros ?? null,
-    outputPriceMicros: row?.outputPriceMicros ?? null,
-  };
 }
 
 /**

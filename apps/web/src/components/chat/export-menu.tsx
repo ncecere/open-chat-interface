@@ -32,11 +32,11 @@ export function exportFormatsFor(markdown: string): DocumentFormat[] {
   return MENU_ORDER.filter((format) => format !== 'xlsx' || tables);
 }
 
-export function formatMenuLabel(format: DocumentFormat): string {
+function formatMenuLabel(format: DocumentFormat): string {
   return `${DOCUMENT_FORMAT_INFO[format].label} (.${DOCUMENT_FORMAT_INFO[format].extension})`;
 }
 
-export interface DocumentExport {
+interface DocumentExport {
   /** The format being prepared, or null. */
   busy: DocumentFormat | null;
   error: string | null;

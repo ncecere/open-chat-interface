@@ -66,7 +66,7 @@ const asUI = (message: ContextMessage, toolsOffered: boolean): UIMessage => ({
  * failure no longer fails the reply: the model is told the search failed and
  * the reply shows why. Anything else (search switched off) still refuses.
  */
-export type PreSearch = { results: SearchResult[]; error?: string };
+type PreSearch = { results: SearchResult[]; error?: string };
 
 async function searchOrFailure(query: string): Promise<PreSearch> {
   try {
@@ -80,7 +80,7 @@ async function searchOrFailure(query: string): Promise<PreSearch> {
   }
 }
 
-export type ModelContextOptions = {
+type ModelContextOptions = {
   /** The search made for an earlier attempt at this turn, reused instead of searching again. */
   search?: PreSearch;
   /**

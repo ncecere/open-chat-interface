@@ -31,7 +31,7 @@ export async function activeEmbedder(options: { fresh?: boolean } = {}): Promise
   };
 }
 
-export interface Embedded {
+interface Embedded {
   vectors: number[][];
   /** Tokens the provider reported; 0 when it reported none. */
   tokens: number;
@@ -78,7 +78,7 @@ export async function embedValues(
   };
 }
 
-export const EMBEDDING_TEST_SAMPLE = 'Open Chat Interface checks that this embeddings model works.';
+const EMBEDDING_TEST_SAMPLE = 'Open Chat Interface checks that this embeddings model works.';
 
 /** Embeds a sample and reports its dimensions; used when a model is tested or saved. */
 export async function testEmbeddingModel(

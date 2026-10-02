@@ -23,7 +23,7 @@ type MemoryRow = typeof schema.userMemory.$inferSelect;
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** How a change was made, recorded in the audit metadata. */
-export type MemoryVia = 'tool' | 'settings' | 'undo' | 'retention';
+type MemoryVia = 'tool' | 'settings' | 'undo' | 'retention';
 
 const UNAVAILABLE = 'Memory is not available. Your administrator has not switched it on for you.';
 const LIMIT_REACHED = `You have reached the limit of ${MAX_MEMORY_ENTRIES} memories. Delete some in Settings → Memory first.`;

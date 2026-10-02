@@ -289,7 +289,7 @@ function ArtifactPanelBody({
 }
 
 /** The rendered artifact: sandboxed for HTML and SVG, OCI's Markdown renderer otherwise. */
-export function ArtifactPreview({
+function ArtifactPreview({
   kind,
   content,
   title,

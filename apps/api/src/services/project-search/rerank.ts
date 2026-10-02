@@ -19,7 +19,7 @@ import type { RetrievedChunk } from './retrieval.js';
 /** Only the start of a long message is sent, as for keyword and meaning-based search. */
 const QUERY_MAX_CHARS = 2000;
 
-export interface RerankedCandidates {
+interface RerankedCandidates {
   candidates: RetrievedChunk[];
   /**
    * Undefined when reranking is off (the note says nothing about it); true

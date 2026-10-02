@@ -8,20 +8,20 @@ import { isToolPart, summarizeToolPart, toolIdOfPart } from '@oci/shared';
 
 type Part = Record<string, unknown>;
 
-export interface ExportedToolStep {
+interface ExportedToolStep {
   toolCallId: string;
   tool: string;
   state: string;
   summary: string;
 }
 
-export interface ExportedFile {
+interface ExportedFile {
   attachmentId: string | null;
   filename: string;
   mediaType: string | null;
 }
 
-export interface MessageContent {
+interface MessageContent {
   text: string;
   toolSteps: ExportedToolStep[];
   files: ExportedFile[];

@@ -115,7 +115,7 @@ export async function shutdownTracing(): Promise<void> {
 }
 
 /** A started span, or a no-op when tracing is off. */
-export interface SpanHandle {
+interface SpanHandle {
   setAttributes(attributes: Attributes): void;
   /** Renames the span, for names known only at the end (an HTTP route template). */
   rename(name: string): void;

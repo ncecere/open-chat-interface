@@ -41,7 +41,7 @@ const contentSchema = z
   // Characters are at most bytes; the exact UTF-8 limit is checked on save.
   .max(MAX_ARTIFACT_BYTES);
 
-export const createArtifactTool: ToolDefinition = {
+const createArtifactTool: ToolDefinition = {
   id: 'create_artifact',
   label: 'Create artifact',
   description: [
@@ -84,7 +84,7 @@ export const createArtifactTool: ToolDefinition = {
   },
 };
 
-export const updateArtifactTool: ToolDefinition = {
+const updateArtifactTool: ToolDefinition = {
   id: 'update_artifact',
   label: 'Update artifact',
   description: [

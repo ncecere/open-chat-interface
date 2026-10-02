@@ -20,7 +20,7 @@ export const liveS3Config = {
   forcePathStyle: true,
 };
 
-export function liveS3Client(): S3Client {
+function liveS3Client(): S3Client {
   return new S3Client({
     region: liveS3Config.region,
     endpoint: liveS3Config.endpoint,

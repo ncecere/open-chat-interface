@@ -59,7 +59,7 @@ export interface DocumentModel {
  * paragraph is a level, so about 30 nested lists or 50 nested quotes fit;
  * markdown-it drops anything nested deeper rather than recursing.
  */
-export const MAX_NESTING = 100;
+const MAX_NESTING = 100;
 
 let parser: MarkdownIt | null = null;
 function markdown(): MarkdownIt {

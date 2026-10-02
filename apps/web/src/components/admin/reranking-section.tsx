@@ -16,10 +16,11 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { ApiError, api } from '~/lib/api-client';
+import { priceMicros } from '~/lib/price';
 
-export const RERANKING_QUERY_KEY = ['admin', 'reranking'] as const;
+const RERANKING_QUERY_KEY = ['admin', 'reranking'] as const;
 
-export interface RerankingDraft {
+interface RerankingDraft {
   enabled: boolean;
   providerId: string;
   modelId: string;
@@ -36,15 +37,6 @@ function makeDraft(settings: RerankingStatus['settings']): RerankingDraft {
         ? ''
         : (settings.searchPriceMicros / MICROS_PER_DOLLAR).toString(),
   };
-}
-
-function priceMicros(value: string): number | null | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed >= 0
-    ? Math.round(parsed * MICROS_PER_DOLLAR)
-    : undefined;
 }
 
 /** Only what changed, so an unchanged model is never tested again. */

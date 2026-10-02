@@ -8,7 +8,7 @@ import { artifactsForPrompt } from './store.js';
 const DEFAULT_DIAGRAM_ACCENT = '#eb6c36';
 
 /** Whether the administrator left the Diagram Design guidance on (the default). */
-export async function diagramGuidanceEnabled(): Promise<boolean> {
+async function diagramGuidanceEnabled(): Promise<boolean> {
   const chat = await getSetting('chat');
   return chat.diagramGuidance !== false;
 }

@@ -23,7 +23,7 @@ import { recordEmbeddingUsage } from '../embeddings/usage.js';
  */
 
 /** Passages embedded per run of the background job; the next tick continues. */
-export const EMBED_PASSAGES_PER_RUN = 512;
+const EMBED_PASSAGES_PER_RUN = 512;
 /** Passages sent in one embeddings request. */
 export const EMBED_BATCH = 64;
 /** Passages an upload embeds itself; the job does the rest of a large file. */
@@ -37,7 +37,7 @@ export function failureBackoffMs(failures: number): number {
   return Math.min(5 * MINUTE_MS * 2 ** Math.max(0, failures - 1), 6 * 60 * MINUTE_MS);
 }
 
-export interface PendingPassage {
+interface PendingPassage {
   attachmentId: string;
   userId: string;
   organizationId: string;

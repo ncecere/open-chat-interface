@@ -14,7 +14,7 @@ import { db } from '../../db/index.js';
 export const EMBEDDING_TABLE = 'project_file_embedding';
 const STORAGE_LOCK = 'oci:embeddings:storage';
 
-export interface PgvectorInfo {
+interface PgvectorInfo {
   state: PgvectorState;
   version: string | null;
   /** Schema the extension was created in; its type and operators are qualified with it. */
@@ -41,7 +41,7 @@ export async function pgvectorInfo(): Promise<PgvectorInfo> {
   return { state: row?.available ? 'available' : 'not-installed', version: null, schema: null };
 }
 
-export interface EmbeddingStorage {
+interface EmbeddingStorage {
   /** Schema of the pgvector extension. */
   schema: string;
   /** Dimensions of the stored vector column, or null when the table does not exist yet. */

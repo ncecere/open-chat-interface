@@ -55,12 +55,12 @@ interface TableItem {
 
 type Item = TextItem | TableItem;
 
-export interface Section {
+interface Section {
   title: string;
   blocks: Block[];
 }
 
-export interface Slide {
+interface Slide {
   title: string;
   items: TextItem[];
   table?: { header: string[]; rows: string[][]; align: TableBlock['align'] };

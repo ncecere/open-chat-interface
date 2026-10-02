@@ -32,7 +32,7 @@ export interface ResolvedComplianceSettings {
   keepDays: number | null;
 }
 
-export const DEFAULT_COMPLIANCE_PREFIX = 'oci-compliance/';
+const DEFAULT_COMPLIANCE_PREFIX = 'oci-compliance/';
 const PURPOSE = 'compliance exports';
 
 export function normalizeComplianceSettings(

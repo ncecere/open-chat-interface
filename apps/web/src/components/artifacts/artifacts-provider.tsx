@@ -35,7 +35,7 @@ function lookups(refs: readonly ArtifactRef[]) {
   };
 }
 
-export const toRef = (artifact: ArtifactSummary): ArtifactRef => ({
+const toRef = (artifact: ArtifactSummary): ArtifactRef => ({
   id: artifact.id,
   messageId: artifact.messageId,
   sourceKey: artifact.sourceKey,

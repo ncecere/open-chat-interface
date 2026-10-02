@@ -90,7 +90,7 @@ function toolLinesFromParts(parts: Record<string, unknown>[]): string[] {
 }
 
 /** An artifact as Markdown exports reference it (the JSON export carries the content). */
-export interface ExportArtifactReference {
+interface ExportArtifactReference {
   messageId: string;
   title: string;
   kind: ArtifactKind;

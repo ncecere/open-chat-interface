@@ -12,7 +12,7 @@ import { type RerankResult, rerank } from './client.js';
 import { isRerankingActive, rerankingSettings } from './config.js';
 
 /** A provider's reranking endpoint and credentials, ready to call. */
-export interface Reranker {
+interface Reranker {
   endpoint: string;
   apiKey: string | null;
   /** The provider's label, for error messages. */
@@ -45,8 +45,8 @@ export async function resolveReranker(providerId: string, modelId: string): Prom
   return { endpoint, apiKey, provider: provider.label, modelId };
 }
 
-export const RERANK_TEST_QUERY = 'How do I reset my password?';
-export const RERANK_TEST_DOCUMENTS = [
+const RERANK_TEST_QUERY = 'How do I reset my password?';
+const RERANK_TEST_DOCUMENTS = [
   'The cafeteria on the ground floor opens at eight in the morning.',
   'To reset your password, open Settings, choose Security and follow the link we email you.',
   'Parking permits are renewed every January at the front desk.',

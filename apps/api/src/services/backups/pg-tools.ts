@@ -15,7 +15,7 @@ import { loadEnv } from '../../config/env.js';
  * Error output is scrubbed of the password before anyone sees it.
  */
 
-export type PgTool = 'pg_dump' | 'pg_restore';
+type PgTool = 'pg_dump' | 'pg_restore';
 
 export function pgToolPath(tool: PgTool, binDir = loadEnv().BACKUP_PG_BIN_DIR): string {
   return binDir ? join(binDir, tool) : tool;
@@ -24,7 +24,7 @@ export function pgToolPath(tool: PgTool, binDir = loadEnv().BACKUP_PG_BIN_DIR): 
 /** `.pgpass` escaping: backslash and colon are escaped with a backslash. */
 const pgpassField = (value: string) => value.replace(/\\/g, '\\\\').replace(/:/g, '\\:');
 
-export interface PgConnection {
+interface PgConnection {
   /** Variables for the child process; contains no password. */
   env: Record<string, string>;
   /** The password, only for scrubbing output. Null when the URL has none. */
@@ -148,8 +148,4 @@ export async function pgDumpVersion(): Promise<string | null> {
   });
   versionCache = { value, expiresAt: Date.now() + 5 * 60_000 };
   return value;
-}
-
-export function clearPgVersionCache(): void {
-  versionCache = null;
 }

@@ -205,7 +205,7 @@ describe('document model: hostile input', () => {
   });
 
   it('survives very deep nesting without exhausting the stack', () => {
-    expect(() => parseMarkdown('>'.repeat(100_000) + ' x')).not.toThrow();
+    expect(() => parseMarkdown(`${'>'.repeat(100_000)} x`)).not.toThrow();
     const lists = Array.from({ length: 2_000 }, (_, index) => `${'  '.repeat(index)}- x`);
     expect(() => parseMarkdown(lists.join('\n'))).not.toThrow();
   });

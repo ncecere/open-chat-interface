@@ -275,7 +275,7 @@ type Reader = Pick<Parameters<Parameters<typeof db.transaction>[0]>[0], 'select'
  * Content and titles are redacted like message text; every renderer shows
  * HTML and SVG only inside the sandboxed artifact frame.
  */
-export async function publicArtifacts(
+async function publicArtifacts(
   tx: Reader,
   messageIds: readonly string[],
   snapshotAt: Date | null,

@@ -21,7 +21,7 @@ const CONCEPT_OF = new Map(
   CONCEPTS.flatMap((words, index) => words.map((word) => [word, index] as const)),
 );
 
-export const FAKE_EMBEDDING_DIMENSIONS = 16;
+const FAKE_EMBEDDING_DIMENSIONS = 16;
 
 export function words(text: string): string[] {
   return text.toLowerCase().match(/[a-z]+/g) ?? [];

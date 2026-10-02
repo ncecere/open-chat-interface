@@ -12,16 +12,16 @@ import { historyParts } from './message-parts.js';
 /** Tool inputs and results longer than this are cut in the transcript. */
 export const TOOL_TEXT_LIMIT = 2000;
 /** Summariser calls per compaction; turns beyond them are left out. */
-export const MAX_SUMMARY_CHUNKS = 4;
+const MAX_SUMMARY_CHUNKS = 4;
 /** Fixed text around the transcript in one summariser call, in input units. */
 export const SUMMARY_PROMPT_OVERHEAD = 2048;
 /** Smallest transcript chunk worth a summariser call. */
 export const MIN_CHUNK_UNITS = 1024;
 
-export type TranscriptMessage = { role: string; parts: unknown };
+type TranscriptMessage = { role: string; parts: unknown };
 
 /** One turn: a user message and the replies to it, with its estimated input size. */
-export type TurnGroup<T> = { messages: T[]; units: number; startsWithUser: boolean };
+type TurnGroup<T> = { messages: T[]; units: number; startsWithUser: boolean };
 
 /**
  * Turns in order. A turn starts at a user message; anything before the first

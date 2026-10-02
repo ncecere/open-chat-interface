@@ -25,7 +25,7 @@ type Transaction = StorageTransaction;
 type ArtifactRow = typeof schema.artifact.$inferSelect;
 type Limits = Awaited<ReturnType<typeof getStorageLimits>>;
 
-export const ARTIFACTS_NOT_ALLOWED = 'Artifacts are not available for your role';
+const ARTIFACTS_NOT_ALLOWED = 'Artifacts are not available for your role';
 
 const tooLarge = () =>
   validationFailed(`An artifact can be at most ${formatBytes(MAX_ARTIFACT_BYTES)}.`);
@@ -65,7 +65,7 @@ function serializeVersion(
 }
 
 /** Refuses content OCI will not store; `content` is checked in UTF-8 bytes. */
-export function assertArtifactContent(content: string): number {
+function assertArtifactContent(content: string): number {
   if (!content.trim()) throw validationFailed('An artifact cannot be empty.');
   const bytes = artifactByteLength(content);
   if (bytes > MAX_ARTIFACT_BYTES) throw tooLarge();

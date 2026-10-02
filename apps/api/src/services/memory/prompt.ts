@@ -9,17 +9,17 @@ import { listMemories, memoryRef } from './store.js';
  * from crowding out the conversation on small models and from growing without
  * bound on large ones; 8 KiB holds roughly 40-80 typical notes.
  */
-export const MEMORY_BUDGET_SHARE = 0.05;
-export const MAX_MEMORY_PROMPT_UNITS = 8 * 1024;
+const MEMORY_BUDGET_SHARE = 0.05;
+const MAX_MEMORY_PROMPT_UNITS = 8 * 1024;
 
-export function memoryBudgetUnits(inputUnits: number): number {
+function memoryBudgetUnits(inputUnits: number): number {
   return Math.max(
     0,
     Math.min(MAX_MEMORY_PROMPT_UNITS, Math.floor(inputUnits * MEMORY_BUDGET_SHARE)),
   );
 }
 
-export interface PromptMemory {
+interface PromptMemory {
   id: string;
   content: string;
 }
@@ -44,7 +44,7 @@ function neutralize(content: string): string {
  * first note that does not fit ends the list, so a newer note is never left
  * out for an older one. Empty when there is nothing to include.
  */
-export function memorySection(memories: readonly PromptMemory[], units: number): string {
+function memorySection(memories: readonly PromptMemory[], units: number): string {
   if (memories.length === 0) return '';
   let used = Buffer.byteLength(`${HEADER}\n${CLOSE}`, 'utf8');
   const lines: string[] = [];

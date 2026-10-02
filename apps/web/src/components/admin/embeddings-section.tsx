@@ -24,8 +24,9 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { ApiError, api } from '~/lib/api-client';
+import { priceMicros } from '~/lib/price';
 
-export const EMBEDDINGS_QUERY_KEY = ['admin', 'embeddings'] as const;
+const EMBEDDINGS_QUERY_KEY = ['admin', 'embeddings'] as const;
 
 /** Operator documentation for enabling pgvector and moving off an Alpine image. */
 export const PGVECTOR_DOCS_URL =
@@ -50,15 +51,6 @@ function makeDraft(settings: EmbeddingsStatus['settings']): Draft {
   };
 }
 
-function priceMicros(value: string): number | null | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed >= 0
-    ? Math.round(parsed * MICROS_PER_DOLLAR)
-    : undefined;
-}
-
 /** Only what changed, so an unchanged model is never re-measured. */
 export function embeddingsChanges(
   saved: EmbeddingsStatus['settings'],
@@ -76,7 +68,7 @@ export function embeddingsChanges(
 }
 
 /** Where pgvector stands, and what the operator needs to do about it. */
-export function PgvectorNotice({ pgvector }: { pgvector: EmbeddingsStatus['pgvector'] }) {
+function PgvectorNotice({ pgvector }: { pgvector: EmbeddingsStatus['pgvector'] }) {
   if (pgvector.state === 'enabled') {
     return (
       <Notice title={`pgvector ${pgvector.version ?? ''} is enabled`.replace('  ', ' ')}>
