@@ -76,7 +76,7 @@ export function usePaletteActions({
           {
             id: 'customize',
             label: 'Customize appearance',
-            keywords: 'fonts density boring theme',
+            keywords: 'fonts density theme code wrap',
             icon: SlidersHorizontal,
             onSelect: () => navigate({ to: '/settings/customization' }),
           },

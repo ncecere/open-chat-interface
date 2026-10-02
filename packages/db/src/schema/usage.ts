@@ -258,7 +258,6 @@ export const userPreference = pgTable(
       .references(() => user.id, { onDelete: 'cascade' })
       .unique(),
     theme: text('theme').notNull().default('dark'),
-    boringMode: boolean('boring_mode').notNull().default(false),
     mainFont: text('main_font').notNull().default('default'),
     codeFont: text('code_font').notNull().default('default'),
     density: text('density').notNull().default('comfortable'),

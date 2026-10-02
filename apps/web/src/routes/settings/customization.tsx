@@ -107,7 +107,7 @@ function ToggleRow({
 export function SettingsCustomizationPage() {
   const { data } = useCurrentUser();
   const queryClient = useQueryClient();
-  const { boringMode, setBoringMode, codeWrap, setCodeWrap } = useTheme();
+  const { codeWrap, setCodeWrap } = useTheme();
 
   const [name, setName] = useState('');
   const [occupation, setOccupation] = useState('');
@@ -269,12 +269,6 @@ export function SettingsCustomizationPage() {
       </Section>
 
       <Section title="Visual Options">
-        <ToggleRow
-          label="Boring Theme"
-          description="If you think the pink is too much, turn this on to tone it down."
-          checked={boringMode}
-          onChange={setBoringMode}
-        />
         <ToggleRow
           label="Wrap Long Code Lines"
           description="Wrap long lines in code blocks instead of scrolling them sideways."

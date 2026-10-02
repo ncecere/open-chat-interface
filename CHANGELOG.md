@@ -57,6 +57,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **A reply stopped part-way through recorded no token usage.** It now
   records the usage of the steps that finished, still marked as incomplete.
 
+### Removed
+
+- **Boring mode** (theme menu and Settings → Customization). It only replaced
+  an instance colour theme's accent with the neutral one, which is already the
+  default, so it looked like it did nothing. The unused
+  `user_preference.boring_mode` column is left in place for this release so
+  that API replicas still on v0.7 keep working during a rolling upgrade; it
+  will be dropped in the next one.
+
 ## [0.7.0] - 2026-10-01
 
 Organise and find: per-role feature switches, full-text search, projects,
