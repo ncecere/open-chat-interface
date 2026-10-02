@@ -1,6 +1,6 @@
 # Connectors
 
-**Appearance & features → Connectors** (`/admin/connectors`). A connector is a
+**Tools & integrations → Connectors** (`/admin/connectors`). A connector is a
 remote [MCP](https://modelcontextprotocol.io) server that OCI talks to over
 Streamable HTTP. Once you enable some of its tools and allow them for a role,
 tool-capable models can call them during a reply: search a document store,

@@ -55,6 +55,13 @@ Pages are grouped by task. **Overview** sits above the groups.
 | Providers & Models | Upstream credentials, the model catalogue, the default model |
 | Usage budgets | Consumption caps applied to roles, with per-person overrides |
 
+**Tools & integrations**
+
+| Page | What it is for |
+| --- | --- |
+| Web search | The switch for web search, its provider, and a test search |
+| Connectors | MCP servers whose tools models can call, and which of their tools are enabled |
+
 **Sign-in & security**
 
 | Page | What it is for |
@@ -86,8 +93,6 @@ Pages are grouped by task. **Overview** sits above the groups.
 | General | The default system prompt and optional chat features |
 | Branding | Name, logo, accent colour, default theme, sign-in message |
 | Announcements | A banner shown to everybody |
-| Web search | The switch for web search, and its provider |
-| Connectors | MCP servers whose tools models can call, and which of their tools are enabled |
 
 ### Old addresses
 

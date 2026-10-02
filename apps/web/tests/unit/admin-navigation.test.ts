@@ -20,6 +20,7 @@ describe('admin navigation catalogue', () => {
         ['Users /admin/users', 'Invitations /admin/invites', 'Roles & access /admin/roles'],
       ],
       ['Models', ['Providers & Models /admin/models', 'Usage budgets /admin/quotas']],
+      ['Tools & integrations', ['Web search /admin/search', 'Connectors /admin/connectors']],
       [
         'Sign-in & security',
         [
@@ -39,8 +40,6 @@ describe('admin navigation catalogue', () => {
           'General /admin/settings/general',
           'Branding /admin/branding',
           'Announcements /admin/broadcasts',
-          'Web search /admin/search',
-          'Connectors /admin/connectors',
         ],
       ],
     ]);

@@ -106,7 +106,7 @@ API replica needs S3; see the [README](../../README.md#running-more-than-one-api
 
 ## 7. Web search (optional)
 
-**Appearance & features → Web search.** Off is a valid choice. Once switched
+**Tools & integrations → Web search.** Off is a valid choice. Once switched
 on, the item needs attention until a provider and what it needs are saved: an
 API key for Tavily, Brave Search, Exa or SerpApi, or the address of your SearXNG
 instance. Until then people are simply not offered search.

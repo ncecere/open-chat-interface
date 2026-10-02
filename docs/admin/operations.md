@@ -67,7 +67,7 @@ back up.
 
 ![Web search](../images/admin-search.png)
 
-**Appearance & features → Web search** (`/admin/search`). The provider used for
+**Tools & integrations → Web search** (`/admin/search`). The provider used for
 web search grounding, its credential, and the one switch that turns search on or
 off. There is no separate web search toggle among the General features any more.
 

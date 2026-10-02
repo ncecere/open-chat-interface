@@ -65,6 +65,13 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     ],
   },
   {
+    label: 'Tools & integrations',
+    items: [
+      { to: '/admin/search', label: 'Web search', icon: Search },
+      { to: '/admin/connectors', label: 'Connectors', icon: Plug },
+    ],
+  },
+  {
     label: 'Sign-in & security',
     items: [
       { to: '/admin/settings/authentication', label: 'Authentication', icon: UserCog },
@@ -94,8 +101,6 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
       { to: '/admin/settings/general', label: 'General', icon: Settings },
       { to: '/admin/branding', label: 'Branding', icon: Palette },
       { to: '/admin/broadcasts', label: 'Announcements', icon: Megaphone },
-      { to: '/admin/search', label: 'Web search', icon: Search },
-      { to: '/admin/connectors', label: 'Connectors', icon: Plug },
     ],
   },
 ];
