@@ -11,6 +11,7 @@ import {
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
 import { ReasoningPanel } from '~/components/chat/message-reasoning';
+import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
 import {
   SearchGroundingDetails,
   SearchSourcesPanel,
@@ -25,6 +26,7 @@ interface MessageRowProps {
   onRetry?: () => void;
   onEdit?: (messageId: string, text: string) => Promise<void>;
   onFork?: (messageId: string) => Promise<void>;
+  replySwitch?: ReplySwitch;
 }
 
 /**
@@ -41,6 +43,7 @@ export const MessageRow = memo(function MessageRow({
   onRetry,
   onEdit,
   onFork,
+  replySwitch,
 }: MessageRowProps) {
   const text = textOf(message);
 
@@ -99,15 +102,22 @@ export const MessageRow = memo(function MessageRow({
         <Markdown className={MARKDOWN_PROSE}>{text}</Markdown>
       </div>
       {grounding && <SearchGroundingDetails grounding={grounding} />}
-      {!streaming && (
-        <MessageActions
-          text={text}
-          onFork={onFork && metadata.status !== 'streaming' ? () => onFork(message.id) : undefined}
-          onRetry={onRetry}
-          modelSlug={metadata.modelSlug}
-          effort={metadata.effort}
-          searched={Boolean(grounding)}
-        />
+      {(replySwitch || !streaming) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {replySwitch && <ReplySwitcher {...replySwitch} />}
+          {!streaming && (
+            <MessageActions
+              text={text}
+              onFork={
+                onFork && metadata.status !== 'streaming' ? () => onFork(message.id) : undefined
+              }
+              onRetry={onRetry}
+              modelSlug={metadata.modelSlug}
+              effort={metadata.effort}
+              searched={Boolean(grounding)}
+            />
+          )}
+        </div>
       )}
     </article>
   );

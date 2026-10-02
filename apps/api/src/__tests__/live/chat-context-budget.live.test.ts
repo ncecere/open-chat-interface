@@ -496,40 +496,53 @@ describe.skipIf(!available)('live bounded model context', () => {
     await expectRejected(chat.id, 'Read the extracted document', [file]);
   });
 
-  it('regenerates the exact original target beyond 128 newer rows without later text or file leakage', async () => {
+  it('regenerates only the latest turn, with its own file but not the reply it replaces', async () => {
     const chat = await thread();
     const early = await attachment({ text: 'ORIGINAL_DOCUMENT_CONTENT' });
-    const late = await attachment({ image: true, missingBlob: true });
     const rows: HistoryRow[] = [
+      ...Array.from({ length: 80 }, (_, index) => [
+        { role: 'user' as const, text: `EARLIER_USER_${index}` },
+        { role: 'assistant' as const, text: `EARLIER_ANSWER_${index}` },
+      ]).flat(),
       { role: 'user', text: 'Same prompt', files: [early] },
       { role: 'assistant', text: 'ORIGINAL_ANSWER_NOT_INPUT' },
-      ...Array.from({ length: 80 }, (_, index) => [
-        {
-          role: 'user' as const,
-          text: index === 79 ? 'Same prompt' : `LATER_USER_${index}`,
-          ...(index === 79 ? { files: [late] } : {}),
-        },
-        { role: 'assistant' as const, text: `LATER_ANSWER_${index}` },
-      ]).flat(),
     ];
     const seeded = await seedHistory(chat.id, rows);
-    const target = seeded[0]!;
+    const target = seeded.at(-2)!;
+    // An earlier turn is fixed, even far beyond the 128-row history window.
+    await expectRejected(
+      chat.id,
+      'EARLIER_USER_0',
+      [],
+      {
+        trigger: 'regenerate-message',
+        messages: [
+          { id: seeded[0]!.id, role: 'user', parts: [{ type: 'text', text: 'EARLIER_USER_0' }] },
+        ],
+      },
+      { message: 'Only the latest reply can be retried' },
+    );
     const before = await messages(chat.id);
     const started = await send(chat.id, 'Same prompt', {
       trigger: 'regenerate-message',
       messages: [{ id: target.id, role: 'user', parts: [{ type: 'text', text: 'Same prompt' }] }],
     });
-    expect(started.turn.uiMessages.map((message) => message.id)).toEqual([target.id]);
+    expect(started.turn.uiMessages.at(-1)?.id).toBe(target.id);
     expect(started.turn.promptMessageId).toBe(target.id);
     expect(started.turn.submittedMessageId).toBeNull();
-    expect(started.turn.contextLimited).toBe(false);
     const text = await sdkText(started);
     expect(text).toContain('ORIGINAL_DOCUMENT_CONTENT');
-    expect(text).not.toMatch(/LATER_|ORIGINAL_ANSWER/);
+    expect(text).toContain('EARLIER_ANSWER_79');
+    expect(text).not.toContain('ORIGINAL_ANSWER_NOT_INPUT');
     expect(getBlob).not.toHaveBeenCalled();
     const after = await messages(chat.id);
-    expect(after.slice(0, before.length)).toEqual(before);
     expect(after).toHaveLength(before.length + 1);
+    expect(after.slice(0, -2)).toEqual(before.slice(0, -1));
+    expect(after.at(-2)).toEqual({
+      ...before.at(-1),
+      supersededAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+    });
     expect(after.at(-1)?.parentMessageId).toBe(target.id);
     expect(after.filter((row) => row.role === 'user')).toHaveLength(81);
   });

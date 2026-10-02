@@ -10,6 +10,7 @@ import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
+import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError } from '~/lib/api-client';
 import { getChatHistory } from '~/lib/chat-history';
@@ -86,6 +87,7 @@ function peekPendingAttachments(): Attachment[] {
 function ThreadConversation({
   threadId,
   initialMessages,
+  initialReplies,
   carriedAttachments,
   carriedEffort,
   carriedSearch,
@@ -94,6 +96,8 @@ function ThreadConversation({
 }: {
   threadId: string;
   initialMessages: UIMessage[];
+  /** Every reply to the latest turn when it was retried; otherwise empty. */
+  initialReplies: UIMessage[];
   carriedAttachments: Attachment[];
   carriedEffort?: ReasoningEffort;
   carriedSearch: boolean;
@@ -165,8 +169,25 @@ function ThreadConversation({
     session.recovery.unavailable,
   ]);
 
-  const retry = useCallback(() => regenerate(), [regenerate]);
-  const submit = useCallback(() => send(), [send]);
+  const replies = useReplySwitcher({
+    threadId,
+    initialMessages,
+    initialReplies,
+    messages: session.messages,
+    setMessages: session.setMessages,
+    streaming: session.streaming,
+  });
+  const { remember: rememberReply, settled: replySettled } = replies;
+  // A switch being saved must land before a reply is generated from context.
+  const retry = useCallback(async () => {
+    await replySettled();
+    rememberReply();
+    await regenerate();
+  }, [regenerate, rememberReply, replySettled]);
+  const submit = useCallback(async () => {
+    await replySettled();
+    await send();
+  }, [send, replySettled]);
 
   const forkAtMessage = useCallback(
     async (messageId: string) => {
@@ -226,17 +247,22 @@ function ThreadConversation({
               onRetry={retry}
               onFork={session.features?.branching ? forkAtMessage : undefined}
               onEdit={session.features?.branching ? editAndBranch : undefined}
+              replySwitch={replies.switcher}
             />
 
-            {(session.error || session.recovery.error || session.recovery.remotePending) && (
+            {(session.error ||
+              session.recovery.error ||
+              session.recovery.remotePending ||
+              replies.error) && (
               <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
-                {(session.recovery.error || session.error) && (
+                {(session.recovery.error || session.error || replies.error) && (
                   <p
                     role="alert"
                     className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
                   >
                     {session.recovery.error ||
                       session.error?.message ||
+                      replies.error ||
                       'Something went wrong generating a response.'}
                   </p>
                 )}
@@ -362,6 +388,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
       key={threadId}
       threadId={threadId}
       initialMessages={data.messages}
+      initialReplies={data.replies}
       carriedAttachments={carriedAttachments}
       carriedEffort={carriedEffort}
       carriedSearch={carriedSearch}

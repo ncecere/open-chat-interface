@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
 import { ERROR_CODES, type UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { AppError, notFound, validationFailed } from '../lib/errors.js';
+import { pathThrough } from './chat/reply-path.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 import { shareableThreadCondition } from './share-link-availability.js';
@@ -291,16 +292,22 @@ export async function getPublicShare(slug: string) {
     ];
     if (cutoffPosition !== null) conditions.push(lte(schema.message.position, cutoffPosition));
 
-    const messages = await tx
+    const rows = await tx
       .select({
         id: schema.message.id,
         role: schema.message.role,
         parts: schema.message.parts,
+        supersededAt: schema.message.supersededAt,
         createdAt: schema.message.createdAt,
       })
       .from(schema.message)
       .where(and(...conditions))
       .orderBy(asc(schema.message.position));
+    // One reply per turn, as the owner reads it. A snapshot ending at a reply
+    // that was later switched away from still shows that reply.
+    const messages =
+      (link.upToMessageId && pathThrough(rows, link.upToMessageId)) ||
+      rows.filter((row) => row.supersededAt === null);
 
     const available = and(
       isNull(schema.shareLink.revokedAt),

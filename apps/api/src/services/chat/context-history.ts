@@ -1,9 +1,10 @@
-import { and, desc, eq, inArray, ne, schema, sql } from '@oci/db';
+import { and, desc, eq, gt, inArray, ne, schema, sql } from '@oci/db';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { validationFailed } from '../../lib/errors.js';
 import { MAX_HISTORY_BYTES, MAX_HISTORY_MESSAGES } from './context-budget.js';
 import { regenerationContext } from './message-parts.js';
+import { activeMessage, RETRY_LATEST_ONLY } from './reply-path.js';
 
 export type ContextMessage = Pick<typeof schema.message.$inferSelect, 'id' | 'role' | 'parts'>;
 const payloadBytes = sql<number>`octet_length(${schema.message.parts}::text)`;
@@ -46,6 +47,20 @@ export async function loadContextHistory(input: {
       throw validationFailed('The regeneration target must be a user message in this thread');
     if (row.bytes > MAX_HISTORY_BYTES)
       throw validationFailed('The regeneration target exceeds the input payload limit');
+    // A retry adds an alternative reply to the latest turn. Earlier turns are
+    // fixed: their replies are what every later turn was answering.
+    const [later] = await db
+      .select({ id: schema.message.id })
+      .from(schema.message)
+      .where(
+        and(
+          eq(schema.message.threadId, input.threadId),
+          eq(schema.message.role, 'user'),
+          gt(schema.message.position, row.position),
+        ),
+      )
+      .limit(1);
+    if (later) throw validationFailed(RETRY_LATEST_ONLY);
     target = row;
     latest = regenerationContext([row], latest, input.attachmentIds).latest;
   }
@@ -61,6 +76,9 @@ export async function loadContextHistory(input: {
         eq(schema.message.userId, input.userId),
         ne(schema.message.id, input.claimId),
         inArray(schema.message.role, ['user', 'assistant']),
+        // Only the active reply of each turn; a retried turn keeps the others
+        // for switching back, but the model must see one answer per question.
+        activeMessage(),
         target
           ? sql`(${schema.message.position}, ${schema.message.createdAt}, ${schema.message.id})
       < (${target.position}, ${target.createdAt.toISOString()}::timestamptz, ${target.id})`

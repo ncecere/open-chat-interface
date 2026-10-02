@@ -307,33 +307,46 @@ describe.skipIf(!available)('live historical attachment context', () => {
     expect(sdk).not.toContain(`/api/attachments/${file.id}/content`);
   });
 
-  it('regenerates the exact stored target with its file, without later-file leakage or user rewrites', async () => {
+  it('regenerates only the latest stored target, with its file and history but not the replaced reply', async () => {
     const chat = await thread();
     const early = await attachment('text/plain', 'EARLY_ATTACHMENT_CONTENT');
-    const late = await attachment('application/pdf', 'LATER_ATTACHMENT_MUST_NOT_LEAK');
+    const late = await attachment('application/pdf', 'LATEST_ATTACHMENT_CONTENT');
     const first = await send(chat.id, 'Same prompt', { attachmentIds: [early.id] });
     await complete(first);
     const second = await send(chat.id, 'Same prompt', { attachmentIds: [late.id] });
     await complete(second);
     const before = await messages(chat.id);
-    const regenerated = await send(chat.id, 'Same prompt', {
-      trigger: 'regenerate-message',
-      messages: [
-        {
-          id: first.turn.promptMessageId,
-          role: 'user',
-          parts: [{ type: 'text', text: 'Same prompt' }],
-        },
-      ],
-    });
+    const regenerate = (promptId: string) =>
+      send(chat.id, 'Same prompt', {
+        trigger: 'regenerate-message',
+        messages: [{ id: promptId, role: 'user', parts: [{ type: 'text', text: 'Same prompt' }] }],
+      });
+    // An earlier turn is fixed: the later turn answered it as it stands.
+    await expect(regenerate(first.turn.promptMessageId)).rejects.toThrow(
+      'Only the latest reply can be retried',
+    );
+    expect(await messages(chat.id)).toEqual(before);
+
+    const regenerated = await regenerate(second.turn.promptMessageId);
+    expect(await modelText(regenerated)).toContain('LATEST_ATTACHMENT_CONTENT');
     expect(await modelText(regenerated)).toContain('EARLY_ATTACHMENT_CONTENT');
-    expect(await modelText(regenerated)).not.toContain('LATER_ATTACHMENT_MUST_NOT_LEAK');
-    expect(regenerated.turn.uiMessages).toHaveLength(1);
+    expect(regenerated.turn.uiMessages.map((message) => message.id)).toEqual([
+      first.turn.promptMessageId,
+      first.run.assistantMessage.id,
+      second.turn.promptMessageId,
+    ]);
     expect(regenerated.turn.submittedMessageId).toBeNull();
     const after = await messages(chat.id);
-    expect(after.slice(0, before.length)).toEqual(before);
+    expect(after.slice(0, 3)).toEqual(before.slice(0, 3));
+    // The replaced reply is kept for switching back, only superseded.
+    expect(after[3]).toEqual({
+      ...before[3],
+      supersededAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+    });
     expect(after.filter((row) => row.role === 'user')).toHaveLength(2);
-    expect(after.at(-1)?.parentMessageId).toBe(first.turn.promptMessageId);
+    expect(after.at(-1)?.parentMessageId).toBe(second.turn.promptMessageId);
+    expect(after.at(-1)?.supersededAt).toBeNull();
   });
 
   it('resolves copied fork metadata against the original live owned allocation', async () => {

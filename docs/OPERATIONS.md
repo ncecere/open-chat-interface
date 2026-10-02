@@ -152,6 +152,15 @@ If a concurrent build fails it leaves an `INVALID` index behind; drop it
 (`DROP INDEX CONCURRENTLY message_text_search_idx;`) and retry, because the
 migration will otherwise skip it.
 
+### Retried replies (migration 0025)
+
+Migration `0025_reply_alternates` adds a nullable `message.superseded_at`
+(no table rewrite) and backfills it: for every turn that was retried, all but
+the newest reply are marked as replaced, so the model, exports, share links
+and search stop seeing both answers. The backfill reads `message` once with a
+sort and updates only those older replies; it holds row locks on them until
+the migration commits. Re-running it changes nothing.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

@@ -597,7 +597,9 @@ describe.skipIf(!available)('live atomic chat admission', () => {
     const rows = await messages(chat.id);
     expect(rows.map((row) => row.role)).toEqual(['user', 'assistant', 'assistant']);
     expect(rows[1]?.parts).toEqual([{ type: 'text', text: 'old reply' }]);
+    expect(rows[1]?.supersededAt).toBeInstanceOf(Date);
     expect(rows[2]?.parentMessageId).toBe(rows[0]?.id);
+    expect(rows[2]?.supersededAt).toBeNull();
     expect(state.started[1]!.turn.uiMessages).toHaveLength(1);
     expect(JSON.stringify(state.started[1]!.turn.uiMessages)).toContain('original');
   });

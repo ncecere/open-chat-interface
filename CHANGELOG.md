@@ -84,6 +84,31 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   GIN index on message text; on a large instance it takes time to build and
   blocks writes to `message` while it does — see the upgrade notes in
   `docs/OPERATIONS.md`.
+- **Switch between retried replies.** Retrying keeps the earlier replies to
+  that question; on the latest reply, **Previous reply** / **Next reply**
+  ("‹ 2 / 3 ›", announced as "Reply 2 of 3") switch between them. The chosen
+  reply is the one shown after a reload and the one the model, exports
+  (single conversation and full export), share links and search see; the
+  others are kept but left out. Switching is available only on the latest
+  turn and not while a reply is generating; editing an earlier message still
+  starts a new conversation. Like Retry, it needs no branching permission.
+  Retry is now refused (`422`) for any question but the latest. API:
+  `PATCH /api/threads/:id/messages/:messageId/active` (owner only; `404` for
+  other people's threads, `409` while a reply is generating, `422` for a
+  reply to an earlier turn), and `GET /api/chat/:threadId/messages` returns
+  `replies`, every reply to the latest turn when there is more than one.
+  Usage and quotas still count every reply generated. Forks and edits copy
+  only the chosen replies. Migration `0025_reply_alternates` adds nullable
+  `message.superseded_at` and marks all but the newest reply to each turn as
+  replaced, matching what people saw after retrying.
+
+### Fixed
+
+- **A retried reply no longer leaves both answers in the model's context.**
+  After a retry, the next question was sent with the original reply and the
+  retried one back to back, so the model saw two answers to one question.
+  Only the chosen reply is sent now, including for existing conversations
+  (see migration `0025_reply_alternates`).
 
 ## [0.6.1] - 2026-10-01
 

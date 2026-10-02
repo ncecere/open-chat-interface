@@ -9,7 +9,7 @@ import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
 import { cancelActiveChatRun, resumeActiveChatRun } from '../services/chat-streams.js';
 import { chatRateLimit } from '../services/limits/rate-limit.js';
-import { getOwnedThread, listMessages } from '../services/threads.js';
+import { getOwnedThread, listConversation } from '../services/threads.js';
 
 export const chatRoutes = new Hono<AppBindings>();
 
@@ -61,11 +61,33 @@ chatRoutes.delete('/:threadId/stream', async (c) => {
   return c.json({ cancelled });
 });
 
-/** Returns stored messages in the AI SDK UI format for hydration. */
+type StoredMessage = Awaited<ReturnType<typeof listConversation>>['messages'][number];
+
+function toUIMessage(message: StoredMessage) {
+  return {
+    id: message.id,
+    role: message.role,
+    parts: message.parts,
+    metadata: {
+      modelSlug: message.modelSlug,
+      effort: message.effort,
+      parentMessageId: message.parentMessageId,
+      status: message.status,
+      errorMessage: message.errorMessage,
+      createdAt: message.createdAt.toISOString(),
+    },
+  };
+}
+
+/**
+ * Returns stored messages in the AI SDK UI format for hydration: the active
+ * conversation, plus `replies`, every reply to the latest turn (oldest first)
+ * when it was retried, so the reader can switch between them. Empty otherwise.
+ */
 chatRoutes.get('/:threadId/messages', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('threadId'), user.id);
-  const messages = await listMessages(thread.id);
+  const { messages, replies } = await listConversation(thread.id);
 
   return c.json({
     thread: {
@@ -73,18 +95,7 @@ chatRoutes.get('/:threadId/messages', async (c) => {
       temporary: thread.temporary,
       expiresAt: thread.expiresAt?.toISOString() ?? null,
     },
-    messages: messages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      parts: message.parts,
-      metadata: {
-        modelSlug: message.modelSlug,
-        effort: message.effort,
-        parentMessageId: message.parentMessageId,
-        status: message.status,
-        errorMessage: message.errorMessage,
-        createdAt: message.createdAt.toISOString(),
-      },
-    })),
+    messages: messages.map(toUIMessage),
+    replies: replies.map(toUIMessage),
   });
 });

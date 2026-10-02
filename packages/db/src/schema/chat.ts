@@ -116,6 +116,13 @@ export const message = pgTable(
       .notNull()
       .default('complete'),
     errorMessage: text('error_message'),
+    /**
+     * Set on an assistant reply that a retry (or a switch between replies)
+     * replaced. Each user turn has several stored replies but exactly one with
+     * this null; model context, exports, shares and search follow only those
+     * (migration 0025). Usage accounting still counts every generated reply.
+     */
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
     tokensIn: integer('tokens_in'),
     tokensOut: integer('tokens_out'),
     durationMs: integer('duration_ms'),

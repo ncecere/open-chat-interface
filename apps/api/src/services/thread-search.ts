@@ -128,6 +128,8 @@ export function threadSearchStatement(
         and t.deleted_at is null
         and t.temporary = false
         and m.role in ('user', 'assistant')
+        -- Replies a retry replaced are not part of the conversation as it reads.
+        and m.superseded_at is null
         and ${messageSearchVector('m')} @@ ${query}
     ),
     scores as (

@@ -1,5 +1,6 @@
-import { asc, eq, schema } from '@oci/db';
+import { and, asc, eq, schema } from '@oci/db';
 import { db } from '../db/index.js';
+import { activeMessage } from './chat/reply-path.js';
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
 export const MAX_EXPORT_MESSAGES = 2_000;
@@ -133,7 +134,8 @@ export async function exportThreadMarkdown(threadId: string): Promise<string> {
       createdAt: schema.message.createdAt,
     })
     .from(schema.message)
-    .where(eq(schema.message.threadId, threadId))
+    // The conversation as it reads: replies a retry replaced are left out.
+    .where(and(eq(schema.message.threadId, threadId), activeMessage()))
     .orderBy(asc(schema.message.position))
     .limit(MAX_EXPORT_MESSAGES);
 

@@ -2,6 +2,7 @@ import { and, asc, type Database, desc, eq, ilike, isNull, lte, schema, sql } fr
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
+import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 
@@ -154,8 +155,7 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
       .from(schema.message)
       .where(eq(schema.message.threadId, sourceThread.id))
       .orderBy(asc(schema.message.position));
-    const selectedIndex = sourceMessages.findIndex((message) => message.id === input.messageId);
-    const selected = sourceMessages[selectedIndex];
+    const selected = sourceMessages.find((message) => message.id === input.messageId);
     if (!selected) throw notFound('Message not found');
     if (selected.status === 'streaming') {
       throw validationFailed('A response cannot be forked while it is still streaming');
@@ -178,7 +178,9 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
       .returning();
     if (!fork) throw new Error('Failed to create fork');
 
-    const copiedMessages = sourceMessages.slice(0, selectedIndex + 1);
+    // The fork reads as the conversation did through the selected message:
+    // one reply per turn, never the alternatives a retry left behind.
+    const copiedMessages = pathThrough(sourceMessages, selected.id) ?? [];
     await tx.insert(schema.message).values(
       copiedMessages.map((message) => ({
         threadId: fork.id,
@@ -253,7 +255,9 @@ export async function branchFromUserMessage(
 
     if (!branch) throw new Error('Failed to create branch');
 
-    const priorMessages = sourceMessages.slice(0, selectedIndex);
+    const priorMessages = sourceMessages
+      .slice(0, selectedIndex)
+      .filter((message) => message.supersededAt === null);
     if (priorMessages.length > 0) {
       await tx.insert(schema.message).values(
         priorMessages.map((message) => ({
@@ -297,12 +301,30 @@ export async function branchFromUserMessage(
   });
 }
 
+/** The conversation as it reads: one active reply per turn, in order. */
 export async function listMessages(threadId: string) {
   return db
     .select()
     .from(schema.message)
-    .where(eq(schema.message.threadId, threadId))
+    .where(and(eq(schema.message.threadId, threadId), activeMessage()))
     .orderBy(asc(schema.message.position));
+}
+
+/**
+ * The active conversation plus, when the latest turn was retried, every reply
+ * to it (oldest first) so the reader can switch between them. Superseded
+ * replies to earlier turns are never returned: they cannot be switched to.
+ */
+export async function listConversation(threadId: string) {
+  const rows = await db
+    .select()
+    .from(schema.message)
+    .where(eq(schema.message.threadId, threadId))
+    .orderBy(asc(schema.message.position), asc(schema.message.createdAt), asc(schema.message.id));
+  return {
+    messages: rows.filter((row) => row.supersededAt === null),
+    replies: latestTurnReplies(rows),
+  };
 }
 
 /** Allocating this position requires holding the thread row lock in the same transaction. */

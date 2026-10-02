@@ -201,6 +201,43 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('the reply switcher on a retried turn has no violations', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    const reply = (id: string, text: string) => ({
+      id,
+      role: 'assistant',
+      parts: [{ type: 'text', text }],
+      metadata: { status: 'complete', createdAt: created },
+    });
+    const replies = [reply('a11y-reply-1', 'First answer'), reply('a11y-reply-2', 'Second answer')];
+    await page.route('**/api/chat/a11y-replies/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-replies', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'A question' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            replies[1],
+          ],
+          replies,
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-replies');
+    const group = page.getByRole('group', { name: 'Replies' });
+    await expect(group.getByRole('status')).toHaveText('Reply 2 of 2');
+    await group.getByRole('button', { name: 'Previous reply' }).focus();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/quotas');

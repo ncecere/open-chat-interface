@@ -58,7 +58,11 @@ function messages(text: string, status = 'complete'): UIMessage[] {
   ];
 }
 function history(saved = messages('Canonical answer'), threadId = 'thread'): ChatHistory {
-  return { thread: { id: threadId, temporary: false, expiresAt: null }, messages: saved };
+  return {
+    thread: { id: threadId, temporary: false, expiresAt: null },
+    messages: saved,
+    replies: [],
+  };
 }
 function sse(runId?: string) {
   let controller!: ReadableStreamDefaultController<Uint8Array>;

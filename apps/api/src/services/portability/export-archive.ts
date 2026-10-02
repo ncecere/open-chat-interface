@@ -3,6 +3,7 @@ import { EXPORT_ARCHIVE_VERSION } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
+import { activeMessage } from '../chat/reply-path.js';
 import { MAX_EXPORT_MESSAGES, renderMarkdown, safeTitleSlug } from '../export.js';
 import { getStorageDriver } from '../storage/index.js';
 import { NameAllocator, safeEntrySegment, ZIP_MAX_ENTRIES, ZipStreamWriter } from './zip-writer.js';
@@ -71,7 +72,10 @@ function threadSummary(thread: ThreadRow) {
   };
 }
 
-function serializeMessage(message: typeof schema.message.$inferSelect) {
+function serializeMessage({
+  supersededAt: _supersededAt,
+  ...message
+}: typeof schema.message.$inferSelect) {
   return {
     ...message,
     createdAt: message.createdAt.toISOString(),
@@ -345,7 +349,14 @@ export async function* exportArchive(
     const messages = await db
       .select()
       .from(schema.message)
-      .where(and(eq(schema.message.threadId, thread.id), eq(schema.message.userId, owner.id)))
+      // Only the active reply of a retried turn, as in the single-thread export.
+      .where(
+        and(
+          eq(schema.message.threadId, thread.id),
+          eq(schema.message.userId, owner.id),
+          activeMessage(),
+        ),
+      )
       .orderBy(asc(schema.message.position), asc(schema.message.createdAt))
       .limit(limits.maxMessagesPerConversation + 1);
     const truncatedMessages = messages.length > limits.maxMessagesPerConversation;

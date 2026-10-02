@@ -10,14 +10,28 @@ Hovering over a message reveals its controls.
 | --- | --- | --- |
 | **Copy message** | Either | Copies the text to your clipboard |
 | **Edit message** | Yours | Rewrites your question and answers again |
-| **Retry** | The reply | Answers the same question again |
+| **Retry** | The latest reply | Answers the same question again, keeping the earlier reply |
+| **Previous reply** / **Next reply** | The latest reply, once retried | Switches between the replies to your latest question |
 | **Fork conversation here** | Either | Starts a separate conversation from this point |
 
 ### Editing, retrying and forking preserve the original
 
-Editing creates a branch with your revised question. Retrying generates another
-answer to the selected stored question, using context through that question;
-later messages remain stored but are not included in the retry.
+Editing creates a new conversation with your revised question; the original
+stays as it was.
+
+Retrying answers your latest question again, using the conversation up to that
+question. The earlier reply is kept: below the latest reply, **‹ 2 / 3 ›**
+shows which reply you are reading, and **Previous reply** and **Next reply**
+switch between them (screen readers announce "Reply 2 of 3"). The reply you
+leave showing is the one that counts: it is what the model sees as context for
+your next question, and what exports, share links and search include. The other
+replies stay stored but are left out of all of those. Every reply generated
+still counts towards your usage.
+
+You can retry and switch only on the latest reply, and not while a reply is
+being generated. Once you ask another question, the reply showing becomes part
+of the conversation. To take an earlier question in a different direction,
+edit it or fork from it instead.
 
 Forking copies the conversation up to the chosen point into a new one and leaves
 the original untouched, so you can pursue an alternative without losing the

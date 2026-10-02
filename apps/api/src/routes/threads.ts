@@ -26,6 +26,7 @@ import {
   getOwnedProject,
   moveThreadToProject,
 } from '../services/projects.js';
+import { activateReply } from '../services/replies.js';
 import { searchThreads } from '../services/thread-search.js';
 import {
   assertBranchingAllowed,
@@ -201,6 +202,19 @@ threadRoutes.post('/:id/branches', async (c) => {
     },
     201,
   );
+});
+
+/**
+ * Chooses which reply to the latest turn is active: the one shown, sent to the
+ * model as context, exported and shared. Refused (409) while a reply in this
+ * thread is generating, and (422) for any reply but one to the latest turn.
+ * Like retrying, it needs no branching permission: nothing new is created.
+ */
+threadRoutes.patch('/:id/messages/:messageId/active', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  const result = await activateReply(thread.id, user.id, c.req.param('messageId'));
+  return c.json(result);
 });
 
 threadRoutes.get('/:id', async (c) => {
