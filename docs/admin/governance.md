@@ -320,8 +320,11 @@ entries are kept. Each field shows
   Check what your institution requires before shortening this. Access-control
   and security changes are kept regardless: account creation, edits and
   deletion, role changes (including bulk role, ban and unban), provider and
-  single sign-on changes, sign-in policy changes, webhook endpoint changes and
-  backup settings changes.
+  single sign-on changes, sign-in policy changes, webhook endpoint changes,
+  backup and compliance export settings changes, and legal holds.
+
+People on [legal hold](compliance.md#legal-hold) are skipped by conversation,
+trash, audit and memory retention until the hold is lifted.
 
 Retention is easier to introduce early and shorten later than to impose on an
 instance where people have accumulated two years of work.

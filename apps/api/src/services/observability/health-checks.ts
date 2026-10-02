@@ -1,8 +1,9 @@
-import { desc, eq, schema } from '@oci/db';
+import { count, desc, eq, isNull, schema } from '@oci/db';
 import type { ObservabilityStatus } from '@oci/shared';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { backupSettings } from '../backups/settings.js';
+import { complianceSettings } from '../compliance/settings.js';
 import { webhookQueueStats } from '../webhooks/delivery.js';
 import { tracingEnabled, tracingEndpointOrigin } from './tracing.js';
 
@@ -74,6 +75,52 @@ export async function backupHealthCheck(now = new Date()): Promise<Check> {
       status: 'warn',
       detail: `${summary}; ${success.missingObjects} attachment object${success.missingObjects === 1 ? '' : 's'} could not be read`,
     };
+  return { ...base, status: 'ok', detail: summary };
+}
+
+/**
+ * Compliance export and legal holds. Off is fine. When on: the latest run
+ * failed is an error; no successful export within two schedule periods (plus
+ * a margin) is a warning. The number of people on hold is always shown.
+ */
+export async function complianceHealthCheck(now = new Date()): Promise<Check> {
+  const base = { id: 'compliance', label: 'Compliance export' } as const;
+  const settings = await complianceSettings();
+  const [holds] = await db
+    .select({ value: count() })
+    .from(schema.legalHold)
+    .where(isNull(schema.legalHold.liftedAt));
+  const held = holds?.value ?? 0;
+  const holdNote = held > 0 ? ` ${held} ${held === 1 ? 'person' : 'people'} on legal hold.` : '';
+  if (!settings.enabled) return { ...base, status: 'ok', detail: `Off.${holdNote}` };
+
+  const [latest] = await db
+    .select()
+    .from(schema.complianceExportRun)
+    .orderBy(desc(schema.complianceExportRun.startedAt))
+    .limit(1);
+  const [success] = await db
+    .select()
+    .from(schema.complianceExportRun)
+    .where(eq(schema.complianceExportRun.status, 'succeeded'))
+    .orderBy(desc(schema.complianceExportRun.startedAt))
+    .limit(1);
+  if (latest?.status === 'failed')
+    return {
+      ...base,
+      status: 'error',
+      detail: `The latest export failed${latest.errorMessage ? `: ${latest.errorMessage.slice(0, 200)}` : ''}.${holdNote}`,
+    };
+  if (!success)
+    return latest?.status === 'running'
+      ? { ...base, status: 'ok', detail: `The first export is running.${holdNote}` }
+      : { ...base, status: 'warn', detail: `On, but no export has completed yet.${holdNote}` };
+
+  const finished = success.finishedAt ?? success.startedAt;
+  const period = settings.schedule === 'hourly' ? 60 * 60_000 : DAY_MS;
+  const summary = `Last export ${finished.toISOString().slice(0, 16).replace('T', ' ')} UTC (${settings.schedule}${settings.includeContent ? ', with conversation content' : ', audit events only'}).${holdNote}`;
+  if (now.getTime() - finished.getTime() > 2 * period + 30 * 60_000)
+    return { ...base, status: 'warn', detail: `No export for over two periods. ${summary}` };
   return { ...base, status: 'ok', detail: summary };
 }
 

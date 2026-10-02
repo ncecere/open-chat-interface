@@ -544,6 +544,8 @@ describe.skipIf(!available)('live bounded model context', () => {
       ...before.at(-1),
       supersededAt: expect.any(Date),
       updatedAt: expect.any(Date),
+      // Superseding is a change the compliance export records (migration 0034).
+      changeSeq: expect.any(Number),
     });
     expect(after.at(-1)?.parentMessageId).toBe(target.id);
     expect(after.filter((row) => row.role === 'user')).toHaveLength(81);

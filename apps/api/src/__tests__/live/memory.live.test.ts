@@ -671,6 +671,33 @@ describe.skipIf(!available)('live user memory', () => {
     });
   });
 
+  describe('retention and legal hold', () => {
+    it('keeps the memories of a person on legal hold', async () => {
+      const { applyMemoryRetention } = await import('../../services/memory/store.js');
+      const now = new Date('2026-06-01T00:00:00Z');
+      await pool.db.delete(schema.userMemory);
+      await seedMemory('Old note', { updatedAt: new Date('2026-01-01T00:00:00Z') });
+      await seedMemory('Held old note', {
+        user: stranger,
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      await pool.db.insert(schema.legalHold).values({
+        organizationId: state.organizationId,
+        userId: stranger,
+        userEmail: 'held@example.test',
+        reason: 'Records request',
+      });
+      state.settings.set('retention', { memoryRetentionDays: 30 });
+      try {
+        expect(await applyMemoryRetention(now)).toBe(1);
+        expect(await memories()).toEqual([]);
+        expect((await memories(stranger)).map((row) => row.content)).toEqual(['Held old note']);
+      } finally {
+        await pool.db.delete(schema.legalHold);
+      }
+    });
+  });
+
   describe('audit', () => {
     it('records adds, edits and deletes as metadata only, never the text', async () => {
       const chat = await thread();

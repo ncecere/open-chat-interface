@@ -97,6 +97,19 @@ export default defineConfig({
         'src/services/observability/events.ts': { statements: 100, branches: 100, functions: 100 },
         'src/routes/admin/webhooks.ts': { statements: 98, branches: 70, functions: 100 },
         'src/routes/admin/backups.ts': { statements: 85, branches: 50, functions: 100 },
+        // v0.9 compliance export and legal hold: the cursor (exactly once), what content
+        // leaves OCI, and the holds that stop retention and deletion.
+        'src/services/compliance/export.ts': { statements: 90, branches: 78, functions: 90 },
+        'src/services/compliance/cursor.ts': { statements: 82, branches: 75, functions: 80 },
+        'src/services/compliance/content.ts': { statements: 98, branches: 85, functions: 100 },
+        'src/services/compliance/holds.ts': { statements: 75, branches: 60, functions: 75 },
+        'src/services/compliance/hold-errors.ts': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+        },
+        'src/services/compliance/settings.ts': { statements: 98, branches: 95, functions: 100 },
+        'src/routes/admin/compliance.ts': { statements: 88, branches: 60, functions: 100 },
         // v0.9 meaning-based search: provider credentials, runtime DDL, usage, fallback.
         'src/services/embeddings/config.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/embeddings/embed.ts': { statements: 95, branches: 90, functions: 100 },

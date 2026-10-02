@@ -237,6 +237,18 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('admin compliance has no violations', async ({ page }) => {
+    // The real page against the live API: status, settings, legal holds and history.
+    await signIn(page);
+    await page.goto('/admin/compliance');
+    await expect(page.getByRole('heading', { name: 'Compliance', level: 1 })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Export automatically' })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Include conversation content' })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('admin webhooks has no violations', async ({ page }) => {
     // A routed endpoint with a failing delivery, so the card and its log are scanned too.
     await page.route('**/api/admin/webhooks', (route) =>

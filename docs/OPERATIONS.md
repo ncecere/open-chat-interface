@@ -374,6 +374,30 @@ then opt in. Notes are part of the database backup and of each person's
 export; the `retention.memories` job deletes old ones only when **Memory
 retention** is set ([User memory](admin/governance.md#user-memory)).
 
+#### Compliance export and legal hold (migration 0034)
+
+Migration `0034_compliance` creates three new tables (`legal_hold`,
+`compliance_export_run`, `compliance_export_cursor`) and changes two existing
+ones:
+
+- `audit_log` gains a `seq` column. Existing entries are numbered once, in time
+  order, while the migration holds an exclusive lock on `audit_log`, so the
+  time it takes (and the time audit writes wait) grows with the size of the
+  audit log; on a very large log, shorten audit retention first or migrate in
+  a quiet period. The column has a default, so v0.8 replicas keep writing
+  audit entries during a rolling upgrade.
+- `message` gains a nullable `change_seq` column (no rewrite), an index on it
+  and a trigger that sets it on every insert and content change. Existing
+  messages keep NULL. Building the index scans `message` once and blocks
+  message writes while it does.
+- A trigger on `user` refuses to delete an account on legal hold, whichever
+  path tries.
+
+The export is off until turned on under **Data & storage → Compliance**
+([Compliance export and legal hold](admin/compliance.md)); it needs egress to
+its bucket, like backups. Conversation content is exported only if an
+administrator also turns that on.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

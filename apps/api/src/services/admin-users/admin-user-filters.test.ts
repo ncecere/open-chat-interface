@@ -83,7 +83,12 @@ describe('admin user listing and detail', () => {
   });
 
   it('serializes nullable dates and account counts without changing role', () => {
-    expect(toAdminUser(row)).toEqual({ ...row, createdAt: row.createdAt.toISOString() });
+    expect(toAdminUser(row)).toEqual({
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+      legalHold: false,
+    });
+    expect(toAdminUser({ ...row, legalHold: true }).legalHold).toBe(true);
     expect(toAdminUser({ ...row, lastSeenAt: row.createdAt }).lastSeenAt).toBe(
       row.createdAt.toISOString(),
     );
@@ -110,7 +115,7 @@ describe('admin user listing and detail', () => {
     expect(rows.offset).toHaveBeenCalledWith(40);
   });
 
-  it('loads all six detail collections and serializes their dates', async () => {
+  it('loads every detail collection, the legal hold included, and serializes their dates', async () => {
     const date = row.createdAt;
     for (const rows of [
       [row],
@@ -119,12 +124,32 @@ describe('admin user listing and detail', () => {
       [{ bytes: '120', files: 2 }],
       [{ id: 'session', createdAt: date, expiresAt: date }],
       [{ id: 'thread', updatedAt: date }],
-      [{ id: 'audit', createdAt: date }],
+      [{ id: 'audit', createdAt: date, seq: 12 }],
+      [
+        {
+          id: 'hold',
+          userId: 'target',
+          userEmail: row.email,
+          reason: 'Matter 42',
+          placedAt: date,
+          placedByEmail: 'admin@example.com',
+          liftedAt: null,
+          liftedByEmail: null,
+          liftReason: null,
+        },
+      ],
     ])
       mocks.db.select.mockReturnValueOnce(query(rows));
     const detail = await getUserDetail('target');
-    expect(mocks.db.select).toHaveBeenCalledTimes(7);
-    expect(detail.user).toMatchObject({ threadCount: 4, messageCount: 9 });
+    expect(mocks.db.select).toHaveBeenCalledTimes(8);
+    expect(detail.user).toMatchObject({ threadCount: 4, messageCount: 9, legalHold: true });
+    expect(detail.legalHold).toEqual({
+      reason: 'Matter 42',
+      placedAt: date.toISOString(),
+      placedByEmail: 'admin@example.com',
+    });
+    // The export's sequence number is internal.
+    expect(detail.audit[0]).not.toHaveProperty('seq');
     expect(detail.storage).toEqual({ bytesUsed: 120, fileCount: 2 });
     expect(detail.sessions[0]).toMatchObject({
       createdAt: date.toISOString(),

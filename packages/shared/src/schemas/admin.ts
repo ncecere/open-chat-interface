@@ -26,6 +26,8 @@ export const adminUserSchema = z.object({
   threadCount: z.number().int().nonnegative(),
   messageCount: z.number().int().nonnegative(),
   createdAt: z.string(),
+  /** On legal hold (v0.9): retention and deletion skip this person's data. */
+  legalHold: z.boolean().optional(),
 });
 
 export const createUserSchema = z.object({

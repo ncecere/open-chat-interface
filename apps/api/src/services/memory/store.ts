@@ -15,6 +15,7 @@ import { db } from '../../db/index.js';
 import { forbidden, notFound, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { recordAudit } from '../audit.js';
+import { notOnLegalHold } from '../compliance/holds.js';
 import { getRetentionSettings } from '../lifecycle/settings.js';
 import { memoryAvailable, memoryOptedIn } from './access.js';
 
@@ -305,7 +306,10 @@ export async function applyMemoryRetention(now: Date = new Date()): Promise<numb
     const batch = await db
       .select({ id: schema.userMemory.id })
       .from(schema.userMemory)
-      .where(lte(schema.userMemory.updatedAt, cutoff))
+      // People on legal hold keep their memories until the hold is lifted.
+      .where(
+        and(lte(schema.userMemory.updatedAt, cutoff), notOnLegalHold(schema.userMemory.userId)),
+      )
       .limit(RETENTION_BATCH);
     if (batch.length === 0) break;
     const rows = await db
@@ -317,6 +321,7 @@ export async function applyMemoryRetention(now: Date = new Date()): Promise<numb
             batch.map((row) => row.id),
           ),
           lte(schema.userMemory.updatedAt, cutoff),
+          notOnLegalHold(schema.userMemory.userId),
         ),
       )
       .returning({ userId: schema.userMemory.userId });

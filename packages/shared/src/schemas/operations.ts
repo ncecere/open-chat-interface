@@ -69,6 +69,19 @@ export const backupSettingsSchema = z.object({
 });
 export type BackupSettings = z.infer<typeof backupSettingsSchema>;
 
+/** A change to a separate S3 target's settings; shared with the compliance export. */
+export const s3TargetPatchSchema = z
+  .object({
+    bucket: z.string().trim().max(255).optional(),
+    region: z.string().trim().max(100).optional(),
+    endpoint: backupEndpointSchema.nullable().optional(),
+    accessKeyId: z.string().trim().max(255).optional(),
+    forcePathStyle: z.boolean().optional(),
+    /** Omit or send an empty string to keep, send a value to replace, or null to clear. */
+    secretAccessKey: z.string().max(2_048).nullable().optional(),
+  })
+  .strict();
+
 /** Body of `PATCH /admin/backups/settings`: only sent fields change. */
 export const updateBackupSettingsSchema = z
   .object({
@@ -76,18 +89,7 @@ export const updateBackupSettingsSchema = z
     hourUtc: z.number().int().min(0).max(23).optional(),
     destination: z.enum(BACKUP_DESTINATIONS).optional(),
     prefix: backupPrefixSchema.optional(),
-    s3: z
-      .object({
-        bucket: z.string().trim().max(255).optional(),
-        region: z.string().trim().max(100).optional(),
-        endpoint: backupEndpointSchema.nullable().optional(),
-        accessKeyId: z.string().trim().max(255).optional(),
-        forcePathStyle: z.boolean().optional(),
-        /** Omit or send an empty string to keep, send a value to replace, or null to clear. */
-        secretAccessKey: z.string().max(2_048).nullable().optional(),
-      })
-      .strict()
-      .optional(),
+    s3: s3TargetPatchSchema.optional(),
     /** Most recent days kept (the newest backup of each day). */
     keepDaily: z.number().int().min(1).max(90).optional(),
     /** Most recent weeks kept (the newest backup of each ISO week); 0 keeps none beyond the daily ones. */

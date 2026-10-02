@@ -1,6 +1,7 @@
 import type { ReasoningEffort } from '@oci/shared';
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -126,10 +127,17 @@ export const message = pgTable(
     tokensIn: integer('tokens_in'),
     tokensOut: integer('tokens_out'),
     durationMs: integer('duration_ms'),
+    /**
+     * Change order for the compliance export (migration 0034): a trigger sets
+     * it from a sequence on insert and whenever parts, status, error or
+     * superseded time change. Null on messages written before v0.9.
+     */
+    changeSeq: bigint('change_seq', { mode: 'number' }),
     ...timestamps(),
   },
   (t) => [
     index('message_thread_position_idx').on(t.threadId, t.position),
+    index('message_change_seq_idx').on(t.changeSeq).where(sql`${t.changeSeq} is not null`),
     index('message_parent_idx').on(t.parentMessageId),
     // Per-user message counts are read on every admin user listing. Without
     // this the count scans the whole table once per row returned, which at two

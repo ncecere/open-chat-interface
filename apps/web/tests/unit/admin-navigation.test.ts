@@ -38,6 +38,7 @@ describe('admin navigation catalogue', () => {
           'Storage /admin/storage',
           'Retention /admin/retention',
           'Backups /admin/backups',
+          'Compliance /admin/compliance',
           'System health /admin/health',
         ],
       ],

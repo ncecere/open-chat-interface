@@ -5,6 +5,7 @@ import { forbidden, notFound, validationFailed } from '../lib/errors.js';
 import { containsPattern } from '../lib/like.js';
 import { copyCompactionToFork } from './chat/compaction-fork.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
+import { notOnLegalHold } from './compliance/holds.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 
@@ -36,7 +37,14 @@ export async function assertBranchingAllowed(role: UserRole): Promise<void> {
 export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<number> {
   const expired = await db
     .delete(schema.thread)
-    .where(and(eq(schema.thread.temporary, true), lte(schema.thread.expiresAt, now)))
+    .where(
+      and(
+        eq(schema.thread.temporary, true),
+        lte(schema.thread.expiresAt, now),
+        // Kept (still invisible to their owner) while the owner is on legal hold.
+        notOnLegalHold(schema.thread.userId),
+      ),
+    )
     .returning({ id: schema.thread.id });
 
   return expired.length;

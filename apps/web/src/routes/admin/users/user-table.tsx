@@ -155,6 +155,11 @@ export function UserTable({
                     <Badge variant={ROLE_VARIANT[user.role]}>{ROLE_LABELS[user.role]}</Badge>
                   )}
                   {user.banned && <Badge variant="danger">Banned</Badge>}
+                  {user.legalHold && (
+                    <Badge variant="warning" title="Retention and deletion skip this person’s data">
+                      Legal hold
+                    </Badge>
+                  )}
                 </div>
               </td>
               <td className="px-4 py-3 text-[var(--text-secondary)]">{user.threadCount}</td>

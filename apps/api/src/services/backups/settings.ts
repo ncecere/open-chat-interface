@@ -125,18 +125,27 @@ export interface BackupTarget {
 const sameEndpoint = (a: string | null, b: string | null) =>
   (a ?? '').replace(/\/+$/, '').toLowerCase() === (b ?? '').replace(/\/+$/, '').toLowerCase();
 
+/** A destination as backups and compliance exports both configure it. */
+export interface S3DestinationSettings {
+  destination: 'storage' | 'separate';
+  prefix: string;
+  s3: S3StorageSettings;
+}
+
 /**
- * Why a backup cannot be written with these settings; empty when it can.
- * Does not contact S3 (see "Test destination").
+ * Why objects cannot be written to this destination; empty when they can.
+ * `purpose` names what is written (`backups`, `compliance exports`) in the
+ * messages. Does not contact S3 (see "Test destination").
  */
-export async function backupConfigurationIssues(
-  settings: ResolvedBackupSettings,
+export async function destinationIssues(
+  settings: S3DestinationSettings,
+  purpose: string,
 ): Promise<string[]> {
   const storage = await getSetting('storage');
   if (settings.destination === 'storage') {
     if (storage.driver !== 's3')
       return [
-        'Attachments are stored on the local disk. Choose a separate S3 bucket for backups, or move attachments to S3.',
+        `Attachments are stored on the local disk. Choose a separate S3 bucket for ${purpose}, or move attachments to S3.`,
       ];
     return getS3ConfigurationIssues(storage.s3).map(
       (issue) => `Attachment storage: ${issue.message}`,
@@ -150,9 +159,19 @@ export async function backupConfigurationIssues(
     sameEndpoint(settings.s3.endpoint, storage.s3.endpoint)
   )
     issues.push(
-      'This is the attachment bucket. Choose “Attachment storage” as the destination to use it, so storage reconciliation leaves the backups alone.',
+      `This is the attachment bucket. Choose “Attachment storage” as the destination to use it, so storage reconciliation leaves the ${purpose} alone.`,
     );
   return issues;
+}
+
+/**
+ * Why a backup cannot be written with these settings; empty when it can.
+ * Does not contact S3 (see "Test destination").
+ */
+export async function backupConfigurationIssues(
+  settings: ResolvedBackupSettings,
+): Promise<string[]> {
+  return destinationIssues(settings, 'backups');
 }
 
 function driverFor(s3: S3StorageSettings): S3StorageDriver {
@@ -172,17 +191,25 @@ function driverFor(s3: S3StorageSettings): S3StorageDriver {
   });
 }
 
-/** Resolves the destination; throws with the configuration issues when there are any. */
-export async function resolveBackupTarget(settings: ResolvedBackupSettings): Promise<BackupTarget> {
-  const issues = await backupConfigurationIssues(settings);
+/**
+ * Resolves a destination: the attachment bucket under `reservedPrefix`, or the
+ * separate bucket under its own prefix. Throws with the issues when there are any.
+ */
+export async function resolveDestination(
+  settings: S3DestinationSettings,
+  reservedPrefix: string,
+  purpose: string,
+): Promise<BackupTarget> {
+  const issues = await destinationIssues(settings, purpose);
   if (issues.length > 0) throw new Error(issues.join(' '));
   if (settings.destination === 'storage') {
     const storage = await getSetting('storage');
-    return {
-      driver: driverFor(storage.s3),
-      root: BACKUP_STORAGE_PREFIX,
-      bucket: storage.s3.bucket,
-    };
+    return { driver: driverFor(storage.s3), root: reservedPrefix, bucket: storage.s3.bucket };
   }
   return { driver: driverFor(settings.s3), root: settings.prefix, bucket: settings.s3.bucket };
+}
+
+/** Resolves the destination; throws with the configuration issues when there are any. */
+export async function resolveBackupTarget(settings: ResolvedBackupSettings): Promise<BackupTarget> {
+  return resolveDestination(settings, BACKUP_STORAGE_PREFIX, 'backups');
 }

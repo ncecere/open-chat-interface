@@ -7,6 +7,7 @@ import { sharedRedis } from '../../services/chat-streams.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
 import {
   backupHealthCheck,
+  complianceHealthCheck,
   observabilityStatus,
   webhookHealthCheck,
 } from '../../services/observability/health-checks.js';
@@ -271,6 +272,7 @@ healthRoutes.get('/', async (c) => {
     embeddingsCheck(),
     guarded('backups', 'Backups', backupHealthCheck),
     guarded('webhooks', 'Webhooks', webhookHealthCheck),
+    guarded('compliance', 'Compliance export', complianceHealthCheck),
   ]);
 
   const recentJobs = await db

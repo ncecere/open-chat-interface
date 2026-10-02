@@ -8,6 +8,7 @@ export * from './schemas/auth.js';
 export * from './schemas/broadcast.js';
 export * from './schemas/chat.js';
 export * from './schemas/compaction.js';
+export * from './schemas/compliance.js';
 export * from './schemas/connectors.js';
 export * from './schemas/embeddings.js';
 export * from './schemas/lifecycle.js';

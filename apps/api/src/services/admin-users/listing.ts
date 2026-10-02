@@ -30,6 +30,7 @@ export function toAdminUser(row: {
   createdAt: Date;
   threadCount: number;
   messageCount: number;
+  legalHold?: boolean;
 }): AdminUser {
   return {
     id: row.id,
@@ -44,6 +45,7 @@ export function toAdminUser(row: {
     threadCount: row.threadCount,
     messageCount: row.messageCount,
     createdAt: row.createdAt.toISOString(),
+    legalHold: row.legalHold ?? false,
   };
 }
 
@@ -77,6 +79,7 @@ export async function listUsers({
   const outerUserId = sql`${schema.user}.${sql.identifier(schema.user.id.name)}`;
   const threadCountSql = sql<number>`(select count(*) from ${schema.thread} where ${schema.thread.userId} = ${outerUserId})::int`;
   const messageCountSql = sql<number>`(select count(*) from ${schema.message} where ${schema.message.userId} = ${outerUserId})::int`;
+  const legalHoldSql = sql<boolean>`exists (select 1 from ${schema.legalHold} where ${schema.legalHold.userId} = ${outerUserId} and ${schema.legalHold.liftedAt} is null)`;
   const sortColumn = {
     created: schema.user.createdAt,
     name: schema.user.name,
@@ -102,6 +105,7 @@ export async function listUsers({
       createdAt: schema.user.createdAt,
       threadCount: threadCountSql,
       messageCount: messageCountSql,
+      legalHold: legalHoldSql,
     })
     .from(schema.user)
     .where(where)

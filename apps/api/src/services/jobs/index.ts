@@ -1,4 +1,5 @@
 import { BACKUP_JOB, runScheduledBackup } from '../backups/run.js';
+import { COMPLIANCE_JOB, runScheduledComplianceExport } from '../compliance/export.js';
 import {
   applyThreadRetention,
   pruneAuditLog,
@@ -143,6 +144,14 @@ export function lifecycleJobs(): JobDefinition[] {
       name: BACKUP_JOB,
       intervalMs: 10 * MINUTE,
       run: () => runScheduledBackup(),
+    },
+    {
+      // Exports audit events (and, when turned on, conversation content) when
+      // the hourly or daily slot is due; does nothing when the export is off.
+      // The lock keeps scheduled and manual exports from overlapping.
+      name: COMPLIANCE_JOB,
+      intervalMs: 5 * MINUTE,
+      run: () => runScheduledComplianceExport(),
     },
   ];
 }

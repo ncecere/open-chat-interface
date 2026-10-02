@@ -24,7 +24,8 @@ export type SettingKey =
   | 'roleTools'
   | 'embeddings'
   | 'reranking'
-  | 'backups';
+  | 'backups'
+  | 'compliance';
 
 export interface BrandingSettings {
   appName: string;
@@ -264,6 +265,21 @@ export interface StoredBackupSettings {
   keepWeekly?: number;
 }
 
+/**
+ * Compliance export (v0.9). Sparse: never saved means off. Normalised by
+ * `complianceSettings` in services/compliance/settings.ts.
+ */
+export interface StoredComplianceSettings {
+  enabled?: boolean;
+  schedule?: 'hourly' | 'daily';
+  hourUtc?: number;
+  destination?: 'storage' | 'separate';
+  prefix?: string;
+  s3?: Partial<S3StorageSettings>;
+  includeContent?: boolean;
+  keepDays?: number | null;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -279,6 +295,7 @@ interface SettingsMap {
   embeddings: StoredEmbeddingsSettings;
   reranking: StoredRerankingSettings;
   backups: StoredBackupSettings;
+  compliance: StoredComplianceSettings;
 }
 
 /**

@@ -1,6 +1,7 @@
 export * from './auth.js';
 export * from './chat.js';
 export * from './compaction.js';
+export * from './compliance.js';
 export * from './connector.js';
 export * from './embeddings.js';
 export * from './lifecycle.js';

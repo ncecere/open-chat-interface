@@ -343,6 +343,8 @@ describe.skipIf(!available)('live historical attachment context', () => {
       ...before[3],
       supersededAt: expect.any(Date),
       updatedAt: expect.any(Date),
+      // Superseding is a change the compliance export records (migration 0034).
+      changeSeq: expect.any(Number),
     });
     expect(after.filter((row) => row.role === 'user')).toHaveLength(2);
     expect(after.at(-1)?.parentMessageId).toBe(second.turn.promptMessageId);

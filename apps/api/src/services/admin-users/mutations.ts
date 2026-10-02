@@ -7,6 +7,11 @@ import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { recordAudit } from '../audit.js';
+import {
+  HELD_ACCOUNT_DELETION_MESSAGE,
+  isLegalHoldViolation,
+  isOnLegalHold,
+} from '../compliance/holds.js';
 
 export interface AdminUserActor {
   id: string;
@@ -149,8 +154,16 @@ export async function deleteUser(actor: AdminUserActor, targetId: string) {
   if (targetId === actor.id) {
     throw validationFailed('You cannot delete your own account');
   }
+  // The database refuses too (a trigger, migration 0034), whichever path deletes;
+  // checking first gives the administrator a clear reason.
+  if (await isOnLegalHold(targetId)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
 
-  await db.delete(schema.user).where(eq(schema.user.id, targetId));
+  try {
+    await db.delete(schema.user).where(eq(schema.user.id, targetId));
+  } catch (error) {
+    if (isLegalHoldViolation(error)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
+    throw error;
+  }
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
