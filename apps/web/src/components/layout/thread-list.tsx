@@ -3,8 +3,8 @@ import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ChevronDown, Folder, GitFork, Pin, PinOff } from 'lucide-react';
 import { useState } from 'react';
 import { Spinner } from '~/components/ui/spinner';
-import { useProjects, useProjectsAvailable } from '~/hooks/use-projects';
-import { useThreads, useUpdateThread } from '~/hooks/use-threads';
+import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
+import { useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
 import { cn } from '~/lib/utils';
 
 /** Groups by local calendar date, matching the reference's Today/Yesterday buckets. */
@@ -31,14 +31,15 @@ function groupThreads(threads: ThreadSummary[]) {
   return groups.filter((group) => group.threads.length > 0);
 }
 
-function ThreadRow({
+/** One conversation in the sidebar, with its pin and archive actions. */
+export function ThreadRow({
   thread,
   active,
   projectName,
 }: {
   thread: ThreadSummary;
   active: boolean;
-  /** Shown lightly after the title when the conversation is in a project. */
+  /** Shown lightly after the title of a pinned project conversation. */
   projectName?: string;
 }) {
   const update = useUpdateThread();
@@ -64,12 +65,19 @@ function ThreadRow({
       <Link
         to="/chat/$threadId"
         params={{ threadId: thread.id }}
+        aria-current={active ? 'page' : undefined}
         className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
         title={projectName ? `${thread.title} (${projectName})` : thread.title}
       >
         <span className="min-w-0 flex-1 truncate">{thread.title}</span>
         {projectName && (
-          <span className="flex max-w-[40%] shrink-0 items-center gap-1 text-[0.6875rem] text-[var(--text-muted)]">
+          <span
+            className={cn(
+              'flex max-w-[40%] shrink-0 items-center gap-1 text-[0.6875rem]',
+              // Muted text is too faint on the highlighted row's background.
+              active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-muted)]',
+            )}
+          >
             <Folder className="size-3 shrink-0" aria-hidden="true" />
             <span className="sr-only">, in project </span>
             <span className="truncate">{projectName}</span>
@@ -107,10 +115,16 @@ function ThreadRow({
   );
 }
 
-export function ThreadList({ search }: { search: string }) {
-  const { data: threads, isLoading } = useThreads(search || undefined);
+/**
+ * The sidebar's general list: Pinned (every pinned conversation, project ones
+ * labelled with their project), then conversations in no project by day.
+ * Unpinned project conversations are listed under their project instead
+ * (SidebarProjects).
+ */
+export function ThreadList() {
+  const { data: threads, isLoading } = useSidebarThreads();
   const projectsAvailable = useProjectsAvailable();
-  const { data: projects } = useProjects(projectsAvailable);
+  const { data: projects } = useSidebarProjects(projectsAvailable);
   const projectNames = new Map(projects?.map((project) => [project.id, project.name]));
   const params = useParams({ strict: false }) as { threadId?: string };
   const [pinnedOpen, setPinnedOpen] = useState(true);
@@ -124,9 +138,11 @@ export function ThreadList({ search }: { search: string }) {
   }
 
   if (!threads || threads.length === 0) {
+    // Someone whose every conversation is in a project has nothing to add here.
+    if (projects?.some((project) => project.threadCount > 0)) return null;
     return (
       <p className="px-2 py-8 text-center text-xs text-[var(--text-muted)]">
-        {search ? 'No threads matched.' : 'Your conversations will appear here.'}
+        Your conversations will appear here.
       </p>
     );
   }
@@ -170,7 +186,9 @@ export function ThreadList({ search }: { search: string }) {
                     key={thread.id}
                     thread={thread}
                     active={params.threadId === thread.id}
-                    projectName={thread.projectId ? projectNames.get(thread.projectId) : undefined}
+                    projectName={
+                      isPinned && thread.projectId ? projectNames.get(thread.projectId) : undefined
+                    }
                   />
                 ))}
               </div>

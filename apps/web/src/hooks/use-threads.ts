@@ -1,7 +1,13 @@
 import type { ReasoningEffort, ThreadSummary } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '~/lib/api-client';
+import {
+  invalidateConversationLists,
+  SIDEBAR_THREADS_KEY,
+  updateCachedConversation,
+} from '~/lib/conversation-cache';
 
+/** Every live conversation (up to 200), including those in projects. */
 export function useThreads(search?: string) {
   return useQuery({
     queryKey: ['threads', search ?? ''],
@@ -9,6 +15,18 @@ export function useThreads(search?: string) {
       api.get<{ threads: ThreadSummary[] }>(
         `/threads${search ? `?search=${encodeURIComponent(search)}` : ''}`,
       ),
+    select: (data) => data.threads,
+  });
+}
+
+/**
+ * The sidebar's general list: conversations in no project plus every pinned
+ * one. Conversations in a project are listed under it (useSidebarProjects).
+ */
+export function useSidebarThreads() {
+  return useQuery({
+    queryKey: SIDEBAR_THREADS_KEY,
+    queryFn: () => api.get<{ threads: ThreadSummary[] }>('/threads?view=sidebar'),
     select: (data) => data.threads,
   });
 }
@@ -22,7 +40,7 @@ export function useCreateThread() {
         temporary: options?.temporary ?? false,
         ...(options?.projectId ? { projectId: options.projectId } : {}),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
+    onSuccess: () => invalidateConversationLists(queryClient),
   });
 }
 
@@ -41,7 +59,7 @@ export function useForkMessage() {
   return useMutation({
     mutationFn: ({ threadId, messageId }: { threadId: string; messageId: string }) =>
       api.post<{ thread: ThreadSummary }>(`/threads/${threadId}/forks`, { messageId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
+    onSuccess: () => invalidateConversationLists(queryClient),
   });
 }
 
@@ -58,7 +76,7 @@ export function useBranchMessage() {
       messageId: string;
       text: string;
     }) => api.post<BranchMessageResult>(`/threads/${threadId}/branches`, { messageId, text }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
+    onSuccess: () => invalidateConversationLists(queryClient),
   });
 }
 
@@ -67,8 +85,11 @@ export function useUpdateThread() {
 
   return useMutation({
     mutationFn: ({ id, ...patch }: { id: string } & Partial<ThreadSummary>) =>
-      api.patch(`/threads/${id}`, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
+      api.patch<{ thread?: ThreadSummary }>(`/threads/${id}`, patch),
+    onSuccess: (result) => {
+      if (result?.thread) updateCachedConversation(queryClient, result.thread);
+      return invalidateConversationLists(queryClient);
+    },
   });
 }
 
@@ -77,6 +98,6 @@ export function useDeleteThread() {
 
   return useMutation({
     mutationFn: (id: string) => api.delete(`/threads/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['threads'] }),
+    onSuccess: () => invalidateConversationLists(queryClient),
   });
 }

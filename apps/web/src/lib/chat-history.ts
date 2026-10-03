@@ -1,8 +1,13 @@
+import type { ThreadSummary } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { api } from './api-client';
 
 export interface ChatHistory {
-  thread: { id: string; temporary: boolean; expiresAt: string | null };
+  /**
+   * The conversation's summary. Since v0.9.1 the server sends all of it;
+   * only the first three fields are relied on for the conversation itself.
+   */
+  thread: Pick<ThreadSummary, 'id' | 'temporary' | 'expiresAt'> & Partial<ThreadSummary>;
   /** The conversation as it reads: one active reply per turn. */
   messages: UIMessage[];
   /**

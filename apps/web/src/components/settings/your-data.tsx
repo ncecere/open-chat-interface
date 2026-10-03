@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Badge } from '~/components/ui/badge';
 import { Button, buttonVariants } from '~/components/ui/button';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { uploadImportFile } from '~/lib/import-upload';
 import { cn, formatBytes, formatRelativeTime } from '~/lib/utils';
 
@@ -139,7 +140,7 @@ export function YourDataSection() {
       }
       previous.current.set(record.id, record.status);
     }
-    if (landed) void queryClient.invalidateQueries({ queryKey: ['threads'] });
+    if (landed) void invalidateConversationLists(queryClient);
   }, [imports.data, queryClient]);
 
   const upload = useMutation({

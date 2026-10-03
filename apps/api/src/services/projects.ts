@@ -1,10 +1,12 @@
-import { and, asc, count, eq, isNull, schema, sql } from '@oci/db';
+import { and, asc, count, desc, eq, isNull, schema, sql } from '@oci/db';
 import {
   type CreateProjectInput,
   MAX_FILES_PER_PROJECT,
   MAX_PROJECTS_PER_USER,
   type ProjectFile,
   type ProjectSummary,
+  SIDEBAR_PROJECT_THREAD_LIMIT,
+  type SidebarProject,
   type UpdateProjectInput,
   type UserRole,
 } from '@oci/shared';
@@ -14,6 +16,7 @@ import { type UploadResult, uploadAttachment } from './attachments/upload.js';
 import { lockLifecycleOwner } from './lifecycle/owner-lock.js';
 import { indexUploadedProjectFile, projectFileIndexStatus } from './project-search/indexing.js';
 import { assertRoleFeature } from './role-features.js';
+import { serializeThread } from './thread-summary.js';
 
 /**
  * Projects: a person's conversations grouped under shared instructions and
@@ -43,9 +46,12 @@ const fileCountSql = sql<number>`(
     and "project_file"."deleted_at" is null
 )::int`;
 
+// Pinned conversations count. The owner check is belt and braces: moves and
+// creation already refuse another person's project.
 const threadCountSql = sql<number>`(
   select count(*) from "thread" as "project_thread"
   where "project_thread"."project_id" = "project"."id"
+    and "project_thread"."user_id" = "project"."user_id"
     and "project_thread"."deleted_at" is null
     and "project_thread"."archived" = false
     and "project_thread"."temporary" = false
@@ -112,6 +118,73 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
     .orderBy(sql`lower(${schema.project.name})`, asc(schema.project.createdAt))
     .limit(MAX_PROJECTS_PER_USER);
   return rows.map(serializeProject);
+}
+
+/**
+ * The sidebar's project tree (v0.9.1): every project in name order with its
+ * live conversation count and its newest unpinned live conversations.
+ *
+ * Two bounded queries rather than one per project: the projects (at most
+ * MAX_PROJECTS_PER_USER), then one lateral join that takes up to
+ * SIDEBAR_PROJECT_THREAD_LIMIT conversations per project, newest first, which
+ * thread_project_idx (project_id, updated_at) serves without a sort. Fetching
+ * these separately from GET /api/threads is the point: a project whose
+ * conversations are older than the person's 200 most recent would otherwise
+ * look empty. Pinned conversations are left out because the sidebar lists
+ * them in its Pinned section; archived, temporary and trashed ones are left
+ * out exactly as listThreads leaves them out.
+ */
+export async function listSidebarProjects(userId: string): Promise<SidebarProject[]> {
+  const projects = await db
+    .select({ id: schema.project.id, name: schema.project.name, threadCount: threadCountSql })
+    .from(schema.project)
+    .where(eq(schema.project.userId, userId))
+    .orderBy(sql`lower(${schema.project.name})`, asc(schema.project.createdAt))
+    .limit(MAX_PROJECTS_PER_USER);
+  if (projects.length === 0) return [];
+
+  // Only the ids go through the join, so project instructions are not
+  // repeated on every row.
+  const owned = db
+    .select({ id: schema.project.id })
+    .from(schema.project)
+    .where(eq(schema.project.userId, userId))
+    .as('owned');
+  const recent = db
+    .select()
+    .from(schema.thread)
+    .where(
+      and(
+        eq(schema.thread.projectId, owned.id),
+        eq(schema.thread.userId, userId),
+        eq(schema.thread.pinned, false),
+        eq(schema.thread.archived, false),
+        eq(schema.thread.temporary, false),
+        isNull(schema.thread.deletedAt),
+      ),
+    )
+    .orderBy(desc(schema.thread.updatedAt), desc(schema.thread.id))
+    .limit(SIDEBAR_PROJECT_THREAD_LIMIT)
+    .as('recent');
+  const rows = await db
+    .select()
+    .from(owned)
+    .crossJoinLateral(recent)
+    .orderBy(desc(recent.updatedAt), desc(recent.id));
+
+  const byProject = new Map<string, SidebarProject['recentThreads']>();
+  for (const { recent: thread } of rows) {
+    if (!thread.projectId) continue;
+    const list = byProject.get(thread.projectId) ?? [];
+    list.push(serializeThread(thread));
+    byProject.set(thread.projectId, list);
+  }
+  return projects.map((project) => ({
+    id: project.id,
+    name: project.name,
+    threadCount: Number(project.threadCount),
+    recentThreads: byProject.get(project.id) ?? [],
+  }));
 }
 
 /** The owner's project, or 404. */

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { attachmentSchema } from './chat.js';
+import { attachmentSchema, threadSummarySchema } from './chat.js';
 
 /**
  * Projects group conversations under shared instructions and files.
@@ -13,6 +13,8 @@ export const PROJECT_NAME_MAX_LENGTH = 100;
 export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 8000;
 export const MAX_PROJECTS_PER_USER = 100;
 export const MAX_FILES_PER_PROJECT = 20;
+/** Recent conversations the sidebar lists under each project (v0.9.1). */
+export const SIDEBAR_PROJECT_THREAD_LIMIT = 5;
 
 const projectNameSchema = z
   .string()
@@ -55,6 +57,20 @@ export const projectSummarySchema = z.object({
   threadCount: z.number().int().nonnegative(),
   createdAt: z.string(),
   updatedAt: z.string(),
+});
+
+/**
+ * One project in the sidebar's tree (`GET /api/projects/sidebar`, v0.9.1).
+ * `recentThreads` are the newest live conversations that are not pinned, at
+ * most SIDEBAR_PROJECT_THREAD_LIMIT, newest first: pinned ones are listed
+ * only in the sidebar's Pinned section. `threadCount` counts every live
+ * conversation in the project, pinned ones included.
+ */
+export const sidebarProjectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  threadCount: z.number().int().nonnegative(),
+  recentThreads: z.array(threadSummarySchema),
 });
 
 /**
@@ -102,6 +118,7 @@ export const projectSearchDataSchema = z.object({
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
+export type SidebarProject = z.infer<typeof sidebarProjectSchema>;
 export type ProjectFile = z.infer<typeof projectFileSchema>;
 export type ProjectFileIndex = z.infer<typeof projectFileIndexSchema>;
 export type ProjectSearchData = z.infer<typeof projectSearchDataSchema>;

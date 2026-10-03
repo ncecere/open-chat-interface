@@ -1,4 +1,4 @@
-import { and, asc, type Database, desc, eq, ilike, isNull, lte, schema, sql } from '@oci/db';
+import { and, asc, type Database, desc, eq, ilike, isNull, lte, or, schema, sql } from '@oci/db';
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
@@ -53,7 +53,17 @@ export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<nu
 
 export async function listThreads(
   userId: string,
-  options?: { search?: string; archived?: boolean; projectId?: string },
+  options?: {
+    search?: string;
+    archived?: boolean;
+    projectId?: string;
+    /**
+     * The sidebar's general list: conversations in no project, plus pinned
+     * ones wherever they are (the sidebar keeps every pinned conversation in
+     * its Pinned section). Project conversations are listed per project.
+     */
+    outsideProjects?: boolean;
+  },
 ) {
   // Expiry cleanup belongs to the background job runner. Doing it here made an
   // ordinary read perform unbounded deletion work on someone else's rows.
@@ -72,6 +82,11 @@ export async function listThreads(
   // The caller checks that the project is the user's own.
   if (options?.projectId) {
     conditions.push(eq(schema.thread.projectId, options.projectId));
+  }
+
+  if (options?.outsideProjects) {
+    const unfiled = or(isNull(schema.thread.projectId), eq(schema.thread.pinned, true));
+    if (unfiled) conditions.push(unfiled);
   }
 
   return db

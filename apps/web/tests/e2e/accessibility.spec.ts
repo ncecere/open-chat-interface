@@ -382,6 +382,46 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     }
   });
 
+  test('the sidebar project tree has no violations while expanded', async ({ page }) => {
+    await signIn(page);
+    const name = `Tree project ${Date.now()}`;
+    const created = await page.request.post('/api/projects', { data: { name } });
+    expect(created.status()).toBe(201);
+    const { project } = (await created.json()) as { project: { id: string } };
+    let threadId = '';
+    for (const title of ['Tree first', 'Tree second']) {
+      const response = await page.request.post('/api/threads', {
+        data: { title, projectId: project.id },
+      });
+      expect(response.status()).toBe(201);
+      threadId = ((await response.json()) as { thread: { id: string } }).thread.id;
+    }
+    // Pinned: listed in Pinned with its project named, counted under the project.
+    expect(
+      (await page.request.patch(`/api/threads/${threadId}`, { data: { pinned: true } })).status(),
+    ).toBe(200);
+
+    // The open conversation's project expands by itself.
+    await page.goto(`/chat/${threadId}`);
+    await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
+    const open = page.getByRole('button', { name: 'Open sidebar' });
+    if (await open.isVisible()) await open.click();
+    const toggle = page.getByRole('button', { name: `Conversations in ${name}` });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(
+      page.getByRole('list', { name: `Conversations in ${name}` }).getByRole('link'),
+    ).toHaveText(['Tree first']);
+    await expect(
+      page.getByRole('link', { name: `Show all (2) conversations in ${name}` }),
+    ).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+
+    // Leave the shared fixture's Pinned section as it was.
+    await page.request.patch(`/api/threads/${threadId}`, { data: { pinned: false } });
+  });
+
   test('the move to project dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     const created = await page.request.post('/api/threads', { data: { title: 'To be moved' } });

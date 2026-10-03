@@ -33,8 +33,8 @@ way regardless of which model you pick.
 
 ## The parts of the screen
 
-**The sidebar** holds your projects and your conversations, newest first, with
-pinned ones at the top. Search finds a conversation by its title or by what was said in it, and
+**The sidebar** holds your projects, each with its own recent conversations,
+and your other conversations, newest first, with pinned ones at the top. Search finds a conversation by its title or by what was said in it, and
 opens it at the matching message.
 
 **The composer** at the bottom is where you type. The controls along its edge

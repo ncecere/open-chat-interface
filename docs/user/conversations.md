@@ -164,10 +164,18 @@ yourself.
 
 ## Organising the sidebar
 
+The sidebar lists your [projects](projects.md#projects-in-the-sidebar), each
+with its own conversations, and then your other conversations under **Pinned**,
+**Today**, **Yesterday** and **Older**. A conversation in a project is listed
+under its project, not in the date groupings.
+
 - **Pin** a conversation to hold it at the top, above the date groupings.
+  Pinned conversations are always listed under **Pinned**, including those in
+  a project, which show the project's name after their title.
 - **Archive** one to remove it from the list without deleting it. Archived
   conversations remain under [Settings → History](settings.md#history).
-- **Search** finds conversations by title and by what was said in them. See
+- **Search** finds conversations by title and by what was said in them,
+  including those in projects. See
   [Finding a conversation](#finding-a-conversation).
 
 ## Finding a conversation

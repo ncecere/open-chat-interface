@@ -6,6 +6,7 @@ import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { useDeleteThread, useThreads, useUpdateThread } from '~/hooks/use-threads';
 import { api } from '~/lib/api-client';
+import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { cn, formatRelativeTime } from '~/lib/utils';
 
 type HistoryTab = 'active' | 'archived' | 'trash';
@@ -31,7 +32,7 @@ function TrashList() {
 
   const invalidate = () =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['threads'] }),
+      invalidateConversationLists(queryClient),
       queryClient.invalidateQueries({ queryKey: ['attachments'] }),
     ]);
 

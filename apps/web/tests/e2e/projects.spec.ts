@@ -2,7 +2,8 @@ import { expect, type Page, test } from '@playwright/test';
 
 /**
  * Projects: create one from the sidebar, start a new chat inside it, and find
- * that conversation under the project.
+ * that conversation under the project, in the sidebar's project tree (v0.9.1)
+ * and on the project page.
  *
  * Self-contained so it runs on any seeded instance (CI has no model provider):
  * sign-in is real, while the model catalog, project, thread and chat APIs are
@@ -32,15 +33,60 @@ interface Recorded {
   threadCreates: unknown[];
 }
 
-async function installApi(page: Page) {
+/** Starting state for the stand-in; times are minutes before the page loads. */
+interface Seed {
+  projects: Array<{ id: string; name: string }>;
+  threads: Array<{
+    id: string;
+    title: string;
+    projectId: string | null;
+    minutesAgo: number;
+    pinned?: boolean;
+  }>;
+}
+
+async function installApi(page: Page, seed: Seed = { projects: [], threads: [] }) {
   await page.addInitScript(
-    ({ model }) => {
+    ({ model, seed }) => {
       const now = () => new Date().toISOString();
-      const projects: Array<Record<string, unknown>> = [];
-      const threads: Array<Record<string, unknown>> = [];
-      const messages: Record<string, unknown[]> = {};
+      // Kept across reloads in the same tab, as the server would keep it.
+      const saved = sessionStorage.getItem('projects-e2e-state');
+      const initial = saved
+        ? JSON.parse(saved)
+        : {
+            projects: seed.projects.map((project) => ({
+              ...project,
+              instructions: '',
+              createdAt: now(),
+              updatedAt: now(),
+            })),
+            threads: seed.threads.map(({ minutesAgo, ...thread }) => {
+              const at = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+              return {
+                pinned: false,
+                archived: false,
+                temporary: false,
+                expiresAt: null,
+                parentThreadId: null,
+                branchedFromMessageId: null,
+                lastMessageAt: at,
+                createdAt: at,
+                updatedAt: at,
+                ...thread,
+              };
+            }),
+          };
+      const projects: Array<Record<string, unknown>> = initial.projects;
+      const threads: Array<Record<string, unknown>> = initial.threads;
+      const save = () =>
+        sessionStorage.setItem('projects-e2e-state', JSON.stringify({ projects, threads }));
+      const messages: Record<string, unknown[]> = Object.fromEntries(
+        threads.map((thread) => [thread.id, []]),
+      );
       const recorded = { threadCreates: [] as unknown[] };
       Object.assign(window, { __projectsE2E: recorded });
+      const newestFirst = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+        String(b.updatedAt).localeCompare(String(a.updatedAt));
 
       const json = (body: unknown, status = 200) =>
         new Response(JSON.stringify(body), {
@@ -51,6 +97,16 @@ async function installApi(page: Page) {
         ...project,
         fileCount: 0,
         threadCount: threads.filter((thread) => thread.projectId === project.id).length,
+      });
+      // GET /api/projects/sidebar: newest five unpinned, every one counted.
+      const sidebarEntry = (project: Record<string, unknown>) => ({
+        id: project.id,
+        name: project.name,
+        threadCount: threads.filter((thread) => thread.projectId === project.id).length,
+        recentThreads: threads
+          .filter((thread) => thread.projectId === project.id && !thread.pinned)
+          .sort(newestFirst)
+          .slice(0, 5),
       });
       const original = window.fetch.bind(window);
 
@@ -75,6 +131,9 @@ async function installApi(page: Page) {
         if (path === '/api/projects' && method === 'GET') {
           return json({ projects: projects.map(summary) });
         }
+        if (path === '/api/projects/sidebar' && method === 'GET') {
+          return json({ projects: projects.map(sidebarEntry) });
+        }
         if (path === '/api/projects' && method === 'POST') {
           const input = body();
           const project = {
@@ -85,6 +144,7 @@ async function installApi(page: Page) {
             updatedAt: now(),
           };
           projects.push(project);
+          save();
           return json({ project: summary(project) }, 201);
         }
         const projectPath = path.match(/^\/api\/projects\/([^/]+)(\/files)?$/);
@@ -98,9 +158,24 @@ async function installApi(page: Page) {
 
         if (path === '/api/threads' && method === 'GET') {
           const projectId = url.searchParams.get('projectId');
+          const sidebar = url.searchParams.get('view') === 'sidebar';
           return json({
-            threads: threads.filter((thread) => !projectId || thread.projectId === projectId),
+            threads: threads
+              .filter((thread) => !projectId || thread.projectId === projectId)
+              .filter((thread) => !sidebar || !thread.projectId || thread.pinned)
+              .sort(
+                (a, b) =>
+                  Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || newestFirst(a, b),
+              ),
           });
+        }
+        const threadPath = path.match(/^\/api\/threads\/([^/]+)$/);
+        if (threadPath && method === 'PATCH') {
+          const thread = threads.find((candidate) => candidate.id === threadPath[1]);
+          if (!thread) return json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
+          Object.assign(thread, body(), { updatedAt: now() });
+          save();
+          return json({ thread });
         }
         if (path === '/api/threads' && method === 'POST') {
           const input = body();
@@ -121,13 +196,14 @@ async function installApi(page: Page) {
           };
           threads.unshift(thread);
           messages[thread.id] = [];
+          save();
           return json({ thread }, 201);
         }
 
         const history = path.match(/^\/api\/chat\/([^/]+)\/messages$/);
         if (history && method === 'GET' && history[1] && history[1] in messages) {
           return json({
-            thread: { id: history[1], temporary: false, expiresAt: null },
+            thread: threads.find((candidate) => candidate.id === history[1]),
             messages: messages[history[1]],
           });
         }
@@ -136,7 +212,9 @@ async function installApi(page: Page) {
           const prompt = request.messages?.[0];
           const text = prompt?.parts?.[0]?.text ?? '';
           const thread = threads.find((candidate) => candidate.id === request.threadId);
-          if (thread) thread.title = text;
+          if (thread)
+            Object.assign(thread, { title: text, updatedAt: now(), lastMessageAt: now() });
+          save();
           const assistantId = `assistant-${request.threadId}`;
           messages[request.threadId]?.push(
             { ...prompt, metadata: { status: 'complete', createdAt: now() } },
@@ -173,7 +251,7 @@ async function installApi(page: Page) {
         return original(input, init);
       };
     },
-    { model: MODEL },
+    { model: MODEL, seed },
   );
 }
 
@@ -236,11 +314,22 @@ test('a new chat started from a project page belongs to that project', async ({ 
   );
   expect(recorded).toEqual([{ temporary: false, projectId: 'project-e2e-1' }]);
 
-  // The conversation is listed under the project, reached from the sidebar.
+  // The open conversation's project opens by itself in the sidebar, with the
+  // conversation under it and highlighted; it is not in the general list.
   await openSidebar(page);
+  const toggle = page.getByRole('button', { name: 'Conversations in Dissertation' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const tree = page.getByRole('list', { name: 'Conversations in Dissertation' });
+  await expect(tree.getByRole('link', { name: 'Outline chapter one' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(page.getByRole('link', { name: 'Outline chapter one' })).toHaveCount(1);
+
+  // The project page lists it too, reached from the sidebar.
   await page
     .getByRole('list', { name: 'Projects' })
-    .getByRole('link', { name: 'Dissertation' })
+    .getByRole('link', { name: 'Dissertation', exact: true })
     .click();
   await expect(page).toHaveURL(/\/projects\/project-e2e-1$/);
   const conversations = page.getByRole('list', { name: 'Project conversations' });
@@ -248,4 +337,103 @@ test('a new chat started from a project page belongs to that project', async ({ 
     'href',
     '/chat/thread-e2e-1',
   );
+});
+
+const RESEARCH: Seed = {
+  projects: [{ id: 'project-research', name: 'Research' }],
+  threads: [
+    { id: 'unfiled-1', title: 'Grocery list', projectId: null, minutesAgo: 1 },
+    ...[1, 2, 3, 4, 5, 6].map((index) => ({
+      id: `research-${index}`,
+      title: `Research note ${index}`,
+      projectId: 'project-research',
+      minutesAgo: index * 10,
+    })),
+    {
+      id: 'research-pinned',
+      title: 'Research pinned',
+      projectId: 'project-research',
+      minutesAgo: 500,
+      pinned: true,
+    },
+  ],
+};
+
+test('project conversations live under their project in the sidebar', async ({
+  page,
+  isMobile,
+}) => {
+  await installApi(page, RESEARCH);
+  await signIn(page);
+  await openSidebar(page);
+  const drawer = page.getByRole('dialog', { name: 'Conversation sidebar' });
+  if (isMobile) await expect(drawer).toBeVisible();
+
+  // A plain heading; each project is its own disclosure, collapsed at first.
+  await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Projects', exact: true })).toHaveCount(0);
+  const toggle = page.getByRole('button', { name: 'Conversations in Research' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('link', { name: 'Research note 1' })).toHaveCount(0);
+
+  // The general list has only unfiled conversations; pinned ones stay in
+  // Pinned with their project named.
+  await expect(page.getByRole('link', { name: 'Grocery list' })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /^Research pinned\s*, in project Research$/ }),
+  ).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const tree = page.getByRole('list', { name: 'Conversations in Research' });
+  await expect(tree.getByRole('link')).toHaveText([
+    'Research note 1',
+    'Research note 2',
+    'Research note 3',
+    'Research note 4',
+    'Research note 5',
+  ]);
+  await expect(page.getByRole('link', { name: 'Research pinned' })).toHaveCount(1);
+
+  // Remembered in this browser.
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
+  await openSidebar(page);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+  // Unpinning moves a conversation from Pinned to the top of its project.
+  const pinnedRow = page.getByRole('link', { name: /^Research pinned\s*, in project Research$/ });
+  await pinnedRow.locator('xpath=..').getByRole('button', { name: 'Unpin thread' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(tree.getByRole('link').first()).toHaveText('Research pinned');
+  await expect(tree.getByRole('link')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Pinned' })).toHaveCount(0);
+
+  // Show all opens the project's conversations; a phone's drawer closes.
+  const showAll = page.getByRole('link', { name: 'Show all (7) conversations in Research' });
+  await expect(showAll).toBeVisible();
+  await showAll.click();
+  await expect(page).toHaveURL(/\/projects\/project-research(\?tab=conversations)?$/);
+  await expect(
+    page.getByRole('list', { name: 'Project conversations' }).getByRole('link'),
+  ).toHaveCount(7);
+  if (isMobile) await expect(drawer).toBeHidden();
+
+  // An older conversation opened from there is shown under its project.
+  await page
+    .getByRole('list', { name: 'Project conversations' })
+    .getByRole('link', { name: /Research note 6/ })
+    .click();
+  await expect(page).toHaveURL(/\/chat\/research-6$/);
+  await openSidebar(page);
+  await expect(tree.getByRole('link')).toHaveCount(6);
+  await expect(tree.getByRole('link', { name: 'Research note 6' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  // Tapping a conversation in the tree opens it; a phone's drawer closes.
+  await tree.getByRole('link', { name: 'Research note 2' }).click();
+  await expect(page).toHaveURL(/\/chat\/research-2$/);
+  if (isMobile) await expect(drawer).toBeHidden();
 });

@@ -20,6 +20,7 @@ import {
   getProjectSummary,
   listProjectFiles,
   listProjects,
+  listSidebarProjects,
   serializeProjectFile,
   updateProject,
   uploadProjectFile,
@@ -50,6 +51,17 @@ projectRoutes.use('*', async (c, next) => {
 projectRoutes.get('/', async (c) => {
   const user = currentUser(c);
   return c.json({ projects: await listProjects(user.id) });
+});
+
+/**
+ * The sidebar's project tree: each project with its conversation count and up to five newest unpinned conversations.
+ *
+ * A separate path rather than a heavier GET /: the project picker and other
+ * callers do not need the conversations. Declared before `/:id`.
+ */
+projectRoutes.get('/sidebar', async (c) => {
+  const user = currentUser(c);
+  return c.json({ projects: await listSidebarProjects(user.id) });
 });
 
 /** Creates a project, up to the per-person limit. */
