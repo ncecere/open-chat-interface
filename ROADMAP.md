@@ -15,6 +15,7 @@ document at every minor release.
 - [Shipped — v0.8: tools and connected knowledge](#shipped--v08-tools-and-connected-knowledge)
 - [Shipped — v0.9: make and operate](#shipped--v09-make-and-operate)
 - [Now — v0.10: finish and harden](#now--v010-finish-and-harden)
+- [Next — v0.11: always on](#next--v011-always-on)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -188,6 +189,40 @@ together they make compliance, backups, exports and artifacts complete.
 | **Sidebar polish** | The remembered expanded projects do not sync between open tabs. | Sync the expanded state across tabs. |
 | **Branding applied everywhere** | Branding sets the name, logo, colour theme, default theme and sign-in message, but not every surface follows it: the browser tab always says "Open Chat Interface", there is no favicon from the logo, verification and password-reset emails do not name the instance, and diagrams read an accent colour the Branding page cannot set, so they always use the default orange. | An end-to-end check of every surface (sign-in, sidebar, tab title and icon, share pages, emails, artifacts and diagrams, exports) with a browser test that sets custom branding and asserts each one, and fixes for what does not follow it. Diagram colours follow the chosen colour theme. |
 | **One place for operations pages** | The Backups and Compliance pages repeat the same destination and schedule controls. | Shared components for destinations, schedules and run history. |
+
+## Next — v0.11: always on
+
+Large deployments (tens of thousands of people, tens of millions of messages,
+a highly available PostgreSQL cluster such as Patroni) cannot take hours of
+downtime for an upgrade. In comparable products those hours go to database
+migrations that rewrite large tables, rebuilding vector indexes and
+re-indexing. The goal of v0.11 is that upgrading from the previous minor
+release needs **no downtime**, survives a database failover partway through,
+and that this is tested, not promised.
+
+OCI starts from a good place: migrations run once under a lock, releases keep
+the previous version working against the new schema, messages are rows rather
+than one document per conversation, vectors live in PostgreSQL, and indexing
+and embedding already run as background jobs. What is missing is below.
+
+| Item | Why | Plan |
+| --- | --- | --- |
+| **Two-phase migrations** | Migrations run in one transaction, so an index on a large table cannot be built concurrently and blocks writes while it builds, and data changes inside migrations take time proportional to the table. | After [GitLab's model](https://docs.gitlab.com/development/database/): a fast transactional schema step before the deploy, then post-deploy steps and batched background migrations run by the job runner while OCI serves (concurrent index builds, backfills in small batches with pauses, invalid indexes cleaned up and retried). Progress on System health; features that need a step degrade gracefully until it finishes; a release can require earlier background migrations to be complete before it upgrades. |
+| **Lock-safe migrations** | A migration waiting behind one long query queues every request behind it, so even a fast change can freeze the application. | Short lock and statement timeouts on every migration step, with automatic retry and backoff. |
+| **Failover-safe upgrades and jobs** | On a highly available cluster the primary can change during an upgrade, dropping connections and the advisory locks that guard migrations and jobs. | Migrations and background migrations resume cleanly after a failover; jobs re-acquire their locks; requests retry where it is safe. A failover drill (stopping the primary mid-upgrade and mid-backfill) runs in the test suite. |
+| **Migration linter** | Unsafe changes are easy to write and only show at scale. | CI blocks non-concurrent indexes on existing tables, table rewrites, unbatched data updates, `NOT NULL` without a default, and dropping a column the previous release still reads. |
+| **Rolling-upgrade tests** | "The previous release works against the new schema" is a convention today. | Every release upgrades a seeded database from the previous minor while the previous release serves traffic, and runs the previous release's checks against the new schema. Supported upgrade paths are published, including which releases cannot be skipped. |
+| **Upgrade preflight** | Operators cannot see what an upgrade will cost before starting it. | A command and an administration page listing pending migrations and background migrations with estimated work (table sizes, index builds, disk needed), and whether this upgrade can be rolling. |
+| **Vector and search rebuilds without a gap** | Changing the embeddings model, or a search index, must not leave search empty while it rebuilds. | A new embeddings model or index builds alongside the current one and takes over when complete; the old one is removed afterwards. Never inside a migration. |
+| **Read-only maintenance mode** | For the rare change that cannot be online, down is the wrong fallback. | People can read and search while sending pauses, announced ahead with a scheduled banner. |
+| **Scale test harness** | OCI has not been measured at tens of thousands of people and tens of millions of messages. | A synthetic dataset at that size and a repeatable run that measures upgrade and migration time, page and search latency and job throughput before each release, with results published in the release notes. |
+| **Connection pooling** | OCI needs direct or session-mode connections, and many replicas against one cluster run out of them. | Transaction-mode pooling (PgBouncer) for ordinary queries, with a small direct pool for locks and jobs. Optional routing of heavy reads (search, reports, exports) to replicas. |
+| **Kubernetes Helm chart** | The zero-downtime procedure should be the default, not a runbook. | A first-party chart: migration job before the rollout, rolling updates, disruption budgets, readiness gating and autoscaling on OCI's metrics. |
+| **Background work visible** | Imports, indexing, re-embedding and background migrations run out of sight. | Queue depth, progress and failures on System health and in metrics. |
+
+Measured by the harness, later releases may also partition the largest
+append-only tables (usage events, audit log, webhook deliveries) so that
+retention drops old partitions instead of deleting rows.
 
 ## Later — v1.0 and beyond: assistants and media
 
