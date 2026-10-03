@@ -158,6 +158,14 @@ describe('Webhooks admin page', () => {
     expect(log.textContent).toContain('user.create');
     expect(log.textContent).toContain('retrying');
     expect(log.textContent).toContain('2 of 8');
+    // It scrolls sideways on phones, so keyboard users can focus and scroll it.
+    const region = log.parentElement!;
+    // A labelled <section> is a region landmark.
+    expect(region.tagName).toBe('SECTION');
+    expect(region.getAttribute('tabindex')).toBe('0');
+    expect(region.getAttribute('aria-label')).toBe(
+      'Recent deliveries to https://hooks.example.test/oci',
+    );
   });
 
   it('confirms before deleting', async () => {

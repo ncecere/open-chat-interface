@@ -309,7 +309,13 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpoint }) {
   if (log.data.deliveries.length === 0)
     return <p className="text-sm text-[var(--text-muted)]">Nothing delivered yet.</p>;
   return (
-    <div className="overflow-x-auto">
+    <section
+      // On narrow screens the log scrolls sideways; keyboard users must be able to scroll it too.
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access (WCAG 2.1.1)
+      tabIndex={0}
+      aria-label={`Recent deliveries to ${endpoint.url}`}
+      className="overflow-x-auto rounded-md"
+    >
       <table className="w-full text-left text-xs">
         <caption className="sr-only">Recent deliveries to {endpoint.url}</caption>
         <thead className="text-[var(--text-muted)]">
@@ -367,7 +373,7 @@ function DeliveryLog({ endpoint }: { endpoint: WebhookEndpoint }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }
 
