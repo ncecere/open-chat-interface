@@ -17,7 +17,7 @@ import type { S3StorageDriver } from '../storage/s3-driver.js';
  * - Retention deletes backup folders; the sweep afterwards deletes copies no
  *   retained backup's manifest references.
  *
- * See docs/admin/backups.md and docs/dev/v0.10-design-backups.md.
+ * See docs/admin/backups.md and docs/dev/v0.10-design.md ("Backups include files").
  */
 
 /** Folder, below the backup root, holding the copied files. */

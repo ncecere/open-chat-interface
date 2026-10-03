@@ -80,6 +80,9 @@ jobs:
       INITIAL_ADMIN_PASSWORD: ci-admin-password-1234
       E2E_ADMIN_EMAIL: admin@example.test
       E2E_ADMIN_PASSWORD: ci-admin-password-1234
+      # The browser suite signs in far more often than a person would; the
+      # sign-in rate limit itself is covered by live tests.
+      RATE_LIMIT_AUTH_PER_MINUTE: '100000'
       S3_TEST_ENDPOINT: http://127.0.0.1:7070
       S3_TEST_BUCKET: oci-ci-attachments
       S3_TEST_ACCESS_KEY_ID: oci_ci_s3
