@@ -196,8 +196,9 @@ lines underneath, matched words highlighted, best match first.
 ## Where conversations go
 
 Your institution may set a retention period, after which conversations are
-removed automatically. If one applies, it is described under
-[Settings → History](settings.md#history).
+removed automatically. Conversations it removes go to the trash first, where
+[Settings → History](settings.md#history) shows them as removed automatically
+and when each will be deleted.
 
 Deleting a conversation yourself moves it to a recoverable state first, so an
 accidental deletion is not immediately final. How long that lasts is set by your

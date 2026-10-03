@@ -1,11 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Moon, Sun } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { ThemeMenu } from '~/components/layout/theme-menu';
 import { UsageLimits } from '~/components/settings/usage-limits';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Select } from '~/components/ui/select';
-import { useCurrentUser } from '~/hooks/use-current-user';
+import {
+  type CurrentFeatures,
+  type SettingsSummary,
+  useCurrentUser,
+} from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
@@ -14,7 +19,7 @@ const TABS = [
   { to: '/settings', label: 'Account', exact: true },
   { to: '/settings/customization', label: 'Customization' },
   { to: '/settings/memory', label: 'Memory' },
-  { to: '/settings/history', label: 'History & Sync' },
+  { to: '/settings/history', label: 'History' },
   { to: '/settings/models', label: 'Models' },
   { to: '/settings/connectors', label: 'Connectors' },
   { to: '/settings/attachments', label: 'Attachments' },
@@ -27,12 +32,44 @@ const SHORTCUTS = [
   { label: 'New Chat', keys: ['⌘', '⇧', 'O'] },
   { label: 'Toggle Sidebar', keys: ['⌘', 'B'] },
   { label: 'Open Model Picker', keys: ['⌘', '/'] },
-  { label: 'Send Message', keys: ['Enter'] },
-  { label: 'New Line', keys: ['⇧', 'Enter'] },
 ];
+
+/** Send and New Line follow "Invert Send/New Line Behavior" (Customization). */
+function messageShortcuts(invertSend: boolean) {
+  return invertSend
+    ? [
+        { label: 'Send Message', keys: ['⌘', 'Enter'] },
+        { label: 'New Line', keys: ['Enter'] },
+      ]
+    : [
+        { label: 'Send Message', keys: ['Enter'] },
+        { label: 'New Line', keys: ['⇧', 'Enter'] },
+      ];
+}
 
 function isActive(tab: Tab, pathname: string) {
   return 'exact' in tab && tab.exact ? pathname === tab.to : pathname.startsWith(tab.to);
+}
+
+/**
+ * Sections with nothing in them for this person are left out of the
+ * navigation (v0.9.1): Memory when it is not offered to them and they have no
+ * saved notes, Connectors when their role has nothing to connect. Their
+ * addresses still work, and the section shows while it is open. Until /me
+ * says otherwise (or from an older API) every section shows.
+ */
+function visibleTabs(
+  pathname: string,
+  features: Partial<CurrentFeatures> | undefined,
+  summary: SettingsSummary | undefined,
+): Tab[] {
+  return TABS.filter((tab) => {
+    if (isActive(tab, pathname) || !summary) return true;
+    if (tab.to === '/settings/memory')
+      return features?.memory !== false || summary.memoryEntries > 0;
+    if (tab.to === '/settings/connectors') return summary.connectors > 0;
+    return true;
+  });
 }
 
 /**
@@ -54,9 +91,9 @@ function Identity() {
   return (
     <div className="flex min-w-0 items-center gap-4 lg:flex-col lg:gap-3 lg:pt-2">
       {user.image ? (
-        <img src={user.image} alt="" className="size-12 rounded-full object-cover lg:size-40" />
+        <img src={user.image} alt="" className="size-12 rounded-full object-cover lg:size-24" />
       ) : (
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-base font-semibold text-[var(--accent-foreground)] lg:size-40 lg:text-4xl">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-base font-semibold text-[var(--accent-foreground)] lg:size-24 lg:text-2xl">
           {initials}
         </span>
       )}
@@ -74,11 +111,12 @@ function Identity() {
 }
 
 function ShortcutsCard() {
+  const { invertSend } = useTheme();
   return (
     <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
       <h2 className="mb-3 text-sm font-semibold">Keyboard Shortcuts</h2>
       <div className="flex flex-col gap-3">
-        {SHORTCUTS.map((shortcut) => (
+        {[...SHORTCUTS, ...messageShortcuts(invertSend)].map((shortcut) => (
           <div key={shortcut.label} className="flex items-center justify-between gap-3">
             <span className="text-sm text-[var(--text-secondary)]">{shortcut.label}</span>
             <span className="flex gap-1">
@@ -117,14 +155,16 @@ function HelpCard() {
  */
 function SectionNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
-  const current = TABS.find((tab) => isActive(tab, pathname)) ?? TABS[0];
+  const { data } = useCurrentUser();
+  const tabs = visibleTabs(pathname, data?.features, data?.settingsSummary);
+  const current = tabs.find((tab) => isActive(tab, pathname)) ?? TABS[0];
   return (
     <div className="@container">
       <nav
         aria-label="Settings sections"
         className="hidden flex-nowrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1 @[46rem]:inline-flex"
       >
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const active = isActive(tab, pathname);
           return (
             <Link
@@ -150,7 +190,7 @@ function SectionNav({ pathname }: { pathname: string }) {
           aria-label="Settings section"
           value={current.to}
           onChange={(to) => void navigate({ to })}
-          options={TABS.map((tab) => ({ value: tab.to, label: tab.label }))}
+          options={tabs.map((tab) => ({ value: tab.to, label: tab.label }))}
           className="h-11"
         />
       </div>
@@ -162,7 +202,6 @@ export function SettingsLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { resolvedTheme, setTheme } = useTheme();
 
   async function handleSignOut() {
     await authClient.signOut();
@@ -182,14 +221,7 @@ export function SettingsLayout() {
           </Button>
 
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Toggle theme"
-              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-            >
-              {resolvedTheme === 'dark' ? <Moon /> : <Sun />}
-            </Button>
+            <ThemeMenu />
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
               Sign out
             </Button>

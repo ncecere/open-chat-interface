@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
+import { isSendKey } from '~/lib/send-keys';
 
 /** Draft and submission state stay inside the one message being edited. */
 export function MessageEditor({
@@ -46,7 +47,11 @@ export function MessageEditor({
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Escape') cancel();
-          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          // Cmd/Ctrl+Enter submits and Enter adds a line whatever the "Invert
+          // Send/New Line Behavior" setting: with it on that is the composer's
+          // rule too, and off this larger edit box keeps its own, as before.
+          // Enter confirming an IME candidate never submits.
+          if (isSendKey(event, { invert: true })) {
             event.preventDefault();
             void save();
           }

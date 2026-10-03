@@ -23,8 +23,28 @@ async function signIn(page: Page) {
 const sidewaysOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
+/** The sections this person should see: Memory and Connectors only when they have something. */
+async function expectedSections(page: Page): Promise<string[]> {
+  const response = await page.request.get('/api/me');
+  expect(response.ok()).toBe(true);
+  const me = (await response.json()) as {
+    features: { memory?: boolean };
+    settingsSummary: { memoryEntries: number; connectors: number };
+  };
+  return [
+    'Account',
+    'Customization',
+    ...(me.features.memory !== false || me.settingsSummary.memoryEntries > 0 ? ['Memory'] : []),
+    'History',
+    'Models',
+    ...(me.settingsSummary.connectors > 0 ? ['Connectors'] : []),
+    'Attachments',
+  ];
+}
+
 test('settings fit the window and offer every section without wrapping', async ({ page }) => {
   await signIn(page);
+  const sections = await expectedSections(page);
   await page.goto('/settings/history');
   await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
   expect(await sidewaysOverflow(page)).toBeLessThanOrEqual(0);
@@ -36,9 +56,10 @@ test('settings fit the window and offer every section without wrapping', async (
     const tops = await tabs
       .getByRole('link')
       .evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
-    expect(tops).toHaveLength(7);
+    expect(tops).toHaveLength(sections.length);
     expect(new Set(tops).size).toBe(1);
-    await expect(tabs.getByRole('link', { name: 'History & Sync' })).toHaveAttribute(
+    await expect(tabs.getByRole('link')).toHaveText(sections);
+    await expect(tabs.getByRole('link', { name: 'History', exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     );
@@ -46,14 +67,14 @@ test('settings fit the window and offer every section without wrapping', async (
       'aria-current',
       'page',
     );
-    await tabs.getByRole('link', { name: 'Memory' }).click();
+    await tabs.getByRole('link', { name: 'Models' }).click();
   } else {
     await expect(menu).toBeVisible();
-    await expect(menu).toContainText('History & Sync');
+    await expect(menu).toContainText('History');
     await menu.click();
-    await page.getByRole('option', { name: 'Memory' }).click();
+    await page.getByRole('option', { name: 'Models' }).click();
   }
-  await expect(page).toHaveURL(/\/settings\/memory$/);
+  await expect(page).toHaveURL(/\/settings\/models$/);
   expect(await sidewaysOverflow(page)).toBeLessThanOrEqual(0);
 
   // Shortcuts and help are cards on every settings page.
@@ -63,4 +84,29 @@ test('settings fit the window and offer every section without wrapping', async (
   // The retired tabs' addresses land on Settings.
   await page.goto('/settings/shortcuts');
   await expect(page).toHaveURL(/\/settings$/);
+
+  // A hidden section's address still opens it.
+  if (!sections.includes('Connectors')) {
+    await page.goto('/settings/connectors');
+    await expect(page.getByRole('heading', { level: 1, name: 'Connectors' })).toBeVisible();
+  }
+});
+
+test('the header offers Light, Dark and System, and the wide avatar is 96px', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/settings/customization');
+  await expect(page.getByRole('button', { name: 'Toggle theme' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Appearance settings' }).click();
+  await page.getByRole('menuitem', { name: 'Light' }).click();
+  await expect(page.locator('html')).toHaveClass(/\blight\b/);
+  // The Appearance row in Customization reflects the same choice.
+  await expect(page.getByRole('radio', { name: 'Light' })).toBeChecked();
+  await page.locator('[role="radiogroup"] label', { hasText: 'Dark' }).click();
+  await expect(page.getByRole('radio', { name: 'Dark' })).toBeChecked();
+  await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+
+  const avatar = page.locator('.lg\\:size-24').first();
+  const box = await avatar.boundingBox();
+  const wide = (page.viewportSize()?.width ?? 0) >= 1024;
+  expect(box?.width).toBe(wide ? 96 : 48);
 });

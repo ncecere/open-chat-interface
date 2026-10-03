@@ -787,10 +787,20 @@ describe.skipIf(!available)('live artifacts', () => {
         liveBytes: bytes,
         artifactBytes: bytes,
         liveFileCount: 0,
+        // Settings "Attachments" breaks the total down (v0.9.1).
+        breakdown: {
+          chatFiles: { bytes: 0, count: 0 },
+          projectFiles: { bytes: 0, count: 0 },
+          artifacts: { bytes, count: 1 },
+        },
       });
       const { softDeleteThread, restoreThread } = await import('../../services/lifecycle/trash.js');
       await softDeleteThread(chat.id, person);
       expect((await getStorageUsage(person, 'user')).liveBytes).toBe(0);
+      expect((await getStorageUsage(person, 'user')).breakdown?.artifacts).toEqual({
+        bytes: 0,
+        count: 0,
+      });
       // Trashed conversations' artifacts are invisible.
       const [artifact] = await artifactsOf(chat.id);
       expect((await get(`/api/artifacts/${artifact!.id}`, person)).status).toBe(404);

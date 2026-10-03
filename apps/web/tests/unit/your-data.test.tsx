@@ -18,7 +18,7 @@ vi.mock('../../src/lib/api-client', async (importOriginal) => {
 vi.mock('../../src/lib/import-upload', () => ({ uploadImportFile: mocks.upload }));
 
 const { ApiError } = await import('../../src/lib/api-client');
-const { IMPORT_POLL_MS, YourDataSection } = await import('../../src/components/settings/your-data');
+const { IMPORT_POLL_MS, YourDataButtons } = await import('../../src/components/settings/your-data');
 
 function record(overrides: Partial<ConversationImportSummary> = {}): ConversationImportSummary {
   return {
@@ -51,19 +51,33 @@ async function settle() {
   }
 }
 
-async function render() {
+/** Renders the buttons and, unless told not to, opens the import dialog. */
+async function render({ openImport = true } = {}) {
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <YourDataSection />
+        <YourDataButtons />
       </QueryClientProvider>,
     ),
   );
   await settle();
+  if (openImport) await press('Import from ChatGPT or Claude');
 }
 
+async function press(name: string) {
+  const target = [...document.querySelectorAll('button')].find(
+    (candidate) =>
+      candidate.textContent?.trim() === name || candidate.getAttribute('aria-label') === name,
+  ) as HTMLButtonElement;
+  await act(async () => target.click());
+  await settle();
+}
+
+/** Dialogs portal to the body, so lookups search the whole document. */
+const $ = (selector: string) => document.querySelector(selector);
+
 function fileInput(): HTMLInputElement {
-  return container.querySelector('input[type="file"]') as HTMLInputElement;
+  return $('input[type="file"]') as HTMLInputElement;
 }
 
 async function choose(file: File) {
@@ -90,25 +104,50 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
+  document.body.innerHTML = '';
   vi.useRealTimers();
 });
 
-it('offers a full export download and a labelled import picker', async () => {
+it('offers a full export download and a labelled import picker, each in a dialog', async () => {
   mocks.get.mockResolvedValue({ imports: [] });
-  await render();
+  await render({ openImport: false });
+  expect(fileInput()).toBeNull();
 
-  const link = [...container.querySelectorAll('a')].find((anchor) =>
-    anchor.textContent?.includes('Export all conversations'),
-  );
+  await press('Export all conversations');
+  const exportDialog = $('[role="dialog"]')!;
+  expect(exportDialog.querySelector('h2')?.textContent).toBe('Export all conversations');
+  const link = exportDialog.querySelector('a');
   expect(link?.getAttribute('href')).toBe('/api/me/export');
   expect(link?.hasAttribute('download')).toBe(true);
+  await press('Close');
 
+  await press('Import from ChatGPT or Claude');
+  expect($('[role="dialog"] h2')?.textContent).toBe('Import from ChatGPT or Claude');
   const input = fileInput();
-  const label = container.querySelector(`label[for="${input.id}"]`);
-  expect(label?.textContent).toBe('Import from ChatGPT or Claude');
+  const label = $(`label[for="${input.id}"]`);
+  expect(label?.textContent).toBe('ChatGPT or Claude export file');
   expect(input.getAttribute('accept')).toContain('.zip');
   expect(input.getAttribute('aria-describedby')).toBeTruthy();
-  expect(container.querySelector('[role="status"]')).not.toBeNull();
+  expect($('[role="dialog"] [role="status"]')).not.toBeNull();
+});
+
+it('keeps announcing an import after its dialog is closed', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  mocks.get.mockResolvedValueOnce({
+    imports: [record({ status: 'running', importedCount: 4, skippedCount: 0, failedCount: 0 })],
+  });
+  await render();
+  await press('Close');
+  expect($('[role="dialog"]')).toBeNull();
+
+  mocks.get.mockResolvedValue({ imports: [record({ skippedCount: 0, failedCount: 0 })] });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS + 100);
+  });
+  await settle();
+  expect($('[role="status"]')?.textContent).toBe(
+    'Import of chatgpt-export.zip finished: 12 conversations imported.',
+  );
 });
 
 it('lists imports with their status and counts, and removes a finished one', async () => {
@@ -131,7 +170,7 @@ it('lists imports with their status and counts, and removes a finished one', asy
   mocks.del.mockResolvedValue({ ok: true });
   await render();
 
-  const items = container.querySelectorAll('ul[aria-label="Imports"] li');
+  const items = document.querySelectorAll('ul[aria-label="Imports"] li');
   expect(items).toHaveLength(2);
   expect(items[0]?.textContent).toContain('Completed');
   expect(items[0]?.textContent).toContain('ChatGPT (v2 export)');
@@ -139,9 +178,7 @@ it('lists imports with their status and counts, and removes a finished one', asy
   expect(items[1]?.textContent).toContain('Failed');
   expect(items[1]?.textContent).toContain('No ChatGPT or Claude conversations');
 
-  const remove = container.querySelector(
-    'button[aria-label="Remove chatgpt-export.zip"]',
-  ) as HTMLButtonElement;
+  const remove = $('button[aria-label="Remove chatgpt-export.zip"]') as HTMLButtonElement;
   await act(async () => remove.click());
   await settle();
   expect(mocks.del).toHaveBeenCalledWith('/me/imports/import-1');
@@ -162,15 +199,13 @@ it('uploads with visible progress and announces the result', async () => {
 
   await choose(new File(['{}'], 'conversations.json', { type: 'application/json' }));
   expect(mocks.upload).toHaveBeenCalledOnce();
-  expect(container.querySelector('[role="status"]')?.textContent).toContain(
-    'Uploading conversations.json',
-  );
+  expect($('[role="status"]')?.textContent).toContain('Uploading conversations.json');
 
   await act(async () => report(0.42));
-  const progress = container.querySelector('progress') as HTMLProgressElement;
+  const progress = $('progress') as HTMLProgressElement;
   expect(progress.getAttribute('aria-label')).toBe('Upload progress');
   expect(progress.value).toBe(42);
-  expect(container.textContent).toContain('42%');
+  expect(document.body.textContent).toContain('42%');
   expect(fileInput().disabled).toBe(true);
 
   mocks.get.mockResolvedValue({
@@ -179,11 +214,9 @@ it('uploads with visible progress and announces the result', async () => {
   await act(async () => finish(record({ status: 'pending', filename: 'conversations.json' })));
   await settle();
 
-  expect(container.querySelector('progress')).toBeNull();
-  expect(container.querySelector('[role="status"]')?.textContent).toContain(
-    'conversations.json uploaded',
-  );
-  expect(container.querySelector('ul[aria-label="Imports"]')?.textContent).toContain('Queued');
+  expect($('progress')).toBeNull();
+  expect($('[role="status"]')?.textContent).toContain('conversations.json uploaded');
+  expect($('ul[aria-label="Imports"]')?.textContent).toContain('Queued');
   // A queued import cannot be joined by another upload.
   expect(fileInput().disabled).toBe(true);
 });
@@ -198,9 +231,7 @@ it('shows the server’s reason when an upload is refused', async () => {
   await choose(new File(['x'], 'huge.zip'));
   await settle();
 
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-    'The file is larger than the 512 MB import limit.',
-  );
+  expect($('[role="alert"]')?.textContent).toBe('The file is larger than the 512 MB import limit.');
   expect(fileInput().disabled).toBe(false);
 });
 
@@ -211,11 +242,9 @@ it('polls while an import runs and announces when it finishes', async () => {
   });
   await render();
 
-  const running = container.querySelector('ul[aria-label="Imports"] li');
+  const running = $('ul[aria-label="Imports"] li');
   expect(running?.textContent).toContain('Importing');
-  const cancel = container.querySelector(
-    'button[aria-label="Cancel import of chatgpt-export.zip"]',
-  ) as HTMLButtonElement;
+  const cancel = $('button[aria-label="Cancel import of chatgpt-export.zip"]') as HTMLButtonElement;
   expect(cancel.disabled).toBe(true);
 
   mocks.get.mockResolvedValue({ imports: [record({ skippedCount: 0, failedCount: 0 })] });
@@ -225,7 +254,7 @@ it('polls while an import runs and announces when it finishes', async () => {
   await settle();
 
   expect(mocks.get).toHaveBeenCalledTimes(2);
-  expect(container.querySelector('[role="status"]')?.textContent).toBe(
+  expect($('[role="status"]')?.textContent).toBe(
     'Import of chatgpt-export.zip finished: 12 conversations imported.',
   );
 

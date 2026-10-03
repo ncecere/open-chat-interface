@@ -18,6 +18,15 @@ function readAutoOpenArtifacts(): boolean {
   return localStorage.getItem(AUTO_OPEN_ARTIFACTS_STORAGE_KEY) !== 'false';
 }
 /**
+ * "Invert Send/New Line Behavior" (v0.9.1, per browser): Enter adds a new
+ * line and Cmd/Ctrl+Enter sends, instead of Enter sending.
+ */
+const INVERT_SEND_STORAGE_KEY = 'oci.invertSend';
+
+function readInvertSend(): boolean {
+  return localStorage.getItem(INVERT_SEND_STORAGE_KEY) === 'true';
+}
+/**
  * The instance color theme is administrator-owned, but caching it avoids a
  * flash of the default accent before /auth/status resolves.
  */
@@ -38,10 +47,13 @@ interface ThemeContextValue {
   codeWrap: boolean;
   /** Open the artifact panel by itself when a reply starts writing an artifact. */
   autoOpenArtifacts: boolean;
+  /** Enter adds a new line and Cmd/Ctrl+Enter sends. */
+  invertSend: boolean;
   colorTheme: ColorTheme;
   setTheme: (theme: ThemeMode) => void;
   setCodeWrap: (enabled: boolean) => void;
   setAutoOpenArtifacts: (enabled: boolean) => void;
+  setInvertSend: (enabled: boolean) => void;
   setColorTheme: (theme: ColorTheme) => void;
   /**
    * The instance default from branding. Applies only while this person has
@@ -81,6 +93,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem(CODE_WRAP_STORAGE_KEY) === 'true',
   );
   const [autoOpenArtifacts, setAutoOpenArtifactsState] = useState(readAutoOpenArtifacts);
+  const [invertSend, setInvertSendState] = useState(readInvertSend);
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(systemTheme);
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(readStoredColorTheme);
 
@@ -122,6 +135,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setAutoOpenArtifactsState(enabled);
   }, []);
 
+  const setInvertSend = useCallback((enabled: boolean) => {
+    localStorage.setItem(INVERT_SEND_STORAGE_KEY, String(enabled));
+    setInvertSendState(enabled);
+  }, []);
+
   const setColorTheme = useCallback((next: ColorTheme) => {
     localStorage.setItem(COLOR_THEME_STORAGE_KEY, next);
     setColorThemeState(next);
@@ -133,10 +151,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolvedTheme,
       codeWrap,
       autoOpenArtifacts,
+      invertSend,
       colorTheme,
       setTheme,
       setCodeWrap,
       setAutoOpenArtifacts,
+      setInvertSend,
       setColorTheme,
       setInstanceDefaultTheme,
     }),
@@ -145,10 +165,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolvedTheme,
       codeWrap,
       autoOpenArtifacts,
+      invertSend,
       colorTheme,
       setTheme,
       setCodeWrap,
       setAutoOpenArtifacts,
+      setInvertSend,
       setColorTheme,
       setInstanceDefaultTheme,
     ],
@@ -164,6 +186,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function useAutoOpenArtifacts(): boolean {
   const context = use(ThemeContext);
   return context ? context.autoOpenArtifacts : readAutoOpenArtifacts();
+}
+
+/**
+ * The person's "Invert Send/New Line Behavior" choice. Outside the provider
+ * (isolated renders) the stored choice is read directly.
+ */
+export function useInvertSend(): boolean {
+  const context = use(ThemeContext);
+  return context ? context.invertSend : readInvertSend();
 }
 
 export function useTheme(): ThemeContextValue {

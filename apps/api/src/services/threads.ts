@@ -97,6 +97,65 @@ export async function listThreads(
     .limit(200);
 }
 
+/** Where a history page ends: the last row's update time (to the millisecond) and id. */
+export interface ThreadHistoryCursor {
+  updatedAt: Date;
+  id: string;
+}
+
+export function encodeThreadHistoryCursor(thread: { updatedAt: Date; id: string }): string {
+  return `${thread.updatedAt.toISOString()}|${thread.id}`;
+}
+
+/** Null for anything that is not a cursor this API issued. */
+export function decodeThreadHistoryCursor(value: string): ThreadHistoryCursor | null {
+  const separator = value.indexOf('|');
+  if (separator < 0) return null;
+  const updatedAt = new Date(value.slice(0, separator));
+  const id = value.slice(separator + 1);
+  if (Number.isNaN(updatedAt.getTime()) || !id || id.length > 200) return null;
+  return { updatedAt, id };
+}
+
+/**
+ * Settings → History (v0.9.1): every live conversation, a page at a time.
+ *
+ * Ordered by last update then id, newest first, without the sidebar's pinned
+ * grouping, so a cursor (the last row's update time and id) always continues
+ * exactly where the previous page stopped. Update times are compared to the
+ * millisecond because that is what the cursor can carry.
+ */
+export async function listThreadHistory(
+  userId: string,
+  options: { search?: string; archived?: boolean; before?: ThreadHistoryCursor; limit: number },
+) {
+  const updatedMs = sql`date_trunc('milliseconds', ${schema.thread.updatedAt})`;
+  const conditions = [
+    eq(schema.thread.userId, userId),
+    eq(schema.thread.archived, options.archived ?? false),
+    eq(schema.thread.temporary, false),
+    isNull(schema.thread.deletedAt),
+  ];
+  if (options.search) conditions.push(ilike(schema.thread.title, containsPattern(options.search)));
+  if (options.before) {
+    conditions.push(
+      sql`(${updatedMs}, ${schema.thread.id}) < (${options.before.updatedAt.toISOString()}::timestamptz, ${options.before.id})`,
+    );
+  }
+  const rows = await db
+    .select()
+    .from(schema.thread)
+    .where(and(...conditions))
+    .orderBy(sql`${updatedMs} desc`, desc(schema.thread.id))
+    .limit(options.limit + 1);
+  const threads = rows.slice(0, options.limit);
+  const last = threads.at(-1);
+  return {
+    threads,
+    nextCursor: rows.length > options.limit && last ? encodeThreadHistoryCursor(last) : null,
+  };
+}
+
 export async function createThread(options: {
   userId: string;
   organizationId: string;

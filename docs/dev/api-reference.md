@@ -259,7 +259,7 @@ Generated from 41 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/attachments` | — |
+| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. |
 | POST | `/api/attachments` | — |
 | DELETE | `/api/attachments/:id` | — |
 | GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. |
@@ -323,6 +323,9 @@ Generated from 41 route files.
 | POST | `/api/me/onboarding/complete` | — |
 | POST | `/api/me/onboarding/skip` | — |
 | PATCH | `/api/me/preferences` | — |
+| GET | `/api/me/sessions` | Settings → Account → Devices: where this person is signed in, this device first. |
+| DELETE | `/api/me/sessions/:id` | Signs out one other device (404 for anyone else's or an unknown session). |
+| POST | `/api/me/sessions/revoke-others` | Signs out every other device. |
 | GET | `/api/me/usage` | — |
 
 ## `routes/memory.ts`

@@ -4,7 +4,9 @@ import { AttachmentChips } from '~/components/chat/attachment-chips';
 import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
 import type { PendingAttachment } from '~/hooks/use-attachments';
+import { isSendKey, sendKeyShortcuts } from '~/lib/send-keys';
 import { cn } from '~/lib/utils';
+import { useInvertSend } from '~/providers/theme-provider';
 
 interface ComposerProps extends ComposerOptionsProps {
   /** Focus the message field when it first appears. */
@@ -45,6 +47,8 @@ export const Composer = memo(function Composer({
   autoFocus = false,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Settings → Customization: Enter adds a line and Cmd/Ctrl+Enter sends.
+  const invertSend = useInvertSend();
 
   // Only on mount: a conversation started from the home page replaces the
   // composer the person was typing in, which would otherwise drop focus.
@@ -66,10 +70,9 @@ export const Composer = memo(function Composer({
   const canSubmit = value.trim().length > 0 && Boolean(selectedModel) && !streaming && !uploading;
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter confirms an IME candidate, not the message. Safari can report
-    // composition ended while retaining the composing keyCode on this event.
-    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // Enter that confirms an IME candidate never sends (see isSendKey). Any
+    // other Enter that does not send is left to add a new line.
+    if (isSendKey(event, { invert: invertSend })) {
       event.preventDefault();
       if (canSubmit) onSubmit();
     }
@@ -125,6 +128,7 @@ export const Composer = memo(function Composer({
               disabled={!canSubmit}
               onClick={onSubmit}
               aria-label="Send message"
+              aria-keyshortcuts={sendKeyShortcuts(invertSend)}
               className={cn(
                 'ml-auto inline-flex size-[2.125rem] items-center justify-center rounded-lg border transition-colors',
                 canSubmit

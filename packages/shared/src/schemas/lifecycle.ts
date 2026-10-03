@@ -30,6 +30,11 @@ export const upsertStoragePolicySchema = z
   .strict();
 
 /** A user's current consumption against their role's storage allowance. */
+const storageShareSchema = z.object({
+  bytes: z.number().int().nonnegative(),
+  count: z.number().int().nonnegative(),
+});
+
 export const storageUsageSchema = z.object({
   liveBytes: z.number().int().nonnegative(),
   liveFileCount: z.number().int().nonnegative(),
@@ -41,6 +46,18 @@ export const storageUsageSchema = z.object({
    * response from an older API still parses.
    */
   artifactBytes: z.number().int().nonnegative().optional(),
+  /**
+   * What the live total is made of (v0.9.1): files attached in chats
+   * (including uploads still in progress), project files, and artifacts. The
+   * three byte counts add up to `liveBytes`. Optional for an older API.
+   */
+  breakdown: z
+    .object({
+      chatFiles: storageShareSchema,
+      projectFiles: storageShareSchema,
+      artifacts: storageShareSchema,
+    })
+    .optional(),
   maxTotalBytes: z.number().int().positive().nullable(),
   maxFileCount: z.number().int().positive().nullable(),
   maxFileBytes: z.number().int().positive().nullable(),

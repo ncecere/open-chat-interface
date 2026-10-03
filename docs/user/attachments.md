@@ -38,8 +38,9 @@ asked about section 4, it answers about section 4.
 ## Managing what you have sent
 
 [Settings → Attachments](settings.md#attachments) lists everything you have
-uploaded, with the conversation each belongs to, and lets you delete files you
-no longer want kept.
+uploaded, in chats and to projects, shows how your storage divides between chat
+files, project files and artifacts, and lets you delete chat files you no
+longer want kept. Project files are deleted from their project.
 
 Attachments count towards any storage limit your institution sets, including
 uploads still in progress. Deleting a file or moving its conversation to trash

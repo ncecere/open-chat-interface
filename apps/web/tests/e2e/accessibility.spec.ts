@@ -140,6 +140,20 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('settings customization, history and attachments have no violations', async ({ page }) => {
+    await signIn(page);
+    for (const [path, heading] of [
+      ['/settings/customization', 'Customize your assistant'],
+      ['/settings/history', 'History'],
+      ['/settings/attachments', 'Attachments'],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+      const results = await scan(page);
+      expect(describeViolations(results), `${path}\n${describeViolations(results)}`).toBe('');
+    }
+  });
+
   test('admin dashboard has no violations', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin');

@@ -5,23 +5,44 @@ Reach settings from your name at the bottom of the sidebar.
 The sections are tabs across the top. Where they do not fit on one row, for
 example on a phone, a **Settings section** menu takes their place.
 
+A section with nothing in it for you is left out: **Memory** when your
+administrator has not made memory available to you and you have no saved
+notes, and **Connectors** when there is nothing for your role to connect.
+Their addresses still open if you follow a link to one.
+
 ## Account
 
 ![Account settings](../images/user-settings-account.png)
 
-Your name, email address, and password, where the instance keeps its own
-accounts. If you sign in through your institution's identity provider, those
-details come from there and cannot be changed here.
+Your name, email address, role, and how you sign in.
 
-**Devices** lists where you are currently signed in. Signing out everywhere is
-the right response to losing a laptop.
+- **Name.** If you sign in with an email address and password, **Edit** changes
+  the name shown on this instance (1 to 100 characters). If you sign in through
+  your organisation, your name and email address come from there and are
+  marked as such.
+- **Password.** **Change Password** asks for your current password and a new
+  one of at least 12 characters. **Sign out of all other devices** is ticked by
+  default, so a change made after losing a device locks it out; you stay
+  signed in where you made the change. If you sign in through your
+  organisation, your password is managed there instead. If your administrator
+  has turned off email and password sign-in, the page says so and the password
+  cannot be changed.
+- **Devices.** **View Devices** lists where your account is signed in: the
+  browser and system, a shortened network address, when each signed in, and
+  when it was last active. Your current device is marked **This device**.
+  **Sign out** ends one other session; **Sign out all other devices** ends
+  every session but this one. A device you sign out can stay signed in for up
+  to five minutes.
+
+You cannot change your email address or delete your account yourself. To delete
+your account, contact your administrator.
 
 ## Customisation
 
 ![Customisation settings](../images/user-settings-customization.png)
 
-What you set here is sent with every message, which is why it changes replies
-without you repeating yourself.
+What you set at the top is sent with every message, which is why it changes
+replies without you repeating yourself.
 
 - **What to call you** — used when a reply addresses you directly.
 - **What you do** — saves explaining your field every time. "Research
@@ -32,32 +53,45 @@ without you repeating yourself.
   bullet points", "always show your working", "British spelling".
 
 Being specific pays off more than being thorough. Three precise sentences beat a
-paragraph of generalities.
+paragraph of generalities. **Save Preferences** becomes available once you have
+changed something.
 
-Further down, **Behaviour options** control the interface itself — fonts,
-density, and whether to reduce visual flourish. Under **Visual options**,
-**Wrap Long Code Lines** wraps code instead of scrolling it sideways, and
-**Open artifacts automatically** (on by default) opens the artifact panel
-beside the conversation when a reply starts writing a page, image, diagram or
-document, so you can watch it being written. It applies on wide screens only;
-see [Artifacts](artifacts.md). Both choices are kept in this browser.
+Further down are choices about the interface itself, all kept in this browser:
 
-## History and sync
+- **Appearance** — **Light**, **Dark**, or **System** to follow your device.
+  The same choice is in the appearance menu at the top of a conversation and
+  of Settings.
+- **Invert Send/New Line Behavior** — normally `Enter` sends a message and
+  `Shift + Enter` starts a new line. With this on, `Enter` starts a new line
+  and `Cmd/Ctrl + Enter` sends. When you edit a message you have sent,
+  `Enter` always starts a new line and `Cmd/Ctrl + Enter` submits.
+- **Wrap Long Code Lines** — wraps code instead of scrolling it sideways.
+- **Open artifacts automatically** (on by default) — opens the artifact panel
+  beside the conversation when a reply starts writing a page, image, diagram
+  or document, so you can watch it being written. It applies on wide screens
+  only; see [Artifacts](artifacts.md).
 
-![History and sync](../images/user-settings-history.png)
+## History
 
-Your conversations, including archived ones, with the option to export.
+![History](../images/user-settings-history.png)
 
-An export contains your messages and the replies, in a form you can keep. It
-excludes reasoning panels and temporary chats, which were never stored to begin
-with.
+Your conversations, under **Active**, **Archived** and **Trash**, newest
+activity first.
 
-If your institution has set a retention period, it is stated here, along with
-when the oldest conversations will be removed.
+- Each title opens its conversation. A conversation in a project shows the
+  project's name.
+- **Search titles** narrows the list to conversations whose title contains what
+  you type. To search what was said in them, use the sidebar's search; see
+  [Finding a conversation](conversations.md#finding-a-conversation).
+- The list shows 50 conversations at a time; **Load more** adds the next 50.
+- Tick conversations, or use **Select all** to tick everything listed, then
+  **Archive** or **Delete** them. Deleting moves them to the trash, where they
+  stay recoverable until their deletion date.
 
-The **Your data** section at the bottom downloads all of your conversations and
-files at once, and imports history from ChatGPT or Claude. See
-[Your data](your-data.md).
+Two buttons at the top handle all of your data at once:
+**Export all conversations** downloads your conversations and files, and
+**Import from ChatGPT or Claude** brings history in from those services. An
+import carries on if you close its window. See [Your data](your-data.md).
 
 ## Memory
 
@@ -83,15 +117,21 @@ Services that need your own sign-in before models can use their tools, with
 
 ![Your attachments](../images/user-settings-attachments.png)
 
-Everything you have uploaded, with the conversation each belongs to, and how
-much space it occupies. Delete anything you no longer need — this is what frees
-space against a storage limit.
+Everything you have uploaded, in chats and to [projects](projects.md), and how
+much space it occupies. **Storage used** shows the total against any limit for
+your role, broken down into chat files, project files and artifacts.
+
+Delete chat files you no longer need: this is what frees space against a
+storage limit. Deleting a file removes it from its conversations, which stay,
+and models can no longer read it there. Project files show the project they
+belong to; open the project to delete them.
 
 ## Keyboard shortcuts and help
 
 Every settings page shows your usage limits, a **Keyboard Shortcuts** card and
 a **Need help?** card: beside the page on a wide screen, below it on a narrow
-one. The shortcuts worth learning:
+one. The send and new-line keys in the card follow **Invert Send/New Line
+Behavior**. The shortcuts worth learning:
 
 | Shortcut | Does |
 | --- | --- |
@@ -99,7 +139,7 @@ one. The shortcuts worth learning:
 | `Cmd/Ctrl + Shift + O` | New conversation |
 | `Cmd/Ctrl + B` | Show or hide the sidebar |
 | `Cmd/Ctrl + /` | Open the model picker |
-| `Enter` | Send the message |
-| `Shift + Enter` | Start a new line |
+| `Enter` | Send the message (`Cmd/Ctrl + Enter` when inverted) |
+| `Shift + Enter` | Start a new line (`Enter` when inverted) |
 
 For help with your account, contact the administrator who runs your instance.

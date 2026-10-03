@@ -360,4 +360,101 @@ describe.skipIf(!available)('live: the sidebar project tree and general list', (
       expect((await call(owner, 'GET', '/threads?view=everything')).status).toBe(422);
     });
   });
+
+  describe('GET /api/threads?view=history (Settings → History, v0.9.1)', () => {
+    type Page = { threads: ThreadSummary[]; nextCursor: string | null };
+
+    /** `count` live conversations with distinct update times, plus ties. */
+    async function seedHistory(userId: string, count: number) {
+      const base = Date.UTC(2026, 0, 1);
+      const rows = Array.from({ length: count }, (_, index) => ({
+        organizationId: state.organizationId,
+        userId,
+        title: index % 10 === 0 ? `Budget review ${index}` : `Conversation ${index}`,
+        // Pairs share an update time, so the id must break the tie.
+        updatedAt: new Date(base + Math.floor(index / 2) * 1000 + 0.4),
+        pinned: index === count - 1,
+      }));
+      await live.db.insert(schema.thread).values(rows);
+    }
+
+    async function allPages(userId: string, query: string) {
+      const seen: ThreadSummary[] = [];
+      let cursor: string | null = null;
+      let pages = 0;
+      do {
+        const suffix: string = cursor ? `&before=${encodeURIComponent(cursor)}` : '';
+        const page: Page = await json<Page>(
+          await call(userId, 'GET', `/threads?view=history${query}${suffix}`),
+        );
+        seen.push(...page.threads);
+        cursor = page.nextCursor;
+        pages++;
+      } while (cursor && pages < 50);
+      return { seen, pages };
+    }
+
+    it('pages past 200 conversations without gaps, repeats or pinned-first ordering', async () => {
+      const userId = await person();
+      await seedHistory(userId, 230);
+      const first = await json<Page>(await call(userId, 'GET', '/threads?view=history&limit=100'));
+      expect(first.threads).toHaveLength(100);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      // Newest activity first (229 and 228 tie, so the id orders them); the
+      // pinned conversation (229) is not hoisted for being pinned.
+      expect(
+        first.threads
+          .slice(0, 2)
+          .map((thread) => thread.title)
+          .sort(),
+      ).toEqual(['Conversation 228', 'Conversation 229']);
+
+      const { seen, pages } = await allPages(userId, '&limit=100');
+      expect(pages).toBe(3);
+      expect(seen).toHaveLength(230);
+      expect(new Set(seen.map((thread) => thread.id)).size).toBe(230);
+      const times = seen.map((thread) => new Date(thread.updatedAt).getTime());
+      expect([...times].sort((a, b) => b - a)).toEqual(times);
+
+      // The default page is 50, and the sidebar list is unchanged (pinned first, 200 rows).
+      expect(
+        (await json<Page>(await call(userId, 'GET', '/threads?view=history'))).threads,
+      ).toHaveLength(50);
+      const plain = await json<Page>(await call(userId, 'GET', '/threads'));
+      expect(plain.threads).toHaveLength(200);
+      expect(plain.threads[0]?.pinned).toBe(true);
+      expect(plain.nextCursor).toBeUndefined();
+    });
+
+    it('searches titles across every page, and keeps archived apart', async () => {
+      const userId = await person();
+      await seedHistory(userId, 120);
+      await live.db.insert(schema.thread).values({
+        organizationId: state.organizationId,
+        userId,
+        title: 'Budget review archived',
+        archived: true,
+      });
+      const { seen } = await allPages(userId, `&limit=5&search=${encodeURIComponent('budget')}`);
+      expect(seen.map((thread) => thread.title)).toHaveLength(12);
+      expect(seen.every((thread) => thread.title.startsWith('Budget review'))).toBe(true);
+      expect(seen.some((thread) => thread.archived)).toBe(false);
+      const archived = await json<Page>(
+        await call(userId, 'GET', '/threads?view=history&archived=true'),
+      );
+      expect(archived.threads.map((thread) => thread.title)).toEqual(['Budget review archived']);
+      expect(archived.nextCursor).toBeNull();
+    });
+
+    it('lists only the caller’s conversations and refuses a forged cursor', async () => {
+      const owner = await person();
+      const other = await person();
+      await seedHistory(owner, 3);
+      expect((await json<Page>(await call(other, 'GET', '/threads?view=history'))).threads).toEqual(
+        [],
+      );
+      expect((await call(owner, 'GET', '/threads?view=history&before=nonsense')).status).toBe(422);
+      expect((await call(owner, 'GET', '/threads?view=history&limit=500')).status).toBe(422);
+    });
+  });
 });

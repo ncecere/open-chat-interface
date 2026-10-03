@@ -7,18 +7,6 @@ import {
   updateCachedConversation,
 } from '~/lib/conversation-cache';
 
-/** Every live conversation (up to 200), including those in projects. */
-export function useThreads(search?: string) {
-  return useQuery({
-    queryKey: ['threads', search ?? ''],
-    queryFn: () =>
-      api.get<{ threads: ThreadSummary[] }>(
-        `/threads${search ? `?search=${encodeURIComponent(search)}` : ''}`,
-      ),
-    select: (data) => data.threads,
-  });
-}
-
 /**
  * The sidebar's general list: conversations in no project plus every pinned
  * one. Conversations in a project are listed under it (useSidebarProjects).

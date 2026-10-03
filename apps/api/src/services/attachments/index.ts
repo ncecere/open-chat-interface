@@ -34,20 +34,32 @@ export async function getOwnedAttachment(id: string, userId: string) {
   return row;
 }
 
-/** Message attachments and staged uploads; project files are listed by their project. */
+/**
+ * Settings → Attachments: chat files (message attachments and staged
+ * uploads) and, since v0.9.1, project files with the project they belong to,
+ * so the list accounts for what the storage meter counts. Newest first.
+ */
 export async function listAttachments(userId: string) {
   return db
-    .select()
+    .select({
+      id: schema.attachment.id,
+      filename: schema.attachment.filename,
+      mimeType: schema.attachment.mimeType,
+      sizeBytes: schema.attachment.sizeBytes,
+      createdAt: schema.attachment.createdAt,
+      projectId: schema.attachment.projectId,
+      projectName: schema.project.name,
+    })
     .from(schema.attachment)
+    .leftJoin(schema.project, eq(schema.project.id, schema.attachment.projectId))
     .where(
       and(
         eq(schema.attachment.userId, userId),
         isNull(schema.attachment.deletedAt),
         eq(schema.attachment.uploadPending, false),
-        isNull(schema.attachment.projectId),
       ),
     )
-    .orderBy(desc(schema.attachment.createdAt))
+    .orderBy(desc(schema.attachment.createdAt), desc(schema.attachment.id))
     .limit(500);
 }
 

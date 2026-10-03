@@ -1,8 +1,16 @@
 import type { ConversationImportSummary, ImportStatus } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState } from 'react';
+import { Download, Upload } from 'lucide-react';
+import { type RefObject, useEffect, useId, useRef, useState } from 'react';
 import { Badge } from '~/components/ui/badge';
 import { Button, buttonVariants } from '~/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { uploadImportFile } from '~/lib/import-upload';
@@ -98,14 +106,11 @@ function ImportRow({
 }
 
 /**
- * Settings → History "Your data": download everything, or bring history in
- * from ChatGPT or Claude.
+ * Imports and their progress. Lives with the buttons rather than the dialog,
+ * so polling and announcements carry on after the dialog is closed.
  */
-export function YourDataSection() {
+function useImports() {
   const queryClient = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const inputId = useId();
-  const helpId = useId();
   const [progress, setProgress] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -173,107 +178,164 @@ export function YourDataSection() {
     upload.isPending ||
     records.some((record) => record.status === 'pending' || record.status === 'running');
 
+  return { records, upload, remove, progress, announcement, error, busy };
+}
+
+type ImportsState = ReturnType<typeof useImports>;
+
+function ImportPanel({
+  state,
+  inputRef,
+}: {
+  state: ImportsState;
+  inputRef: RefObject<HTMLInputElement | null>;
+}) {
+  const inputId = useId();
+  const helpId = useId();
+  const { records, upload, remove, progress, announcement, error, busy } = state;
+
   return (
-    <section aria-labelledby="your-data-heading" className="mt-12">
-      <h2 id="your-data-heading" className="font-semibold text-lg">
-        Your data
-      </h2>
-      <p className="mt-1 text-[var(--text-muted)] text-sm">
-        Take a copy of everything you have here, or bring your history in from another service.
+    <div>
+      <label htmlFor={inputId} className="sr-only">
+        ChatGPT or Claude export file
+      </label>
+      <p id={helpId} className="text-[var(--text-muted)] text-sm">
+        Upload the .zip you received from ChatGPT or Claude, or the conversations.json inside it.
+        Conversations keep their titles and dates. Attached files are not part of those exports, so
+        they are listed by name only. Importing the same export again skips conversations already
+        here.
       </p>
-
-      <div className="mt-5 rounded-xl border border-[var(--border-subtle)] p-4">
-        <p className="font-medium text-sm">Export all conversations</p>
-        <p className="mt-1 text-[var(--text-muted)] text-xs">
-          Downloads a .zip with every active and archived conversation as Markdown and JSON, plus
-          the files you attached. Conversations in the trash and temporary chats are not included.
-        </p>
-        <a
-          href="/api/me/export"
-          download
-          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'mt-3')}
-        >
-          Export all conversations
-        </a>
-      </div>
-
-      <div className="mt-4 rounded-xl border border-[var(--border-subtle)] p-4">
-        <label htmlFor={inputId} className="font-medium text-sm">
-          Import from ChatGPT or Claude
-        </label>
-        <p id={helpId} className="mt-1 text-[var(--text-muted)] text-xs">
-          Upload the .zip you received from ChatGPT or Claude, or the conversations.json inside it.
-          Conversations keep their titles and dates. Attached files are not part of those exports,
-          so they are listed by name only. Importing the same export again skips conversations
-          already here.
-        </p>
-        <input
-          ref={inputRef}
-          id={inputId}
-          type="file"
-          accept=".zip,.json,application/zip,application/json"
-          aria-describedby={helpId}
-          className="sr-only"
+      <input
+        ref={inputRef}
+        id={inputId}
+        type="file"
+        accept=".zip,.json,application/zip,application/json"
+        aria-describedby={helpId}
+        className="sr-only"
+        disabled={busy}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) upload.mutate(file);
+          // Clear so choosing the same file again still fires a change.
+          event.target.value = '';
+        }}
+      />
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
           disabled={busy}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) upload.mutate(file);
-            // Clear so choosing the same file again still fires a change.
-            event.target.value = '';
-          }}
-        />
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-          >
-            {upload.isPending ? 'Uploading…' : 'Choose export file'}
-          </Button>
-          {progress !== null && (
-            <div className="flex min-w-48 flex-1 items-center gap-2">
-              <progress
-                className="h-1.5 flex-1 accent-[var(--accent)]"
-                max={100}
-                value={Math.round(progress * 100)}
-                aria-label="Upload progress"
-              />
-              <span className="text-[var(--text-muted)] text-xs tabular-nums">
-                {Math.round(progress * 100)}%
-              </span>
-            </div>
-          )}
-          {busy && !upload.isPending && (
-            <span className="text-[var(--text-muted)] text-xs">
-              One import runs at a time. You can leave this page while it works.
+          onClick={() => inputRef.current?.click()}
+        >
+          {upload.isPending ? 'Uploading…' : 'Choose export file'}
+        </Button>
+        {progress !== null && (
+          <div className="flex min-w-48 flex-1 items-center gap-2">
+            <progress
+              className="h-1.5 flex-1 accent-[var(--accent)]"
+              max={100}
+              value={Math.round(progress * 100)}
+              aria-label="Upload progress"
+            />
+            <span className="text-[var(--text-muted)] text-xs tabular-nums">
+              {Math.round(progress * 100)}%
             </span>
-          )}
-        </div>
-
-        <p role="status" aria-live="polite" className="mt-2 text-[var(--text-muted)] text-xs">
-          {announcement}
-        </p>
-        {error && (
-          <p role="alert" className="mt-1 text-[var(--danger)] text-xs">
-            {error}
-          </p>
+          </div>
         )}
-
-        {records.length > 0 && (
-          <ul aria-label="Imports" className="mt-3 flex flex-col">
-            {records.map((record) => (
-              <ImportRow
-                key={record.id}
-                record={record}
-                deleting={remove.isPending && remove.variables === record.id}
-                onDelete={() => remove.mutate(record.id)}
-              />
-            ))}
-          </ul>
+        {busy && !upload.isPending && (
+          <span className="text-[var(--text-muted)] text-xs">
+            One import runs at a time. You can close this while it works.
+          </span>
         )}
       </div>
-    </section>
+
+      <p role="status" aria-live="polite" className="mt-2 text-[var(--text-muted)] text-xs">
+        {announcement}
+      </p>
+      {error && (
+        <p role="alert" className="mt-1 text-[var(--danger)] text-xs">
+          {error}
+        </p>
+      )}
+
+      {records.length > 0 && (
+        <ul aria-label="Imports" className="mt-3 flex max-h-[40vh] flex-col overflow-y-auto">
+          {records.map((record) => (
+            <ImportRow
+              key={record.id}
+              record={record}
+              deleting={remove.isPending && remove.variables === record.id}
+              onDelete={() => remove.mutate(record.id)}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Settings → History, top of the page: download everything, or bring history
+ * in from ChatGPT or Claude, each in a dialog (v0.9.1; before, a section
+ * below the conversation list).
+ */
+export function YourDataButtons() {
+  const state = useImports();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState<'export' | 'import' | null>(null);
+  const close = (next: boolean) => {
+    if (!next) setOpen(null);
+  };
+
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-2">
+      <Button variant="secondary" size="sm" onClick={() => setOpen('export')}>
+        <Download />
+        Export all conversations
+      </Button>
+      <Button variant="secondary" size="sm" onClick={() => setOpen('import')}>
+        <Upload />
+        Import from ChatGPT or Claude
+      </Button>
+      {/* While the import dialog is open its own status line speaks instead. */}
+      {open !== 'import' && (
+        <p role="status" aria-live="polite" className="text-[var(--text-muted)] text-xs">
+          {state.announcement}
+        </p>
+      )}
+
+      <Dialog open={open === 'export'} onOpenChange={close}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export all conversations</DialogTitle>
+            <DialogDescription>
+              Downloads a .zip with every active and archived conversation as Markdown and JSON,
+              plus the files you attached and your projects. Conversations in the trash and
+              temporary chats are not included.
+            </DialogDescription>
+          </DialogHeader>
+          <a
+            href="/api/me/export"
+            download
+            className={cn(buttonVariants({ variant: 'accent', size: 'sm' }), 'mt-2')}
+            onClick={() => setOpen(null)}
+          >
+            <Download />
+            Download export
+          </a>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={open === 'import'} onOpenChange={close}>
+        {/* Described by the panel's own help text, tied to the file input. */}
+        <DialogContent className="max-w-xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Import from ChatGPT or Claude</DialogTitle>
+          </DialogHeader>
+          <ImportPanel state={state} inputRef={inputRef} />
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

@@ -1,10 +1,12 @@
-import type { Attachment } from '@oci/shared';
+import type { StoredFile } from '@oci/shared';
+import { Link } from '@tanstack/react-router';
 import {
   ArrowDown,
   ArrowUp,
   ExternalLink,
   File,
   FileText,
+  FolderOpen,
   ImageIcon,
   Paperclip,
   Trash2,
@@ -44,7 +46,7 @@ function SelectionCheckbox({
   );
 }
 
-function AttachmentPreview({ attachment }: { attachment: Attachment }) {
+function AttachmentPreview({ attachment }: { attachment: StoredFile }) {
   const [imageFailed, setImageFailed] = useState(false);
   const isImage = attachment.mimeType.startsWith('image/');
   const isPdf = attachment.mimeType === 'application/pdf';
@@ -87,7 +89,7 @@ function formatCreatedAt(value: string): string {
 }
 
 interface AttachmentListProps {
-  attachments: Attachment[];
+  attachments: StoredFile[];
   totalCount: number;
   selected: Set<string>;
   deletingIds: Set<string>;
@@ -115,17 +117,40 @@ export function AttachmentList({
   onToggleAll,
   onDelete,
 }: AttachmentListProps) {
-  const selectedVisibleCount = attachments.filter((file) => selected.has(file.id)).length;
-  const allVisibleSelected = attachments.length > 0 && selectedVisibleCount === attachments.length;
+  // Project files are managed (and deleted) from their project, not here.
+  const selectable = attachments.filter((file) => !file.project);
+  const selectedVisibleCount = selectable.filter((file) => selected.has(file.id)).length;
+  const allVisibleSelected = selectable.length > 0 && selectedVisibleCount === selectable.length;
   const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
 
+  if (!isLoading && !isError && attachments.length === 0) {
+    // Compact: a sentence, not an empty table.
+    return (
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] px-4 py-4">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--bg-control)]">
+          <Paperclip className="size-4 text-[var(--text-muted)]" />
+        </span>
+        <div>
+          <p className="text-sm font-medium text-[var(--text-secondary)]">
+            {totalCount === 0 ? 'No attachments yet' : 'No files match this filter'}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            {totalCount === 0
+              ? 'Files uploaded in chats and to projects will appear here.'
+              : 'Choose another file type to see your uploads.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-4 min-h-72 overflow-hidden rounded-lg border border-[var(--border-subtle)] sm:min-h-[32rem]">
+    <div className="mt-4 overflow-hidden rounded-lg border border-[var(--border-subtle)]">
       <div className="grid h-10 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] px-4 text-xs font-semibold text-[var(--text-secondary)] sm:grid-cols-[1.25rem_minmax(0,1fr)_8rem_2rem]">
         <SelectionCheckbox
           checked={allVisibleSelected}
           indeterminate={someVisibleSelected}
-          disabled={attachments.length === 0}
+          disabled={selectable.length === 0}
           label={
             allVisibleSelected
               ? 'Deselect all visible attachments'
@@ -152,40 +177,25 @@ export function AttachmentList({
 
       {isLoading ? (
         <div
-          className="flex min-h-56 items-center justify-center"
+          className="flex min-h-32 items-center justify-center"
           role="status"
           aria-label="Loading attachments"
         >
           <Spinner className="size-6" />
         </div>
       ) : isError ? (
-        <div className="flex min-h-56 flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="flex min-h-32 flex-col items-center justify-center gap-3 px-6 text-center">
           <p className="text-sm text-[var(--text-secondary)]">Attachments could not be loaded.</p>
           <Button variant="secondary" size="sm" onClick={onRetry}>
             Try again
           </Button>
-        </div>
-      ) : attachments.length === 0 ? (
-        <div className="flex min-h-56 flex-col items-center justify-center gap-3 px-6 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-[var(--bg-control)]">
-            <Paperclip className="size-5 text-[var(--text-muted)]" />
-          </span>
-          <div>
-            <p className="text-sm font-medium text-[var(--text-secondary)]">
-              {totalCount === 0 ? 'No attachments yet' : 'No files match this filter'}
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              {totalCount === 0
-                ? 'Files uploaded in chat will appear here.'
-                : 'Choose another file type to see your uploads.'}
-            </p>
-          </div>
         </div>
       ) : (
         <div>
           {attachments.map((attachment) => {
             const isSelected = selected.has(attachment.id);
             const isDeleting = deletingIds.has(attachment.id);
+            const project = attachment.project;
 
             return (
               <div
@@ -196,12 +206,16 @@ export function AttachmentList({
                   isDeleting && 'opacity-55',
                 )}
               >
-                <SelectionCheckbox
-                  checked={isSelected}
-                  disabled={isDeleting}
-                  label={`Select ${attachment.filename}`}
-                  onChange={() => onToggle(attachment.id)}
-                />
+                {project ? (
+                  <span aria-hidden="true" />
+                ) : (
+                  <SelectionCheckbox
+                    checked={isSelected}
+                    disabled={isDeleting}
+                    label={`Select ${attachment.filename}`}
+                    onChange={() => onToggle(attachment.id)}
+                  />
+                )}
 
                 <div className="flex min-w-0 items-center gap-3">
                   <AttachmentPreview attachment={attachment} />
@@ -217,6 +231,20 @@ export function AttachmentList({
                       <ExternalLink className="size-3 shrink-0 text-[var(--text-secondary)]" />
                     </a>
                     <p className="truncate text-xs leading-4 text-[var(--text-muted)]">
+                      {project && (
+                        <>
+                          Project{' '}
+                          <Link
+                            to="/projects/$projectId"
+                            params={{ projectId: project.id }}
+                            search={{ tab: 'files' }}
+                            className="font-medium text-[var(--text-secondary)] hover:underline"
+                          >
+                            {project.name}
+                          </Link>{' '}
+                          ·{' '}
+                        </>
+                      )}
                       {attachment.mimeType} · {formatBytes(attachment.sizeBytes)}
                       <span className="sm:hidden"> · {formatCreatedAt(attachment.createdAt)}</span>
                     </p>
@@ -230,17 +258,31 @@ export function AttachmentList({
                   {formatCreatedAt(attachment.createdAt)}
                 </time>
 
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={isDeleting}
-                  aria-label={`Delete ${attachment.filename}`}
-                  title={`Delete ${attachment.filename}`}
-                  className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-foreground)] hover:bg-[var(--danger)]/30"
-                  onClick={() => onDelete([attachment.id])}
-                >
-                  {isDeleting ? <Spinner className="size-3.5" /> : <Trash2 />}
-                </Button>
+                {project ? (
+                  <Button variant="ghost" size="icon-sm" asChild>
+                    <Link
+                      to="/projects/$projectId"
+                      params={{ projectId: project.id }}
+                      search={{ tab: 'files' }}
+                      aria-label={`Manage ${attachment.filename} in ${project.name}`}
+                      title={`Manage in ${project.name}`}
+                    >
+                      <FolderOpen />
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={isDeleting}
+                    aria-label={`Delete ${attachment.filename}`}
+                    title={`Delete ${attachment.filename}`}
+                    className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-foreground)] hover:bg-[var(--danger)]/30"
+                    onClick={() => onDelete([attachment.id])}
+                  >
+                    {isDeleting ? <Spinner className="size-3.5" /> : <Trash2 />}
+                  </Button>
+                )}
               </div>
             );
           })}

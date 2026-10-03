@@ -24,7 +24,8 @@ way regardless of which model you pick.
 9. [Connectors](connectors.md) — connecting your account to services models can
    use.
 10. [Sharing](sharing.md) — publishing a conversation read-only.
-11. [Settings](settings.md) — your account, personalisation, history, models.
+11. [Settings](settings.md) — your account, password and devices, appearance and
+    personalisation, history, models, attachments.
 12. [Memory](memory.md) — notes about you that models can use in every
     conversation, and how to see, change and delete them.
 13. [Limits](limits.md) — what a usage warning means and what to do about it.

@@ -53,6 +53,34 @@ export async function artifactBytes(tx: Reader, userId: string): Promise<number>
   return Number(row?.bytes ?? 0);
 }
 
+/** Live project files (with upload reservations), for the storage breakdown. */
+export async function projectFileTotals(tx: Reader, userId: string) {
+  const [row] = await tx
+    .select({
+      bytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}), 0)::bigint`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.attachment)
+    .where(
+      and(
+        eq(schema.attachment.userId, userId),
+        sql`${schema.attachment.projectId} is not null`,
+        sql`${schema.attachment.deletedAt} is null`,
+      ),
+    );
+  return { bytes: Number(row?.bytes ?? 0), count: Number(row?.count ?? 0) };
+}
+
+/** Artifacts (not versions) in conversations that are not in the trash. */
+export async function artifactCount(tx: Reader, userId: string): Promise<number> {
+  const [row] = await tx
+    .select({ value: sql<number>`count(*)::int` })
+    .from(schema.artifact)
+    .innerJoin(schema.thread, eq(schema.thread.id, schema.artifact.threadId))
+    .where(and(eq(schema.artifact.userId, userId), sql`${schema.thread.deletedAt} is null`));
+  return Number(row?.value ?? 0);
+}
+
 /** Bytes held by one conversation's artifact versions. */
 export async function threadArtifactBytes(tx: Reader, threadId: string): Promise<number> {
   const [row] = await tx

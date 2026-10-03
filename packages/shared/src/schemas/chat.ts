@@ -67,6 +67,18 @@ export const attachmentSchema = z.object({
   createdAt: z.string(),
 });
 
+/**
+ * One file in Settings → Attachments (v0.9.1): a chat file, or a project
+ * file with the project it belongs to.
+ */
+export const storedFileSchema = attachmentSchema.extend({
+  project: z.object({ id: z.string(), name: z.string() }).nullable(),
+});
+
+/** GET /api/threads?view=history: one page, newest activity first. */
+export const THREAD_HISTORY_PAGE_SIZE = 50;
+export const THREAD_HISTORY_MAX_PAGE_SIZE = 200;
+
 export const messageSchema = z.object({
   id: z.string(),
   threadId: z.string(),
@@ -151,4 +163,5 @@ export type BranchMessageInput = z.infer<typeof branchMessageSchema>;
 export type ChatMessage = z.infer<typeof messageSchema>;
 export type SearchGroundingData = z.infer<typeof searchGroundingDataSchema>;
 export type Attachment = z.infer<typeof attachmentSchema>;
+export type StoredFile = z.infer<typeof storedFileSchema>;
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;

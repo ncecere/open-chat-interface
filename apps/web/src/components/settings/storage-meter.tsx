@@ -13,6 +13,10 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+function plural(count: number, noun: string): string {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`;
+}
+
 /**
  * Storage consumption against the role's allowance.
  *
@@ -58,6 +62,28 @@ export function StorageMeter() {
             style={{ width: `${percentUsed}%` }}
           />
         </div>
+      )}
+
+      {data.breakdown && (
+        <dl
+          aria-label="Storage by kind"
+          className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-3"
+        >
+          {(
+            [
+              ['Chat files', data.breakdown.chatFiles, 'file'],
+              ['Project files', data.breakdown.projectFiles, 'file'],
+              ['Artifacts', data.breakdown.artifacts, 'artifact'],
+            ] as const
+          ).map(([label, share, noun]) => (
+            <div key={label} className="flex items-baseline justify-between gap-2 sm:block">
+              <dt className="text-[var(--text-secondary)]">{label}</dt>
+              <dd className="text-[var(--text-muted)]">
+                {formatBytes(share.bytes)} · {plural(share.count, noun)}
+              </dd>
+            </div>
+          ))}
+        </dl>
       )}
 
       <p className="mt-2 text-[var(--text-muted)] text-xs">

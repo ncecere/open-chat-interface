@@ -1,4 +1,4 @@
-import type { Attachment } from '@oci/shared';
+import type { StoredFile } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Files, FileText, ImageIcon, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -104,7 +104,7 @@ export function SettingsAttachmentsPage() {
 
   const attachments = useQuery({
     queryKey: ['attachments'],
-    queryFn: () => api.get<{ attachments: Attachment[] }>('/attachments'),
+    queryFn: () => api.get<{ attachments: StoredFile[] }>('/attachments'),
     select: (result) => result.attachments,
   });
 
@@ -171,12 +171,14 @@ export function SettingsAttachmentsPage() {
   }
 
   function toggleAllVisible() {
+    // Project files are managed from their project, so they are never selected here.
+    const selectable = visible.filter((file) => !file.project);
     const everyVisibleSelected =
-      visible.length > 0 && visible.every((file) => selected.has(file.id));
+      selectable.length > 0 && selectable.every((file) => selected.has(file.id));
 
     setSelected((current) => {
       const next = new Set(current);
-      for (const file of visible) {
+      for (const file of selectable) {
         if (everyVisibleSelected) next.delete(file.id);
         else next.add(file.id);
       }
@@ -194,9 +196,9 @@ export function SettingsAttachmentsPage() {
     <div>
       <h1 className="text-2xl font-bold">Attachments</h1>
       <p className="mt-1 max-w-4xl text-sm leading-5 text-[var(--text-secondary)]">
-        Manage your uploaded files and attachments. Deleting a file here removes it from the
-        relevant threads, but does not delete those threads. This may cause unexpected behavior if
-        the file is still in use.
+        Files you uploaded in chats and to projects. Deleting a chat file removes it from its
+        conversations, which stay, and models can no longer read it there. Project files are managed
+        from their project.
       </p>
 
       <StorageMeter />

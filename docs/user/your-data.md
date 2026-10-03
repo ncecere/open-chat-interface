@@ -1,16 +1,17 @@
 # Your data
 
 You can download a copy of everything you have stored here, and you can bring
-your history in from ChatGPT or Claude. Both are under
-[Settings → History](settings.md#history-and-sync), in the **Your data**
-section. To save a single reply or document as a Word document, PDF,
+your history in from ChatGPT or Claude. Both are buttons at the top of
+[Settings → History](settings.md#history), and each opens in its own window.
+To save a single reply or document as a Word document, PDF,
 presentation or spreadsheet, see [Exporting as files](exporting.md).
 
 ## Exporting everything
 
-**Export all conversations** downloads a `.zip` file. It starts straight away
-and is put together while it downloads, so a large history takes a little
-while but does not need to be prepared in advance.
+**Export all conversations**, then **Download export**, downloads a `.zip`
+file. It starts straight away and is put together while it downloads, so a
+large history takes a little while but does not need to be prepared in
+advance.
 
 The archive contains:
 
@@ -42,11 +43,13 @@ capped: past 2 GB of attached files, further files are listed in
      a link to a `.zip` file.
    - **Claude:** Settings → Privacy → Export data. Choose all dates, not only
      recent ones. You get an email with a link to a `.zip` file.
-2. In **Your data**, choose **Choose export file** and pick the `.zip`. You can
-   also upload the `conversations.json` file from inside it.
+2. In Settings → History, choose **Import from ChatGPT or Claude**, then
+   **Choose export file**, and pick the `.zip`. You can also upload the
+   `conversations.json` file from inside it.
 3. The upload shows its progress. Once it finishes, the import runs in the
-   background. You can leave the page; the list shows when it is done and how
-   many conversations were imported, skipped, or could not be read.
+   background. You can close the window or leave the page; the list in the
+   import window shows when it is done and how many conversations were
+   imported, skipped, or could not be read.
 
 Imported conversations appear in your sidebar with their original titles and
 dates. Only what you saw on screen is brought across: your messages and the
