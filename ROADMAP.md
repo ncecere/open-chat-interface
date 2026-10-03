@@ -181,6 +181,9 @@ together they make compliance, backups, exports and artifacts complete.
 | **Failed summaries are reported** | When a summary someone asked for fails in the background, the "Summarising" state simply disappears. | Tell the person it failed and why (allowance, model error), with a retry. |
 | **Slow search providers** | SearchApi occasionally times out, and a slow provider fails the search. | Retry once, then fall back to a second configured provider when one is set. |
 | **S3 suites in CI** | CI has no S3 (MinIO) service or PostgreSQL 17 client tools, so storage, backup and compliance-export tests skip there and their coverage floors are enforced only locally. | A MinIO service and matching `pg_dump` in CI, so those suites run on every pull request and their floors apply there too. |
+| **Your shared links** | People can see a conversation's share link only from inside that conversation, so links shared long ago are easy to forget. | A Settings page listing every share link a person has made (conversation, created, last viewed) with Revoke and Revoke all, audited. |
+| **Default model and reasoning level per person** | The composer remembers the last model per browser only, so a new device starts from the instance default. | A default model and reasoning level in Settings, stored with the account, within what the person's role allows; the instance default still applies when unset or no longer allowed. |
+| **Self-service account deletion** | Settings no longer shows a Delete Account button (it never worked); administrators delete accounts under People. | An administrator setting (off by default, per role) that lets people delete their own account after typing a confirmation. Refused under legal hold; conversations, files, artifacts, memory and share links deleted, usage events kept for budgets; audited. For single sign-on accounts the next sign-in creates a new, empty account, which the confirmation explains. |
 | **One place for operations pages** | The Backups and Compliance pages repeat the same destination and schedule controls. | Shared components for destinations, schedules and run history. |
 
 ## Later — v1.0 and beyond: assistants and media
@@ -214,6 +217,14 @@ Ideas with merit that need more evidence or design before they are scheduled.
 - **Native PDF input** to models that support it, instead of always extracting
   text.
 - **Multi-architecture images** (linux/arm64) for the published containers.
+- **Changing your own email address.** For single sign-on accounts the
+  identity provider owns the address, and OCI uses it to link sign-ins to
+  accounts and to check domain allowlists, so a change in OCI could split an
+  account in two or, without strict verification, let one person claim
+  another's institutional address. For password accounts it would need a
+  confirmation sent to the new address and a notice to the old one.
+  Administrators cannot change addresses either today; a person whose address
+  changes signs in with the new one (single sign-on) or is invited again.
 - **SCIM provisioning** (SCIM 2.0 users and groups mapped to roles, with LDAP
   sign-in as an optional addition). Large institutions provision accounts
   centrally, but single sign-on with just-in-time provisioning and claim-to-role
