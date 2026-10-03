@@ -27,12 +27,15 @@ function backoffMs(attempts: number): number {
  * a log line and a permanently orphaned file.
  */
 export async function drainDeletedObjects(now: Date = new Date()): Promise<number> {
+  // `now` has millisecond precision and PostgreSQL microsecond: compare against
+  // the end of that millisecond so a row queued within it is already due.
+  const dueBefore = new Date(now.getTime() + 1);
   const claimed = await db.transaction(async (tx) => {
     const rows = await tx.execute<{ id: string; storage_key: string; attempts: number }>(sql`
       select id, storage_key, attempts
       from deleted_object
       where deleted_at is null
-        and next_attempt_at <= ${now.toISOString()}::timestamptz
+        and next_attempt_at < ${dueBefore.toISOString()}::timestamptz
         and attempts < ${MAX_ATTEMPTS}
       order by next_attempt_at
       limit ${BATCH_SIZE}
