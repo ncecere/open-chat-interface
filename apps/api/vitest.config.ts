@@ -9,8 +9,8 @@ import { defineConfig } from 'vitest/config';
 const s3Floors = {
   'src/services/backups/pg-tools.ts': { statements: 90, branches: 75, functions: 85 },
   // Functions: CI measures 83-85% from run to run: two log-only callbacks (a background
-// manual backup failing, a failed copy sweep) run only if those paths happen to fire
-// before the suite ends. The floor guards against erosion, not that noise.
+  // manual backup failing, a failed copy sweep) run only if those paths happen to fire
+  // before the suite ends. The floor guards against erosion, not that noise.
   'src/services/backups/run.ts': { statements: 88, branches: 70, functions: 82 },
   'src/services/backups/settings.ts': { statements: 93, branches: 88, functions: 90 },
   'src/services/backups/files.ts': { statements: 90, branches: 85, functions: 100 },
