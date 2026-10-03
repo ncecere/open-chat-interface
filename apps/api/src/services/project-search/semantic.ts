@@ -12,6 +12,7 @@ import {
 } from '../embeddings/storage.js';
 import { recordEmbeddingUsage } from '../embeddings/usage.js';
 import { getDefaultOrganizationId } from '../organization.js';
+import { similarEnough } from './relevance.js';
 import {
   type ChunkRow,
   type RetrievedChunk,
@@ -35,11 +36,13 @@ const QUERY_TIMEOUT_MS = 8_000;
 type Scope = { userId: string; projectId: string; fileIds: string[] };
 
 /**
- * The chunks nearest to `vector` by cosine distance, nearest first. An exact
- * scan of this project's own embeddings from the current model: a project is
- * small enough that no approximate index is needed, and none could restrict
- * itself to one project anyway. Ownership and project are re-checked through
- * the same scope as keyword search.
+ * The chunks nearest to `vector` by cosine distance, nearest first, leaving
+ * out any less similar than `SEMANTIC_MIN_SIMILARITY` (relevance.ts): a vector
+ * search otherwise returns its top results however unrelated they are. An
+ * exact scan of this project's own embeddings from the current model: a
+ * project is small enough that no approximate index is needed, and none could
+ * restrict itself to one project anyway. Ownership and project are re-checked
+ * through the same scope as keyword search.
  */
 export async function vectorRankProjectChunks(
   scope: Scope,
@@ -49,18 +52,22 @@ export async function vectorRankProjectChunks(
   limit: number,
 ): Promise<RetrievedChunk[]> {
   if (scope.fileIds.length === 0 || limit <= 0) return [];
-  const rows = await db.execute<ChunkRow>(sql`
+  const rows = await db.execute<ChunkRow & { distance: number }>(sql`
     with scope as materialized (${scopedChunks(scope)})
-    select s.attachment_id, s.filename, s.ordinal, s.start_offset, s.end_offset, s.content
+    select s.attachment_id, s.filename, s.ordinal, s.start_offset, s.end_offset, s.content,
+           (e.embedding ${cosineDistance(storage.schema)} ${vectorLiteral(vector)}::${vectorType(storage.schema)})::float8
+             as distance
     from scope s
     join ${sql.identifier(EMBEDDING_TABLE)} e
       on e.attachment_id = s.attachment_id and e.ordinal = s.ordinal
     where e.model_key = ${modelKey}
-    order by e.embedding ${cosineDistance(storage.schema)} ${vectorLiteral(vector)}::${vectorType(storage.schema)},
-             s.attachment_id, s.ordinal
+    order by distance, s.attachment_id, s.ordinal
     limit ${limit}
   `);
-  return rows.map(toChunk);
+  // Nearest first, so filtering after the limit keeps the same prefix.
+  return similarEnough(rows.map((row) => ({ ...row, distance: Number(row.distance) }))).map(
+    toChunk,
+  );
 }
 
 /** Whether any of these files has an embedding from the current model yet. */

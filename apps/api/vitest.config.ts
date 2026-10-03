@@ -141,6 +141,12 @@ export default defineConfig({
         },
         'src/services/project-search/fusion.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/project-search/semantic.ts': { statements: 95, branches: 95, functions: 100 },
+        // Relevance floors: an unrelated question must add no project passages.
+        'src/services/project-search/relevance.ts': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+        },
         'src/routes/admin/embeddings.ts': { statements: 95, branches: 90, functions: 100 },
         // v0.9 user memory: every switch, temporary chats, ownership, limits and the prompt budget.
         'src/services/memory/access.ts': { statements: 100, branches: 95, functions: 100 },

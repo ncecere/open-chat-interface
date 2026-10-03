@@ -116,7 +116,9 @@ is added, and indexed with PostgreSQL full-text search. On each message:
    aside for project files, they are included whole, as in v0.7.
 2. Otherwise OCI searches the chunks with the person's message and includes
    the best-ranked passages, each labelled with its file name, until that
-   share is used.
+   share is used. (v0.9 includes only passages above a relevance floor, and
+   none for an unrelated message: see
+   [v0.9-design.md](v0.9-design.md#relevance-floors).)
 
 The reply shows that project files were searched and which files the
 passages came from. This works with every model. Existing project files are

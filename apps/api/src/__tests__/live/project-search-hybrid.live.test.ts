@@ -275,16 +275,16 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
 
       await configure({ enabled: false });
       const before = await select(target, QUESTION);
-      const keyword = await select(target, 'kitchen rota pantry');
+      const keyword = await select(target, 'conservatory boiler ignition');
       await configure({ enabled: true });
       const after = await select(target, QUESTION);
-      const keywordAfter = await select(target, 'kitchen rota pantry');
+      const keywordAfter = await select(target, 'conservatory boiler ignition');
 
-      // The paraphrase finds nothing by keyword: the opening passages are used.
+      // The paraphrase finds nothing by keyword, so no passage is used.
       expect(after.search).toEqual(before.search);
-      expect(after.searchPart?.data).toEqual(before.searchPart?.data);
-      expect(after.searchPart?.data.mode).toBe('opening');
-      expect(passageText(after)).not.toContain(TARGET);
+      expect(after.search?.passages).toEqual([]);
+      expect(after.searchPart).toBeNull();
+      expect(before.searchPart).toBeNull();
       expect(keywordAfter.search).toEqual(keyword.search);
       expect(keywordAfter.searchPart?.data).toMatchObject({ mode: 'search', ranking: 'keyword' });
 
@@ -459,15 +459,16 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       expect(hybrid.searchPart?.data.files[0]?.name).toBe('facilities.txt');
       expect(JSON.stringify(hybrid.searchPart)).not.toContain(TARGET);
 
-      // Exact words still win: the keyword match is ranked first.
-      const exact = await select(target, 'zebra xylophone quokka marmalade');
+      // Exact words still count: the keyword match is merged in.
+      const exact = await select(target, 'conservatory boiler ignition');
       expect(exact.searchPart?.data).toMatchObject({ mode: 'search', ranking: 'hybrid' });
-      expect(passageText(exact)).toContain('Ledger entry');
+      expect(passageText(exact)).toContain(TARGET);
 
-      // Switched off, the same question falls back to keyword search alone.
+      // Switched off, the same question falls back to keyword search alone,
+      // which finds nothing.
       await configure({ enabled: false });
       const keyword = await select(target, QUESTION);
-      expect(keyword.searchPart?.data.mode).toBe('opening');
+      expect(keyword.searchPart).toBeNull();
       expect(passageText(keyword)).not.toContain(TARGET);
       // A message with nothing to search for is never embedded.
       await configure({});
@@ -476,13 +477,42 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       expect(fake.embedded).toEqual([]);
     });
 
+    it('leaves out passages unrelated in meaning, however near they are', async () => {
+      const { project: target, notes, stock } = await largeProject('Unrelated');
+      await embedAll();
+      fake.embedded.length = 0;
+      const unrelated = await select(target, 'quantum chromodynamics lecture');
+      // Searched by meaning, but nothing is similar enough: no passage, no note.
+      expect(fake.embedded).toEqual(['quantum chromodynamics lecture']);
+      expect(unrelated.search?.passages).toEqual([]);
+      expect(unrelated.searchPart).toBeNull();
+
+      const scope = { userId: owner, projectId: target.id, fileIds: [notes.id, stock.id] };
+      const key = 'fake-provider/fake-embed/16';
+      const nearest = async (text: string) =>
+        vectorRankProjectChunks(
+          scope,
+          { schema: 'public' },
+          key,
+          (await fake.doEmbed({ values: [text] })).embeddings[0]!,
+          50,
+        );
+      expect(await nearest('quantum chromodynamics lecture')).toEqual([]);
+      // A related question gets the passages about the boiler only, not the
+      // kitchen notes or the ledger that a top-k search would also return.
+      const related = await nearest(QUESTION);
+      expect(related.length).toBeGreaterThan(0);
+      expect(related[0]!.content).toContain(TARGET);
+      for (const chunk of related) expect(chunk.content).toMatch(/boiler/i);
+    });
+
     it('falls back to keyword search when the embeddings call fails, and backs failing files off', async () => {
       const { project: target, notes } = await largeProject('Failing');
       await embedAll();
       fake.failWith = new Error('provider down');
 
       const selection = await select(target, QUESTION);
-      expect(selection.searchPart?.data.mode).toBe('opening');
+      expect(selection.searchPart).toBeNull();
       expect(passageText(selection)).not.toContain(TARGET);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ projectId: target.id }),
@@ -569,7 +599,7 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       // Same dimensions, new model: old vectors are ignored until replaced in place.
       await configure({ modelId: 'fake-embed-2' });
       const meanwhile = await select(target, QUESTION);
-      expect(meanwhile.searchPart?.data.mode).toBe('opening');
+      expect(meanwhile.searchPart).toBeNull();
       expect(await embedAll()).toBe(total);
       const rows = await embeddingRows();
       expect(rows).toHaveLength(total);
@@ -582,7 +612,7 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       fake = fakeEmbeddingModel({ modelId: 'fake-embed-3', dimensions: 12 });
       state.fake = fake;
       await configure({ modelId: 'fake-embed-3', dimensions: 12 });
-      expect((await select(target, QUESTION)).searchPart?.data.mode).toBe('opening');
+      expect((await select(target, QUESTION)).searchPart).toBeNull();
       expect(await embedAll()).toBe(total);
       expect((await embeddingStorage())?.dimensions).toBe(12);
       const status = await embeddingsStatus();
@@ -602,7 +632,7 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       // A model returning the wrong size is refused, never stored.
       fake = fakeEmbeddingModel({ modelId: 'fake-embed-3', dimensions: 5 });
       state.fake = fake;
-      expect((await select(target, QUESTION)).searchPart?.data.mode).toBe('opening');
+      expect((await select(target, QUESTION)).searchPart).toBeNull();
       await ensureEmbeddingTable(12);
       await configure({ modelId: 'fake-embed-3', dimensions: 16 });
       // Storage is the wrong size for the setting until the job re-creates it.

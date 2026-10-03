@@ -100,8 +100,9 @@ vi.mock('../../services/chat-streams.js', () => ({
 
 const available = await livePostgresAvailable();
 const { indexProjectFile } = await import('../../services/project-search/indexing.js');
-const { indexedChunkCounts, openingProjectChunks, rankProjectChunks, projectSearchTerms } =
-  await import('../../services/project-search/retrieval.js');
+const { indexedChunkCounts, rankProjectChunks, projectSearchTerms } = await import(
+  '../../services/project-search/retrieval.js'
+);
 const { PROJECT_PASSAGE_SHARE } = await import('../../services/chat/project-context.js');
 
 async function modelText(started: StartedTurn) {
@@ -331,24 +332,49 @@ describe.skipIf(!available)('live: searching large project files', () => {
     expect(fitsContext(assembledCost(started), budget)).toBe(true);
   });
 
-  it('uses the opening passages of each file when the message has nothing to search for', async () => {
-    smallModel();
-    const { operations } = await largeProject('Opening');
-    for (const message of ['?! … —', 'Tell me about walruses']) {
+  it('names the files but adds no passage when nothing matches or there is nothing to search for', async () => {
+    const budget = smallModel();
+    const { operations } = await largeProject('Nothing matches');
+    // No words at all; words the files lack; words in every passage ("the", "for", "of").
+    for (const message of ['?! … —', 'Tell me about walruses', 'the rota for the week of']) {
       const started = await send((await thread(operations.id)).id, message);
       const text = await modelText(started);
-      expect(text).toContain('opening passages of each file');
-      expect(text).toContain('Handbook section 0 ');
-      expect(text).toContain('Appendix note 0 ');
-      expect(text).not.toContain(KESTREL);
-      expect(started.turn.projectSearchPart?.data).toEqual({
-        mode: 'opening',
-        files: [
-          { name: 'handbook.txt', passages: 1 },
-          { name: 'appendix.txt', passages: 1 },
-        ],
-      });
+      expect(text).not.toContain('Passage');
+      expect(text).not.toContain('Handbook section');
+      expect(text).not.toContain('Appendix note');
+      expect(text).toContain(
+        'Files from the project "Nothing matches". They are reference material for every conversation in the project, not files attached to this message. The project\'s files (handbook.txt, appendix.txt) are too long to include in full, so passages that match each message are included instead; none matched the latest message closely enough.',
+      );
+      // No note on the reply: there is nothing to show.
+      expect(started.turn.projectSearchPart).toBeNull();
+      expect(started.turn.contextLimited).toBe(false);
+      expect(fitsContext(assembledCost(started), budget)).toBe(true);
     }
+  });
+
+  it('still includes unsearchable files whole when nothing matches', async () => {
+    smallModel();
+    const { operations } = await largeProject('Nothing matches, with a note');
+    await projectFile(operations.id, 'note.txt', 'NOTE_FILE fits.', { index: false });
+    const started = await send((await thread(operations.id)).id, 'Tell me about walruses');
+    const text = await modelText(started);
+    expect(text).toContain("The project's files (handbook.txt, appendix.txt) are too long");
+    expect(text).toContain('Attached file "note.txt":\n\nNOTE_FILE fits.');
+    expect(text).not.toContain('Passage');
+    expect(started.turn.projectSearchPart).toBeNull();
+    expect(started.turn.contextLimited).toBe(false);
+  });
+
+  it('leaves out the file names too when not even they fit', async () => {
+    // The question leaves 300 units: less than the note naming the files.
+    const budget = smallModel(3000);
+    const { operations } = await largeProject('No room');
+    const question = `walruses ${'x'.repeat(budget.units - 300 - 2 * 64 - 2 * 16 - 'INSTANCE PROMPT'.length - 'walruses '.length)}`;
+    const started = await send((await thread(operations.id)).id, question);
+    const text = await modelText(started);
+    expect(text).not.toContain('too long to include in full');
+    expect(started.turn.projectSearchPart).toBeNull();
+    expect(fitsContext(assembledCost(started), budget)).toBe(true);
   });
 
   it('never interprets operators or SQL in the message', async () => {
@@ -366,7 +392,13 @@ describe.skipIf(!available)('live: searching large project files', () => {
     expect(await projectSearchTerms("a ' & | ! <-> :*")).toEqual([]);
     expect(await projectSearchTerms(' \u0001\u0002 ')).toEqual([]);
     expect(await projectSearchTerms("O'Brien's kestrel-nest of")).toEqual(
-      expect.arrayContaining(["'brien':*", "'kestrel-nest':*", "'kestrel':*", "'nest':*", "'of'"]),
+      expect.arrayContaining([
+        { operand: "'brien':*", stopWord: false },
+        { operand: "'kestrel-nest':*", stopWord: false },
+        { operand: "'kestrel':*", stopWord: false },
+        { operand: "'nest':*", stopWord: false },
+        { operand: "'of'", stopWord: true },
+      ]),
     );
     const [rows] = await pool.db.execute<{ total: number }>(
       sql`select count(*)::int as total from project_file_chunk`,
@@ -406,12 +438,11 @@ describe.skipIf(!available)('live: searching large project files', () => {
     const mine = { userId: owner, projectId: operations.id, fileIds: [handbookFile.id] };
     expect(await rankProjectChunks(mine, [], 10)).toEqual([]);
     expect(await rankProjectChunks({ ...mine, fileIds: [] }, operands, 10)).toEqual([]);
-    expect(await openingProjectChunks({ ...mine, fileIds: [] }, 10)).toEqual([]);
-    expect(await openingProjectChunks(mine, 0)).toEqual([]);
+    expect(await rankProjectChunks(mine, operands, 0)).toEqual([]);
     expect(await indexedChunkCounts([])).toEqual(new Map());
     expect(
-      (await openingProjectChunks({ ...mine, fileIds: [foreign.id, sibling.id] }, 10)).length,
-    ).toBe(0);
+      await rankProjectChunks({ ...mine, fileIds: [foreign.id, sibling.id] }, operands, 10),
+    ).toEqual([]);
     for (const fileId of [sibling.id, foreign.id]) {
       const chunks = await rankProjectChunks(
         { userId: owner, projectId: operations.id, fileIds: [fileId, handbookFile.id] },

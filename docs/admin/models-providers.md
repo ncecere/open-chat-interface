@@ -133,6 +133,17 @@ away. The tab shows how many passages are embedded, and any files that failed
 and are waiting to be retried. **System health** has a *Meaning-based search*
 row with the same information.
 
+**Relevance floor.** Passages less similar in meaning to the question than a
+cosine similarity of 0.2 are left out, so a question the files do not cover
+does not bring in the nearest passages anyway. What counts as unrelated depends
+on the model: with OpenAI's `text-embedding-3` models or Cohere's embed-v3,
+unrelated text scores below about 0.2 and the floor removes it; models such as
+`nomic-embed-text` or `bge-m3` score even unrelated text above 0.3, so with
+them the floor removes little and keyword search and reranking (which have
+floors of their own) do the filtering. The value is fixed and deliberately
+low, so a passage that answers a question is never dropped for scoring
+slightly low.
+
 **Changing the model** (or its size) re-embeds everything in the background.
 Until a project's passages are embedded with the new model, its searches are
 keyword-only. Switching meaning-based search off keeps the stored embeddings, so
@@ -184,6 +195,12 @@ Anthropic and Google have no Cohere-compatible reranking endpoint.
 | Hugging Face TEI | through LiteLLM | TEI's own `/rerank` expects `texts` rather than `documents`, so put a LiteLLM gateway (or another Cohere-compatible proxy) in front of it. |
 | Jina | `https://api.jina.ai/v1` | Model `jina-reranker-v2-base-multilingual`. |
 | Cohere | `https://api.cohere.com/v2` | Model `rerank-v3.5`. Add it as an OpenAI-compatible provider with this base URL. |
+
+**Relevance floor.** Rerankers on this API return a relevance score from 0 to
+1, where unrelated text scores close to 0. Passages scored below **0.05** are
+left out, with everything ranked after them; if none is above it, the reply
+uses no passages from the project. A server that returns raw scores outside
+0–1 (logits) is used to order the passages only, as before.
 
 A reply waits at most **five seconds** for the reranker. A timeout or any error
 keeps the previous order (fused, or keyword), is logged, and never fails the

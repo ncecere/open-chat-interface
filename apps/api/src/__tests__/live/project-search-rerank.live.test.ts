@@ -77,8 +77,13 @@ function facilities(): string {
   ).join('\n\n');
 }
 
+/**
+ * Thirty ledger paragraphs, so the facilities notes are a quarter of the
+ * project's chunks and "boiler" and "code" are distinctive enough to search
+ * by (see relevance.ts).
+ */
 function ledger(): string {
-  return Array.from({ length: 6 }, (_, index) =>
+  return Array.from({ length: 30 }, (_, index) =>
     paragraph(
       `Ledger entry ${index}: stock of zebra xylophone quokka marmalade is catalogued alphabetically in the inventory`,
     ),
@@ -278,13 +283,44 @@ describe.skipIf(!available)('live: reranking project search', () => {
       expect(documents.findIndex((document) => document.includes(TARGET))).toBeGreaterThan(0);
       expect(logger.warn).not.toHaveBeenCalled();
 
-      // A message that matches nothing uses the opening passages, never reranked.
-      const opening = await select(target, 'zzzz qqqq');
-      expect(opening.searchPart?.data).toEqual({
-        mode: 'opening',
-        files: expect.any(Array),
-      });
+      // A message that matches nothing adds no passage, and nothing is reranked.
+      const nothing = await select(target, 'zzzz qqqq');
+      expect(nothing.searchPart).toBeNull();
+      expect(nothing.search?.passages).toEqual([]);
       expect(reranker.requests).toHaveLength(1);
+    });
+
+    it('drops candidates the reranker scores as unrelated, leaving none if none is related', async () => {
+      const target = await largeProject('Floor');
+      // Only the answer is above the floor: the passages after it are dropped too.
+      reranker.score = (_query, document) => (document.includes(TARGET) ? 0.6 : 0.04);
+      const one = await select(target);
+      expect(passageText(one)).toContain(TARGET);
+      expect(one.searchPart?.data).toMatchObject({ reranked: true });
+
+      // Nothing related: no passage, no note, though the search was reranked (and charged).
+      reranker.score = () => 0.01;
+      const none = await select(target);
+      expect(none.search?.passages).toEqual([]);
+      expect(none.search?.header).toContain('none matched the latest message closely enough');
+      expect(none.searchPart).toBeNull();
+      expect(await usageEvents(owner)).toHaveLength(2);
+
+      // Scores off the 0–1 scale (raw logits) are used to order, never as a floor.
+      reranker.score = (_query, document) => (document.includes(TARGET) ? 4.2 : -3.1);
+      const scope = { userId: owner, projectId: target.id };
+      const chunk = (index: number, content: string) => ({
+        attachmentId: 'file',
+        filename: 'file.txt',
+        ordinal: index,
+        start: 0,
+        end: 10,
+        content,
+      });
+      const candidates = [chunk(0, 'boiler code'), chunk(1, TARGET), chunk(2, 'boiler')];
+      const logits = await rerankProjectCandidates(scope, QUESTION, candidates);
+      expect(logits.candidates.map((candidate) => candidate.ordinal)).toEqual([1, 0, 2]);
+      expect(logits.reranked).toBe(true);
     });
 
     it('charges each reranked message to the person asking, at the configured price', async () => {

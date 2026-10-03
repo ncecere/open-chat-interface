@@ -1,8 +1,8 @@
-import { and, eq, schema } from '@oci/db';
+import { and, eq, inArray, schema } from '@oci/db';
 import type { ProjectSearchData, UserRole } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
-import { singleLine } from '../../lib/text.js';
+import { clip, singleLine } from '../../lib/text.js';
 import { hybridRanking } from '../project-search/fusion.js';
 import {
   type ProjectPassage,
@@ -13,7 +13,6 @@ import {
 import { rerankProjectCandidates } from '../project-search/rerank.js';
 import {
   indexedChunkCounts,
-  openingProjectChunks,
   projectSearchTerms,
   type RetrievedChunk,
   rankProjectChunks,
@@ -53,6 +52,12 @@ type ProjectContext = {
 export const PROJECT_PASSAGE_SHARE = 0.5;
 /** Ranked candidates fetched per turn; far more than any budget can take. */
 const PASSAGE_CANDIDATES = 160;
+/**
+ * File names are clipped to this length when no passage matched and the model
+ * is given the names instead; a project has at most `MAX_CONTEXT_FILES` files
+ * in context, so the list stays short.
+ */
+const NOTE_MAX_NAME_CHARS = 120;
 
 const chunkKey = (chunk: RetrievedChunk) => `${chunk.attachmentId}:${chunk.ordinal}`;
 
@@ -108,12 +113,34 @@ function projectFilesHeader(name: string): string {
   return `Files from the project "${singleLine(name)}". They are reference material for every conversation in the project, not files attached to this message.`;
 }
 
-function projectPassagesHeader(name: string, mode: ProjectSearchData['mode']): string {
-  const chosen =
-    mode === 'search'
-      ? 'the passages below are the ones that best match the latest message'
-      : 'the passages below are the opening passages of each file';
-  return `${projectFilesHeader(name)} The files are too long to include in full, so ${chosen}, labelled with their file and passage number. The rest of the files is not shown.`;
+function projectPassagesHeader(name: string): string {
+  return `${projectFilesHeader(name)} The files are too long to include in full, so the passages below are the ones that best match the latest message, labelled with their file and passage number. The rest of the files is not shown.`;
+}
+
+/**
+ * What the model is told when nothing in the searched files is relevant to
+ * the latest message: which files exist (names only), so it can say what the
+ * person could ask about instead of guessing or claiming there are none.
+ */
+async function projectNoPassagesHeader(
+  project: ProjectContext,
+  files: AttachmentCandidate[],
+): Promise<string> {
+  const order = new Map(files.map((file, index) => [file.id, index]));
+  const rows = await db
+    .select({ id: schema.attachment.id, filename: schema.attachment.filename })
+    .from(schema.attachment)
+    .where(
+      and(
+        inArray(schema.attachment.id, [...order.keys()]),
+        eq(schema.attachment.userId, project.userId),
+        eq(schema.attachment.projectId, project.id),
+      ),
+    );
+  const names = rows
+    .sort((a, b) => order.get(a.id)! - order.get(b.id)!)
+    .map((row) => clip(singleLine(row.filename), NOTE_MAX_NAME_CHARS));
+  return `${projectFilesHeader(project.name)} The project's files (${names.join(', ')}) are too long to include in full, so passages that match each message are included instead; none matched the latest message closely enough. If the person needs something from these files, they can ask about a specific topic, name or term in them.`;
 }
 
 /** The `data-project-search` part: file names and passage counts, never passage text. */
@@ -175,6 +202,10 @@ function fitWholeFiles(
  *    indexed, or no text such as images) are still included whole, oldest
  *    first, when they fit; one that does not fit is skipped, never truncated,
  *    and the reply is marked context-limited.
+ * 3. Each search stage keeps only passages relevant enough to the message
+ *    (relevance.ts). When none is, no passage is included and the reply gets
+ *    no note; the model is told in one line which files exist. A message with
+ *    nothing to search for (no words at all) is treated the same way.
  */
 export async function selectProjectFiles(
   project: ProjectContext | null,
@@ -207,30 +238,42 @@ export async function selectProjectFiles(
     projectId: project.id,
     fileIds: searchable.map((file) => file.id),
   };
-  const operands = await projectSearchTerms(latestText);
-  let mode: ProjectSearchData['mode'] = 'search';
+  const terms = await projectSearchTerms(latestText);
   let ranking: ProjectSearchData['ranking'] = 'keyword';
-  let candidates = await rankProjectChunks(scope, operands, PASSAGE_CANDIDATES);
+  let candidates = await rankProjectChunks(scope, terms, PASSAGE_CANDIDATES);
   // Meaning-based search (v0.9) joins in when it is configured and available;
   // otherwise, or if it fails, the keyword ranking stands alone as in v0.8.
   const semantic =
-    operands.length > 0 ? await semanticProjectChunks(scope, latestText, PASSAGE_CANDIDATES) : null;
+    terms.length > 0 ? await semanticProjectChunks(scope, latestText, PASSAGE_CANDIDATES) : null;
   if (semantic && semantic.length > 0) {
     ranking = 'hybrid';
     candidates = hybridRanking(candidates, semantic, chunkKey, PASSAGE_CANDIDATES);
   }
   // Reranking (v0.9) reorders the best search results when it is configured;
-  // any failure keeps the order above. The opening passages are not reranked.
+  // any failure keeps the order above.
   let reranked: boolean | undefined;
   if (candidates.length > 0) {
     ({ candidates, reranked } = await rerankProjectCandidates(scope, latestText, candidates));
-  } else {
-    mode = 'opening';
-    candidates = await openingProjectChunks(scope, PASSAGE_CANDIDATES);
+  }
+  if (candidates.length === 0) {
+    // Nothing relevant. Until v0.9 each file's opening passages were used
+    // here; for a question the files do not cover they only cost room and
+    // could mislead, so the model gets the file names instead.
+    const header = await projectNoPassagesHeader(project, searchable);
+    const kept = fitWholeFiles(others, textCost(header), required, budget, supportsVision);
+    // `kept.cost` includes the header; if even that does not fit, neither does any file.
+    if (!fitsContext(addCost(required, kept.cost), budget)) return noProjectFiles(others.length);
+    return {
+      files: kept.files,
+      search: { header, passages: [] },
+      cost: kept.cost,
+      omitted: others.length - kept.files.length,
+      searchPart: null,
+    };
   }
 
   // The longer header is costed up front so the passages' share stays exact.
-  const header = projectPassagesHeader(project.name, mode);
+  const header = projectPassagesHeader(project.name);
   const kept = fitWholeFiles(others, textCost(header), required, budget, supportsVision);
   const room = budget.units - required.units - kept.cost.units;
   const share = Math.min(room, Math.floor(budget.units * PROJECT_PASSAGE_SHARE));
@@ -251,14 +294,11 @@ export async function selectProjectFiles(
     searchPart: {
       type: 'data-project-search',
       id: `project-search-${crypto.randomUUID()}`,
-      data:
-        mode === 'search'
-          ? {
-              ...projectSearchSummary(passages, mode),
-              ranking,
-              ...(reranked !== undefined && { reranked }),
-            }
-          : projectSearchSummary(passages, mode),
+      data: {
+        ...projectSearchSummary(passages, 'search'),
+        ranking,
+        ...(reranked !== undefined && { reranked }),
+      },
     },
   };
 }

@@ -76,8 +76,10 @@ export const projectFileSchema = attachmentSchema.extend({ index: projectFileInd
  * The `data-project-search` part on a reply whose project files were too large
  * to include whole, so passages were chosen instead. It names the files used
  * and how many passages came from each, never the passage text, so it is safe
- * in exports. `mode` is `search` when passages matched the message and
- * `opening` when nothing matched and each file's opening passages were used.
+ * in exports. `mode` is `search` when passages matched the message.
+ * `opening` is only on replies stored before v0.9's relevance floors, when
+ * nothing matched and each file's opening passages were used; now a reply
+ * that used no passages has no part at all.
  * `ranking` (v0.9) says how searched passages were ranked: `hybrid` when
  * meaning-based (vector) results were merged with keyword results, `keyword`
  * otherwise. Absent on replies from before v0.9, which were keyword-only.

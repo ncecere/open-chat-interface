@@ -6,6 +6,7 @@ import { rerank } from '../reranking/client.js';
 import { isRerankingActive, rerankingSettings } from '../reranking/config.js';
 import { resolveReranker } from '../reranking/reranker.js';
 import { recordRerankUsage } from '../reranking/usage.js';
+import { aboveRerankFloor } from './relevance.js';
 import type { RetrievedChunk } from './retrieval.js';
 
 /**
@@ -34,6 +35,11 @@ interface RerankedCandidates {
  * scores; the rest keep their place after them. Candidates the model did not
  * score follow the scored ones in their previous order. One usage event of
  * the person asking is recorded per reranked message.
+ *
+ * When the scores are on the usual 0–1 relevance scale and some fall below
+ * `RERANK_MIN_SCORE` (relevance.ts), the list ends before the first of them:
+ * those candidates, the unscored ones and the rest all rank after a candidate
+ * the model judged unrelated. That may leave nothing.
  */
 export async function rerankProjectCandidates(
   scope: { userId: string; projectId: string },
@@ -63,6 +69,10 @@ export async function rerankProjectCandidates(
       tokens,
       searchPriceMicros: settings.searchPriceMicros,
     });
+    const kept = aboveRerankFloor(ranking);
+    if (kept && kept.length < ranking.length) {
+      return { candidates: kept.map((entry) => head[entry.index]!), reranked: true };
+    }
     const scored = new Set(ranking.map((entry) => entry.index));
     const reordered = [
       ...ranking.map((entry) => head[entry.index]!),
