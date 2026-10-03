@@ -246,6 +246,18 @@ describe.skipIf(!available)('live: signed webhooks', () => {
     ]);
   });
 
+  it('treats a delivery queued earlier in the same millisecond as due', async () => {
+    // PostgreSQL keeps microseconds and JavaScript milliseconds, so on a fast
+    // machine "now" can read as just before a delivery queued a moment ago.
+    await create();
+    await recordAudit({ action: 'backup.run', metadata: { status: 'succeeded' } });
+    await pool.db.execute(
+      sql`update webhook_delivery set next_attempt_at = '2026-10-03T12:00:00.123456Z'`,
+    );
+    const now = new Date('2026-10-03T12:00:00.123Z');
+    expect(await delivery.processWebhookDeliveries({ now })).toBe(1);
+  });
+
   it('retries a failing endpoint with growing delays and gives up after the last attempt', async () => {
     const created = await create();
     const original = delivery.WEBHOOK_LIMITS.maxAttempts;

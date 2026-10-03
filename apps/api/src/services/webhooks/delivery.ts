@@ -215,12 +215,16 @@ type DeliveryRow = typeof schema.webhookDelivery.$inferSelect;
 /** Leases due rows so a concurrent or crashed run cannot send them twice at once. */
 async function claimDue(now: Date, limit: number): Promise<DeliveryRow[]> {
   const leaseUntil = new Date(now.getTime() + WEBHOOK_LIMITS.leaseMs);
+  // `now` has millisecond precision and PostgreSQL microsecond: a delivery
+  // queued earlier in the same millisecond (12:00:00.123456) is due at
+  // 12:00:00.123, so compare against the end of that millisecond.
+  const dueBefore = new Date(now.getTime() + 1);
   return db.execute<DeliveryRow>(sql`
     update ${schema.webhookDelivery}
     set next_attempt_at = ${leaseUntil.toISOString()}::timestamptz
     where id in (
       select id from ${schema.webhookDelivery}
-      where status = 'pending' and next_attempt_at <= ${now.toISOString()}::timestamptz
+      where status = 'pending' and next_attempt_at < ${dueBefore.toISOString()}::timestamptz
       order by next_attempt_at
       limit ${limit}
       for update skip locked

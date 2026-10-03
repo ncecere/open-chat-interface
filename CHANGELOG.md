@@ -125,6 +125,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - The first message of a conversation, and a just-sent question moved to
   the top, could sit under the top bar's buttons on phones and narrower
   windows.
+- A webhook delivery or storage deletion queued in the same millisecond as
+  the job that looked for it waited for the next run (PostgreSQL keeps
+  microseconds, JavaScript milliseconds).
 
 ### Removed
 
