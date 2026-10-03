@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-03
+
 ### Changed
 
 - **Project conversations live under their project in the sidebar.**
@@ -959,7 +961,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.9.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.9.1...main
+[0.9.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.7.0
