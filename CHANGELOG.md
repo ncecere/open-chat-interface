@@ -105,6 +105,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - In your own conversations, a link the safety rules refuse shows as its
   text instead of "[blocked]"; share links keep the marker.
 - The message box's focus line is drawn inside its border.
+- **Project search adds only relevant passages.** Keyword matches on common
+  words no longer count on their own, and passages far weaker than the best
+  match are left out, so a question the project's files do not cover adds
+  none (and shows no note) instead of filling the context with unrelated
+  sections. Meaning-based search and reranking have floors of their own. The
+  opening sections of every file are no longer sent when nothing matches.
 
 ### Fixed
 
