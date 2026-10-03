@@ -7,8 +7,9 @@ example on a phone, a **Settings section** menu takes their place.
 
 A section with nothing in it for you is left out: **Memory** when your
 administrator has not made memory available to you and you have no saved
-notes, and **Connectors** when there is nothing for your role to connect.
-Their addresses still open if you follow a link to one.
+notes, **Sharing** when you may not share and have no link left to revoke, and
+**Connectors** when there is nothing for your role to connect. Their addresses
+still open if you follow a link to one.
 
 ## Account
 
@@ -34,8 +35,26 @@ Your name, email address, role, and how you sign in.
   every session but this one. A device you sign out can stay signed in for up
   to five minutes.
 
-You cannot change your email address or delete your account yourself. To delete
-your account, contact your administrator.
+You cannot change your email address yourself.
+
+### Deleting your account
+
+If your administrator allows it for your role, **Delete account** at the
+bottom of the page deletes your account and everything it owns:
+conversations and their messages, uploaded files, projects, artifacts,
+memory, share links, connected accounts, saved views, usage records and
+preferences. You are signed out straight away, and it cannot be undone. The
+audit log keeps its entries, including one for the deletion, with your email
+address; invites and announcements you created stay.
+
+To confirm, type your email address and, if you have a password, enter it.
+If you sign in through your organisation, there is no password to enter;
+signing in that way again later creates a new, empty account.
+
+The deletion is refused, with the reason, while your organisation has paused
+deletion for your account (a legal hold), and if you are the last
+administrator. Without the option, the page says **To delete your account,
+contact your administrator**; an administrator can delete it under People.
 
 ## Customisation
 
@@ -102,11 +121,42 @@ and delete. See [Memory](memory.md).
 
 ![The models available to you](../images/user-settings-models.png)
 
-Which models you can use, and what each can do. This mirrors the picker, with
-room to read the descriptions properly.
+**Defaults** sets where new conversations start, on every device you use:
 
-You cannot add models here. Which appear is decided by your administrator, and
-may depend on your role.
+- **Default model** — one of the models your role may use, or **Instance
+  default** to follow the model your administrator marked as the default.
+- **Default reasoning level** — the levels your role may use that the default
+  model offers, or **Instance default**. On a model with other levels, the
+  composer uses the nearest one the model has; on a model with none, the
+  setting waits for one that has.
+
+**Save defaults** stores them with your account. A conversation starts from
+the model and level you picked in it, or last used in it; a new one starts
+from your defaults, then the instance's. Picking a different model or level
+in a conversation changes that conversation only.
+
+If your administrator later hides your default model or withdraws your level,
+new conversations quietly start from the instance default instead, and this
+page says so until you choose again.
+
+Below, **Available models** lists which models you can use and what each can
+do, marked **instance default** and **your default**. This mirrors the picker,
+with room to read the descriptions properly. You cannot add models here.
+Which appear is decided by your administrator, and may depend on your role.
+
+## Sharing
+
+Every public link you have made to a conversation, newest first, 50 at a time
+(**Show more** adds the next 50): the conversation (a link to it), whether the
+link is **Live** or a **Snapshot**, whether it is **Active**, **Expired** or
+**Revoked**, when it was created, when it expires, and how many times it has
+been viewed. A conversation in the trash, or a temporary chat that has
+expired, is marked as such.
+
+**Revoke** takes one link down and **Revoke all** takes down every link not
+yet revoked, expired ones included; each asks you to confirm first. Both work
+even when your administrator has turned sharing off for you, so you can still
+withdraw links you made before. See [Sharing a conversation](sharing.md).
 
 ## Connectors
 

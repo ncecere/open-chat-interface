@@ -23,13 +23,13 @@ async function signIn(page: Page) {
 const sidewaysOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
-/** The sections this person should see: Memory and Connectors only when they have something. */
+/** The sections this person should see: Memory, Sharing and Connectors only when they have something. */
 async function expectedSections(page: Page): Promise<string[]> {
   const response = await page.request.get('/api/me');
   expect(response.ok()).toBe(true);
   const me = (await response.json()) as {
-    features: { memory?: boolean };
-    settingsSummary: { memoryEntries: number; connectors: number };
+    features: { memory?: boolean; shareLinks?: boolean };
+    settingsSummary: { memoryEntries: number; connectors: number; shareLinks: number };
   };
   return [
     'Account',
@@ -37,6 +37,7 @@ async function expectedSections(page: Page): Promise<string[]> {
     ...(me.features.memory !== false || me.settingsSummary.memoryEntries > 0 ? ['Memory'] : []),
     'History',
     'Models',
+    ...(me.features.shareLinks !== false || me.settingsSummary.shareLinks > 0 ? ['Sharing'] : []),
     ...(me.settingsSummary.connectors > 0 ? ['Connectors'] : []),
     'Attachments',
   ];

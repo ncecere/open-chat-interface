@@ -16,7 +16,9 @@ verification, and single sign-on. Including **failures**, and including for an
 account that does not exist, which is what makes a brute-force attempt visible.
 A person's own changes in Settings → Account are recorded too: their name
 (`auth.profile.updated`) and signing devices out (`auth.session.revoked`,
-`auth.sessions.revoked_others`).
+`auth.sessions.revoked_others`). Revoking share links is recorded as
+`share_link.revoke` and `share_link.revoke_all` (v0.10), and a refused attempt
+to delete one's own account (wrong password) as `user.delete.failure`.
 
 Attempts refused by the [sign-in limit](governance.md#sign-in-attempts) are
 recorded as `auth.rate_limited`, once per minute per address or account.

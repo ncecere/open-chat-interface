@@ -19,6 +19,8 @@ export const roleFeaturesSchema = z.object({
   memory: z.boolean(),
   /** Absent in settings saved before v0.9; the default applies. */
   artifacts: z.boolean(),
+  /** People may delete their own account (v0.10); off by default for every role. */
+  accountDeletion: z.boolean(),
   reasoningEfforts: z.array(z.enum(REASONING_EFFORTS)),
 });
 
@@ -37,6 +39,7 @@ export const updateRoleFeaturesSchema = z
     projects: z.boolean().optional(),
     memory: z.boolean().optional(),
     artifacts: z.boolean().optional(),
+    accountDeletion: z.boolean().optional(),
     reasoningEfforts: z
       .array(z.enum(REASONING_EFFORTS))
       .max(REASONING_EFFORTS.length)
@@ -97,6 +100,8 @@ export const roleAccessSchema = z.object({
     /** Instance switch and role; each person still opts in themselves. */
     memory: z.boolean(),
     artifacts: z.boolean(),
+    /** Decided by the role alone; there is no instance-wide switch. */
+    accountDeletion: z.boolean(),
   }),
   /** The role's own, editable switches and reasoning levels. */
   roleFeatures: roleFeaturesSchema,

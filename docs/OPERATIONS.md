@@ -525,6 +525,23 @@ backup destination, under `<prefix>objects/<sha256>`
 - A bucket and prefix belong to one OCI instance: never point two instances'
   backups at the same prefix, or one's sweep deletes the other's copies.
 
+#### Default model and reasoning level per person (migration 0036)
+
+Migration `0036_personal_defaults` adds one nullable column,
+`user_preference.default_effort`, with no default: catalog-only under a brief
+lock, no table rewrite, safe to apply before the new release is deployed.
+v0.9 replicas ignore it. Every existing person keeps starting from the
+instance defaults until they choose their own under Settings → Models.
+
+The composer no longer reads the last model picked from the browser
+(`oci.model` in local storage); the first visit after the upgrade removes it.
+People who relied on it start from the instance default, or the default they
+save, on every device.
+
+Also in v0.10 without a migration: Settings → Sharing, and the **Delete own
+account** role switch, which is off for every role after the upgrade (see
+[Self-service account deletion](admin/governance.md#self-service-account-deletion)).
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with

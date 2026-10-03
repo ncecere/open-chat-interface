@@ -138,6 +138,23 @@ describe('Roles & access', () => {
     expect(roleLoads()).toBeGreaterThan(before);
   });
 
+  it('offers deleting their own account per role, off by default', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=user' }));
+
+    const control = featureSwitch('user', 'accountDeletion');
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    const description = document.getElementById('role-user-feature-accountDeletion-description');
+    expect(description?.textContent).toContain('Refused while they are on legal hold');
+    expect(description?.textContent).toContain('Off by default');
+    // No instance-wide switch, so it is never reported as switched off there.
+    expect(description?.textContent).not.toContain('Switched off instance-wide');
+
+    await click(control);
+    await click(button('Save features'));
+    expect(api.put).toHaveBeenCalledWith('/admin/roles/user', { accountDeletion: true });
+    expect(updateRoleFeaturesSchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
+  });
+
   it('reports a rejected feature save next to the form', async () => {
     const { ApiError } = await import('../../src/lib/api-client');
     api.put.mockRejectedValue(new ApiError(422, 'VALIDATION_FAILED', 'Instant is always allowed.'));

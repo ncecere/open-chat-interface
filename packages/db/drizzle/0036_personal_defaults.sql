@@ -1,0 +1,11 @@
+-- Default model and reasoning level per person (v0.10). See
+-- docs/user/settings.md, "Models".
+--
+-- `user_preference.default_model_slug` has existed since 0000 (unused until
+-- now); this adds the matching reasoning level. Nullable with no default, so
+-- adding it rewrites nothing and takes only a brief lock: safe before the new
+-- release is deployed, and the previous release ignores it. NULL means the
+-- instance default, which is what every existing row keeps.
+--
+-- Re-runnable: applying it twice is harmless.
+ALTER TABLE "user_preference" ADD COLUMN IF NOT EXISTS "default_effort" text;

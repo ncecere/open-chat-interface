@@ -28,6 +28,7 @@ const TABS = [
   { to: '/settings/memory', label: 'Memory' },
   { to: '/settings/history', label: 'History' },
   { to: '/settings/models', label: 'Models' },
+  { to: '/settings/sharing', label: 'Sharing' },
   { to: '/settings/connectors', label: 'Connectors' },
   { to: '/settings/attachments', label: 'Attachments' },
 ] as const;
@@ -54,9 +55,10 @@ function isActive(tab: Tab, pathname: string) {
 /**
  * Sections with nothing in them for this person are left out of the
  * navigation (v0.9.1): Memory when it is not offered to them and they have no
- * saved notes, Connectors when their role has nothing to connect. Their
- * addresses still work, and the section shows while it is open. Until /me
- * says otherwise (or from an older API) every section shows.
+ * saved notes, Connectors when their role has nothing to connect, and
+ * Sharing (v0.10) when they may not share and have no link left to revoke.
+ * Their addresses still work, and the section shows while it is open. Until
+ * /me says otherwise (or from an older API) every section shows.
  */
 function visibleTabs(
   pathname: string,
@@ -68,6 +70,8 @@ function visibleTabs(
     if (tab.to === '/settings/memory')
       return features?.memory !== false || summary.memoryEntries > 0;
     if (tab.to === '/settings/connectors') return summary.connectors > 0;
+    if (tab.to === '/settings/sharing')
+      return features?.shareLinks !== false || (summary.shareLinks ?? 0) > 0;
     return true;
   });
 }
@@ -157,6 +161,8 @@ function HelpCard() {
  * The settings sections: tabs on one row where they fit, otherwise one menu.
  * Decided by the width of the content column (a container query), so it holds
  * whatever the window, sidebar or font size; the row never wraps or scrolls.
+ * Eight tabs need about 44rem at the default font; the switch is at 50rem
+ * (v0.10, was 46rem for seven) to keep room for wider fonts and labels.
  */
 function SectionNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
@@ -167,7 +173,7 @@ function SectionNav({ pathname }: { pathname: string }) {
     <div className="@container">
       <nav
         aria-label="Settings sections"
-        className="hidden flex-nowrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1 @[46rem]:inline-flex"
+        className="hidden flex-nowrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1 @[50rem]:inline-flex"
       >
         {tabs.map((tab) => {
           const active = isActive(tab, pathname);
@@ -190,7 +196,7 @@ function SectionNav({ pathname }: { pathname: string }) {
           );
         })}
       </nav>
-      <div className="@[46rem]:hidden">
+      <div className="@[50rem]:hidden">
         <Select
           aria-label="Settings section"
           value={current.to}

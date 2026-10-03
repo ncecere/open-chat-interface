@@ -15,9 +15,9 @@ import { useModels } from '~/hooks/use-models';
 import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
+import { startingModel } from '~/lib/starting-model';
 import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
-const MODEL_STORAGE_KEY = 'oci.model';
 const EMPTY_MODELS: CatalogModel[] = [];
 
 /**
@@ -98,26 +98,21 @@ export function useChatSession(options: {
   // Project files left out of the next message only (v0.10); reset on send.
   const [excludedProjectFileIds, setExcludedProjectFileIds] = useState<string[]>([]);
   const [webSearch, setWebSearch] = useState(options.initialWebSearch ?? false);
-  const [modelSlug, setModelSlug] = useState<string | null>(
-    () => options.initialModelSlug ?? localStorage.getItem(MODEL_STORAGE_KEY),
-  );
+  // An explicit choice in this conversation: picked here, handed over from the
+  // home page or a branch, or the model it last used.
+  const [chosenSlug, setChosenSlug] = useState<string | null>(options.initialModelSlug ?? null);
   const attachments = useAttachments();
   const { items: attachmentItems, consume: consumeAttachments } = attachments;
 
-  // Fall back to the catalog default once models load or the saved model
-  // disappears from the catalog.
-  useEffect(() => {
-    if (models.length === 0) return;
-    if (modelSlug && models.some((model) => model.slug === modelSlug)) return;
-
-    const fallback = models.find((model) => model.isDefault) ?? models[0];
-    if (fallback) setModelSlug(fallback.slug);
-  }, [models, modelSlug]);
-
+  // Then the person's own default, then the instance default (v0.10). Derived
+  // rather than stored, so a default that arrives after the catalog still
+  // applies, and a model withdrawn from the catalog falls through silently.
+  const personalDefault = currentUser?.chat?.defaultModelSlug;
   const selectedModel = useMemo(
-    () => models.find((model) => model.slug === modelSlug) ?? null,
-    [models, modelSlug],
+    () => startingModel(models, chosenSlug, personalDefault),
+    [models, chosenSlug, personalDefault],
   );
+  const modelSlug = selectedModel?.slug ?? null;
 
   // Starts at the administrator's default; a model switch never retains a
   // level the new model (or this person's role) cannot accept.
@@ -257,10 +252,8 @@ export function useChatSession(options: {
     await Promise.all([localStop, remoteStop]);
   }, [stopChat, options.threadId, recovery.waitForServer, scope]);
 
-  const selectModel = useCallback((model: CatalogModel) => {
-    setModelSlug(model.slug);
-    localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
-  }, []);
+  // Lasts for this conversation only; Settings → Models sets where new ones start.
+  const selectModel = useCallback((model: CatalogModel) => setChosenSlug(model.slug), []);
 
   const send = useCallback(
     async (text?: string) => {

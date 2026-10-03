@@ -94,6 +94,12 @@ Filtering by ability is quicker than reading every entry when you know what you
 need: the funnel beside the search box narrows the list to models that can, for
 instance, read a PDF.
 
+A model you pick applies to that conversation; reopening it later starts from
+the model it last used. New conversations start from your default model and
+reasoning level, which you can set under
+[Settings → Models](settings.md#models) for every device, or from the
+instance's default.
+
 ## Where to go next
 
 - [Conversations](conversations.md) — editing, branching, and temporary chats.

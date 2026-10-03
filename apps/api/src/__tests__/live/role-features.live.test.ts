@@ -44,6 +44,7 @@ const { assertTemporaryChatAllowed, createThread } = await import('../../service
 const { assertProjectsAllowed } = await import('../../services/projects.js');
 const { resolveTurnContext } = await import('../../services/chat/turn-context.js');
 const { assertMemoryAvailable } = await import('../../services/memory/store.js');
+const { assertRoleFeature } = await import('../../services/role-features.js');
 
 type Actor = AuthenticatedUser;
 
@@ -147,6 +148,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
       projects: await outcome(() => assertProjectsAllowed(role)),
       memory: await outcome(() => assertMemoryAvailable(role)),
       artifacts: await outcome(() => assertArtifactsAllowed(role)),
+      accountDeletion: await outcome(() => assertRoleFeature(role, 'accountDeletion')),
     };
   }
 
@@ -225,7 +227,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
   });
 
   describe('defaults preserve the previous fixed rules', () => {
-    it('denies restricted attachments, share links, temporary chats, projects, memory and artifacts only', async () => {
+    it('denies restricted attachments, share links, temporary chats, projects, memory and artifacts, and deleting your own account to everyone', async () => {
       expect(await checks('restricted')).toEqual({
         attachments: 403,
         shareLinks: 403,
@@ -235,6 +237,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         projects: 403,
         memory: 403,
         artifacts: 403,
+        accountDeletion: 403,
       });
       for (const role of ['admin', 'auditor', 'user'] as const) {
         expect(await checks(role)).toEqual({
@@ -246,6 +249,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
           projects: 'allowed',
           memory: 'allowed',
           artifacts: 'allowed',
+          accountDeletion: 403,
         });
       }
     });
@@ -288,6 +292,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         projects: false,
         memory: false,
         artifacts: false,
+        accountDeletion: false,
       });
 
       const summary = rolesAccessSchema.parse(
@@ -304,6 +309,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         projects: false,
         memory: false,
         artifacts: false,
+        accountDeletion: false,
       });
       expect(restricted.fixedRules).toEqual([]);
       expect(summary.roles.find((entry) => entry.role === 'auditor')?.fixedRules).toEqual([
@@ -359,6 +365,7 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         projects: 'allowed',
         memory: 'allowed',
         artifacts: 'allowed',
+        accountDeletion: 403,
       });
     });
 
@@ -370,6 +377,51 @@ describe.skipIf(!available)('live: feature entitlements per role', () => {
         await call(actors.user, 'GET', '/me'),
       );
       expect(me.features).toMatchObject({ branching: false, temporaryChat: false });
+    });
+  });
+
+  describe('deleting your own account (v0.10)', () => {
+    it('is off for every role until switched on, and follows its switch per role', async () => {
+      for (const role of ['admin', 'auditor', 'user', 'restricted'] as const) {
+        expect(DEFAULT_ROLE_FEATURES[role].accountDeletion).toBe(false);
+        const me = await json<{ features: Record<string, boolean> }>(
+          await call(actors[role], 'GET', '/me'),
+        );
+        expect(me.features.accountDeletion).toBe(false);
+      }
+      await expect(assertRoleFeature('user', 'accountDeletion')).rejects.toMatchObject({
+        status: 403,
+        message:
+          'Deleting your own account is not available for your role. Ask your administrator.',
+      });
+
+      const body = await json<{ roleFeatures: Record<string, unknown> }>(
+        await putRole('user', { accountDeletion: true }),
+      );
+      expect(body.roleFeatures.accountDeletion).toBe(true);
+      expect((await checks('user')).accountDeletion).toBe('allowed');
+      const me = await json<{ features: Record<string, boolean> }>(
+        await call(actors.user, 'GET', '/me'),
+      );
+      expect(me.features.accountDeletion).toBe(true);
+      // No instance-wide switch: the instance features do not narrow it.
+      await updateSetting('features', {});
+      expect((await checks('user')).accountDeletion).toBe('allowed');
+      // Other roles keep their own value.
+      expect((await checks('restricted')).accountDeletion).toBe(403);
+
+      const summary = rolesAccessSchema.parse(
+        await json(await call(actors.admin, 'GET', '/admin/roles')),
+      );
+      const user = summary.roles.find((entry) => entry.role === 'user')!;
+      expect(user.roleFeatures.accountDeletion).toBe(true);
+      expect(user.features.accountDeletion).toBe(true);
+
+      expect(
+        (await call(actors.auditor, 'PUT', '/admin/roles/user', { accountDeletion: false })).status,
+      ).toBe(403);
+      await json(await putRole('user', { accountDeletion: false }));
+      expect((await checks('user')).accountDeletion).toBe(403);
     });
   });
 

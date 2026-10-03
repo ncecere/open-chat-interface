@@ -2,6 +2,7 @@ import type { AdminUser } from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
+import { AccountDeletionText, deletionConfirmed } from '~/components/account/account-deletion';
 import { EditOnly } from '~/components/admin/admin-access';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { ADMIN_USERS_QUERY_KEY } from '~/components/admin/user-role-select';
@@ -10,11 +11,6 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
-
-/** True once the typed text is the account's email, ignoring case and outer spaces. */
-export function deletionConfirmed(typed: string, email: string): boolean {
-  return typed.trim().toLowerCase() === email.trim().toLowerCase();
-}
 
 /**
  * Permanently deleting one account, from its detail page.
@@ -76,18 +72,7 @@ export function DeleteUserSection({
         open={open}
         onOpenChange={setOpen}
         title={`Delete ${name}?`}
-        description={
-          <>
-            This permanently deletes the account and everything it owns: conversations and their
-            messages, uploaded files, projects, artifacts, memory, share links, connected accounts,
-            saved views, usage records and preferences. {name} is signed out straight away. This
-            cannot be undone.
-            <br />
-            <br />
-            The audit log keeps every entry, including this deletion, with the email address it was
-            recorded with. Invites and announcements they created stay.
-          </>
-        }
+        description={<AccountDeletionText subject={{ kind: 'admin', name }} />}
         confirmLabel="Delete user"
         pendingLabel="Deleting…"
         errorMessage="The account could not be deleted."

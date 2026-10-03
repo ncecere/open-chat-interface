@@ -30,6 +30,8 @@ const ROLE_FEATURE_DENIED: Record<RoleFeatureKey, string> = {
   projects: 'Projects are not available for your role',
   memory: 'Memory is not available for your role',
   artifacts: 'Artifacts are not available for your role',
+  accountDeletion:
+    'Deleting your own account is not available for your role. Ask your administrator.',
 };
 
 /**
@@ -82,6 +84,8 @@ export function combineFeatures(
     memory: role.memory && Boolean(instance.memory),
     // Like projects, artifacts have no instance-wide switch: the role decides.
     artifacts: role.artifacts,
+    // Off by default; no instance-wide switch, the role decides (v0.10).
+    accountDeletion: role.accountDeletion,
     reasoningEfforts: [...role.reasoningEfforts],
   };
 }

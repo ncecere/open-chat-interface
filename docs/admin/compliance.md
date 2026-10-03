@@ -66,7 +66,7 @@ retention while unexported or while their owner is on legal hold.
 | `attachment.delete` | A project file is deleted (`user`), or a file trashed on its own is purged (`trash_expiry`). | `threadId`, `messageId` or `projectId`; `sizeBytes`. |
 | `project.delete` | A project is deleted. | `fileIds` and `files`: its files, deleted with it; `conversationsDetached`: its conversations, which are kept. |
 | `memory.delete` | A memory note is deleted by the person (`user`), the `forget` tool or undoing a saved note (`tool`), or memory retention (`retention`). One entry per note. | The target is the owner (as since v0.9); also `via`, `memoryId`. |
-| `user.delete` | An administrator deletes an account. | `conversations`, `messages`, `attachments`, `artifacts`, `projects`, `memories`, `shareLinks`: everything deleted with it; also `email`, `role`. |
+| `user.delete` | An administrator deletes an account, or a person deletes their own (v0.10: `reason: "user"`, `self: true`). | `conversations`, `messages`, `attachments`, `artifacts`, `projects`, `memories`, `shareLinks`: everything deleted with it; also `email`, `role`. |
 
 Every one of them has the same `metadata.deletion` object:
 

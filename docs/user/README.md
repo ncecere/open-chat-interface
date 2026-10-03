@@ -63,7 +63,8 @@ instance:
 - **Which tools models may use for your role**, and how many steps a reply
   may take.
 - **Which reasoning levels you can choose**, and which one a new conversation
-  starts at.
+  starts at unless you set your own default.
+- **Whether you can delete your own account** from Settings, per role.
 
 If something described here is missing from your instance, it has been turned
 off rather than broken.

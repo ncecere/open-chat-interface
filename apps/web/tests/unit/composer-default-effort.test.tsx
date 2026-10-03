@@ -111,4 +111,43 @@ describe('composer default reasoning level', () => {
     await act(() => mocks.composer!.onSelectModel(mocks.models[1]!));
     expect(mocks.composer?.effort).toBe('instant');
   });
+
+  it('starts from the person’s default model and level, and hands the choice to the conversation (v0.10)', async () => {
+    mocks.models = [
+      model('thinker', ['instant', 'low', 'medium']),
+      model('quick', ['instant']),
+      model('deep', ['instant', 'low', 'medium', 'high']),
+    ];
+    // The server sends the person's level as the starting one when it applies.
+    mocks.me = {
+      ...signedIn('high'),
+      chat: {
+        defaultEffort: 'high',
+        defaultModelSlug: 'deep',
+        reasoningEfforts: ['instant', 'low', 'medium', 'high'],
+      },
+    };
+    localStorage.setItem('oci.model', 'quick');
+    await render();
+    expect(mocks.composer?.selectedModel?.slug).toBe('deep');
+    expect(mocks.composer?.effort).toBe('high');
+    // The per-browser model from before v0.10 is forgotten, not used.
+    expect(localStorage.getItem('oci.model')).toBeNull();
+
+    // A model picked here applies to the conversation it starts.
+    await act(() => mocks.composer!.onSelectModel(mocks.models[1]!));
+    expect(mocks.composer?.selectedModel?.slug).toBe('quick');
+    expect(mocks.composer?.effort).toBe('instant');
+    await act(() => mocks.composer!.onChange('Question'));
+    await act(() => mocks.composer!.onSubmit());
+    expect(sessionStorage.getItem('oci.pendingModel')).toBe('quick');
+    expect(localStorage.getItem('oci.model')).toBeNull();
+  });
+
+  it('falls back to the instance default when the person has no usable default', async () => {
+    mocks.me = { ...signedIn('low'), chat: { ...signedIn('low').chat, defaultModelSlug: null } };
+    await render();
+    expect(mocks.composer?.selectedModel?.slug).toBe('thinker');
+    expect(mocks.composer?.effort).toBe('low');
+  });
 });

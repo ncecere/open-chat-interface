@@ -16,6 +16,7 @@ import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getChatHistory } from '~/lib/chat-history';
+import { conversationChoice } from '~/lib/starting-model';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 const PENDING_KEY = 'oci.pendingPrompt';
@@ -25,7 +26,8 @@ const PENDING_EFFORT_KEY = 'oci.pendingEffort';
 const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
 const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
 const PENDING_BRANCH_KEY = 'oci.pendingBranchResponse';
-const MODEL_STORAGE_KEY = 'oci.model';
+/** The model picked on the home page for this new conversation (v0.10). */
+const PENDING_MODEL_KEY = 'oci.pendingModel';
 
 interface PendingBranchResponse {
   threadId: string;
@@ -60,6 +62,10 @@ function peekPendingEffort(): ReasoningEffort | undefined {
   return REASONING_EFFORTS.find((effort) => effort === value);
 }
 
+function peekPendingModel(): string | null {
+  return sessionStorage.getItem(PENDING_MODEL_KEY) || null;
+}
+
 function peekPendingSearch(): boolean {
   return sessionStorage.getItem(PENDING_SEARCH_KEY) === 'true';
 }
@@ -92,6 +98,7 @@ function ThreadConversation({
   initialMessages,
   initialReplies,
   carriedAttachments,
+  carriedModel,
   carriedEffort,
   carriedSearch,
   carriedFocus,
@@ -106,6 +113,8 @@ function ThreadConversation({
   /** Every reply to the latest turn when it was retried; otherwise empty. */
   initialReplies: UIMessage[];
   carriedAttachments: Attachment[];
+  /** The model picked on the home page for this conversation. */
+  carriedModel: string | null;
   carriedEffort?: ReasoningEffort;
   carriedSearch: boolean;
   /** The person was typing on the home page: keep the cursor in the composer. */
@@ -114,12 +123,15 @@ function ThreadConversation({
   target?: ChatScrollTarget;
 }) {
   const pendingBranch = peekPendingBranch(threadId);
+  // An explicit choice in this conversation comes first: a branch's or the home
+  // page's, else what it last used. Without one, the person's default applies.
+  const [recorded] = useState(() => conversationChoice(initialMessages));
   const session = useChatSession({
     threadId,
     initialMessages,
     carriedAttachments,
-    initialModelSlug: pendingBranch?.modelSlug,
-    initialEffort: pendingBranch?.effort ?? carriedEffort,
+    initialModelSlug: pendingBranch?.modelSlug ?? carriedModel ?? recorded.modelSlug,
+    initialEffort: pendingBranch?.effort ?? carriedEffort ?? recorded.effort,
     initialWebSearch: carriedSearch,
     temporary,
   });
@@ -145,6 +157,7 @@ function ThreadConversation({
     sessionStorage.removeItem(PENDING_KEY);
     sessionStorage.removeItem(PENDING_ATTACHMENTS_KEY);
     sessionStorage.removeItem(PENDING_EFFORT_KEY);
+    sessionStorage.removeItem(PENDING_MODEL_KEY);
     sessionStorage.removeItem(PENDING_SEARCH_KEY);
     sessionStorage.removeItem(PENDING_THREAD_KEY);
     void send(pending);
@@ -213,7 +226,6 @@ function ThreadConversation({
       // Without a recorded level the new thread starts at the instance default.
       const effort = result.message.effort ?? undefined;
 
-      if (modelSlug) localStorage.setItem(MODEL_STORAGE_KEY, modelSlug);
       sessionStorage.setItem(
         PENDING_BRANCH_KEY,
         JSON.stringify({
@@ -381,6 +393,9 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
   const [carriedAttachments] = useState(() =>
     sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingAttachments() : [],
   );
+  const [carriedModel] = useState(() =>
+    sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingModel() : null,
+  );
   const [carriedEffort] = useState(() =>
     sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingEffort() : undefined,
   );
@@ -436,6 +451,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
       initialMessages={data.messages}
       initialReplies={data.replies}
       carriedAttachments={carriedAttachments}
+      carriedModel={carriedModel}
       carriedEffort={carriedEffort}
       carriedSearch={carriedSearch}
       carriedFocus={carriedFocus}

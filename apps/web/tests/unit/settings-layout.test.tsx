@@ -45,7 +45,7 @@ const render = async (path = '/settings/history') => {
 };
 
 describe('settings layout', () => {
-  it('has seven sections on one row that never wraps', async () => {
+  it('has eight sections on one row that never wraps', async () => {
     await render();
     const nav = container.querySelector('nav[aria-label="Settings sections"]')!;
     const labels = [...nav.querySelectorAll('a')].map((link) => link.textContent);
@@ -55,6 +55,7 @@ describe('settings layout', () => {
       'Memory',
       'History',
       'Models',
+      'Sharing',
       'Connectors',
       'Attachments',
     ]);
@@ -69,8 +70,8 @@ describe('settings layout', () => {
     const menu = container.querySelector('[aria-label="Settings section"]')!;
     // A container query swaps them at the same width, so exactly one shows.
     expect(nav.className).toContain('hidden');
-    expect(nav.className).toContain('@[46rem]:inline-flex');
-    expect(menu.closest('.\\@\\[46rem\\]\\:hidden')).not.toBeNull();
+    expect(nav.className).toContain('@[50rem]:inline-flex');
+    expect(menu.closest('.\\@\\[50rem\\]\\:hidden')).not.toBeNull();
     expect(menu.textContent).toContain('History');
   });
 
@@ -103,7 +104,14 @@ describe('settings layout', () => {
       settingsSummary: { memoryEntries: 0, connectors: 0 },
     };
     await render();
-    expect(tabLabels()).toEqual(['Account', 'Customization', 'History', 'Models', 'Attachments']);
+    expect(tabLabels()).toEqual([
+      'Account',
+      'Customization',
+      'History',
+      'Models',
+      'Sharing',
+      'Attachments',
+    ]);
     const menu = container.querySelector('[aria-label="Settings section"]')!;
     expect(menu.textContent).not.toContain('Memory');
   });
@@ -117,6 +125,28 @@ describe('settings layout', () => {
     await render();
     expect(tabLabels()).toContain('Memory');
     expect(tabLabels()).toContain('Connectors');
+  });
+
+  it('hides Sharing when the person may not share and has no link left to revoke', async () => {
+    me = {
+      ...me,
+      features: { shareLinks: false },
+      settingsSummary: { memoryEntries: 0, connectors: 0, shareLinks: 0 },
+    };
+    await render();
+    expect(tabLabels()).not.toContain('Sharing');
+    await cleanup(root!);
+
+    // Links made before sharing was switched off can still be revoked there.
+    me = { ...me, settingsSummary: { memoryEntries: 0, connectors: 0, shareLinks: 2 } };
+    await render();
+    expect(tabLabels()).toContain('Sharing');
+    await cleanup(root!);
+
+    // Its address still opens it.
+    me = { ...me, settingsSummary: { memoryEntries: 0, connectors: 0, shareLinks: 0 } };
+    await render('/settings/sharing');
+    expect(tabLabels()).toContain('Sharing');
   });
 
   it('shows a hidden section while its address is open', async () => {

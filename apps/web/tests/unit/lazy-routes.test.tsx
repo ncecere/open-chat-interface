@@ -62,6 +62,7 @@ const lazyModules = [
   ['routes/settings/memory', ['SettingsMemoryPage']],
   ['routes/settings/history', ['SettingsHistoryPage']],
   ['routes/settings/models', ['SettingsModelsPage']],
+  ['routes/settings/sharing', ['SettingsSharingPage']],
   ['routes/settings/connectors', ['SettingsConnectorsPage']],
   ['routes/settings/attachments', ['SettingsAttachmentsPage']],
 ] as const;

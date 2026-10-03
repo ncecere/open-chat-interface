@@ -1,4 +1,4 @@
-import type { ReasoningEffort, SignInMethods, UserRole } from '@oci/shared';
+import type { PersonalDefaultProblem, ReasoningEffort, SignInMethods, UserRole } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '~/lib/api-client';
 
@@ -20,7 +20,10 @@ export interface UserPreferences {
   occupation: string | null;
   traits: string[];
   additionalContext: string | null;
+  /** The person's own starting model (Settings → Models); null for the instance default. */
   defaultModelSlug: string | null;
+  /** The person's own starting reasoning level (v0.10); null or absent for the instance default. */
+  defaultEffort?: ReasoningEffort | null;
   /** The person's own memory switch; absent from an API before v0.9. */
   memoryEnabled?: boolean;
 }
@@ -40,13 +43,24 @@ export interface CurrentFeatures {
   memory?: boolean;
   /** Decided by the role alone (v0.9). Optional so an older API's response still renders. */
   artifacts?: boolean;
+  /** The person may delete their own account (v0.10); decided by the role, off by default. */
+  accountDeletion?: boolean;
 }
 
 interface CurrentChatDefaults {
-  /** The administrator's starting level, before clamping to the model. */
+  /**
+   * Where the composer's level starts, before clamping to the model: the
+   * person's own default when it still applies (v0.10), else the instance's.
+   */
   defaultEffort: ReasoningEffort;
   /** Levels this person's role may choose. */
   reasoningEfforts: ReasoningEffort[];
+  /** The administrator's level (v0.10; absent from an older API). */
+  instanceDefaultEffort?: ReasoningEffort;
+  /** The person's own model while it is available to them (v0.10); null for the catalog default. */
+  defaultModelSlug?: string | null;
+  /** Saved defaults that no longer apply and are ignored (v0.10). */
+  defaultProblems?: PersonalDefaultProblem[];
 }
 
 /** What Settings needs to hide sections with nothing in them (v0.9.1). */
@@ -54,6 +68,8 @@ export interface SettingsSummary {
   memoryEntries: number;
   /** Connectors the person's role could connect to. */
   connectors: number;
+  /** Share links not yet revoked (v0.10); absent from an older API. */
+  shareLinks?: number;
 }
 
 interface MeResponse {

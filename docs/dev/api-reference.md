@@ -319,14 +319,17 @@ Generated from 41 route files.
 | GET | `/api/me` | — |
 | GET | `/api/me/broadcasts` | Announcements this person should currently see. |
 | POST | `/api/me/broadcasts/:id/dismiss` | — |
+| POST | `/api/me/delete-account` | Deletes the signed-in person's own account and everything it owns (v0.10), when their role allows it (403 otherwise). |
 | GET | `/api/me/onboarding` | What must happen before this person can use the instance. |
 | POST | `/api/me/onboarding/accept-policy` | — |
 | POST | `/api/me/onboarding/complete` | — |
 | POST | `/api/me/onboarding/skip` | — |
-| PATCH | `/api/me/preferences` | — |
+| PATCH | `/api/me/preferences` | Saves the person's preferences. |
 | GET | `/api/me/sessions` | Settings → Account → Devices: where this person is signed in, this device first. |
 | DELETE | `/api/me/sessions/:id` | Signs out one other device (404 for anyone else's or an unknown session). |
 | POST | `/api/me/sessions/revoke-others` | Signs out every other device. |
+| GET | `/api/me/share-links` | Settings → Sharing (v0.10): every share link this person made, newest first, 50 per page (`limit` up to 100, `offset`). |
+| POST | `/api/me/share-links/revoke-all` | Revokes every share link this person still has, audited as one `share_link.revoke_all` entry with the count. |
 | GET | `/api/me/usage` | — |
 
 ## `routes/memory.ts`
@@ -375,7 +378,7 @@ Generated from 41 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/share-links/:slug` | Anonymous, read-only endpoint. |
-| DELETE | `/api/share-links/links/:linkId` | — |
+| DELETE | `/api/share-links/links/:linkId` | Revokes one of the caller's links (404 for anyone else's), audited as `share_link.revoke`. |
 | GET | `/api/share-links/threads/:threadId` | — |
 | POST | `/api/share-links/threads/:threadId` | — |
 

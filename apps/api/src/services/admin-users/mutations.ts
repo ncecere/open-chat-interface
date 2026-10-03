@@ -10,6 +10,7 @@ import { recordAudit } from '../audit.js';
 import { recordDeletions } from '../compliance/deletions.js';
 import {
   HELD_ACCOUNT_DELETION_MESSAGE,
+  HELD_SELF_DELETION_MESSAGE,
   isLegalHoldViolation,
   isOnLegalHold,
 } from '../compliance/holds.js';
@@ -154,13 +155,32 @@ export async function revokeUserSessions(actor: AdminUserActor, targetId: string
   return { ok: true };
 }
 
-export async function deleteUser(actor: AdminUserActor, targetId: string) {
-  if (targetId === actor.id) {
+export const LAST_ADMIN_SELF_DELETION_MESSAGE =
+  'You are the last administrator, so your account cannot be deleted. Make someone else an administrator first.';
+
+/**
+ * Deleting an account and everything it owns, by an administrator (People →
+ * Users) or, with `self`, by the person themselves (Settings → Account,
+ * v0.10). Both refuse an account on legal hold and the last administrator,
+ * and write one `user.delete` deletion event in the deleting transaction; a
+ * person's own deletion is recorded with `reason: 'user'` and `self: true`.
+ * Only the self path may delete the caller's own account: an administrator
+ * cannot remove themselves from People by mistake.
+ */
+export async function deleteUser(
+  actor: AdminUserActor,
+  targetId: string,
+  options: { self?: boolean; ipAddress?: string | null } = {},
+) {
+  const self = options.self === true;
+  if (self && targetId !== actor.id) throw validationFailed('You can delete only your own account');
+  if (!self && targetId === actor.id) {
     throw validationFailed('You cannot delete your own account');
   }
+  const heldMessage = self ? HELD_SELF_DELETION_MESSAGE : HELD_ACCOUNT_DELETION_MESSAGE;
   // The database refuses too (a trigger, migration 0034), whichever path deletes;
-  // checking first gives the administrator a clear reason.
-  if (await isOnLegalHold(targetId)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
+  // checking first gives a clear reason.
+  if (await isOnLegalHold(targetId)) throw conflict(heldMessage);
 
   try {
     await db.transaction(async (tx) => {
@@ -180,7 +200,7 @@ export async function deleteUser(actor: AdminUserActor, targetId: string) {
         .for('update');
       if (!target) throw notFound('User not found');
       if (target.role === 'admin' && !admins.some((admin) => admin.id !== targetId)) {
-        throw conflict(LAST_ADMIN_DELETION_MESSAGE);
+        throw conflict(self ? LAST_ADMIN_SELF_DELETION_MESSAGE : LAST_ADMIN_DELETION_MESSAGE);
       }
       // Recorded first, in this transaction (the owner's email is read from the
       // row about to go): everything the account owned goes with it, counted.
@@ -201,18 +221,22 @@ export async function deleteUser(actor: AdminUserActor, targetId: string) {
           actorEmail: actor.email,
           id: targetId,
           ownerUserId: targetId,
-          reason: 'admin',
-          details: Object.fromEntries(
-            Object.entries(owned ?? {}).map(([key, value]) => [key, Number(value)]),
-          ),
+          reason: self ? 'user' : 'admin',
+          details: {
+            ...Object.fromEntries(
+              Object.entries(owned ?? {}).map(([key, value]) => [key, Number(value)]),
+            ),
+            ...(self ? { self: true } : {}),
+          },
+          ipAddress: options.ipAddress ?? null,
           // The account is gone; keep enough to say whose it was.
-          legacy: { email: target.email, role: target.role },
+          legacy: { email: target.email, role: target.role, ...(self ? { self: true } : {}) },
         },
       ]);
       await tx.delete(schema.user).where(eq(schema.user.id, targetId));
     });
   } catch (error) {
-    if (isLegalHoldViolation(error)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
+    if (isLegalHoldViolation(error)) throw conflict(heldMessage);
     throw error;
   }
   return { ok: true };

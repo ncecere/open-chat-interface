@@ -1,4 +1,4 @@
-import type { QuotaMetric, QuotaWindowKind, UserRole } from '@oci/shared';
+import type { QuotaMetric, QuotaWindowKind, ReasoningEffort, UserRole } from '@oci/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -272,7 +272,13 @@ export const userPreference = pgTable(
     occupation: text('occupation'),
     traits: jsonb('traits').$type<string[]>().notNull().default([]),
     additionalContext: text('additional_context'),
+    /**
+     * The person's own starting model and reasoning level (Settings → Models,
+     * v0.10; the effort column is migration 0036). Null means the instance
+     * default. Checked against what the role allows whenever they are used.
+     */
     defaultModelSlug: text('default_model_slug'),
+    defaultEffort: text('default_effort').$type<ReasoningEffort>(),
     /**
      * When the introduction was completed. Null means it has not been shown,
      * so a returning user is never asked again after finishing it once.

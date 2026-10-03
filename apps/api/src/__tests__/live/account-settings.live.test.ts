@@ -139,7 +139,7 @@ describe.skipIf(!available)('live: Settings → Account', () => {
     expect(response.status).toBe(200);
     return (await response.json()) as {
       signIn: { password: boolean; credential: boolean; sso: string[] };
-      settingsSummary: { memoryEntries: number; connectors: number };
+      settingsSummary: { memoryEntries: number; connectors: number; shareLinks: number };
     };
   }
 
@@ -152,7 +152,7 @@ describe.skipIf(!available)('live: Settings → Account', () => {
       const { cookie } = await signedIn();
       const body = await signInOf(cookie);
       expect(body.signIn).toEqual({ password: true, credential: true, sso: [] });
-      expect(body.settingsSummary).toEqual({ memoryEntries: 0, connectors: 0 });
+      expect(body.settingsSummary).toEqual({ memoryEntries: 0, connectors: 0, shareLinks: 0 });
     });
 
     it('reports an unusable password for a person once local sign-in is off', async () => {
@@ -220,6 +220,40 @@ describe.skipIf(!available)('live: Settings → Account', () => {
         source: 'person',
       });
       expect((await signInOf(cookie)).settingsSummary.memoryEntries).toBe(1);
+    });
+  });
+
+  describe('deleting your own account (v0.10)', () => {
+    it('ends the session and expires its cookies, and Better Auth’s endpoint stays off', async () => {
+      const { updateSetting } = await import('../../services/settings.js');
+      await updateSetting('roleFeatures', { roles: { user: { accountDeletion: true } } });
+      try {
+        const { user, email, cookie } = await signedIn();
+        // Better Auth's own endpoint is still disabled with the switch on.
+        expect((await authRequest('/delete-user', { password }, cookie)).status).not.toBe(200);
+        expect((await me('', cookie)).status).toBe(200);
+
+        const response = await me('/delete-account', cookie, {
+          method: 'POST',
+          body: JSON.stringify({ confirmEmail: email, password }),
+        });
+        expect(response.status, await response.clone().text()).toBe(200);
+        const expired = response.headers
+          .getSetCookie()
+          .filter((value) => /max-age=0/i.test(value))
+          .map((value) => value.split('=')[0]);
+        expect(expired).toEqual(expect.arrayContaining(['oci.session_token', 'oci.session_data']));
+        expect((await me('', cookie)).status).toBe(401);
+        const rows = await pool.db
+          .select({ id: schema.user.id })
+          .from(schema.user)
+          .where(eq(schema.user.id, user.id));
+        expect(rows).toHaveLength(0);
+        // Signing in again is refused: the account is gone.
+        expect((await authRequest('/sign-in/email', { email, password })).status).toBe(401);
+      } finally {
+        await updateSetting('roleFeatures', { roles: {} });
+      }
     });
   });
 

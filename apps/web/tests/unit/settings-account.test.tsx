@@ -17,8 +17,8 @@ import {
 /**
  * Settings → Account (v0.9.1): the password control follows how the person
  * signs in, devices can be listed and signed out, the name can be edited on
- * a password account, and changing the email or deleting the account are
- * gone.
+ * a password account, and changing the email is gone. Deleting the account
+ * (v0.10) is offered only when the role allows it.
  */
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -40,8 +40,10 @@ const IPHONE_SAFARI =
 
 let root: Root | undefined;
 let signIn: { password: boolean; credential: boolean; sso: string[] } | undefined;
+let features: Record<string, boolean>;
 beforeEach(() => {
   signIn = { password: true, credential: true, sso: [] };
+  features = {};
   api.get.mockReset().mockImplementation(async (path: string) => {
     if (path === '/me')
       return {
@@ -53,7 +55,7 @@ beforeEach(() => {
           emailVerified: true,
         },
         preferences: {},
-        features: {},
+        features,
         signIn,
       };
     if (path === '/me/sessions')
@@ -91,8 +93,9 @@ afterEach(async () => {
   root = undefined;
 });
 
+let router: Awaited<ReturnType<typeof renderAdmin>>['router'];
 const render = async () => {
-  ({ root } = await renderAdmin(<SettingsAccountPage />, { path: '/settings' }));
+  ({ root, router } = await renderAdmin(<SettingsAccountPage />, { path: '/settings' }));
 };
 
 async function type(element: HTMLInputElement, value: string) {
@@ -129,6 +132,86 @@ describe('Settings → Account', () => {
     expect(text).not.toContain('Danger Zone');
     expect(text).toContain('To delete your account, contact your administrator.');
     expect(text).toContain('Security & Access');
+  });
+
+  describe('deleting your account (v0.10)', () => {
+    const confirmButton = () => button('Delete my account');
+
+    it('is offered only when the role allows it', async () => {
+      features = { accountDeletion: true };
+      await render();
+      const text = document.body.textContent ?? '';
+      expect(text).not.toContain('contact your administrator');
+      expect(document.getElementById('delete-account-heading')?.textContent).toBe('Delete account');
+    });
+
+    it('says what is deleted and kept, and needs the email and password typed', async () => {
+      features = { accountDeletion: true };
+      api.post.mockResolvedValue({ ok: true });
+      await render();
+      await click(button('Delete account'));
+
+      const text = dialog()?.textContent ?? '';
+      expect(text).toContain('Delete your account?');
+      expect(text).toContain('conversations and their messages');
+      expect(text).toContain('share links');
+      expect(text).toContain('The audit log keeps every entry');
+      expect(text).not.toContain('a new, empty account');
+      expect(confirmButton().disabled).toBe(true);
+
+      await type(field('Type ada@example.test to confirm'), 'ADA@example.test ');
+      expect(confirmButton().disabled).toBe(true);
+      await type(field('Your password'), 'Secret-password-1');
+      expect(confirmButton().disabled).toBe(false);
+      await click(confirmButton());
+
+      expect(api.post).toHaveBeenCalledWith('/me/delete-account', {
+        confirmEmail: 'ADA@example.test ',
+        password: 'Secret-password-1',
+      });
+      expect(router.state.location.pathname).toBe('/auth/login');
+    });
+
+    it('explains that signing in through the organisation again creates a new, empty account', async () => {
+      features = { accountDeletion: true };
+      signIn = { password: false, credential: false, sso: ['Campus SSO'] };
+      api.post.mockResolvedValue({ ok: true });
+      await render();
+      await click(button('Delete account'));
+
+      expect(dialog()?.textContent).toContain(
+        'You sign in through Campus SSO. If you sign in that way again later, a new, empty account is created for you.',
+      );
+      expect(() => field('Your password')).toThrow();
+      await type(field('Type ada@example.test to confirm'), 'ada@example.test');
+      await click(confirmButton());
+      expect(api.post).toHaveBeenCalledWith('/me/delete-account', {
+        confirmEmail: 'ada@example.test',
+      });
+    });
+
+    it('shows why the server refused, such as a legal hold', async () => {
+      const { ApiError } = await import('../../src/lib/api-client');
+      features = { accountDeletion: true };
+      api.post.mockRejectedValue(
+        new ApiError(
+          409,
+          'CONFLICT',
+          'Deleting your account is paused by your organization. Contact your administrator if you need it deleted.',
+        ),
+      );
+      await render();
+      await click(button('Delete account'));
+      await type(field('Type ada@example.test to confirm'), 'ada@example.test');
+      await type(field('Your password'), 'Secret-password-1');
+      await click(confirmButton());
+
+      expect(alerts()).toContain(
+        'Your account could not be deleted. Deleting your account is paused by your organization. Contact your administrator if you need it deleted.',
+      );
+      expect(dialog()).not.toBeNull();
+      expect(router.state.location.pathname).toBe('/settings');
+    });
   });
 
   describe('password', () => {

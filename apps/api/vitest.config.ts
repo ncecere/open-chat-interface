@@ -89,6 +89,10 @@ export default defineConfig({
         'src/services/quota/sweep.ts': { statements: 90, branches: 80, functions: 100 },
         'src/services/quota/windows.ts': { statements: 95, branches: 70, functions: 100 },
         'src/services/share-links.ts': { statements: 55, branches: 70, functions: 80 },
+        // v0.10 settings for people: deleting your own account (role switch,
+        // typed confirmation, password) and the default model and level checks.
+        'src/services/account-deletion.ts': { statements: 95, branches: 95, functions: 100 },
+        'src/services/personal-defaults.ts': { statements: 95, branches: 95, functions: 100 },
         // v0.8 tools: the tool set, approvals and the audit/usage paths of the loop.
         'src/services/tools/registry.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/tools/role-tools.ts': { statements: 95, branches: 95, functions: 100 },

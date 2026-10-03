@@ -128,6 +128,7 @@ export function roleAccessFixture(
       branching: true,
       projects: role !== 'restricted',
       memory: false,
+      accountDeletion: false,
     },
     // The built-in defaults: restricted cannot upload, share, go temporary or use projects.
     roleFeatures: {
@@ -138,6 +139,8 @@ export function roleAccessFixture(
       branching: true,
       projects: role !== 'restricted',
       memory: role !== 'restricted',
+      // Off for every role until an administrator allows it (v0.10).
+      accountDeletion: false,
       reasoningEfforts: ['instant', 'low', 'medium', 'high'],
     },
     // Built-in default: read tools on for every role except restricted.

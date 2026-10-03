@@ -253,6 +253,13 @@
       "when": 1790539200015,
       "tag": "0035_backup_files",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790539200016,
+      "tag": "0036_personal_defaults",
+      "breakpoints": true
     }
   ]
 }

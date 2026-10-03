@@ -47,6 +47,7 @@ describe('role feature defaults', () => {
       projects: false,
       memory: false,
       artifacts: false,
+      accountDeletion: false,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
     for (const role of ['admin', 'auditor', 'user'] as const) {
@@ -59,6 +60,8 @@ describe('role feature defaults', () => {
         projects: true,
         memory: true,
         artifacts: true,
+        // Deleting your own account is off for every role until switched on (v0.10).
+        accountDeletion: false,
         reasoningEfforts: [...REASONING_EFFORTS],
       });
     }
@@ -106,6 +109,7 @@ describe('combineFeatures', () => {
       // The instance memory switch is off unless saved on.
       memory: false,
       artifacts: true,
+      accountDeletion: false,
       reasoningEfforts: [...REASONING_EFFORTS],
     });
   });
@@ -127,6 +131,14 @@ describe('combineFeatures', () => {
     const role = DEFAULT_ROLE_FEATURES.user;
     expect(combineFeatures(instance, search, role).artifacts).toBe(true);
     expect(combineFeatures(instance, search, { ...role, artifacts: false }).artifacts).toBe(false);
+  });
+
+  it('takes deleting your own account from the role alone: there is no instance switch', () => {
+    const role = DEFAULT_ROLE_FEATURES.user;
+    expect(combineFeatures(instance, search, role).accountDeletion).toBe(false);
+    expect(combineFeatures({}, search, { ...role, accountDeletion: true }).accountDeletion).toBe(
+      true,
+    );
   });
 
   it('takes projects from the role alone: there is no instance switch', () => {

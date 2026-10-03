@@ -19,8 +19,8 @@ For each role:
   provider) the role can see. Visibility is set per model on
   [Providers & Models](models-providers.md).
 - **Features** — editable switches for web search, file attachments, share
-  links, temporary chats, branching, projects and artifacts, plus the reasoning
-  levels the role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
+  links, temporary chats, branching, projects, artifacts and deleting one's
+  own account, plus the reasoning levels the role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
 - **Fixed rules** — what is always true for the role and no setting changes:
   administrators have full access; auditors can view administration but not
   change it.
@@ -37,8 +37,9 @@ while a response generates.
 
 Each role has its own switches for **web search**, **file attachments**,
 **share links**, **temporary chats**, **branching** (forking a conversation
-or editing an earlier message into a new branch), **projects** and **user
-memory**. A role switch
+or editing an earlier message into a new branch), **projects**, **user
+memory**, **artifacts** and **delete own account** (see
+[Self-service account deletion](#self-service-account-deletion)). A role switch
 can only narrow what the instance offers. Somebody can use a feature when both
 of these are on:
 
@@ -70,8 +71,44 @@ the fields you changed, and each save is recorded in the audit log as
 `role.features.update` with the previous and new values. Auditors see the
 switches but cannot change them. API: `PUT /api/admin/roles/:role` with any of
 `webSearch`, `attachments`, `shareLinks`, `temporaryChat`, `branching`,
-`projects`, `memory`, `artifacts` (booleans) and `reasoningEfforts` (a list that must include
-`instant`).
+`projects`, `memory`, `artifacts`, `accountDeletion` (booleans) and
+`reasoningEfforts` (a list that must include `instant`).
+
+Turning **share links** off for a role (or instance-wide) stops new links;
+people keep seeing the links they made under Settings → Sharing and can still
+revoke them there or from the conversation. Revoking is recorded as
+`share_link.revoke` (one link) or `share_link.revoke_all` (with the count).
+
+### Self-service account deletion
+
+**Delete own account** (v0.10) lets people in the role delete their own
+account under Settings → Account. It is **off for every role** by default and
+has no instance-wide switch.
+
+It is a role switch rather than one instance-wide setting because the
+decision usually differs by population: an institution may let students and
+guests leave on their own while keeping staff and administrator accounts,
+whose data has records obligations, behind an administrator. It sits beside
+the other per-role switches so Roles & access stays the one place that says
+what a role may do.
+
+The person types their email address and, if the account has a password,
+enters it. The deletion is the same as **Delete user** under People (see
+[Deleting an account](people.md#deleting-an-account)): the same cascade, and
+the same refusals for a person on [legal hold](compliance.md#legal-hold) (the
+person is told only that deletion is paused by the organisation) and for the
+last administrator. It is also refused in a session an administrator opened
+as the person; delete under People instead, where the entry names you. It is
+recorded as a `user.delete` entry with
+`metadata.self: true` and `metadata.deletion.reason: "user"`; a wrong password
+is recorded as `user.delete.failure`. Better Auth's own delete-user endpoint
+stays disabled.
+
+For an account that signs in through single sign-on there is no password to
+ask for; signing in again later creates a new, empty account (through
+just-in-time provisioning), which the confirmation explains. If that is not
+wanted, leave the switch off for roles whose people sign in that way, or limit
+who may sign in under [Identity](identity.md).
 
 ### Projects
 

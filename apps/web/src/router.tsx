@@ -203,6 +203,10 @@ const SETTINGS_TABS = [
     component: lazyRouteComponent(() => import('~/routes/settings/models'), 'SettingsModelsPage'),
   },
   {
+    path: '/settings/sharing',
+    component: lazyRouteComponent(() => import('~/routes/settings/sharing'), 'SettingsSharingPage'),
+  },
+  {
     path: '/settings/connectors',
     component: lazyRouteComponent(
       () => import('~/routes/settings/connectors'),

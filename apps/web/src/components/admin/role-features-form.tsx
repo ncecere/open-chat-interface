@@ -55,6 +55,11 @@ const ROLE_FEATURE_LABELS: Record<RoleFeatureKey, { label: string; description: 
     description:
       'Keep HTML pages, SVG images, diagrams and documents from replies as versioned artifacts, and let tool-capable models create and revise them. They count towards storage. There is no instance-wide switch.',
   },
+  accountDeletion: {
+    label: 'Delete own account',
+    description:
+      'Delete their own account and everything it owns from Settings → Account, after typing their email (and their password, if they have one). Refused while they are on legal hold and for the last administrator; audited. Off by default. There is no instance-wide switch.',
+  },
 };
 
 export const EFFORT_LABELS: Record<ReasoningEffort, string> = {

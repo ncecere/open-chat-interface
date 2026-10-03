@@ -25,6 +25,13 @@ it.
 The same dialog lists the conversation's links, each marked **Live** or
 **Snapshot** with its view count and expiry, so you can copy or revoke them.
 
+## All your links
+
+**Settings → Sharing** lists every link you have made, across all your
+conversations, with the same details, so links shared long ago are easy to
+find. Revoke them one at a time, or all at once with **Revoke all**. See
+[Settings](settings.md#sharing).
+
 ## What is included
 
 - The conversation's title and its messages: your messages and the replies, one
@@ -46,7 +53,8 @@ Text that looks like a password, API key or access token is replaced with
 
 ## Revoking
 
-Revoking a link makes it stop working immediately. Anybody who opened it
+Revoking a link, from the conversation or from Settings → Sharing, makes it
+stop working immediately. Anybody who opened it
 before that keeps whatever they saved or copied — revoking removes access, not
 memory. An expired link stops working the same way.
 
@@ -62,4 +70,6 @@ whatever you add to the conversation later. If a conversation contains anything
 you would not put on a public page, it should not be shared this way.
 
 Your administrator can turn sharing off entirely, or for your role; if you
-cannot find the option, that is why.
+cannot find the option, that is why. Links you made before stay listed in
+Settings → Sharing, where you can still revoke them. Revoking is recorded in
+the audit log.

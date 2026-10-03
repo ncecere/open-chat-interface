@@ -96,6 +96,12 @@ The server refuses:
 The reason is shown in the dialog. Auditors do not see **Delete user**. To stop
 somebody signing in without losing their data, **Ban** them instead.
 
+People can also delete their own account from Settings → Account when their
+role allows it; see
+[Self-service account deletion](governance.md#self-service-account-deletion).
+That runs the same deletion, with the same refusals, and its `user.delete`
+entry carries `self: true`.
+
 ### Limits
 
 What this person is held to right now, computed by the same code that enforces
