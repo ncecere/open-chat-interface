@@ -30,9 +30,50 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   a `metadata.deletion` block (type, id, owner, reason, whether permanent,
   counts), never the deleted content, so the exactly-once audit export
   carries them.
+- **Settings → Sharing** lists every share link you made, with Revoke and
+  Revoke all, also after sharing has been turned off for your role. Revoking
+  is audited.
+- **A default model and reasoning level** in Settings → Models, stored with
+  your account so they follow you to any device. A conversation's own choice
+  still comes first; a default your role no longer allows falls back to the
+  instance default with a note.
+- **Delete your own account,** when an administrator turns on "Delete own
+  account" for your role in Roles & access (off for every role by default):
+  typed confirmation, your password for password accounts; refused under
+  legal hold, for the last administrator and in a session an administrator
+  opened as you. Migration `0036_personal_defaults`.
+- **A fallback web search provider.** After a timeout, network error or
+  server error (retried once), search uses the fallback provider when one is
+  set; results say which provider answered, and Test search checks both.
+- **Which passages a reply used.** The project-search note lists the
+  passages (their first ~200 characters, with headings where the file has
+  them), and a **Files** control in the composer leaves chosen project files
+  out of the next message.
+- **Resize the artifact panel** by dragging its edge or with the keyboard;
+  the width is kept in this browser.
+- **A failed summary you asked for is reported** with the reason (allowance,
+  model error, nothing to summarise, timeout), and Retry. Migration
+  `0037_compaction_failure`.
+- **PDF export in every script.** Documents outside Western European
+  characters embed Noto fonts chosen per run of text: Chinese, Japanese,
+  Korean, Arabic and Hebrew (shaped, right to left), Greek and Cyrillic.
+  Emoji print as a replacement character.
 
 ### Changed
 
+- **Branding applies everywhere.** The OCI logo is the default mark beside
+  your instance's name (an uploaded logo still replaces it); the browser tab
+  shows the page and your instance's name and its icon; share pages follow
+  branding; verification and password-reset emails name your instance;
+  diagrams use the chosen colour theme's accent (neutral keeps the default
+  orange); exports name your instance.
+- **Project-search notes keep short excerpts.** To show which passages a
+  reply used, the note now stores up to 24 passage starts with the reply.
+  Share links never show the note.
+- **A reload during a very long reply resumes** from a saved copy when the
+  stored stream no longer reaches its start.
+- **Backups and Compliance** share their destination, schedule and run
+  history controls.
 - **Legal hold covers every deletion.** Deleting a held person's project or
   project file is refused; usage-event and share-link pruning skip held
   people; held people cannot delete memories; expired temporary chats are not
@@ -47,6 +88,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `INITIAL_ADMIN_PASSWORD` empty prints a one-time password as documented;
   `AUTH_SECRET`, `ENCRYPTION_KEY` and `DATABASE_URL` still refuse empty values.
 - The sharing guide describes live and snapshot links and expiry.
+- Expanded projects in the sidebar stay in step across open tabs.
+- Revoking a single share link was not audited.
 - `RATE_LIMIT_AUTH_PER_MINUTE` had no effect. Sign-in, sign-up, password
   reset and verification are now limited per client address and per email,
   answer 429 with `Retry-After`, and the first refusal each minute is audited.
