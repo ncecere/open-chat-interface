@@ -10,6 +10,7 @@ overrides:
   nanoid@>=3.0.0 <3.3.18: 3.3.18
   undici@>=7.0.0 <7.29.1: 7.29.1
   dompurify@>=3.0.0 <3.4.16: 3.4.16
+  image-size@>=0.6.3 <2.0.3: 2.0.3
 
 patchedDependencies:
   postgres@3.4.9: bfcf548baceb328833bff7730630db37afeca5344b1209407ac4755516955a61
@@ -2981,9 +2982,9 @@ packages:
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
 
-  image-size@1.2.1:
-    resolution: {integrity: sha512-rH+46sQJ2dlwfjfhCyNx5thzrv+dtmBIhPHk0zgRUukHzZ/kRueTJXoYYsclBaKcSMBWuGbOFXtioLpzTb5euw==}
-    engines: {node: '>=16.x'}
+  image-size@2.0.3:
+    resolution: {integrity: sha512-9BJAtVCBth+76NwqnEfWr3PiRnYhbquk6K/USuQ1GQajz5NgLzO7tNsnoNjHfO7LuftgkBf+CCH6j28hjMbIYQ==}
+    engines: {node: '>=18'}
     hasBin: true
 
   immediate@3.0.6:
@@ -3639,9 +3640,6 @@ packages:
   punycode.js@2.3.1:
     resolution: {integrity: sha512-uxFIHU0YlHYhDQtV4R9J6a52SLx28BCjT+4ieh7IGbgwVJWO+km431c4yRlREUAsAmt/uMjQUyQHNEPf0M39CA==}
     engines: {node: '>=6'}
-
-  queue@6.0.2:
-    resolution: {integrity: sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==}
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
@@ -6783,9 +6781,7 @@ snapshots:
 
   ieee754@1.2.1: {}
 
-  image-size@1.2.1:
-    dependencies:
-      queue: 6.0.2
+  image-size@2.0.3: {}
 
   immediate@3.0.6: {}
 
@@ -7610,7 +7606,7 @@ snapshots:
     dependencies:
       '@types/node': 22.20.0
       https: 1.0.0
-      image-size: 1.2.1
+      image-size: 2.0.3
       jszip: 3.10.2
 
   process-nextick-args@2.0.1: {}
@@ -7625,10 +7621,6 @@ snapshots:
       once: 1.4.0
 
   punycode.js@2.3.1: {}
-
-  queue@6.0.2:
-    dependencies:
-      inherits: 2.0.4
 
   quick-format-unescaped@4.0.4: {}
 

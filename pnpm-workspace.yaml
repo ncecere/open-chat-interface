@@ -11,6 +11,9 @@ overrides:
   # Patch SDK transport and Markdown dependencies without changing SDK majors or newer safe versions.
   'undici@>=7.0.0 <7.29.1': '7.29.1'
   'dompurify@>=3.0.0 <3.4.16': '3.4.16'
+  # GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr: pptxgenjs declares image-size but never loads it,
+  # and OCI adds no images to presentations; the patched major is safe to substitute.
+  'image-size@>=0.6.3 <2.0.3': '2.0.3'
 
 allowBuilds:
   esbuild: true
