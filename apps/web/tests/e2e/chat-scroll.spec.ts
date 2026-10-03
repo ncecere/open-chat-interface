@@ -212,6 +212,25 @@ test('a sent question moves to the top and the view follows the reply', async ({
   const pinnedTop = await topInView(page, 'Scroll behaviour question one');
   expect(pinnedTop).toBeGreaterThanOrEqual(0);
   expect(pinnedTop).toBeLessThan(80);
+  // Clear of the top bar's floating controls (on a phone the view runs under them).
+  const covered = await page.evaluate((wanted) => {
+    const rows = [...document.querySelectorAll<HTMLElement>('[aria-label="Your message"]')];
+    const bubble = rows.findLast((row) => row.textContent?.includes(wanted))?.firstElementChild;
+    if (!bubble) return null;
+    const question = bubble.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLElement>('[data-floating-controls]')].some(
+      (control) => {
+        const box = control.getBoundingClientRect();
+        return (
+          box.left < question.right &&
+          box.right > question.left &&
+          box.top < question.bottom &&
+          box.bottom > question.top
+        );
+      },
+    );
+  }, 'Scroll behaviour question one');
+  expect(covered).toBe(false);
 
   // Once the reply outgrows the view, the view follows it.
   await expect
@@ -252,6 +271,8 @@ test('scrolling up stops following until the reader jumps back', async ({ page }
 test('a conversation started from the home page also follows its first reply', async ({ page }) => {
   await send(page, 'Scroll behaviour from home');
   await expect(page).toHaveURL(new RegExp(`/chat/${NEW_THREAD_ID}$`));
+  // The conversation replaces the home composer; the cursor stays in the new one.
+  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeFocused();
   await expect
     .poll(() => topInView(page, 'Scroll behaviour from home'), { timeout: 15_000 })
     .toBeLessThan(0);

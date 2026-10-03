@@ -23,6 +23,7 @@ const PENDING_THREAD_KEY = 'oci.pendingThreadId';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 const PENDING_EFFORT_KEY = 'oci.pendingEffort';
 const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
+const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
 const PENDING_BRANCH_KEY = 'oci.pendingBranchResponse';
 const MODEL_STORAGE_KEY = 'oci.model';
 
@@ -93,6 +94,7 @@ function ThreadConversation({
   carriedAttachments,
   carriedEffort,
   carriedSearch,
+  carriedFocus,
   temporary,
   target,
 }: {
@@ -103,6 +105,8 @@ function ThreadConversation({
   carriedAttachments: Attachment[];
   carriedEffort?: ReasoningEffort;
   carriedSearch: boolean;
+  /** The person was typing on the home page: keep the cursor in the composer. */
+  carriedFocus: boolean;
   temporary: boolean;
   target?: ChatScrollTarget;
 }) {
@@ -330,6 +334,7 @@ function ThreadConversation({
         </div>
 
         <Composer
+          autoFocus={carriedFocus}
           value={session.draft}
           onChange={session.setDraft}
           onSubmit={submit}
@@ -376,6 +381,13 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
   const [carriedSearch] = useState(
     () => sessionStorage.getItem(PENDING_THREAD_KEY) === threadId && peekPendingSearch(),
   );
+  const [carriedFocus] = useState(() => {
+    const carried =
+      sessionStorage.getItem(PENDING_THREAD_KEY) === threadId &&
+      sessionStorage.getItem(PENDING_FOCUS_KEY) === 'true';
+    sessionStorage.removeItem(PENDING_FOCUS_KEY);
+    return carried;
+  });
   const { setTemporary } = useTemporaryChat();
 
   const { data, isLoading, isError, error, isFetching, fetchStatus, refetch } = useQuery({
@@ -420,6 +432,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
       carriedAttachments={carriedAttachments}
       carriedEffort={carriedEffort}
       carriedSearch={carriedSearch}
+      carriedFocus={carriedFocus}
       temporary={data.thread.temporary}
       target={target}
     />

@@ -50,7 +50,10 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
       )}
     >
       {!sidebarOpen && (
-        <div className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1">
+        <div
+          data-floating-controls
+          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+        >
           <Button variant="ghost" size="icon-sm" onClick={onOpenSidebar} aria-label="Open sidebar">
             <PanelLeft />
           </Button>
@@ -71,7 +74,10 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         </div>
       )}
 
-      <div className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1">
+      <div
+        data-floating-controls
+        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+      >
         {params.threadId && (
           <Button
             variant="ghost"

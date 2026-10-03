@@ -169,6 +169,15 @@ describe('Composer interaction', () => {
     expect(button('Send message').className).not.toContain('text-[var(--text-primary)]');
   });
 
+  it('focuses the message field on mount only when asked', async () => {
+    await render();
+    expect(document.activeElement).not.toBe(textarea());
+    await act(() => root.unmount());
+    root = createRoot(container);
+    await render({ autoFocus: true });
+    expect(document.activeElement).toBe(textarea());
+  });
+
   it('marks focus inside the composer border, with nothing drawn outside it', async () => {
     await render();
     const box = container.querySelector('textarea')?.parentElement;

@@ -1,5 +1,5 @@
 import { ArrowUp, Square } from 'lucide-react';
-import { type KeyboardEvent, memo, useLayoutEffect, useRef } from 'react';
+import { type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef } from 'react';
 import { AttachmentChips } from '~/components/chat/attachment-chips';
 import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
@@ -7,6 +7,8 @@ import type { PendingAttachment } from '~/hooks/use-attachments';
 import { cn } from '~/lib/utils';
 
 interface ComposerProps extends ComposerOptionsProps {
+  /** Focus the message field when it first appears. */
+  autoFocus?: boolean;
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
@@ -40,8 +42,16 @@ export const Composer = memo(function Composer({
   onAttachFiles,
   onRemoveAttachment,
   placeholder = 'Type your message here...',
+  autoFocus = false,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Only on mount: a conversation started from the home page replaces the
+  // composer the person was typing in, which would otherwise drop focus.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
+  useEffect(() => {
+    if (autoFocus) textareaRef.current?.focus({ preventScroll: true });
+  }, []);
 
   // Re-measure whenever the text changes so the field grows with its content.
   // biome-ignore lint/correctness/useExhaustiveDependencies: value drives the resize

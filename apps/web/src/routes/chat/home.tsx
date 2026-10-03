@@ -23,6 +23,8 @@ const PENDING_THREAD_KEY = 'oci.pendingThreadId';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 const PENDING_EFFORT_KEY = 'oci.pendingEffort';
 const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
+/** Set when the person was typing in the composer, so the conversation keeps focus there. */
+const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
 
 /**
  * Landing page. Sending here creates a thread first, then hands the prompt to
@@ -69,6 +71,10 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
     async (text: string) => {
       const content = text.trim();
       if (!content || !selectedModel) return;
+      // Read before any await: the composer is replaced when the conversation opens.
+      const typing =
+        document.activeElement instanceof HTMLTextAreaElement &&
+        document.activeElement.getAttribute('aria-label') === 'Message input';
 
       const { thread } = await createThread(
         projectId ? { temporary: false, projectId } : { temporary },
@@ -81,6 +87,8 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
       else sessionStorage.removeItem(PENDING_EFFORT_KEY);
       if (webSearch) sessionStorage.setItem(PENDING_SEARCH_KEY, 'true');
       else sessionStorage.removeItem(PENDING_SEARCH_KEY);
+      if (typing) sessionStorage.setItem(PENDING_FOCUS_KEY, 'true');
+      else sessionStorage.removeItem(PENDING_FOCUS_KEY);
 
       // Hand any uploads over to the thread view along with the prompt.
       const readyAttachments = attachmentItems.flatMap((item) =>

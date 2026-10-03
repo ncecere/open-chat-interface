@@ -5,6 +5,24 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 const FOLLOW_THRESHOLD_PX = 64;
 /** Breathing room above a question pinned to the top of the view. */
 const PIN_OFFSET_PX = 16;
+
+/**
+ * Room above a pinned question: the breathing room, or enough to clear the
+ * top bar's floating controls where they cover it (on a phone the
+ * conversation runs under them).
+ */
+function pinOffset(scroller: HTMLElement, pinned: HTMLElement): number {
+  const view = scroller.getBoundingClientRect();
+  // The row spans the column; its first child is the bubble the person sees.
+  const question = (pinned.firstElementChild ?? pinned).getBoundingClientRect();
+  let offset = PIN_OFFSET_PX;
+  for (const control of document.querySelectorAll<HTMLElement>('[data-floating-controls]')) {
+    const box = control.getBoundingClientRect();
+    const overlaps = box.left < question.right && box.right > question.left;
+    if (overlaps && box.bottom > view.top) offset = Math.max(offset, box.bottom - view.top + 8);
+  }
+  return offset;
+}
 /**
  * How long an opened search match is held in the centre while late layout
  * (images, diagrams, code highlighting) settles, unless the reader scrolls.
@@ -82,7 +100,9 @@ export function useChatScroll(
     let height = 0;
     if (pinned) {
       const fromPinned =
-        content.getBoundingClientRect().bottom - pinned.getBoundingClientRect().top + PIN_OFFSET_PX;
+        content.getBoundingClientRect().bottom -
+        pinned.getBoundingClientRect().top +
+        pinOffset(scroller, pinned);
       height = Math.max(0, scroller.clientHeight - fromPinned);
     }
     spacer.style.height = `${height}px`;
