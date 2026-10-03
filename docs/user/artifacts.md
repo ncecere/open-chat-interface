@@ -11,34 +11,79 @@ separate object with its own versions, which you can open, copy and download.
 - **SVG images.** Any complete SVG.
 - **Mermaid diagrams** of three lines or more. The diagram still appears in the
   reply, with a card below it.
-- **Documents and anything else a model creates on purpose.** Models that can
-  use tools can create an artifact directly, including Markdown documents, and
-  revise it later.
+- **Long documents you ask for.** Models that can use tools can also create a
+  long document you ask for, such as a report or plan, and revise it later.
+  Program code stays in the reply as ordinary code blocks unless you ask for
+  an artifact.
 
 Other code blocks are not affected. Artifacts work with every model: models
 without tools write a code block and OCI saves it once the reply is finished.
 
+## Watching an artifact being written
+
+When a model that can use tools writes an artifact, the reply shows its card
+straight away, in the place where the model started writing it (after its
+reasoning, before the text that follows):
+
+- **Preparing *Title*…** until the first text arrives. Some providers send the
+  whole artifact at once at the end; after a few seconds the card shows how
+  long it has been waiting.
+- **Writing *Title*…** with the number of lines and characters so far and the
+  last few lines, growing as the model writes. A revision shows
+  **Revising *Title*… (2 changes)**.
+- Once the artifact is saved, the card becomes the ordinary card that opens it.
+
+Select **Details** next to a card to see the title, kind and size, each change
+of a revision as a before-and-after snippet, and **Open artifact** for the
+version that call made.
+
+On a wide screen (a computer, or a tablet held sideways) the artifact panel
+**opens by itself** beside the conversation for the first artifact a reply
+starts writing, and shows the source as it arrives, following the end unless
+you scroll up. When the artifact is saved, the panel switches to its preview,
+unless you have opened something else in the meantime. If the reply puts a
+page, image or diagram in a code block instead, the panel opens on it once the
+reply has finished. The panel never takes focus from what you are doing: you
+can keep typing in the message box. Screen readers announce "Opened artifact:
+*Title*" and when the writing starts and finishes.
+
+The panel does not open by itself:
+
+- on phones and narrow windows (select the card to watch instead);
+- for conversations you open from history, or after reloading the page;
+- again in the same reply after you have closed it;
+- if you turn off **Open artifacts automatically** in Settings → Customisation.
+
+Share links never open artifacts by themselves.
+
 ## Opening an artifact
 
 An artifact appears in the reply as a card with its title, its kind and its
-version. Select it to open the artifact panel. On a computer the panel opens on
-the right of the conversation; on a phone it fills the screen.
+version. Select it to open the artifact panel. On a wide screen the panel sits
+beside the conversation, which narrows to make room; the conversation and the
+message box stay usable, and Tab moves between them and the panel. On a phone
+the panel fills the screen until you close it.
 
 The panel has three views:
 
 - **Preview** shows the artifact: the page or image itself, the drawn diagram,
   or the formatted document.
-- **Source** shows the text it is made of.
+- **Source** shows the text it is made of, with the same syntax colouring as
+  code in replies (and your **Wrap Long Code Lines** choice). Very large
+  sources are shown without colouring so the page stays responsive.
 - **Versions** lists every version, newest first, with who made it and when.
   Select one to look at it.
 
 **Copy** puts the version you are looking at on the clipboard; **Download**
 saves it as a file (`.html`, `.svg`, `.mmd` or `.md`). For documents,
 **Export as…** saves the version as a Word document, PDF, presentation or
-spreadsheet ([Exporting as files](exporting.md)). Press Escape or select
-Close to go back to the conversation. After clicking inside a preview, press
-Tab to move out of it first: the preview is sealed off from the rest of OCI,
-so it does not pass on key presses.
+spreadsheet ([Exporting as files](exporting.md)). Press Escape (with focus in
+the panel) or select Close to go back to the conversation. After clicking
+inside a preview, press Tab to move out of it first: the preview is sealed off
+from the rest of OCI, so it does not pass on key presses.
+
+Open artifacts from their cards. If a reply's text links to an artifact, or to
+anything else OCI cannot open, the link shows as plain text.
 
 ## Changing an artifact
 
@@ -50,9 +95,9 @@ Every change makes a new version; earlier versions are kept.
   editing, OCI tells you instead of overwriting the newer version.
 - **HTML, SVG and diagrams** are changed by asking the model, for example
   "make the chart's bars blue". A model that can use tools revises the existing
-  artifact, and the reply shows a step such as *Updated artifact 'Sales chart' ·
-  version 3* with a card to open it. Other models write a new version as a new
-  code block, which becomes a new artifact.
+  artifact, and the reply shows its card marked *Updated · HTML · version 3*.
+  Other models write a new version as a new code block, which becomes a new
+  artifact.
 
 ## Safety
 

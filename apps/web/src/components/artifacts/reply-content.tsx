@@ -1,18 +1,38 @@
-import {
-  type ArtifactBlock,
-  artifactOfToolPart,
-  isToolPart,
-  splitArtifactSegments,
-  toolIdOfPart,
-  toolKey,
-} from '@oci/shared';
-import type { UIMessage } from 'ai';
+import { type ArtifactBlock, detectArtifactBlocks, type ReplySegment } from '@oci/shared';
 import { useMemo } from 'react';
 import { ArtifactCard } from '~/components/artifacts/artifact-card';
 import { useArtifacts } from '~/components/artifacts/artifacts-context';
 import { Markdown, type MarkdownProps } from '~/components/chat/markdown';
 
-type ReplyMarkdownProps = Omit<MarkdownProps, 'children'> & { messageId: string; text: string };
+type ReplyMarkdownProps = Omit<MarkdownProps, 'children'> & {
+  messageId: string;
+  /** The reply's whole text: artifact block keys are positions in it. */
+  text: string;
+  /** The part of `text` to show (one run of the reply's text); all of it when absent. */
+  range?: { start: number; end: number };
+};
+
+/**
+ * The segments of `text` within [start, end): Markdown around the artifact
+ * blocks that start there. Detection runs on the whole text, so a block's key
+ * is the same whichever range shows it (`splitArtifactSegments`, per range).
+ */
+function segmentsInRange(text: string, start: number, end: number): ReplySegment[] {
+  const blocks = detectArtifactBlocks(text).filter(
+    (block) => block.start >= start && block.start < end,
+  );
+  const segments: ReplySegment[] = [];
+  let cursor = start;
+  for (const block of blocks) {
+    const before = text.slice(cursor, block.start);
+    if (before.trim()) segments.push({ type: 'markdown', text: before });
+    segments.push({ type: 'artifact', block, raw: text.slice(block.start, block.end) });
+    cursor = block.end + 1;
+  }
+  const after = text.slice(cursor, Math.max(cursor, end));
+  if (after.trim() || segments.length === 0) segments.push({ type: 'markdown', text: after });
+  return segments;
+}
 
 /**
  * A reply's text with each saved artifact block shown as a card that opens
@@ -21,14 +41,16 @@ type ReplyMarkdownProps = Omit<MarkdownProps, 'children'> & { messageId: string;
  * artifact (still streaming, not saved, or outside a conversation page) is
  * shown as the code block it is.
  */
-export function ReplyMarkdown({ messageId, text, ...markdown }: ReplyMarkdownProps) {
+export function ReplyMarkdown({ messageId, text, range, ...markdown }: ReplyMarkdownProps) {
   const artifacts = useArtifacts();
+  const start = range?.start ?? 0;
+  const end = range?.end ?? text.length;
   const segments = useMemo(
-    () => (artifacts ? splitArtifactSegments(text) : null),
-    [artifacts, text],
+    () => (artifacts ? segmentsInRange(text, start, end) : null),
+    [artifacts, text, start, end],
   );
   if (!artifacts || !segments || (segments.length === 1 && segments[0]?.type === 'markdown'))
-    return <Markdown {...markdown}>{text}</Markdown>;
+    return <Markdown {...markdown}>{text.slice(start, end)}</Markdown>;
   let previous = 'start';
   return (
     <>
@@ -76,32 +98,6 @@ function ArtifactSlot({
       {card}
     </>
   );
-}
-
-/** Cards for artifacts this reply created or revised through the artifact tools. */
-export function ToolArtifactCards({ message }: { message: UIMessage }) {
-  const artifacts = useArtifacts();
-  if (!artifacts) return null;
-  const cards = message.parts.flatMap((part) => {
-    if (!isToolPart(part)) return [];
-    const result = artifactOfToolPart(part);
-    if (!result) return [];
-    const created = toolIdOfPart(part) === 'create_artifact';
-    const artifact = created
-      ? artifacts.find(message.id, toolKey(part.toolCallId))
-      : artifacts.findById(result.artifactId);
-    if (!artifact) return [];
-    return [
-      <ArtifactCard
-        key={part.toolCallId}
-        // A revision opens the artifact; its card names the version this reply made.
-        artifact={created ? artifact : { ...artifact, version: result.version }}
-        onOpen={artifacts.open}
-        note={created ? undefined : 'Updated'}
-      />,
-    ];
-  });
-  return cards.length ? <div>{cards}</div> : null;
 }
 
 /**

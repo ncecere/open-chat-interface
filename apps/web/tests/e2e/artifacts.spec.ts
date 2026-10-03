@@ -84,7 +84,10 @@ async function expectSandboxed(page: Page) {
   await expect(frame.locator('#out')).toBeVisible();
 }
 
-test('HTML artifacts run in a sandbox that cannot reach OCI or the network', async ({ page }) => {
+test('HTML artifacts run in a sandbox that cannot reach OCI or the network', async ({
+  page,
+  isMobile,
+}) => {
   await signIn(page);
   await page.route(`**/api/chat/${THREAD_ID}/messages`, (route) =>
     route.fulfill({
@@ -138,8 +141,12 @@ test('HTML artifacts run in a sandbox that cannot reach OCI or the network', asy
   const card = page.getByRole('button', { name: 'Open artifact: Probe' });
   await expect(card).toBeVisible({ timeout: 15_000 });
   await card.click();
-  const panel = page.getByRole('dialog', { name: 'Probe' });
+  // Docked beside the conversation on wide screens; a dialog on phones.
+  const panel = isMobile
+    ? page.getByRole('dialog', { name: 'Probe' })
+    : page.getByRole('complementary', { name: 'Probe' });
   await expect(panel).toBeVisible();
+  if (!isMobile) await expect(page.getByRole('dialog')).toHaveCount(0);
   await expectSandboxed(page);
 
   // Keyboard: Escape closes the panel and focus returns to the card. The

@@ -2,23 +2,54 @@ import {
   ARTIFACT_FILE_TYPES,
   ARTIFACT_KIND_LABELS,
   type ArtifactDetail,
+  type ArtifactKind,
   type ArtifactVersionDetail,
   type DocumentFormat,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Download, Pencil } from 'lucide-react';
-import { type KeyboardEvent, useCallback, useId, useState } from 'react';
+import { Check, Copy, Download, Pencil, X } from 'lucide-react';
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import type { ArtifactDraft } from '~/components/artifacts/artifact-drafts';
 import { ArtifactFrame } from '~/components/artifacts/artifact-frame';
+import { ArtifactSource } from '~/components/artifacts/artifact-source';
 import { type ArtifactRef, useArtifacts } from '~/components/artifacts/artifacts-context';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { Button } from '~/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/dialog';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '~/components/ui/dialog';
 import { PillTabs } from '~/components/ui/pill-tabs';
 import { ApiError, api, saveBlob } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 type View = 'preview' | 'source' | 'versions';
+
+/** What the panel shows: a saved artifact, or one a reply is writing now. */
+export type PanelView =
+  | { type: 'artifact'; ref: ArtifactRef }
+  | {
+      type: 'draft';
+      draft: ArtifactDraft;
+      title: string | null;
+      kind: ArtifactKind | null;
+      /** The reply is still writing it (false once saved, failed or stopped). */
+      writing: boolean;
+    };
 
 /** The title made safe for a file name, without an extension. */
 function filenameBase(title: string): string {
@@ -50,33 +81,211 @@ function formatDate(value: string): string {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
+const viewKey = (view: PanelView) =>
+  view.type === 'artifact'
+    ? `artifact:${view.ref.id ?? `${view.ref.messageId}:${view.ref.sourceKey}`}`
+    : `draft:${view.draft.toolCallId}`;
+
+/** How the panel is framed: a dialog, or a region docked beside the conversation. */
+interface Chrome {
+  docked: boolean;
+  headingId: string;
+  onClose: (focusWasInside: boolean) => void;
+}
+
+function PanelHeading({ chrome, children }: { chrome: Chrome; children: ReactNode }) {
+  if (!chrome.docked) return <DialogTitle className="truncate text-base">{children}</DialogTitle>;
+  return (
+    <h2
+      id={chrome.headingId}
+      tabIndex={-1}
+      data-panel-heading=""
+      className="truncate text-base font-semibold outline-none"
+    >
+      {children}
+    </h2>
+  );
+}
+
+function PanelDescription({ chrome, children }: { chrome: Chrome; children: ReactNode }) {
+  if (!chrome.docked) return <DialogDescription className="text-xs">{children}</DialogDescription>;
+  return <p className="text-xs text-[var(--text-muted)]">{children}</p>;
+}
+
 /**
- * The artifact side panel: a modal dialog on the right (full screen on
- * phones) with Preview, Source and, for the owner, Versions. Escape closes it
- * (or first leaves an unsaved edit) and focus returns to the card that opened
+ * The panel's header: title and description, the actions, then Close in its
+ * own column at the end, so the actions wrap before they could ever run under
  * it.
  */
-export function ArtifactPanel({
-  artifact,
-  onClose,
+function PanelHeader({
+  chrome,
+  title,
+  description,
+  toolbar,
+  children,
 }: {
-  artifact: ArtifactRef | null;
-  onClose: () => void;
+  chrome: Chrome;
+  title: string;
+  description: ReactNode;
+  toolbar?: ReactNode;
+  children?: ReactNode;
+}) {
+  const close = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Close"
+      data-panel-close=""
+      className="shrink-0"
+      onClick={chrome.docked ? () => chrome.onClose(true) : undefined}
+    >
+      <X aria-hidden="true" />
+    </Button>
+  );
+  return (
+    <header
+      data-panel-header=""
+      className="flex items-start gap-2 border-b border-[var(--border-subtle)] px-4 py-3 sm:px-5"
+    >
+      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-2">
+        <div className="min-w-[8rem] flex-1">
+          <PanelHeading chrome={chrome}>{title}</PanelHeading>
+          <PanelDescription chrome={chrome}>{description}</PanelDescription>
+        </div>
+        {toolbar}
+        {children}
+      </div>
+      {chrome.docked ? close : <DialogClose asChild>{close}</DialogClose>}
+    </header>
+  );
+}
+
+/** Announces when a source starts and finishes being written, never each token. */
+function useWritingAnnouncement(view: PanelView | null): string {
+  const [message, setMessage] = useState('');
+  const announced = useRef<{ id: string; finished: boolean } | null>(null);
+  useEffect(() => {
+    const current = announced.current;
+    if (view?.type === 'draft') {
+      const name = view.title ?? 'the artifact';
+      if (view.writing && view.title && current?.id !== view.draft.toolCallId) {
+        announced.current = { id: view.draft.toolCallId, finished: false };
+        setMessage(`Writing ${view.title}…`);
+      } else if (!view.writing && current?.id === view.draft.toolCallId && !current.finished) {
+        current.finished = true;
+        setMessage(
+          view.draft.state === 'saved'
+            ? `Finished writing ${name}.`
+            : `Writing ${name} stopped before it was saved.`,
+        );
+      }
+    } else if (view?.type === 'artifact' && current && !current.finished) {
+      current.finished = true;
+      setMessage(`Finished writing ${view.ref.title}.`);
+    }
+  }, [view]);
+  return message;
+}
+
+/**
+ * The artifact panel, with Preview, Source and, for the owner, Versions; or
+ * the source of an artifact as a reply writes it.
+ *
+ * On wide screens in a conversation it is docked beside the conversation: a
+ * complementary region that never traps focus, so the composer and messages
+ * stay usable; Escape inside it or Close closes it. Elsewhere (phones, share
+ * links) it is a modal dialog, full screen on phones; Escape leaves an edit
+ * first, then closes, and focus returns to the card that opened it.
+ */
+export function ArtifactPanel({
+  view,
+  onClose,
+  docked = false,
+  focusRequest = 0,
+  panelRef,
+}: {
+  view: PanelView | null;
+  onClose: (focusWasInside: boolean) => void;
+  docked?: boolean;
+  /** Changes when focus should move into the docked panel (it was opened by the person). */
+  focusRequest?: number;
+  panelRef?: Ref<HTMLElement>;
 }) {
   const [editing, setEditing] = useState(false);
+  const headingId = useId();
+  const status = useWritingAnnouncement(view);
+  const chrome: Chrome = { docked, headingId, onClose };
+
+  useEffect(() => {
+    if (docked && focusRequest) document.getElementById(headingId)?.focus();
+  }, [docked, focusRequest, headingId]);
+
+  const body = view ? (
+    view.type === 'draft' ? (
+      <DraftBody key={viewKey(view)} view={view} chrome={chrome} />
+    ) : (
+      <ArtifactPanelBody
+        key={viewKey(view)}
+        artifact={view.ref}
+        editing={editing}
+        setEditing={setEditing}
+        chrome={chrome}
+      />
+    )
+  ) : null;
+  const announcer = (
+    <p className="sr-only" role="status" aria-live="polite" data-writing-status="">
+      {status}
+    </p>
+  );
+
+  if (docked) {
+    if (!view) return null;
+    return (
+      <aside
+        ref={panelRef}
+        aria-labelledby={headingId}
+        data-artifact-panel=""
+        data-docked=""
+        onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
+          // A menu inside the panel closes itself first (and marks the key used).
+          if (event.key !== 'Escape' || event.defaultPrevented) return;
+          event.preventDefault();
+          if (editing) setEditing(false);
+          else {
+            setEditing(false);
+            onClose(true);
+          }
+        }}
+        className={cn(
+          // Below the conversation controls that hang from the top bar.
+          // Positioned: its visually hidden status texts are laid out inside it.
+          'relative mb-2 mr-2 mt-16 flex min-h-0 shrink-0 flex-col overflow-hidden',
+          'w-[45%] min-w-[22rem] max-w-[56rem]',
+          'rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-[var(--shadow-popover)]',
+        )}
+      >
+        {body}
+        {announcer}
+      </aside>
+    );
+  }
+
   return (
     <Dialog
-      open={artifact !== null}
+      open={view !== null}
       onOpenChange={(open) => {
         if (!open) {
           setEditing(false);
-          onClose();
+          onClose(false);
         }
       }}
     >
-      {artifact && (
+      {view && (
         <DialogContent
           data-artifact-panel=""
+          closeButton={false}
           onEscapeKeyDown={(event) => {
             // Escape leaves an edit first; a second one closes the panel.
             if (editing) {
@@ -91,15 +300,87 @@ export function ArtifactPanel({
             'md:left-auto md:right-0 md:w-[min(56rem,92vw)] md:rounded-none md:border-y-0 md:border-r-0',
           )}
         >
-          <ArtifactPanelBody
-            key={artifact.id ?? `${artifact.messageId}:${artifact.sourceKey}`}
-            artifact={artifact}
-            editing={editing}
-            setEditing={setEditing}
-          />
+          {body}
+          {announcer}
         </DialogContent>
       )}
     </Dialog>
+  );
+}
+
+/**
+ * An artifact as a reply writes it: the source streams in, following the end
+ * unless the person scrolls up. It switches to the saved artifact's preview
+ * once it is saved (the provider swaps the view).
+ */
+function DraftBody({
+  view,
+  chrome,
+}: {
+  view: Extract<PanelView, { type: 'draft' }>;
+  chrome: Chrome;
+}) {
+  const { draft, kind, writing } = view;
+  const name = view.title ?? 'New artifact';
+  const scroller = useRef<HTMLElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
+  const toEnd = useCallback(() => {
+    const element = scroller.current;
+    if (element && follow.current) element.scrollTop = element.scrollHeight;
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follows each new piece of text.
+  useLayoutEffect(toEnd, [draft.content, toEnd]);
+  useEffect(() => {
+    // Highlighting arrives after the text; keep following as it grows.
+    const element = inner.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(toEnd);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [toEnd]);
+
+  const state = writing
+    ? 'being written…'
+    : draft.state === 'saved'
+      ? 'saved'
+      : draft.state === 'failed'
+        ? 'not saved'
+        : 'stopped';
+  return (
+    <>
+      <PanelHeader
+        chrome={chrome}
+        title={name}
+        description={`${kind ? ARTIFACT_KIND_LABELS[kind] : 'Artifact'} · ${state}`}
+      />
+      <section
+        ref={scroller}
+        aria-label={`Source of ${name}`}
+        aria-busy={writing}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access.
+        tabIndex={0}
+        data-draft-source=""
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          follow.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
+        }}
+        className="relative min-h-0 flex-1 overflow-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-bright)]"
+      >
+        <div ref={inner}>
+          {draft.mode === 'content' ? (
+            <ArtifactSource kind={kind} content={draft.content} writing={writing} />
+          ) : (
+            <p className="p-4 text-sm text-[var(--text-muted)]">Preparing…</p>
+          )}
+          {!writing && draft.state !== 'saved' && (
+            <p role="alert" className="px-4 pb-4 text-sm text-[var(--danger-foreground)]">
+              This artifact was not saved.
+            </p>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -107,16 +388,18 @@ function ArtifactPanelBody({
   artifact,
   editing,
   setEditing,
+  chrome,
 }: {
   artifact: ArtifactRef;
   editing: boolean;
   setEditing: (editing: boolean) => void;
+  chrome: Chrome;
 }) {
   const context = useArtifacts();
   const owner = context?.mode === 'owner' && artifact.id !== null;
   const id = artifact.id ?? '';
   const [view, setView] = useState<View>('preview');
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(artifact.openVersion ?? null);
   const [copied, setCopied] = useState(false);
   const viewId = useId();
 
@@ -175,60 +458,64 @@ function ArtifactPanelBody({
 
   return (
     <>
-      <header className="flex flex-wrap items-start gap-3 border-b border-[var(--border-subtle)] px-4 py-3 pr-14 sm:px-5">
-        <div className="min-w-0 flex-1">
-          <DialogTitle className="truncate text-base">{title}</DialogTitle>
-          <DialogDescription className="text-xs">
+      <PanelHeader
+        chrome={chrome}
+        title={title}
+        description={
+          <>
             {ARTIFACT_KIND_LABELS[artifact.kind]} · version {shownVersion}
             {older !== null ? ` of ${current}` : ''}
-          </DialogDescription>
-        </div>
-        <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Artifact">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => void copy()}
-            disabled={content === undefined}
-          >
-            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => content !== undefined && download(title, artifact.kind, content)}
-            disabled={content === undefined}
-          >
-            <Download aria-hidden="true" />
-            Download
-          </Button>
-          {canExport && (
-            <ExportMenu
-              markdown={content ?? ''}
-              state={exporting}
-              disabled={content === undefined || editing}
-            />
-          )}
-          {canEdit && !editing && (
+          </>
+        }
+        toolbar={
+          <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Artifact">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setEditing(true)}
+              onClick={() => void copy()}
               disabled={content === undefined}
             >
-              <Pencil aria-hidden="true" />
-              Edit
+              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              {copied ? 'Copied' : 'Copy'}
             </Button>
-          )}
-        </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => content !== undefined && download(title, artifact.kind, content)}
+              disabled={content === undefined}
+            >
+              <Download aria-hidden="true" />
+              Download
+            </Button>
+            {canExport && (
+              <ExportMenu
+                markdown={content ?? ''}
+                state={exporting}
+                disabled={content === undefined || editing}
+              />
+            )}
+            {canEdit && !editing && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditing(true)}
+                disabled={content === undefined}
+              >
+                <Pencil aria-hidden="true" />
+                Edit
+              </Button>
+            )}
+          </div>
+        }
+      >
         <span className="sr-only" role="status" aria-live="polite">
           {copied ? 'Copied to the clipboard' : ''}
         </span>
         {canExport && <ExportNotice state={exporting} className="basis-full" />}
-      </header>
+      </PanelHeader>
 
       {editing && canEdit && content !== undefined ? (
         <DocumentEditor
@@ -250,7 +537,9 @@ function ArtifactPanelBody({
             id={viewId}
             role="tabpanel"
             aria-label={tabs.find((tab) => tab.id === view)?.label}
-            className="min-h-0 flex-1 overflow-auto"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a long source scrolls; the keyboard must reach it.
+            tabIndex={0}
+            className="relative min-h-0 flex-1 overflow-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-bright)]"
           >
             {view === 'versions' ? (
               <VersionList
@@ -270,9 +559,7 @@ function ArtifactPanelBody({
                 This artifact could not be loaded.
               </p>
             ) : view === 'source' ? (
-              <pre className="m-0 min-h-full whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-[var(--text-secondary)] sm:p-5">
-                <code>{content}</code>
-              </pre>
+              <ArtifactSource kind={artifact.kind} content={content} />
             ) : (
               <ArtifactPreview
                 kind={artifact.kind}

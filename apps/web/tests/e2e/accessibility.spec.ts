@@ -527,6 +527,95 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('the artifact panel and an artifact step have no violations', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    const html = '<!doctype html>\n<title>Plan page</title>\n<h1>Plan</h1>\n<p>Hello</p>';
+    const artifact = {
+      id: 'a11y-artifact',
+      threadId: 'a11y-artifacts',
+      messageId: 'a11y-artifact-reply',
+      sourceKey: 'tool:a11y-call',
+      title: 'Plan page',
+      kind: 'html',
+      currentVersion: 1,
+      sizeBytes: html.length,
+      createdAt: created,
+      updatedAt: created,
+    };
+    await page.route('**/api/chat/a11y-artifacts/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-artifacts', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-artifact-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'A page, please' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            {
+              id: 'a11y-artifact-reply',
+              role: 'assistant',
+              parts: [
+                { type: 'step-start' },
+                { type: 'reasoning', text: 'A short page.' },
+                {
+                  type: 'tool-create_artifact',
+                  toolCallId: 'a11y-call',
+                  state: 'output-available',
+                  input: { title: 'Plan page', kind: 'html', content: html },
+                  output: { artifactId: artifact.id, title: 'Plan page', kind: 'html', version: 1 },
+                },
+                { type: 'step-start' },
+                { type: 'text', text: 'Here it is.' },
+              ],
+              metadata: { status: 'complete', createdAt: created },
+            },
+          ],
+          replies: [],
+        }),
+      }),
+    );
+    await page.route('**/api/artifacts?threadId=a11y-artifacts', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ artifacts: [artifact] }),
+      }),
+    );
+    await page.route(`**/api/artifacts/${artifact.id}`, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          artifact,
+          versions: [
+            {
+              version: 1,
+              sizeBytes: html.length,
+              source: 'reply',
+              messageId: artifact.messageId,
+              createdAt: created,
+            },
+          ],
+          content: html,
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-artifacts');
+    await page.getByRole('button', { name: 'Details: Plan page' }).click();
+    await page.getByRole('button', { name: 'Open artifact: Plan page' }).click();
+    // Docked beside the conversation on wide screens, a dialog on phones.
+    const panel = page.locator('[data-artifact-panel]');
+    await expect(panel).toBeVisible();
+    // The source view (the preview is a sandboxed frame axe cannot enter).
+    await panel.getByRole('tab', { name: 'Source' }).click();
+    await expect(panel.getByRole('tabpanel', { name: 'Source' })).toContainText('Plan page');
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('a dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/quotas');

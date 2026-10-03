@@ -11,8 +11,12 @@ export function DialogContent({
   className,
   children,
   onCloseAutoFocus,
+  closeButton = true,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content>) {
+}: ComponentProps<typeof DialogPrimitive.Content> & {
+  /** False when the dialog lays out its own Close button (use DialogClose). */
+  closeButton?: boolean;
+}) {
   /**
    * WCAG 2.4.3 Focus Order.
    *
@@ -50,12 +54,14 @@ export function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
-          aria-label="Close"
-        >
-          <X className="size-4" />
-        </DialogPrimitive.Close>
+        {closeButton && (
+          <DialogPrimitive.Close
+            className="absolute right-4 top-4 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
+            aria-label="Close"
+          >
+            <X className="size-4" />
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );

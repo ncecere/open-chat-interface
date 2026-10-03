@@ -1,4 +1,5 @@
 import {
+  ARTIFACT_TOOL_IDS,
   connectorSlugOfToolId,
   isToolPart,
   memoryChangeOf,
@@ -11,6 +12,7 @@ import {
 import type { UIMessage } from 'ai';
 import { ChevronDown, Globe2, ShieldQuestion, Wrench } from 'lucide-react';
 import { memo, useEffect, useId, useRef, useState } from 'react';
+import { ArtifactToolStep } from '~/components/artifacts/artifact-tool-step';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { MemoryNote } from '~/components/chat/memory-note';
 import { Button } from '~/components/ui/button';
@@ -259,22 +261,36 @@ function ApprovalCard({
   );
 }
 
+const isArtifactStep = (toolId: string) =>
+  (ARTIFACT_TOOL_IDS as readonly string[]).includes(toolId);
+
 /**
  * A reply's tool use: each call as a collapsed step, approvals inline in the
- * same place, and the note when the reply hit a limit.
+ * same place, and the note when the reply hit a limit. Artifact calls show as
+ * their artifact's card instead (live while the model writes it).
  */
 export const ToolSteps = memo(function ToolSteps({
   message,
   onAnswer,
   disabled = false,
+  streaming = false,
+  only,
+  showLimit = true,
 }: {
   message: UIMessage;
   /** Absent for replies that can no longer be answered. */
   onAnswer?: AnswerApproval;
   disabled?: boolean;
+  /** This reply is being written now. */
+  streaming?: boolean;
+  /** The tool calls of one run of the reply (by toolCallId); all of them when absent. */
+  only?: string;
+  /** Whether this group shows the note when the reply hit a limit. */
+  showLimit?: boolean;
 }) {
-  const steps = toolStepsOf(message);
-  const limit = toolLimitOf(message);
+  const shown = only === undefined ? null : new Set(only.split('\n'));
+  const steps = toolStepsOf(message).filter(({ step }) => !shown || shown.has(step.toolCallId));
+  const limit = showLimit ? toolLimitOf(message) : null;
   const answeredHere = useRef(new Set<string>());
   if (steps.length === 0 && !limit) return null;
   const wrapped: AnswerApproval | undefined = onAnswer
@@ -293,7 +309,16 @@ export const ToolSteps = memo(function ToolSteps({
             const memory = memoryChangeOf(part);
             return (
               <li key={step.toolCallId} className="min-w-0">
-                {memory ? (
+                {isArtifactStep(step.toolId) &&
+                !step.approvalId &&
+                part.state !== 'approval-responded' ? (
+                  <ArtifactToolStep
+                    messageId={message.id}
+                    part={part}
+                    step={step}
+                    streaming={streaming}
+                  />
+                ) : memory ? (
                   <MemoryNote
                     messageId={message.id}
                     toolCallId={step.toolCallId}

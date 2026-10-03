@@ -93,7 +93,9 @@ denials by the person are part of that event, not separate ones.
 Each tool call appears in the reply as a collapsed step, for example
 "Searched the web for 'library opening hours' · 5 results", expandable to the
 inputs and a summary of the result. Approval requests appear inline in the
-same place. Share links and exports include the steps' summaries but not raw
+same place. Since v0.9 steps sit where they happened in the reply (after the
+reasoning that led to them, before the text that follows), and artifact tool
+calls appear as the artifact's card instead of a step. Share links and exports include the steps' summaries but not raw
 results.
 
 ## Web search as a tool

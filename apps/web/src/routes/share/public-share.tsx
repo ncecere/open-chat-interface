@@ -6,6 +6,7 @@ import { CreatedArtifactCards, ReplyMarkdown } from '~/components/artifacts/repl
 import { Wordmark } from '~/components/brand/wordmark';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { Markdown } from '~/components/chat/markdown';
+import { partGroupsOf } from '~/components/chat/message-content';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
@@ -149,8 +150,7 @@ function Sources({ parts }: { parts: PublicPart[] }) {
   );
 }
 
-function ToolStepSummaries({ parts }: { parts: PublicPart[] }) {
-  const steps = parts.filter((part): part is PublicToolStepPart => part.type === 'tool-step');
+function ToolStepSummaries({ steps }: { steps: PublicToolStepPart[] }) {
   if (steps.length === 0) return null;
   return (
     <ul className="mb-3 space-y-1 text-xs text-[var(--text-muted)]" aria-label="Tool steps">
@@ -164,6 +164,16 @@ function ToolStepSummaries({ parts }: { parts: PublicPart[] }) {
     </ul>
   );
 }
+
+const SHARED_PROSE = cn(
+  'prose-headings:font-semibold prose-headings:text-[var(--text-primary)]',
+  '[&_a]:text-[var(--accent-bright)] [&_a]:underline-offset-2',
+  '[&_strong]:text-[var(--text-primary)]',
+  '[&_code]:rounded [&_code]:bg-[var(--bg-control)] [&_code]:px-1 [&_code]:py-0.5',
+  '[&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
+  '[&_hr]:border-[var(--border-subtle)]',
+  '[&_li::marker]:text-[var(--accent-bright)]',
+);
 
 function SharedMessage({ message }: { message: PublicShareResponse['messages'][number] }) {
   const text = message.parts
@@ -191,26 +201,31 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
 
   return (
     <article aria-label="Assistant message">
-      <ToolStepSummaries parts={message.parts} />
       <Sources parts={message.parts} />
-      {text && (
-        <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
-          <ReplyMarkdown
-            messageId={message.id}
-            text={text}
-            skipHtml
-            urlTransform={publicMarkdownUrl}
-            className={cn(
-              'prose-headings:font-semibold prose-headings:text-[var(--text-primary)]',
-              '[&_a]:text-[var(--accent-bright)] [&_a]:underline-offset-2',
-              '[&_strong]:text-[var(--text-primary)]',
-              '[&_code]:rounded [&_code]:bg-[var(--bg-control)] [&_code]:px-1 [&_code]:py-0.5',
-              '[&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
-              '[&_hr]:border-[var(--border-subtle)]',
-              '[&_li::marker]:text-[var(--accent-bright)]',
+      {/* Tool steps and text in the order they were written. */}
+      {partGroupsOf(message.parts, (part) => part.type === 'tool-step').map((group) =>
+        group.type === 'tools' ? (
+          <ToolStepSummaries
+            key={group.key}
+            steps={group.parts.filter(
+              (part): part is PublicToolStepPart => part.type === 'tool-step',
             )}
           />
-        </div>
+        ) : group.type === 'text' ? (
+          <div
+            key={group.key}
+            className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]"
+          >
+            <ReplyMarkdown
+              messageId={message.id}
+              text={text}
+              range={{ start: group.start, end: group.end }}
+              skipHtml
+              urlTransform={publicMarkdownUrl}
+              className={SHARED_PROSE}
+            />
+          </div>
+        ) : null,
       )}
       <CreatedArtifactCards messageId={message.id} />
     </article>

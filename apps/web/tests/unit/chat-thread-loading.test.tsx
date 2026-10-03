@@ -45,6 +45,7 @@ vi.mock('@tanstack/react-query', () => ({
     // Never execute queryFn: this suite tests the route's query-state boundary.
     return { ...mocks.query, refetch: mocks.refetch };
   },
+  useQueryClient: () => ({ invalidateQueries: async () => undefined }),
 }));
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mocks.navigate,

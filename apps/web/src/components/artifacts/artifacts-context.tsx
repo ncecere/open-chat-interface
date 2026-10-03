@@ -13,6 +13,8 @@ export interface ArtifactRef {
   version: number;
   /** Given on share links, where the panel shows this one version only. */
   content?: string;
+  /** Open the panel on this version rather than the current one. */
+  openVersion?: number;
 }
 
 export interface ArtifactsContextValue {
@@ -21,6 +23,14 @@ export interface ArtifactsContextValue {
   /** Every artifact a reply created, in order. */
   forMessage: (messageId: string) => ArtifactRef[];
   open: (artifact: ArtifactRef) => void;
+  /**
+   * Open the panel on an artifact tool call of a reply, showing its source as
+   * it is written; it switches to the saved artifact once there is one.
+   * Conversations only.
+   */
+  openDraft?: (messageId: string, toolCallId: string) => void;
+  /** True when the panel is docked beside the conversation rather than a dialog. */
+  docked?: boolean;
   /** `owner`: versions, edits and the API; `public`: one version, read-only. */
   mode: 'owner' | 'public';
   /** Whether the person may edit documents (their role allows artifacts). */

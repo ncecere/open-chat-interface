@@ -40,3 +40,45 @@ export function reasoningOf(message: UIMessage): string {
     .map((part) => part.text)
     .join('\n');
 }
+
+/**
+ * A reply's parts as the conversation shows them, in the order they were
+ * written: runs of reasoning, of tool calls and of text, each run one group.
+ * Other parts (step boundaries, sources, data) do not end a run. Text groups
+ * are ranges of `textOf(message)` (text parts joined by a newline), so a
+ * group's artifact blocks keep the keys detection gave them in the whole text.
+ * Empty text and reasoning (a model that hides its reasoning) make no group.
+ */
+export type PartGroup<P> =
+  | { type: 'reasoning'; key: string; text: string }
+  | { type: 'tools'; key: string; parts: P[] }
+  | { type: 'text'; key: string; start: number; end: number };
+
+export function partGroupsOf<P extends { type: string }>(
+  parts: readonly P[],
+  isTool: (part: P) => boolean,
+): PartGroup<P>[] {
+  const groups: PartGroup<P>[] = [];
+  let offset = 0;
+  parts.forEach((part, index) => {
+    const last = groups.at(-1);
+    const value = (part as { text?: unknown }).text;
+    const text = typeof value === 'string' ? value : '';
+    if (part.type === 'text' && typeof value === 'string') {
+      const start = offset;
+      const end = start + text.length;
+      offset = end + 1;
+      if (!text.trim()) return;
+      if (last?.type === 'text') last.end = end;
+      else groups.push({ type: 'text', key: `text-${index}`, start, end });
+    } else if (part.type === 'reasoning') {
+      if (!text.trim()) return;
+      if (last?.type === 'reasoning') last.text = `${last.text}\n${text}`;
+      else groups.push({ type: 'reasoning', key: `reasoning-${index}`, text });
+    } else if (isTool(part)) {
+      if (last?.type === 'tools') last.parts.push(part);
+      else groups.push({ type: 'tools', key: `tools-${index}`, parts: [part] });
+    }
+  });
+  return groups;
+}

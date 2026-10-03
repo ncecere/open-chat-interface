@@ -11,6 +11,12 @@ import {
 
 const THEME_STORAGE_KEY = 'oci.theme';
 const CODE_WRAP_STORAGE_KEY = 'oci.codeWrap';
+/** Opening the artifact panel by itself while a reply writes an artifact (on unless turned off). */
+const AUTO_OPEN_ARTIFACTS_STORAGE_KEY = 'oci.autoOpenArtifacts';
+
+function readAutoOpenArtifacts(): boolean {
+  return localStorage.getItem(AUTO_OPEN_ARTIFACTS_STORAGE_KEY) !== 'false';
+}
 /**
  * The instance color theme is administrator-owned, but caching it avoids a
  * flash of the default accent before /auth/status resolves.
@@ -30,9 +36,12 @@ interface ThemeContextValue {
   resolvedTheme: 'light' | 'dark';
   /** Wrap long lines in code blocks instead of scrolling them sideways. */
   codeWrap: boolean;
+  /** Open the artifact panel by itself when a reply starts writing an artifact. */
+  autoOpenArtifacts: boolean;
   colorTheme: ColorTheme;
   setTheme: (theme: ThemeMode) => void;
   setCodeWrap: (enabled: boolean) => void;
+  setAutoOpenArtifacts: (enabled: boolean) => void;
   setColorTheme: (theme: ColorTheme) => void;
   /**
    * The instance default from branding. Applies only while this person has
@@ -71,6 +80,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [codeWrap, setCodeWrapState] = useState(
     () => localStorage.getItem(CODE_WRAP_STORAGE_KEY) === 'true',
   );
+  const [autoOpenArtifacts, setAutoOpenArtifactsState] = useState(readAutoOpenArtifacts);
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(systemTheme);
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(readStoredColorTheme);
 
@@ -107,6 +117,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setCodeWrapState(enabled);
   }, []);
 
+  const setAutoOpenArtifacts = useCallback((enabled: boolean) => {
+    localStorage.setItem(AUTO_OPEN_ARTIFACTS_STORAGE_KEY, String(enabled));
+    setAutoOpenArtifactsState(enabled);
+  }, []);
+
   const setColorTheme = useCallback((next: ColorTheme) => {
     localStorage.setItem(COLOR_THEME_STORAGE_KEY, next);
     setColorThemeState(next);
@@ -117,9 +132,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       theme,
       resolvedTheme,
       codeWrap,
+      autoOpenArtifacts,
       colorTheme,
       setTheme,
       setCodeWrap,
+      setAutoOpenArtifacts,
       setColorTheme,
       setInstanceDefaultTheme,
     }),
@@ -127,15 +144,26 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       theme,
       resolvedTheme,
       codeWrap,
+      autoOpenArtifacts,
       colorTheme,
       setTheme,
       setCodeWrap,
+      setAutoOpenArtifacts,
       setColorTheme,
       setInstanceDefaultTheme,
     ],
   );
 
   return <ThemeContext value={value}>{children}</ThemeContext>;
+}
+
+/**
+ * The person's "Open artifacts automatically" choice. Outside the provider
+ * (isolated renders) the stored choice is read directly.
+ */
+export function useAutoOpenArtifacts(): boolean {
+  const context = use(ThemeContext);
+  return context ? context.autoOpenArtifacts : readAutoOpenArtifacts();
 }
 
 export function useTheme(): ThemeContextValue {
