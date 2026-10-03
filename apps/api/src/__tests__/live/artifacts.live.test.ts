@@ -447,6 +447,17 @@ describe.skipIf(!available)('live artifacts', () => {
       expect(system).toContain('data-oci-library=\\"d3\\"');
       expect(system).toContain('Diagram Design by Cathryn Lavery, MIT');
       expect(system).toContain('#3366ff');
+      // Program code stays in the reply as code blocks; artifacts are never linked.
+      const { PROGRAM_CODE_IN_CHAT } = await import('../../services/artifacts/guidance.js');
+      expect(system).toContain(PROGRAM_CODE_IN_CHAT);
+      expect(system).toContain('Never link to an artifact');
+      expect(system).not.toContain('also for long Markdown documents');
+      const tool = (model.doStreamCalls[0]?.tools ?? []).find(
+        (entry) => 'name' in entry && entry.name === 'create_artifact',
+      );
+      expect(tool && 'description' in tool ? tool.description : '').toContain(
+        'Never use it for program code',
+      );
     });
 
     it('offers no artifact tools and no guidance when the role switch is off', async () => {

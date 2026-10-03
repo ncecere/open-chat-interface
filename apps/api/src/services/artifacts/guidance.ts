@@ -7,6 +7,13 @@ import { artifactsForPrompt } from './store.js';
 /** Diagram Design's default accent, used when the instance has no accent colour of its own. */
 const DEFAULT_DIAGRAM_ACCENT = '#eb6c36';
 
+/**
+ * Program code is an answer, not an artifact: people read, compare and copy it
+ * in the reply, with the conversation's syntax highlighting, one block per file.
+ */
+export const PROGRAM_CODE_IN_CHAT =
+  'Program code in any language (examples, functions, implementations, scripts, configuration) belongs in ordinary fenced code blocks in your reply, one block per language or file, never in an artifact, unless the person asks for an artifact.';
+
 /** Whether the administrator left the Diagram Design guidance on (the default). */
 async function diagramGuidanceEnabled(): Promise<boolean> {
   const chat = await getSetting('chat');
@@ -52,11 +59,13 @@ export async function artifactGuidance(context: {
 }): Promise<string> {
   if (!(await roleFeatures(context.role)).artifacts) return '';
   const lines = [
-    'Artifacts: substantial standalone content, such as an HTML page or small app, an SVG image or diagram, or a Mermaid diagram,',
+    'Artifacts: content the person will want to see rendered, such as an HTML page or small app, an SVG image or diagram, or a Mermaid diagram,',
     'is shown to the person as an artifact they can open, preview, copy and download.',
     context.tools
-      ? 'Create one with the create_artifact tool (also for long Markdown documents) and revise it with update_artifact, preferring small find-and-replace edits; or write it as a single fenced code block (```html, ```svg or ```mermaid).'
+      ? 'Create one with the create_artifact tool and revise it with update_artifact, preferring small find-and-replace edits; or write it as a single fenced code block (```html, ```svg or ```mermaid). Use a Markdown artifact only for a long prose document the person asked for, such as a report, letter or plan.'
       : 'Write each one as a single fenced code block (```html, ```svg or ```mermaid); HTML should be a complete document.',
+    PROGRAM_CODE_IN_CHAT,
+    'Never link to an artifact in your text: a card for it appears below your reply on its own.',
     'Artifacts run in a sandbox without network access: inline all styles, scripts and images (no external URLs, fonts or requests).',
     `For charts, include ${libraries}.`,
   ];
