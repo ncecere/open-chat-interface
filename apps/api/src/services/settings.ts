@@ -160,6 +160,14 @@ export interface SearchSettings {
   baseUrl: string | null;
   encryptedApiKey: string | null;
   maxResults: number;
+  /**
+   * The fallback provider (v0.10), tried when the first one times out or
+   * fails with a server or network error. Absent from settings saved before
+   * v0.10, which read as no fallback.
+   */
+  fallbackProvider?: SearchProviderKind | null;
+  fallbackBaseUrl?: string | null;
+  encryptedFallbackApiKey?: string | null;
 }
 
 export interface SmtpSettings {

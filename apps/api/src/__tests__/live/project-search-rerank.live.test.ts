@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createDatabase, eq, schema, sql } from '@oci/db';
+import { PROJECT_EXCERPT_MAX_CHARS } from '@oci/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeEmbeddingModel } from '../../../test/fake-embeddings.js';
 import { type FakeReranker, startFakeReranker } from '../../../test/fake-reranker.js';
@@ -267,7 +268,10 @@ describe.skipIf(!available)('live: reranking project search', () => {
         reranked: true,
         files: [{ name: 'facilities.txt', passages: 1 }],
       });
-      expect(JSON.stringify(after.searchPart)).not.toContain(TARGET);
+      // The note keeps only the start of each passage used (v0.10), not the passage.
+      for (const excerpt of after.searchPart?.data.files[0]?.excerpts ?? [])
+        expect(excerpt.snippet.length).toBeLessThanOrEqual(PROJECT_EXCERPT_MAX_CHARS + 1);
+      expect(after.searchPart?.data.files[0]?.excerpts).toHaveLength(1);
 
       // One request, on the provider's /rerank, with its key and the keyword order.
       expect(reranker.requests).toHaveLength(1);

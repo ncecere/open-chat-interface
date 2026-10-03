@@ -184,7 +184,7 @@ Generated from 41 route files.
 | GET | `/api/admin/settings` | — |
 | PATCH | `/api/admin/settings` | — |
 | POST | `/api/admin/settings/logo` | Uploads an instance logo. |
-| POST | `/api/admin/settings/search/test` | Runs one sample search with the provider, address and key on the page, so an administrator can check them before or after saving. |
+| POST | `/api/admin/settings/search/test` | Runs one sample search with the provider, address and key on the page, so an administrator can check them before or after saving, and the same for the fallback provider when the page has one (v0.10). |
 | POST | `/api/admin/settings/storage/test` | — |
 
 ## `routes/admin/setup.ts`

@@ -132,6 +132,7 @@ export async function setupApprovalContinuation(
     // The search switch belongs to the message; with the tool it never searches up front.
     webSearch: reply.webSearchUsed && hasTool(tools, 'web_search'),
     attachmentIds: [],
+    // Exclusions are not stored with the message, so a continuation uses every file.
     temporary: thread.temporary,
     trigger: 'regenerate-message',
     messages: [{ id: reply.parentMessageId, role: 'user', parts: textParts(prompt.parts) }],

@@ -6,6 +6,7 @@ import { assertReasoningEffortSupported } from '../reasoning.js';
 import { assertRoleFeature, roleFeatures } from '../role-features.js';
 import { assertTemporaryChatAllowed, getOwnedThread } from '../threads.js';
 import { resolveTurnTools, type TurnTools } from '../tools/registry.js';
+import { assertExcludableProjectFiles } from './project-context.js';
 
 export type TurnContext = {
   user: Pick<AuthenticatedUser, 'id' | 'name' | 'role'>;
@@ -32,6 +33,8 @@ export async function resolveTurnContext(
   const { reasoningEfforts } = await roleFeatures(user.role);
   assertReasoningEffortSupported(input.effort, resolved.supportedEfforts, reasoningEfforts);
   if (!input.messages[0]) throw validationFailed('A user message is required');
+  // Validated before the turn is claimed, so a bad id never leaves a message behind.
+  await assertExcludableProjectFiles(thread.projectId, user.id, input.excludedProjectFileIds ?? []);
   const tools = await resolveTurnTools({
     role: user.role,
     userId: user.id,

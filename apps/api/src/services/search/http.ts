@@ -1,9 +1,11 @@
 import { type AppError, providerError } from '../../lib/errors.js';
 
 /**
- * Failures worth one more attempt: the provider did not answer in time or could
- * not be reached. A refused key, a rate limit, another HTTP error or an invalid
- * response would fail the same way again, so they are never retried.
+ * Failures worth one more attempt, and then the fallback provider: the
+ * provider did not answer in time, could not be reached or failed with a
+ * server error (HTTP 5xx, since v0.10). A refused key, a rate limit, another
+ * HTTP error or an invalid response would fail the same way again (and is
+ * the administrator's to fix), so they are never retried or passed on.
  */
 const transientFailures = new WeakSet<Error>();
 
@@ -63,7 +65,8 @@ export async function searchFetch(
         `${provider} refused the search because a rate limit or quota was reached (HTTP 429).`,
       );
     }
-    throw providerError(`${provider} returned an error (HTTP ${response.status}).`);
+    const failure = providerError(`${provider} returned an error (HTTP ${response.status}).`);
+    throw response.status >= 500 ? transient(failure) : failure;
   }
 
   try {

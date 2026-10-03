@@ -160,6 +160,15 @@ export const instanceSettingsSchema = z.object({
     baseUrl: z.string().nullable(),
     hasCredential: z.boolean(),
     maxResults: z.number().int().positive(),
+    /**
+     * A second provider (v0.10), used only when the first times out or fails
+     * with a server or network error, after its one retry. Null when unset;
+     * absent from an older API's response, which reads as none. Its
+     * credential is write-only like the primary's.
+     */
+    fallbackProvider: z.enum(SEARCH_PROVIDER_KINDS).nullable().optional(),
+    fallbackBaseUrl: z.string().nullable().optional(),
+    hasFallbackCredential: z.boolean().optional(),
   }),
   smtp: z.object({
     configured: z.boolean(),
@@ -195,8 +204,13 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
       .extend({ s3: updateS3SettingsSchema.optional() })
       .optional(),
     search: instanceSettingsSchema.shape.search
+      .omit({ hasFallbackCredential: true })
       .partial()
-      .extend({ apiKey: z.string().max(500).nullable().optional() })
+      .extend({
+        apiKey: z.string().max(500).nullable().optional(),
+        fallbackBaseUrl: z.string().max(2000).nullable().optional(),
+        fallbackApiKey: z.string().max(500).nullable().optional(),
+      })
       .optional(),
     smtp: instanceSettingsSchema.shape.smtp
       .partial()
@@ -324,14 +338,21 @@ export const adminOverviewSchema = z.object({
   }),
 });
 
-/**
- * A trial search from the Web search page, before or after saving. Without a
- * key, the saved key is used when it belongs to the same provider.
- */
-export const searchTestSchema = z.object({
+/** One provider to test: its kind, and the address or key typed on the page. */
+const searchTestTargetSchema = z.object({
   provider: z.enum(SEARCH_PROVIDER_KINDS),
   baseUrl: z.string().max(2000).nullable().optional(),
   apiKey: z.string().max(500).optional(),
+});
+
+/**
+ * A trial search from the Web search page, before or after saving. Without a
+ * key, the saved key is used when it belongs to the same provider. With
+ * `fallback` (v0.10), the fallback provider is tested too, on its own: the
+ * saved fallback key is used when it belongs to that provider.
+ */
+export const searchTestSchema = searchTestTargetSchema.extend({
+  fallback: searchTestTargetSchema.optional(),
 });
 export type SearchTestInput = z.infer<typeof searchTestSchema>;
 
@@ -341,6 +362,8 @@ export interface SearchTestResult {
   results?: number;
   /** What went wrong, in words for an administrator. */
   message?: string;
+  /** The fallback provider's own test, when one was asked for. */
+  fallback?: Omit<SearchTestResult, 'fallback'>;
 }
 
 export type AdminUser = z.infer<typeof adminUserSchema>;

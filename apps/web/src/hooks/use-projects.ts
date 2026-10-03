@@ -54,12 +54,13 @@ export function useProject(projectId: string | undefined) {
   });
 }
 
-export function useProjectFiles(projectId: string) {
+export function useProjectFiles(projectId: string, enabled = true) {
   return useQuery({
     queryKey: ['projects', projectId, 'files'],
     queryFn: () =>
       api.get<{ files: ProjectFile[] }>(`/projects/${encodeURIComponent(projectId)}/files`),
     select: (data) => data.files,
+    enabled,
   });
 }
 

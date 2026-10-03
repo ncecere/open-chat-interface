@@ -55,6 +55,13 @@ export const searchGroundingDataSchema = z.object({
   ),
   /** Set when the search failed; the reply went ahead without results. */
   error: z.string().optional(),
+  /**
+   * The provider that answered, by name (v0.10). Absent on replies from
+   * before v0.10 and when the search failed.
+   */
+  provider: z.string().optional(),
+  /** True when the fallback provider answered because the first one failed (v0.10). */
+  fallback: z.boolean().optional(),
 });
 
 export const attachmentSchema = z.object({
@@ -153,6 +160,12 @@ export const sendMessageSchema = z
     effort: z.enum(REASONING_EFFORTS).optional(),
     webSearch: z.boolean().default(false),
     attachmentIds: z.array(z.string()).default([]),
+    /**
+     * Project files to leave out of this message's context (v0.10), by id.
+     * Each must be a file of the conversation's project; at most a project's
+     * file limit (MAX_FILES_PER_PROJECT, 20). Absent means none.
+     */
+    excludedProjectFileIds: z.array(z.string().min(1).max(200)).max(20).optional(),
     temporary: z.boolean().default(false),
     trigger: z.enum(['submit-message', 'regenerate-message']).default('submit-message'),
   })

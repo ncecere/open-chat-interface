@@ -95,6 +95,8 @@ export function useChatSession(options: {
   );
 
   const [draft, setDraft] = useState('');
+  // Project files left out of the next message only (v0.10); reset on send.
+  const [excludedProjectFileIds, setExcludedProjectFileIds] = useState<string[]>([]);
   const [webSearch, setWebSearch] = useState(options.initialWebSearch ?? false);
   const [modelSlug, setModelSlug] = useState<string | null>(
     () => options.initialModelSlug ?? localStorage.getItem(MODEL_STORAGE_KEY),
@@ -289,6 +291,8 @@ export function useChatSession(options: {
       }));
 
       setDraft('');
+      const excluded = excludedProjectFileIds;
+      setExcludedProjectFileIds([]);
       // The server denies unanswered approvals as "not answered" when a new
       // message arrives; show the same without waiting for a reload.
       setMessages(denyUnansweredApprovals);
@@ -296,13 +300,19 @@ export function useChatSession(options: {
         {
           parts: [{ type: 'text', text: content }, ...cards],
         } as Parameters<typeof sendMessage>[0],
-        { body: { attachmentIds: submitted.map((file) => file.id) } },
+        {
+          body: {
+            attachmentIds: submitted.map((file) => file.id),
+            ...(excluded.length > 0 && { excludedProjectFileIds: excluded }),
+          },
+        },
       );
       // The SDK resolves even on HTTP failure. Only accepted response headers
       // (or confirmed canonical history) may consume the submitted files.
     },
     [
       draft,
+      excludedProjectFileIds,
       selectedModel,
       attachmentItems,
       carriedAttachments,
@@ -333,6 +343,8 @@ export function useChatSession(options: {
     recovery,
     draft,
     setDraft,
+    excludedProjectFileIds,
+    setExcludedProjectFileIds,
     effort,
     setEffort,
     webSearch,

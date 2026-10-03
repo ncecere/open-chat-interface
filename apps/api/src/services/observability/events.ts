@@ -5,6 +5,8 @@ import {
   jobRuns,
   toolCallDuration,
   toolCalls,
+  webSearchDuration,
+  webSearches,
 } from './metrics.js';
 import { recordSpan } from './tracing.js';
 
@@ -50,4 +52,20 @@ export function observeToolCall(toolId: string, outcome: string, durationMs: num
 export function observeJob(name: string, outcome: 'success' | 'error', durationMs: number): void {
   jobRuns.inc({ job: name, outcome });
   jobDuration.observe({ job: name }, durationMs / 1000);
+}
+
+/**
+ * One provider's part in a web search from a conversation (v0.10): the
+ * provider kind (a fixed vocabulary), whether it was the primary or the
+ * fallback, and whether it answered. Never the query.
+ */
+export function observeWebSearch(
+  provider: string,
+  slot: 'primary' | 'fallback',
+  outcome: 'answered' | 'failed',
+  durationMs: number,
+): void {
+  const label = /^[a-z]{1,20}$/.test(provider) ? provider : 'other';
+  webSearches.inc({ provider: label, slot, outcome });
+  webSearchDuration.observe({ provider: label, slot }, Math.max(0, durationMs) / 1000);
 }

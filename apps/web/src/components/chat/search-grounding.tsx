@@ -16,6 +16,9 @@ export interface SearchGroundingView {
   results: SearchGroundingData['results'];
   /** Why the search failed; the reply went ahead without results. */
   error?: string;
+  /** Which provider answered (v0.10), and whether it was the fallback. */
+  provider?: string;
+  fallback?: boolean;
 }
 
 function sourcePartsOf(message: UIMessage): MessageSource[] {
@@ -43,6 +46,10 @@ export function searchGroundingOf(message: UIMessage): SearchGroundingView | nul
       ...(typeof details.data.error === 'string' && details.data.error
         ? { error: details.data.error }
         : {}),
+      ...(typeof details.data.provider === 'string' && details.data.provider
+        ? { provider: details.data.provider }
+        : {}),
+      ...(details.data.fallback === true ? { fallback: true } : {}),
     };
   }
 
@@ -188,6 +195,17 @@ export function SearchGroundingDetails({ grounding }: { grounding: SearchGroundi
               {grounding.query ?? 'Query not retained for this older response'}
             </p>
           </section>
+
+          {grounding.provider && (
+            <section>
+              <h3 className="text-xs font-semibold text-[var(--text-primary)]">Search provider:</h3>
+              <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                {grounding.fallback
+                  ? `${grounding.provider} (the fallback provider; the first one did not answer)`
+                  : grounding.provider}
+              </p>
+            </section>
+          )}
 
           <section>
             <h3 className="text-xs font-semibold text-[var(--text-primary)]">Search Results:</h3>

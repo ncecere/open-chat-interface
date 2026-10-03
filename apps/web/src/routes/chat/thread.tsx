@@ -96,9 +96,12 @@ function ThreadConversation({
   carriedSearch,
   carriedFocus,
   temporary,
+  projectId,
   target,
 }: {
   threadId: string;
+  /** The conversation's project, if any, for the composer's Project files control. */
+  projectId: string | null;
   initialMessages: UIMessage[];
   /** Every reply to the latest turn when it was retried; otherwise empty. */
   initialReplies: UIMessage[];
@@ -352,6 +355,9 @@ function ThreadConversation({
           attachments={session.attachments.items}
           onAttachFiles={session.attachments.upload}
           onRemoveAttachment={session.attachments.remove}
+          projectId={projectId}
+          excludedProjectFileIds={session.excludedProjectFileIds}
+          onExcludedProjectFilesChange={session.setExcludedProjectFileIds}
         />
       </div>
     </ThreadArtifactsProvider>
@@ -434,6 +440,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
       carriedSearch={carriedSearch}
       carriedFocus={carriedFocus}
       temporary={data.thread.temporary}
+      projectId={data.thread.projectId ?? null}
       target={target}
     />
   );

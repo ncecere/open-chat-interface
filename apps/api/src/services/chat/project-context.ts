@@ -2,7 +2,9 @@ import { and, eq, inArray, schema } from '@oci/db';
 import type { ProjectSearchData, UserRole } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
+import { validationFailed } from '../../lib/errors.js';
 import { clip, singleLine } from '../../lib/text.js';
+import { passageHeadings } from '../project-search/excerpts.js';
 import { hybridRanking } from '../project-search/fusion.js';
 import {
   type ProjectPassage,
@@ -41,6 +43,8 @@ type ProjectContext = {
   instructions: string;
   /** Candidates only; payloads are loaded after budget selection. */
   files: AttachmentCandidate[];
+  /** Names of the files the person left out of this message (v0.10); none when absent. */
+  excluded?: string[];
 };
 
 /**
@@ -72,6 +76,7 @@ const chunkKey = (chunk: RetrievedChunk) => `${chunk.attachmentId}:${chunk.ordin
 export async function loadProjectContext(
   projectId: string | null,
   user: { id: string; role: UserRole },
+  excludedFileIds: readonly string[] = [],
 ): Promise<ProjectContext | null> {
   if (!projectId) return null;
   const own = await roleFeatures(user.role);
@@ -84,10 +89,68 @@ export async function loadProjectContext(
   if (!project) return null;
 
   let files: AttachmentCandidate[] = [];
+  let excluded: string[] = [];
   if (own.attachments && (await getSetting('features')).attachments) {
     files = await inspectProjectFiles(projectId, user.id);
+    const left = new Set(excludedFileIds);
+    const out = files.filter((file) => left.has(file.id));
+    if (out.length > 0) {
+      files = files.filter((file) => !left.has(file.id));
+      excluded = await projectFileNames(projectId, user.id, out);
+    }
   }
-  return { id: projectId, userId: user.id, ...project, files };
+  return { id: projectId, userId: user.id, ...project, files, excluded };
+}
+
+/**
+ * Checks the files a message asks to leave out (v0.10): each must be a file
+ * of the conversation's project, owned by the person. A file deleted since the
+ * composer listed it still passes, so a send never fails over it. Runs before
+ * the turn is claimed.
+ */
+export async function assertExcludableProjectFiles(
+  projectId: string | null,
+  userId: string,
+  ids: readonly string[],
+): Promise<void> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return;
+  if (!projectId)
+    throw validationFailed('Files can only be left out in a conversation that is in a project.');
+  const rows = await db
+    .select({ id: schema.attachment.id })
+    .from(schema.attachment)
+    .where(
+      and(
+        inArray(schema.attachment.id, unique),
+        eq(schema.attachment.userId, userId),
+        eq(schema.attachment.projectId, projectId),
+      ),
+    );
+  if (rows.length !== unique.length)
+    throw validationFailed("A file left out of this message is not one of this project's files.");
+}
+
+/** File names in the given order, each on one line and clipped for a note or prompt. */
+async function projectFileNames(
+  projectId: string,
+  userId: string,
+  files: AttachmentCandidate[],
+): Promise<string[]> {
+  const order = new Map(files.map((file, index) => [file.id, index]));
+  const rows = await db
+    .select({ id: schema.attachment.id, filename: schema.attachment.filename })
+    .from(schema.attachment)
+    .where(
+      and(
+        inArray(schema.attachment.id, [...order.keys()]),
+        eq(schema.attachment.userId, userId),
+        eq(schema.attachment.projectId, projectId),
+      ),
+    );
+  return rows
+    .sort((a, b) => order.get(a.id)! - order.get(b.id)!)
+    .map((row) => clip(singleLine(row.filename), NOTE_MAX_NAME_CHARS));
 }
 
 /**
@@ -126,24 +189,15 @@ async function projectNoPassagesHeader(
   project: ProjectContext,
   files: AttachmentCandidate[],
 ): Promise<string> {
-  const order = new Map(files.map((file, index) => [file.id, index]));
-  const rows = await db
-    .select({ id: schema.attachment.id, filename: schema.attachment.filename })
-    .from(schema.attachment)
-    .where(
-      and(
-        inArray(schema.attachment.id, [...order.keys()]),
-        eq(schema.attachment.userId, project.userId),
-        eq(schema.attachment.projectId, project.id),
-      ),
-    );
-  const names = rows
-    .sort((a, b) => order.get(a.id)! - order.get(b.id)!)
-    .map((row) => clip(singleLine(row.filename), NOTE_MAX_NAME_CHARS));
+  const names = await projectFileNames(project.id, project.userId, files);
   return `${projectFilesHeader(project.name)} The project's files (${names.join(', ')}) are too long to include in full, so passages that match each message are included instead; none matched the latest message closely enough. If the person needs something from these files, they can ask about a specific topic, name or term in them.`;
 }
 
-/** The `data-project-search` part: file names and passage counts, never passage text. */
+/**
+ * The `data-project-search` part: file names, passage counts and the start of
+ * each passage (v0.10, bounded; see projectSearchDataSchema), and the files
+ * left out of the message.
+ */
 export type ProjectSearchPart = {
   type: 'data-project-search';
   id: string;
@@ -206,8 +260,40 @@ function fitWholeFiles(
  *    (relevance.ts). When none is, no passage is included and the reply gets
  *    no note; the model is told in one line which files exist. A message with
  *    nothing to search for (no words at all) is treated the same way.
+ * 4. Files the person left out of this message (v0.10) take no part in any
+ *    of the above; the reply's note names them.
  */
 export async function selectProjectFiles(
+  project: ProjectContext | null,
+  required: ContextCost,
+  budget: ContextCost,
+  supportsVision: boolean,
+  latestText: string,
+): Promise<ProjectFileSelection> {
+  const selection = await selectIncludedFiles(
+    project,
+    required,
+    budget,
+    supportsVision,
+    latestText,
+  );
+  // Files the person left out (v0.10) are named on the reply, with or without
+  // searched passages, so the reply says what it did not look at.
+  if (!project?.excluded?.length) return selection;
+  const excluded = project.excluded.map((name) => ({ name }));
+  return {
+    ...selection,
+    searchPart: selection.searchPart
+      ? { ...selection.searchPart, data: { ...selection.searchPart.data, excluded } }
+      : {
+          type: 'data-project-search',
+          id: `project-search-${crypto.randomUUID()}`,
+          data: { mode: 'search', files: [], excluded },
+        },
+  };
+}
+
+async function selectIncludedFiles(
   project: ProjectContext | null,
   required: ContextCost,
   budget: ContextCost,
@@ -295,7 +381,11 @@ export async function selectProjectFiles(
       type: 'data-project-search',
       id: `project-search-${crypto.randomUUID()}`,
       data: {
-        ...projectSearchSummary(passages, 'search'),
+        ...projectSearchSummary(
+          passages,
+          'search',
+          await passageHeadings(passages, project.userId),
+        ),
         ranking,
         ...(reranked !== undefined && { reranked }),
       },

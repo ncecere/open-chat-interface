@@ -4,7 +4,7 @@ import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { isSmtpUsable } from './email.js';
 import { getProviderConfigurationIssues } from './providers/config.js';
-import { webSearchProblem } from './search/availability.js';
+import { fallbackSearchProblem, webSearchProblem } from './search/availability.js';
 import { getSetting } from './settings.js';
 import { getS3ConfigurationIssues } from './storage/config.js';
 
@@ -250,12 +250,18 @@ async function webSearchCheck(): Promise<SetupCheck> {
     };
   }
   const reason = webSearchProblem(features, search);
+  // An incomplete fallback (v0.10) does not stop search; it is only not used.
+  const fallback = reason ? null : fallbackSearchProblem(search);
   return {
     id: 'web-search',
     title,
     status: reason ? 'attention' : 'complete',
     required: false,
-    detail: reason ? `Web search is unavailable: ${reason}.` : 'Web search is available.',
+    detail: reason
+      ? `Web search is unavailable: ${reason}.`
+      : fallback
+        ? `Web search is available, but the fallback provider is not used: ${fallback}.`
+        : 'Web search is available.',
     action,
   };
 }

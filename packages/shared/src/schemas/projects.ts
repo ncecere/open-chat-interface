@@ -88,11 +88,33 @@ export const projectFileIndexSchema = z.object({
 /** A project file is an attachment owned by the project rather than a message. */
 export const projectFileSchema = attachmentSchema.extend({ index: projectFileIndexSchema });
 
+/** Characters of a passage kept in a reply's project-search note (v0.10). */
+export const PROJECT_EXCERPT_MAX_CHARS = 200;
+/** Passages listed in one reply's project-search note (v0.10); the rest are only counted. */
+export const PROJECT_EXCERPTS_MAX = 24;
+
+const projectSearchExcerptSchema = z.object({
+  /** Stable within the reply: the file's id and the passage numbers. */
+  id: z.string().max(300),
+  /** 1-based passage numbers of the first and last chunk, as the model saw them. */
+  first: z.number().int().positive(),
+  last: z.number().int().positive(),
+  heading: z.string().max(200).optional(),
+  /** Ends with an ellipsis when the passage was longer. */
+  snippet: z.string().max(PROJECT_EXCERPT_MAX_CHARS + 1),
+});
+
 /**
  * The `data-project-search` part on a reply whose project files were too large
  * to include whole, so passages were chosen instead. It names the files used
- * and how many passages came from each, never the passage text, so it is safe
- * in exports. `mode` is `search` when passages matched the message.
+ * and how many passages came from each. Since v0.10 each file also lists its
+ * passages (`excerpts`): an id, the passage numbers, the nearest heading when
+ * the passage has one, and only the first PROJECT_EXCERPT_MAX_CHARS characters
+ * of its text, at most PROJECT_EXCERPTS_MAX per reply; older replies have no
+ * excerpts. `excluded` (v0.10) names the files the person left out of this
+ * message; with exclusions and no searched passages, `files` is empty.
+ * The part is never shown on shared links. `mode` is `search` when passages
+ * matched the message.
  * `opening` is only on replies stored before v0.9's relevance floors, when
  * nothing matched and each file's opening passages were used; now a reply
  * that used no passages has no part at all.
@@ -111,8 +133,13 @@ export const projectSearchDataSchema = z.object({
     z.object({
       name: z.string(),
       passages: z.number().int().positive(),
+      excerpts: z.array(projectSearchExcerptSchema).max(PROJECT_EXCERPTS_MAX).optional(),
     }),
   ),
+  excluded: z
+    .array(z.object({ name: z.string() }))
+    .max(MAX_FILES_PER_PROJECT)
+    .optional(),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;

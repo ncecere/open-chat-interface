@@ -456,3 +456,16 @@ it('consumes home-carried A once without consuming B queued for the following tu
   expect(userCards(2)).toEqual([]);
   expect(deletions).toEqual([]);
 });
+
+it('sends the project files left out with the next message only, then uses all again', async () => {
+  await mount();
+  await act(() => session.setExcludedProjectFileIds(['project-file-1', 'project-file-2']));
+  const first = await startSend('First');
+  expect(posts[0]?.excludedProjectFileIds).toEqual(['project-file-1', 'project-file-2']);
+  expect(session.excludedProjectFileIds).toEqual([]);
+  await (await accept(first)).finish();
+
+  const second = await startSend('Second');
+  expect(posts[1]).not.toHaveProperty('excludedProjectFileIds');
+  await (await accept(second)).finish();
+});

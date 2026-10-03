@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createDatabase, eq, schema, sql } from '@oci/db';
+import { PROJECT_EXCERPT_MAX_CHARS } from '@oci/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type FakeEmbeddingModel,
@@ -457,7 +458,10 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       expect(hybrid.search?.header).toContain('best match the latest message');
       expect(hybrid.searchPart?.data).toMatchObject({ mode: 'search', ranking: 'hybrid' });
       expect(hybrid.searchPart?.data.files[0]?.name).toBe('facilities.txt');
-      expect(JSON.stringify(hybrid.searchPart)).not.toContain(TARGET);
+      // The note keeps only the start of each passage used (v0.10), not the passage.
+      for (const excerpt of hybrid.searchPart?.data.files[0]?.excerpts ?? [])
+        expect(excerpt.snippet.length).toBeLessThanOrEqual(PROJECT_EXCERPT_MAX_CHARS + 1);
+      expect(hybrid.searchPart?.data.files[0]?.excerpts).toHaveLength(1);
 
       // Exact words still count: the keyword match is merged in.
       const exact = await select(target, 'conservatory boiler ignition');

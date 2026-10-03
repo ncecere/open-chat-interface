@@ -1,3 +1,8 @@
+import {
+  PROJECT_EXCERPT_MAX_CHARS,
+  PROJECT_EXCERPTS_MAX,
+  projectSearchDataSchema,
+} from '@oci/shared';
 import { describe, expect, it } from 'vitest';
 import { textCost } from '../../services/chat/context-budget.js';
 import {
@@ -6,6 +11,7 @@ import {
   chunkText,
   MAX_CHUNKS_PER_FILE,
 } from '../../services/project-search/chunking.js';
+import { passageHeading, passageSnippet } from '../../services/project-search/excerpts.js';
 import { projectFileIndexStatus } from '../../services/project-search/indexing.js';
 import {
   projectSearchSummary,
@@ -186,17 +192,61 @@ describe('project passage selection', () => {
     );
   });
 
-  it('summarises names and passage counts only', () => {
+  it('summarises names, passage counts and the start of each passage', () => {
     const passages = selectPassages([a0, a1, b0], ['a', 'b'], 10_000);
-    const summary = projectSearchSummary(passages, 'search');
+    const summary = projectSearchSummary(passages, 'search', new Map([['b:0', 'Bravo']]));
     expect(summary).toEqual({
       mode: 'search',
       files: [
-        { name: 'a.txt', passages: 2 },
-        { name: 'b.txt', passages: 1 },
+        {
+          name: 'a.txt',
+          passages: 2,
+          excerpts: [{ id: 'a:1-2', first: 1, last: 2, snippet: source.slice(0, 54).trim() }],
+        },
+        {
+          name: 'b.txt',
+          passages: 1,
+          excerpts: [
+            { id: 'b:1-1', first: 1, last: 1, heading: 'Bravo', snippet: 'Bravo file text.' },
+          ],
+        },
       ],
     });
-    expect(JSON.stringify(summary)).not.toContain('Alpha');
+  });
+
+  it('lists a bounded number of short excerpts but counts every passage', () => {
+    const long = 'word '.repeat(200).trim();
+    const many = Array.from({ length: PROJECT_EXCERPTS_MAX + 6 }, (_, index) =>
+      chunk('m', index * 2, long, index * 10_000),
+    );
+    const summary = projectSearchSummary(selectPassages(many, ['m'], 1_000_000), 'search');
+    const [file] = summary.files;
+    expect(file?.passages).toBe(PROJECT_EXCERPTS_MAX + 6);
+    expect(file?.excerpts).toHaveLength(PROJECT_EXCERPTS_MAX);
+    for (const excerpt of file?.excerpts ?? []) {
+      expect(excerpt.snippet.length).toBeLessThanOrEqual(PROJECT_EXCERPT_MAX_CHARS + 1);
+      expect(excerpt.snippet.endsWith('…')).toBe(true);
+    }
+    expect(projectSearchDataSchema.safeParse(summary).success).toBe(true);
+  });
+
+  it('finds the heading a passage falls under', () => {
+    expect(passageHeading('', '## Travel policy\n\nBook trains early.')).toBe('Travel policy');
+    expect(passageHeading('# Handbook\n\n## Data plans\n\nText', 'More text.')).toBe('Data plans');
+    expect(passageHeading('No headings here.', 'Body.\n### Later section ##\nMore.')).toBe(
+      'Later section',
+    );
+    expect(passageHeading('#hashtag is not a heading', 'Plain text.')).toBeNull();
+    expect(passageHeading('', `# ${'Long '.repeat(40)}`)?.length).toBeLessThanOrEqual(120);
+  });
+
+  it('shows the start of a passage on one line, without its opening heading', () => {
+    expect(passageSnippet('## Travel\n\nBook   trains\nearly.')).toBe('Book trains early.');
+    expect(passageSnippet('# Only a heading')).toBe('# Only a heading');
+    const clipped = passageSnippet('a'.repeat(500));
+    expect(clipped).toBe(`${'a'.repeat(PROJECT_EXCERPT_MAX_CHARS)}…`);
+    // Never splits a character outside the Basic Multilingual Plane.
+    expect(passageSnippet('😀'.repeat(300))).toBe(`${'😀'.repeat(PROJECT_EXCERPT_MAX_CHARS)}…`);
   });
 
   it('reports index status', () => {

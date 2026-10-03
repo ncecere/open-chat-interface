@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDatabase, eq, schema, sql } from '@oci/db';
-import type { SendMessageInput } from '@oci/shared';
+import { PROJECT_EXCERPT_MAX_CHARS, type SendMessageInput } from '@oci/shared';
 import { convertToModelMessages } from 'ai';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -283,22 +283,39 @@ describe.skipIf(!available)('live: searching large project files', () => {
     expect(started.turn.contextLimited).toBe(false);
     expect(fitsContext(assembledCost(started), budget)).toBe(true);
 
-    // Marked with names and counts only; nothing of the passages is stored.
+    // Marked with names, counts and the start of each passage used (v0.10),
+    // never the whole passage.
     expect(started.turn.projectSearchPart).toEqual({
       type: 'data-project-search',
       id: expect.stringMatching(/^project-search-/),
       data: {
         mode: 'search',
         ranking: 'keyword',
-        files: [{ name: 'handbook.txt', passages: expect.any(Number) }],
+        files: [
+          {
+            name: 'handbook.txt',
+            passages: expect.any(Number),
+            excerpts: [
+              {
+                id: expect.stringMatching(/:\d+-\d+$/),
+                first: expect.any(Number),
+                last: expect.any(Number),
+                snippet: expect.any(String),
+              },
+            ],
+          },
+        ],
       },
     });
-    expect(JSON.stringify(started.turn.projectSearchPart)).not.toContain('PELICAN');
+    const [excerpt] = started.turn.projectSearchPart!.data.files[0]!.excerpts!;
+    expect(excerpt!.snippet.length).toBeLessThanOrEqual(PROJECT_EXCERPT_MAX_CHARS + 1);
+    expect(text.replace(/\s+/g, ' ')).toContain(excerpt!.snippet.replace(/…$/, ''));
     const stored = await pool.db
       .select()
       .from(schema.message)
       .where(eq(schema.message.threadId, chat.id));
-    expect(JSON.stringify(stored)).not.toContain('PELICAN');
+    // The prompt and the model input are not stored; the reply part holds only the excerpt.
+    expect(JSON.stringify(stored)).not.toContain('Handbook section 24 covers');
   });
 
   it('keeps passages within their share of the budget, ordered by file and position', async () => {
@@ -474,6 +491,130 @@ describe.skipIf(!available)('live: searching large project files', () => {
     expect(text).toContain('Attached file "photo.png" (image/png) could not be read.');
     expect(text).not.toContain('PENDING_FILE');
     expect(started.turn.contextLimited).toBe(true);
+  });
+
+  it('names the section a passage comes from when the file has headings', async () => {
+    smallModel();
+    const guide = await project('Guide');
+    const body = Array.from({ length: 30 }, (_, index) =>
+      index === 0
+        ? '# Staff guide'
+        : index === 20
+          ? '## Field trips'
+          : index === 24
+            ? 'Osprey watching trips leave from the north gate at dawn.'
+            : `Paragraph ${index} is filler text about routine matters for everyone.`,
+    ).join('\n\n');
+    await projectFile(guide.id, 'guide.md', body, { mimeType: 'text/markdown' });
+    await projectFile(guide.id, 'appendix.txt', appendix());
+    const started = await send((await thread(guide.id)).id, 'When do osprey trips leave?');
+    const [file] = started.turn.projectSearchPart!.data.files;
+    expect(file?.name).toBe('guide.md');
+    expect(file?.excerpts?.[0]?.heading).toBe('Field trips');
+  });
+
+  describe('leaving files out of a message', () => {
+    it('searches only the files that are left in, and names the ones left out', async () => {
+      smallModel(3200);
+      const { operations, handbookFile } = await largeProject('Leave out');
+      const chat = await thread(operations.id);
+      const started = await send(chat.id, 'What is the launch code for Operation Kestrel?', {
+        excludedProjectFileIds: [handbookFile.id, handbookFile.id],
+      });
+      const text = await modelText(started);
+      expect(text).not.toContain(KESTREL);
+      expect(text).not.toContain('handbook.txt');
+      expect(started.turn.projectSearchPart?.data).toEqual({
+        mode: 'search',
+        files: [],
+        excluded: [{ name: 'handbook.txt' }],
+      });
+
+      // Only that message: the next one uses every file again.
+      const next = await send(
+        (await thread(operations.id)).id,
+        'What is the launch code for Operation Kestrel?',
+      );
+      expect(await modelText(next)).toContain(KESTREL);
+      expect(next.turn.projectSearchPart?.data.excluded).toBeUndefined();
+    });
+
+    it('adds the files left out to a note that lists passages', async () => {
+      smallModel(3200);
+      const { operations, appendixFile } = await largeProject('Leave one out');
+      const started = await send(
+        (await thread(operations.id)).id,
+        'What is the launch code for Operation Kestrel?',
+        { excludedProjectFileIds: [appendixFile.id] },
+      );
+      expect(await modelText(started)).toContain(KESTREL);
+      expect(started.turn.projectSearchPart?.data).toMatchObject({
+        files: [{ name: 'handbook.txt' }],
+        excluded: [{ name: 'appendix.txt' }],
+      });
+    });
+
+    it('leaves a small file out of a project that is included whole', async () => {
+      const small = await project('Small, leave out');
+      const facts = await projectFile(small.id, 'facts.txt', 'The codename is Blue Heron.');
+      await projectFile(small.id, 'other.txt', 'Other notes.');
+      const started = await send((await thread(small.id)).id, 'What is the codename?', {
+        excludedProjectFileIds: [facts.id],
+      });
+      const text = await modelText(started);
+      expect(text).not.toContain('Blue Heron');
+      expect(text).toContain('Other notes.');
+      expect(started.turn.projectSearchPart?.data).toEqual({
+        mode: 'search',
+        files: [],
+        excluded: [{ name: 'facts.txt' }],
+      });
+    });
+
+    it('refuses files that are not this project’s, before anything is stored', async () => {
+      const mine = await project('Refuse');
+      await projectFile(mine.id, 'mine.txt', 'Mine.');
+      const otherProject = await project('Refuse other');
+      const sibling = await projectFile(otherProject.id, 'sibling.txt', 'Sibling.');
+      const stranger = await seedUser(pool.db, state.organizationId);
+      const theirs = await project('Refuse theirs', stranger);
+      const foreign = await projectFile(theirs.id, 'theirs.txt', 'Theirs.', { userId: stranger });
+      const chat = await thread(mine.id);
+      for (const id of [sibling.id, foreign.id, 'no-such-file']) {
+        await expect(
+          send(chat.id, 'Hello', { excludedProjectFileIds: [id] }),
+        ).rejects.toMatchObject({ status: 422 });
+      }
+      const loose = await thread(null);
+      await expect(
+        send(loose.id, 'Hello', { excludedProjectFileIds: [sibling.id] }),
+      ).rejects.toThrow('Files can only be left out in a conversation that is in a project.');
+      const messages = await pool.db
+        .select({ id: schema.message.id })
+        .from(schema.message)
+        .where(eq(schema.message.threadId, chat.id));
+      expect(messages).toEqual([]);
+      // A file deleted since the composer listed it is still accepted.
+      const gone = await projectFile(mine.id, 'gone.txt', 'Gone.');
+      await pool.db
+        .update(schema.attachment)
+        .set({ deletedAt: new Date() })
+        .where(eq(schema.attachment.id, gone.id));
+      await expect(
+        send(chat.id, 'Hello', { excludedProjectFileIds: [gone.id] }),
+      ).resolves.toBeTruthy();
+    });
+
+    it('rejects more ids than a project can have files', async () => {
+      const { sendMessageSchema } = await import('@oci/shared');
+      const parsed = sendMessageSchema.safeParse({
+        threadId: 't',
+        modelSlug: 'm',
+        messages: [{ role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+        excludedProjectFileIds: Array.from({ length: 21 }, (_, index) => `f${index}`),
+      });
+      expect(parsed.success).toBe(false);
+    });
   });
 
   it('falls back to whole files that fit when no passage fits', async () => {

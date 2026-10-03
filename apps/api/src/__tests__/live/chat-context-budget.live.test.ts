@@ -105,7 +105,11 @@ vi.mock('../../services/system-prompt.js', () => ({
 }));
 vi.mock('../../services/search/index.js', () => ({
   normalizeSearchQuery: (text: string) => text.trim(),
-  searchWeb: async () => [{ title: 'Fixture', url: 'https://example.test/source' }],
+  searchWeb: async () => ({
+    results: [{ title: 'Fixture', url: 'https://example.test/source' }],
+    provider: 'Fixture search',
+    fallback: false,
+  }),
   buildGroundingContext: () => state.grounding,
 }));
 vi.mock('../../services/limits/concurrency.js', () => ({
