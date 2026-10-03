@@ -218,11 +218,21 @@ and embedding already run as background jobs. What is missing is below.
 | **Scale test harness** | OCI has not been measured at tens of thousands of people and tens of millions of messages. | A synthetic dataset at that size and a repeatable run that measures upgrade and migration time, page and search latency and job throughput before each release, with results published in the release notes. |
 | **Connection pooling** | OCI needs direct or session-mode connections, and many replicas against one cluster run out of them. | Transaction-mode pooling (PgBouncer) for ordinary queries, with a small direct pool for locks and jobs. Optional routing of heavy reads (search, reports, exports) to replicas. |
 | **Kubernetes Helm chart** | The zero-downtime procedure should be the default, not a runbook. | A first-party chart: migration job before the rollout, rolling updates, disruption budgets, readiness gating and autoscaling on OCI's metrics. |
+| **Draining replies on shutdown** | A replica that stops ends the replies it is writing, so every rolling upgrade cuts some off. | On shutdown a replica stops taking new turns, lets replies in progress finish within a limit, and saves anything left so it can continue elsewhere. |
+| **Separate worker role** | Embedding, imports, document rendering, exports and backups run on the same replicas as requests. | An optional worker role that runs background work and scales separately. |
+| **Provider capacity** | At scale the model provider's rate limits are the bottleneck, and requests over them fail. | Shared per-provider and per-model limits across replicas, a fair queue with a visible position, and backoff on rate-limit errors. |
+| **Redis high availability** | Several replicas depend on Redis for reply streams and shared limits. | Sentinel and Redis Cluster support, documented behaviour when Redis is unavailable, and a tested failover. |
+| **Optional Qdrant** | Very large deployments may want vector search off the database cluster. | A vector store interface with pgvector as the default; Qdrant as an optional, rebuildable store (PostgreSQL stays the source of truth, blue/green collections, reliable deletes), if the scale harness shows the need. |
+| **Backups at scale** | `pg_dump` takes hours on a large cluster. | For clusters with their own backups (pgBackRest, WAL-G), OCI backs up attachments and verifies; recovery objectives and restore drills documented. |
+| **Fast usage reports and budgets** | Budgets and the Usage pages read raw usage events. | Hourly and daily rollups maintained in the background. |
 | **Background work visible** | Imports, indexing, re-embedding and background migrations run out of sight. | Queue depth, progress and failures on System health and in metrics. |
 
-Measured by the harness, later releases may also partition the largest
-append-only tables (usage events, audit log, webhook deliveries) so that
-retention drops old partitions instead of deleting rows.
+Further items (cross-replica cache invalidation, batched pruning, loading
+long conversations in parts, sign-in storms, encryption key rotation, service
+objectives) and the design are in `docs/dev/v0.11-design.md`. Measured by the
+harness, later releases may also partition the largest append-only tables
+(usage events, audit log, webhook deliveries) so that retention drops old
+partitions instead of deleting rows.
 
 ## Later — v1.0 and beyond: assistants and media
 
