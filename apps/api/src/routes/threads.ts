@@ -370,6 +370,10 @@ threadRoutes.get('/:id', async (c) => {
   });
 });
 
+/**
+ * Renames (title, trimmed, 1–200 characters), pins, archives or moves a
+ * conversation; only the sent fields change.
+ */
 threadRoutes.patch('/:id', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);

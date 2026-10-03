@@ -13,6 +13,9 @@ import {
   isOnLegalHold,
 } from '../compliance/holds.js';
 
+export const LAST_ADMIN_DELETION_MESSAGE =
+  'This is the last administrator account, so it cannot be deleted. Make someone else an administrator first.';
+
 export interface AdminUserActor {
   id: string;
   email: string;
@@ -158,8 +161,30 @@ export async function deleteUser(actor: AdminUserActor, targetId: string) {
   // checking first gives the administrator a clear reason.
   if (await isOnLegalHold(targetId)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
 
+  let deleted: { email: string; role: string };
   try {
-    await db.delete(schema.user).where(eq(schema.user.id, targetId));
+    deleted = await db.transaction(async (tx) => {
+      // Lock every administrator first, so two administrators deleting each
+      // other at the same time cannot both succeed and leave nobody in charge.
+      const admins = await tx
+        .select({ id: schema.user.id })
+        .from(schema.user)
+        .where(eq(schema.user.role, 'admin'))
+        .orderBy(schema.user.id)
+        .for('update');
+      const [target] = await tx
+        .select({ email: schema.user.email, role: schema.user.role })
+        .from(schema.user)
+        .where(eq(schema.user.id, targetId))
+        .limit(1)
+        .for('update');
+      if (!target) throw notFound('User not found');
+      if (target.role === 'admin' && !admins.some((admin) => admin.id !== targetId)) {
+        throw conflict(LAST_ADMIN_DELETION_MESSAGE);
+      }
+      await tx.delete(schema.user).where(eq(schema.user.id, targetId));
+      return target;
+    });
   } catch (error) {
     if (isLegalHoldViolation(error)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
     throw error;
@@ -170,6 +195,8 @@ export async function deleteUser(actor: AdminUserActor, targetId: string) {
     action: 'user.delete',
     targetType: 'user',
     targetId,
+    // The account is gone; keep enough to say whose it was.
+    metadata: { email: deleted.email, role: deleted.role },
   });
   return { ok: true };
 }

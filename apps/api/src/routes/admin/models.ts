@@ -1,8 +1,13 @@
 import { and, asc, eq, ne, schema } from '@oci/db';
-import { type AdminModel, updateModelSchema, upsertModelSchema } from '@oci/shared';
+import {
+  type AdminModel,
+  modelLimitsProblem,
+  updateModelSchema,
+  upsertModelSchema,
+} from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
-import { conflict, notFound } from '../../lib/errors.js';
+import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
@@ -70,6 +75,17 @@ async function clearOtherDefaults(tx: Executor, organizationId: string, keepId: 
     .where(and(eq(schema.model.organizationId, organizationId), ne(schema.model.id, keepId)));
 }
 
+/**
+ * Refuses an output limit that leaves no room for input in the context window
+ * (the assumed one when unset): every chat with the model would then fail.
+ */
+function assertUsableLimits(contextWindow: number | null, maxOutputTokens: number | null) {
+  const problem = modelLimitsProblem(contextWindow, maxOutputTokens);
+  if (problem) {
+    throw validationFailed(problem, [{ path: ['maxOutputTokens'], message: problem }]);
+  }
+}
+
 async function requireProvider(providerId: string, organizationId: string) {
   const [provider] = await db
     .select({ id: schema.provider.id })
@@ -85,6 +101,7 @@ async function requireProvider(providerId: string, organizationId: string) {
 modelRoutes.post('/', async (c) => {
   const actor = currentUser(c);
   const input = await parseBody(c, upsertModelSchema);
+  assertUsableLimits(input.contextWindow ?? null, input.maxOutputTokens ?? null);
   const organizationId = await getDefaultOrganizationId();
   await requireProvider(input.providerId, organizationId);
 
@@ -141,7 +158,12 @@ modelRoutes.patch('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [existing] = await db
-    .select({ id: schema.model.id, organizationId: schema.model.organizationId })
+    .select({
+      id: schema.model.id,
+      organizationId: schema.model.organizationId,
+      contextWindow: schema.model.contextWindow,
+      maxOutputTokens: schema.model.maxOutputTokens,
+    })
     .from(schema.model)
     .where(eq(schema.model.id, id))
     .limit(1);
@@ -149,6 +171,12 @@ modelRoutes.patch('/:id', async (c) => {
   if (!existing) throw notFound('Model not found');
 
   const input = await parseBody(c, updateModelSchema);
+  if (input.contextWindow !== undefined || input.maxOutputTokens !== undefined) {
+    assertUsableLimits(
+      input.contextWindow !== undefined ? input.contextWindow : existing.contextWindow,
+      input.maxOutputTokens !== undefined ? input.maxOutputTokens : existing.maxOutputTokens,
+    );
+  }
   const organizationId = await getDefaultOrganizationId();
 
   if (input.providerId !== undefined) await requireProvider(input.providerId, organizationId);

@@ -145,7 +145,12 @@ describe('settings layout', () => {
         ?.parentElement?.querySelectorAll('kbd');
     const keys = (label: string) => [...(row(label) ?? [])].map((kbd) => kbd.textContent);
 
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'MacIntel' });
     await render();
+    expect(keys('Search')).toEqual(['\u2318', 'K']);
+    expect(keys('New Chat')).toEqual(['\u2318', '\u21e7', 'O']);
+    expect(keys('Toggle Sidebar')).toEqual(['\u2318', 'B']);
+    expect(keys('Open Model Picker')).toEqual(['\u2318', '/']);
     expect(keys('Send Message')).toEqual(['Enter']);
     expect(keys('New Line')).toEqual(['⇧', 'Enter']);
     await cleanup(root!);
@@ -154,6 +159,14 @@ describe('settings layout', () => {
     await render();
     expect(keys('Send Message')).toEqual(['⌘', 'Enter']);
     expect(keys('New Line')).toEqual(['Enter']);
+    await cleanup(root!);
+
+    // Ctrl on every other platform.
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'Win32' });
+    await render();
+    expect(keys('New Chat')).toEqual(['Ctrl', 'Shift', 'O']);
+    expect(keys('Open Model Picker')).toEqual(['Ctrl', '/']);
+    expect(keys('Send Message')).toEqual(['Ctrl', 'Enter']);
   });
 
   it('keeps the wide-screen avatar at 96px', async () => {

@@ -3,6 +3,7 @@ import { ChevronDown, Search } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
+import { ariaKeyShortcuts, OPEN_MODEL_PICKER_EVENT } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { labsFrom, matchesCapabilities, matchesSearch } from './model-picker-data';
 import { ModelPickerFilters } from './model-picker-filters';
@@ -97,6 +98,20 @@ export const ModelPicker = memo(function ModelPicker({
     };
   });
 
+  // ⌘/ (Ctrl+/) from anywhere on the page opens the picker with its search focused.
+  const available = models.length > 0;
+  useEffect(() => {
+    if (!available) return;
+    function openFromShortcut(event: Event) {
+      event.preventDefault();
+      setOpen(true);
+      // Already open: the panel keeps focus where it was, so put it back on search.
+      searchRef.current?.focus();
+    }
+    window.addEventListener(OPEN_MODEL_PICKER_EVENT, openFromShortcut);
+    return () => window.removeEventListener(OPEN_MODEL_PICKER_EVENT, openFromShortcut);
+  }, [available]);
+
   const labs = useMemo(() => labsFrom(models), [models]);
   const visible = useMemo(
     () =>
@@ -134,6 +149,7 @@ export const ModelPicker = memo(function ModelPicker({
         role="combobox"
         aria-haspopup="listbox"
         aria-label={`Select model. Current model: ${selected?.displayName ?? 'none'}`}
+        aria-keyshortcuts={ariaKeyShortcuts('model-picker')}
         className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]"
       >
         {selected && <LabLogo labId={selected.labId} className="size-3.5" />}

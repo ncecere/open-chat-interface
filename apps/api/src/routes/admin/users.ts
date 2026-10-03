@@ -74,6 +74,11 @@ userRoutes.post('/:id/revoke-sessions', async (c) => {
   return c.json(await revokeUserSessions({ id, email }, c.req.param('id')));
 });
 
+/**
+ * Permanently deletes an account and everything it owns; audit entries stay.
+ * Refuses your own account (422), the last administrator and anyone on legal
+ * hold (409); 404 for an unknown account.
+ */
 userRoutes.delete('/:id', async (c) => {
   const { id, email } = currentUser(c);
   return c.json(await deleteUser({ id, email }, c.req.param('id')));

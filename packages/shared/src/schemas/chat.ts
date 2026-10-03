@@ -96,9 +96,12 @@ export const messageSchema = z.object({
   createdAt: z.string(),
 });
 
+/** Longest conversation title, after trimming; renaming enforces the same. */
+export const THREAD_TITLE_MAX_LENGTH = 200;
+
 export const createThreadSchema = z
   .object({
-    title: z.string().trim().max(200).optional(),
+    title: z.string().trim().max(THREAD_TITLE_MAX_LENGTH).optional(),
     temporary: z.boolean().default(false),
     /** Start the conversation inside one of the caller's projects. */
     projectId: z.string().min(1).max(200).optional(),
@@ -106,7 +109,7 @@ export const createThreadSchema = z
   .strict();
 
 export const updateThreadSchema = z.object({
-  title: z.string().trim().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(THREAD_TITLE_MAX_LENGTH).optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
   /** Move into one of the caller's projects, or `null` to take it out. */

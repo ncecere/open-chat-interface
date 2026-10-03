@@ -31,6 +31,7 @@ export function ConfirmDialog({
   pendingLabel = 'Working…',
   errorMessage,
   onConfirm,
+  confirmDisabled = false,
   children,
 }: {
   open: boolean;
@@ -43,6 +44,8 @@ export function ConfirmDialog({
   errorMessage: string;
   /** Should resolve once the change is complete, including any refetch. */
   onConfirm: () => Promise<unknown>;
+  /** Holds the confirm button back, for example until a typed confirmation matches. */
+  confirmDisabled?: boolean;
   children?: ReactNode;
 }) {
   // Triggers are hidden from read-only viewers; this is the backstop.
@@ -83,7 +86,7 @@ export function ConfirmDialog({
             <Button
               type="button"
               variant="danger"
-              disabled={action.isPending || !canEdit}
+              disabled={action.isPending || !canEdit || confirmDisabled}
               onClick={() => action.mutate()}
             >
               {action.isPending && <Spinner />}

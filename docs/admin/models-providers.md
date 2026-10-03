@@ -50,11 +50,19 @@ anything.
   cannot read one and get a reply that never mentions it.
 - **Visible to roles** — which roles see it. This is how an expensive model is
   kept to the people who need it.
-- **Context window** — used to budget provider input. If unset, the application
-  uses a 32,768-unit fallback. Keep it aligned with the upstream model.
-- **Max output tokens** — reserved before input selection and explicitly passed
-  on every request. If unset, the default is 4,096, or one quarter of a smaller
-  context window. A configured output cap that leaves no input space is rejected.
+- **Context window** — the tokens the model accepts, input and output together,
+  used to budget provider input. Set it in **Edit model** (whole tokens, up to
+  10,000,000; thousands separators are fine). Blank means unknown, and OCI then
+  assumes 32,768 — far less than most current models, so long conversations
+  are cut short. **Discover** does not fill it in; copy it from the provider's
+  model documentation. The model's row shows the value in use when expanded.
+- **Max output** — the most tokens one reply may use, reserved before input
+  selection and passed on every request. Set it in **Edit model** (up to
+  1,000,000). If blank, OCI
+  reserves 4,096, or one quarter of a smaller context window. A cap that leaves
+  no room for input (it must stay below the context window, or the assumed
+  32,768, less 512) is refused when you save. Changes to either are recorded in
+  the audit log as `model.update`, naming the fields changed.
 
 For budgeted Anthropic thinking models, the output limit includes both thinking
 and the visible answer. The application allocates 10%, 30% or 60% to low, medium

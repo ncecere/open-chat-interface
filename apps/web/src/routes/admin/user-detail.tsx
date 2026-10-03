@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { DeleteUserSection } from '~/components/admin/delete-user';
 import { UserLimitsSection } from '~/components/admin/user-limits';
 import {
   ADMIN_USERS_QUERY_KEY,
@@ -336,6 +337,8 @@ export function AdminUserDetailPage() {
           </ul>
         )}
       </Section>
+
+      <DeleteUserSection user={{ ...user, legalHold: Boolean(user.legalHold || data.legalHold) }} />
 
       <ConfirmDialog
         open={confirming === 'ban'}

@@ -1,4 +1,4 @@
-import { useRouterState } from '@tanstack/react-router';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
@@ -7,7 +7,25 @@ import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
 import { TopBar } from '~/components/layout/top-bar';
 import { useCommandPalette } from '~/hooks/use-command-palette';
-import { TemporaryChatProvider } from '~/providers/temporary-chat-provider';
+import { useGlobalShortcuts } from '~/hooks/use-global-shortcuts';
+import { TemporaryChatProvider, useTemporaryChat } from '~/providers/temporary-chat-provider';
+
+/**
+ * The global shortcuts, mounted inside the temporary chat provider because a
+ * new chat started from the keyboard leaves temporary mode, like the button.
+ */
+function GlobalShortcuts({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+  const navigate = useNavigate();
+  const { setTemporary } = useTemporaryChat();
+  useGlobalShortcuts({
+    onNewChat: () => {
+      setTemporary(false);
+      void navigate({ to: '/' });
+    },
+    onToggleSidebar,
+  });
+  return null;
+}
 
 /**
  * Desktop shell: sidebar, a full-width top bar carrying the global controls,
@@ -61,6 +79,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <TemporaryChatProvider>
+      <GlobalShortcuts
+        onToggleSidebar={() => (sidebarOpen ? closeSidebar() : setSidebarOpen(true))}
+      />
       <div className="flex h-dvh overflow-hidden bg-[var(--bg-app)]">
         <SkipLink />
         <Sidebar open={sidebarOpen} mobile={mobile} onToggle={closeSidebar} />

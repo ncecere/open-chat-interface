@@ -119,6 +119,18 @@ export function CommandPalette(props: CommandPaletteProps) {
                       ) : (
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                       )}
+                      {item.shortcut && (
+                        <span className="hidden shrink-0 gap-1 sm:flex" data-shortcut>
+                          {item.shortcut.map((key) => (
+                            <kbd
+                              key={key}
+                              className="rounded border border-[var(--border-subtle)] bg-[var(--bg-control)] px-1.5 py-0.5 text-[0.625rem] text-[var(--text-muted)]"
+                            >
+                              {key}
+                            </kbd>
+                          ))}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

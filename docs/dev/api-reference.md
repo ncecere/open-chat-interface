@@ -219,7 +219,7 @@ Generated from 41 route files.
 | POST | `/api/admin/users` | — |
 | GET | `/api/admin/users/:id` | — |
 | PATCH | `/api/admin/users/:id` | — |
-| DELETE | `/api/admin/users/:id` | — |
+| DELETE | `/api/admin/users/:id` | Permanently deletes an account and everything it owns; audit entries stay. |
 | GET | `/api/admin/users/:id/limits` | The limits one person is held to right now: each budget with its current usage and reset time, and storage use against the role's allowance. |
 | POST | `/api/admin/users/:id/revoke-sessions` | — |
 | POST | `/api/admin/users/bulk` | — |
@@ -385,7 +385,7 @@ Generated from 41 route files.
 | GET | `/api/threads` | Live conversations, pinned first then newest, at most 200; `view=sidebar` leaves out unpinned project conversations. |
 | POST | `/api/threads` | — |
 | GET | `/api/threads/:id` | — |
-| PATCH | `/api/threads/:id` | — |
+| PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
 | POST | `/api/threads/:id/branches` | — |
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |

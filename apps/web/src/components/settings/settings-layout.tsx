@@ -12,6 +12,13 @@ import {
   useCurrentUser,
 } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
+import {
+  isApplePlatform,
+  modifierKey,
+  SHORTCUT_IDS,
+  SHORTCUTS,
+  shortcutKeys,
+} from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
 
@@ -27,23 +34,16 @@ const TABS = [
 
 type Tab = (typeof TABS)[number];
 
-const SHORTCUTS = [
-  { label: 'Search', keys: ['⌘', 'K'] },
-  { label: 'New Chat', keys: ['⌘', '⇧', 'O'] },
-  { label: 'Toggle Sidebar', keys: ['⌘', 'B'] },
-  { label: 'Open Model Picker', keys: ['⌘', '/'] },
-];
-
 /** Send and New Line follow "Invert Send/New Line Behavior" (Customization). */
-function messageShortcuts(invertSend: boolean) {
+function messageShortcuts(invertSend: boolean, apple: boolean) {
   return invertSend
     ? [
-        { label: 'Send Message', keys: ['⌘', 'Enter'] },
+        { label: 'Send Message', keys: [modifierKey(apple), 'Enter'] },
         { label: 'New Line', keys: ['Enter'] },
       ]
     : [
         { label: 'Send Message', keys: ['Enter'] },
-        { label: 'New Line', keys: ['⇧', 'Enter'] },
+        { label: 'New Line', keys: [apple ? '⇧' : 'Shift', 'Enter'] },
       ];
 }
 
@@ -112,11 +112,16 @@ function Identity() {
 
 function ShortcutsCard() {
   const { invertSend } = useTheme();
+  const apple = isApplePlatform();
+  const shortcuts = [
+    ...SHORTCUT_IDS.map((id) => ({ label: SHORTCUTS[id].label, keys: shortcutKeys(id, apple) })),
+    ...messageShortcuts(invertSend, apple),
+  ];
   return (
     <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
       <h2 className="mb-3 text-sm font-semibold">Keyboard Shortcuts</h2>
       <div className="flex flex-col gap-3">
-        {[...SHORTCUTS, ...messageShortcuts(invertSend)].map((shortcut) => (
+        {shortcuts.map((shortcut) => (
           <div key={shortcut.label} className="flex items-center justify-between gap-3">
             <span className="text-sm text-[var(--text-secondary)]">{shortcut.label}</span>
             <span className="flex gap-1">

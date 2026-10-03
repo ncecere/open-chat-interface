@@ -15,6 +15,8 @@ export interface PaletteItem {
   icon: LucideIcon;
   /** Richer rendering than the label, such as a search result's snippets. */
   content?: ReactNode;
+  /** The global shortcut for the same action, shown beside the label. */
+  shortcut?: string[];
   /** Keep focus where the selection put it instead of restoring it on close. */
   keepFocusOnClose?: boolean;
   onSelect: () => void | Promise<void>;

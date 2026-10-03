@@ -15,6 +15,7 @@ import {
 import { useMemo } from 'react';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { NAV_SECTIONS } from '~/lib/admin-navigation';
+import { shortcutKeys } from '~/lib/keyboard-shortcuts';
 import { useTheme } from '~/providers/theme-provider';
 import type { CommandPaletteProps, PaletteGroup } from './types';
 
@@ -37,6 +38,7 @@ export function usePaletteActions({
             label: 'New chat',
             keywords: 'start conversation home',
             icon: Plus,
+            shortcut: shortcutKeys('new-chat'),
             onSelect: () => navigate({ to: '/' }),
           },
           {
@@ -100,6 +102,7 @@ export function usePaletteActions({
             label: `${sidebarOpen ? 'Close' : 'Open'} sidebar`,
             keywords: 'toggle collapse navigation',
             icon: ChevronsLeftRight,
+            shortcut: shortcutKeys('toggle-sidebar'),
             onSelect: () => onSidebarOpenChange(!sidebarOpen),
           },
         ],

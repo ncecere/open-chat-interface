@@ -1,7 +1,8 @@
 import type { ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
-import { Archive, ChevronDown, Folder, GitFork, Pin, PinOff } from 'lucide-react';
+import { Archive, ChevronDown, Folder, GitFork, Pencil, Pin, PinOff } from 'lucide-react';
 import { useState } from 'react';
+import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
 import { useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
@@ -31,7 +32,7 @@ function groupThreads(threads: ThreadSummary[]) {
   return groups.filter((group) => group.threads.length > 0);
 }
 
-/** One conversation in the sidebar, with its pin and archive actions. */
+/** One conversation in the sidebar, with its pin, rename and archive actions. */
 export function ThreadRow({
   thread,
   active,
@@ -43,6 +44,7 @@ export function ThreadRow({
   projectName?: string;
 }) {
   const update = useUpdateThread();
+  const [renaming, setRenaming] = useState(false);
 
   return (
     <div
@@ -104,6 +106,15 @@ export function ThreadRow({
         </button>
         <button
           type="button"
+          aria-label="Rename thread"
+          aria-haspopup="dialog"
+          onClick={() => setRenaming(true)}
+          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+        <button
+          type="button"
           aria-label="Archive thread"
           onClick={() => update.mutate({ id: thread.id, archived: true })}
           className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -111,6 +122,12 @@ export function ThreadRow({
           <Archive className="size-3.5" />
         </button>
       </div>
+      <RenameThreadDialog
+        threadId={thread.id}
+        title={thread.title}
+        open={renaming}
+        onOpenChange={setRenaming}
+      />
     </div>
   );
 }

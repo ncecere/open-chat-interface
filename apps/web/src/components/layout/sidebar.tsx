@@ -9,6 +9,7 @@ import { UserMenu } from '~/components/layout/user-menu';
 import { Button } from '~/components/ui/button';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
+import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 
 interface SidebarProps {
@@ -58,6 +59,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           size="icon-sm"
           onClick={onToggle}
           aria-label="Close sidebar"
+          aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
         >
           <PanelLeft />
         </Button>
@@ -79,6 +81,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           className="h-9 w-full font-semibold"
           onClick={handleNewChat}
           disabled={createThread.isPending}
+          aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
         >
           New Chat
         </Button>
@@ -129,7 +132,12 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       </div>
 
       <div className="flex items-center justify-between px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:hidden">
-        <Button variant="accent" className="h-11 rounded-full px-5" onClick={handleNewChat}>
+        <Button
+          variant="accent"
+          className="h-11 rounded-full px-5"
+          onClick={handleNewChat}
+          aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
+        >
           New Chat
         </Button>
         <UserMenu compact />

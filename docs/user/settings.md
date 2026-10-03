@@ -131,15 +131,24 @@ belong to; open the project to delete them.
 Every settings page shows your usage limits, a **Keyboard Shortcuts** card and
 a **Need help?** card: beside the page on a wide screen, below it on a narrow
 one. The send and new-line keys in the card follow **Invert Send/New Line
-Behavior**. The shortcuts worth learning:
+Behavior**, and the card shows `⌘` on a Mac and `Ctrl` everywhere else. The
+shortcuts worth learning:
 
 | Shortcut | Does |
 | --- | --- |
 | `Cmd/Ctrl + K` | Search and commands |
 | `Cmd/Ctrl + Shift + O` | New conversation |
 | `Cmd/Ctrl + B` | Show or hide the sidebar |
-| `Cmd/Ctrl + /` | Open the model picker |
+| `Cmd/Ctrl + /` | Open the model picker, with its search ready for typing |
 | `Enter` | Send the message (`Cmd/Ctrl + Enter` when inverted) |
 | `Shift + Enter` | Start a new line (`Enter` when inverted) |
+
+The first four work anywhere in the chat — a new chat, a conversation or a
+project, though not in Settings or Admin — including while you are typing a
+message, but not while an input method is composing text. Use `Cmd` on a Mac
+and `Ctrl` elsewhere. `Cmd/Ctrl + /` needs a message box with a model picker (a
+new chat or a conversation) and does nothing elsewhere.
+Search (`Cmd/Ctrl + K`) lists the same shortcuts beside **New chat** and the
+sidebar command.
 
 For help with your account, contact the administrator who runs your instance.

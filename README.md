@@ -61,8 +61,8 @@ pnpm dev
 - API: <http://localhost:3080>
 
 The first administrator is created from `INITIAL_ADMIN_EMAIL` /
-`INITIAL_ADMIN_PASSWORD` on an empty database. If no password is supplied a
-one-time password is printed to the API logs.
+`INITIAL_ADMIN_PASSWORD` on an empty database. If no password is supplied (the
+variable is unset or empty) a one-time password is printed to the API logs.
 
 Locked out? `pnpm --filter @oci/api admin:promote you@example.com`.
 
@@ -116,8 +116,9 @@ comes up without a separate migration step. Both operations are idempotent and
 an existing deployment passes straight through.
 
 Set `INITIAL_ADMIN_EMAIL` to create the first administrator. Leaving
-`INITIAL_ADMIN_PASSWORD` unset prints a one-time password to the API logs
-instead of baking a credential into the environment.
+`INITIAL_ADMIN_PASSWORD` unset (or empty, as in `.env.example`) prints a
+one-time password to the API logs (`docker compose logs api`) instead of baking
+a credential into the environment.
 
 Once running, sign in and open **Admin**. The setup checklist on **Overview**
 lists what is still missing, in order, and links to each page. Start by adding a

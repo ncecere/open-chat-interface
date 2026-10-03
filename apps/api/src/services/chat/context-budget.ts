@@ -1,3 +1,8 @@
+import {
+  CONTEXT_SAFETY_MARGIN_TOKENS,
+  effectiveOutputTokens,
+  FALLBACK_CONTEXT_WINDOW,
+} from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { validationFailed } from '../../lib/errors.js';
 
@@ -10,9 +15,9 @@ export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 export const IMAGE_INPUT_UNITS = 8192;
 export const MESSAGE_OVERHEAD = 64;
 export const PART_OVERHEAD = 16;
-const FALLBACK_CONTEXT_WINDOW = 32_768;
-const DEFAULT_OUTPUT_TOKENS = 4096;
-const SAFETY_MARGIN = 512;
+// The fallbacks for an unset window or output limit are shared with the admin
+// model form, which explains them.
+const SAFETY_MARGIN = CONTEXT_SAFETY_MARGIN_TOKENS;
 
 export type ContextCost = { units: number; files: number; imageBytes: number };
 export type ContextBudget = ContextCost & { outputTokens: number };
@@ -70,8 +75,10 @@ export function contextBudget(model: {
   maxOutputTokens?: number | null;
 }): ContextBudget {
   const window = model.contextWindow ?? FALLBACK_CONTEXT_WINDOW;
-  const outputTokens =
-    model.maxOutputTokens ?? Math.min(DEFAULT_OUTPUT_TOKENS, Math.floor(window / 4));
+  const outputTokens = effectiveOutputTokens(
+    model.contextWindow ?? null,
+    model.maxOutputTokens ?? null,
+  );
   if (
     !Number.isSafeInteger(window) ||
     window <= 0 ||
