@@ -57,6 +57,12 @@ E2E_ADMIN_PASSWORD='...' \
 Playwright, in desktop and mobile projects. Includes an accessibility scan
 against WCAG 2.2 AA.
 
+The specs sign the same account in from one address many times a minute, in
+parallel, which the authentication limit (10 a minute per address and per
+account) refuses with `429`. Start the API under test with
+`RATE_LIMIT_AUTH_PER_MINUTE=100000` (the browser fixture,
+`apps/api/test/browser-performance/server.ts`, sets it itself).
+
 The accessibility check is a **regression net, not a conformance claim**.
 Automation covers perhaps a third of the criteria — contrast, names, roles,
 structure. Whether an error message actually helps still needs a person.

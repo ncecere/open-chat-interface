@@ -17,6 +17,8 @@ const AUDITED_PATHS = new Map<string, string>([
   ['/sign-out', 'auth.signout'],
   ['/sign-in/sso', 'auth.signin.sso.start'],
   ['/forget-password', 'auth.password.reset_requested'],
+  // The endpoint's current name (Better Auth 1.4+); the line above is the old one.
+  ['/request-password-reset', 'auth.password.reset_requested'],
   ['/reset-password', 'auth.password.reset_completed'],
   ['/change-password', 'auth.password.changed'],
   ['/change-email', 'auth.email.change_requested'],

@@ -100,6 +100,41 @@ function scheduleWebhookDelivery(): void {
 }
 
 /**
+ * Queues deliveries for audit entries written inside a transaction (deletion
+ * events, `services/compliance/deletions.ts`), in that transaction: a
+ * rolled-back entry queues nothing, and a failure here fails the transaction
+ * rather than leaving an entry its webhooks never hear about.
+ */
+export async function enqueueWebhookEventsIn(
+  tx: Pick<typeof db, 'insert' | 'select'>,
+  entries: AuditEntry[],
+): Promise<number> {
+  // Read through the transaction, not the cache's own connection, which a
+  // transaction holding the last pooled connection would wait on forever.
+  const endpoints = await tx
+    .select()
+    .from(schema.webhookEndpoint)
+    .where(eq(schema.webhookEndpoint.enabled, true));
+  if (endpoints.length === 0) return 0;
+  const rows = entries.flatMap((entry) => {
+    const selected = endpoints.filter((endpoint) => actionSelected(endpoint, entry.action));
+    if (selected.length === 0) return [];
+    const body = webhookPayload(entry);
+    return selected.map((endpoint) => ({
+      endpointId: endpoint.id,
+      auditLogId: entry.id,
+      event: entry.action,
+      body,
+      maxAttempts: WEBHOOK_LIMITS.maxAttempts,
+    }));
+  });
+  if (rows.length === 0) return 0;
+  await tx.insert(schema.webhookDelivery).values(rows);
+  scheduleWebhookDelivery();
+  return rows.length;
+}
+
+/**
  * Queues one delivery per enabled endpoint that selected this action. Called
  * by `recordAudit` after the entry is written; never throws.
  */

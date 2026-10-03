@@ -136,6 +136,10 @@ export async function main(): Promise<void> {
     for (const key of Object.keys(process.env)) {
       if (/^(RETENTION_|RATE_LIMIT_|QUOTA_RESERVE_)/.test(key)) delete process.env[key];
     }
+    // The browser suites sign the same account in from one address, in
+    // parallel, far more often than the authentication limit (10 a minute per
+    // address and per account since v0.10) allows a person to.
+    process.env.RATE_LIMIT_AUTH_PER_MINUTE = '100000';
     delete process.env.DISPLAY_TIMEZONE;
     checkStopping();
 

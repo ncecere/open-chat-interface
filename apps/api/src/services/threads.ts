@@ -7,6 +7,7 @@ import { copyArtifactsToFork } from './artifacts/store.js';
 import { copyCompactionToFork } from './chat/compaction-fork.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
 import { notOnLegalHold } from './compliance/holds.js';
+import { destroyThreads } from './lifecycle/destroy.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 
@@ -36,17 +37,15 @@ export async function assertBranchingAllowed(role: UserRole): Promise<void> {
  * vanish in 24 hours must not linger for another month in a recovery bin.
  */
 export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<number> {
-  const expired = await db
-    .delete(schema.thread)
-    .where(
-      and(
-        eq(schema.thread.temporary, true),
-        lte(schema.thread.expiresAt, now),
-        // Kept (still invisible to their owner) while the owner is on legal hold.
-        notOnLegalHold(schema.thread.userId),
-      ),
-    )
-    .returning({ id: schema.thread.id });
+  const expired = await destroyThreads(
+    and(
+      eq(schema.thread.temporary, true),
+      lte(schema.thread.expiresAt, now),
+      // Kept (still invisible to their owner) while the owner is on legal hold.
+      notOnLegalHold(schema.thread.userId),
+    ),
+    { reason: 'temporary_expiry', actorUserId: null, skipLocked: true, all: true },
+  );
 
   return expired.length;
 }
@@ -214,7 +213,16 @@ export async function getOwnedThread(threadId: string, userId: string) {
   if (!thread) throw notFound('Thread not found');
 
   if (thread.temporary && (!thread.expiresAt || thread.expiresAt.getTime() <= Date.now())) {
-    await db.delete(schema.thread).where(eq(schema.thread.id, thread.id));
+    // Deleted now rather than at the next purge, except under legal hold,
+    // where it is kept (and stays invisible) like any other expired chat.
+    await destroyThreads(
+      and(
+        eq(schema.thread.id, thread.id),
+        eq(schema.thread.temporary, true),
+        notOnLegalHold(schema.thread.userId),
+      ),
+      { reason: 'temporary_expiry', actorUserId: null },
+    );
     throw notFound('Temporary chat has expired');
   }
 

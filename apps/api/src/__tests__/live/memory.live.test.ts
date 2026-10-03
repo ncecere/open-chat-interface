@@ -666,12 +666,22 @@ describe.skipIf(!available)('live user memory', () => {
       expect(await applyMemoryRetention(now)).toBe(2);
       expect((await memories()).map((row) => row.content)).toEqual(['Recent note']);
       expect(await memories(stranger)).toEqual([]);
-      const [event] = (await audits()).filter((row) => row.action === 'memory.delete');
-      expect(event).toMatchObject({
-        actorUserId: null,
-        metadata: { count: 2, people: 2, via: 'retention', retentionDays: 30 },
-      });
-      expect(JSON.stringify(event)).not.toContain('Old note');
+      // One deletion event per note (v0.10), with no actor and never the text.
+      const events = (await audits()).filter((row) => row.action === 'memory.delete');
+      expect(events).toHaveLength(2);
+      for (const event of events)
+        expect(event).toMatchObject({
+          actorUserId: null,
+          targetType: 'user',
+          metadata: {
+            count: 1,
+            via: 'retention',
+            retentionDays: 30,
+            deletion: { type: 'memory', reason: 'retention', permanent: true },
+          },
+        });
+      expect(new Set(events.map((event) => event.targetId)).size).toBe(2);
+      expect(JSON.stringify(events)).not.toContain('Old note');
     });
   });
 

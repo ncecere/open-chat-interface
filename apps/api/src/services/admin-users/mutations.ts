@@ -1,4 +1,4 @@
-import { eq, schema } from '@oci/db';
+import { eq, schema, sql } from '@oci/db';
 import type { createUserSchema, updateUserSchema } from '@oci/shared';
 import type { z } from 'zod';
 import { auth } from '../../auth/index.js';
@@ -7,6 +7,7 @@ import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { recordAudit } from '../audit.js';
+import { recordDeletions } from '../compliance/deletions.js';
 import {
   HELD_ACCOUNT_DELETION_MESSAGE,
   isLegalHoldViolation,
@@ -161,9 +162,8 @@ export async function deleteUser(actor: AdminUserActor, targetId: string) {
   // checking first gives the administrator a clear reason.
   if (await isOnLegalHold(targetId)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
 
-  let deleted: { email: string; role: string };
   try {
-    deleted = await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       // Lock every administrator first, so two administrators deleting each
       // other at the same time cannot both succeed and leave nobody in charge.
       const admins = await tx
@@ -182,21 +182,38 @@ export async function deleteUser(actor: AdminUserActor, targetId: string) {
       if (target.role === 'admin' && !admins.some((admin) => admin.id !== targetId)) {
         throw conflict(LAST_ADMIN_DELETION_MESSAGE);
       }
+      // Recorded first, in this transaction (the owner's email is read from the
+      // row about to go): everything the account owned goes with it, counted.
+      const [owned] = await tx.execute<Record<string, number>>(sql`
+        select
+          (select count(*) from "thread" where "user_id" = ${targetId})::int as conversations,
+          (select count(*) from "message" where "user_id" = ${targetId})::int as messages,
+          (select count(*) from "attachment" where "user_id" = ${targetId})::int as attachments,
+          (select count(*) from "artifact" where "user_id" = ${targetId})::int as artifacts,
+          (select count(*) from "project" where "user_id" = ${targetId})::int as projects,
+          (select count(*) from "user_memory" where "user_id" = ${targetId})::int as memories,
+          (select count(*) from "share_link" where "user_id" = ${targetId})::int as "shareLinks"
+      `);
+      await recordDeletions(tx, [
+        {
+          action: 'user.delete',
+          actorUserId: actor.id,
+          actorEmail: actor.email,
+          id: targetId,
+          ownerUserId: targetId,
+          reason: 'admin',
+          details: Object.fromEntries(
+            Object.entries(owned ?? {}).map(([key, value]) => [key, Number(value)]),
+          ),
+          // The account is gone; keep enough to say whose it was.
+          legacy: { email: target.email, role: target.role },
+        },
+      ]);
       await tx.delete(schema.user).where(eq(schema.user.id, targetId));
-      return target;
     });
   } catch (error) {
     if (isLegalHoldViolation(error)) throw conflict(HELD_ACCOUNT_DELETION_MESSAGE);
     throw error;
   }
-  await recordAudit({
-    actorUserId: actor.id,
-    actorEmail: actor.email,
-    action: 'user.delete',
-    targetType: 'user',
-    targetId,
-    // The account is gone; keep enough to say whose it was.
-    metadata: { email: deleted.email, role: deleted.role },
-  });
   return { ok: true };
 }

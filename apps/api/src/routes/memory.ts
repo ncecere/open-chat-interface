@@ -73,7 +73,7 @@ memoryRoutes.patch('/:id', async (c) => {
   return c.json({ memory: toMemoryEntry(row) });
 });
 
-/** Deletes one of the person's notes. */
+/** Deletes one of the person's notes; 409 while they are on legal hold. */
 memoryRoutes.delete('/:id', async (c) => {
   const user = currentUser(c);
   const removed = await deleteMemory(user.id, c.req.param('id'), 'settings');
@@ -81,7 +81,7 @@ memoryRoutes.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-/** Deletes every note the person has. */
+/** Deletes every note the person has; 409 while they are on legal hold. */
 memoryRoutes.delete('/', async (c) => {
   const user = currentUser(c);
   return c.json({ deleted: await deleteAllMemories(user.id) });

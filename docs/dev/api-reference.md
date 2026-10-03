@@ -309,7 +309,8 @@ Generated from 41 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET/POST | `/api/auth/*` | — |
+| GET/POST | `/api/auth/*` | Better Auth owns every other /api/auth/* path; sign-in, sign-up, password reset and verification are limited per client address and per account (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After). |
+| POST | `/api/auth/admin/remove-user` | Answers 404: accounts are deleted with DELETE /api/admin/users/:id, which checks legal holds and the last administrator and records a `user.delete` deletion event. |
 
 ## `routes/me.ts`
 
@@ -334,9 +335,9 @@ Generated from 41 route files.
 | --- | --- | --- |
 | GET | `/api/memory` | The person's switch, whether memory is offered to them, their notes newest first, and the limits. |
 | POST | `/api/memory` | Adds a note; an existing identical note is returned with `created: false`. |
-| DELETE | `/api/memory` | Deletes every note the person has. |
+| DELETE | `/api/memory` | Deletes every note the person has; 409 while they are on legal hold. |
 | PATCH | `/api/memory/:id` | Changes the text of one of the person's notes. |
-| DELETE | `/api/memory/:id` | Deletes one of the person's notes. |
+| DELETE | `/api/memory/:id` | Deletes one of the person's notes; 409 while they are on legal hold. |
 | PUT | `/api/memory/settings` | Switches the person's own memory on or off; on needs the instance and role to allow it. |
 | POST | `/api/memory/undo` | Reverses one `remember` or `forget` step of the person's own reply. |
 
@@ -363,10 +364,10 @@ Generated from 41 route files.
 | POST | `/api/projects` | Creates a project, up to the per-person limit. |
 | GET | `/api/projects/:id` | One of the person's projects; 404 for anyone else's. |
 | PATCH | `/api/projects/:id` | Renames a project or changes its instructions; only the sent fields change. |
-| DELETE | `/api/projects/:id` | Conversations are detached and kept; files are deleted and their storage released. |
+| DELETE | `/api/projects/:id` | Conversations are detached and kept; files are deleted and their storage released; 409 while the owner is on legal hold. |
 | GET | `/api/projects/:id/files` | The project's files, oldest first. |
 | POST | `/api/projects/:id/files` | Uploads through the same validation and storage path as chat attachments, so it also needs attachments to be allowed for the role and the instance, shares the upload rate limit, and counts against the storage allowance. |
-| DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright; its storage is released immediately. |
+| DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright, releasing its storage at once; 409 while the owner is on legal hold. |
 | GET | `/api/projects/sidebar` | The sidebar's project tree: each project with its conversation count and up to five newest unpinned conversations. |
 
 ## `routes/share-links.ts`

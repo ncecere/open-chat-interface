@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { auth } from '../auth/index.js';
 import { loadEnv } from '../config/env.js';
+import { authRateLimitMiddleware } from '../middleware/auth-rate-limit.js';
 import type { AppBindings } from '../middleware/context.js';
 import { adminRoutes } from './admin/index.js';
 import { artifactRoutes } from './artifacts.js';
@@ -28,7 +29,31 @@ export function createApiRoutes() {
   // Unauthenticated: the sign-in page renders the logo before anyone signs in.
   api.route('/branding', brandingRoutes);
 
-  // Better Auth owns every other /api/auth/* path.
+  // Sign-in, sign-up, password reset and verification: RATE_LIMIT_AUTH_PER_MINUTE.
+  api.use('/auth/*', authRateLimitMiddleware);
+
+  /**
+   * Answers 404: accounts are deleted with DELETE /api/admin/users/:id, which
+   * checks legal holds and the last administrator and records a `user.delete`
+   * deletion event. Better Auth's own endpoint would skip all but the
+   * database's legal hold trigger.
+   */
+  api.post('/auth/admin/remove-user', (c) =>
+    c.json(
+      {
+        code: 'NOT_FOUND',
+        message: 'Delete accounts under People → Users.',
+        error: { code: 'NOT_FOUND', message: 'Delete accounts under People → Users.' },
+      },
+      404,
+    ),
+  );
+
+  /**
+   * Better Auth owns every other /api/auth/* path; sign-in, sign-up, password
+   * reset and verification are limited per client address and per account
+   * (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After).
+   */
   api.on(['GET', 'POST'], '/auth/*', async (c) => {
     const response = await auth.handler(c.req.raw);
 

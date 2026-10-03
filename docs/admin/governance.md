@@ -30,7 +30,8 @@ For each role:
 
 Below the role tabs, **Instance-wide** holds the limits that apply to everybody
 regardless of role: sign-in attempts per minute (counted per IP address and per
-account), and the cost and tokens reserved while a response generates.
+account; see [below](#sign-in-attempts)), and the cost and tokens reserved
+while a response generates.
 
 ### Features and reasoning levels
 
@@ -139,8 +140,12 @@ offered only when all three are on, and never in temporary chats.
   the source (`tool` or `person`), how the change was made (`tool`,
   `settings`, `undo` or `retention`) and ids, never the text.
   `memory.settings.update` records a person switching memory on or off.
-  Retention writes one `memory.delete` per run with the number of notes and
-  people affected.
+  Since v0.10 every deleted note has its own `memory.delete`, a
+  [deletion event](compliance.md#deletion-events), including those removed by
+  retention (no actor) or by deleting all notes.
+- **Legal hold.** A person on [legal hold](compliance.md#legal-hold) cannot
+  delete notes (in Settings, with `forget` or by undoing a saved note), and
+  retention skips their notes.
 - **Export.** A person's full export includes their notes as `memory.json`.
   Deleting an account deletes its notes.
 
@@ -338,6 +343,34 @@ forgive uncertain spend or take over active generations.
 
 The amounts held while a response generates are the **Budget held per
 response** and **Tokens held per response** values under **Instance-wide**.
+
+### Sign-in attempts
+
+**Sign-in attempts per minute** (`RATE_LIMIT_AUTH_PER_MINUTE`, default 10)
+limits how fast credentials and tokens can be tried. It counts every request
+to sign in with a password or single sign-on, sign up, request or complete a
+password reset, and send or follow a verification link, successful or not, in
+two counters with the same limit:
+
+- **per client address**, the address the web container's proxy reports
+  ([behind another proxy](../OPERATIONS.md#behind-another-proxy-or-an-ingress), set `TRUSTED_PROXIES`), so one machine cannot try many accounts;
+- **per account**, the email address in the request, so many machines cannot
+  try one account.
+
+Past the limit the request is refused with `429 Too Many Requests` and a
+`Retry-After` header until the minute ends; the sign-in page shows *Too many
+attempts. Wait a minute and try again.* The first refusal in each minute for
+an address or account is audited as `auth.rate_limited` (the address, the
+account tried, the endpoint and which counter refused), so a flood of refused
+requests does not flood the audit log too. Refused requests never reach the
+sign-in code, so they are not also recorded as failed sign-ins.
+
+The counters live in Redis, so every API replica shares them; without Redis
+each replica counts on its own (as for the other limits). Many people behind
+one address, such as a campus network, share the per-address counter: raise
+the value if they meet it at the start of a class. Signing out, reading the
+session and changing a password while signed in are not counted. Better
+Auth's own built-in limiter still applies on top in production.
 
 ## Retention
 

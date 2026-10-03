@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, schema } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
+import { recordDeletions } from '../compliance/deletions.js';
 import { assertRoleFeature } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { adjustStorageUsage } from '../storage/usage.js';
@@ -124,6 +125,20 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
         .update(schema.attachment)
         .set({ deletedAt: new Date(), deletedReason: 'user' })
         .where(eq(schema.attachment.id, id));
+      await recordDeletions(tx, [
+        {
+          action: 'attachment.trash',
+          actorUserId: userId,
+          id,
+          ownerUserId: userId,
+          reason: 'user',
+          details: {
+            threadId: thread?.id ?? null,
+            messageId: row.messageId,
+            sizeBytes: row.sizeBytes,
+          },
+        },
+      ]);
       await adjustStorageUsage(tx, {
         organizationId: row.organizationId,
         userId,

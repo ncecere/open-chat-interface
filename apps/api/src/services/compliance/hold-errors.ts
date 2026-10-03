@@ -12,6 +12,13 @@ export const HELD_ACCOUNT_DELETION_MESSAGE =
 export const HELD_PERMANENT_DELETION_MESSAGE =
   'Permanent deletion is paused for this account by your organization. Deleted conversations stay in the trash.';
 
+/** Projects and project files have no trash, so removing them is permanent. */
+export const HELD_PROJECT_DELETION_MESSAGE =
+  'Deleting projects and project files is paused for this account by your organization. Conversations can still be moved to the trash.';
+
+export const HELD_MEMORY_DELETION_MESSAGE =
+  'Deleting memories is paused for this account by your organization.';
+
 /** True for the error the deletion trigger raises, however the driver wraps it. */
 export function isLegalHoldViolation(error: unknown): boolean {
   let cause = error;

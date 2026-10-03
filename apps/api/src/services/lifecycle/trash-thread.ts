@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, schema } from '@oci/db';
 import type { db } from '../../db/index.js';
+import { recordDeletions } from '../compliance/deletions.js';
 import { adjustStorageUsage } from '../storage/quota.js';
 
 export type DeleteReason = 'user' | 'retention' | 'admin';
@@ -19,6 +20,8 @@ export async function trashLockedThread(
   thread: LockedThread,
   reason: DeleteReason,
   now: Date,
+  /** Who moved it; defaults to the owner for `user` and nobody (a job) otherwise. */
+  actorUserId: string | null = reason === 'user' ? thread.userId : null,
 ): Promise<void> {
   // Children stay valid conversations; only the stale navigation link goes.
   await tx
@@ -51,6 +54,17 @@ export async function trashLockedThread(
     .where(and(eq(schema.message.threadId, thread.id), isNull(schema.attachment.deletedAt)))
     .orderBy(schema.attachment.id)
     .for('update', { of: schema.attachment });
+
+  await recordDeletions(tx, [
+    {
+      action: 'conversation.trash',
+      actorUserId,
+      id: thread.id,
+      ownerUserId: thread.userId,
+      reason,
+      details: { attachments: attachments.length },
+    },
+  ]);
 
   if (attachments.length === 0) return;
 

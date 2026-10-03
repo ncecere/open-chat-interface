@@ -89,7 +89,7 @@ projectRoutes.patch('/:id', async (c) => {
   return c.json({ project: await updateProject(c.req.param('id'), user.id, patch) });
 });
 
-/** Conversations are detached and kept; files are deleted and their storage released. */
+/** Conversations are detached and kept; files are deleted and their storage released; 409 while the owner is on legal hold. */
 projectRoutes.delete('/:id', async (c) => {
   const user = currentUser(c);
   const result = await deleteProject(c.req.param('id'), user.id);
@@ -175,7 +175,7 @@ projectRoutes.post(
   },
 );
 
-/** Removes the file outright; its storage is released immediately. */
+/** Removes the file outright, releasing its storage at once; 409 while the owner is on legal hold. */
 projectRoutes.delete('/:id/files/:fileId', async (c) => {
   const user = currentUser(c);
   await deleteProjectFile(c.req.param('id'), c.req.param('fileId'), user.id);

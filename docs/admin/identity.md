@@ -36,6 +36,11 @@ neither local sign-in nor an enabled single sign-on provider is available, the
 page and the [setup checklist](first-run.md#4-offer-a-way-to-sign-in) say that
 nobody can sign in.
 
+Sign-in, sign-up, password reset and verification are limited to
+**Sign-in attempts per minute** per client address and per account (default
+10); past it the request is refused with `429` for the rest of the minute. See
+[sign-in attempts](governance.md#sign-in-attempts).
+
 Turning local authentication off still admits a **verified administrator**,
 deliberately, so the setting cannot lock everybody out. That safety net depends
 on at least one administrator having a verified address and a password somebody

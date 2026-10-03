@@ -18,6 +18,16 @@ A person's own changes in Settings → Account are recorded too: their name
 (`auth.profile.updated`) and signing devices out (`auth.session.revoked`,
 `auth.sessions.revoked_others`).
 
+Attempts refused by the [sign-in limit](governance.md#sign-in-attempts) are
+recorded as `auth.rate_limited`, once per minute per address or account.
+
+**Deletions** — every conversation, file, project, memory note and account
+moved to the trash, restored or deleted, by the person, an administrator or a
+background job (`conversation.trash`, `conversation.delete`,
+`attachment.delete`, `project.delete`, `memory.delete`, `user.delete` and
+others). Each names what was deleted, whose it was and why, never its
+content; see [deletion events](compliance.md#deletion-events).
+
 Only outcomes are recorded. No credentials, no tokens, no request bodies.
 
 ### Searching it

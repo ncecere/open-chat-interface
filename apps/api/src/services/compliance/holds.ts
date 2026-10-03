@@ -7,16 +7,22 @@ import { getDefaultOrganizationId } from '../organization.js';
 
 export {
   HELD_ACCOUNT_DELETION_MESSAGE,
+  HELD_MEMORY_DELETION_MESSAGE,
   HELD_PERMANENT_DELETION_MESSAGE,
+  HELD_PROJECT_DELETION_MESSAGE,
   isLegalHoldViolation,
 } from './hold-errors.js';
 
 /**
  * Legal holds: named people whose data must be preserved. While a hold is
- * active, retention, trash purging, temporary chat expiry, a person's own
- * permanent deletion and account deletion all skip that person's data. A
- * database trigger (migration 0034) refuses to delete a held account on any
- * code path, including Better Auth's own admin endpoints.
+ * active, retention, trash purging, temporary chat expiry, memory retention,
+ * usage-event and share-link pruning skip that person's data; their own
+ * permanent deletions (delete forever, empty trash, deleting a project or a
+ * project file, deleting memories) and account deletion are refused. Moving a
+ * conversation or a file to the trash still works. A database trigger
+ * (migration 0034) refuses to delete a held account on any code path,
+ * including Better Auth's own admin endpoints. Every deletion path and how it
+ * treats a hold is listed in `__tests__/unit/legal-hold-paths.unit.test.ts`.
  *
  * A hold takes effect for work that starts after it is placed: a purge that
  * is already deleting when the hold commits is not rolled back.
@@ -34,8 +40,12 @@ export function notOnLegalHold(userColumn: unknown): ReturnType<typeof sql> {
       and ${schema.legalHold.liftedAt} is null)`;
 }
 
-export async function isOnLegalHold(userId: string): Promise<boolean> {
-  const [row] = await db
+export async function isOnLegalHold(
+  userId: string,
+  /** A transaction, to check under the locks it already holds. */
+  executor: Pick<typeof db, 'select'> = db,
+): Promise<boolean> {
+  const [row] = await executor
     .select({ id: schema.legalHold.id })
     .from(schema.legalHold)
     .where(and(eq(schema.legalHold.userId, userId), isNull(schema.legalHold.liftedAt)))

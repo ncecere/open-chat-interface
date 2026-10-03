@@ -105,6 +105,8 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
  * non-UTC calendar window can be evaluated exactly, and only recent ones are
  * ever read for that. Pending and unknown rows are never pruned: a producer may
  * still report usage, and amendments need the event's identity and price snapshot.
+ * Nor are the events of people on legal hold: they record what each person
+ * used, when and with which model.
  */
 export async function pruneUsageEvents(now: Date = new Date()): Promise<number> {
   const { usageEventRetentionDays } = await getRetentionSettings();
@@ -135,6 +137,7 @@ export async function pruneUsageEvents(now: Date = new Date()): Promise<number> 
         // Preserve both active runs and unresolved accounting identities.
         eq(schema.usageEvent.pending, false),
         eq(schema.usageEvent.usageUnknown, false),
+        notOnLegalHold(schema.usageEvent.userId),
       ),
     )
     .returning({ id: schema.usageEvent.id });
@@ -146,9 +149,10 @@ export async function pruneUsageEvents(now: Date = new Date()): Promise<number> 
  * Prunes audit history, retaining security-relevant actions regardless of age.
  * Those are the entries an incident review needs and they are low volume.
  *
- * Also kept: entries by or about a person on legal hold, and, while the
- * compliance export is on, entries it has not exported yet, so retention can
- * never open a gap in the export.
+ * Also kept: entries by or about a person on legal hold (including deletion
+ * events for their data, which name them as `metadata.deletion.ownerUserId`),
+ * and, while the compliance export is on, entries it has not exported yet, so
+ * retention can never open a gap in the export.
  */
 export async function pruneAuditLog(now: Date = new Date()): Promise<number> {
   const { auditLogRetentionDays } = await getRetentionSettings();
@@ -169,7 +173,8 @@ export async function pruneAuditLog(now: Date = new Date()): Promise<number> {
           where ${schema.legalHold.liftedAt} is null
             and (${schema.legalHold.userId} = ${schema.auditLog.actorUserId}
               or (${schema.auditLog.targetType} = 'user'
-                and ${schema.legalHold.userId} = ${schema.auditLog.targetId})))`,
+                and ${schema.legalHold.userId} = ${schema.auditLog.targetId})
+              or ${schema.legalHold.userId} = ${schema.auditLog.metadata}->'deletion'->>'ownerUserId'))`,
       ),
     )
     .returning({ id: schema.auditLog.id });
@@ -198,22 +203,28 @@ export async function pruneExpiredQuotaOverrides(now: Date = new Date()): Promis
   return removed.length;
 }
 
-/** Removes expired and long-revoked share links. */
+/**
+ * Removes expired and long-revoked share links, except those of people on
+ * legal hold: a link records what was shared, when and how often it was read.
+ */
 export async function pruneShareLinks(now: Date = new Date()): Promise<number> {
   const cutoff = daysAgo(30, now);
 
   const removed = await db
     .delete(schema.shareLink)
     .where(
-      or(
-        and(
-          sql`${schema.shareLink.expiresAt} is not null`,
-          lte(schema.shareLink.expiresAt, cutoff),
+      and(
+        or(
+          and(
+            sql`${schema.shareLink.expiresAt} is not null`,
+            lte(schema.shareLink.expiresAt, cutoff),
+          ),
+          and(
+            sql`${schema.shareLink.revokedAt} is not null`,
+            lte(schema.shareLink.revokedAt, cutoff),
+          ),
         ),
-        and(
-          sql`${schema.shareLink.revokedAt} is not null`,
-          lte(schema.shareLink.revokedAt, cutoff),
-        ),
+        notOnLegalHold(schema.shareLink.userId),
       ),
     )
     .returning({ id: schema.shareLink.id });
