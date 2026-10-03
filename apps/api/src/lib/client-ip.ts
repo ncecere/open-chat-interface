@@ -1,28 +1,32 @@
+import { isIP } from 'node:net';
 import type { Context } from 'hono';
 
 /**
- * The client address, as far as the proxy in front of this application
- * reports it.
+ * The client address, as the proxy directly in front of the API reports it.
  *
- * Both headers are supplied by whatever sits in front, so neither is
- * trustworthy on its own — a client can send `x-forwarded-for` directly if the
- * deployment exposes the application without a proxy. It is recorded as
- * evidence for an investigation rather than used to make an access decision,
- * which is the only use that tolerates a spoofable value.
+ * In the bundled deployment that proxy is the web container's Caddy. Caddy
+ * replaces `X-Forwarded-For` with the single client address it determined —
+ * the connecting peer, or, for peers listed in `TRUSTED_PROXIES`, the address
+ * those proxies forwarded — and removes `CF-Connecting-IP` and `X-Real-IP`,
+ * which a client could otherwise send straight through (docker/Caddyfile).
  *
- * The left-most entry of `x-forwarded-for` is the original client; the rest are
- * intermediaries appended on the way through.
+ * So the API trusts that one header and, of its entries, only the right-most:
+ * the one the nearest proxy wrote. Anything to its left arrived from further
+ * out and may be whatever the client sent. A value that is not an IP address
+ * is not recorded.
+ *
+ * Better Auth reads the same header for the address on sessions and for its
+ * own limits, and accepts it only as a single address, which is what Caddy
+ * sends.
  */
 export function clientIpFromHeaders(headers: Headers | undefined): string | null {
-  if (!headers) return null;
-  const cloudflare = headers.get('cf-connecting-ip')?.trim();
-  if (cloudflare) return cloudflare;
-
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  if (forwarded) return forwarded;
-
-  const real = headers.get('x-real-ip')?.trim();
-  return real || null;
+  const entries = headers
+    ?.get('x-forwarded-for')
+    ?.split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const nearest = entries?.at(-1);
+  return nearest && isIP(nearest) ? nearest : null;
 }
 
 /** Hono adapter; authentication hooks use the same resolver with raw Headers. */

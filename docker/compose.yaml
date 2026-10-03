@@ -9,6 +9,10 @@ services:
     restart: unless-stopped
     environment:
       API_UPSTREAM: api:3000
+      # Behind another proxy or an ingress: its addresses (space-separated IPs
+      # or CIDR ranges), so the real client address reaches audit, sessions and
+      # rate limits. Unset trusts nothing in front. See docs/OPERATIONS.md.
+      TRUSTED_PROXIES:
     ports:
       - '${OCI_PORT:-8080}:8080'
     depends_on:
@@ -25,13 +29,16 @@ services:
       NODE_ENV: production
       API_PORT: 3000
       APP_URL: ${APP_URL:-http://localhost:8080}
-      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-}
+      # No value: taken from your shell or .env when set, and left out of the
+      # container entirely when not (rather than passed as an empty string).
+      AUTH_TRUSTED_ORIGINS:
       DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
       REDIS_URL: redis://redis:6379
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
-      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      # Leave INITIAL_ADMIN_PASSWORD unset to get a one-time password in the logs.
+      INITIAL_ADMIN_EMAIL:
+      INITIAL_ADMIN_PASSWORD:
       STORAGE_LOCAL_PATH: /data/storage
       # Leave true for a single instance. Set false when the migrate job below
       # owns schema changes, which is the usual pattern once replicas > 1.
