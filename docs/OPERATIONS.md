@@ -214,14 +214,21 @@ authorization servers) where egress is filtered.
 
 #### Conversation compaction (migration 0028)
 
-Migration `0028_conversation_compaction` creates one new, empty table,
-`conversation_compaction`, cascading from the thread, the user and the message
-where a summary's kept messages begin. It rewrites and locks nothing existing,
-so it applies instantly, and v0.8 replicas never read it. From v0.9, long
-conversations are summarised instead of losing their oldest turns; each summary
-call is a usage event of its own (no message counted) for the conversation's
-model. Administrators can turn automatic summaries off under **General →
-Summarise long conversations**
+Migration `0028_conversation_compaction` creates two new, empty tables:
+`conversation_compaction` (the summaries), cascading from the thread, the user
+and the message where a summary's kept messages begin, and
+`conversation_compaction_job` (at most one queued or running summary request
+per conversation), cascading from the thread and the user. It rewrites and
+locks nothing existing, so it applies instantly, and v0.8 replicas never read
+it. From v0.9, long conversations are summarised in the background instead of
+losing their oldest turns; each summary call is a usage event of its own (no
+message counted) for the conversation's model. Summaries are made by the
+`chat.compact-conversations` background job (every minute, plus an immediate
+in-process start after each request), with the background jobs that already
+run on every replica. Replicas claim requests with a lease, so several never
+summarise one conversation twice, and a request interrupted by a restart is
+taken over after 15 minutes. Administrators can turn automatic
+summaries off under **General → Summarise long conversations**
 ([Instance settings](admin/instance-settings.md#general)).
 
 #### Meaning-based search and pgvector (migration 0029)

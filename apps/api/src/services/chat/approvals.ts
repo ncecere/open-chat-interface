@@ -251,17 +251,20 @@ export async function setupApprovalContinuation(
           refused: claimed.answered.refused,
           existingParts: claimed.answered.parts,
         },
-        // Compaction applies to a continued reply as to a new one.
+        // A continued reply recovers from an overlong input like a new one:
+        // fewer turns, the reply being continued still last.
         recoverOverflow: async () => {
-          const rebuilt = await buildModelContext(context, reply.id, { compact: 'overflow' });
-          return rebuilt.compacted
-            ? {
-                uiMessages: [...rebuilt.uiMessages, continuing],
-                system: rebuilt.system,
-                contextLimited: rebuilt.contextLimited,
-              }
-            : null;
+          if (model.sentHistoryUnits <= 0) return null;
+          const rebuilt = await buildModelContext(context, reply.id, {
+            maxHistoryUnits: Math.floor(model.sentHistoryUnits / 2),
+          });
+          return {
+            uiMessages: [...rebuilt.uiMessages, continuing],
+            system: rebuilt.system,
+            contextLimited: rebuilt.contextLimited,
+          };
         },
+        compactionCheck: model.compactionCheck,
       },
       run: {
         ...resources,

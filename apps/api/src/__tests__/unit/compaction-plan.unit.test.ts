@@ -2,11 +2,14 @@ import { APICallError, RetryError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
   chunkTranscript,
+  compactionDue,
   groupTurns,
   isContextOverflowError,
+  SOFT_COMPACTION_RATIO,
   selectCutPoint,
   serializeConversation,
   serializeMessage,
+  softThresholdUnits,
   summaryPrompt,
   TOOL_TEXT_LIMIT,
   truncateText,
@@ -104,6 +107,27 @@ describe('compaction cut point', () => {
     expect(cutAt(sincePreviousCut, 1_000)).toBeNull();
     // Index 0 (the previous cut) is never returned as the new cut.
     expect(selectCutPoint(groups(sincePreviousCut), 1_000)).toBeNull();
+  });
+});
+
+describe('background compaction threshold', () => {
+  it('is three quarters of the input budget', () => {
+    expect(SOFT_COMPACTION_RATIO).toBe(0.75);
+    expect(softThresholdUnits(14_488)).toBe(10_866);
+    expect(softThresholdUnits(128_000)).toBe(96_000);
+    expect(softThresholdUnits(3)).toBe(2);
+  });
+
+  it('is due only above the threshold', () => {
+    expect(compactionDue({ historyUnits: 7_500, budgetUnits: 10_000 })).toBe(false);
+    expect(compactionDue({ historyUnits: 7_501, budgetUnits: 10_000 })).toBe(true);
+    expect(compactionDue({ historyUnits: 0, budgetUnits: 10_000 })).toBe(false);
+    expect(compactionDue({ historyUnits: 50_000, budgetUnits: 10_000 })).toBe(true);
+  });
+
+  it('is due whenever a turn already had to leave turns out', () => {
+    expect(compactionDue({ historyUnits: 10, budgetUnits: 10_000, limited: true })).toBe(true);
+    expect(compactionDue({ historyUnits: 10, budgetUnits: 10_000, limited: false })).toBe(false);
   });
 });
 

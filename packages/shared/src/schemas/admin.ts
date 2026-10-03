@@ -120,8 +120,9 @@ export const instanceSettingsSchema = z.object({
     .max(MAX_TOOL_STEPS)
     .default(DEFAULT_MAX_TOOL_STEPS),
   /**
-   * Summarise a conversation's earlier turns when it outgrows the model's
-   * input, instead of dropping them. People can still compact by hand when off.
+   * Summarise a conversation's earlier turns in the background when it nears
+   * the model's input limit, instead of dropping them. People can still ask
+   * for a summary themselves when off.
    */
   autoCompact: z.boolean().default(true),
   /**

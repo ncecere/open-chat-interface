@@ -29,14 +29,19 @@ says the limit was reached. A higher limit lets a model research more thoroughly
 cost of more usage per reply. API: `PATCH /api/admin/settings` with
 `maxToolSteps`.
 
-**Summarise long conversations** (on by default): when a conversation
-outgrows the model's input, its earlier messages are summarised by the
-conversation's own model and the summary is sent in their place, instead of
-leaving them out. The summary call counts towards the person's usage as its
-own usage event (no message is counted). It also governs the single retry
-after a provider reports an input as too long. Off, the oldest turns are left
-out as in v0.8, and people can still use **Compact conversation** themselves.
-Messages are never changed or deleted either way; see
+**Summarise long conversations** (on by default): once a conversation takes
+up about three quarters of its model's input budget, its earlier messages are
+summarised in the background by the conversation's own model, and later turns
+are sent the summary in their place instead of leaving them out. Summaries are
+never made while a reply waits, and never block or refuse sending, retrying or
+approving. Each summary counts towards the person's usage as its own usage
+event (no message is counted) and is skipped, and tried again later, while the
+person's allowance is spent. Off, no summary is queued automatically (requests
+already queued are dropped) and the oldest turns are left out as in v0.8;
+people can still use **Summarise earlier messages now** themselves, and
+summaries made earlier stay in use. The single retry after a provider reports
+an input as too long leaves older turns out and does not depend on this
+switch. Messages are never changed or deleted either way; see
 [Long conversations](../user/conversations.md#long-conversations). API:
 `PATCH /api/admin/settings` with `autoCompact`.
 

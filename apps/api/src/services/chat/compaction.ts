@@ -1,15 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, gte, inArray, isNull, notInArray, schema, sql } from '@oci/db';
-import type { CompactionReason, ConversationCompaction, UserRole } from '@oci/shared';
+import { and, desc, eq, gte, inArray, isNull, schema, sql } from '@oci/db';
+import {
+  type CompactionReason,
+  type ConversationCompaction,
+  ERROR_CODES,
+  type UserRole,
+} from '@oci/shared';
 import { generateText } from 'ai';
 import { db } from '../../db/index.js';
-import { AppError, conflict, providerError, validationFailed } from '../../lib/errors.js';
+import { AppError, quotaExceeded, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { isImage } from '../attachments/validate.js';
 import {
-  modelPricing,
+  allowanceExhausted,
   releaseReservation,
-  reserveQuota,
   reserveQuotaForRun,
   settleReservation,
   type UsageReservation,
@@ -23,9 +27,18 @@ import {
   SUMMARY_SYSTEM,
   selectCutPoint,
   serializeConversation,
+  softThresholdUnits,
   summaryPrompt,
+  withSummary,
 } from './compaction-plan.js';
-import { contextBudget, IMAGE_INPUT_UNITS, messageCost } from './context-budget.js';
+import {
+  contextBudget,
+  IMAGE_INPUT_UNITS,
+  MAX_HISTORY_BYTES,
+  MAX_HISTORY_MESSAGES,
+  messageCost,
+  textCost,
+} from './context-budget.js';
 import { boundedParts, payloadBytes } from './context-history.js';
 import { historyParts } from './message-parts.js';
 import { activeMessage } from './reply-path.js';
@@ -37,6 +50,8 @@ import type { TurnContext } from './turn-context.js';
  * summarises the turns before a cut (plus any previous summary) with the
  * conversation's own model and records it; the model is then sent the summary
  * and the turns from the cut on. Messages are never changed or deleted.
+ * Summaries are made only in the background (compaction-queue.ts); a reply
+ * uses the latest one already recorded and never waits for a new one.
  */
 
 type CompactionRow = typeof schema.conversationCompaction.$inferSelect;
@@ -47,8 +62,6 @@ type SummaryModel = Pick<
   'slug' | 'languageModel' | 'contextWindow' | 'maxOutputTokens'
 >;
 type SpanMessage = { id: string; role: 'user' | 'assistant'; parts: unknown };
-/** A stored message's place in the thread, for "before this message" bounds. */
-type MessageBound = { position: number; createdAt: Date; id: string };
 
 /** Messages read for one compaction: newest first, then trimmed to these bounds. */
 const MAX_SPAN_MESSAGES = 2000;
@@ -116,17 +129,12 @@ export async function latestCompaction(
 }
 
 /**
- * The active-path messages from the previous cut (or the start) up to, not
- * including, `before`. Bounded like model context: newest first, so a backlog
- * too large to read loses its oldest messages, never the recent ones.
+ * The active-path messages from the previous cut (or the start) on. Bounded
+ * like model context: newest first, so a backlog too large to read loses its
+ * oldest messages, never the recent ones. The newest turn (possibly still
+ * generating) is read only to size it: it is always kept, never summarised.
  */
-async function loadSpan(input: {
-  threadId: string;
-  userId: string;
-  fromPosition: number | null;
-  before: MessageBound | null;
-  excludeIds: string[];
-}) {
+async function loadSpan(input: { threadId: string; userId: string; fromPosition: number | null }) {
   const candidates = await db
     .select({ id: schema.message.id, bytes: payloadBytes })
     .from(schema.message)
@@ -137,11 +145,6 @@ async function loadSpan(input: {
         inArray(schema.message.role, ['user', 'assistant']),
         activeMessage(),
         input.fromPosition == null ? undefined : gte(schema.message.position, input.fromPosition),
-        input.excludeIds.length ? notInArray(schema.message.id, input.excludeIds) : undefined,
-        input.before
-          ? sql`(${schema.message.position}, ${schema.message.createdAt}, ${schema.message.id})
-      < (${input.before.position}, ${input.before.createdAt.toISOString()}::timestamptz, ${input.before.id})`
-          : undefined,
       ),
     )
     .orderBy(desc(schema.message.position), desc(schema.message.createdAt), desc(schema.message.id))
@@ -153,16 +156,17 @@ async function loadSpan(input: {
     ids.push(row.id);
     bytes += row.bytes;
   }
-  if (!ids.length) return [];
+  if (!ids.length) return { messages: [], bytes };
   const rows = await db
     .select({ id: schema.message.id, role: schema.message.role, parts: boundedParts })
     .from(schema.message)
     .where(and(inArray(schema.message.id, ids), eq(schema.message.threadId, input.threadId)));
   const byId = new Map(rows.map((row) => [row.id, row]));
-  return ids.reverse().flatMap((id) => {
+  const messages = ids.reverse().flatMap((id) => {
     const row = byId.get(id);
     return row ? [row as SpanMessage] : [];
   });
+  return { messages, bytes };
 }
 
 /** Estimated input units of each message's files, as model context counts them. */
@@ -207,23 +211,22 @@ type CompactionPlan = {
  * Where to cut and what to summarise. Keeps the newest turns up to
  * `keepUnits` (with `atMostHalf`, also at most half of what is there now, so
  * a request always summarises something once there are two turns). Null when
- * the cut would not move past the previous one.
+ * the cut would not move past the previous one, or when `dueAboveUnits` is
+ * given and the history the model would receive (the previous summary plus
+ * the turns since its cut) is not above it nor near the history ceilings.
  */
 async function planCompaction(input: {
   threadId: string;
   userId: string;
   previous: ActiveCompaction | null;
-  before: MessageBound | null;
-  excludeIds: string[];
   keepUnits: number;
   atMostHalf?: boolean;
+  dueAboveUnits?: number;
 }): Promise<CompactionPlan | null> {
-  const messages = await loadSpan({
+  const { messages, bytes } = await loadSpan({
     threadId: input.threadId,
     userId: input.userId,
     fromPosition: input.previous?.firstKeptPosition ?? null,
-    before: input.before,
-    excludeIds: input.excludeIds,
   });
   const files = await attachmentUnits(messages.map((message) => message.id));
   const groups = groupTurns(
@@ -233,6 +236,14 @@ async function planCompaction(input: {
         .units + (files.get(message.id) ?? 0),
   );
   const total = groups.reduce((sum, group) => sum + group.units, 0);
+  const summaryUnits = input.previous ? textCost(withSummary('', input.previous.summary)).units : 0;
+  // Due past the soft threshold, or when the history ceilings (messages,
+  // bytes) are as close, since those also make a turn leave turns out.
+  const due =
+    total + summaryUnits > (input.dueAboveUnits ?? -1) ||
+    messages.length > softThresholdUnits(MAX_HISTORY_MESSAGES) ||
+    bytes > softThresholdUnits(MAX_HISTORY_BYTES);
+  if (!due) return null;
   const keep = input.atMostHalf
     ? Math.min(input.keepUnits, Math.floor(total / 2))
     : input.keepUnits;
@@ -251,6 +262,27 @@ async function planCompaction(input: {
     // Units are UTF-8 bytes; four per token is the usual rough figure.
     tokensSummarized: Math.ceil(units / 4),
   };
+}
+
+/**
+ * Room for transcript in one summariser call, beside its instructions, the
+ * previous summary and the summary it writes. Refused when too small.
+ */
+function summaryChunkUnits(
+  model: SummaryModel,
+  previousSummary: string | null,
+  instructions: string | null | undefined,
+): number {
+  const budget = contextBudget(model);
+  const fixed =
+    SUMMARY_PROMPT_OVERHEAD +
+    Buffer.byteLength(SUMMARY_SYSTEM) +
+    Buffer.byteLength(instructions ?? '') +
+    Math.max(Buffer.byteLength(previousSummary ?? ''), summaryMaxTokens(budget) * 4);
+  const chunkUnits = budget.units - fixed;
+  if (chunkUnits < MIN_CHUNK_UNITS)
+    throw validationFailed('The model’s input limit is too small to summarise this conversation');
+  return chunkUnits;
 }
 
 type Tally = {
@@ -273,17 +305,9 @@ async function summarize(
   instructions: string | null | undefined,
   tally: Tally,
 ): Promise<string> {
-  const budget = contextBudget(model);
-  const maxOutputTokens = summaryMaxTokens(budget);
+  const maxOutputTokens = summaryMaxTokens(contextBudget(model));
   let summary = plan.previous?.summary ?? null;
-  const fixed =
-    SUMMARY_PROMPT_OVERHEAD +
-    Buffer.byteLength(SUMMARY_SYSTEM) +
-    Buffer.byteLength(instructions ?? '') +
-    Math.max(Buffer.byteLength(summary ?? ''), maxOutputTokens * 4);
-  const chunkUnits = budget.units - fixed;
-  if (chunkUnits < MIN_CHUNK_UNITS)
-    throw validationFailed('The model’s input limit is too small to summarise this conversation');
+  const chunkUnits = summaryChunkUnits(model, summary, instructions);
   const turns = groupTurns(plan.summarized, () => 0)
     .map((group) => serializeConversation(group.messages))
     .filter((text) => text.length > 0);
@@ -312,33 +336,21 @@ async function summarize(
 
 /**
  * The summary call is its own usage event (no message counted), with the
- * compaction's id. A manual compaction is admitted like a reply and refused
- * when the person's allowance is spent; one made during a reply belongs to a
- * turn that was already admitted, so it is recorded without a second check.
+ * compaction's id. Every summary is made in the background, outside any
+ * reply, so it is admitted against the person's allowance like a reply: a
+ * spent allowance refuses it (and the queue tries again later).
  */
-async function openUsage(
+function openUsage(
   user: { id: string; role: UserRole },
   modelSlug: string,
   id: string,
-  admitted: boolean,
 ): Promise<UsageReservation> {
-  if (admitted)
-    return reserveQuotaForRun({
-      userId: user.id,
-      role: user.role,
-      modelSlug,
-      runId: id,
-      messageCount: 0,
-    });
-  return reserveQuota({
+  return reserveQuotaForRun({
     userId: user.id,
     role: user.role,
     modelSlug,
     runId: id,
     messageCount: 0,
-    policies: [],
-    pricing: await modelPricing(modelSlug),
-    reserve: { costMicros: 0, tokens: 0 },
   });
 }
 
@@ -359,33 +371,69 @@ async function settle(reservation: UsageReservation, tally: Tally) {
   }
 }
 
-/** Records the compaction unless another one was recorded since the plan was made. */
+/**
+ * Records the compaction unless its input changed while it was being made.
+ * The newest cut wins: when another compaction was recorded meanwhile, this
+ * one is kept only if it reaches further (its summary carries everything
+ * before its own cut forward, so it stands on its own). It is discarded when
+ * the conversation was trashed or expired, or when any message it summarised
+ * or its first kept message is gone or no longer on the active path.
+ */
 async function commitCompaction(
   values: typeof schema.conversationCompaction.$inferInsert,
-  previousId: string | null,
+  plan: CompactionPlan,
 ): Promise<ActiveCompaction | null> {
   return db.transaction(async (tx) => {
-    await lockChatThread(tx, values.threadId, values.userId);
+    try {
+      // A short row lock that orders this with other commits. It is not the
+      // reply claim: sending, retrying and approving never wait on a summary.
+      await lockChatThread(tx, values.threadId, values.userId);
+    } catch (error) {
+      if (error instanceof AppError && error.status === 404) return null;
+      throw error;
+    }
+    const [kept] = await tx
+      .select({ position: schema.message.position, role: schema.message.role })
+      .from(schema.message)
+      .where(
+        and(
+          eq(schema.message.id, values.firstKeptMessageId),
+          eq(schema.message.threadId, values.threadId),
+          activeMessage(),
+        ),
+      );
+    if (kept?.role !== 'user') return null;
     const [latest] = await tx
-      .select({ id: schema.conversationCompaction.id })
+      .select({ id: schema.conversationCompaction.id, position: schema.message.position })
       .from(schema.conversationCompaction)
+      .innerJoin(
+        schema.message,
+        eq(schema.message.id, schema.conversationCompaction.firstKeptMessageId),
+      )
       .where(eq(schema.conversationCompaction.threadId, values.threadId))
       .orderBy(
         desc(schema.conversationCompaction.createdAt),
         desc(schema.conversationCompaction.id),
       )
       .limit(1);
-    if ((latest?.id ?? null) !== previousId) return null;
-    const [kept] = await tx
-      .select({ position: schema.message.position })
-      .from(schema.message)
-      .where(
-        and(
-          eq(schema.message.id, values.firstKeptMessageId),
-          eq(schema.message.threadId, values.threadId),
-        ),
-      );
-    if (!kept) return null;
+    if (latest && latest.id !== (plan.previous?.id ?? null) && latest.position >= kept.position)
+      return null;
+    const ids = plan.summarized.map((message) => message.id);
+    let present = 0;
+    for (let index = 0; index < ids.length; index += 1000) {
+      const [row] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.message)
+        .where(
+          and(
+            inArray(schema.message.id, ids.slice(index, index + 1000)),
+            eq(schema.message.threadId, values.threadId),
+            activeMessage(),
+          ),
+        );
+      present += Number(row?.count ?? 0);
+    }
+    if (present !== ids.length) return null;
     const [row] = await tx
       .insert(schema.conversationCompaction)
       .values({ ...values, createdAt: new Date() })
@@ -394,7 +442,11 @@ async function commitCompaction(
   });
 }
 
-/** Summarise, account for the call, and record. Null when another compaction won. */
+/**
+ * Summarise, account for the call, and record. Null when the result was
+ * discarded (see commitCompaction). A spent allowance throws QUOTA_EXCEEDED
+ * before any model call.
+ */
 async function runCompaction(
   plan: CompactionPlan,
   options: {
@@ -403,11 +455,10 @@ async function runCompaction(
     model: SummaryModel;
     reason: CompactionReason;
     instructions?: string | null;
-    admitted: boolean;
   },
 ): Promise<ActiveCompaction | null> {
   const id = randomUUID();
-  const reservation = await openUsage(options.user, options.model.slug, id, options.admitted);
+  const reservation = await openUsage(options.user, options.model.slug, id);
   const tally: Tally = {
     inputTokens: 0,
     outputTokens: 0,
@@ -446,112 +497,110 @@ async function runCompaction(
       tokensIn: tally.calls && tally.complete ? tally.inputTokens : null,
       tokensOut: tally.calls && tally.complete ? tally.outputTokens : null,
     },
-    plan.previous?.id ?? null,
+    plan,
   );
 }
 
-/**
- * Compaction during a reply (automatic, or after the provider reported the
- * input too long). Best effort: on any failure the reply goes ahead without
- * it, leaving the oldest turns out as before. Returns the compaction now in
- * use when it changed, otherwise null.
- */
-export async function compactForTurn(input: {
-  context: Pick<TurnContext, 'user' | 'thread' | 'resolved'>;
-  reason: Exclude<CompactionReason, 'manual'>;
-  previous: ActiveCompaction | null;
-  before: MessageBound | null;
-  excludeIds: string[];
-  keepUnits: number;
-  atMostHalf?: boolean;
-}): Promise<ActiveCompaction | null> {
-  const { user, thread, resolved } = input.context;
-  try {
-    const plan = await planCompaction({
-      threadId: thread.id,
-      userId: user.id,
-      previous: input.previous,
-      before: input.before,
-      excludeIds: input.excludeIds,
-      keepUnits: input.keepUnits,
-      atMostHalf: input.atMostHalf,
-    });
-    if (!plan) return null;
-    const created = await runCompaction(plan, {
-      user,
-      threadId: thread.id,
-      model: resolved,
-      reason: input.reason,
-      admitted: false,
-    });
-    // Another compaction was recorded meanwhile: use whichever is now newest.
-    const current = created ?? (await latestCompaction(thread.id, user.id));
-    return current && current.id !== input.previous?.id ? current : null;
-  } catch (error) {
-    logger.warn(
-      { error, threadId: thread.id, reason: input.reason },
-      'Compaction failed; the oldest turns are left out instead',
-    );
-    return null;
-  }
-}
+export type CompactionOutcome =
+  | { status: 'created'; compaction: ActiveCompaction }
+  /** Nothing to summarise, or (automatic) the history is below the threshold. */
+  | { status: 'nothing' }
+  /** The person's allowance is spent: try again later. */
+  | { status: 'allowance' }
+  /** Made, but its input changed meanwhile or a further cut won. */
+  | { status: 'discarded' };
 
 /**
- * "Compact conversation": summarise now, with optional instructions. The
- * caller has checked ownership. Refused (409) while a reply is generating;
- * the summary call is admitted against the person's allowance.
+ * One background compaction, run by the queue (compaction-queue.ts), never
+ * in a reply's path. Reads only finished turns before the cut: the newest
+ * turn, which may still be generating, is always kept whole, so this takes no
+ * reply claim. Automatic runs keep recent turns up to half the input budget
+ * and only when the history is past the soft threshold; a manual run also
+ * keeps at most half of the history since the previous cut, so a request
+ * always summarises something once there are two turns.
  */
-export async function compactThreadNow(
-  user: { id: string; role: UserRole },
-  threadId: string,
-  input: { instructions?: string; model: SummaryModel },
-): Promise<ActiveCompaction> {
-  await db.transaction(async (tx) => {
-    // The thread lock serialises this check with chat admission (claimThread).
-    await lockChatThread(tx, threadId, user.id);
-    const [active] = await tx
-      .select({ id: schema.message.id })
-      .from(schema.message)
-      .where(
-        and(
-          eq(schema.message.threadId, threadId),
-          eq(schema.message.role, 'assistant'),
-          eq(schema.message.status, 'streaming'),
-        ),
-      )
-      .limit(1);
-    if (active)
-      throw conflict('Wait for the current reply to finish before compacting the conversation');
-  });
-  const previous = await latestCompaction(threadId, user.id);
+export async function compactConversation(input: {
+  user: { id: string; role: UserRole };
+  threadId: string;
+  model: SummaryModel;
+  reason: CompactionReason;
+  instructions?: string | null;
+}): Promise<CompactionOutcome> {
+  const budget = contextBudget(input.model);
+  const previous = await latestCompaction(input.threadId, input.user.id);
   const plan = await planCompaction({
-    threadId,
-    userId: user.id,
+    threadId: input.threadId,
+    userId: input.user.id,
     previous,
-    before: null,
-    excludeIds: [],
-    keepUnits: Math.floor(contextBudget(input.model).units / 2),
-    atMostHalf: true,
+    keepUnits: Math.floor(budget.units / 2),
+    atMostHalf: input.reason === 'manual',
+    ...(input.reason === 'automatic' ? { dueAboveUnits: softThresholdUnits(budget.units) } : {}),
   });
-  if (!plan) throw validationFailed(NOTHING_TO_COMPACT);
+  if (!plan) return { status: 'nothing' };
+  // Checked without recording a denial: the queue may ask again many times.
+  if (await allowanceSpent(input.user, input.model.slug)) return { status: 'allowance' };
   let created: ActiveCompaction | null;
   try {
     created = await runCompaction(plan, {
-      user,
-      threadId,
+      user: input.user,
+      threadId: input.threadId,
       model: input.model,
-      reason: 'manual',
+      reason: input.reason,
       instructions: input.instructions,
-      admitted: true,
     });
   } catch (error) {
-    if (error instanceof AppError) throw error;
-    logger.warn({ error, threadId }, 'Manual compaction failed');
-    throw providerError('The model could not summarise this conversation. Try again.');
+    if (error instanceof AppError && error.code === ERROR_CODES.QUOTA_EXCEEDED)
+      return { status: 'allowance' };
+    throw error;
   }
-  if (!created)
-    throw conflict('The conversation changed while it was being summarised. Try again.');
-  return created;
+  return created ? { status: 'created', compaction: created } : { status: 'discarded' };
+}
+
+/** Whether a summary call would exceed the person's allowance now. */
+export function allowanceSpent(
+  user: { id: string; role: UserRole },
+  modelSlug: string,
+): Promise<boolean> {
+  return allowanceExhausted({
+    userId: user.id,
+    role: user.role,
+    modelSlug,
+    runId: '',
+    tokensIn: 0,
+    tokensOut: 0,
+    messageCount: 0,
+  });
+}
+
+/**
+ * The checks a manual request can answer at once, before it is queued: there
+ * are two turns since the previous cut to summarise, the model can hold the
+ * summariser's input, and the allowance is not spent.
+ */
+export async function assertCompactionPossible(input: {
+  user: { id: string; role: UserRole };
+  threadId: string;
+  model: SummaryModel;
+  instructions?: string | null;
+}) {
+  const previous = await latestCompaction(input.threadId, input.user.id);
+  const [turns] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.message)
+    .where(
+      and(
+        eq(schema.message.threadId, input.threadId),
+        eq(schema.message.userId, input.user.id),
+        eq(schema.message.role, 'user'),
+        previous ? gte(schema.message.position, previous.firstKeptPosition) : undefined,
+      ),
+    );
+  if (Number(turns?.count ?? 0) < 2) throw validationFailed(NOTHING_TO_COMPACT);
+  summaryChunkUnits(input.model, previous?.summary ?? null, input.instructions);
+  if (await allowanceSpent(input.user, input.model.slug))
+    throw quotaExceeded(
+      'Your usage allowance is used up, so earlier messages cannot be summarised now.',
+    );
 }
 
 /** The model of the conversation's latest reply, for compacting without a choice. */

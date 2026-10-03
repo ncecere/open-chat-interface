@@ -33,6 +33,11 @@ export async function trashLockedThread(
     .set({ deletedAt: now, deletedReason: reason, pinned: false })
     .where(eq(schema.thread.id, thread.id));
 
+  // A queued summary is dropped; one being made is discarded when it ends.
+  await tx
+    .delete(schema.conversationCompactionJob)
+    .where(eq(schema.conversationCompactionJob.threadId, thread.id));
+
   // Never overwrite an explicit revocation's timestamp/provenance.
   await tx
     .update(schema.shareLink)

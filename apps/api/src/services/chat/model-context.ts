@@ -1,7 +1,6 @@
 import { ERROR_CODES } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { AppError, validationFailed } from '../../lib/errors.js';
-import { logger } from '../../lib/logger.js';
 import { loadMemorySection, withMemories } from '../memory/prompt.js';
 import {
   buildGroundingContext,
@@ -20,14 +19,9 @@ import {
   UNAVAILABLE_ATTACHMENT_TEXT,
   withAttachmentContext,
 } from './attachment-context.js';
-import {
-  type ActiveCompaction,
-  autoCompactEnabled,
-  compactForTurn,
-  latestCompaction,
-  summaryMaxTokens,
-} from './compaction.js';
+import { type ActiveCompaction, latestCompaction } from './compaction.js';
 import { withSummary } from './compaction-plan.js';
+import { type CompactionCheck, scheduleAutomaticCompaction } from './compaction-queue.js';
 import {
   addCost,
   assertFitsContext,
@@ -84,21 +78,12 @@ type ModelContextOptions = {
   /** The search made for an earlier attempt at this turn, reused instead of searching again. */
   search?: PreSearch;
   /**
-   * Rebuilding after the provider reported the input too long: compact first
-   * (when automatic compaction is on), keeping at most half of the history.
+   * Rebuilding after the provider reported the input too long: send at most
+   * this much history (input units), leaving the oldest turns out. No summary
+   * is made here; a background compaction is queued instead.
    */
-  compact?: 'overflow';
+  maxHistoryUnits?: number;
 };
-
-/** Automatic compaction is best effort; a setting that cannot be read leaves it off. */
-async function compactionAllowed(threadId: string): Promise<boolean> {
-  try {
-    return await autoCompactEnabled();
-  } catch (error) {
-    logger.warn({ error, threadId }, 'Could not read the automatic compaction setting');
-    return false;
-  }
-}
 
 export async function buildModelContext(
   context: TurnContext,
@@ -128,8 +113,9 @@ export async function buildModelContext(
   if (input.trigger === 'regenerate-message' && input.attachmentIds.length)
     throw validationFailed('Attachments cannot be added while regenerating a response');
   // A compacted conversation is sent as its summary plus the turns from the
-  // cut on; the turns before the cut are not even read.
-  const previous = await latestCompaction(thread.id, user.id);
+  // cut on; the turns before the cut are not even read. Only a compaction
+  // already recorded is used: a reply never waits for a summary.
+  const compaction = await latestCompaction(thread.id, user.id);
   const historyInput = {
     threadId: thread.id,
     userId: user.id,
@@ -140,7 +126,7 @@ export async function buildModelContext(
   };
   const stored = await loadContextHistory({
     ...historyInput,
-    fromPosition: previous?.firstKeptPosition,
+    fromPosition: compaction?.firstKeptPosition,
   });
   const toolsOffered = context.tools.definitions.length > 0;
   // With the web_search tool the model searches when it chooses; otherwise
@@ -186,7 +172,7 @@ export async function buildModelContext(
   /**
    * History as it would be sent with `compaction`: the summary (when it fits
    * beside the required context) and then whole turns, newest first, as the
-   * budget allows.
+   * budget (and `maxHistoryUnits`) allows.
    */
   async function assemble(history: typeof stored, compaction: ActiveCompaction | null) {
     const groups = historyGroups(history.history);
@@ -237,30 +223,38 @@ export async function buildModelContext(
       textFromParts(history.latest.parts),
     );
     required = addCost(required, projectFiles.cost);
-    const beforeSummary = required;
     // The summary stands for the turns before the cut. If even it does not fit
     // beside the required context, those turns are left out unsummarised.
     const summaryCost = compaction ? textCost(withSummary('', compaction.summary)) : emptyCost();
     const summarised = compaction !== null && fitsContext(addCost(required, summaryCost), budget);
     if (summarised) required = addCost(required, summaryCost);
+    const costed = inspectedGroups.map((items) => ({
+      items,
+      cost: items.reduce(
+        (sum, message) =>
+          addCost(sum, addCost(messageCost(asUI(message, toolsOffered)), filesCost(message.id))),
+        emptyCost(),
+      ),
+    }));
     const selected = selectContextSuffix(
-      inspectedGroups.map((items) => ({
-        items,
-        cost: items.reduce(
-          (sum, message) =>
-            addCost(sum, addCost(messageCost(asUI(message, toolsOffered)), filesCost(message.id))),
-          emptyCost(),
-        ),
-      })),
+      costed,
       required,
-      budget,
+      options.maxHistoryUnits === undefined
+        ? budget
+        : { ...budget, units: Math.min(budget.units, required.units + options.maxHistoryUnits) },
     );
     const historyLimited = history.limited || first > 0 || selected.limited;
     return {
       history,
       historical,
       selected,
-      beforeSummary,
+      // What the next compaction check measures: the summary in use, every
+      // turn since its cut that was read, and this turn's prompt.
+      historyUnits:
+        summaryCost.units +
+        costed.reduce((sum, group) => sum + group.cost.units, 0) +
+        messageCost(latest).units,
+      sentHistoryUnits: selected.cost.units - required.units,
       compaction: summarised ? compaction : null,
       historyLimited,
       limited:
@@ -270,33 +264,15 @@ export async function buildModelContext(
     };
   }
 
-  let view = await assemble(stored, previous);
-  let compacted = false;
-  if (
-    (options.compact === 'overflow' || view.historyLimited) &&
-    (await compactionAllowed(thread.id))
-  ) {
-    // Keep recent turns up to half the input budget, or less when the system
-    // prompt, project files and the new message leave less room for history
-    // beside a summary.
-    const room = budget.units - view.beforeSummary.units - summaryMaxTokens(budget) * 4;
-    const created = await compactForTurn({
-      context,
-      reason: options.compact === 'overflow' ? 'overflow' : 'automatic',
-      previous,
-      before: stored.target ?? null,
-      excludeIds: [claimId],
-      keepUnits: Math.max(0, Math.min(Math.floor(budget.units / 2), room)),
-      atMostHalf: options.compact === 'overflow',
+  const view = await assemble(stored, compaction);
+  // Too long even with the latest summary: this turn leaves the oldest turns
+  // out (as in v0.8) and a summary is made in the background for the next.
+  if (view.historyLimited)
+    await scheduleAutomaticCompaction({
+      threadId: thread.id,
+      userId: user.id,
+      modelSlug: resolved.slug,
     });
-    if (created) {
-      compacted = true;
-      view = await assemble(
-        await loadContextHistory({ ...historyInput, fromPosition: created.firstKeptPosition }),
-        created,
-      );
-    }
-  }
   const { selected, historical, history } = view;
   const finalSystem = withSummary(system, view.compaction?.summary);
   const finalSystemCost: ContextCost = {
@@ -352,8 +328,14 @@ export async function buildModelContext(
     outputTokens: budget.outputTokens,
     generationSettings: generation,
     contextLimited: view.limited || files.omitted > 0,
-    /** Whether this call recorded a new compaction. */
-    compacted,
+    /** For the compaction check after the reply. */
+    compactionCheck: {
+      historyUnits: view.historyUnits,
+      budgetUnits: budget.units,
+      limited: view.historyLimited,
+    } satisfies CompactionCheck,
+    /** History actually sent, in input units; an overflow retry sends at most half. */
+    sentHistoryUnits: view.sentHistoryUnits,
     /** The search results, so a rebuilt context can reuse them. */
     search: searchResults,
     sourceParts: searchResults.results.map((source, index) => ({

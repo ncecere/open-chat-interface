@@ -18,6 +18,35 @@ export const SUMMARY_PROMPT_OVERHEAD = 2048;
 /** Smallest transcript chunk worth a summariser call. */
 export const MIN_CHUNK_UNITS = 1024;
 
+/**
+ * The soft threshold for automatic compaction, as a share of the model's input
+ * budget. After a reply finishes, a background compaction is queued once the
+ * history the model would receive for the next turn (the summary in use plus
+ * every turn since its cut, files included) is above this share. Compacting
+ * keeps recent turns up to half the budget, so a summary is ready well before
+ * a turn would have to leave the oldest turns out. Three quarters leaves room
+ * for a few more turns, plus the system prompt and project files, while the
+ * summary is being made.
+ */
+export const SOFT_COMPACTION_RATIO = 0.75;
+
+/** The soft threshold in input units for a budget. */
+export function softThresholdUnits(budgetUnits: number): number {
+  return Math.floor(budgetUnits * SOFT_COMPACTION_RATIO);
+}
+
+/**
+ * Whether to queue a background compaction: the history is past the soft
+ * threshold, or the turn already had to leave older turns out (`limited`).
+ */
+export function compactionDue(input: {
+  historyUnits: number;
+  budgetUnits: number;
+  limited?: boolean;
+}): boolean {
+  return input.limited === true || input.historyUnits > softThresholdUnits(input.budgetUnits);
+}
+
 type TranscriptMessage = { role: string; parts: unknown };
 
 /** One turn: a user message and the replies to it, with its estimated input size. */

@@ -12,9 +12,14 @@ import type { UIMessage } from 'ai';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  COMPACT_ACTION_LABEL,
+  COMPACTION_PENDING_TEXT,
+} from '../../src/components/chat/compact-thread-dialog';
 import { COMPACTION_DIVIDER_TEXT } from '../../src/components/chat/compaction-divider';
 import { MessageList } from '../../src/components/chat/message-list';
 import { TopBar } from '../../src/components/layout/top-bar';
+import { COMPACTION_POLL_MS, COMPACTION_POLL_WINDOW_MS } from '../../src/hooks/use-compaction';
 import { ApiError } from '../../src/lib/api-client';
 import { alerts, button, cleanup, click, dialog, settle } from './admin-test-utils';
 
@@ -65,8 +70,10 @@ let root: Root | undefined;
 beforeEach(() => {
   api.get.mockReset();
   api.post.mockReset();
+  api.get.mockResolvedValue({ compaction: null, pending: false });
 });
 afterEach(async () => {
+  vi.useRealTimers();
   if (root) await cleanup(root);
   root = undefined;
 });
@@ -130,7 +137,9 @@ describe('compaction divider', () => {
     await click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(container.textContent).toContain('BUDGET_SUMMARY');
-    expect(container.textContent).toContain('in place of the 2 earlier messages above');
+    expect(container.textContent).toContain(
+      'in place of the 2 earlier messages above, which stay here unchanged',
+    );
     await click(toggle);
     expect(container.textContent).not.toContain('BUDGET_SUMMARY');
   });
@@ -152,48 +161,112 @@ describe('compaction divider', () => {
   });
 });
 
-describe('Compact conversation in the conversation menu', () => {
+describe('Summarise earlier messages now', () => {
   const topBar = <TopBar sidebarOpen onOpenSidebar={vi.fn()} onOpenCommandPalette={vi.fn()} />;
+  const control = () =>
+    document.querySelector<HTMLButtonElement>(`button[aria-label="${COMPACT_ACTION_LABEL}"]`);
+  const status = () => document.querySelector('[role="status"]')?.textContent ?? '';
 
   it('is offered only for a conversation', async () => {
     await mount(topBar, '/');
-    expect(document.querySelector('button[aria-label="Compact conversation"]')).toBeNull();
+    expect(control()).toBeNull();
   });
 
-  it('compacts with optional instructions and closes', async () => {
-    api.post.mockResolvedValue({ compaction });
+  it('queues the summary with optional instructions, closes at once and shows it is being made', async () => {
+    api.post.mockResolvedValue({ compaction: null, pending: true });
     const { client } = await mount(topBar, '/chat/thread-1');
-    await click(button('Compact conversation'));
-    expect(dialog()?.querySelector('h2')?.textContent).toBe('Compact conversation');
+    expect(control()?.title).toBe(COMPACT_ACTION_LABEL);
+    expect(status()).toBe('');
+    await click(button(COMPACT_ACTION_LABEL));
+    expect(dialog()?.querySelector('h2')?.textContent).toBe(COMPACT_ACTION_LABEL);
+    expect(dialog()?.textContent).toContain('You can keep writing meanwhile');
     const field = dialog()!.querySelector('textarea')!;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
       setter.call(field, '  keep the budget figures ');
       field.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await click(button('Compact'));
+    // Checked on while pending, without waiting in real time.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    await click(button('Summarise'));
     expect(api.post).toHaveBeenCalledWith('/threads/thread-1/compact', {
       instructions: 'keep the budget figures',
     });
+    // Closed straight away: nothing waits for the summary.
     expect(dialog()).toBeNull();
-    // The thread view's summary is updated without a refetch.
-    expect(client.getQueryData(['thread', 'thread-1', 'compaction'])).toEqual({ compaction });
+    expect(client.getQueryData(['thread', 'thread-1', 'compaction'])).toEqual({
+      compaction: null,
+      pending: true,
+    });
+    expect(control()?.title).toBe(COMPACTION_PENDING_TEXT);
+    expect(control()?.hasAttribute('data-compaction-pending')).toBe(true);
+    expect(status()).toBe(COMPACTION_PENDING_TEXT);
+
+    // Done in the background: the next check shows the summary.
+    api.get.mockResolvedValue({ compaction, pending: false });
+    const reads = api.get.mock.calls.length;
+    await act(async () => {
+      vi.advanceTimersByTime(COMPACTION_POLL_MS);
+    });
+    await settle();
+    expect(api.get.mock.calls.length).toBeGreaterThan(reads);
+    expect(client.getQueryData(['thread', 'thread-1', 'compaction'])).toEqual({
+      compaction,
+      pending: false,
+    });
+    expect(control()?.title).toBe(COMPACT_ACTION_LABEL);
+    expect(status()).toBe('');
   });
 
-  it('sends no instructions when left empty, and shows why it was refused', async () => {
+  it('stops checking after a while when the summary takes long', async () => {
+    api.get.mockResolvedValue({ compaction: null, pending: true });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    await mount(topBar, '/chat/thread-2');
+    expect(status()).toBe(COMPACTION_PENDING_TEXT);
+    const tick = async (ms: number) => {
+      await act(async () => {
+        vi.advanceTimersByTime(ms);
+      });
+      await settle();
+    };
+    // It checks on every interval while the window lasts…
+    const first = api.get.mock.calls.length;
+    await tick(COMPACTION_POLL_MS);
+    await tick(COMPACTION_POLL_MS);
+    expect(api.get.mock.calls.length).toBe(first + 2);
+    // …then stops; the next reply reads the state again.
+    await tick(COMPACTION_POLL_WINDOW_MS);
+    const reads = api.get.mock.calls.length;
+    await tick(COMPACTION_POLL_MS);
+    await tick(COMPACTION_POLL_MS);
+    expect(api.get.mock.calls.length).toBe(reads);
+  });
+
+  it('says a summary is already being made, and a repeat is accepted', async () => {
+    api.get.mockResolvedValue({ compaction: null, pending: true });
+    api.post.mockResolvedValue({ compaction: null, pending: true });
+    await mount(topBar, '/chat/thread-3');
+    await click(button(COMPACT_ACTION_LABEL));
+    expect(dialog()?.textContent).toContain(COMPACTION_PENDING_TEXT);
+    await click(button('Summarise'));
+    expect(api.post).toHaveBeenCalledWith('/threads/thread-3/compact', {});
+    expect(dialog()).toBeNull();
+  });
+
+  it('shows why a request was refused and stays open', async () => {
     api.post.mockRejectedValue(
       new ApiError(
-        409,
-        'CONFLICT',
-        'Wait for the current reply to finish before compacting the conversation',
+        429,
+        'QUOTA_EXCEEDED',
+        'Your usage allowance is used up, so earlier messages cannot be summarised now.',
       ),
     );
     await mount(topBar, '/chat/thread-1');
-    await click(button('Compact conversation'));
-    await click(button('Compact'));
+    await click(button(COMPACT_ACTION_LABEL));
+    await click(button('Summarise'));
     expect(api.post).toHaveBeenCalledWith('/threads/thread-1/compact', {});
     expect(alerts()).toEqual([
-      'Wait for the current reply to finish before compacting the conversation',
+      'Your usage allowance is used up, so earlier messages cannot be summarised now.',
     ]);
     expect(dialog()).not.toBeNull();
     await click(button('Cancel'));

@@ -19,6 +19,7 @@ import { observeChatReply } from '../observability/events.js';
 import { touchThread } from '../threads.js';
 import { buildSdkTools, toolApprovalPolicy } from '../tools/registry.js';
 import { isContextOverflowError } from './compaction-plan.js';
+import { scheduleCompactionAfterReply } from './compaction-queue.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { failRunSetup, releaseRunHandles } from './run-cleanup.js';
 import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
@@ -271,7 +272,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
         if (turn.projectSearchPart) writer.write(turn.projectSearchPart);
         for (const source of sourceParts) writer.write(source);
         // The provider refused the input as too long before writing anything:
-        // compact the conversation and try once more. Never more than once.
+        // try once more with the oldest turns left out (no summary call; one
+        // is queued for later turns). Never more than once.
         if (turn.recoverOverflow && (await overflowedBeforeOutput(current.result))) {
           const recovered = await turn.recoverOverflow().catch((error: unknown) => {
             logger.warn({ error, runId: runIdentity.runId }, 'Overflow recovery failed');
@@ -322,6 +324,16 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
             await releaseRunHandles(run);
             observeChatReply(outcome.status, run.startedAt);
           }
+          // After the claim is released: a reply that took the history past
+          // the soft threshold queues a background summary for later turns.
+          if (outcome.status === 'complete' && turn.compactionCheck)
+            await scheduleCompactionAfterReply({
+              threadId: thread.id,
+              userId: turn.user.id,
+              modelSlug: resolved.slug,
+              check: turn.compactionCheck,
+              reply: responseMessage,
+            });
         })();
         return completion;
       },

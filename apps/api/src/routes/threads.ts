@@ -19,12 +19,11 @@ import { type AppBindings, currentUser, requireAuth } from '../middleware/contex
 import { parseBody, parseQuery } from '../middleware/validate.js';
 import { recordAudit } from '../services/audit.js';
 import {
-  compactThreadNow,
-  latestCompaction,
+  assertCompactionPossible,
   latestReplyModel,
   NOTHING_TO_COMPACT,
-  serializeCompaction,
 } from '../services/chat/compaction.js';
+import { compactionState, requestCompaction } from '../services/chat/compaction-queue.js';
 import { consumeFileExport, exportReply } from '../services/documents/export.js';
 import { exportFilename, exportThreadMarkdown } from '../services/export.js';
 import {
@@ -271,21 +270,26 @@ threadRoutes.patch('/:id/messages/:messageId/active', async (c) => {
   return c.json(result);
 });
 
-/** The compaction in use: its summary and where the verbatim messages start. */
+/**
+ * The compaction in use (its summary and where the verbatim messages start)
+ * and whether a background summary is queued or being made (`pending`).
+ */
 threadRoutes.get('/:id/compaction', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
-  const compaction = await latestCompaction(thread.id, user.id);
   c.header('cache-control', 'no-store');
-  return c.json({ compaction: compaction ? serializeCompaction(compaction) : null });
+  return c.json(await compactionState(thread.id, user.id));
 });
 
 /**
- * "Compact conversation": summarise the earlier turns now, optionally with
- * instructions for the summary, using the given model (the composer's) or the
- * latest reply's. Owner only (404 otherwise); 409 while a reply is generating;
- * 422 when there is nothing to summarise yet. The summary call counts towards
- * the person's usage and is refused when their allowance is spent.
+ * "Summarise earlier messages now": queues a background summary of the
+ * earlier turns, optionally with instructions for it, using the given model
+ * (the composer's) or the latest reply's, and returns 202 at once with the
+ * same body as GET. A request while one is queued or running is that
+ * request. Never refused because a reply is generating. Owner only (404
+ * otherwise); 422 when there is nothing to summarise yet or the model is too
+ * small to summarise with; 429 when the person's allowance is spent. The
+ * summary counts towards the person's usage.
  */
 threadRoutes.post('/:id/compact', async (c) => {
   const user = currentUser(c);
@@ -301,11 +305,20 @@ threadRoutes.post('/:id/compact', async (c) => {
   const slug = input.modelSlug ?? (await latestReplyModel(thread.id));
   if (!slug) throw validationFailed(NOTHING_TO_COMPACT);
   const model = await resolveModelForRole(slug, user.role);
-  const compaction = await compactThreadNow(user, thread.id, {
-    instructions: input.instructions,
+  await assertCompactionPossible({
+    user,
+    threadId: thread.id,
     model,
+    instructions: input.instructions,
   });
-  return c.json({ compaction: serializeCompaction(compaction) }, 201);
+  await requestCompaction({
+    threadId: thread.id,
+    userId: user.id,
+    modelSlug: model.slug,
+    reason: 'manual',
+    instructions: input.instructions,
+  });
+  return c.json(await compactionState(thread.id, user.id), 202);
 });
 
 threadRoutes.get('/:id', async (c) => {

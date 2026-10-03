@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Conversation compaction (v0.9): a conversation's earlier turns summarised so
  * it keeps fitting the model's input. See docs/user/conversations.md.
  */
-export const COMPACTION_REASONS = ['automatic', 'manual', 'overflow'] as const;
+export const COMPACTION_REASONS = ['automatic', 'manual'] as const;
 export type CompactionReason = (typeof COMPACTION_REASONS)[number];
 
 /** Optional focus a person gives a manual compaction ("keep the budget figures"). */
@@ -34,5 +34,16 @@ export const conversationCompactionSchema = z.object({
   createdAt: z.string(),
 });
 
+/**
+ * What `GET /api/threads/:id/compaction` and `POST /api/threads/:id/compact`
+ * return: the summary in use and whether a background summary is queued or
+ * running (one waiting for a later retry is not reported as pending).
+ */
+export const compactionStateSchema = z.object({
+  compaction: conversationCompactionSchema.nullable(),
+  pending: z.boolean(),
+});
+
+export type CompactionState = z.infer<typeof compactionStateSchema>;
 export type CompactThreadInput = z.infer<typeof compactThreadSchema>;
 export type ConversationCompaction = z.infer<typeof conversationCompactionSchema>;

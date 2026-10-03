@@ -1,4 +1,5 @@
 import { BACKUP_JOB, runScheduledBackup } from '../backups/run.js';
+import { processCompactionQueue } from '../chat/compaction-queue.js';
 import { COMPLIANCE_JOB, runScheduledComplianceExport } from '../compliance/export.js';
 import {
   applyThreadRetention,
@@ -22,6 +23,7 @@ import { processWebhookDeliveries } from '../webhooks/delivery.js';
 import { type JobDefinition, runExclusively, startJobs } from './runner.js';
 
 const MINUTE = 60 * 1000;
+export const COMPACTION_JOB = 'chat.compact-conversations';
 const HOUR = 60 * MINUTE;
 
 /**
@@ -50,6 +52,15 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'imports.process',
       intervalMs: MINUTE,
       run: () => processPendingImports(),
+    },
+    {
+      // Conversation summaries (v0.9) are made here, never while a reply
+      // waits. Requests also kick a pass straight away; the tick picks up
+      // retries as they fall due and requests left by a restart. Rows are
+      // claimed with a lease, so replicas never summarise one thread twice.
+      name: COMPACTION_JOB,
+      intervalMs: MINUTE,
+      run: () => processCompactionQueue(),
     },
     {
       // Uploads index their own file; this chunks files added before v0.8

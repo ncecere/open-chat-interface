@@ -41,7 +41,9 @@ export default defineConfig({
         },
         'src/services/chat/context-history.ts': { statements: 90, branches: 85, functions: 100 },
         'src/services/chat/model-context.ts': { statements: 90, branches: 85, functions: 100 },
-        // v0.9 compaction: what the model is sent, the cut, usage and overflow detection.
+        // v0.9 compaction: what the model is sent, the cut, usage, overflow detection
+        // and the background queue (claims, leases, retries, idempotent requests).
+        'src/services/chat/compaction-queue.ts': { statements: 90, branches: 80, functions: 100 },
         'src/services/chat/compaction-plan.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/chat/compaction.ts': { statements: 90, branches: 78, functions: 95 },
         'src/services/chat/compaction-fork.ts': { statements: 95, branches: 70, functions: 100 },

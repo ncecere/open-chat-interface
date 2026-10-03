@@ -133,6 +133,14 @@ and commits each thread separately. Busy accounts or threads are skipped. A fail
 pass can have completed some threads; retrying continues with those still eligible
 rather than repeating their storage adjustments.
 
+Conversation summaries (`chat.compact-conversations`) are queued per
+conversation. Besides the scheduled pass, each request starts a pass at once in
+the API process that received it; both claim a conversation's request with a
+15-minute lease, so replicas never summarise one conversation twice and a
+request left by a restart is taken over when its lease runs out. A failed
+summary is retried after 1, 5 and 30 minutes, then dropped; one waiting for a
+spent allowance is checked every 15 minutes for a day.
+
 `DATABASE_URL` must use a direct PostgreSQL connection or a session-mode pooler,
 not transaction pooling. Budget one additional connection per concurrently
 attempted job per API replica, separate from the regular application pool

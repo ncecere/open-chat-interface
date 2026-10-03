@@ -384,8 +384,8 @@ Generated from 41 route files.
 | PATCH | `/api/threads/:id` | — |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
 | POST | `/api/threads/:id/branches` | — |
-| POST | `/api/threads/:id/compact` | "Compact conversation": summarise the earlier turns now, optionally with instructions for the summary, using the given model (the composer's) or the latest reply's. |
-| GET | `/api/threads/:id/compaction` | The compaction in use: its summary and where the verbatim messages start. |
+| POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
+| GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start) and whether a background summary is queued or being made (`pending`). |
 | GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
 | POST | `/api/threads/:id/forks` | — |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |

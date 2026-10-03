@@ -423,7 +423,7 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
       <ToggleSetting
         id="auto-compact"
         label="Summarise long conversations"
-        description="When a conversation outgrows the model's input, its earlier messages are summarised by the conversation's model (counting towards the person's usage) instead of being left out. People can still compact a conversation themselves when this is off."
+        description="When a conversation nears the model's input limit, its earlier messages are summarised in the background by the conversation's model (counting towards the person's usage) instead of being left out. Nobody waits for a summary. People can still ask for one themselves when this is off."
         checked={draft}
         disabled={save.isPending}
         onCheckedChange={(checked) => {
