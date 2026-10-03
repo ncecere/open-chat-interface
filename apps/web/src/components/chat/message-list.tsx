@@ -52,8 +52,9 @@ export const MessageList = memo(function MessageList({
   );
   const waitingLabel = lastReasoning ? 'Thinking' : 'Generating response';
 
+  // Room at the top for the top bar's floating controls, which the column runs under.
   return (
-    <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 pb-8 pt-[4.5rem]">
       {messages.flatMap((message, index) => [
         ...(compaction?.firstKeptMessageId === message.id
           ? [<CompactionDivider key={`compaction-${compaction.id}`} compaction={compaction} />]

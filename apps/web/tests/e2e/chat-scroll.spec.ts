@@ -159,6 +159,31 @@ function topInView(page: Page, text: string) {
   }, text);
 }
 
+/** Whether the top bar's floating button groups cover the latest question with this text. */
+function coveredByTopBar(page: Page, text: string) {
+  return page.evaluate((wanted) => {
+    const rows = [...document.querySelectorAll<HTMLElement>('[aria-label="Your message"]')];
+    const bubble = rows.findLast((row) => row.textContent?.includes(wanted))?.firstElementChild;
+    if (!bubble) return null;
+    const question = bubble.getBoundingClientRect();
+    // The top bar's floating button groups, found by their buttons.
+    const groups = ['Download this conversation', 'Open sidebar'].flatMap((name) => {
+      const button = document.querySelector(`[aria-label="${name}"]`);
+      return button?.parentElement ? [button.parentElement] : [];
+    });
+    if (groups.length === 0) return null;
+    return groups.some((control) => {
+      const box = control.getBoundingClientRect();
+      return (
+        box.left < question.right &&
+        box.right > question.left &&
+        box.top < question.bottom &&
+        box.bottom > question.top
+      );
+    });
+  }, text);
+}
+
 /** The message at the top of the view and where it sits, to compare reading positions. */
 function visibleAnchor(page: Page) {
   return scroller(page).evaluate((node) => {
@@ -213,24 +238,7 @@ test('a sent question moves to the top and the view follows the reply', async ({
   expect(pinnedTop).toBeGreaterThanOrEqual(0);
   expect(pinnedTop).toBeLessThan(80);
   // Clear of the top bar's floating controls (on a phone the view runs under them).
-  const covered = await page.evaluate((wanted) => {
-    const rows = [...document.querySelectorAll<HTMLElement>('[aria-label="Your message"]')];
-    const bubble = rows.findLast((row) => row.textContent?.includes(wanted))?.firstElementChild;
-    if (!bubble) return null;
-    const question = bubble.getBoundingClientRect();
-    return [...document.querySelectorAll<HTMLElement>('[data-floating-controls]')].some(
-      (control) => {
-        const box = control.getBoundingClientRect();
-        return (
-          box.left < question.right &&
-          box.right > question.left &&
-          box.top < question.bottom &&
-          box.bottom > question.top
-        );
-      },
-    );
-  }, 'Scroll behaviour question one');
-  expect(covered).toBe(false);
+  expect(await coveredByTopBar(page, 'Scroll behaviour question one')).toBe(false);
 
   // Once the reply outgrows the view, the view follows it.
   await expect
@@ -294,6 +302,12 @@ test('the page itself never scrolls, so the composer stays in view', async ({ pa
       return main ? { overflow: main.scrollHeight - main.clientHeight, top: main.scrollTop } : null;
     });
   expect(await mainScroll()).toEqual({ overflow: 0, top: 0 });
+
+  // At the very top, the first message sits clear of the top bar's floating controls.
+  await scroller(page).evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  expect(await coveredByTopBar(page, 'History 0.')).toBe(false);
 
   await scroller(page).hover();
   for (let turn = 0; turn < 4; turn += 1) await page.mouse.wheel(0, 4000);
