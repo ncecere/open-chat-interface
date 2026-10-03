@@ -16,6 +16,28 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **Rename a conversation** from the sidebar or the conversation's top bar.
 - **Context window and output limit per model** in Providers & Models; an
   output limit that leaves no room for input is refused.
+- **Backups copy attachment files.** Each backup copies attachment files,
+  thumbnails and the uploaded logo to `objects/<sha256>` at the destination,
+  once per distinct content, streamed and checked against their checksum; a
+  sample (or every file) is read back each run, and copies no kept backup
+  lists are removed after retention. On for new backup configurations;
+  existing ones keep listing files only until an administrator turns copying
+  on (the first copy can be as large as all attachment storage).
+  `restore-backup-files` copies them back. Migration `0035_backup_files`.
+- **Deletions in the compliance export.** Every deletion (conversations,
+  messages, attachments, artifacts, memory notes, projects, accounts, and
+  those made by retention) writes an audit entry in the same transaction with
+  a `metadata.deletion` block (type, id, owner, reason, whether permanent,
+  counts), never the deleted content, so the exactly-once audit export
+  carries them.
+
+### Changed
+
+- **Legal hold covers every deletion.** Deleting a held person's project or
+  project file is refused; usage-event and share-link pruning skip held
+  people; held people cannot delete memories; expired temporary chats are not
+  deleted when opened under hold; accounts are deleted only through the
+  checked, audited route.
 
 ### Fixed
 
@@ -25,6 +47,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `INITIAL_ADMIN_PASSWORD` empty prints a one-time password as documented;
   `AUTH_SECRET`, `ENCRYPTION_KEY` and `DATABASE_URL` still refuse empty values.
 - The sharing guide describes live and snapshot links and expiry.
+- `RATE_LIMIT_AUTH_PER_MINUTE` had no effect. Sign-in, sign-up, password
+  reset and verification are now limited per client address and per email,
+  answer 429 with `Retry-After`, and the first refusal each minute is audited.
 
 ## [0.9.2] - 2026-10-03
 
