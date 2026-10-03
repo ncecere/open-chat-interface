@@ -9,19 +9,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- **Long conversations are compacted instead of cut off.** When history would
-  exceed the model's input budget, older turns are summarised by the
-  conversation's own model into a structured summary (topic, facts and
-  decisions, preferences, open questions, critical details) while recent
-  turns are kept verbatim, after the approach of the
-  [pi coding agent](https://pi.dev). Later compactions build on the previous
-  summary, and cuts fall only between user turns. **Compact conversation**
-  does it on request, with optional instructions; a provider context-length
-  error triggers one compaction and one retry. Nothing is deleted: a divider
-  marks where messages were summarised and expands to the summary, and
-  exports, search and share links keep the full history. Each summary is a
-  usage event. General settings has an on/off switch (on by default).
-  Migration `0028_conversation_compaction`.
+- **Long conversations are summarised in the background instead of cut
+  off.** After a reply, a conversation past 75% of the model's input budget
+  has its older turns summarised by the conversation's own model into a
+  structured summary (topic, facts and decisions, preferences, open
+  questions, critical details) while recent turns are kept verbatim, after
+  the approach of the [pi coding agent](https://pi.dev). Summaries are made
+  by the job runner, never while a reply waits: sending, retrying, switching
+  replies and approving never wait for one or are refused because of one.
+  Requests survive restarts and run once per conversation across replicas.
+  Later summaries build on the previous one, and cuts fall only between user
+  turns. **Summarise earlier messages now** asks for one, with optional
+  instructions, and returns at once. A provider context-length error retries
+  once with fewer earlier turns. Nothing is deleted: a quiet line marks where
+  messages were summarised and expands to the summary, and exports, search
+  and share links keep the full history. Each summary is a usage event.
+  General settings has an on/off switch for automatic summaries (on by
+  default). Migration `0028_conversation_compaction`.
 - **Meaning-based search for project files.** With an embeddings model
   configured under **Providers & Models → Embeddings** and the pgvector
   extension enabled by the operator, project search merges keyword and vector
@@ -43,6 +47,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   documented headers for `/artifact-frame.html`. Per-role switch, a
   General settings switch for Diagram Design guidance (MIT, Cathryn Lavery),
   storage accounting, export and forks. Migration `0032_artifacts`.
+  - **Written live.** While a model writes an artifact, the reply shows a
+    card with its title, line count and latest lines, and revisions show
+    their changes. On wide screens the panel opens beside the conversation
+    by itself for replies written in that tab, shows the source as it
+    arrives and switches to the preview when it is saved, without moving
+    focus; on phones the card shows progress and opens the panel when
+    tapped. Settings → Customization → **Open artifacts automatically**
+    (on by default).
+  - **Full screen** from the panel header, also on phones and share links.
+  - **Readable steps.** Expanding an artifact step shows its title, kind,
+    size and each change as before-and-after text instead of the tool's
+    JSON input.
+  - Source views are syntax-highlighted like code blocks in chat.
+  - Models are asked to keep program code in the reply as code blocks, use
+    Markdown artifacts only for long documents the person asked for, and
+    not link to artifacts.
 - **Export as DOCX, PDF, XLSX or PPTX** from replies and Markdown artifacts,
   generated server-side in a worker thread. XLSX takes the reply's tables;
   PPTX makes a slide per heading; PDFs cover Western European characters.
@@ -70,12 +90,35 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   → Webhooks. Migration `0030_backups_webhooks`.
 - **A composer hint** to connect an account when a connector's tools are
   allowed but the person has not connected.
+- **A live reasoning preview.** While a model thinks, a three-line window
+  under "Thinking…" shows its latest reasoning; it collapses to "Reasoning"
+  when the answer starts, and expanding it shows everything.
 
 ### Changed
 
 - **A timed-out web search is retried once** within the tool's time limit.
 - **Connector token refresh is coordinated across API replicas**, so a
   rotating refresh token is used once and every caller gets the new token.
+- **Replies show their parts in the order they were written** (reasoning,
+  tool steps, text), also on share links and in Markdown exports, instead of
+  every tool step first.
+- In your own conversations, a link the safety rules refuse shows as its
+  text instead of "[blocked]"; share links keep the marker.
+- The message box's focus line is drawn inside its border.
+
+### Fixed
+
+- Scrolling past the end of a conversation could scroll the whole page and
+  carry the message box off screen (hidden screen-reader text escaped the
+  conversation's scroll area).
+- The Stop and Send icons were invisible on the neutral colour theme.
+- Highlighted code followed the operating system's light or dark setting
+  instead of OCI's theme, which made it hard to read when they differed.
+- Starting a conversation from the home page dropped the cursor out of the
+  message box.
+- The first message of a conversation, and a just-sent question moved to
+  the top, could sit under the top bar's buttons on phones and narrower
+  windows.
 
 ### Removed
 
@@ -84,10 +127,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Known limitations
 
-- Legal hold does not yet pause project deletion or usage-event pruning, and
-  deletions are not exported as compliance events.
+Planned for v0.10 (see `ROADMAP.md`):
+
+- Legal hold does not yet pause project file deletion or usage-event pruning,
+  and deletions are not exported as compliance events.
 - Backups list attachment objects in a manifest rather than copying them; use
   bucket versioning or volume snapshots for attachment data.
+- Exported PDFs cover Latin scripts only.
+- The artifact panel cannot be resized, and reloading during a very long
+  artifact may not resume its stream.
+- A summary someone asked for that fails in the background is not reported.
 
 ## [0.8.0] - 2026-10-02
 

@@ -14,6 +14,7 @@ document at every minor release.
 - [Shipped — v0.7: organise and find](#shipped--v07-organise-and-find)
 - [Shipped — v0.8: tools and connected knowledge](#shipped--v08-tools-and-connected-knowledge)
 - [Now — v0.9: make and operate](#now--v09-make-and-operate)
+- [Next — v0.10: finish and harden](#next--v010-finish-and-harden)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -165,6 +166,23 @@ calling.
 | **Compliance export** | eDiscovery, records requests and security monitoring. | Stream audit events and, where policy allows, conversation content as JSONL to storage or a SIEM; legal hold that pauses retention for named people. |
 | **Observability and events** | Operators need metrics and integrations beyond the health page. | OpenTelemetry traces and metrics, a Prometheus endpoint, and signed webhooks for selected events. |
 | **Automated backups** | Backups are documented but manual. | Scheduled `pg_dump` and attachment snapshots to S3-compatible storage, with retention and a restore check on System health. |
+
+## Next — v0.10: finish and harden
+
+The gaps v0.9 left open, closed before new features. Each is small on its own;
+together they make compliance, backups, exports and artifacts complete.
+
+| Item | Gap in v0.9 | Plan |
+| --- | --- | --- |
+| **Legal hold covers everything** | A hold pauses conversation retention, trash purging, temporary-chat expiry, memory retention and permanent deletion, but removing a held person's project still deletes its files at once, and their usage events are still pruned. | Holds also pause project file deletion and usage-event pruning, with tests that every deletion path checks the hold. |
+| **Deletions in the compliance export** | The export streams audit events and content, but not what was deleted, so a downstream archive cannot tell a deletion from a gap. | Deletions (conversations, messages, attachments, artifacts, memory) exported as events with who, what and when, never the deleted content. |
+| **Backups include files** | Automated backups copy the database and list every attachment object with its checksum, but do not copy the attachments themselves; operators protect the storage separately. | Incremental attachment copies to the backup destination alongside each database backup, covered by retention and the restore check. |
+| **PDF export in every script** | Exported PDFs cover Latin scripts only; Chinese, Japanese, Korean, Arabic, Hebrew and others are replaced. | Embedded fonts with wide script coverage (and right-to-left layout), chosen per document. |
+| **Resizable artifact panel** | The docked panel is a fixed share of the window. | A drag handle and keyboard-operable resizing, remembered per person. |
+| **Long artifact streams after a reload** | Reloading during a very long artifact can fail to resume, because a stored reply keeps a bounded number of stream events. | Resume from the saved draft instead of replaying every event. |
+| **Failed summaries are reported** | When a summary someone asked for fails in the background, the "Summarising" state simply disappears. | Tell the person it failed and why (allowance, model error), with a retry. |
+| **Slow search providers** | SearchApi occasionally times out, and a slow provider fails the search. | Retry once, then fall back to a second configured provider when one is set. |
+| **One place for operations pages** | The Backups and Compliance pages repeat the same destination and schedule controls. | Shared components for destinations, schedules and run history. |
 
 ## Later — v1.0 and beyond: assistants and media
 
