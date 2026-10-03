@@ -48,6 +48,8 @@ scrape_configs:
 | `oci_tool_call_duration_seconds` | histogram | `tool` |
 | `oci_job_runs_total` | counter | `job`, `outcome`: `success`, `error` |
 | `oci_job_duration_seconds` | histogram | `job` |
+| `oci_web_searches_total` | counter | `provider` (such as `searxng`, `brave`), `slot`: `primary`, `fallback`; `outcome`: `answered`, `failed`. Searches from conversations only, never the query |
+| `oci_web_search_duration_seconds` | histogram | `provider`, `slot` (retry included) |
 | `oci_webhook_deliveries_total` | counter | `outcome`: `succeeded`, `retrying`, `failed` |
 | `oci_webhook_deliveries_pending` | gauge | Deliveries waiting for a first attempt or a retry |
 | `oci_storage_deletions_pending` | gauge | Stored objects queued for deletion |

@@ -9,6 +9,7 @@ import { UserMenu } from '~/components/layout/user-menu';
 import { Button } from '~/components/ui/button';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
+import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 
 interface SidebarProps {
@@ -58,19 +59,20 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           size="icon-sm"
           onClick={onToggle}
           aria-label="Close sidebar"
+          aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
         >
           <PanelLeft />
         </Button>
-        <Link to="/" className="min-w-0 flex-1 px-1 text-center">
+        {/* Mark and name sit beside the toggle (v0.10): centring them needed a
+            spacer that left too little room for the full default name. */}
+        <Link to="/" className="flex min-w-0 flex-1 items-center px-2">
           <Wordmark
             name={branding?.appName}
             shortName={branding?.shortName}
             logoUrl={branding?.logoUrl}
             compact
-            className="mx-auto block truncate"
           />
         </Link>
-        <span className="size-8" />
       </div>
 
       <div className="hidden px-3 pb-2 md:block">
@@ -79,6 +81,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           className="h-9 w-full font-semibold"
           onClick={handleNewChat}
           disabled={createThread.isPending}
+          aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
         >
           New Chat
         </Button>
@@ -129,7 +132,12 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       </div>
 
       <div className="flex items-center justify-between px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:hidden">
-        <Button variant="accent" className="h-11 rounded-full px-5" onClick={handleNewChat}>
+        <Button
+          variant="accent"
+          className="h-11 rounded-full px-5"
+          onClick={handleNewChat}
+          aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
+        >
           New Chat
         </Button>
         <UserMenu compact />

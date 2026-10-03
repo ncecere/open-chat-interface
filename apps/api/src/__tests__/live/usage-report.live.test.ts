@@ -116,7 +116,7 @@ describe.skipIf(!available)('live Postgres: usage reporting', () => {
     expect(row?.policy_name).toBe('Anthropic models');
   });
 
-  it('removes denials with the person they belonged to', async () => {
+  it('keeps denials without the person they belonged to', async () => {
     const doomed = await seedUser(db, organizationId, { email: 'leaving@example.com' });
     await db.execute(sql`
       insert into quota_denial
@@ -130,5 +130,10 @@ describe.skipIf(!available)('live Postgres: usage reporting', () => {
       sql`select count(*)::bigint as count from quota_denial where user_id = ${doomed}`,
     );
     expect(Number(row?.count)).toBe(0);
+    // The refusals still count towards the limit's history (Usage, Limits tab).
+    const kept = await db.execute<{ user_id: string | null; denial_count: number }>(
+      sql`select user_id, denial_count from quota_denial where policy_id = 'policy-2'`,
+    );
+    expect(kept).toEqual([{ user_id: null, denial_count: 5 }]);
   });
 });

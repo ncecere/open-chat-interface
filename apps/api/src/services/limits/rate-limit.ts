@@ -11,6 +11,11 @@ export interface RateLimitResult {
   remaining: number;
   /** Seconds until the window rolls over, for the Retry-After header. */
   retryAfterSeconds: number;
+  /**
+   * True only for the first refused request in a window, so a refusal can be
+   * logged or audited once per window rather than once per request.
+   */
+  firstRefusal: boolean;
 }
 
 /**
@@ -82,6 +87,7 @@ export async function consumeRateLimit(params: {
     limit: params.limit,
     remaining: Math.max(0, params.limit - count),
     retryAfterSeconds: Math.max(1, Math.ceil(windowSeconds - elapsed)),
+    firstRefusal: count === params.limit + 1,
   };
 }
 
@@ -108,30 +114,52 @@ export async function uploadRateLimit(userId: string, role: UserRole): Promise<R
  * targeted. Both are needed: an attacker controls the account field, so an
  * account-only limit is trivially evaded, while an IP-only limit lets a
  * distributed attempt through.
+ *
+ * Applied to Better Auth's sign-in, sign-up, password-reset and verification
+ * endpoints by `middleware/auth-rate-limit.ts`. With no client address (no
+ * trusted proxy header and no socket), only the account is counted: one
+ * shared "unknown" counter would let a single client lock everyone out.
  */
 export async function authRateLimit(params: {
   ipAddress: string | null;
   identifier?: string | null;
-}): Promise<RateLimitResult> {
+}): Promise<RateLimitResult & { scope: 'ip' | 'account' | null }> {
   const settings = await getRateLimitSettings();
   const limit = settings.authAttemptsPerMinute;
 
-  const results = await Promise.all([
-    consumeRateLimit({ bucket: 'auth:ip', identifier: params.ipAddress ?? 'unknown', limit }),
-    ...(params.identifier
-      ? [
-          consumeRateLimit({
-            bucket: 'auth:id',
-            identifier: params.identifier.toLowerCase(),
-            limit,
-          }),
-        ]
-      : []),
-  ]);
+  const checks: Array<Promise<RateLimitResult & { scope: 'ip' | 'account' }>> = [];
+  if (params.ipAddress)
+    checks.push(
+      consumeRateLimit({ bucket: 'auth:ip', identifier: params.ipAddress, limit }).then(
+        (result) => ({ ...result, scope: 'ip' as const }),
+      ),
+    );
+  if (params.identifier)
+    checks.push(
+      consumeRateLimit({
+        bucket: 'auth:id',
+        identifier: params.identifier.trim().toLowerCase(),
+        limit,
+      }).then((result) => ({ ...result, scope: 'account' as const })),
+    );
+  const results = await Promise.all(checks);
+  if (results.length === 0) {
+    return {
+      allowed: true,
+      limit,
+      remaining: limit,
+      retryAfterSeconds: 0,
+      firstRefusal: false,
+      scope: null,
+    };
+  }
 
   // The tightest of the applicable limits wins.
   return results.reduce((strictest, result) =>
-    !result.allowed || result.remaining < strictest.remaining ? result : strictest,
+    (!result.allowed && strictest.allowed) ||
+    (result.allowed === strictest.allowed && result.remaining < strictest.remaining)
+      ? result
+      : strictest,
   );
 }
 

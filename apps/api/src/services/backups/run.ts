@@ -1,13 +1,33 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { and, asc, desc, eq, gt, gte, inArray, isNull, ne, or, schema, sql } from '@oci/db';
-import { BACKUP_STORAGE_PREFIX, type BackupRun, type BackupStatus } from '@oci/shared';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  schema,
+  sql,
+} from '@oci/db';
+import {
+  BACKUP_FILE_SAMPLE_SIZE,
+  BACKUP_STORAGE_PREFIX,
+  type BackupRun,
+  type BackupStatus,
+} from '@oci/shared';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
+import { isManagedLogoKey } from '../branding-assets.js';
 import { runExclusively } from '../jobs/runner.js';
 import { backupDuration, backupRuns } from '../observability/metrics.js';
 import { withSpan } from '../observability/tracing.js';
@@ -15,6 +35,17 @@ import { getDefaultOrganizationId } from '../organization.js';
 import { getSetting } from '../settings.js';
 import type { StorageDriver } from '../storage/driver.js';
 import { getStorageDriver } from '../storage/index.js';
+import {
+  BACKUP_OBJECTS_FOLDER,
+  ChecksumMismatchError,
+  checksumStored,
+  copyObjectToBackup,
+  eachLimit,
+  readObject,
+  SourceReadError,
+  sweepBackupObjects,
+  verifyBackupObjects,
+} from './files.js';
 import {
   captureTail,
   exitCode,
@@ -34,13 +65,15 @@ import {
 } from './settings.js';
 
 /**
- * Automated backups: a `pg_dump` archive (custom format) and a manifest of
- * attachment objects, written to S3-compatible storage by the job runner,
- * then read back and verified. See docs/admin/backups.md.
+ * Automated backups: a `pg_dump` archive (custom format), a manifest of
+ * attachment objects and, when copying files is on, copies of those objects
+ * (see files.ts), written to S3-compatible storage by the job runner, then
+ * read back and verified. See docs/admin/backups.md.
  *
  * Nothing is held in memory whole: the dump streams from `pg_dump` into a
  * multipart upload, the manifest is produced a page of attachments at a time,
- * and verification streams the stored archive back through `pg_restore`.
+ * files stream from attachment storage to the destination, and verification
+ * streams the stored archive back through `pg_restore`.
  */
 
 export const BACKUP_JOB = 'backups.run';
@@ -115,37 +148,143 @@ async function dumpDatabase(
   }
 }
 
-async function readObject(driver: StorageDriver, key: string): Promise<AsyncIterable<Uint8Array>> {
-  if (driver.getStream) return (await driver.getStream(key)) as AsyncIterable<Uint8Array>;
-  return Readable.from([await driver.get(key)]);
-}
-
-/** SHA-256 and size of one stored attachment object. */
-async function checksumObject(driver: StorageDriver, key: string) {
-  const hash = sha256();
-  let bytes = 0;
-  for await (const chunk of await readObject(driver, key)) {
-    hash.update(chunk);
-    bytes += chunk.byteLength;
-  }
-  return { sha256: hash.digest('hex'), bytes };
+interface FileTotals {
+  copiedObjects: number;
+  copiedBytes: number;
+  skippedObjects: number;
+  skippedBytes: number;
 }
 
 interface ManifestTotals {
   count: number;
   bytes: number;
   missing: number;
+  /** Set when files are copied. */
+  files: FileTotals | null;
 }
 
 const PAGE = 200;
+/** Files copied at once; each holds at most one 16 MiB part in memory. */
+const COPY_CONCURRENCY = 4;
+/** The sweep deletes only copies older than this (see `sweepBackupObjects`). */
+const SWEEP_GRACE_MS = 24 * 60 * 60_000;
+
+type ManifestObject = {
+  attachmentId: string | null;
+  key: string;
+  kind: 'file' | 'thumbnail' | 'logo';
+};
 
 /**
- * One JSON line per attachment object (file and thumbnail): key, size and
- * SHA-256. Checksums are cached per key, since attachment objects are never
- * rewritten, so each run reads only objects it has not seen before.
+ * Manifest lines for one page of objects, copying each to the destination
+ * first when `copyTo` is set. Checksums are cached per key, since attachment
+ * objects are never rewritten, so each run reads only objects it has not
+ * seen before; a copy is skipped when the destination already has its
+ * SHA-256. An object that cannot be read, or whose bytes no longer match its
+ * cached checksum, is listed as missing. A destination failure fails the run.
+ */
+async function manifestLines(
+  source: StorageDriver,
+  objects: ManifestObject[],
+  totals: ManifestTotals,
+  copyTo: BackupTarget | null,
+): Promise<string> {
+  if (objects.length === 0) return '';
+  const cached = new Map(
+    (
+      await db
+        .select()
+        .from(schema.backupObjectChecksum)
+        .where(
+          inArray(
+            schema.backupObjectChecksum.storageKey,
+            objects.map((object) => object.key),
+          ),
+        )
+    ).map((row) => [row.storageKey, row]),
+  );
+
+  const lines: string[] = new Array(objects.length);
+  const inFlight = new Map<string, Promise<unknown>>();
+  const missing = (index: number, error?: string) => {
+    totals.missing += 1;
+    lines[index] =
+      `${JSON.stringify({ ...objects[index], missing: true, ...(error ? { error } : {}) })}\n`;
+  };
+  await eachLimit(
+    objects.map((object, index) => ({ object, index })),
+    copyTo ? COPY_CONCURRENCY : 1,
+    async ({ object, index }) => {
+      let entry = cached.get(object.key);
+      if (!entry) {
+        try {
+          const measured = await checksumStored(source, object.key);
+          entry = {
+            storageKey: object.key,
+            sizeBytes: measured.bytes,
+            sha256: measured.sha256,
+            computedAt: new Date(),
+          };
+          await db.insert(schema.backupObjectChecksum).values(entry).onConflictDoNothing();
+        } catch {
+          missing(index);
+          return;
+        }
+      }
+      if (copyTo && totals.files) {
+        try {
+          // Two objects with the same content copy once: the second waits for
+          // the first, then finds the copy there.
+          const earlier = inFlight.get(entry.sha256);
+          if (earlier) await earlier.catch(() => undefined);
+          const copying = copyObjectToBackup(source, copyTo, {
+            key: object.key,
+            sha256: entry.sha256,
+            bytes: entry.sizeBytes,
+          });
+          inFlight.set(entry.sha256, copying);
+          const outcome = await copying;
+          if (outcome === 'copied') {
+            totals.files.copiedObjects += 1;
+            totals.files.copiedBytes += entry.sizeBytes;
+          } else {
+            totals.files.skippedObjects += 1;
+            totals.files.skippedBytes += entry.sizeBytes;
+          }
+        } catch (error) {
+          if (error instanceof SourceReadError) {
+            missing(index);
+            return;
+          }
+          if (error instanceof ChecksumMismatchError) {
+            // Recomputed next run; this run has no trustworthy copy.
+            await db
+              .delete(schema.backupObjectChecksum)
+              .where(eq(schema.backupObjectChecksum.storageKey, object.key));
+            missing(index, 'checksum mismatch');
+            return;
+          }
+          throw error;
+        }
+      }
+      totals.count += 1;
+      totals.bytes += entry.sizeBytes;
+      lines[index] =
+        `${JSON.stringify({ ...object, bytes: entry.sizeBytes, sha256: entry.sha256 })}\n`;
+    },
+  );
+  return lines.join('');
+}
+
+/**
+ * One JSON line per attachment object (file and thumbnail), then the
+ * instance logo if one was uploaded: key, size and SHA-256.
  * No file names or other content are written.
  */
-async function* attachmentManifest(totals: ManifestTotals): AsyncGenerator<Uint8Array> {
+async function* attachmentManifest(
+  totals: ManifestTotals,
+  copyTo: BackupTarget | null,
+): AsyncGenerator<Uint8Array> {
   const source = await getStorageDriver();
   let after = '';
   for (;;) {
@@ -165,55 +304,28 @@ async function* attachmentManifest(totals: ManifestTotals): AsyncGenerator<Uint8
       )
       .orderBy(asc(schema.attachment.id))
       .limit(PAGE);
-    if (rows.length === 0) return;
+    if (rows.length === 0) break;
     after = rows.at(-1)!.id;
 
-    const objects = rows.flatMap((row) => [
-      { attachmentId: row.id, key: row.storageKey, kind: 'file' as const },
+    const objects = rows.flatMap((row): ManifestObject[] => [
+      { attachmentId: row.id, key: row.storageKey, kind: 'file' },
       ...(row.thumbnailKey
         ? [{ attachmentId: row.id, key: row.thumbnailKey, kind: 'thumbnail' as const }]
         : []),
     ]);
-    const cached = new Map(
-      (
-        await db
-          .select()
-          .from(schema.backupObjectChecksum)
-          .where(
-            inArray(
-              schema.backupObjectChecksum.storageKey,
-              objects.map((object) => object.key),
-            ),
-          )
-      ).map((row) => [row.storageKey, row]),
-    );
+    yield Buffer.from(await manifestLines(source, objects, totals, copyTo), 'utf8');
+  }
 
-    const lines: string[] = [];
-    for (const object of objects) {
-      let entry = cached.get(object.key);
-      if (!entry) {
-        try {
-          const measured = await checksumObject(source, object.key);
-          entry = {
-            storageKey: object.key,
-            sizeBytes: measured.bytes,
-            sha256: measured.sha256,
-            computedAt: new Date(),
-          };
-          await db.insert(schema.backupObjectChecksum).values(entry).onConflictDoNothing();
-        } catch {
-          totals.missing += 1;
-          lines.push(`${JSON.stringify({ ...object, missing: true })}\n`);
-          continue;
-        }
-      }
-      totals.count += 1;
-      totals.bytes += entry.sizeBytes;
-      lines.push(
-        `${JSON.stringify({ ...object, bytes: entry.sizeBytes, sha256: entry.sha256 })}\n`,
-      );
-    }
-    yield Buffer.from(lines.join(''), 'utf8');
+  // The uploaded instance logo lives in attachment storage too.
+  const logo = (await getSetting('branding')).logoUrl ?? null;
+  if (isManagedLogoKey(logo)) {
+    const lines = await manifestLines(
+      source,
+      [{ attachmentId: null, key: logo!, kind: 'logo' }],
+      totals,
+      copyTo,
+    );
+    yield Buffer.from(lines, 'utf8');
   }
 }
 
@@ -328,7 +440,8 @@ async function closeInterruptedRuns(): Promise<void> {
 }
 
 /**
- * Runs one backup now: dump, manifest, verification, then retention. Records
+ * Runs one backup now: dump, manifest (copying files when that is on),
+ * verification, then retention and the sweep of unreferenced copies. Records
  * the run, its metrics and a `backup.run` audit entry, and rethrows a failure
  * so the job run is marked failed too. Callers hold the backup job lock.
  */
@@ -336,6 +449,8 @@ export async function performBackup(options: {
   trigger: 'schedule' | 'manual';
   actor?: Actor;
   databaseUrl?: string;
+  /** How old an unreferenced copy must be before the sweep deletes it; tests shorten it. */
+  sweepGraceMs?: number;
 }): Promise<RunRow> {
   const settings = await backupSettings();
   await closeInterruptedRuns();
@@ -367,12 +482,21 @@ export async function performBackup(options: {
         options.databaseUrl ?? loadEnv().DATABASE_URL,
       );
 
-      const totals: ManifestTotals = { count: 0, bytes: 0, missing: 0 };
+      const totals: ManifestTotals = {
+        count: 0,
+        bytes: 0,
+        missing: 0,
+        files: settings.copyFiles
+          ? { copiedObjects: 0, copiedBytes: 0, skippedObjects: 0, skippedBytes: 0 }
+          : null,
+      };
       const manifestFile = { bytes: 0, hash: sha256() };
       written.push(attachmentsKey);
+      // Copies are not in `written`: they are shared by content with other
+      // backups, so a failed run leaves them for the sweep.
       await target.driver.putStream(
         attachmentsKey,
-        measured(attachmentManifest(totals), manifestFile),
+        measured(attachmentManifest(totals, settings.copyFiles ? target : null), manifestFile),
         'application/x-ndjson',
       );
       const attachments = { bytes: manifestFile.bytes, sha256: manifestFile.hash.digest('hex') };
@@ -397,6 +521,15 @@ export async function performBackup(options: {
                 missingObjects: totals.missing,
                 ...attachments,
               },
+              // Copies live beside the backup folders, in `objects/<sha256>`.
+              files: totals.files
+                ? {
+                    copied: true,
+                    folder: BACKUP_OBJECTS_FOLDER,
+                    verification: settings.verifyFiles,
+                    ...totals.files,
+                  }
+                : { copied: false },
             },
             null,
             2,
@@ -410,6 +543,20 @@ export async function performBackup(options: {
         ...attachments,
         lines: totals.count + totals.missing,
       });
+      let filesChecked: number | null = null;
+      if (totals.files) {
+        const files = await verifyBackupObjects(
+          target,
+          attachmentsKey,
+          settings.verifyFiles,
+          BACKUP_FILE_SAMPLE_SIZE,
+        );
+        if (files.failed > 0)
+          throw new BackupError(
+            `Verification failed: ${files.failed} of ${files.checked} copied attachment files checked are missing at the destination or do not match their checksum.`,
+          );
+        filesChecked = files.checked;
+      }
 
       const [finished] = await db
         .update(schema.backupRun)
@@ -424,9 +571,19 @@ export async function performBackup(options: {
           attachmentCount: totals.count,
           attachmentBytes: totals.bytes,
           missingObjects: totals.missing,
+          ...(totals.files
+            ? {
+                ...totals.files,
+                verifiedObjects: filesChecked ?? 0,
+              }
+            : {}),
           verified: true,
           verificationDetail: `${detail}; ${totals.count} attachment objects checksummed${
             totals.missing ? `, ${totals.missing} missing` : ''
+          }${
+            totals.files
+              ? `; ${totals.files.copiedObjects} files copied, ${totals.files.skippedObjects} already at the destination, ${filesChecked} read back and checksummed`
+              : ''
           }`,
         })
         .where(eq(schema.backupRun.id, run!.id))
@@ -451,17 +608,39 @@ export async function performBackup(options: {
           dumpBytes: dump.bytes,
           attachmentObjects: totals.count,
           missingObjects: totals.missing,
+          ...(totals.files
+            ? {
+                copiedObjects: totals.files.copiedObjects,
+                copiedBytes: totals.files.copiedBytes,
+              }
+            : {}),
           verified: true,
         },
       });
 
-      await pruneBackups(settings, target).catch((error: unknown) =>
-        logger.error(
-          { err: error instanceof Error ? error.message : String(error) },
-          'Backup retention failed',
-        ),
+      const retained = await pruneBackups(settings, target).then(
+        () => true,
+        (error: unknown) => {
+          logger.error(
+            { err: error instanceof Error ? error.message : String(error) },
+            'Backup retention failed',
+          );
+          return false;
+        },
       );
-      return finished!;
+      if (!retained) return finished!;
+      const swept = await sweepCopies(
+        settings,
+        target,
+        new Date(Date.now() - (options.sweepGraceMs ?? SWEEP_GRACE_MS)),
+      );
+      if (swept === null) return finished!;
+      const [after] = await db
+        .update(schema.backupRun)
+        .set({ sweptObjects: swept })
+        .where(eq(schema.backupRun.id, run!.id))
+        .returning();
+      return after ?? finished!;
     });
   } catch (error) {
     const message =
@@ -570,6 +749,45 @@ export async function pruneBackups(
   return pruned;
 }
 
+/**
+ * After retention: deletes copies at this destination that no retained
+ * backup which copied files references. Null when it could not run (it is
+ * retried after the next backup); never fails the backup.
+ */
+async function sweepCopies(
+  settings: ResolvedBackupSettings,
+  target: BackupTarget,
+  olderThan: Date,
+): Promise<number | null> {
+  try {
+    const retained = await db
+      .select({ attachmentsKey: schema.backupRun.attachmentsKey })
+      .from(schema.backupRun)
+      .where(
+        and(
+          eq(schema.backupRun.status, 'succeeded'),
+          isNull(schema.backupRun.prunedAt),
+          isNotNull(schema.backupRun.copiedObjects),
+          eq(schema.backupRun.destination, settings.destination),
+          eq(schema.backupRun.keyPrefix, target.root),
+        ),
+      );
+    const swept = await sweepBackupObjects(
+      target,
+      retained.flatMap((run) => (run.attachmentsKey ? [run.attachmentsKey] : [])),
+      olderThan,
+    );
+    if (swept > 0) logger.info({ swept }, 'Deleted backup file copies no backup references');
+    return swept;
+  } catch (error) {
+    logger.warn(
+      { err: error instanceof Error ? error.message : String(error) },
+      'Could not sweep backup file copies; will retry after the next backup',
+    );
+    return null;
+  }
+}
+
 /** The most recent scheduled start at or before `now`. */
 export function scheduledSlot(now: Date, hourUtc: number): Date {
   const slot = new Date(
@@ -650,6 +868,17 @@ function toBackupRunView(row: RunRow): BackupRun {
     attachmentCount: row.attachmentCount,
     attachmentBytes: row.attachmentBytes,
     missingObjects: row.missingObjects,
+    files:
+      row.copiedObjects === null
+        ? null
+        : {
+            copiedObjects: row.copiedObjects,
+            copiedBytes: row.copiedBytes ?? 0,
+            skippedObjects: row.skippedObjects ?? 0,
+            skippedBytes: row.skippedBytes ?? 0,
+            verifiedObjects: row.verifiedObjects ?? 0,
+            sweptObjects: row.sweptObjects,
+          },
     verified: row.verified,
     verificationDetail: row.verificationDetail,
     errorMessage: row.errorMessage,

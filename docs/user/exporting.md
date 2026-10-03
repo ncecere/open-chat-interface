@@ -28,7 +28,7 @@ text, or on share links.
 | Format | What you get |
 | --- | --- |
 | **Word document** (`.docx`) | The conversation's (or document's) title, then the content with real Word headings, bulleted and numbered lists, tables with a shaded header row that repeats on each page, and code in a monospace font. A4 pages. |
-| **PDF** (`.pdf`) | The same content on A4 pages, in Helvetica and Courier. Long tables and code continue over pages. Fonts are limited; see [Characters in PDFs](#characters-in-pdfs). |
+| **PDF** (`.pdf`) | The same content on A4 pages. Long tables and code continue over pages. Text in any common script, including right-to-left; see [Characters in PDFs](#characters-in-pdfs). |
 | **Presentation** (`.pptx`) | A widescreen deck: a title slide, then one slide per top-level heading (or per second-level heading when there is only one top-level heading). Paragraphs and list items become bullets; tables become slide tables. A slide that would overflow continues on the next one, marked "(continued)". |
 | **Spreadsheet** (`.xlsx`) | One worksheet per table, named after the heading above it (or "Table 1", "Table 2", …). The header row is bold and stays in view as you scroll. Plain numbers and percentages are stored as numbers; everything else, including values such as `007` or `=SUM(A1)`, stays text. Offered only when the reply or document contains a table. |
 
@@ -64,18 +64,30 @@ document (`project-plan-v3.pdf`).
 
 ### Characters in PDFs
 
-PDFs use the standard PDF fonts, which cover Western European text (the
-Windows-1252 character set) only:
+Text in Western European languages is set in Helvetica and Courier, the
+standard PDF fonts, as it always was. When a reply or document has other text,
+the PDF includes the fonts it needs (only the characters used, so the file
+stays small):
 
-- Accented letters outside that set are written without their accent
-  ("ő" becomes "o").
-- A few symbols get plain stand-ins: arrows such as "→" become "->", and "≤",
-  "≥" and "≠" become "<=", ">=" and "!=".
-- Anything else, including Greek, Cyrillic, Chinese, Japanese, Korean,
-  Arabic, Hebrew and emoji, prints as "?".
+- Latin with any accents, Vietnamese, Greek, Cyrillic and Devanagari in Noto
+  Sans;
+- Chinese, Japanese and Korean in Noto Sans SC, JP and KR. A document with
+  Japanese kana uses the Japanese forms of shared characters, one with Korean
+  Hangul the Korean forms, and otherwise the Chinese (simplified) forms;
+- Arabic, with its letters joined as they should be, and Hebrew, in Noto Sans
+  Arabic and Hebrew. Right-to-left paragraphs start on the right and read
+  right to left, with numbers and Latin words inside them kept left to right;
+- arrows, maths symbols and similar signs.
 
-For text in other scripts, export a **Word document** instead: it keeps every
-character.
+Some limits:
+
+- **Emoji** print as "�": colour emoji fonts cannot be embedded this way.
+- Chinese, Japanese, Korean, Arabic and Hebrew have no italic, and Chinese,
+  Japanese and Korean bold is drawn slightly thicker rather than in a bold
+  font.
+- A few rare characters no bundled font has also print as "�". Word documents
+  keep every character, for your own fonts to show.
+- List bullets and numbers stay on the left, also in right-to-left lists.
 
 ## Limits
 

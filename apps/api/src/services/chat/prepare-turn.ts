@@ -1,6 +1,6 @@
 import { DEFAULT_MAX_TOOL_STEPS } from '@oci/shared';
 import type { UIMessage } from 'ai';
-import type { searchWeb } from '../search/index.js';
+import type { SearchResult } from '../search/index.js';
 import type { CompactionCheck } from './compaction-queue.js';
 import type { generationSettings } from './generation-settings.js';
 import { textParts } from './message-parts.js';
@@ -39,9 +39,15 @@ export type PreparedTurn = TurnContext & {
   searchGroundingPart: {
     type: 'data-search-grounding';
     id: string;
-    data: { query: string; results: Awaited<ReturnType<typeof searchWeb>> };
+    data: {
+      query: string;
+      results: SearchResult[];
+      error?: string;
+      provider?: string;
+      fallback?: boolean;
+    };
   } | null;
-  /** Set when project files were searched; names and passage counts only. */
+  /** Set when project files were searched or left out; names, counts and short excerpts. */
   projectSearchPart?: ProjectSearchPart | null;
   /**
    * After the provider reported the input too long: rebuild the input with at

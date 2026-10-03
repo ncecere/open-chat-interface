@@ -34,7 +34,11 @@ export async function lockUsageOwner(tx: UsageTransaction, userId: string): Prom
   return !!owner;
 }
 
-async function changeRollup(tx: UsageTransaction, event: UsageEvent, delta: Amounts) {
+async function changeRollup(
+  tx: UsageTransaction,
+  event: UsageEvent & { userId: string },
+  delta: Amounts,
+) {
   const day = event.occurredAt.toISOString().slice(0, 10);
   const changes = {
     messageCount: sql`${schema.usageRecord.messageCount} + ${delta.messageCount}`,
@@ -92,6 +96,10 @@ export async function settleLockedEvent(
   const reportedIn = tokenCount(usage?.tokensIn);
   const reportedOut = tokenCount(usage?.tokensOut);
   if (!event.pending && !event.usageUnknown) return;
+  // A deleted account's event has no owner to settle for (callers lock the
+  // owner first, so this is only a guard): it keeps what was last recorded.
+  const { userId } = event;
+  if (userId === null) return;
   // Partial reports can race a sweep or each other. Merge cumulative maxima
   // until a complete report authoritatively replaces them (including downward
   // corrections). Missing fields and out-of-order retries never erase actuals.
@@ -122,12 +130,16 @@ export async function settleLockedEvent(
       usageUnknown: !known,
     })
     .where(eq(schema.usageEvent.id, event.id));
-  await changeRollup(tx, event, {
-    messageCount: event.pending ? event.messageCount : 0,
-    tokensIn: tokensIn - (event.pending ? 0 : event.tokensIn),
-    tokensOut: tokensOut - (event.pending ? 0 : event.tokensOut),
-    costMicros: costMicros - (event.pending ? 0 : event.costMicros),
-  });
+  await changeRollup(
+    tx,
+    { ...event, userId },
+    {
+      messageCount: event.pending ? event.messageCount : 0,
+      tokensIn: tokensIn - (event.pending ? 0 : event.tokensIn),
+      tokensOut: tokensOut - (event.pending ? 0 : event.tokensOut),
+      costMicros: costMicros - (event.pending ? 0 : event.costMicros),
+    },
+  );
 }
 
 export async function settleReservation(
@@ -168,12 +180,16 @@ export async function releaseReservation(reservation: UsageReservation): Promise
       .for('update');
     if (!event || (!event.pending && !event.usageUnknown)) return;
     if (!event.pending) {
-      await changeRollup(tx, event, {
-        messageCount: -event.messageCount,
-        tokensIn: -event.tokensIn,
-        tokensOut: -event.tokensOut,
-        costMicros: -event.costMicros,
-      });
+      await changeRollup(
+        tx,
+        { ...event, userId: reservation.userId },
+        {
+          messageCount: -event.messageCount,
+          tokensIn: -event.tokensIn,
+          tokensOut: -event.tokensOut,
+          costMicros: -event.costMicros,
+        },
+      );
     }
     await tx.delete(schema.usageEvent).where(eq(schema.usageEvent.id, event.id));
   });

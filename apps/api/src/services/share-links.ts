@@ -1,8 +1,11 @@
-import { and, asc, desc, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
+import { and, asc, count, desc, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
 import {
   ERROR_CODES,
   isToolPart,
   MAX_ARTIFACT_TITLE_LENGTH,
+  MY_SHARE_LINKS_PAGE_SIZE,
+  type MyShareLink,
+  type MyShareLinksResponse,
   type PublicArtifact,
   summarizeToolPart,
   type UserRole,
@@ -134,7 +137,90 @@ export async function listShareLinks(threadId: string, userId: string) {
     .orderBy(desc(schema.shareLink.createdAt));
 }
 
-export async function revokeShareLink(linkId: string, userId: string) {
+/**
+ * Every share link one person made, newest first, with the conversation each
+ * publishes (Settings → Sharing, v0.10). Only their own links: the owner
+ * column is the filter, so another person's id never matches. Revoked and
+ * expired links are listed too, until retention removes revoked ones.
+ */
+export async function listOwnShareLinks(
+  userId: string,
+  page: { limit?: number; offset?: number } = {},
+): Promise<MyShareLinksResponse> {
+  const limit = page.limit ?? MY_SHARE_LINKS_PAGE_SIZE;
+  const offset = page.offset ?? 0;
+  const owned = eq(schema.shareLink.userId, userId);
+  const [rows, [totals]] = await Promise.all([
+    db
+      .select({
+        id: schema.shareLink.id,
+        slug: schema.shareLink.slug,
+        threadId: schema.shareLink.threadId,
+        threadTitle: schema.thread.title,
+        threadAvailable: sql<boolean>`coalesce((${shareableThreadCondition()}), false)`,
+        upToMessageId: schema.shareLink.upToMessageId,
+        viewCount: schema.shareLink.viewCount,
+        expiresAt: schema.shareLink.expiresAt,
+        revokedAt: schema.shareLink.revokedAt,
+        createdAt: schema.shareLink.createdAt,
+      })
+      .from(schema.shareLink)
+      .innerJoin(schema.thread, eq(schema.thread.id, schema.shareLink.threadId))
+      .where(owned)
+      .orderBy(desc(schema.shareLink.createdAt), desc(schema.shareLink.id))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({
+        total: count(),
+        active: sql<number>`count(*) filter (where ${schema.shareLink.revokedAt} is null)::int`,
+      })
+      .from(schema.shareLink)
+      .where(owned),
+  ]);
+  const total = Number(totals?.total ?? 0);
+  const links: MyShareLink[] = rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    path: `/share/${row.slug}`,
+    threadId: row.threadId,
+    threadTitle: row.threadTitle,
+    threadUnavailable: !row.threadAvailable,
+    upToMessageId: row.upToMessageId,
+    viewCount: row.viewCount,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    revokedAt: row.revokedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  }));
+  return {
+    links,
+    total,
+    active: Number(totals?.active ?? 0),
+    nextOffset: offset + rows.length < total ? offset + rows.length : null,
+  };
+}
+
+/**
+ * Revokes every link the person still has (expired ones too, so none can be
+ * brought back by a changed expiry). Returns how many were revoked; links
+ * already revoked keep their original time.
+ */
+export async function revokeAllOwnShareLinks(userId: string): Promise<number> {
+  const now = new Date();
+  const revoked = await db
+    .update(schema.shareLink)
+    .set({ revokedAt: now, updatedAt: now })
+    .where(and(eq(schema.shareLink.userId, userId), isNull(schema.shareLink.revokedAt)))
+    .returning({ id: schema.shareLink.id });
+  return revoked.length;
+}
+
+/**
+ * Revokes one of the person's links. `changed` is false when it was already
+ * revoked, so the caller audits only a real revocation. 404 for a link that is
+ * not theirs.
+ */
+export async function revokeOwnShareLink(linkId: string, userId: string) {
   const [revoked] = await db
     .update(schema.shareLink)
     .set({ revokedAt: new Date(), updatedAt: new Date() })
@@ -147,7 +233,7 @@ export async function revokeShareLink(linkId: string, userId: string) {
     )
     .returning();
 
-  if (revoked) return revoked;
+  if (revoked) return { link: revoked, changed: true };
 
   const [existing] = await db
     .select()
@@ -156,7 +242,11 @@ export async function revokeShareLink(linkId: string, userId: string) {
     .limit(1);
 
   if (!existing) throw notFound('Share link not found');
-  return existing;
+  return { link: existing, changed: false };
+}
+
+export async function revokeShareLink(linkId: string, userId: string) {
+  return (await revokeOwnShareLink(linkId, userId)).link;
 }
 
 /** Redacts common credential forms without exposing hidden message metadata. */

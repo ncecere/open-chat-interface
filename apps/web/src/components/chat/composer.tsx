@@ -3,6 +3,7 @@ import { type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef } from 're
 import { AttachmentChips } from '~/components/chat/attachment-chips';
 import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
+import { ProjectFilesControl } from '~/components/chat/project-files-control';
 import type { PendingAttachment } from '~/hooks/use-attachments';
 import { isSendKey, sendKeyShortcuts } from '~/lib/send-keys';
 import { cn } from '~/lib/utils';
@@ -19,7 +20,14 @@ interface ComposerProps extends ComposerOptionsProps {
   attachments?: PendingAttachment[];
   onRemoveAttachment?: (localId: string) => void;
   placeholder?: string;
+  /** The conversation's project, for the Project files control (v0.10). */
+  projectId?: string | null;
+  /** Project files left out of the next message. */
+  excludedProjectFileIds?: readonly string[];
+  onExcludedProjectFilesChange?: (ids: string[]) => void;
 }
+
+const NO_FILES: readonly string[] = [];
 
 /**
  * Bottom-anchored composer. The card is flush with the bottom edge and only
@@ -45,6 +53,9 @@ export const Composer = memo(function Composer({
   onRemoveAttachment,
   placeholder = 'Type your message here...',
   autoFocus = false,
+  projectId = null,
+  excludedProjectFileIds = NO_FILES,
+  onExcludedProjectFilesChange,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Settings → Customization: Enter adds a line and Cmd/Ctrl+Enter sends.
@@ -112,6 +123,14 @@ export const Composer = memo(function Composer({
             attachmentsAvailable={attachmentsAvailable}
             onAttachFiles={onAttachFiles}
           />
+          {projectId && attachmentsAvailable !== false && onExcludedProjectFilesChange && (
+            <ProjectFilesControl
+              projectId={projectId}
+              excluded={excludedProjectFileIds}
+              onExcludedChange={onExcludedProjectFilesChange}
+              disabled={streaming}
+            />
+          )}
 
           {streaming ? (
             <button

@@ -1,7 +1,7 @@
 import type { CatalogModel } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
 import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
@@ -11,17 +11,19 @@ import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
+import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 type CategoryId = (typeof SUGGESTION_CATEGORIES)[number]['id'];
 
-const MODEL_STORAGE_KEY = 'oci.model';
 const EMPTY_MODELS: CatalogModel[] = [];
 const PENDING_KEY = 'oci.pendingPrompt';
 const PENDING_THREAD_KEY = 'oci.pendingThreadId';
 const PENDING_ATTACHMENTS_KEY = 'oci.pendingAttachments';
 const PENDING_EFFORT_KEY = 'oci.pendingEffort';
+/** The model chosen here, handed to the new conversation (v0.10; was `oci.model`). */
+const PENDING_MODEL_KEY = 'oci.pendingModel';
 const PENDING_SEARCH_KEY = 'oci.pendingWebSearch';
 /** Set when the person was typing in the composer, so the conversation keeps focus there. */
 const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
@@ -44,17 +46,15 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraft] = useState('');
   const [webSearch, setWebSearch] = useState(false);
-  const [modelSlug, setModelSlug] = useState<string | null>(() =>
-    localStorage.getItem(MODEL_STORAGE_KEY),
-  );
+  // A model picked here applies to the conversation it starts; otherwise the
+  // person's own default (Settings → Models), then the instance default.
+  const [modelSlug, setModelSlug] = useState<string | null>(null);
   const { items: attachmentItems, upload, remove } = useAttachments();
+  useEffect(() => forgetBrowserModel(), []);
 
-  const selectedModel =
-    models.find((model) => model.slug === modelSlug) ??
-    models.find((model) => model.isDefault) ??
-    models[0] ??
-    null;
-  // The administrator's default, clamped to what this model and role allow.
+  const selectedModel = startingModel(models, modelSlug, data?.chat?.defaultModelSlug);
+  // The person's default level, else the administrator's, clamped to what this
+  // model and role allow.
   const [effort, setEffort] = useComposerEffort(selectedModel);
 
   const firstName = data?.user.name.split(' ')[0];
@@ -62,10 +62,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
     SUGGESTION_CATEGORIES.find((category) => category.id === activeCategory)?.prompts ??
     DEFAULT_PROMPTS;
 
-  const selectModel = useCallback((model: CatalogModel) => {
-    setModelSlug(model.slug);
-    localStorage.setItem(MODEL_STORAGE_KEY, model.slug);
-  }, []);
+  const selectModel = useCallback((model: CatalogModel) => setModelSlug(model.slug), []);
 
   const startThread = useCallback(
     async (text: string) => {
@@ -82,6 +79,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
       // Invalidate the old destination before changing any payload fields.
       sessionStorage.removeItem(PENDING_THREAD_KEY);
       sessionStorage.setItem(PENDING_KEY, content);
+      sessionStorage.setItem(PENDING_MODEL_KEY, selectedModel.slug);
       const requestEffort = reasoningEffortForRequest(selectedModel, effort);
       if (requestEffort) sessionStorage.setItem(PENDING_EFFORT_KEY, requestEffort);
       else sessionStorage.removeItem(PENDING_EFFORT_KEY);

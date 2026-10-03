@@ -1,71 +1,20 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { containerRunning } from '../../../test/live-postgres.js';
+import { liveS3Config as config, liveS3Available } from '../../../test/live-backup-tools.js';
 import { S3StorageDriver } from '../../services/storage/s3-driver.js';
 
 /**
- * Exercises the real S3 driver against MinIO from `docker/compose.auth-test.yaml`.
- * The mocked suites assert configuration and policy logic; these assert that the
- * driver actually round trips bytes, deletes objects, and fails cleanly against a
- * genuine S3 API — behaviour a stubbed `S3Client` can never prove.
+ * Exercises the real S3 driver against an S3-compatible server: VersityGW in
+ * CI, the MinIO fixture from `docker/compose.auth-test.yaml` locally (see
+ * test/live-backup-tools.ts). The mocked suites assert configuration and
+ * policy logic; these assert that the driver actually round trips bytes,
+ * deletes objects, and fails cleanly against a genuine S3 API — behaviour a
+ * stubbed `S3Client` can never prove.
  */
-const config = {
-  bucket: process.env.MINIO_TEST_BUCKET ?? 'oci-test-attachments',
-  region: 'us-east-1',
-  // CI reaches MinIO by service alias; locally it is published on a host port.
-  endpoint:
-    process.env.S3_TEST_ENDPOINT ?? `http://127.0.0.1:${process.env.MINIO_TEST_PORT ?? '9020'}`,
-  accessKeyId: process.env.MINIO_ROOT_USER ?? process.env.MINIO_TEST_ROOT_USER ?? 'oci_test',
-  secretAccessKey:
-    process.env.MINIO_ROOT_PASSWORD ?? process.env.MINIO_TEST_ROOT_PASSWORD ?? 'oci_test_password',
-  forcePathStyle: true,
-};
-
-/**
- * True when MinIO is up and the bucket is reachable. Suites skip rather than
- * fail, so `pnpm test:live` still passes with no container running. The
- * container check short circuits the slower network probe.
- */
-async function liveS3Available(): Promise<boolean> {
-  // CI supplies MinIO as a service rather than a named container, so the fast
-  // local check only short circuits when no endpoint was configured for it.
-  if (!process.env.S3_TEST_ENDPOINT && !containerRunning('oci-auth-test-minio')) return false;
-
-  try {
-    await new S3StorageDriver(config).checkReadAccess();
-    return true;
-  } catch {
-    // The bucket may simply not exist yet, which is the normal state for a
-    // freshly started CI service. Create it, then re-check.
-    try {
-      await createTestBucket();
-      await new S3StorageDriver(config).checkReadAccess();
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-
-/** Creates the test bucket so CI needs no separate provisioning step. */
-async function createTestBucket(): Promise<void> {
-  const { CreateBucketCommand, S3Client } = await import('@aws-sdk/client-s3');
-  const client = new S3Client({
-    region: config.region,
-    endpoint: config.endpoint,
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-  });
-  await client.send(new CreateBucketCommand({ Bucket: config.bucket }));
-}
-
 const available = await liveS3Available();
 
-describe.skipIf(!available)('live S3: storage driver against MinIO', () => {
+describe.skipIf(!available)('live S3: storage driver against S3-compatible storage', () => {
   const driver = new S3StorageDriver(config);
   // Namespaces this run so a failed cleanup cannot leak into the next one.
   const prefix = `live-test/${randomUUID()}`;
@@ -89,8 +38,17 @@ describe.skipIf(!available)('live S3: storage driver against MinIO', () => {
       },
     });
     try {
-      const result = await client.send(new ListObjectsV2Command({ Bucket: config.bucket }));
-      return (result.Contents ?? []).flatMap((entry) => (entry.Key ? [entry.Key] : []));
+      // Every page: other suites share the bucket, so it can hold more than one.
+      const keys: string[] = [];
+      let token: string | undefined;
+      do {
+        const result = await client.send(
+          new ListObjectsV2Command({ Bucket: config.bucket, ContinuationToken: token }),
+        );
+        for (const entry of result.Contents ?? []) if (entry.Key) keys.push(entry.Key);
+        token = result.IsTruncated ? result.NextContinuationToken : undefined;
+      } while (token);
+      return keys;
     } finally {
       client.destroy();
     }
@@ -153,10 +111,11 @@ describe.skipIf(!available)('live S3: storage driver against MinIO', () => {
     const traversal = `${prefix}/../../../../etc/passwd`;
     const body = Buffer.from('not-a-real-password-file');
 
-    // MinIO validates the key server side and refuses any `..` or `.` component
-    // with a 400, so the write fails outright rather than resolving elsewhere.
+    // S3 servers validate the key and refuse a `..` component with a 400
+    // (MinIO says XMinioInvalidResourceName, VersityGW a bare 400), so the
+    // write fails outright rather than resolving elsewhere.
     await expect(driver.put(traversal, body, 'text/plain')).rejects.toMatchObject({
-      name: 'XMinioInvalidResourceName',
+      $metadata: { httpStatusCode: 400 },
     });
 
     // Nothing landed at the escaped target, nor anywhere else in the bucket.
@@ -170,7 +129,7 @@ describe.skipIf(!available)('live S3: storage driver against MinIO', () => {
   });
 
   it('treats an encoded or dotted key as a literal name under the prefix', async () => {
-    // These are the traversal shapes MinIO does accept, so the guarantee that
+    // These are the traversal shapes S3 servers do accept, so the guarantee that
     // matters is that they stay opaque strings inside this run's namespace
     // rather than being collapsed into a parent path.
     const encoded = `${prefix}/%2e%2e/escaped.txt`;

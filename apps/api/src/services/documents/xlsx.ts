@@ -197,7 +197,7 @@ export function renderXlsx(model: DocumentModel): Uint8Array {
     ),
     'docProps/core.xml': strToU8(
       `${header}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-        `<dc:title>${xml(model.title)}</dc:title><dc:creator>Open Chat Interface</dc:creator>` +
+        `<dc:title>${xml(model.title)}</dc:title><dc:creator>${xml(model.creator)}</dc:creator>` +
         `<dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</dcterms:created>` +
         '</cp:coreProperties>',
     ),

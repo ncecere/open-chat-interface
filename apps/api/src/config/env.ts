@@ -78,19 +78,45 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
-let cached: Env | null = null;
+/**
+ * Variables that must be set to something real. A blank value is passed to
+ * validation as it is, so it fails with the variable's own message.
+ */
+const REQUIRED = new Set(['DATABASE_URL', 'AUTH_SECRET', 'ENCRYPTION_KEY']);
 
-export function loadEnv(): Env {
-  if (cached) return cached;
+/**
+ * Drops blank optional variables, so they read as unset.
+ *
+ * Docker Compose passes `NAME: ${NAME:-}` through as an empty string, so a
+ * variable the operator never set arrives as "" rather than missing. For an
+ * optional setting that means "not set": the default applies, and leaving
+ * INITIAL_ADMIN_PASSWORD out prints a one-time password as documented.
+ */
+function withoutBlankOptionals(source: Record<string, string | undefined>) {
+  const result: Record<string, string | undefined> = {};
+  for (const [name, value] of Object.entries(source)) {
+    if (value !== undefined && value.trim() === '' && !REQUIRED.has(name)) continue;
+    result[name] = value;
+  }
+  return result;
+}
 
-  const parsed = envSchema.safeParse(process.env);
+/** Validates an environment; exported for tests, which pass their own. */
+export function parseEnv(source: Record<string, string | undefined>): Env {
+  const parsed = envSchema.safeParse(withoutBlankOptionals(source));
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
       .join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
+  return parsed.data;
+}
 
-  cached = parsed.data;
+let cached: Env | null = null;
+
+export function loadEnv(): Env {
+  if (cached) return cached;
+  cached = parseEnv(process.env);
   return cached;
 }

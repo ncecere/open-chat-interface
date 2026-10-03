@@ -2,6 +2,7 @@ import {
   DEFAULT_MAX_TOOL_STEPS,
   type InstanceSettings,
   SEARCH_PROVIDERS,
+  type SearchProviderKind,
   type SearchTestResult,
   searchTestSchema,
   updateInstanceSettingsSchema,
@@ -16,8 +17,12 @@ import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
-import { runSearch, storedSearchKey } from '../../services/search/index.js';
-import { getSetting, updateSetting } from '../../services/settings.js';
+import {
+  runSearch,
+  storedFallbackSearchKey,
+  storedSearchKey,
+} from '../../services/search/index.js';
+import { getSetting, type SearchSettings, updateSetting } from '../../services/settings.js';
 import { diffSettings, redactSecrets } from '../../services/settings-diff.js';
 import {
   applyS3SettingsPatch,
@@ -125,6 +130,9 @@ settingsRoutes.get('/', async (c) => {
       baseUrl: search.baseUrl,
       hasCredential: Boolean(search.encryptedApiKey),
       maxResults: search.maxResults,
+      fallbackProvider: search.fallbackProvider ?? null,
+      fallbackBaseUrl: search.fallbackBaseUrl ?? null,
+      hasFallbackCredential: Boolean(search.encryptedFallbackApiKey),
     },
     smtp: {
       configured: Boolean(smtp.host && smtp.port && smtp.fromAddress),
@@ -173,49 +181,77 @@ settingsRoutes.post('/storage/test', async (c) => {
 });
 
 /**
+ * One sample search with a provider's address or key, on its own: no retry
+ * budget is shared and no fallback is tried, so each provider's own result is
+ * reported. `storedKey` is used when no key was typed.
+ */
+async function testSearchProvider(
+  target: { provider: SearchProviderKind; baseUrl?: string | null; apiKey?: string },
+  storedKey: () => string | null,
+): Promise<SearchTestResult> {
+  const provider = SEARCH_PROVIDERS[target.provider];
+  const apiKey = provider.needs !== 'apiKey' ? null : target.apiKey?.trim() || storedKey();
+  const baseUrl = provider.needs === 'baseUrl' ? target.baseUrl?.trim() || null : null;
+  try {
+    const results = await runSearch(SEARCH_TEST_QUERY, {
+      provider: target.provider,
+      baseUrl,
+      apiKey,
+      maxResults: 3,
+    });
+    return results.length > 0
+      ? { ok: true, results: results.length }
+      : {
+          ok: false,
+          message: `${provider.name} answered but returned no results for a test search.`,
+        };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof AppError ? error.message : `${provider.name} test search failed.`,
+    };
+  }
+}
+
+/**
  * Runs one sample search with the provider, address and key on the page, so
- * an administrator can check them before or after saving. Nothing is stored.
+ * an administrator can check them before or after saving, and the same for
+ * the fallback provider when the page has one (v0.10). Nothing is stored.
  */
 settingsRoutes.post('/search/test', async (c) => {
   const actor = currentUser(c);
   const input = await parseBody(c, searchTestSchema);
   const stored = await getSetting('search');
-  const provider = SEARCH_PROVIDERS[input.provider];
-  const apiKey =
-    provider.needs !== 'apiKey'
-      ? null
-      : input.apiKey?.trim() ||
-        (stored.provider === input.provider ? storedSearchKey(stored) : null);
-  const baseUrl = provider.needs === 'baseUrl' ? input.baseUrl?.trim() || null : null;
-
-  let result: SearchTestResult;
-  try {
-    const results = await runSearch(SEARCH_TEST_QUERY, {
-      provider: input.provider,
-      baseUrl,
-      apiKey,
-      maxResults: 3,
-    });
-    result =
-      results.length > 0
-        ? { ok: true, results: results.length }
-        : {
-            ok: false,
-            message: `${provider.name} answered but returned no results for a test search.`,
-          };
-  } catch (error) {
-    result = {
-      ok: false,
-      message: error instanceof AppError ? error.message : `${provider.name} test search failed.`,
-    };
-  }
+  const { fallback } = input;
+  const [primary, fallbackResult] = await Promise.all([
+    testSearchProvider(input, () =>
+      stored.provider === input.provider ? storedSearchKey(stored) : null,
+    ),
+    fallback
+      ? testSearchProvider(fallback, () =>
+          stored.fallbackProvider === fallback.provider ? storedFallbackSearchKey(stored) : null,
+        )
+      : Promise.resolve(undefined),
+  ]);
+  const result: SearchTestResult = {
+    ...primary,
+    ...(fallbackResult && { fallback: fallbackResult }),
+  };
 
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'search.test',
     targetType: 'instance',
-    metadata: { provider: input.provider, ok: result.ok },
+    metadata: {
+      provider: input.provider,
+      ok: result.ok,
+      ...(fallback &&
+        fallbackResult && {
+          fallbackProvider: fallback.provider,
+          fallbackOk: fallbackResult.ok,
+        }),
+    },
   });
   return c.json(result);
 });
@@ -320,12 +356,18 @@ settingsRoutes.patch('/', async (c) => {
   }
 
   if (patch.search) {
-    const { apiKey, ...rest } = patch.search;
+    const { apiKey, fallbackApiKey, ...rest } = patch.search;
     const stored = await getSetting('search');
     const provider = rest.provider === undefined ? stored.provider : rest.provider;
     const needs = provider ? SEARCH_PROVIDERS[provider].needs : null;
     const switched = rest.provider !== undefined && rest.provider !== stored.provider;
-    await updateSetting('search', {
+    const storedFallback = stored.fallbackProvider ?? null;
+    const fallbackProvider =
+      rest.fallbackProvider === undefined ? storedFallback : rest.fallbackProvider;
+    const fallbackNeeds = fallbackProvider ? SEARCH_PROVIDERS[fallbackProvider].needs : null;
+    const fallbackSwitched =
+      rest.fallbackProvider !== undefined && rest.fallbackProvider !== storedFallback;
+    const changes: Partial<SearchSettings> = {
       ...rest,
       // Store only what the selected provider uses. A key belongs to one
       // provider, so switching drops it rather than sending it elsewhere.
@@ -333,7 +375,36 @@ settingsRoutes.patch('/', async (c) => {
       ...((switched || needs !== 'apiKey') && { encryptedApiKey: null }),
       ...(apiKey !== undefined &&
         needs === 'apiKey' && { encryptedApiKey: apiKey ? encryptSecret(apiKey) : null }),
-    });
+      // The fallback (v0.10) follows the same rules with its own key.
+      fallbackProvider,
+      ...(fallbackNeeds !== 'baseUrl'
+        ? { fallbackBaseUrl: null }
+        : rest.fallbackBaseUrl !== undefined && {
+            fallbackBaseUrl: rest.fallbackBaseUrl?.trim() || null,
+          }),
+      ...((fallbackSwitched || fallbackNeeds !== 'apiKey') && { encryptedFallbackApiKey: null }),
+      ...(fallbackApiKey !== undefined &&
+        fallbackNeeds === 'apiKey' && {
+          encryptedFallbackApiKey: fallbackApiKey ? encryptSecret(fallbackApiKey) : null,
+        }),
+    };
+    // The same hosted service cannot stand in for itself; SearXNG can, at
+    // another address. Checked on the merged result so either side may change.
+    const next = { ...stored, ...changes };
+    if (
+      next.fallbackProvider &&
+      next.fallbackProvider === next.provider &&
+      (SEARCH_PROVIDERS[next.fallbackProvider].needs === 'apiKey' ||
+        (next.fallbackBaseUrl ?? null) === (next.baseUrl ?? null))
+    ) {
+      throw validationFailed(
+        SEARCH_PROVIDERS[next.fallbackProvider].needs === 'apiKey'
+          ? 'Choose a different service as the fallback provider.'
+          : 'The fallback SearXNG must be at a different address.',
+        [{ path: ['search', 'fallbackProvider'], message: 'Same as the primary provider.' }],
+      );
+    }
+    await updateSetting('search', changes);
   }
 
   if (patch.smtp) {

@@ -17,6 +17,14 @@ import {
   PublicArtifactsProvider,
   ThreadArtifactsProvider,
 } from '../../src/components/artifacts/artifacts-provider';
+import {
+  clampPanelWidth,
+  maxPanelWidth,
+  PANEL_KEY_STEP,
+  PANEL_MIN_WIDTH,
+  PANEL_WIDTH_STORAGE_KEY,
+  widthForKey,
+} from '../../src/components/artifacts/panel-resize';
 import { CreatedArtifactCards } from '../../src/components/artifacts/reply-content';
 import { MessageRow } from '../../src/components/chat/message-row';
 import { ApiError } from '../../src/lib/api-client';
@@ -152,6 +160,7 @@ function mockViewport(width: number) {
 let root: Root | undefined;
 beforeEach(() => {
   mockViewport(390);
+  localStorage.removeItem(PANEL_WIDTH_STORAGE_KEY);
   api.get.mockReset();
   api.post.mockReset();
   api.get.mockImplementation(async (path: string) => {
@@ -681,6 +690,142 @@ describe('the docked panel', () => {
     expect(dialog()).toBeNull();
     await click(button('Open artifact: Plan'));
     expect(fullScreenPanel()).toBeNull();
+  });
+});
+
+describe('resizing the docked panel', () => {
+  const separator = () => document.querySelector<HTMLElement>('[role="separator"]');
+  const panel = () => document.querySelector<HTMLElement>('aside[data-artifact-panel]')!;
+  const key = async (target: HTMLElement, name: string, shiftKey = false) => {
+    await act(async () => {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true, cancelable: true }),
+      );
+    });
+  };
+
+  it('clamps to 22rem and 70% of the window, and maps keys to widths', () => {
+    expect(maxPanelWidth(2000)).toBe(1400);
+    expect(maxPanelWidth(400)).toBe(PANEL_MIN_WIDTH);
+    expect(clampPanelWidth(100, 2000)).toBe(PANEL_MIN_WIDTH);
+    expect(clampPanelWidth(5000, 2000)).toBe(1400);
+    expect(clampPanelWidth(600.4, 2000)).toBe(600);
+    // The separator is the left edge: Left widens, Right narrows.
+    expect(widthForKey('ArrowLeft', false, 600, 2000)).toBe(600 + PANEL_KEY_STEP);
+    expect(widthForKey('ArrowRight', false, 600, 2000)).toBe(600 - PANEL_KEY_STEP);
+    expect(widthForKey('ArrowLeft', true, 600, 2000)).toBe(600 + 4 * PANEL_KEY_STEP);
+    expect(widthForKey('ArrowRight', false, PANEL_MIN_WIDTH, 2000)).toBe(PANEL_MIN_WIDTH);
+    expect(widthForKey('Home', false, 600, 2000)).toBe(PANEL_MIN_WIDTH);
+    expect(widthForKey('End', false, 600, 2000)).toBe(1400);
+    expect(widthForKey('a', false, 600, 2000)).toBeNull();
+  });
+
+  it('has a keyboard-operable separator whose width is remembered, and Enter resets it', async () => {
+    mockViewport(1280);
+    await mount(conversation());
+    await click(button('Open artifact: Chart'));
+    const handle = separator()!;
+    expect(handle).not.toBeNull();
+    expect(handle.getAttribute('aria-orientation')).toBe('vertical');
+    expect(handle.getAttribute('aria-label')).toBe('Resize artifact panel');
+    expect(handle.getAttribute('tabindex')).toBe('0');
+    expect(handle.getAttribute('aria-controls')).toBe(panel().id);
+    expect(Number(handle.getAttribute('aria-valuemin'))).toBe(PANEL_MIN_WIDTH);
+    const max = maxPanelWidth(window.innerWidth);
+    expect(Number(handle.getAttribute('aria-valuemax'))).toBe(max);
+    // Until resized, the responsive default stays in CSS.
+    expect(panel().className).toContain('w-[45%]');
+    expect(panel().style.width).toBe('');
+
+    handle.focus();
+    await key(handle, 'Home');
+    expect(handle.getAttribute('aria-valuenow')).toBe(String(PANEL_MIN_WIDTH));
+    expect(panel().style.width).toBe(`${PANEL_MIN_WIDTH}px`);
+    expect(panel().className).not.toContain('w-[45%]');
+    expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBe(String(PANEL_MIN_WIDTH));
+    await key(handle, 'ArrowLeft');
+    expect(handle.getAttribute('aria-valuenow')).toBe(String(PANEL_MIN_WIDTH + PANEL_KEY_STEP));
+    await key(handle, 'ArrowRight');
+    expect(handle.getAttribute('aria-valuenow')).toBe(String(PANEL_MIN_WIDTH));
+    await key(handle, 'End');
+    expect(handle.getAttribute('aria-valuenow')).toBe(String(max));
+    expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBe(String(max));
+    // Focus stays on the separator; Escape there still closes the panel.
+    expect(document.activeElement).toBe(handle);
+
+    // Closed and opened again (or after a reload), the width is remembered.
+    await click(button('Close'));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 40)));
+    await click(button('Open artifact: Chart'));
+    expect(panel().style.width).toBe(`${max}px`);
+
+    // Enter restores the default and forgets the width.
+    await key(separator()!, 'Enter');
+    expect(panel().className).toContain('w-[45%]');
+    expect(panel().style.width).toBe('');
+    expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBeNull();
+  });
+
+  it('follows a drag from its left edge, and a double click resets it', async () => {
+    mockViewport(1280);
+    localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, '500');
+    await mount(conversation());
+    await click(button('Open artifact: Chart'));
+    const handle = separator()!;
+    expect(panel().style.width).toBe('500px');
+    const pointer = (type: string, clientX: number) =>
+      act(async () => {
+        const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, button: 0 });
+        Object.defineProperty(event, 'pointerId', { value: 1 });
+        handle.dispatchEvent(event);
+      });
+    await pointer('pointerdown', 600);
+    await pointer('pointermove', 560);
+    // Moving left by 40px widens the panel by 40px, stored when the drag ends.
+    expect(panel().style.width).toBe('540px');
+    expect(handle.hasAttribute('data-dragging')).toBe(true);
+    expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBe('500');
+    await pointer('pointermove', 2000);
+    expect(panel().style.width).toBe(`${PANEL_MIN_WIDTH}px`);
+    await pointer('pointermove', 520);
+    await pointer('pointerup', 520);
+    expect(panel().style.width).toBe('580px');
+    expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBe('580');
+    expect(handle.hasAttribute('data-dragging')).toBe(false);
+    // Moving the pointer without a drag changes nothing.
+    await pointer('pointermove', 100);
+    expect(panel().style.width).toBe('580px');
+
+    await act(async () => {
+      handle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    expect(panel().style.width).toBe('');
+    expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBeNull();
+  });
+
+  it('is absent in full screen and in the phone dialog', async () => {
+    mockViewport(1280);
+    localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, '500');
+    await mount(conversation());
+    await click(button('Open artifact: Chart'));
+    expect(separator()).not.toBeNull();
+    await click(button('Full screen'));
+    expect(separator()).toBeNull();
+    expect(panel().style.width).toBe('');
+    expect(document.querySelector<HTMLElement>('[data-panel-placeholder]')?.style.width).toBe(
+      '500px',
+    );
+    await click(button('Exit full screen'));
+    expect(separator()).not.toBeNull();
+    await click(button('Close'));
+
+    await cleanup(root!);
+    root = undefined;
+    mockViewport(390);
+    await mount(conversation());
+    await click(button('Open artifact: Chart'));
+    expect(dialog()).not.toBeNull();
+    expect(separator()).toBeNull();
   });
 });
 

@@ -2,7 +2,7 @@ import { schema } from '@oci/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  db: { select: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  db: { select: vi.fn(), update: vi.fn(), delete: vi.fn(), transaction: vi.fn() },
   createUser: vi.fn(),
   sendVerificationEmail: vi.fn(),
   isEmailVerificationEnforced: vi.fn(),
@@ -33,6 +33,7 @@ function query(rows: unknown[] = []) {
     orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     offset: vi.fn().mockReturnThis(),
+    for: vi.fn().mockReturnThis(),
     returning: vi.fn().mockReturnThis(),
     // biome-ignore lint/suspicious/noThenProperty: Drizzle query builders are intentionally thenable.
     then: result.then.bind(result),
@@ -60,6 +61,9 @@ beforeEach(() => {
   mocks.db.select.mockImplementation(() => query());
   mocks.db.update.mockImplementation(() => query([{ id: 'target' }]));
   mocks.db.delete.mockImplementation(() => query());
+  mocks.db.transaction.mockImplementation((work: (tx: typeof mocks.db) => unknown) =>
+    work(mocks.db),
+  );
   mocks.createUser.mockResolvedValue({ user: { id: 'target' } });
   mocks.isEmailVerificationEnforced.mockResolvedValue(false);
 });
@@ -321,15 +325,15 @@ describe('individual user mutations', () => {
     });
   });
 
-  it('retains self-delete protection and idempotent delete/revoke responses', async () => {
+  it('refuses self-deletion, answers 404 for a missing account, and keeps revoke idempotent', async () => {
     await expect(deleteUser(actor, actor.id)).rejects.toMatchObject({
       message: 'You cannot delete your own account',
     });
+    // Deleting nobody used to answer ok and record a deletion that never happened.
+    await expect(deleteUser(actor, 'missing')).rejects.toMatchObject({ status: 404 });
     expect(mocks.db.delete).not.toHaveBeenCalled();
-    expect(await deleteUser(actor, 'missing')).toEqual({ ok: true });
     expect(await revokeUserSessions(actor, 'missing')).toEqual({ ok: true });
     expect(mocks.recordAudit.mock.calls.map(([entry]) => entry.action)).toEqual([
-      'user.delete',
       'user.revoke_sessions',
     ]);
   });

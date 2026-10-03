@@ -45,6 +45,8 @@ function useCompactionState<T>(
 
 const selectCompaction = (state: CompactionState) => state.compaction;
 const selectPending = (state: CompactionState) => state.pending;
+// `?? null`: a response from an API older than v0.10 has no `failure`.
+const selectFailure = (state: CompactionState) => state.failure ?? null;
 
 /** The summary in use for a conversation, if its earlier messages were summarised. */
 export function useCompaction(threadId: string, enabled = true) {
@@ -54,6 +56,23 @@ export function useCompaction(threadId: string, enabled = true) {
 /** Whether a summary of the conversation is being made in the background. */
 export function useCompactionPending(threadId: string) {
   return useCompactionState(threadId, selectPending).data === true;
+}
+
+/** The last failure of a summary the person asked for, until dismissed or retried. */
+export function useCompactionFailure(threadId: string) {
+  return useCompactionState(threadId, selectFailure).data ?? null;
+}
+
+/** Dismisses the report of a failed summary. */
+export function useDismissCompactionFailure(threadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.delete<CompactionState>(`/threads/${encodeURIComponent(threadId)}/compaction/failure`),
+    onSuccess: (data) => {
+      queryClient.setQueryData(compactionQueryKey(threadId), data);
+    },
+  });
 }
 
 /**

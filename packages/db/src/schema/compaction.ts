@@ -101,3 +101,43 @@ export const conversationCompactionJob = pgTable(
     ),
   ],
 );
+
+export type CompactionFailureReason =
+  | 'allowance'
+  | 'model_error'
+  | 'nothing_to_summarise'
+  | 'timeout';
+
+/**
+ * The last failure of a summary the person asked for (migration 0036,
+ * v0.10): at most one per thread. Written by the queue when a manual request
+ * fails (automatic ones are never reported); removed when the person
+ * dismisses it, asks again, or any later summary of the thread succeeds.
+ */
+export const conversationCompactionFailure = pgTable(
+  'conversation_compaction_failure',
+  {
+    threadId: text('thread_id')
+      .primaryKey()
+      .references(() => thread.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    reason: text('reason').$type<CompactionFailureReason>().notNull(),
+    /** The failed request's instructions, so Retry asks for the same summary. */
+    instructions: text('instructions'),
+    failedAt: timestamp('failed_at', { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps(),
+  },
+  (t) => [
+    index('conversation_compaction_failure_user_idx').on(t.userId),
+    check(
+      'conversation_compaction_failure_reason',
+      sql`${t.reason} in ('allowance', 'model_error', 'nothing_to_summarise', 'timeout')`,
+    ),
+    check(
+      'conversation_compaction_failure_instructions_length',
+      sql`${t.instructions} is null or char_length(${t.instructions}) <= 2000`,
+    ),
+  ],
+);

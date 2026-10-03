@@ -1,13 +1,7 @@
-import type {
-  BackupDestination,
-  ComplianceRun,
-  ComplianceSchedule,
-  ComplianceStatus,
-  LegalHold,
-} from '@oci/shared';
+import type { ComplianceRun, ComplianceSchedule, ComplianceStatus, LegalHold } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CircleAlert, CircleCheck, FileLock, Play, Scale, TriangleAlert } from 'lucide-react';
+import { FileLock, Scale } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import {
@@ -21,47 +15,42 @@ import {
   ToggleSetting,
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import {
+  type DestinationDraft,
+  DestinationSelect,
+  DestinationTest,
+  destinationChanges,
+  destinationDraftFrom,
+  S3BucketFields,
+} from '~/components/admin/operations/destination';
+import { formatRunTime, RunHistory, RunNowControl } from '~/components/admin/operations/runs';
+import {
+  formatHourUtc,
+  HourField,
+  IntervalField,
+  RetentionField,
+} from '~/components/admin/operations/schedule';
 import { ADMIN_USERS_QUERY_KEY } from '~/components/admin/user-role-select';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
-import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { Switch } from '~/components/ui/switch';
 import { ApiError, api } from '~/lib/api-client';
-import { cn, formatRelativeTime } from '~/lib/utils';
+import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
 export const COMPLIANCE_QUERY_KEY = ['admin', 'compliance'] as const;
-
-const HOURS = Array.from({ length: 24 }, (_, hour) => ({
-  value: String(hour),
-  label: `${String(hour).padStart(2, '0')}:00 UTC`,
-}));
 
 const SCHEDULES: Array<{ value: ComplianceSchedule; label: string }> = [
   { value: 'hourly', label: 'Every hour' },
   { value: 'daily', label: 'Once a day' },
 ];
 
-const DESTINATIONS: Array<{ value: BackupDestination; label: string }> = [
-  { value: 'storage', label: 'Attachment storage bucket' },
-  { value: 'separate', label: 'Separate S3 bucket (recommended)' },
-];
-
-interface Draft {
+interface Draft extends DestinationDraft {
   enabled: boolean;
   schedule: ComplianceSchedule;
   hourUtc: number;
-  destination: BackupDestination;
-  prefix: string;
-  bucket: string;
-  region: string;
-  endpoint: string;
-  accessKeyId: string;
-  forcePathStyle: boolean;
-  secretAccessKey: string;
   includeContent: boolean;
   /** Empty keeps exported objects. */
   keepDays: string;
@@ -73,14 +62,7 @@ function draftFrom(status: ComplianceStatus): Draft {
     enabled: settings.enabled,
     schedule: settings.schedule,
     hourUtc: settings.hourUtc,
-    destination: settings.destination,
-    prefix: settings.prefix,
-    bucket: settings.s3.bucket,
-    region: settings.s3.region,
-    endpoint: settings.s3.endpoint ?? '',
-    accessKeyId: settings.s3.accessKeyId,
-    forcePathStyle: settings.s3.forcePathStyle,
-    secretAccessKey: '',
+    ...destinationDraftFrom(settings),
     includeContent: settings.includeContent,
     keepDays: settings.keepDays === null ? '' : String(settings.keepDays),
   };
@@ -93,61 +75,24 @@ export function complianceChanges(status: ComplianceStatus, draft: Draft): Recor
   if (draft.enabled !== settings.enabled) patch.enabled = draft.enabled;
   if (draft.schedule !== settings.schedule) patch.schedule = draft.schedule;
   if (draft.hourUtc !== settings.hourUtc) patch.hourUtc = draft.hourUtc;
-  if (draft.destination !== settings.destination) patch.destination = draft.destination;
-  if (draft.prefix.trim() !== settings.prefix) patch.prefix = draft.prefix.trim();
+  Object.assign(patch, destinationChanges(settings, draft));
   if (draft.includeContent !== settings.includeContent) patch.includeContent = draft.includeContent;
   const keepDays = draft.keepDays.trim() ? Number(draft.keepDays) : null;
   if (keepDays !== settings.keepDays) patch.keepDays = keepDays;
-  const s3: Record<string, unknown> = {};
-  if (draft.bucket.trim() !== settings.s3.bucket) s3.bucket = draft.bucket.trim();
-  if (draft.region.trim() !== settings.s3.region) s3.region = draft.region.trim();
-  if ((draft.endpoint.trim() || null) !== settings.s3.endpoint)
-    s3.endpoint = draft.endpoint.trim() || null;
-  if (draft.accessKeyId.trim() !== settings.s3.accessKeyId)
-    s3.accessKeyId = draft.accessKeyId.trim();
-  if (draft.forcePathStyle !== settings.s3.forcePathStyle) s3.forcePathStyle = draft.forcePathStyle;
-  if (draft.secretAccessKey) s3.secretAccessKey = draft.secretAccessKey;
-  if (Object.keys(s3).length > 0) patch.s3 = s3;
   return patch;
 }
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
+const when = formatRunTime;
 
 function scheduleLabel(status: ComplianceStatus): string {
   const { settings } = status;
   if (!settings.enabled) return 'Off';
   return settings.schedule === 'hourly'
     ? 'Every hour'
-    : `Daily at ${String(settings.hourUtc).padStart(2, '0')}:00 UTC`;
-}
-
-function RunIcon({ run }: { run: ComplianceRun }) {
-  const Icon =
-    run.status === 'failed' ? CircleAlert : run.status === 'running' ? TriangleAlert : CircleCheck;
-  return (
-    <Icon
-      role="img"
-      aria-label={
-        run.status === 'failed' ? 'Failed' : run.status === 'running' ? 'Running' : 'Succeeded'
-      }
-      className={cn(
-        'mt-0.5 size-4 shrink-0',
-        run.status === 'failed'
-          ? 'text-[var(--danger)]'
-          : run.status === 'running'
-            ? 'text-[var(--warning)]'
-            : 'text-[var(--success)]',
-      )}
-    />
-  );
+    : `Daily at ${formatHourUtc(settings.hourUtc)}`;
 }
 
 function Overview({ status }: { status: ComplianceStatus }) {
-  const queryClient = useQueryClient();
-  const run = useMutation({
-    mutationFn: () => api.post<{ started: boolean }>('/admin/compliance/run'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMPLIANCE_QUERY_KEY }),
-  });
   const latest = status.runs[0];
   const held = status.holds.filter((hold) => !hold.liftedAt).length;
 
@@ -197,27 +142,16 @@ function Overview({ status }: { status: ComplianceStatus }) {
         </Notice>
       )}
 
-      <EditOnly>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={run.isPending || status.running || status.issues.length > 0}
-            onClick={() => run.mutate()}
-          >
-            {run.isPending ? <Spinner /> : <Play />}
-            Export now
-          </Button>
-          <p aria-live="polite" className="text-sm text-[var(--text-muted)]">
-            {status.running
-              ? 'An export is running. This page updates when it finishes.'
-              : run.isSuccess
-                ? 'Export started.'
-                : ''}
-          </p>
-        </div>
-      </EditOnly>
-      <MutationError error={run.error} message="The export could not be started." />
+      <RunNowControl
+        endpoint="/admin/compliance/run"
+        queryKey={COMPLIANCE_QUERY_KEY}
+        label="Export now"
+        running={status.running}
+        blocked={status.issues.length > 0}
+        runningText="An export is running. This page updates when it finishes."
+        startedText="Export started."
+        errorMessage="The export could not be started."
+      />
     </div>
   );
 }
@@ -247,10 +181,6 @@ function SettingsForm({
       await queryClient.invalidateQueries({ queryKey: ['admin', 'health'] });
     },
   });
-  const test = useMutation({
-    mutationFn: () => api.post<{ ok: boolean; detail: string }>('/admin/compliance/test'),
-  });
-
   const patch = complianceChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
 
@@ -270,27 +200,19 @@ function SettingsForm({
         onCheckedChange={(enabled) => set('enabled', enabled)}
       />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="How often" htmlFor="compliance-schedule">
-          <Select
-            id="compliance-schedule"
-            value={draft.schedule}
-            onChange={(value) => set('schedule', value as ComplianceSchedule)}
-            options={SCHEDULES}
-          />
-        </Field>
+        <IntervalField
+          id="compliance-schedule"
+          value={draft.schedule}
+          options={SCHEDULES}
+          onChange={(schedule) => set('schedule', schedule)}
+        />
         {draft.schedule === 'daily' && (
-          <Field
-            label="Time of day"
-            htmlFor="compliance-hour"
+          <HourField
+            id="compliance-hour"
             hint="The daily export starts within a few minutes of this hour."
-          >
-            <Select
-              id="compliance-hour"
-              value={String(draft.hourUtc)}
-              onChange={(value) => set('hourUtc', Number(value))}
-              options={HOURS}
-            />
-          </Field>
+            value={draft.hourUtc}
+            onChange={(hour) => set('hourUtc', hour)}
+          />
         )}
       </div>
 
@@ -311,139 +233,42 @@ function SettingsForm({
         </Notice>
       )}
 
-      <Field
-        label="Destination"
-        htmlFor="compliance-destination"
+      <DestinationSelect
+        idPrefix="compliance"
+        value={draft.destination}
+        onChange={(destination) => set('destination', destination)}
         hint={
           draft.destination === 'storage'
             ? `Written to ${status.attachmentStorage.bucket ? `the ${status.attachmentStorage.bucket} bucket` : 'the attachment bucket'} under .oci-compliance/.`
             : 'Its own bucket and credentials. Recommended: give it object lock or versioning so records cannot be altered.'
         }
-      >
-        <Select
-          id="compliance-destination"
-          value={draft.destination}
-          onChange={(value) => set('destination', value as BackupDestination)}
-          options={DESTINATIONS}
-        />
-      </Field>
+      />
 
       {draft.destination === 'separate' && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Bucket" htmlFor="compliance-bucket">
-            <Input
-              id="compliance-bucket"
-              value={draft.bucket}
-              onChange={(e) => set('bucket', e.target.value)}
-            />
-          </Field>
-          <Field label="Region" htmlFor="compliance-region">
-            <Input
-              id="compliance-region"
-              value={draft.region}
-              onChange={(e) => set('region', e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Endpoint (optional)"
-            htmlFor="compliance-endpoint"
-            hint="For MinIO and other S3-compatible services."
-          >
-            <Input
-              id="compliance-endpoint"
-              value={draft.endpoint}
-              placeholder="https://s3.example.com"
-              onChange={(e) => set('endpoint', e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Key prefix"
-            htmlFor="compliance-prefix"
-            hint="Folder for exports, ending with /."
-          >
-            <Input
-              id="compliance-prefix"
-              value={draft.prefix}
-              onChange={(e) => set('prefix', e.target.value)}
-            />
-          </Field>
-          <Field label="Access key ID" htmlFor="compliance-access-key">
-            <Input
-              id="compliance-access-key"
-              value={draft.accessKeyId}
-              autoComplete="off"
-              onChange={(e) => set('accessKeyId', e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Secret access key"
-            htmlFor="compliance-secret"
-            hint={
-              status.settings.s3.hasCredential
-                ? 'Set. Leave empty to keep it; stored encrypted and never shown again.'
-                : 'Not set. Stored encrypted and never shown again.'
-            }
-          >
-            <Input
-              id="compliance-secret"
-              type="password"
-              autoComplete="off"
-              value={draft.secretAccessKey}
-              onChange={(e) => set('secretAccessKey', e.target.value)}
-            />
-          </Field>
-          <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3 sm:col-span-2">
-            <label htmlFor="compliance-path-style" className="text-sm font-medium">
-              Path-style addressing (MinIO and most self-hosted services)
-            </label>
-            <Switch
-              id="compliance-path-style"
-              checked={draft.forcePathStyle}
-              onCheckedChange={(value) => set('forcePathStyle', value)}
-            />
-          </div>
-        </div>
+        <S3BucketFields
+          idPrefix="compliance"
+          draft={draft}
+          onChange={(change) => {
+            setSaved(false);
+            setDraft((current) => ({ ...current, ...change }));
+          }}
+          hasCredential={status.settings.s3.hasCredential}
+          prefixHint="Folder for exports, ending with /."
+        />
       )}
 
-      <Field
+      <RetentionField
+        id="compliance-keep-days"
         label="Delete exported objects after (days)"
-        htmlFor="compliance-keep-days"
         hint="Leave empty to keep them, the default: institutions usually manage these records themselves. Deleting old objects never exports their events again."
-      >
-        <Input
-          id="compliance-keep-days"
-          type="number"
-          min={1}
-          max={3650}
-          placeholder="Keep"
-          value={draft.keepDays}
-          onChange={(e) => set('keepDays', e.target.value)}
-        />
-      </Field>
+        min={1}
+        max={3650}
+        placeholder="Keep"
+        value={draft.keepDays}
+        onChange={(value) => set('keepDays', value)}
+      />
 
-      <EditOnly>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={test.isPending || hasChanges}
-            onClick={() => test.mutate()}
-          >
-            {test.isPending && <Spinner />}
-            Test destination
-          </Button>
-          <p aria-live="polite" className="text-sm">
-            {hasChanges ? (
-              <span className="text-[var(--text-muted)]">Save first to test these settings.</span>
-            ) : test.data ? (
-              <span className={test.data.ok ? 'text-[var(--success)]' : 'text-[var(--danger)]'}>
-                {test.data.detail}
-              </span>
-            ) : null}
-          </p>
-        </div>
-      </EditOnly>
-      <MutationError error={test.error} message="The destination could not be tested." />
+      <DestinationTest endpoint="/admin/compliance/test" hasChanges={hasChanges} />
 
       <SaveRow
         hasChanges={hasChanges}
@@ -630,44 +455,32 @@ function HoldList({ holds }: { holds: LegalHold[] }) {
 }
 
 function History({ runs }: { runs: ComplianceRun[] }) {
-  if (runs.length === 0)
-    return (
-      <EmptyState icon={FileLock} title="No exports yet.">
-        Turn on the export or export now. Each run is verified by reading its objects back.
-      </EmptyState>
-    );
   return (
-    <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
-      {runs.map((run) => (
-        <li key={run.id} className="flex items-start gap-3 px-4 py-3" data-testid="compliance-run">
-          <RunIcon run={run} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium">{when(run.startedAt)}</p>
-              <Badge variant="neutral">{run.trigger === 'manual' ? 'Manual' : 'Scheduled'}</Badge>
-              {run.status === 'succeeded' && run.manifestKey && (
-                <Badge variant="success">Verified</Badge>
-              )}
-              {run.prunedAt && <Badge variant="outline">Deleted</Badge>}
-            </div>
-            <p className="text-xs text-[var(--text-muted)]">
-              {run.status === 'succeeded'
-                ? run.manifestKey
-                  ? `${run.audit.count ?? 0} audit events${run.messages ? ` · ${run.messages.count ?? 0} messages` : ''} · ${formatBytes((run.audit.bytes ?? 0) + (run.messages?.bytes ?? 0))}`
-                  : 'Nothing new to export.'
-                : run.status === 'running'
-                  ? 'Running…'
-                  : (run.errorMessage ?? 'Failed')}
-            </p>
-            {run.manifestKey && run.status === 'succeeded' && !run.prunedAt && (
-              <p className="truncate font-mono text-xs text-[var(--text-muted)]">
-                {run.manifestKey}
-              </p>
-            )}
-          </div>
-        </li>
-      ))}
-    </ul>
+    <RunHistory
+      runs={runs}
+      testId="compliance-run"
+      empty={{
+        icon: FileLock,
+        title: 'No exports yet.',
+        body: 'Turn on the export or export now. Each run is verified by reading its objects back.',
+      }}
+      badges={(run) => (
+        <>
+          {run.status === 'succeeded' && run.manifestKey && (
+            <Badge variant="success">Verified</Badge>
+          )}
+          {run.prunedAt && <Badge variant="outline">Deleted</Badge>}
+        </>
+      )}
+      summary={(run) =>
+        run.manifestKey
+          ? `${run.audit.count ?? 0} audit events${run.messages ? ` · ${run.messages.count ?? 0} messages` : ''} · ${formatBytes((run.audit.bytes ?? 0) + (run.messages?.bytes ?? 0))}`
+          : 'Nothing new to export.'
+      }
+      objectKey={(run) =>
+        run.manifestKey && run.status === 'succeeded' && !run.prunedAt ? run.manifestKey : null
+      }
+    />
   );
 }
 

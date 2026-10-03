@@ -47,10 +47,13 @@ failed** with the reason, and the model is told to say that current sources
 could not be checked. A model using the search tool sees the failure as the
 step's result and answers accordingly.
 
-A search that times out or cannot reach the provider is tried once more before
-it counts as failed, so a brief network problem usually goes unnoticed. A
-rejected key or a rate limit is reported straight away, since trying again
-would not help. Either way a search gives up within about 25 seconds.
+A search that times out, cannot reach the provider or meets a server error is
+tried once more before it counts as failed, so a brief network problem usually
+goes unnoticed. If your administrator has set up a second, fallback provider,
+the search then goes to it, and the reply's search details name the provider
+that answered. A rejected key or a rate limit is reported straight away, since
+trying again would not help. Either way a search gives up within about 25
+seconds.
 
 ## When it helps and when it does not
 

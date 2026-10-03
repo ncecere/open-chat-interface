@@ -593,21 +593,34 @@ describe.skipIf(!available)('live Postgres: durable quota settlement', () => {
     }
   });
 
-  it('leaves no orphaned accounting when account deletion races settlement', async () => {
+  it('leaves consistent accounting when account deletion races settlement', async () => {
+    const { deleteUser } = await import('../../services/admin-users/mutations.js');
+    const admin = await seedUser(db, state.organizationId, { role: 'admin' });
     const reservation = await reserve();
-    // Both legal orderings converge: settlement commits before the cascade,
-    // or the cascade removes the reservation before settlement can claim it.
+    // Both legal orderings converge: settlement commits first and the measured
+    // usage is kept without the person, or the deletion removes the in-flight
+    // reservation before settlement can claim it.
     const results = await Promise.allSettled([
       settleReservation(reservation, measured),
-      db.delete(schema.user).where(eq(schema.user.id, userId)),
+      deleteUser({ id: admin, email: 'admin@example.test' }, userId),
     ]);
     expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
-    expect(await event(reservation.id)).toBeUndefined();
-    expect(await records()).toEqual([]);
     expect(await db.select().from(schema.user).where(eq(schema.user.id, userId))).toEqual([]);
+    const kept = await event(reservation.id);
+    const orphanRollups = await db
+      .select()
+      .from(schema.usageRecord)
+      .where(sql`${schema.usageRecord.userId} is null`);
+    if (kept) {
+      expect(kept).toMatchObject({ ...measuredTotals, userId: null, pending: false });
+      expect(orphanRollups).toEqual([expect.objectContaining({ userId: null, ...measuredTotals })]);
+    } else {
+      expect(orphanRollups).toEqual([]);
+    }
+    const before = await snapshot();
     await settleReservation(reservation, measured);
     await releaseReservation(reservation);
-    expect(await records()).toEqual([]);
+    expect(await snapshot()).toEqual(before);
   });
 
   it('retains uncertain spend estimates through expiry and sweeping until actual usage arrives', async () => {

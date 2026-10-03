@@ -1,6 +1,9 @@
-import { createReadStream } from 'node:fs';
-import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { notFound } from '../../lib/errors.js';
 import type { ListPage, StorageDriver, StoredObject } from './driver.js';
 
@@ -43,6 +46,28 @@ export class LocalStorageDriver implements StorageDriver {
     const target = this.resolveKey(key);
     await mkdir(dirname(target), { recursive: true });
     await copyFile(path, target);
+    return { key, sizeBytes: (await stat(target)).size };
+  }
+
+  /**
+   * Writes a stream to a temporary file beside the target and renames it into
+   * place, so a source that fails part way never leaves a partial object.
+   */
+  async putStream(
+    key: string,
+    source: AsyncIterable<Uint8Array>,
+    _contentType: string,
+  ): Promise<StoredObject> {
+    const target = this.resolveKey(key);
+    await mkdir(dirname(target), { recursive: true });
+    const temporary = `${target}.${randomUUID()}.partial`;
+    try {
+      await pipeline(Readable.from(source), createWriteStream(temporary, { flags: 'wx' }));
+      await rename(temporary, target);
+    } catch (error) {
+      await rm(temporary, { force: true });
+      throw error;
+    }
     return { key, sizeBytes: (await stat(target)).size };
   }
 

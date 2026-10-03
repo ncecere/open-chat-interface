@@ -120,6 +120,108 @@ describe.skipIf(!available)('live: partial administrative updates', () => {
     });
   });
 
+  it('sets, clears and audits the context window and output limit', async () => {
+    const [model] = await live.db
+      .insert(schema.model)
+      .values({
+        organizationId: state.organizationId,
+        providerId,
+        slug: 'limits-model',
+        upstreamModelId: 'limits-model',
+        displayName: 'Limits model',
+      })
+      .returning();
+    const stored = async () => {
+      const [row] = await live.db
+        .select({
+          contextWindow: schema.model.contextWindow,
+          maxOutputTokens: schema.model.maxOutputTokens,
+        })
+        .from(schema.model)
+        .where(eq(schema.model.id, model!.id));
+      return row;
+    };
+
+    await send(app, 'PATCH', `/models/${model!.id}`, {
+      contextWindow: 200_000,
+      maxOutputTokens: 64_000,
+    });
+    expect(await stored()).toEqual({ contextWindow: 200_000, maxOutputTokens: 64_000 });
+
+    const [audit] = await live.db
+      .select({ metadata: schema.auditLog.metadata })
+      .from(schema.auditLog)
+      .where(
+        and(eq(schema.auditLog.action, 'model.update'), eq(schema.auditLog.targetId, model!.id)),
+      );
+    expect(audit?.metadata).toEqual({ fields: ['contextWindow', 'maxOutputTokens'] });
+
+    // Blank in the form: unknown again, so the fallback applies.
+    await send(app, 'PATCH', `/models/${model!.id}`, {
+      contextWindow: null,
+      maxOutputTokens: null,
+    });
+    expect(await stored()).toEqual({ contextWindow: null, maxOutputTokens: null });
+  });
+
+  it('refuses an output limit that leaves no room for input', async () => {
+    const [model] = await live.db
+      .insert(schema.model)
+      .values({
+        organizationId: state.organizationId,
+        providerId,
+        slug: 'tight-model',
+        upstreamModelId: 'tight-model',
+        displayName: 'Tight model',
+        contextWindow: 8192,
+      })
+      .returning();
+    const patch = (body: unknown) =>
+      app.request(`/models/${model!.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // Against the stored window.
+    let response = await patch({ maxOutputTokens: 8000 });
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { error: { message: string } }).error.message).toMatch(
+      /below 7,680 tokens/,
+    );
+    // Against the assumed window when the window is cleared.
+    response = await patch({ contextWindow: null, maxOutputTokens: 40_000 });
+    expect(response.status).toBe(422);
+    // Not an integer, or beyond the ceiling.
+    expect((await patch({ contextWindow: 1.5 })).status).toBe(422);
+    expect((await patch({ contextWindow: 20_000_000 })).status).toBe(422);
+    expect((await patch({ maxOutputTokens: 0 })).status).toBe(422);
+
+    const [row] = await live.db
+      .select({
+        contextWindow: schema.model.contextWindow,
+        maxOutputTokens: schema.model.maxOutputTokens,
+      })
+      .from(schema.model)
+      .where(eq(schema.model.id, model!.id));
+    expect(row).toEqual({ contextWindow: 8192, maxOutputTokens: null });
+
+    // Creating checks too.
+    response = await app.request('/models', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        providerId,
+        upstreamModelId: 'new-tight',
+        slug: 'new-tight',
+        displayName: 'New tight',
+        contextWindow: 4096,
+        maxOutputTokens: 4096,
+      }),
+    });
+    expect(response.status).toBe(422);
+  });
+
   it('leaves exactly one default when defaults are changed concurrently', async () => {
     const created = await live.db
       .insert(schema.model)

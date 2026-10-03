@@ -1,18 +1,30 @@
 import PDFDocument from 'pdfkit';
 import type { Align, Block, DocumentModel, Run, TableBlock } from './model.js';
 import { runsText } from './model.js';
+import {
+  cjkOrder,
+  FontBook,
+  needsUnicodeFonts,
+  type Span,
+  TextEngine,
+  type TextLine,
+} from './pdf-text.js';
+import { toWinAnsi } from './pdf-winansi.js';
+
+export { toWinAnsi };
 
 /**
  * PDF output with pdfkit (MIT), laid out here without a browser: A4, 2 cm
- * margins, the PDF standard fonts Helvetica and Courier.
+ * margins.
  *
- * The standard fonts are not embedded and cover the Windows-1252 (Western
- * European) repertoire only. Accented Latin letters outside it are reduced to
- * their base letter ("ő" → "o"), a few symbols get ASCII stand-ins ("→" →
- * "->"), and anything else (Greek, Cyrillic, CJK, emoji) prints as "?".
- * Embedding a Unicode font was rejected: the fonts that cover those scripts are
- * OFL-licensed rather than MIT/Apache and add megabytes per script. DOCX keeps
- * every character and is the format to use for non-Latin text.
+ * A document whose text fits Windows-1252 (Western European) uses the PDF
+ * standard fonts Helvetica and Courier, which are not embedded, as before
+ * v0.10; a few symbols get ASCII stand-ins ("→" → "->"). Any other document
+ * (v0.10) embeds Noto fonts for every script it uses, chosen per run of
+ * characters, with right-to-left paragraphs laid out by the Unicode
+ * Bidirectional Algorithm: see pdf-text.ts. Should the font packages be
+ * missing (they are optional), such a document falls back to the standard
+ * fonts, where characters outside Windows-1252 print as "?".
  */
 
 type Doc = PDFKit.PDFDocument;
@@ -27,69 +39,6 @@ const MUTED = '#595959';
 const LINK = '#1a56db';
 const RULE = '#bfbfbf';
 const INDENT = 16;
-
-const WIN_ANSI_EXTRA = new Set([
-  0x152, 0x153, 0x160, 0x161, 0x178, 0x17d, 0x17e, 0x192, 0x2c6, 0x2dc, 0x2013, 0x2014, 0x2018,
-  0x2019, 0x201a, 0x201c, 0x201d, 0x201e, 0x2020, 0x2021, 0x2022, 0x2026, 0x2030, 0x2039, 0x203a,
-  0x20ac, 0x2122,
-]);
-
-const STAND_INS: Record<string, string> = {
-  '\u2190': '<-',
-  '\u2192': '->',
-  '\u2194': '<->',
-  '\u21d0': '<=',
-  '\u21d2': '=>',
-  '\u2212': '-',
-  '\u2010': '-',
-  '\u2011': '-',
-  '\u2012': '-',
-  '\u2015': '-',
-  '\u2264': '<=',
-  '\u2265': '>=',
-  '\u2260': '!=',
-  '\u2248': '~',
-  '\u2032': "'",
-  '\u2033': '"',
-  '\u2009': ' ',
-  '\u2002': ' ',
-  '\u2003': ' ',
-  '\u202f': ' ',
-  '\u200b': '',
-  '\u200c': '',
-  '\u200d': '',
-  '\ufeff': '',
-  '\u2713': 'v',
-  '\u2714': 'v',
-  '\u2717': 'x',
-  '\u2718': 'x',
-  '\u25cf': '\u2022',
-  '\u25e6': '\u2022',
-  '\u25aa': '\u2022',
-};
-
-function winAnsi(code: number): boolean {
-  return (
-    (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WIN_ANSI_EXTRA.has(code)
-  );
-}
-
-/** Text the standard fonts can draw: see the module comment. */
-export function toWinAnsi(text: string): string {
-  let out = '';
-  for (const char of text.normalize('NFC')) {
-    const code = char.codePointAt(0)!;
-    if (char === '\n') out += char;
-    else if (char === '\t') out += '    ';
-    else if (winAnsi(code)) out += char;
-    else if (STAND_INS[char] !== undefined) out += STAND_INS[char];
-    else {
-      const base = char.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-      out += base && [...base].every((part) => winAnsi(part.codePointAt(0)!)) ? base : '?';
-    }
-  }
-  return out;
-}
 
 function fontFor(run: { bold?: boolean; italic?: boolean; code?: boolean }): string {
   if (run.code) {
@@ -119,8 +68,44 @@ interface Area {
 
 export class TooLargeError extends Error {}
 
+/** Every piece of text in a document, to decide which fonts it needs. */
+function documentText(model: DocumentModel): string {
+  const parts: string[] = [model.title];
+  const visit = (blocks: readonly Block[]) => {
+    for (const block of blocks) {
+      switch (block.type) {
+        case 'heading':
+        case 'paragraph':
+          parts.push(runsText(block.runs));
+          break;
+        case 'code':
+          parts.push(block.text);
+          break;
+        case 'quote':
+          visit(block.blocks);
+          break;
+        case 'list':
+          for (const item of block.items) visit(item.blocks);
+          break;
+        case 'table':
+          for (const row of [block.header, ...block.rows])
+            for (const cell of row) parts.push(runsText(cell));
+          break;
+        case 'rule':
+          break;
+      }
+    }
+  };
+  visit(model.blocks);
+  return parts.join('\n');
+}
+
 class PdfWriter {
-  constructor(private readonly doc: Doc) {}
+  constructor(
+    private readonly doc: Doc,
+    /** Embedded fonts for every script; null: the standard fonts only. */
+    private readonly text: TextEngine | null = null,
+  ) {}
 
   private get bottom(): number {
     return this.doc.page.height - this.doc.page.margins.bottom;
@@ -135,7 +120,37 @@ class PdfWriter {
     return this.doc.font(font).fontSize(size).currentLineHeight(true) + 2;
   }
 
+  /** Draws laid-out lines from the current position, breaking pages between lines. */
+  private lines(lines: readonly TextLine[], area: Area, align: Style['align']): void {
+    for (const line of lines) {
+      this.ensure(line.height);
+      const y = this.doc.y;
+      this.text!.drawLine(line, area.x, area.width, y, align ?? 'start');
+      this.doc.y = y + line.height;
+    }
+    this.doc.x = area.x;
+  }
+
+  private spans(runs: readonly Run[], style: Style, size = style.size): Span[] {
+    return runs.map((run) => ({
+      text: run.break ? '\n' : run.text,
+      size: run.code ? size - 1 : size,
+      color: style.color,
+      bold: run.bold || style.bold,
+      italic: run.italic,
+      code: run.code,
+      href: run.href ?? null,
+      strike: run.strike,
+    }));
+  }
+
   runs(runs: readonly Run[], area: Area, style: Style): void {
+    if (this.text) {
+      if (!runs.some((run) => run.break || run.text.length > 0)) return;
+      const lines = this.text.layout(this.spans(runs, style), area.width);
+      this.lines(lines, area, style.align);
+      return;
+    }
     const pieces = runs
       .map((run) => ({
         run,
@@ -261,6 +276,21 @@ class PdfWriter {
     const width = area.width - 2 * pad;
     this.doc.font('Courier').fontSize(CODE);
     this.gap(2);
+    if (this.text) {
+      for (const raw of text.split('\n')) {
+        const span = { text: raw || ' ', size: CODE, color: TEXT, code: true };
+        for (const line of this.text.layout([span], width, 'ltr')) {
+          this.ensure(line.height);
+          const y = this.doc.y;
+          this.doc.rect(area.x, y, area.width, line.height).fill('#f2f2f2');
+          this.text.drawLine(line, area.x + pad, width, y + 1, 'left');
+          this.doc.y = y + line.height;
+        }
+      }
+      this.doc.x = area.x;
+      this.gap(8);
+      return;
+    }
     for (const raw of text.split('\n')) {
       const line = toWinAnsi(raw) || ' ';
       const height = this.doc.heightOfString(line, { width, lineGap: 1 }) + 2;
@@ -291,6 +321,11 @@ class PdfWriter {
     const total = weights.reduce((sum, weight) => sum + weight, 0);
     const widths = weights.map((weight) => (area.width * weight) / total);
     const maxRowHeight = (this.bottom - this.doc.page.margins.top) / 3;
+
+    if (this.text) {
+      this.unicodeTable(block, area, widths, pad, maxRowHeight);
+      return;
+    }
 
     const measure = (row: string[], bold: boolean) => {
       this.doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(TABLE);
@@ -337,19 +372,100 @@ class PdfWriter {
     this.doc.x = area.x;
     this.gap(10);
   }
+
+  private unicodeTable(
+    block: TableBlock,
+    area: Area,
+    widths: number[],
+    pad: number,
+    maxRowHeight: number,
+  ): void {
+    const engine = this.text!;
+    const layoutRow = (row: Run[][], bold: boolean) => {
+      const cells = widths.map((width, column) =>
+        cellLines(engine, row[column] ?? [], width - 2 * pad, bold),
+      );
+      const tallest = Math.max(
+        ...cells.map((lines) => lines.reduce((sum, line) => sum + line.height, 0)),
+      );
+      return { cells, height: Math.min(maxRowHeight, tallest + 2 * pad) };
+    };
+    const draw = (row: ReturnType<typeof layoutRow>, bold: boolean) => {
+      const y = this.doc.y;
+      let x = area.x;
+      row.cells.forEach((lines, column) => {
+        const width = widths[column]!;
+        if (bold) this.doc.rect(x, y, width, row.height).fill('#e7e6e6');
+        this.doc.rect(x, y, width, row.height).lineWidth(0.5).strokeColor(RULE).stroke();
+        let top = y + pad;
+        for (const line of lines) {
+          // Cut at the row's height, as the standard-font table does.
+          if (top + line.height > y + row.height - pad + 0.01) break;
+          engine.drawLine(
+            line,
+            x + pad,
+            width - 2 * pad,
+            top,
+            alignOf(block.align[column] ?? null, true),
+          );
+          top += line.height;
+        }
+        x += width;
+      });
+      this.doc.y = y + row.height;
+    };
+    const header = layoutRow(block.header, true);
+    const rows = block.rows.map((row) => layoutRow(row, false));
+    this.ensure(header.height + (rows[0]?.height ?? 0));
+    draw(header, true);
+    for (const row of rows) {
+      if (this.doc.y + row.height > this.bottom) {
+        this.doc.addPage();
+        draw(header, true);
+      }
+      draw(row, false);
+    }
+    this.doc.x = area.x;
+    this.gap(10);
+  }
 }
 
-function alignOf(align: Align): 'left' | 'center' | 'right' {
-  return align ?? 'left';
+/** Table cells in any script: laid out per cell, cut at the row's height. */
+function cellLines(engine: TextEngine, cell: Run[], width: number, bold: boolean): TextLine[] {
+  const spans = cell.map((run) => ({
+    text: run.break ? ' ' : run.text,
+    size: TABLE,
+    color: TEXT,
+    bold: run.bold || bold,
+    italic: run.italic,
+    code: run.code,
+    href: run.href ?? null,
+    strike: run.strike,
+  }));
+  return engine.layout(spans.length ? spans : [{ text: ' ', size: TABLE, color: TEXT }], width);
+}
+
+function alignOf(align: Align): 'left' | 'center' | 'right';
+function alignOf(align: Align, start: true): 'start' | 'left' | 'center' | 'right';
+function alignOf(align: Align, start = false): 'start' | 'left' | 'center' | 'right' {
+  return align ?? (start ? 'start' : 'left');
 }
 
 export async function renderPdf(model: DocumentModel, maxBytes: number): Promise<Uint8Array> {
+  const text = documentText(model);
+  const unicode = needsUnicodeFonts(text);
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-    info: { Title: toWinAnsi(model.title), Creator: 'Open Chat Interface' },
+    info: {
+      Title: unicode ? model.title : toWinAnsi(model.title),
+      Creator: unicode ? model.creator : toWinAnsi(model.creator),
+    },
     compress: true,
   });
+  // The fonts are read only for a document that needs them.
+  const fonts = unicode ? new FontBook(doc, cjkOrder(text)) : null;
+  const engine = fonts?.available ? new TextEngine(doc, fonts) : null;
   const chunks: Buffer[] = [];
   let size = 0;
   const finished = new Promise<void>((resolve, reject) => {
@@ -361,7 +477,7 @@ export async function renderPdf(model: DocumentModel, maxBytes: number): Promise
     doc.on('error', reject);
   });
 
-  const writer = new PdfWriter(doc);
+  const writer = new PdfWriter(doc, engine);
   const area = { x: MARGIN, width: doc.page.width - 2 * MARGIN, color: TEXT };
   writer.runs([{ text: model.title }], area, { size: 22, bold: true, color: TEXT });
   doc.y += 10;

@@ -1,5 +1,7 @@
 import {
   type AdminModel,
+  effectiveOutputTokens,
+  FALLBACK_CONTEXT_WINDOW,
   MODEL_CAPABILITIES,
   type ModelCapability,
   type Provider,
@@ -49,6 +51,31 @@ const CAPABILITY_LABELS: Record<ModelCapability, string> = {
   fast: 'Fast',
   web_search: 'Search',
 };
+
+/**
+ * The limits OCI budgets conversations with, and where an unset one comes
+ * from. Edited in the model form.
+ */
+function ModelLimits({ model }: { model: AdminModel }) {
+  const tokens = (value: number) => `${value.toLocaleString('en-US')} tokens`;
+  const output = effectiveOutputTokens(model.contextWindow, model.maxOutputTokens);
+  return (
+    <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+      <dt className="text-[var(--text-secondary)]">Context window</dt>
+      <dd className="text-[var(--text-muted)]">
+        {model.contextWindow === null
+          ? `Not set; OCI assumes ${tokens(FALLBACK_CONTEXT_WINDOW)}`
+          : tokens(model.contextWindow)}
+      </dd>
+      <dt className="text-[var(--text-secondary)]">Max output</dt>
+      <dd className="text-[var(--text-muted)]">
+        {model.maxOutputTokens === null
+          ? `Not set; OCI reserves ${tokens(output)}`
+          : tokens(model.maxOutputTokens)}
+      </dd>
+    </dl>
+  );
+}
 
 function ModelRow({
   model,
@@ -172,6 +199,8 @@ function ModelRow({
               />
             </Field>
           </div>
+
+          <ModelLimits model={model} />
 
           <div>
             <p className="mb-2 text-sm text-[var(--text-secondary)]">Capabilities</p>

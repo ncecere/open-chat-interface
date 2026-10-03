@@ -221,6 +221,15 @@ describe.skipIf(!available)('live: administrator setup status', () => {
     );
     await updateSetting('search', { provider: 'searxng', baseUrl: 'http://127.0.0.1:1' });
     expect(check(await getSetupStatus(), 'web-search').status).toBe('complete');
+    // An incomplete fallback provider is reported but does not stop search.
+    await updateSetting('search', { fallbackProvider: 'brave', encryptedFallbackApiKey: null });
+    expect(check(await getSetupStatus(), 'web-search')).toMatchObject({
+      status: 'complete',
+      detail:
+        'Web search is available, but the fallback provider is not used: the fallback Brave Search needs an API key.',
+    });
+    await updateSetting('search', { fallbackProvider: null });
+    expect(check(await getSetupStatus(), 'web-search').detail).toBe('Web search is available.');
 
     const storage = await (await import('../../services/settings.js')).getSetting('storage');
     await updateSetting('storage', { driver: 's3', s3: { ...storage.s3, bucket: '' } });

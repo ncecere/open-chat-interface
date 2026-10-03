@@ -155,6 +155,13 @@ summary the model receives.
   while the summary is made, the icon shows **Summarising earlier messages…**
   and you can keep writing. Asking again meanwhile does not make a second one.
   It uses the model of the latest reply.
+- **If a summary you asked for fails,** a quiet note under the conversation
+  says so and why: your usage allowance ran out, the model returned an error,
+  the model took too long, or there was nothing to summarise by then. Select
+  **Retry** to ask again with the same instructions, or **Dismiss**. The note
+  goes away by itself when a later summary succeeds (OCI also retries a model
+  error a few times in the background). Summaries OCI makes on its own are
+  never reported: if one fails, the conversation simply carries on as before.
 - **Forks and edits** carry the summary over when everything it covers was
   copied into the new conversation.
 
@@ -172,11 +179,25 @@ under its project, not in the date groupings.
 - **Pin** a conversation to hold it at the top, above the date groupings.
   Pinned conversations are always listed under **Pinned**, including those in
   a project, which show the project's name after their title.
+- **Rename** one with its pencil; see
+  [Renaming a conversation](#renaming-a-conversation).
 - **Archive** one to remove it from the list without deleting it. Archived
   conversations remain under [Settings → History](settings.md#history).
 - **Search** finds conversations by title and by what was said in them,
   including those in projects. See
   [Finding a conversation](#finding-a-conversation).
+
+## Renaming a conversation
+
+A conversation is named automatically from your first message. To change the
+name, point at the conversation in the sidebar and choose the pencil
+(**Rename thread**), or, with the conversation open, choose the pencil at the
+top right (**Rename conversation**). Type the new name and press Enter to save,
+or Escape to leave it as it was.
+
+Names are 1 to 200 characters; spaces at either end are dropped. The new name
+shows straight away in the sidebar, in search and in
+[Settings → History](settings.md#history).
 
 ## Finding a conversation
 

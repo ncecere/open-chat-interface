@@ -17,13 +17,18 @@ import {
   COMPACTION_PENDING_TEXT,
 } from '../../src/components/chat/compact-thread-dialog';
 import { COMPACTION_DIVIDER_TEXT } from '../../src/components/chat/compaction-divider';
+import {
+  COMPACTION_FAILED_TEXT,
+  COMPACTION_FAILURE_TEXT,
+  CompactionFailureNotice,
+} from '../../src/components/chat/compaction-failure-notice';
 import { MessageList } from '../../src/components/chat/message-list';
 import { TopBar } from '../../src/components/layout/top-bar';
 import { COMPACTION_POLL_MS, COMPACTION_POLL_WINDOW_MS } from '../../src/hooks/use-compaction';
 import { ApiError } from '../../src/lib/api-client';
 import { alerts, button, cleanup, click, dialog, settle } from './admin-test-utils';
 
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/lib/api-client')>()),
   api,
@@ -70,6 +75,7 @@ let root: Root | undefined;
 beforeEach(() => {
   api.get.mockReset();
   api.post.mockReset();
+  api.delete.mockReset();
   api.get.mockResolvedValue({ compaction: null, pending: false });
 });
 afterEach(async () => {
@@ -271,5 +277,83 @@ describe('Summarise earlier messages now', () => {
     expect(dialog()).not.toBeNull();
     await click(button('Cancel'));
     expect(dialog()).toBeNull();
+  });
+});
+
+describe('a failed summary', () => {
+  const failure = {
+    reason: 'model_error' as const,
+    instructions: 'keep the budget figures',
+    failedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const notice = () => document.querySelector<HTMLElement>('[data-compaction-failure]');
+
+  it('is reported quietly with the reason, and Retry asks again with the same instructions', async () => {
+    api.get.mockResolvedValue({ compaction: null, pending: false, failure });
+    api.post.mockResolvedValue({ compaction: null, pending: true, failure: null });
+    const { client } = await mount(
+      <CompactionFailureNotice threadId="thread-1" />,
+      '/chat/thread-1',
+    );
+    expect(notice()?.getAttribute('role')).toBe('status');
+    expect(notice()?.textContent).toContain(COMPACTION_FAILED_TEXT);
+    expect(notice()?.textContent).toContain(COMPACTION_FAILURE_TEXT.model_error);
+    await click(button('Retry'));
+    expect(api.post).toHaveBeenCalledWith('/threads/thread-1/compact', {
+      instructions: 'keep the budget figures',
+    });
+    expect(client.getQueryData(['thread', 'thread-1', 'compaction'])).toMatchObject({
+      pending: true,
+      failure: null,
+    });
+    expect(notice()).toBeNull();
+  });
+
+  it('is dismissed, and says when dismissing or retrying did not work', async () => {
+    api.get.mockResolvedValue({
+      compaction: null,
+      pending: false,
+      failure: { ...failure, reason: 'allowance', instructions: null },
+    });
+    api.post.mockRejectedValue(
+      new ApiError(429, 'QUOTA_EXCEEDED', 'Your usage allowance is used up.'),
+    );
+    await mount(<CompactionFailureNotice threadId="thread-2" />, '/chat/thread-2');
+    expect(notice()?.textContent).toContain(COMPACTION_FAILURE_TEXT.allowance);
+    await click(button('Retry'));
+    expect(api.post).toHaveBeenCalledWith('/threads/thread-2/compact', {});
+    expect(alerts()).toEqual(['Your usage allowance is used up.']);
+    api.delete.mockResolvedValue({ compaction: null, pending: false, failure: null });
+    await click(button('Dismiss'));
+    expect(api.delete).toHaveBeenCalledWith('/threads/thread-2/compaction/failure');
+    expect(notice()).toBeNull();
+  });
+
+  it('offers no Retry when there was nothing to summarise, and shows nothing without a failure', async () => {
+    api.get.mockResolvedValue({
+      compaction: null,
+      pending: false,
+      failure: { ...failure, reason: 'nothing_to_summarise' },
+    });
+    await mount(<CompactionFailureNotice threadId="thread-3" />, '/chat/thread-3');
+    expect(notice()?.textContent).toContain(COMPACTION_FAILURE_TEXT.nothing_to_summarise);
+    expect([...notice()!.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'Dismiss',
+    ]);
+    await cleanup(root!);
+    root = undefined;
+    // An older API without the field.
+    api.get.mockResolvedValue({ compaction: null, pending: false });
+    await mount(<CompactionFailureNotice threadId="thread-4" />, '/chat/thread-4');
+    expect(notice()).toBeNull();
+  });
+
+  it('names every reason', () => {
+    expect(Object.keys(COMPACTION_FAILURE_TEXT).sort()).toEqual([
+      'allowance',
+      'model_error',
+      'nothing_to_summarise',
+      'timeout',
+    ]);
   });
 });

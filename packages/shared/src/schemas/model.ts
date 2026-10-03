@@ -29,6 +29,48 @@ export const catalogModelSchema = z.object({
  */
 const tokenPriceSchema = z.number().int().nonnegative().max(1_000_000_000).nullable().optional();
 
+/** The context window OCI assumes for a model whose window is not set. */
+export const FALLBACK_CONTEXT_WINDOW = 32_768;
+/**
+ * The output OCI reserves for a model whose output limit is not set: this, or
+ * a quarter of the context window if that is smaller.
+ */
+export const DEFAULT_OUTPUT_TOKENS = 4096;
+/** Room kept between the input and the output when budgeting a request. */
+export const CONTEXT_SAFETY_MARGIN_TOKENS = 512;
+export const MAX_CONTEXT_WINDOW = 10_000_000;
+export const MAX_OUTPUT_TOKENS_LIMIT = 1_000_000;
+
+/** The output reserved for a model with these limits (either may be unknown). */
+export function effectiveOutputTokens(
+  contextWindow: number | null,
+  maxOutputTokens: number | null,
+): number {
+  const window = contextWindow ?? FALLBACK_CONTEXT_WINDOW;
+  return maxOutputTokens ?? Math.min(DEFAULT_OUTPUT_TOKENS, Math.floor(window / 4));
+}
+
+/**
+ * Why a context window and output limit cannot be used together, or null.
+ * The output limit must leave room for input in the (possibly assumed) window;
+ * otherwise every message to the model would be refused.
+ */
+export function modelLimitsProblem(
+  contextWindow: number | null,
+  maxOutputTokens: number | null,
+): string | null {
+  const window = contextWindow ?? FALLBACK_CONTEXT_WINDOW;
+  const output = effectiveOutputTokens(contextWindow, maxOutputTokens);
+  if (output + CONTEXT_SAFETY_MARGIN_TOKENS >= window) {
+    return `The output limit must leave room for input: keep it below ${(
+      window - CONTEXT_SAFETY_MARGIN_TOKENS
+    ).toLocaleString(
+      'en-US',
+    )} tokens${contextWindow === null ? ' (the assumed context window, less 512), or set the context window' : ' (the context window, less 512)'}.`;
+  }
+  return null;
+}
+
 export const adminModelSchema = catalogModelSchema.extend({
   inputPriceMicros: z.number().int().nonnegative().nullable(),
   outputPriceMicros: z.number().int().nonnegative().nullable(),
@@ -51,8 +93,20 @@ export const upsertModelSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   description: z.string().trim().max(600).nullable().optional(),
   capabilities: z.array(modelCapabilitySchema).default([]),
-  contextWindow: z.number().int().positive().max(10_000_000).nullable().optional(),
-  maxOutputTokens: z.number().int().positive().max(1_000_000).nullable().optional(),
+  contextWindow: z
+    .number()
+    .int('Context window must be a whole number of tokens.')
+    .positive('Context window must be a positive number of tokens.')
+    .max(MAX_CONTEXT_WINDOW, 'Context window can be at most 10,000,000 tokens.')
+    .nullable()
+    .optional(),
+  maxOutputTokens: z
+    .number()
+    .int('Max output must be a whole number of tokens.')
+    .positive('Max output must be a positive number of tokens.')
+    .max(MAX_OUTPUT_TOKENS_LIMIT, 'Max output can be at most 1,000,000 tokens.')
+    .nullable()
+    .optional(),
   supportedEfforts: z.array(z.enum(REASONING_EFFORTS)).default([]),
   inputPriceMicros: tokenPriceSchema,
   outputPriceMicros: tokenPriceSchema,

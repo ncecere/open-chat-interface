@@ -1,13 +1,15 @@
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
-import { Download, FolderInput, History, PanelLeft, Plus, Search } from 'lucide-react';
+import { Download, FolderInput, History, PanelLeft, Pencil, Plus, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CompactConversationControl } from '~/components/chat/compact-thread-dialog';
+import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { ShareThreadDialog } from '~/components/chat/share-thread-dialog';
 import { ThemeMenu } from '~/components/layout/theme-menu';
 import { MoveToProjectDialog } from '~/components/projects/project-dialogs';
 import { Button } from '~/components/ui/button';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
+import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -54,7 +56,13 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
           data-floating-controls
           className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
         >
-          <Button variant="ghost" size="icon-sm" onClick={onOpenSidebar} aria-label="Open sidebar">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onOpenSidebar}
+            aria-label="Open sidebar"
+            aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
+          >
             <PanelLeft />
           </Button>
           <Button
@@ -66,7 +74,13 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
           >
             <Search />
           </Button>
-          <Button variant="ghost" size="icon-sm" asChild aria-label="New chat">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            asChild
+            aria-label="New chat"
+            aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
+          >
             <Link to="/" onClick={() => setTemporary(false)}>
               <Plus />
             </Link>
@@ -78,6 +92,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         data-floating-controls
         className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
       >
+        {params.threadId && <RenameConversationControl threadId={params.threadId} />}
         {params.threadId && (
           <Button
             variant="ghost"
@@ -118,6 +133,31 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         <ThemeMenu />
       </div>
     </header>
+  );
+}
+
+/** Renames the conversation on screen; offered once its current name is known. */
+function RenameConversationControl({ threadId }: { threadId: string }) {
+  const [open, setOpen] = useState(false);
+  const title = useOpenConversation(threadId)?.thread.title;
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Rename conversation"
+        title="Rename"
+        aria-haspopup="dialog"
+        disabled={title === undefined}
+        onClick={() => setOpen(true)}
+      >
+        <Pencil />
+      </Button>
+      {title !== undefined && (
+        <RenameThreadDialog threadId={threadId} title={title} open={open} onOpenChange={setOpen} />
+      )}
+    </>
   );
 }
 

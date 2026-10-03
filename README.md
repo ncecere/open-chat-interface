@@ -61,8 +61,8 @@ pnpm dev
 - API: <http://localhost:3080>
 
 The first administrator is created from `INITIAL_ADMIN_EMAIL` /
-`INITIAL_ADMIN_PASSWORD` on an empty database. If no password is supplied a
-one-time password is printed to the API logs.
+`INITIAL_ADMIN_PASSWORD` on an empty database. If no password is supplied (the
+variable is unset or empty) a one-time password is printed to the API logs.
 
 Locked out? `pnpm --filter @oci/api admin:promote you@example.com`.
 
@@ -116,8 +116,9 @@ comes up without a separate migration step. Both operations are idempotent and
 an existing deployment passes straight through.
 
 Set `INITIAL_ADMIN_EMAIL` to create the first administrator. Leaving
-`INITIAL_ADMIN_PASSWORD` unset prints a one-time password to the API logs
-instead of baking a credential into the environment.
+`INITIAL_ADMIN_PASSWORD` unset (or empty, as in `.env.example`) prints a
+one-time password to the API logs (`docker compose logs api`) instead of baking
+a credential into the environment.
 
 Once running, sign in and open **Admin**. The setup checklist on **Overview**
 lists what is still missing, in order, and links to each page. Start by adding a
@@ -188,10 +189,10 @@ erosion without inviting number-chasing.
 
 GitHub Actions validates pull requests and `main` with read-only permissions,
 using Node 22 and pnpm 11.18.0. Checks cover lint, type checking, builds,
-unit/integration tests, API coverage floors, live PostgreSQL/Redis/Mailpit and
-browser tests, production dependency auditing, and license policy. S3-dependent
-live tests can skip when S3 is unavailable; a green run does not establish S3
-coverage. GitLab SAST and dependency-scanning report parity is not provided.
+unit/integration tests, API coverage floors, live PostgreSQL/Redis/Mailpit/S3
+and browser tests, production dependency auditing, and license policy. The S3
+and backup suites run against an S3-compatible service and fail rather than
+skip in CI. GitLab SAST and dependency-scanning report parity is not provided.
 
 **Publish containers** runs for stable `vX.Y.Z` tag pushes or a manual dispatch
 for an existing stable tag. It checks `main` ancestry, package versions, and the
@@ -349,4 +350,6 @@ read: connection strings, secrets, and the initial administrator.
 ## Licence
 
 Open Chat Interface is available under the [MIT License](LICENSE). Third-party
-model logos retain their upstream notices in `apps/web/public/logos/`.
+model logos retain their upstream notices in `apps/web/public/logos/`; the Noto
+fonts PDF export embeds are under the SIL Open Font License 1.1 (see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).

@@ -77,6 +77,19 @@ describe('backup settings', () => {
     expect(toPublicBackupSettings(settings).s3.hasCredential).toBe(false);
   });
 
+  it('copies files for a new configuration, not for one saved before v0.10', () => {
+    expect(normalizeBackupSettings({})).toMatchObject({ copyFiles: true, verifyFiles: 'sample' });
+    expect(normalizeBackupSettings({ enabled: true, destination: 'storage' })).toMatchObject({
+      copyFiles: false,
+    });
+    expect(normalizeBackupSettings({ enabled: true, copyFiles: true }).copyFiles).toBe(true);
+    const before = normalizeBackupSettings({ enabled: false });
+    const after = applyBackupSettingsPatch(before, { copyFiles: true, verifyFiles: 'all' });
+    expect(changedBackupFields(before, after)).toEqual(['copyFiles', 'verifyFiles']);
+    expect(toPublicBackupSettings(after)).toMatchObject({ copyFiles: true, verifyFiles: 'all' });
+    expect(updateBackupSettingsSchema.safeParse({ verifyFiles: 'some' }).success).toBe(false);
+  });
+
   it('keeps secrets write-only and reports which fields changed', () => {
     const before = normalizeBackupSettings({});
     const after = applyBackupSettingsPatch(before, {
@@ -165,7 +178,8 @@ describe('pg_dump connection', () => {
     expect(pgToolPath('pg_dump', '/usr/lib/postgresql/17/bin')).toBe(
       '/usr/lib/postgresql/17/bin/pg_dump',
     );
-    expect(pgToolPath('pg_restore', undefined)).toBe('pg_restore');
+    // An empty directory means PATH; an explicit value, not BACKUP_PG_BIN_DIR, which CI sets.
+    expect(pgToolPath('pg_restore', '')).toBe('pg_restore');
   });
 });
 

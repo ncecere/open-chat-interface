@@ -244,7 +244,7 @@ export async function renderDocx(model: DocumentModel): Promise<Uint8Array> {
   const body = builder.blocks(model.blocks, { indent: 0, level: 0, quote: false });
   const document = new Document({
     title: model.title,
-    creator: 'Open Chat Interface',
+    creator: model.creator,
     styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     numbering: { config: builder.numbering },
     sections: [

@@ -160,6 +160,20 @@ ID and remove only the temporary directories/files created for this run.
 This recipe does not repair or change the other Compose files' registry references.
 Do not assume those optional MinIO services now pull successfully.
 
+## S3 in pull-request CI (v0.10)
+
+Pull-request CI does not build MinIO. It runs VersityGW
+(`versity/versitygw:v1.8.0`, Apache-2.0, pinned by digest) as a service, and
+installs `postgresql-client-17` from the PostgreSQL apt repository, so the
+storage, backup and compliance-export suites run on every pull request with
+their coverage floors ([Testing](testing.md#s3-in-ci)). Before switching, the
+three S3 suites were run locally against that exact image (posix backend,
+sidecar metadata, `CI=true` so nothing could skip): 30 tests passed, none
+skipped; the same suites pass against this MinIO fixture. One assertion had
+named MinIO's error (`XMinioInvalidResourceName`); it now checks the HTTP 400
+that both return. The MinIO source build stays available for release
+validation against a second implementation.
+
 ## Isolation and remaining gates
 
 Host-side application/test validation used an explicit environment allowlist,

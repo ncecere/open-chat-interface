@@ -221,6 +221,21 @@ export const jobDuration = register(
     DURATION_BUCKETS,
   ),
 );
+export const webSearches = register(
+  new Counter(
+    'oci_web_searches_total',
+    'Web searches from conversations by provider, slot (primary, fallback) and outcome (answered, failed). Never the query.',
+    ['provider', 'slot', 'outcome'],
+  ),
+);
+export const webSearchDuration = register(
+  new Histogram(
+    'oci_web_search_duration_seconds',
+    'Web search duration per provider and slot, retry included.',
+    ['provider', 'slot'],
+    DURATION_BUCKETS,
+  ),
+);
 export const webhookDeliveries = register(
   new Counter(
     'oci_webhook_deliveries_total',

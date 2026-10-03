@@ -10,6 +10,7 @@ import { ChatThreadPage } from '../../src/routes/chat/thread';
 interface ThreadData {
   thread: { id: string; temporary: boolean; expiresAt: string | null };
   messages: UIMessage[];
+  replies?: UIMessage[];
 }
 interface QueryState {
   data: ThreadData | undefined;
@@ -80,6 +81,9 @@ vi.mock('../../src/components/chat/composer', () => ({
     return <textarea aria-label="Message composer" />;
   },
 }));
+vi.mock('../../src/components/chat/compaction-failure-notice', () => ({
+  CompactionFailureNotice: () => null,
+}));
 vi.mock('../../src/components/chat/message-list', () => ({
   MessageList: (props: unknown) => {
     mocks.messageList(props);
@@ -102,6 +106,7 @@ const pending = {
   'oci.pendingPrompt': 'Keep this unsent draft',
   'oci.pendingAttachments': JSON.stringify([upload]),
   'oci.pendingEffort': 'high',
+  'oci.pendingModel': 'picked-on-home',
   'oci.pendingWebSearch': 'true',
 };
 let container: HTMLDivElement;
@@ -337,12 +342,48 @@ describe('ChatThreadPage loading boundary', () => {
       expect(mocks.useChatSession).toHaveBeenLastCalledWith(
         expect.objectContaining({
           carriedAttachments: [],
+          initialModelSlug: null,
           initialEffort: undefined,
           initialWebSearch: false,
         }),
       );
     },
   );
+
+  it('starts from the model and level the conversation last used (v0.10)', async () => {
+    const recorded = (
+      id: string,
+      role: 'user' | 'assistant',
+      modelSlug: string | null,
+      effort?: string,
+    ) => ({ id, role, parts: [], metadata: { modelSlug, effort: effort ?? null } }) as UIMessage;
+    setQuery('success', null, {
+      ...emptyThread(),
+      replies: [],
+      messages: [
+        recorded('m1', 'user', 'older', 'low'),
+        recorded('m2', 'assistant', 'older', 'low'),
+        recorded('m3', 'user', 'newer', 'high'),
+        recorded('m4', 'assistant', null),
+      ],
+    });
+    await render();
+    expect(mocks.useChatSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ initialModelSlug: 'newer', initialEffort: 'high' }),
+    );
+  });
+
+  it('leaves a conversation without a recorded model to the person’s default', async () => {
+    setQuery('success', null, {
+      ...emptyThread(),
+      replies: [],
+      messages: [{ id: 'm1', role: 'user', parts: [], metadata: { modelSlug: null } } as UIMessage],
+    });
+    await render();
+    expect(mocks.useChatSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ initialModelSlug: null, initialEffort: undefined }),
+    );
+  });
 
   it('consumes a matching handover only once, after a successful load', async () => {
     seedPending();
@@ -399,6 +440,7 @@ describe('ChatThreadPage loading boundary', () => {
         threadId,
         initialMessages: [],
         carriedAttachments: [upload],
+        initialModelSlug: 'picked-on-home',
         initialEffort: 'high',
         initialWebSearch: true,
       }),

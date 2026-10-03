@@ -12,11 +12,12 @@ const job = workerData as {
   format: DocumentFormat;
   title: string;
   markdown: string;
+  creator?: string;
   maxBytes: number;
 };
 
 try {
-  const model = await prepareDocument(job.format, job.title, job.markdown);
+  const model = await prepareDocument(job.format, job.title, job.markdown, job.creator);
   // A fresh, exactly sized buffer, so it can be transferred rather than copied.
   const bytes = new Uint8Array(await renderDocument(job.format, model, job.maxBytes));
   parentPort?.postMessage({ ok: true, buffer: bytes.buffer }, [bytes.buffer]);

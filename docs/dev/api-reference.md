@@ -184,7 +184,7 @@ Generated from 41 route files.
 | GET | `/api/admin/settings` | — |
 | PATCH | `/api/admin/settings` | — |
 | POST | `/api/admin/settings/logo` | Uploads an instance logo. |
-| POST | `/api/admin/settings/search/test` | Runs one sample search with the provider, address and key on the page, so an administrator can check them before or after saving. |
+| POST | `/api/admin/settings/search/test` | Runs one sample search with the provider, address and key on the page, so an administrator can check them before or after saving, and the same for the fallback provider when the page has one (v0.10). |
 | POST | `/api/admin/settings/storage/test` | — |
 
 ## `routes/admin/setup.ts`
@@ -219,7 +219,7 @@ Generated from 41 route files.
 | POST | `/api/admin/users` | — |
 | GET | `/api/admin/users/:id` | — |
 | PATCH | `/api/admin/users/:id` | — |
-| DELETE | `/api/admin/users/:id` | — |
+| DELETE | `/api/admin/users/:id` | Permanently deletes an account and everything it owns; audit entries stay. |
 | GET | `/api/admin/users/:id/limits` | The limits one person is held to right now: each budget with its current usage and reset time, and storage use against the role's allowance. |
 | POST | `/api/admin/users/:id/revoke-sessions` | — |
 | POST | `/api/admin/users/bulk` | — |
@@ -309,7 +309,8 @@ Generated from 41 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET/POST | `/api/auth/*` | — |
+| GET/POST | `/api/auth/*` | Better Auth owns every other /api/auth/* path; sign-in, sign-up, password reset and verification are limited per client address and per account (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After). |
+| POST | `/api/auth/admin/remove-user` | Answers 404: accounts are deleted with DELETE /api/admin/users/:id, which checks legal holds and the last administrator and records a `user.delete` deletion event. |
 
 ## `routes/me.ts`
 
@@ -318,14 +319,17 @@ Generated from 41 route files.
 | GET | `/api/me` | — |
 | GET | `/api/me/broadcasts` | Announcements this person should currently see. |
 | POST | `/api/me/broadcasts/:id/dismiss` | — |
+| POST | `/api/me/delete-account` | Deletes the signed-in person's own account and everything it owns (v0.10), when their role allows it (403 otherwise). |
 | GET | `/api/me/onboarding` | What must happen before this person can use the instance. |
 | POST | `/api/me/onboarding/accept-policy` | — |
 | POST | `/api/me/onboarding/complete` | — |
 | POST | `/api/me/onboarding/skip` | — |
-| PATCH | `/api/me/preferences` | — |
+| PATCH | `/api/me/preferences` | Saves the person's preferences. |
 | GET | `/api/me/sessions` | Settings → Account → Devices: where this person is signed in, this device first. |
 | DELETE | `/api/me/sessions/:id` | Signs out one other device (404 for anyone else's or an unknown session). |
 | POST | `/api/me/sessions/revoke-others` | Signs out every other device. |
+| GET | `/api/me/share-links` | Settings → Sharing (v0.10): every share link this person made, newest first, 50 per page (`limit` up to 100, `offset`). |
+| POST | `/api/me/share-links/revoke-all` | Revokes every share link this person still has, audited as one `share_link.revoke_all` entry with the count. |
 | GET | `/api/me/usage` | — |
 
 ## `routes/memory.ts`
@@ -334,9 +338,9 @@ Generated from 41 route files.
 | --- | --- | --- |
 | GET | `/api/memory` | The person's switch, whether memory is offered to them, their notes newest first, and the limits. |
 | POST | `/api/memory` | Adds a note; an existing identical note is returned with `created: false`. |
-| DELETE | `/api/memory` | Deletes every note the person has. |
+| DELETE | `/api/memory` | Deletes every note the person has; 409 while they are on legal hold. |
 | PATCH | `/api/memory/:id` | Changes the text of one of the person's notes. |
-| DELETE | `/api/memory/:id` | Deletes one of the person's notes. |
+| DELETE | `/api/memory/:id` | Deletes one of the person's notes; 409 while they are on legal hold. |
 | PUT | `/api/memory/settings` | Switches the person's own memory on or off; on needs the instance and role to allow it. |
 | POST | `/api/memory/undo` | Reverses one `remember` or `forget` step of the person's own reply. |
 
@@ -363,10 +367,10 @@ Generated from 41 route files.
 | POST | `/api/projects` | Creates a project, up to the per-person limit. |
 | GET | `/api/projects/:id` | One of the person's projects; 404 for anyone else's. |
 | PATCH | `/api/projects/:id` | Renames a project or changes its instructions; only the sent fields change. |
-| DELETE | `/api/projects/:id` | Conversations are detached and kept; files are deleted and their storage released. |
+| DELETE | `/api/projects/:id` | Conversations are detached and kept; files are deleted and their storage released; 409 while the owner is on legal hold. |
 | GET | `/api/projects/:id/files` | The project's files, oldest first. |
 | POST | `/api/projects/:id/files` | Uploads through the same validation and storage path as chat attachments, so it also needs attachments to be allowed for the role and the instance, shares the upload rate limit, and counts against the storage allowance. |
-| DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright; its storage is released immediately. |
+| DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright, releasing its storage at once; 409 while the owner is on legal hold. |
 | GET | `/api/projects/sidebar` | The sidebar's project tree: each project with its conversation count and up to five newest unpinned conversations. |
 
 ## `routes/share-links.ts`
@@ -374,7 +378,7 @@ Generated from 41 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/share-links/:slug` | Anonymous, read-only endpoint. |
-| DELETE | `/api/share-links/links/:linkId` | — |
+| DELETE | `/api/share-links/links/:linkId` | Revokes one of the caller's links (404 for anyone else's), audited as `share_link.revoke`. |
 | GET | `/api/share-links/threads/:threadId` | — |
 | POST | `/api/share-links/threads/:threadId` | — |
 
@@ -385,11 +389,12 @@ Generated from 41 route files.
 | GET | `/api/threads` | Live conversations, pinned first then newest, at most 200; `view=sidebar` leaves out unpinned project conversations. |
 | POST | `/api/threads` | — |
 | GET | `/api/threads/:id` | — |
-| PATCH | `/api/threads/:id` | — |
+| PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
 | POST | `/api/threads/:id/branches` | — |
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
-| GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start) and whether a background summary is queued or being made (`pending`). |
+| GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start), whether a background summary is queued or being made (`pending`), and the last failure of a summary the person asked for (`failure`, v0.10). |
+| DELETE | `/api/threads/:id/compaction/failure` | Dismisses the report of a failed summary (v0.10) and returns the state as GET does. |
 | GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
 | POST | `/api/threads/:id/forks` | — |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |

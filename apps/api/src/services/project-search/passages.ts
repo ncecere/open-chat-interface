@@ -1,6 +1,7 @@
-import type { ProjectSearchData } from '@oci/shared';
+import { PROJECT_EXCERPTS_MAX, type ProjectSearchData } from '@oci/shared';
 import { singleLine } from '../../lib/text.js';
 import { textCost } from '../chat/context-budget.js';
+import { passageKey, passageSnippet } from './excerpts.js';
 import type { RetrievedChunk } from './retrieval.js';
 
 /** A run of one file's chunks, stitched together where they overlap. */
@@ -104,15 +105,37 @@ export function selectPassages(
   return passages;
 }
 
-/** Names and passage counts only, in file order: never the passage text. */
+/**
+ * Names and passage counts, in file order, with the start of each passage
+ * (v0.10): at most PROJECT_EXCERPTS_MAX passages are listed, the first ones
+ * in file order; every passage is still counted. `headings` comes from
+ * `passageHeadings` and may be empty.
+ */
 export function projectSearchSummary(
   passages: ProjectPassage[],
   mode: ProjectSearchData['mode'],
+  headings: Map<string, string> = new Map(),
 ): ProjectSearchData {
-  const files = new Map<string, { name: string; passages: number }>();
+  const files = new Map<string, ProjectSearchData['files'][number]>();
+  let listed = 0;
   for (const passage of passages) {
-    const entry = files.get(passage.attachmentId) ?? { name: passage.filename, passages: 0 };
+    const entry = files.get(passage.attachmentId) ?? {
+      name: passage.filename,
+      passages: 0,
+      excerpts: [],
+    };
     entry.passages += passage.chunks;
+    if (listed < PROJECT_EXCERPTS_MAX) {
+      listed += 1;
+      const heading = headings.get(passageKey(passage));
+      entry.excerpts!.push({
+        id: `${passage.attachmentId}:${passage.first}-${passage.last}`,
+        first: passage.first,
+        last: passage.last,
+        ...(heading && { heading }),
+        snippet: passageSnippet(passage.text),
+      });
+    }
     files.set(passage.attachmentId, entry);
   }
   return { mode, files: [...files.values()] };

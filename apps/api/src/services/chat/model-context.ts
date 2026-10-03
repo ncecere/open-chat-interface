@@ -60,11 +60,16 @@ const asUI = (message: ContextMessage, toolsOffered: boolean): UIMessage => ({
  * failure no longer fails the reply: the model is told the search failed and
  * the reply shows why. Anything else (search switched off) still refuses.
  */
-type PreSearch = { results: SearchResult[]; error?: string };
+type PreSearch = { results: SearchResult[]; error?: string; provider?: string; fallback?: boolean };
 
 async function searchOrFailure(query: string): Promise<PreSearch> {
   try {
-    return { results: await searchWeb(query) };
+    const answer = await searchWeb(query);
+    return {
+      results: answer.results,
+      provider: answer.provider,
+      ...(answer.fallback && { fallback: true }),
+    };
   } catch (error) {
     if (error instanceof AppError && error.code !== ERROR_CODES.PROVIDER_ERROR) throw error;
     return {
@@ -143,7 +148,7 @@ export async function buildModelContext(
       threadId: thread.id,
       artifactTools: hasTool(context.tools, 'create_artifact'),
     }),
-    loadProjectContext(thread.projectId, user),
+    loadProjectContext(thread.projectId, user, input.excludedProjectFileIds ?? []),
     // Empty unless memory is on for this person and the chat is not temporary.
     loadMemorySection(
       { userId: user.id, role: user.role, temporary: thread.temporary },
@@ -352,6 +357,8 @@ export async function buildModelContext(
             query: searchQuery,
             results: searchResults.results,
             ...(searchResults.error ? { error: searchResults.error } : {}),
+            ...(searchResults.provider ? { provider: searchResults.provider } : {}),
+            ...(searchResults.fallback ? { fallback: true } : {}),
           },
         }
       : null,

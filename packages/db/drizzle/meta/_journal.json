@@ -246,6 +246,34 @@
       "when": 1790539200014,
       "tag": "0034_compliance",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790539200015,
+      "tag": "0035_backup_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790539200016,
+      "tag": "0036_personal_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790539200017,
+      "tag": "0037_compaction_failure",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790539200018,
+      "tag": "0038_usage_kept_after_deletion",
+      "breakpoints": true
     }
   ]
 }

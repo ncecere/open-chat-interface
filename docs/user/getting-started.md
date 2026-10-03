@@ -63,7 +63,9 @@ clearly going somewhere unhelpful — you do not have to wait for an answer you
 have already decided against.
 
 The conversation is given a title automatically from what you asked, and
-appears in the sidebar. To rename it, use the menu beside it in the list.
+appears in the sidebar. To rename it, point at it in the list and choose the
+pencil (**Rename thread**), or use the pencil at the top right of the open
+conversation; see [Renaming](conversations.md#renaming-a-conversation).
 
 ## Choosing a model
 
@@ -91,6 +93,12 @@ The **i** beside a model opens a card describing it in full.
 Filtering by ability is quicker than reading every entry when you know what you
 need: the funnel beside the search box narrows the list to models that can, for
 instance, read a PDF.
+
+A model you pick applies to that conversation; reopening it later starts from
+the model it last used. New conversations start from your default model and
+reasoning level, which you can set under
+[Settings → Models](settings.md#models) for every device, or from the
+instance's default.
 
 ## Where to go next
 

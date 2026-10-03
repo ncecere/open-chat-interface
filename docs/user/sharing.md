@@ -5,16 +5,40 @@ an account.
 
 ## Creating a link
 
-Open the conversation's menu and choose to share it. You get a link to copy.
+Open the conversation and choose **Share conversation** (the share icon at the
+top right). Pick what the link shows and, if you like, when it stops working,
+then create it and copy the link.
 
-What the recipient sees is a **snapshot**, not a live view: messages you add
-afterwards do not appear unless you update the share. That is deliberate — a
-link you sent last week should not silently acquire content you added since.
+**Share through** decides whether the link is live or a snapshot:
+
+- **Latest messages (live)**, the default, shows the conversation as it is
+  whenever someone opens the link, including messages you add later.
+- **A particular message** makes a **snapshot**: the link shows the
+  conversation up to and including that message, and nothing you add
+  afterwards. Use this when you want a link you sent last week to keep showing
+  what it showed then.
+
+**Expires (optional)** sets a date and time, in your local time, after which
+the link stops working. Leave it blank for a link that works until you revoke
+it.
+
+The same dialog lists the conversation's links, each marked **Live** or
+**Snapshot** with its view count and expiry, so you can copy or revoke them.
+
+## All your links
+
+**Settings → Sharing** lists every link you have made, across all your
+conversations, with the same details, so links shared long ago are easy to
+find. Revoke them one at a time, or all at once with **Revoke all**. See
+[Settings](settings.md#sharing).
 
 ## What is included
 
-- The messages, as they stood when you shared.
-- Which model produced each reply.
+- The conversation's title and its messages: your messages and the replies, one
+  reply per turn as you see it.
+- The sources a reply cited, and a one-line summary of each tool step it took.
+- Artifacts the shared replies created, at their latest version (for a
+  snapshot, the latest version at the time you created the link).
 
 Not included:
 
@@ -22,13 +46,17 @@ Not included:
   yours, not part of the published answer.
 - **Your attachments.** Files you attached stay private; the shared page shows
   the messages without them.
-- **Anything about your account** beyond a display name.
+- **Anything about your account**, or which model wrote each reply.
+
+Text that looks like a password, API key or access token is replaced with
+`[REDACTED]` on the shared page. Do not rely on that to catch everything.
 
 ## Revoking
 
-Deleting the link makes it stop working immediately. Anybody who opened it
+Revoking a link, from the conversation or from Settings → Sharing, makes it
+stop working immediately. Anybody who opened it
 before that keeps whatever they saved or copied — revoking removes access, not
-memory.
+memory. An expired link stops working the same way.
 
 Deleting a conversation, including automatic retention cleanup, also revokes
 its links. Restoring the conversation does **not** reactivate those links. To
@@ -37,8 +65,11 @@ content when the conversation expires, even before background cleanup runs.
 
 ## Before you share
 
-The link needs no account, so treat it as public. If a conversation contains
-anything you would not put on a public page, it should not be shared this way.
+The link needs no account, so treat it as public. A live link also publishes
+whatever you add to the conversation later. If a conversation contains anything
+you would not put on a public page, it should not be shared this way.
 
 Your administrator can turn sharing off entirely, or for your role; if you
-cannot find the option, that is why.
+cannot find the option, that is why. Links you made before stay listed in
+Settings → Sharing, where you can still revoke them. Revoking is recorded in
+the audit log.

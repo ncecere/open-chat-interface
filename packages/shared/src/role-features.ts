@@ -10,6 +10,7 @@ export const ROLE_FEATURE_KEYS = [
   'projects',
   'memory',
   'artifacts',
+  'accountDeletion',
 ] as const;
 export type RoleFeatureKey = (typeof ROLE_FEATURE_KEYS)[number];
 
@@ -31,6 +32,8 @@ const ALL_FEATURES: RoleFeatures = {
   projects: true,
   memory: true,
   artifacts: true,
+  // Off for every role until an administrator turns it on (v0.10).
+  accountDeletion: false,
   reasoningEfforts: [...REASONING_EFFORTS],
 };
 
@@ -41,6 +44,7 @@ const ALL_FEATURES: RoleFeatures = {
  * arrived later and follow the same line: off for restricted accounts until an
  * administrator turns them on. So do user memory and artifacts (v0.9); user
  * memory is also off instance-wide until an administrator turns it on.
+ * Deleting one's own account (v0.10) is off for every role.
  */
 export const DEFAULT_ROLE_FEATURES: Record<UserRole, RoleFeatures> = Object.fromEntries(
   USER_ROLES.map((role) => [

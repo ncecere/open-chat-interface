@@ -67,6 +67,45 @@ until the hold is lifted.
   one to end. This is the right response to a suspected compromise; changing the
   password alone leaves existing sessions working. They can sign in again
   straight away.
+- **Delete user**, at the bottom of the page, removes the account for good.
+  See [Deleting an account](#deleting-an-account).
+
+### Deleting an account
+
+**Delete user** asks you to type the person's email address before the button
+will do anything, so the wrong account cannot be deleted with a stray click.
+
+Deleting is permanent. It removes the account and everything it owns: its
+conversations and their messages, uploaded files (the stored files are removed
+shortly after by the storage cleanup job), projects, artifacts, memory, share
+links, connected accounts, saved views, limit overrides and preferences. The
+person is signed out at once.
+
+Kept: the **audit log**, including everything the person did (their entries
+keep the email address they were recorded with) and a `user.delete` entry
+naming the account and its role. Invitations and announcements they created
+stay too. **Usage records** (messages, tokens and cost per model, daily
+totals and limit refusals) are kept without anything that identifies the
+person, so usage reports and budget history do not change; reports show them
+as one **Deleted accounts** row (see
+[Usage](audit-reporting.md#usage)). Only a run still in progress loses its
+reserved allowance.
+
+The server refuses:
+
+- **your own account** — ask another administrator;
+- **the last administrator** — make somebody else an administrator first;
+- a person on [legal hold](compliance.md#legal-hold) — lift the hold first.
+  The dialog explains this and cannot be confirmed.
+
+The reason is shown in the dialog. Auditors do not see **Delete user**. To stop
+somebody signing in without losing their data, **Ban** them instead.
+
+People can also delete their own account from Settings → Account when their
+role allows it; see
+[Self-service account deletion](governance.md#self-service-account-deletion).
+That runs the same deletion, with the same refusals, and its `user.delete`
+entry carries `self: true`.
 
 ### Limits
 

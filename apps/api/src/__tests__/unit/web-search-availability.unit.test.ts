@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { webSearchProblem } from '../../services/search/availability.js';
+import { fallbackSearchProblem, webSearchProblem } from '../../services/search/availability.js';
 import type { SearchSettings } from '../../services/settings.js';
 
 const search = (overrides: Partial<SearchSettings> = {}): SearchSettings => ({
@@ -48,5 +48,54 @@ describe('web search availability', () => {
         search({ provider: 'searchapi', encryptedApiKey: null }),
       ),
     ).toBe('SearchApi needs an API key');
+  });
+});
+
+describe('fallback provider availability', () => {
+  it('has nothing to say when no fallback is configured', () => {
+    expect(fallbackSearchProblem(search())).toBeNull();
+    expect(fallbackSearchProblem(search({ fallbackProvider: null }))).toBeNull();
+  });
+
+  it('requires what the fallback provider needs', () => {
+    expect(fallbackSearchProblem(search({ fallbackProvider: 'brave' }))).toBe(
+      'the fallback Brave Search needs an API key',
+    );
+    expect(
+      fallbackSearchProblem(search({ fallbackProvider: 'brave', encryptedFallbackApiKey: 'c' })),
+    ).toBeNull();
+    expect(fallbackSearchProblem(search({ fallbackProvider: 'searxng' }))).toBe(
+      'the fallback SearXNG needs its address',
+    );
+    expect(
+      fallbackSearchProblem(
+        search({ fallbackProvider: 'searxng', fallbackBaseUrl: 'https://search.example.edu' }),
+      ),
+    ).toBeNull();
+  });
+
+  it('never uses a hosted service, or the same SearXNG, as its own fallback', () => {
+    expect(
+      fallbackSearchProblem(search({ fallbackProvider: 'tavily', encryptedFallbackApiKey: 'c' })),
+    ).toBe('the fallback must be a different service than Tavily');
+    const searxng = { provider: 'searxng' as const, baseUrl: 'https://a.example.edu' };
+    expect(
+      fallbackSearchProblem(
+        search({
+          ...searxng,
+          fallbackProvider: 'searxng',
+          fallbackBaseUrl: 'https://a.example.edu',
+        }),
+      ),
+    ).toBe('the fallback SearXNG must be at another address');
+    expect(
+      fallbackSearchProblem(
+        search({
+          ...searxng,
+          fallbackProvider: 'searxng',
+          fallbackBaseUrl: 'https://b.example.edu',
+        }),
+      ),
+    ).toBeNull();
   });
 });

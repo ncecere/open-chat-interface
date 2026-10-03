@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { decryptSecret } from '../lib/crypto.js';
 import { logger } from '../lib/logger.js';
+import { currentAppName } from './branding.js';
 import { getSetting } from './settings.js';
 
 export interface OutboundEmail {
@@ -26,6 +27,22 @@ export async function isSmtpUsable(): Promise<boolean> {
     logger.warn({ error }, 'SMTP configuration is unusable');
     return false;
   }
+}
+
+/** A bare address, without a display name of its own. */
+const BARE_ADDRESS = /^[^\s<>"@]+@[^\s<>"@]+$/;
+
+/**
+ * The From header. A bare configured address gets the instance name as its
+ * display name ("Acme AI" <no-reply@acme.test>); an address the administrator
+ * already gave a name (`Help Desk <help@acme.test>`) is left as it is.
+ */
+export function fromHeader(
+  fromAddress: string,
+  appName: string,
+): string | { name: string; address: string } {
+  const address = fromAddress.trim();
+  return BARE_ADDRESS.test(address) ? { name: appName, address } : address;
 }
 
 /**
@@ -57,7 +74,7 @@ export async function sendEmail(email: OutboundEmail): Promise<{ delivered: bool
     });
 
     await transport.sendMail({
-      from: smtp.fromAddress,
+      from: fromHeader(smtp.fromAddress, await currentAppName()),
       to: email.to,
       subject: email.subject,
       text: email.text,
@@ -70,26 +87,33 @@ export async function sendEmail(email: OutboundEmail): Promise<{ delivered: bool
   }
 }
 
+// Each message names the instance (Branding > App name) in its subject and
+// body, so a person with accounts on several instances can tell them apart.
+
 export async function sendVerificationEmail(params: { to: string; url: string }) {
+  const appName = await currentAppName();
   return sendEmail({
     to: params.to,
-    subject: 'Verify your email address',
-    text: `Confirm your email address to finish setting up your account:\n\n${params.url}`,
+    subject: `Verify your email address for ${appName}`,
+    text: `Confirm your email address to finish setting up your ${appName} account:\n\n${params.url}\n\nIf you did not create an account, you can ignore this email.`,
   });
 }
 
 export async function sendPasswordResetEmail(params: { to: string; url: string }) {
+  const appName = await currentAppName();
   return sendEmail({
     to: params.to,
-    subject: 'Reset your password',
-    text: `Use this link to choose a new password:\n\n${params.url}\n\nIf you did not request this, you can ignore this email.`,
+    subject: `Reset your ${appName} password`,
+    text: `Use this link to choose a new password for your ${appName} account:\n\n${params.url}\n\nIf you did not request this, you can ignore this email.`,
   });
 }
 
-export async function sendInviteEmail(params: { to: string; url: string; appName: string }) {
+/** `appName` is read from Branding when not given. */
+export async function sendInviteEmail(params: { to: string; url: string; appName?: string }) {
+  const appName = params.appName?.trim() || (await currentAppName());
   return sendEmail({
     to: params.to,
-    subject: `You have been invited to ${params.appName}`,
-    text: `You have been invited to join ${params.appName}.\n\nAccept the invitation:\n\n${params.url}`,
+    subject: `You have been invited to ${appName}`,
+    text: `You have been invited to join ${appName}.\n\nAccept the invitation:\n\n${params.url}`,
   });
 }

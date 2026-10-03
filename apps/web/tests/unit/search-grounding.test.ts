@@ -28,6 +28,33 @@ describe('search grounding message data', () => {
     });
   });
 
+  it('carries which provider answered, and whether it was the fallback', () => {
+    const grounding = searchGroundingOf(
+      message([
+        {
+          type: 'data-search-grounding',
+          data: { query: 'q', results: [], provider: 'Brave Search', fallback: true },
+        } as UIMessage['parts'][number],
+      ]),
+    );
+    expect(grounding).toEqual({
+      query: 'q',
+      results: [],
+      provider: 'Brave Search',
+      fallback: true,
+    });
+
+    const first = searchGroundingOf(
+      message([
+        {
+          type: 'data-search-grounding',
+          data: { query: 'q', results: [], provider: 'SearXNG', fallback: 'yes' },
+        } as UIMessage['parts'][number],
+      ]),
+    );
+    expect(first).toEqual({ query: 'q', results: [], provider: 'SearXNG' });
+  });
+
   it('carries why a search failed, so the reply can say so', () => {
     const grounding = searchGroundingOf(
       message([

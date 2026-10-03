@@ -118,19 +118,28 @@ describe.skipIf(!available)('live Postgres: quota reservations', () => {
     await expect(insertRollup()).rejects.toThrow();
   });
 
-  it('cascades usage rows when a user is deleted', async () => {
+  it('keeps usage rows without the person when a user is deleted', async () => {
     const doomed = await seedUser(db, organizationId);
-    await db.execute(sql`
+    const [event] = await db.execute<{ id: string }>(sql`
       insert into usage_event (organization_id, user_id, model_slug, message_count, tokens_in, tokens_out, cost_micros)
-      values (${organizationId}, ${doomed}, 'm', 1, 0, 0, 0)
+      values (${organizationId}, ${doomed}, 'kept-on-delete', 1, 0, 0, 0)
+      returning id
+    `);
+    await db.execute(sql`
+      insert into usage_record (organization_id, user_id, model_slug, day, message_count)
+      values (${organizationId}, ${doomed}, 'kept-on-delete', '2026-01-02', 1)
     `);
 
     await db.execute(sql`delete from "user" where id = ${doomed}`);
 
-    const rows = await db.execute<{ count: string }>(
-      sql`select count(*)::bigint as count from usage_event where user_id = ${doomed}`,
+    const rows = await db.execute<{ user_id: string | null }>(
+      sql`select user_id from usage_event where id = ${event!.id}`,
     );
-    expect(Number(rows[0]?.count)).toBe(0);
+    expect(rows).toEqual([{ user_id: null }]);
+    const rollups = await db.execute<{ user_id: string | null }>(
+      sql`select user_id from usage_record where model_slug = 'kept-on-delete'`,
+    );
+    expect(rollups).toEqual([{ user_id: null }]);
   });
 });
 

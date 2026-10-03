@@ -25,7 +25,11 @@ import {
   latestReplyModel,
   NOTHING_TO_COMPACT,
 } from '../services/chat/compaction.js';
-import { compactionState, requestCompaction } from '../services/chat/compaction-queue.js';
+import {
+  clearCompactionFailure,
+  compactionState,
+  requestCompaction,
+} from '../services/chat/compaction-queue.js';
 import { consumeFileExport, exportReply } from '../services/documents/export.js';
 import { exportFilename, exportThreadMarkdown } from '../services/export.js';
 import {
@@ -295,12 +299,25 @@ threadRoutes.patch('/:id/messages/:messageId/active', async (c) => {
 });
 
 /**
- * The compaction in use (its summary and where the verbatim messages start)
- * and whether a background summary is queued or being made (`pending`).
+ * The compaction in use (its summary and where the verbatim messages start),
+ * whether a background summary is queued or being made (`pending`), and the
+ * last failure of a summary the person asked for (`failure`, v0.10).
  */
 threadRoutes.get('/:id/compaction', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
+  c.header('cache-control', 'no-store');
+  return c.json(await compactionState(thread.id, user.id));
+});
+
+/**
+ * Dismisses the report of a failed summary (v0.10) and returns the state as
+ * GET does. Idempotent; owner only (404 otherwise).
+ */
+threadRoutes.delete('/:id/compaction/failure', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  await clearCompactionFailure(thread.id, user.id);
   c.header('cache-control', 'no-store');
   return c.json(await compactionState(thread.id, user.id));
 });
@@ -370,6 +387,10 @@ threadRoutes.get('/:id', async (c) => {
   });
 });
 
+/**
+ * Renames (title, trimmed, 1–200 characters), pins, archives or moves a
+ * conversation; only the sent fields change.
+ */
 threadRoutes.patch('/:id', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);

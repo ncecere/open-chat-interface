@@ -11,8 +11,10 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { db } from '../db/index.js';
-import { notFound, validationFailed } from '../lib/errors.js';
+import { conflict, notFound, validationFailed } from '../lib/errors.js';
 import { type UploadResult, uploadAttachment } from './attachments/upload.js';
+import { recordDeletions } from './compliance/deletions.js';
+import { HELD_PROJECT_DELETION_MESSAGE, isOnLegalHold } from './compliance/holds.js';
 import { lockLifecycleOwner } from './lifecycle/owner-lock.js';
 import { indexUploadedProjectFile, projectFileIndexStatus } from './project-search/indexing.js';
 import { assertRoleFeature } from './role-features.js';
@@ -265,6 +267,10 @@ export async function updateProject(
  * Deletes a project now. Its conversations are kept and simply leave the
  * project; its files are deleted, which releases their storage at once and
  * queues the stored objects through the usual attachment delete trigger.
+ *
+ * Projects have no trash, so this is a permanent deletion and, like "delete
+ * forever", is refused while the owner is on legal hold (409). Recorded as one
+ * `project.delete` event naming the files that went with it.
  */
 export async function deleteProject(
   projectId: string,
@@ -278,18 +284,34 @@ export async function deleteProject(
       .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, userId)))
       .for('update');
     if (!project) throw notFound('Project not found');
+    if (await isOnLegalHold(userId, tx)) throw conflict(HELD_PROJECT_DELETION_MESSAGE);
 
     const [threads] = await tx
       .select({ value: count() })
       .from(schema.thread)
       .where(eq(schema.thread.projectId, projectId));
     // ON DELETE CASCADE removes these rows; the triggers release their bytes.
-    const [files] = await tx
-      .select({ value: count() })
+    const files = await tx
+      .select({ id: schema.attachment.id })
       .from(schema.attachment)
-      .where(eq(schema.attachment.projectId, projectId));
+      .where(eq(schema.attachment.projectId, projectId))
+      .orderBy(asc(schema.attachment.id));
+    await recordDeletions(tx, [
+      {
+        action: 'project.delete',
+        actorUserId: userId,
+        id: projectId,
+        ownerUserId: userId,
+        reason: 'user',
+        details: {
+          conversationsDetached: threads?.value ?? 0,
+          files: files.length,
+          fileIds: files.map((file) => file.id),
+        },
+      },
+    ]);
     await tx.delete(schema.project).where(eq(schema.project.id, projectId));
-    return { detachedThreads: threads?.value ?? 0, removedFiles: files?.value ?? 0 };
+    return { detachedThreads: threads?.value ?? 0, removedFiles: files.length };
   });
 }
 
@@ -356,6 +378,7 @@ export async function uploadProjectFile(params: {
  * Removes a project file outright rather than to the trash: a project file
  * has no conversation to restore it with. The attachment delete triggers
  * release the counted storage and queue the object for the storage reaper.
+ * Being permanent, it is refused while the owner is on legal hold (409).
  */
 export async function deleteProjectFile(
   projectId: string,
@@ -370,6 +393,7 @@ export async function deleteProjectFile(
       .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, userId)))
       .for('update');
     if (!project) throw notFound('Project not found');
+    if (await isOnLegalHold(userId, tx)) throw conflict(HELD_PROJECT_DELETION_MESSAGE);
     const deleted = await tx
       .delete(schema.attachment)
       .where(
@@ -380,8 +404,18 @@ export async function deleteProjectFile(
           eq(schema.attachment.uploadPending, false),
         ),
       )
-      .returning({ id: schema.attachment.id });
+      .returning({ id: schema.attachment.id, sizeBytes: schema.attachment.sizeBytes });
     if (deleted.length === 0) throw notFound('File not found');
+    await recordDeletions(tx, [
+      {
+        action: 'attachment.delete',
+        actorUserId: userId,
+        id: fileId,
+        ownerUserId: userId,
+        reason: 'user',
+        details: { projectId, sizeBytes: deleted[0]!.sizeBytes },
+      },
+    ]);
   });
 }
 

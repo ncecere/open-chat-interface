@@ -3,12 +3,12 @@
 **Data & storage → Compliance** (`/admin/compliance`). Two tools for
 eDiscovery, records requests and security monitoring:
 
-- **Compliance export**: every audit event and, if you turn it on, conversation
-  content, written as [JSON Lines](https://jsonlines.org/) to S3-compatible
-  storage every hour or every day. Each run continues exactly where the last
-  one ended.
-- **Legal hold**: named people whose data retention, trash purging, temporary
-  chat expiry and account deletion must leave alone until the hold is lifted.
+- **Compliance export**: every audit event (including what was deleted, by
+  whom and when) and, if you turn it on, conversation content, written as
+  [JSON Lines](https://jsonlines.org/) to S3-compatible storage every hour or
+  every day. Each run continues exactly where the last one ended.
+- **Legal hold**: named people whose data no retention job, purge or deletion
+  may remove until the hold is lifted.
 
 An `auditor` sees everything on the page and changes nothing.
 
@@ -18,7 +18,7 @@ An `auditor` sees everything on the page and changes nothing.
 
 | Stream | When | Each line |
 | --- | --- | --- |
-| Audit events | Always, while the export is on | One audit log entry: `seq`, `id`, `createdAt`, `action`, `actorUserId`, `actorEmail`, `targetType`, `targetId`, `metadata`, `ipAddress`. |
+| Audit events | Always, while the export is on | One audit log entry: `seq`, `id`, `createdAt`, `action`, `actorUserId`, `actorEmail`, `targetType`, `targetId`, `metadata`, `ipAddress`. Includes [deletion events](#deletion-events). |
 | Conversation content | Only with **Include conversation content** on | One message: `seq`, `id`, `threadId`, `userId`, `userEmail`, `role`, `status`, `model`, `parentMessageId`, `createdAt`, `updatedAt`, `supersededAt`, `error`, `thread` (`title`, `temporary`, `projectId`), `text`, `toolSteps`, `files`, `sources`. |
 
 The first export includes the whole audit log as it stands (whatever audit
@@ -40,9 +40,56 @@ For messages:
   reply still being written is exported once, when it finishes. If a message
   changes several times between two runs, the export has its latest state.
 - Temporary chats are included, marked `"temporary": true`.
-- Deletions are not exported as messages. Deleting an account or a
-  conversation from the trash leaves the lines already exported; account
-  deletion and other administrative actions appear in the audit stream.
+- Deletions are not exported as messages. Deleting a conversation or an
+  account leaves the lines already exported; the deletion itself is a
+  [deletion event](#deletion-events) in the audit stream.
+
+### Deletion events
+
+Since v0.10, everything that moves a person's data to the trash, restores it
+or deletes it writes one audit entry, so a downstream archive can tell a
+deletion from a gap. That includes the person themselves, an administrator
+and the background jobs (retention, trash purging, temporary chat expiry,
+memory retention). Each entry is written in the same database transaction as
+the change: a deletion is never committed without its entry, and an entry is
+never written for a deletion that rolled back. They travel in the audit
+stream, so they are exported exactly once like every other audit event, can
+be [sent to webhooks](observability.md#webhooks), and are kept by audit
+retention while unexported or while their owner is on legal hold.
+
+| `action` | When | Notes |
+| --- | --- | --- |
+| `conversation.trash` | A conversation moves to the trash: by its owner (`reason: user`) or by conversation retention (`retention`). | `attachments`: files that went to the trash with it. |
+| `conversation.restore` | Its owner restores it from the trash. | |
+| `conversation.delete` | A conversation is destroyed: deleted forever or the trash emptied (`user`), the trash window elapsed (`trash_expiry`), a temporary chat expired (`temporary_expiry`). | `messages`, `attachments`, `artifacts`: what was destroyed with it; `temporary`, `projectId`. |
+| `attachment.trash` | A chat file is deleted on its own (it goes to the trash). | `threadId`, `messageId`, `sizeBytes`. |
+| `attachment.delete` | A project file is deleted (`user`), or a file trashed on its own is purged (`trash_expiry`). | `threadId`, `messageId` or `projectId`; `sizeBytes`. |
+| `project.delete` | A project is deleted. | `fileIds` and `files`: its files, deleted with it; `conversationsDetached`: its conversations, which are kept. |
+| `memory.delete` | A memory note is deleted by the person (`user`), the `forget` tool or undoing a saved note (`tool`), or memory retention (`retention`). One entry per note. | The target is the owner (as since v0.9); also `via`, `memoryId`. |
+| `user.delete` | An administrator deletes an account, or a person deletes their own (v0.10: `reason: "user"`, `self: true`). | `conversations`, `messages`, `attachments`, `artifacts`, `projects`, `memories`, `shareLinks`: everything deleted with it; also `email`, `role`. |
+
+Every one of them has the same `metadata.deletion` object:
+
+| Field | Meaning |
+| --- | --- |
+| `type` | `conversation`, `attachment`, `project`, `memory` or `user`. |
+| `id` | The id of what was trashed, restored or deleted. |
+| `ownerUserId`, `ownerEmail` | Whose data it was. Kept even after the account is deleted, when `actorUserId` of the person's own entries becomes null. |
+| `reason` | `user`, `admin`, `tool`, `retention`, `trash_expiry` or `temporary_expiry`. |
+| `permanent` | `true` for `*.delete`; `false` for trash and restore. |
+
+**Who** is `actorUserId` and `actorEmail`: the owner, the administrator, or
+null for a background job (the `reason` names the job). **When** is
+`createdAt`.
+
+**Never what was deleted**: no conversation titles, file names, project names
+or memory text, because audit entries are shown to administrators, sent to
+webhooks and kept after the thing itself is gone. What went with a
+conversation (its messages, files and artifacts) is counted, and named by the
+conversation's id. With **Include conversation content** on, the archive
+already holds the messages, keyed by `threadId`, with their file names under
+`files[].attachmentId` and their project under `thread.projectId`, so the ids
+join a deletion to what it removed.
 
 ### Content is off by default
 
@@ -212,9 +259,14 @@ While a person is on hold:
 | [Conversation retention](governance.md#retention) moves inactive conversations to the trash | Skipped for this person |
 | The trash is purged after its retention window | Skipped: their trash (conversations and files) is kept |
 | Expired temporary chats are deleted | Kept (still invisible to them) |
-| Audit retention prunes old entries | Entries by or about them are kept |
+| Audit retention prunes old entries | Entries by or about them are kept, including [deletion events](#deletion-events) for their data |
 | [Memory retention](governance.md#user-memory) deletes notes not updated for a while | Their notes are kept |
+| Usage history is pruned after its retention window | Their usage events are kept (daily totals are always kept) |
+| Expired and revoked share links are removed after 30 days | Their links are kept (still unusable) |
 | They empty their trash or delete a conversation forever | Refused: *Permanent deletion is paused for this account by your organization.* Moving to the trash still works. |
+| They delete a project or a project file | Refused: *Deleting projects and project files is paused for this account by your organization.* Projects have no trash, so this would destroy the files at once. |
+| They delete memories (in Settings, with the `forget` tool, or by undoing a saved note) | Refused: *Deleting memories is paused for this account by your organization.* Editing a note still works. |
+| They delete a chat file | Still works: it goes to the trash, which is kept |
 | An administrator deletes the account | Refused with *This person is on legal hold…*. A database trigger also refuses it on any other path. |
 
 Lifting the hold restores normal behaviour from then on: anything past its
@@ -223,5 +275,15 @@ window is removed at the next run of the job concerned.
 A hold applies to work that starts after it is placed; a purge already deleting
 when the hold is saved is not undone. A hold does not stop the person using OCI
 (ban them for that), does not change what the compliance export includes, and
-does not cover data outside OCI's database and attachment storage. Removing a
-project deletes its files at once and is not paused by a hold.
+does not cover data outside OCI's database and attachment storage: in
+particular, [backup](backups.md) retention still deletes old backups.
+
+Every place OCI deletes data is listed, with how it treats a hold, in the test
+`apps/api/src/__tests__/unit/legal-hold-paths.unit.test.ts`, which fails when a
+new deletion is added without that decision. Deletions that do not check
+remove things that are not a person's records: sessions and tokens, connector
+credentials, configuration, queues, a failed upload, an empty reply
+placeholder, a released usage reservation, and an import upload (what it
+imports becomes conversations, which are held). Editing (renaming a
+conversation, changing a project's instructions or a memory note) is not
+deletion and is not paused.

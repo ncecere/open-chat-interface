@@ -12,10 +12,15 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { forbidden, notFound, validationFailed } from '../../lib/errors.js';
+import { conflict, forbidden, notFound, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { recordAudit } from '../audit.js';
-import { notOnLegalHold } from '../compliance/holds.js';
+import { recordDeletions } from '../compliance/deletions.js';
+import {
+  HELD_MEMORY_DELETION_MESSAGE,
+  isOnLegalHold,
+  notOnLegalHold,
+} from '../compliance/holds.js';
 import { getRetentionSettings } from '../lifecycle/settings.js';
 import { memoryAvailable, memoryOptedIn } from './access.js';
 
@@ -44,7 +49,8 @@ export function toMemoryEntry(row: MemoryRow): MemoryEntry {
  * log outlives deleted memories and is read by administrators.
  */
 async function auditMemory(
-  action: 'memory.add' | 'memory.update' | 'memory.delete' | 'memory.settings.update',
+  // Deletions are recorded by `recordDeletions`, in the deleting transaction.
+  action: 'memory.add' | 'memory.update' | 'memory.settings.update',
   userId: string | null,
   metadata: Record<string, unknown>,
 ): Promise<void> {
@@ -184,29 +190,75 @@ export async function updateMemory(userId: string, id: string, content: string) 
   return row;
 }
 
-/** Deletes one of the person's own memories; returns it, or null when there was none. */
+/**
+ * Deletes one of the person's own memories; returns it, or null when there was
+ * none. Memory has no trash, so this is refused while the person is on legal
+ * hold (409). Recorded as a `memory.delete` deletion event in the same
+ * transaction, never with the text.
+ */
 export async function deleteMemory(
   userId: string,
   id: string,
   via: MemoryVia,
   context: { threadId?: string; messageId?: string } = {},
 ): Promise<MemoryRow | null> {
-  const [row] = await db
-    .delete(schema.userMemory)
-    .where(and(eq(schema.userMemory.id, id), eq(schema.userMemory.userId, userId)))
-    .returning();
-  if (row) await auditMemory('memory.delete', userId, { count: 1, via, memoryId: id, ...context });
-  return row ?? null;
+  return db.transaction(async (tx) => {
+    if (await isOnLegalHold(userId, tx)) throw conflict(HELD_MEMORY_DELETION_MESSAGE);
+    const [row] = await tx
+      .delete(schema.userMemory)
+      .where(and(eq(schema.userMemory.id, id), eq(schema.userMemory.userId, userId)))
+      .returning();
+    if (row)
+      await recordDeletions(tx, [
+        memoryDeletion(row.id, userId, userId, via, { count: 1, via, memoryId: id, ...context }),
+      ]);
+    return row ?? null;
+  });
 }
 
 export async function deleteAllMemories(userId: string): Promise<number> {
-  const removed = await db
-    .delete(schema.userMemory)
-    .where(eq(schema.userMemory.userId, userId))
-    .returning({ id: schema.userMemory.id });
-  if (removed.length > 0)
-    await auditMemory('memory.delete', userId, { count: removed.length, via: 'settings' });
-  return removed.length;
+  return db.transaction(async (tx) => {
+    if (await isOnLegalHold(userId, tx)) throw conflict(HELD_MEMORY_DELETION_MESSAGE);
+    const removed = await tx
+      .delete(schema.userMemory)
+      .where(eq(schema.userMemory.userId, userId))
+      .returning({ id: schema.userMemory.id });
+    // One event per note (at most MAX_MEMORY_ENTRIES), like every other deletion.
+    await recordDeletions(
+      tx,
+      removed.map((row) =>
+        memoryDeletion(row.id, userId, userId, 'settings', {
+          count: 1,
+          via: 'settings',
+          memoryId: row.id,
+        }),
+      ),
+    );
+    return removed.length;
+  });
+}
+
+/** A `memory.delete` deletion event; `legacy` keeps the v0.9 metadata fields. */
+function memoryDeletion(
+  memoryId: string,
+  ownerUserId: string,
+  actorUserId: string | null,
+  via: MemoryVia,
+  legacy: Record<string, string | number>,
+) {
+  return {
+    action: 'memory.delete' as const,
+    actorUserId,
+    id: memoryId,
+    ownerUserId,
+    reason:
+      via === 'settings'
+        ? ('user' as const)
+        : via === 'retention'
+          ? ('retention' as const)
+          : ('tool' as const),
+    legacy,
+  };
 }
 
 /** The short reference the model sees for a memory: the first 8 characters of its id. */
@@ -293,8 +345,8 @@ const RETENTION_BATCH = 1_000;
 
 /**
  * Deletes memories not updated for the configured number of days (off by
- * default). One audit event per run with the count and how many people it
- * touched; never what was deleted.
+ * default). One `memory.delete` deletion event per note (since v0.10; one per
+ * run before), with no actor; never what was deleted.
  */
 export async function applyMemoryRetention(now: Date = new Date()): Promise<number> {
   const { memoryRetentionDays } = await getRetentionSettings();
@@ -312,31 +364,40 @@ export async function applyMemoryRetention(now: Date = new Date()): Promise<numb
       )
       .limit(RETENTION_BATCH);
     if (batch.length === 0) break;
-    const rows = await db
-      .delete(schema.userMemory)
-      .where(
-        and(
-          inArray(
-            schema.userMemory.id,
-            batch.map((row) => row.id),
+    const rows = await db.transaction(async (tx) => {
+      const deleted = await tx
+        .delete(schema.userMemory)
+        .where(
+          and(
+            inArray(
+              schema.userMemory.id,
+              batch.map((row) => row.id),
+            ),
+            lte(schema.userMemory.updatedAt, cutoff),
+            notOnLegalHold(schema.userMemory.userId),
           ),
-          lte(schema.userMemory.updatedAt, cutoff),
-          notOnLegalHold(schema.userMemory.userId),
+        )
+        .returning({ id: schema.userMemory.id, userId: schema.userMemory.userId });
+      // One deletion event per note, with no actor (a background job).
+      await recordDeletions(
+        tx,
+        deleted.map((row) =>
+          memoryDeletion(row.id, row.userId, null, 'retention', {
+            count: 1,
+            via: 'retention',
+            memoryId: row.id,
+            retentionDays: memoryRetentionDays,
+          }),
         ),
-      )
-      .returning({ userId: schema.userMemory.userId });
+      );
+      return deleted;
+    });
     removed += rows.length;
     for (const row of rows) people.add(row.userId);
     if (batch.length < RETENTION_BATCH) break;
   }
   if (removed > 0) {
-    logger.info({ count: removed }, 'Deleted memories past their retention');
-    await auditMemory('memory.delete', null, {
-      count: removed,
-      people: people.size,
-      via: 'retention',
-      retentionDays: memoryRetentionDays,
-    });
+    logger.info({ count: removed, people: people.size }, 'Deleted memories past their retention');
   }
   return removed;
 }

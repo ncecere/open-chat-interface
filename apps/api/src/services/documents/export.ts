@@ -3,6 +3,7 @@ import { ARTIFACT_KIND_LABELS, DOCUMENT_FORMAT_INFO, type DocumentFormat } from 
 import { db } from '../../db/index.js';
 import { conflict, notFound, rateLimited, validationFailed } from '../../lib/errors.js';
 import { artifactVersionForExport, replyText } from '../artifacts/store.js';
+import { currentAppName } from '../branding.js';
 import { activeMessage } from '../chat/reply-path.js';
 import { safeTitleSlug } from '../export.js';
 import { consumeRateLimit } from '../limits/rate-limit.js';
@@ -72,7 +73,7 @@ async function generate(
   // prepared does not use the allowance.
   const bytes = await withGenerationSlot(userId, async () => {
     await consumeFileExport(userId);
-    return renderInWorker(format, source.title, source.markdown);
+    return renderInWorker(format, source.title, source.markdown, undefined, await currentAppName());
   });
   return {
     bytes,

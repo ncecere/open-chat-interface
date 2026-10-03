@@ -257,6 +257,56 @@ describe('sidebar projects', () => {
     expect(toggle('Thesis').getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('follows projects opened and closed in another tab', async () => {
+    await render();
+    expect(toggle('Thesis').getAttribute('aria-expanded')).toBe('false');
+
+    // Another tab writes the key; the browser tells this tab with a storage event.
+    const otherTab = async (
+      value: string | null,
+      key: string | null = EXPANDED_PROJECTS_STORAGE_KEY,
+    ) => {
+      if (key === EXPANDED_PROJECTS_STORAGE_KEY && value !== null) localStorage.setItem(key, value);
+      if (key === null) localStorage.clear();
+      await act(async () => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key, newValue: value, storageArea: localStorage }),
+        );
+      });
+      await settle();
+    };
+
+    await otherTab(JSON.stringify(['p1', 'p2']));
+    expect(toggle('Thesis').getAttribute('aria-expanded')).toBe('true');
+    expect(toggle('Grants').getAttribute('aria-expanded')).toBe('true');
+    expect(titles(projectList('Thesis'))).toHaveLength(5);
+
+    await otherTab(JSON.stringify(['p2']));
+    expect(toggle('Thesis').getAttribute('aria-expanded')).toBe('false');
+    expect(toggle('Grants').getAttribute('aria-expanded')).toBe('true');
+
+    // Other keys are ignored; clearing storage collapses everything.
+    localStorage.setItem('oci.unrelated', '1');
+    await otherTab('1', 'oci.unrelated');
+    expect(toggle('Grants').getAttribute('aria-expanded')).toBe('true');
+    await otherTab(null, null);
+    expect(toggle('Grants').getAttribute('aria-expanded')).toBe('false');
+
+    // A toggle here after a sync builds on what the other tab chose.
+    await otherTab(JSON.stringify(['p3']));
+    await click(toggle('Thesis'));
+    expect(stored()).toEqual(['p3', 'p1']);
+  });
+
+  it('stops listening for other tabs once unmounted', async () => {
+    const remove = vi.spyOn(window, 'removeEventListener');
+    await render();
+    await act(() => root!.unmount());
+    root = undefined;
+    expect(remove.mock.calls.some(([type]) => type === 'storage')).toBe(true);
+    remove.mockRestore();
+  });
+
   it('lists a pinned project conversation only in Pinned, still counted in Show all', async () => {
     await render();
     await click(toggle('Grants'));

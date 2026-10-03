@@ -224,6 +224,91 @@ describe('user detail actions', () => {
   });
 });
 
+describe('deleting an account', () => {
+  function confirmInput() {
+    return document.getElementById('delete-user-confirm') as HTMLInputElement;
+  }
+
+  it('enables Delete only once the email is typed, then deletes and returns to People', async () => {
+    api.delete.mockResolvedValue({ ok: true });
+    let router: Awaited<ReturnType<typeof renderDetail>>['router'];
+    ({ root, router } = await renderDetail());
+
+    await click(button('Delete user'));
+    const text = dialog()?.textContent ?? '';
+    expect(text).toContain('Delete Dana Admin?');
+    expect(text).toContain('conversations and their messages, uploaded files');
+    expect(text).toContain('share links');
+    expect(text).toContain('The audit log keeps every entry');
+    // Usage is kept for reports, without the person (v0.10).
+    expect(text).toContain(
+      'Usage records (messages, tokens and cost per model) are kept without anything that identifies them',
+    );
+    expect(text).toContain('reports show them under Deleted accounts');
+    expect(text).not.toMatch(/everything it owns:[^.]*usage records/);
+
+    const confirm = [...(dialog() as HTMLElement).querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === 'Delete user',
+    ) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    await type(confirmInput(), 'dana@example');
+    expect(confirm.disabled).toBe(true);
+    await type(confirmInput(), '  DANA@example.test ');
+    expect(confirm.disabled).toBe(false);
+
+    await click(confirm);
+    expect(api.delete).toHaveBeenCalledWith('/admin/users/user-1');
+    expect(router.state.location.pathname).toBe('/admin/users');
+  });
+
+  it('shows the server reason and stays open when the deletion is refused', async () => {
+    api.delete.mockRejectedValueOnce(
+      new ApiError(
+        409,
+        'CONFLICT',
+        'This is the last administrator account, so it cannot be deleted. Make someone else an administrator first.',
+      ),
+    );
+    ({ root } = await renderDetail());
+
+    await click(button('Delete user'));
+    await type(confirmInput(), 'dana@example.test');
+    const confirm = [...(dialog() as HTMLElement).querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === 'Delete user',
+    ) as HTMLButtonElement;
+    await click(confirm);
+
+    expect(dialog()).not.toBeNull();
+    expect(alerts(dialog() as HTMLElement)).toEqual([
+      'The account could not be deleted. This is the last administrator account, so it cannot be deleted. Make someone else an administrator first.',
+    ]);
+  });
+
+  it('explains a legal hold and cannot be confirmed', async () => {
+    user = { ...baseUser, role: 'user', legalHold: true } as typeof baseUser;
+    ({ root } = await renderDetail());
+
+    await click(button('Delete user'));
+    expect(dialog()?.textContent).toContain('This person is on legal hold');
+    expect(confirmInput()).toBeNull();
+    const confirm = [...(dialog() as HTMLElement).querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === 'Delete user',
+    ) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+  });
+
+  it('is not offered on your own account', async () => {
+    const fallback = api.get.getMockImplementation();
+    api.get.mockImplementation(async (path: string) =>
+      path === '/me' ? { user: { id: 'user-1' }, preferences: {}, features: {} } : fallback?.(path),
+    );
+    ({ root } = await renderDetail());
+
+    expect(document.body.textContent).toContain('Dana Admin');
+    expect(findButton('Delete user')).toBeUndefined();
+  });
+});
+
 describe('user limits', () => {
   it('shows each budget with an accessible progress bar, remaining and reset', async () => {
     ({ root } = await renderDetail());
@@ -284,6 +369,7 @@ describe('read-only viewers', () => {
     expect(findButton('Unban')).toBeUndefined();
     expect(findButton('Sign out everywhere')).toBeUndefined();
     expect(findButton('Adjust limits')).toBeUndefined();
+    expect(findButton('Delete user')).toBeUndefined();
   });
 });
 

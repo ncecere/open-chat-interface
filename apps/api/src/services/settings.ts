@@ -160,6 +160,14 @@ export interface SearchSettings {
   baseUrl: string | null;
   encryptedApiKey: string | null;
   maxResults: number;
+  /**
+   * The fallback provider (v0.10), tried when the first one times out or
+   * fails with a server or network error. Absent from settings saved before
+   * v0.10, which read as no fallback.
+   */
+  fallbackProvider?: SearchProviderKind | null;
+  fallbackBaseUrl?: string | null;
+  encryptedFallbackApiKey?: string | null;
 }
 
 export interface SmtpSettings {
@@ -265,6 +273,13 @@ export interface StoredBackupSettings {
   s3?: Partial<S3StorageSettings>;
   keepDaily?: number;
   keepWeekly?: number;
+  /**
+   * Copy attachment files to the destination (v0.10). Absent on instances
+   * that saved backup settings before v0.10, which keeps them off until an
+   * administrator turns copying on; see `normalizeBackupSettings`.
+   */
+  copyFiles?: boolean;
+  verifyFiles?: 'sample' | 'all';
 }
 
 /**

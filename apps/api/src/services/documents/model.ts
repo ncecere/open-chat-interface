@@ -1,3 +1,4 @@
+import { DEFAULT_APP_NAME } from '@oci/shared';
 import MarkdownItFactory, { type MarkdownIt, type Token } from 'markdown-it';
 
 /**
@@ -52,6 +53,11 @@ export interface ListItem {
 export interface DocumentModel {
   title: string;
   blocks: Block[];
+  /**
+   * The document's author/creator metadata: the instance name (Branding >
+   * App name), so a rebranded instance's files do not name the product.
+   */
+  creator: string;
 }
 
 /**
@@ -324,10 +330,15 @@ export function parseMarkdown(source: string): Block[] {
   return root;
 }
 
-export function documentModel(title: string, markdownSource: string): DocumentModel {
+export function documentModel(
+  title: string,
+  markdownSource: string,
+  creator?: string,
+): DocumentModel {
   return {
     title: cleanText(title).trim() || 'Untitled',
     blocks: parseMarkdown(markdownSource),
+    creator: cleanText(creator ?? '').trim() || DEFAULT_APP_NAME,
   };
 }
 

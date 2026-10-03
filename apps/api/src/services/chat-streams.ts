@@ -4,9 +4,11 @@ import { logger } from '../lib/logger.js';
 import type { OwnedRunState } from './chat/run-state.js';
 import { type ReplayValidator, validateReplayRun } from './chat-replay-validation.js';
 import { createChatReplay } from './chat-stream-replay.js';
+import { ReplaySnapshot } from './chat-stream-snapshot.js';
 
 const KEY_PREFIX = 'oci:chat-stream';
-const MAX_EVENTS = 10_000;
+/** Stream events kept per reply (approximately: Redis trims in whole nodes, never below it). */
+export const MAX_EVENTS = 10_000;
 const REDIS_RETRY_DELAY_MS = 30_000;
 
 export type ChatRunStatus = 'active' | 'complete' | 'error' | 'cancelled';
@@ -42,12 +44,34 @@ function eventsKey(runId: string) {
   return `${KEY_PREFIX}:run:${runId}:events`;
 }
 
+function snapshotKey(runId: string) {
+  return `${KEY_PREFIX}:run:${runId}:snapshot`;
+}
+
+interface StoreOptions {
+  /** Events kept per reply; lowered only in tests. */
+  maxEvents?: number;
+}
+
 /** Redis persistence for one bounded, owner-scoped AI SDK SSE stream. */
 export class ChatStreamStore {
+  private readonly maxEvents: number;
+  /**
+   * How often a compact snapshot is saved, in events. A quarter of the kept
+   * events: Redis never keeps fewer than `maxEvents`, so the newest snapshot
+   * always reaches the oldest kept event and a trimmed replay can continue
+   * from it without a gap.
+   */
+  readonly snapshotEvery: number;
+
   constructor(
     private readonly redis: Redis,
     private readonly ttlSeconds: number,
-  ) {}
+    options: StoreOptions = {},
+  ) {
+    this.maxEvents = Math.max(4, Math.floor(options.maxEvents ?? MAX_EVENTS));
+    this.snapshotEvery = Math.floor(this.maxEvents / 4);
+  }
 
   async begin(identity: ChatRunIdentity, options?: BeginOptions): Promise<BeginChatRunResult> {
     if (options?.admission === 'durable') return this.publishAdmitted(identity);
@@ -171,12 +195,44 @@ export class ChatStreamStore {
     return (await this.redis.hget(metadataKey(runId), 'cancelRequested')) === '1';
   }
 
-  async append(runId: string, value: string): Promise<void> {
+  /**
+   * Appends one SSE frame and returns its sequence number. With a snapshot,
+   * the frame is added to it and the snapshot is saved every `snapshotEvery`
+   * events, so a replay whose prefix was trimmed can start from it.
+   */
+  async append(runId: string, value: string, snapshot?: ReplaySnapshot): Promise<number> {
+    const sequence = await this.appendEvent(runId, value);
+    if (snapshot) {
+      snapshot.observe(value);
+      if (sequence % this.snapshotEvery === 0 && snapshot.size === sequence)
+        await this.saveSnapshot(runId, sequence, snapshot.frames());
+    }
+    return sequence;
+  }
+
+  /** Saves the frames standing for events 1..sequence, while the run's metadata lives. */
+  private async saveSnapshot(runId: string, sequence: number, frames: string[]): Promise<void> {
+    await this.redis.eval(
+      `
+      local ttl = redis.call('PTTL', KEYS[1])
+      if ttl <= 0 or redis.call('HGET', KEYS[1], 'runId') ~= ARGV[1] then return 0 end
+      redis.call('SET', KEYS[2], ARGV[2], 'PX', ttl)
+      return 1
+    `,
+      2,
+      metadataKey(runId),
+      snapshotKey(runId),
+      runId,
+      JSON.stringify({ sequence, frames }),
+    );
+  }
+
+  private async appendEvent(runId: string, value: string): Promise<number> {
     // One operation: metadata cannot expire between validation and XADD, and
     // sequence gaps remain detectable even when MAXLEN drops the SSE prefix.
     // Increment before XADD: if the latter fails, replay sees a missing event
     // rather than mistaking a partial cache for successful completion.
-    await this.redis.eval(
+    const sequence = await this.redis.eval(
       `
       local expires = tonumber(redis.call('HGET', KEYS[1], 'expiresAt'))
       local ttl = redis.call('PTTL', KEYS[1])
@@ -200,9 +256,10 @@ export class ChatStreamStore {
       metadataKey(runId),
       eventsKey(runId),
       Date.now(),
-      MAX_EVENTS,
+      this.maxEvents,
       value,
     );
+    return Number(sequence);
   }
 
   async finalize(identity: ChatRunIdentity, outcome: ChatRunOutcome): Promise<void> {
@@ -258,6 +315,7 @@ export class ChatStreamStore {
       identity,
       metadataKey: metadataKey(identity.runId),
       eventsKey: eventsKey(identity.runId),
+      snapshotKey: snapshotKey(identity.runId),
       signal,
       readState: options?.readState,
     });
@@ -423,6 +481,7 @@ export async function captureChatRun(
 ): Promise<void> {
   const reader = stream.getReader();
   let persistenceFailed = false;
+  const snapshot = new ReplaySnapshot();
 
   try {
     while (true) {
@@ -431,7 +490,7 @@ export async function captureChatRun(
       if (persistenceFailed) continue;
 
       const stored = await withStore(async (store) => {
-        await store.append(identity.runId, value);
+        await store.append(identity.runId, value, snapshot);
         return true;
       });
       if (!stored) persistenceFailed = true;

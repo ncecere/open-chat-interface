@@ -387,6 +387,17 @@ describe('history and summaries', () => {
     expect(summarizeToolPart({ ...search, output: {} }).summary).toBe(
       "Searched the web for 'opening hours' · 0 results",
     );
+    // v0.10: the fallback provider is named when it answered; the first provider is not.
+    const results = (search.output as { results: unknown[] }).results;
+    expect(
+      summarizeToolPart({
+        ...search,
+        output: { results, provider: 'Brave Search', fallback: true },
+      }).summary,
+    ).toBe("Searched the web for 'opening hours' · 1 result · via Brave Search (fallback)");
+    expect(summarizeToolPart({ ...search, output: { results, provider: 'SearXNG' } }).summary).toBe(
+      "Searched the web for 'opening hours' · 1 result",
+    );
     expect(summarizeToolPart({ ...search, input: { query: 'x'.repeat(100) } }).summary).toContain(
       '…',
     );

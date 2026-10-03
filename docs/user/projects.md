@@ -134,7 +134,12 @@ a model name starting with `rerank:`. If the reranking model is slow or
 unavailable, the reply still comes, with passages in the usual order.
 
 A reply that used searched passages says so above its text, for example
-"Searched project files. Used passages from handbook.pdf (2 passages)", or
+"Searched project files. Used passages from handbook.pdf (2 passages)". Select
+**Show passages used** under the note to see which passages they were: for
+each file, the passage numbers, the heading of the section a passage comes
+from when the file has Markdown-style headings (`# Title`), and the first 200
+or so characters of the passage. Up to 24 passages are listed; replies from
+before this was added show only the file names and counts. The note says
 "Searched project files by meaning and keywords" when meaning-based search
 was used. If meaning-based search is unavailable for a moment, the reply still
 comes, searched by keyword only. With meaning-based search on, each passage of
@@ -155,10 +160,24 @@ rather than cut off, and the reply is marked as having limited context.
 Nothing from the project is written into the conversation itself. Exports and
 share links show the conversation as it was written; a shared conversation
 never includes the project's instructions or files. The note on a searched
-reply names the files and counts the passages but never contains their text;
-it is kept with the reply in your own data export and left out of share links. Like any attachment, a
+reply names the files, counts the passages and keeps only the first 200 or so
+characters of each passage used (at most 24), never the whole passage; it is
+kept with the reply in your own data export and left out of share links. Like any attachment, a
 project file's contents go to the provider of the model you chose for that
 message.
+
+## Leaving a file out of a question
+
+In a conversation whose project has searchable files, the composer has a
+**Files** button (a folder). It lists the project's files, all ticked. Untick
+a file to leave it out of your next message: the model gets neither the file
+nor any passage from it, whether the project is included whole or searched.
+The reply's note then says so, for example "Left out of this message:
+draft-2023.pdf." Only that message is affected; the next one uses every file
+again, and the button shows, say, "Files 2/3" while a file is left out.
+The button appears once a conversation has started, so the first message of
+a new conversation uses every file. Regenerating a reply, or a reply that
+continues after you approve a tool step, uses every file.
 
 ## Deleting
 

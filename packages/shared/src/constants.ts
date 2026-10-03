@@ -89,6 +89,12 @@ export const DEFAULT_USAGE_EVENT_RETENTION_DAYS = 90;
 export const DEFAULT_AUDIT_LOG_RETENTION_DAYS = 365;
 
 /**
+ * How usage reports name the usage of deleted accounts, which is kept without
+ * the person (v0.10): one row wherever a list names people.
+ */
+export const DELETED_ACCOUNTS_LABEL = 'Deleted accounts';
+
+/**
  * Audit actions kept regardless of retention. These are the entries an
  * incident review needs, and they are low volume.
  */

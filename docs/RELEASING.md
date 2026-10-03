@@ -71,10 +71,10 @@ git push origin vX.Y.Z
   against the current `main` checkout.
 
 Validation uses Node 22 and pnpm 11.18.0 for lint, type checking, builds,
-unit/integration tests, coverage floors, live PostgreSQL/Redis/Mailpit and
-browser tests, production dependency auditing, and license checks. S3-dependent
-live tests can skip when S3 is unavailable; review skips before claiming storage
-coverage.
+unit/integration tests, coverage floors, live PostgreSQL/Redis/Mailpit/S3
+(VersityGW) and browser tests, production dependency auditing, and license
+checks. In CI the S3 and backup suites fail rather than skip when their
+services are missing ([Testing](dev/testing.md#s3-in-ci)).
 
 Images are published for `linux/amd64` only to:
 

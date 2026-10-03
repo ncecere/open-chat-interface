@@ -105,6 +105,37 @@ provider is selected, and it has its key or address. Until all of those hold,
 search is removed from the composer rather than offered and failing. The page
 says whether search is available, and why not.
 
+### Fallback provider
+
+A search that times out, cannot reach the provider or gets a server error
+(HTTP 5xx) is tried once more. If it fails again and you have chosen a
+**Fallback provider**, the same search goes to that provider instead. A
+refused key, a used-up quota (HTTP 429) or another error you need to fix is
+reported as it is and never passed to the fallback.
+
+- The fallback has its own provider and asks for exactly what that provider
+  needs: an address for SearXNG, a key for the others. Its key is stored
+  encrypted and never shown again, like the first provider's; switching the
+  fallback to another provider removes its saved key.
+- It must be a different service: a hosted provider cannot be its own
+  fallback, and a SearXNG fallback must be at a different address.
+- With a fallback chosen, each attempt at the first provider waits at most
+  8 seconds (15 without one), so the fallback still has time to answer; a
+  search still gives up within about 25 seconds in all.
+- The reply records which provider answered. Its search details say so, and a
+  tool step that the fallback answered reads, for example, "Searched the web
+  for 'library hours' · 5 results · via Brave Search (fallback)". When both
+  fail, the error names both.
+- **Test search** tests the fallback too, separately, and reports each result.
+  The audit entry records both providers and outcomes.
+- A fallback missing its key or address is not used. Search still works, and
+  the [setup checklist](first-run.md) says why the fallback is not used.
+
+Logs say which provider failed, how and when, and that a search fell back,
+never the query or a key. The [metrics](observability.md#metrics)
+`oci_web_searches_total` and `oci_web_search_duration_seconds` count searches
+by provider, by primary or fallback, and by outcome.
+
 ## Maintenance
 
 Background jobs and storage reconciliation, both on

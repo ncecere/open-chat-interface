@@ -46,10 +46,15 @@ export function assertExportable(format: DocumentFormat, markdown: string): void
 }
 
 /** Parsed content, checked for what the format needs. */
-export async function prepareDocument(format: DocumentFormat, title: string, markdown: string) {
+export async function prepareDocument(
+  format: DocumentFormat,
+  title: string,
+  markdown: string,
+  creator?: string,
+) {
   assertExportableText(markdown);
   const { documentModel, hasTables } = await import('./model.js');
-  const model = documentModel(title, markdown);
+  const model = documentModel(title, markdown, creator);
   if (format === 'xlsx' && !hasTables(model.blocks)) throw validationFailed(NO_TABLES_TO_EXPORT);
   return model;
 }
@@ -125,13 +130,15 @@ export function renderInWorker(
   title: string,
   markdown: string,
   limits: WorkerLimits = WORKER_LIMITS,
+  /** The instance name for the file's author/creator metadata. */
+  creator?: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
   // Under tsx or Vitest this module is TypeScript; the worker then needs tsx too.
   const typescript = import.meta.url.endsWith('.ts');
   const worker = new Worker(
     new URL(`./render-worker.${typescript ? 'ts' : 'js'}`, import.meta.url),
     {
-      workerData: { format, title, markdown, maxBytes: MAX_DOCUMENT_EXPORT_OUTPUT_BYTES },
+      workerData: { format, title, markdown, creator, maxBytes: MAX_DOCUMENT_EXPORT_OUTPUT_BYTES },
       resourceLimits: { maxOldGenerationSizeMb: limits.heapMb },
       ...(typescript ? { execArgv: ['--import', 'tsx'] } : {}),
     },

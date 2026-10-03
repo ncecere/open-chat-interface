@@ -88,6 +88,32 @@ describe('rate limiting', () => {
   });
 });
 
+describe('authentication limit details', () => {
+  it('marks only the first refusal in a window, so it is recorded once', async () => {
+    const results = [];
+    for (let attempt = 0; attempt < 4; attempt += 1)
+      results.push(await consumeRateLimit({ bucket: 'auth:ip', identifier: 'a', limit: 2 }));
+    expect(results.map((result) => [result.allowed, result.firstRefusal])).toEqual([
+      [true, false],
+      [true, false],
+      [false, true],
+      [false, false],
+    ]);
+  });
+
+  it('names the limit that refused, and counts nothing without an address or account', async () => {
+    for (let attempt = 0; attempt < 10; attempt += 1)
+      await authRateLimit({ ipAddress: `192.0.2.${attempt}`, identifier: 'Victim@X.test' });
+    expect(
+      await authRateLimit({ ipAddress: '192.0.2.200', identifier: ' victim@x.test ' }),
+    ).toMatchObject({ allowed: false, scope: 'account' });
+    expect(await authRateLimit({ ipAddress: null, identifier: null })).toMatchObject({
+      allowed: true,
+      scope: null,
+    });
+  });
+});
+
 describe('concurrency cap', () => {
   it('permits up to the role limit of simultaneous generations', async () => {
     const first = await acquireStreamSlot('user-1', 'user', 'run-1');

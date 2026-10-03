@@ -244,7 +244,13 @@ export function summarizeToolPart(part: PartLike): ToolStepSummary {
     const target = query ? ` for ${quote(query)}` : '';
     if (state === 'done') {
       const count = resultCount(part) ?? 0;
-      summary = `Searched the web${target} · ${count} ${count === 1 ? 'result' : 'results'}`;
+      // v0.10: when the fallback provider answered, say which one.
+      const output = part.output as { provider?: unknown; fallback?: unknown } | undefined;
+      const via =
+        output?.fallback === true && typeof output.provider === 'string' && output.provider
+          ? ` · via ${output.provider} (fallback)`
+          : '';
+      summary = `Searched the web${target} · ${count} ${count === 1 ? 'result' : 'results'}${via}`;
     } else if (state === 'error') summary = `Web search${target} failed`;
     else if (state === 'denied') summary = `Web search${target} was not run`;
     else summary = `Searching the web${target}`;

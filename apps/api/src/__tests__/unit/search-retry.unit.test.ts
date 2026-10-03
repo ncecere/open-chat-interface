@@ -8,7 +8,10 @@ vi.mock('../../lib/logger.js', () => ({
 import {
   runSearch,
   SEARCH_ATTEMPT_TIMEOUT_MS,
+  SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS,
+  SEARCH_PRIMARY_BUDGET_WITH_FALLBACK_MS,
   SEARCH_TOTAL_TIMEOUT_MS,
+  searchWithFallback,
 } from '../../services/search/index.js';
 
 const QUERY = 'library opening hours';
@@ -58,7 +61,7 @@ describe('web search retry', () => {
       'Web search failed',
     );
     expect(mocks.info).toHaveBeenCalledWith(
-      { provider: 'brave', attempt: 2 },
+      { provider: 'brave', slot: 'primary', attempt: 2 },
       'Web search succeeded on retry',
     );
     expectLogsWithoutSecrets();
@@ -86,11 +89,19 @@ describe('web search retry', () => {
     [401, 'Brave Search rejected the web search API key (HTTP 401)'],
     [403, 'Brave Search rejected the web search API key (HTTP 403)'],
     [429, 'Brave Search refused the search because a rate limit or quota was reached (HTTP 429)'],
-    [500, 'Brave Search returned an error (HTTP 500)'],
+    [404, 'Brave Search returned an error (HTTP 404)'],
   ])('does not retry HTTP %i', async (status, message) => {
     fetch.mockImplementation(() => Promise.resolve(new Response('{}', { status })));
     await expect(runSearch(QUERY, config)).rejects.toThrow(message);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([500, 502, 503, 504])('retries a server error (HTTP %i) once', async (status) => {
+    fetch
+      .mockImplementationOnce(() => Promise.resolve(new Response('{}', { status })))
+      .mockImplementationOnce(answered);
+    await expect(runSearch(QUERY, config)).resolves.toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('does not retry a response that is not search results', async () => {
@@ -140,6 +151,121 @@ describe('web search retry', () => {
     });
 
     await expect(runSearch(QUERY, config)).rejects.toThrow('Brave Search did not answer in time.');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('web search fallback', () => {
+  const fallback = {
+    provider: 'searxng' as const,
+    baseUrl: 'https://search.example.edu',
+    apiKey: null,
+    maxResults: 3,
+  };
+  const searxngAnswered = () =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({ results: [{ title: 'Fallback', url: 'https://fallback.test/' }] }),
+        { status: 200 },
+      ),
+    );
+
+  it('leaves the fallback at least one full attempt inside the overall limit', () => {
+    expect(2 * SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS).toBeLessThanOrEqual(
+      SEARCH_PRIMARY_BUDGET_WITH_FALLBACK_MS,
+    );
+    expect(SEARCH_TOTAL_TIMEOUT_MS - SEARCH_PRIMARY_BUDGET_WITH_FALLBACK_MS).toBeGreaterThanOrEqual(
+      SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS,
+    );
+  });
+
+  it('answers from the first provider when it works', async () => {
+    fetch.mockImplementationOnce(answered);
+    await expect(searchWithFallback(QUERY, config, fallback)).resolves.toEqual({
+      results: [{ title: 'Hours', url: 'https://lib.example.edu/hours', snippet: '' }],
+      provider: 'Brave Search',
+      fallback: false,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("shortens the first provider's attempts and gives the fallback the rest", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const timeouts = vi.spyOn(AbortSignal, 'timeout');
+    fetch
+      .mockImplementationOnce(() => {
+        now += SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS;
+        return timedOut();
+      })
+      .mockImplementationOnce(() => {
+        now += SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS;
+        return timedOut();
+      })
+      .mockImplementationOnce(searxngAnswered);
+
+    await expect(searchWithFallback(QUERY, config, fallback)).resolves.toMatchObject({
+      provider: 'SearXNG',
+      fallback: true,
+    });
+    expect(timeouts.mock.calls.map(([ms]) => ms)).toEqual([
+      SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS,
+      SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS,
+      SEARCH_TOTAL_TIMEOUT_MS - 2 * SEARCH_PRIMARY_ATTEMPT_WITH_FALLBACK_MS,
+    ]);
+    expect(mocks.warn).toHaveBeenCalledWith(
+      { provider: 'brave', fallbackProvider: 'searxng' },
+      'Web search falling back to the second provider',
+    );
+    expectLogsWithoutSecrets();
+  });
+
+  it('keeps the full time limits when no fallback is configured', async () => {
+    const timeouts = vi.spyOn(AbortSignal, 'timeout');
+    fetch.mockImplementationOnce(answered);
+    await searchWithFallback(QUERY, config, null);
+    expect(timeouts.mock.calls[0]?.[0]).toBe(SEARCH_ATTEMPT_TIMEOUT_MS);
+  });
+
+  it.each([
+    [401, 'Brave Search rejected the web search API key (HTTP 401)'],
+    [429, 'Brave Search refused the search because a rate limit or quota was reached (HTTP 429)'],
+  ])('does not fall back on HTTP %i', async (status, message) => {
+    fetch.mockImplementation(() => Promise.resolve(new Response('{}', { status })));
+    await expect(searchWithFallback(QUERY, config, fallback)).rejects.toThrow(message);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('names both providers when both fail', async () => {
+    fetch.mockImplementation(() => Promise.reject(new TypeError('fetch failed')));
+    await expect(searchWithFallback(QUERY, config, fallback)).rejects.toThrow(
+      'Brave Search could not be reached. The fallback provider failed too: SearXNG could not be reached.',
+    );
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not fall back when the caller stopped the search', async () => {
+    const caller = new AbortController();
+    fetch.mockImplementation(() => {
+      caller.abort();
+      return Promise.reject(new DOMException('This operation was aborted', 'AbortError'));
+    });
+    await expect(
+      searchWithFallback(QUERY, config, fallback, { signal: caller.signal }),
+    ).rejects.toThrow('Brave Search did not answer in time.');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fall back when too little of the overall limit is left', async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    fetch.mockImplementation(() => {
+      now += SEARCH_TOTAL_TIMEOUT_MS - 1_000;
+      return timedOut();
+    });
+    await expect(searchWithFallback(QUERY, config, fallback)).rejects.toThrow(
+      'Brave Search did not answer in time.',
+    );
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

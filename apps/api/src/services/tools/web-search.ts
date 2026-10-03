@@ -15,6 +15,10 @@ const MAX_URL_CHARS = 2_000;
 interface WebSearchToolResult {
   query: string;
   results: Array<{ title: string; url: string; snippet: string }>;
+  /** The provider that answered, by name (v0.10). */
+  provider: string;
+  /** Present and true only when the fallback provider answered (v0.10). */
+  fallback?: true;
 }
 
 /**
@@ -48,14 +52,16 @@ export const webSearchTool: ToolDefinition = {
   async execute(input, { signal }) {
     const query = normalizeSearchQuery((input as { query: string }).query);
     // The call's signal: a stopped reply or the tool time limit ends the search.
-    const results = await searchWeb(query, signal);
+    const answer = await searchWeb(query, signal);
     return {
       query,
-      results: results.slice(0, WEB_SEARCH_MAX_RESULTS).map((result) => ({
+      results: answer.results.slice(0, WEB_SEARCH_MAX_RESULTS).map((result) => ({
         title: clip(result.title, MAX_TITLE_CHARS),
         url: clip(result.url, MAX_URL_CHARS),
         snippet: clip(result.snippet, MAX_SNIPPET_CHARS),
       })),
+      provider: answer.provider,
+      ...(answer.fallback && { fallback: true as const }),
     } satisfies WebSearchToolResult;
   },
   sources: (output) => webSearchSources(output),

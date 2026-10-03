@@ -32,7 +32,13 @@ vi.mock('../../services/organization.js', () => ({
   getDefaultOrganizationId: async () => state.organizationId,
 }));
 vi.mock('../../services/settings.js', () => ({
-  getSetting: async () => ({ branching: true, shareLinks: true, temporaryChat: true }),
+  getSetting: async () => ({
+    branching: true,
+    shareLinks: true,
+    temporaryChat: true,
+    // Branding (v0.10): the export header names the instance.
+    appName: 'Acme Research',
+  }),
 }));
 
 import type { AppBindings } from '../../middleware/context.js';
@@ -105,6 +111,11 @@ describe.skipIf(!available)('live Postgres: conversation export', () => {
     expect(body).toContain('# Migration planning');
     expect(body).toContain('How should we migrate?');
     expect(body).toContain('Start with the schema.');
+  });
+
+  it('names the instance it was exported from', async () => {
+    const body = await (await appFor(ownerId).request(`/api/threads/${threadId}/export`)).text();
+    expect(body).toMatch(/^Exported from Acme Research on \d{4}-\d{2}-\d{2} · started /m);
   });
 
   it('attributes each answer to the model that produced it', async () => {

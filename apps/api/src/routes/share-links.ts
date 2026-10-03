@@ -1,14 +1,16 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { clientIp } from '../lib/client-ip.js';
 import { notFound, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
+import { recordAudit } from '../services/audit.js';
 import {
   assertShareLinkManagementAllowed,
   createShareLink,
   getPublicShare,
   listShareLinks,
-  revokeShareLink,
+  revokeOwnShareLink,
 } from '../services/share-links.js';
 
 export const shareLinkRoutes = new Hono<AppBindings>();
@@ -71,11 +73,27 @@ shareLinkRoutes.post('/threads/:threadId', requireAuth, async (c) => {
   return c.json({ link: serializeOwnerLink(link) }, 201);
 });
 
+/**
+ * Revokes one of the caller's links (404 for anyone else's), audited as
+ * `share_link.revoke`. Allowed even while sharing is off for the role or the
+ * instance (v0.10): taking a link down must never need the permission to put
+ * one up. Revoking a revoked link changes and records nothing.
+ */
 shareLinkRoutes.delete('/links/:linkId', requireAuth, async (c) => {
   const user = currentUser(c);
-  await assertShareLinkManagementAllowed(user.role);
 
   const linkId = idSchema.parse(c.req.param('linkId'));
-  const link = await revokeShareLink(linkId, user.id);
+  const { link, changed } = await revokeOwnShareLink(linkId, user.id);
+  if (changed) {
+    await recordAudit({
+      actorUserId: user.id,
+      actorEmail: user.email,
+      action: 'share_link.revoke',
+      targetType: 'share_link',
+      targetId: link.id,
+      ipAddress: clientIp(c),
+      metadata: { threadId: link.threadId, snapshot: link.upToMessageId !== null },
+    });
+  }
   return c.json({ link: serializeOwnerLink(link) });
 });

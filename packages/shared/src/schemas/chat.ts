@@ -55,6 +55,13 @@ export const searchGroundingDataSchema = z.object({
   ),
   /** Set when the search failed; the reply went ahead without results. */
   error: z.string().optional(),
+  /**
+   * The provider that answered, by name (v0.10). Absent on replies from
+   * before v0.10 and when the search failed.
+   */
+  provider: z.string().optional(),
+  /** True when the fallback provider answered because the first one failed (v0.10). */
+  fallback: z.boolean().optional(),
 });
 
 export const attachmentSchema = z.object({
@@ -96,9 +103,12 @@ export const messageSchema = z.object({
   createdAt: z.string(),
 });
 
+/** Longest conversation title, after trimming; renaming enforces the same. */
+export const THREAD_TITLE_MAX_LENGTH = 200;
+
 export const createThreadSchema = z
   .object({
-    title: z.string().trim().max(200).optional(),
+    title: z.string().trim().max(THREAD_TITLE_MAX_LENGTH).optional(),
     temporary: z.boolean().default(false),
     /** Start the conversation inside one of the caller's projects. */
     projectId: z.string().min(1).max(200).optional(),
@@ -106,7 +116,7 @@ export const createThreadSchema = z
   .strict();
 
 export const updateThreadSchema = z.object({
-  title: z.string().trim().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(THREAD_TITLE_MAX_LENGTH).optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
   /** Move into one of the caller's projects, or `null` to take it out. */
@@ -150,6 +160,12 @@ export const sendMessageSchema = z
     effort: z.enum(REASONING_EFFORTS).optional(),
     webSearch: z.boolean().default(false),
     attachmentIds: z.array(z.string()).default([]),
+    /**
+     * Project files to leave out of this message's context (v0.10), by id.
+     * Each must be a file of the conversation's project; at most a project's
+     * file limit (MAX_FILES_PER_PROJECT, 20). Absent means none.
+     */
+    excludedProjectFileIds: z.array(z.string().min(1).max(200)).max(20).optional(),
     temporary: z.boolean().default(false),
     trigger: z.enum(['submit-message', 'regenerate-message']).default('submit-message'),
   })

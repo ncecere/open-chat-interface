@@ -23,6 +23,15 @@ export const BACKUP_STORAGE_PREFIX = '.oci-backups/';
 export const DEFAULT_BACKUP_KEEP_DAILY = 7;
 export const DEFAULT_BACKUP_KEEP_WEEKLY = 4;
 
+/**
+ * How many copied attachment files each backup reads back from the
+ * destination and checksums: a random `sample`, or `all` of them.
+ */
+export const BACKUP_FILE_VERIFICATION = ['sample', 'all'] as const;
+export type BackupFileVerification = (typeof BACKUP_FILE_VERIFICATION)[number];
+/** Files read back per run with `sample` verification. */
+export const BACKUP_FILE_SAMPLE_SIZE = 32;
+
 const backupEndpointSchema = z
   .string()
   .trim()
@@ -66,6 +75,9 @@ export const backupSettingsSchema = z.object({
   s3: backupS3TargetSchema,
   keepDaily: z.number().int(),
   keepWeekly: z.number().int(),
+  /** Copy attachment files to the destination (content addressed, incremental). */
+  copyFiles: z.boolean(),
+  verifyFiles: z.enum(BACKUP_FILE_VERIFICATION),
 });
 export type BackupSettings = z.infer<typeof backupSettingsSchema>;
 
@@ -94,6 +106,8 @@ export const updateBackupSettingsSchema = z
     keepDaily: z.number().int().min(1).max(90).optional(),
     /** Most recent weeks kept (the newest backup of each ISO week); 0 keeps none beyond the daily ones. */
     keepWeekly: z.number().int().min(0).max(104).optional(),
+    copyFiles: z.boolean().optional(),
+    verifyFiles: z.enum(BACKUP_FILE_VERIFICATION).optional(),
   })
   .strict()
   .refine((input) => Object.keys(input).length > 0, { message: 'Send at least one change.' });
@@ -116,6 +130,20 @@ export const backupRunSchema = z.object({
   attachmentCount: z.number().nullable(),
   attachmentBytes: z.number().nullable(),
   missingObjects: z.number().nullable(),
+  /** Attachment files copied by this run; null when it did not copy files. */
+  files: z
+    .object({
+      copiedObjects: z.number(),
+      copiedBytes: z.number(),
+      /** Already at the destination, so not copied again. */
+      skippedObjects: z.number(),
+      skippedBytes: z.number(),
+      /** Read back from the destination and checksummed. */
+      verifiedObjects: z.number(),
+      /** Unreferenced copies deleted after retention; null until the sweep has run. */
+      sweptObjects: z.number().nullable(),
+    })
+    .nullable(),
   verified: z.boolean(),
   verificationDetail: z.string().nullable(),
   errorMessage: z.string().nullable(),

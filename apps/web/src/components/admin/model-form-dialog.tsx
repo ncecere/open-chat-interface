@@ -1,9 +1,12 @@
 import {
   type AdminModel,
+  DEFAULT_OUTPUT_TOKENS,
+  FALLBACK_CONTEXT_WINDOW,
   MICROS_PER_DOLLAR,
   MODEL_CAPABILITIES,
   MODEL_LABS,
   type ModelCapability,
+  modelLimitsProblem,
   type Provider,
   REASONING_EFFORTS,
   type ReasoningEffort,
@@ -62,6 +65,19 @@ function toPriceMicros(value: string): number | null {
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? Math.round(parsed * MICROS_PER_DOLLAR) : null;
 }
+
+/**
+ * A token count typed in the form: blank is unknown (null), thousands
+ * separators are allowed, anything else that is not a whole number is NaN so
+ * validation reports it.
+ */
+export function parseTokenCount(value: string): number | null {
+  const digits = value.replace(/[\s,_]/g, '');
+  if (!digits) return null;
+  return /^\d+$/.test(digits) ? Number(digits) : Number.NaN;
+}
+
+const formatTokens = (value: number) => value.toLocaleString('en-US');
 
 function slugify(value: string): string {
   return value
@@ -187,18 +203,31 @@ export function ModelFormDialog({
     event.preventDefault();
     setError(null);
 
+    const contextWindow = parseTokenCount(draft.contextWindow);
+    const maxOutputTokens = parseTokenCount(draft.maxOutputTokens);
+    if (Number.isNaN(contextWindow) || Number.isNaN(maxOutputTokens)) {
+      setError(
+        `${Number.isNaN(contextWindow) ? 'Context window' : 'Max output'} must be a whole number of tokens.`,
+      );
+      return;
+    }
     const parsed = upsertModelSchema.safeParse({
       ...draft,
       labId: draft.labId || null,
       description: draft.description.trim() || null,
-      contextWindow: draft.contextWindow ? Number(draft.contextWindow) : null,
-      maxOutputTokens: draft.maxOutputTokens ? Number(draft.maxOutputTokens) : null,
+      contextWindow,
+      maxOutputTokens,
       sortOrder: Number(draft.sortOrder || 0),
       inputPriceMicros: toPriceMicros(draft.inputPrice),
       outputPriceMicros: toPriceMicros(draft.outputPrice),
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Check the model fields.');
+      return;
+    }
+    const limits = modelLimitsProblem(contextWindow, maxOutputTokens);
+    if (limits) {
+      setError(limits);
       return;
     }
     save.mutate(parsed.data);
@@ -305,11 +334,45 @@ export function ModelFormDialog({
         </Field>
 
         {/*
-         * Cost tier, context window, and max output are no longer edited here.
-         * They are provider facts rather than decisions an administrator makes,
-         * and keeping them on the form invited stale values that disagreed with
-         * the model itself. Existing values are preserved on save.
+         * Provider discovery does not report these, so without them OCI budgets
+         * every model as if it had the fallback window and output, which cuts
+         * long conversations short on large models.
          */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Context window"
+            htmlFor="model-context-window"
+            hint={`Tokens the model accepts, input and output together. Leave blank if unknown: OCI then assumes ${formatTokens(FALLBACK_CONTEXT_WINDOW)}.`}
+          >
+            <Input
+              id="model-context-window"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder={formatTokens(FALLBACK_CONTEXT_WINDOW)}
+              value={draft.contextWindow}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, contextWindow: event.target.value }))
+              }
+            />
+          </Field>
+          <Field
+            label="Max output"
+            htmlFor="model-max-output"
+            hint={`Most tokens the model writes in one reply. Leave blank if unknown: OCI then reserves ${formatTokens(DEFAULT_OUTPUT_TOKENS)}, or a quarter of the context window if that is smaller.`}
+          >
+            <Input
+              id="model-max-output"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder={formatTokens(DEFAULT_OUTPUT_TOKENS)}
+              value={draft.maxOutputTokens}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, maxOutputTokens: event.target.value }))
+              }
+            />
+          </Field>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Sort order" htmlFor="model-sort-order">
             <Input

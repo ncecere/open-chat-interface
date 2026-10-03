@@ -19,8 +19,8 @@ For each role:
   provider) the role can see. Visibility is set per model on
   [Providers & Models](models-providers.md).
 - **Features** — editable switches for web search, file attachments, share
-  links, temporary chats, branching, projects and artifacts, plus the reasoning
-  levels the role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
+  links, temporary chats, branching, projects, artifacts and deleting one's
+  own account, plus the reasoning levels the role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
 - **Fixed rules** — what is always true for the role and no setting changes:
   administrators have full access; auditors can view administration but not
   change it.
@@ -30,14 +30,16 @@ For each role:
 
 Below the role tabs, **Instance-wide** holds the limits that apply to everybody
 regardless of role: sign-in attempts per minute (counted per IP address and per
-account), and the cost and tokens reserved while a response generates.
+account; see [below](#sign-in-attempts)), and the cost and tokens reserved
+while a response generates.
 
 ### Features and reasoning levels
 
 Each role has its own switches for **web search**, **file attachments**,
 **share links**, **temporary chats**, **branching** (forking a conversation
-or editing an earlier message into a new branch), **projects** and **user
-memory**. A role switch
+or editing an earlier message into a new branch), **projects**, **user
+memory**, **artifacts** and **delete own account** (see
+[Self-service account deletion](#self-service-account-deletion)). A role switch
 can only narrow what the instance offers. Somebody can use a feature when both
 of these are on:
 
@@ -69,8 +71,44 @@ the fields you changed, and each save is recorded in the audit log as
 `role.features.update` with the previous and new values. Auditors see the
 switches but cannot change them. API: `PUT /api/admin/roles/:role` with any of
 `webSearch`, `attachments`, `shareLinks`, `temporaryChat`, `branching`,
-`projects`, `memory`, `artifacts` (booleans) and `reasoningEfforts` (a list that must include
-`instant`).
+`projects`, `memory`, `artifacts`, `accountDeletion` (booleans) and
+`reasoningEfforts` (a list that must include `instant`).
+
+Turning **share links** off for a role (or instance-wide) stops new links;
+people keep seeing the links they made under Settings → Sharing and can still
+revoke them there or from the conversation. Revoking is recorded as
+`share_link.revoke` (one link) or `share_link.revoke_all` (with the count).
+
+### Self-service account deletion
+
+**Delete own account** (v0.10) lets people in the role delete their own
+account under Settings → Account. It is **off for every role** by default and
+has no instance-wide switch.
+
+It is a role switch rather than one instance-wide setting because the
+decision usually differs by population: an institution may let students and
+guests leave on their own while keeping staff and administrator accounts,
+whose data has records obligations, behind an administrator. It sits beside
+the other per-role switches so Roles & access stays the one place that says
+what a role may do.
+
+The person types their email address and, if the account has a password,
+enters it. The deletion is the same as **Delete user** under People (see
+[Deleting an account](people.md#deleting-an-account)): the same cascade, and
+the same refusals for a person on [legal hold](compliance.md#legal-hold) (the
+person is told only that deletion is paused by the organisation) and for the
+last administrator. It is also refused in a session an administrator opened
+as the person; delete under People instead, where the entry names you. It is
+recorded as a `user.delete` entry with
+`metadata.self: true` and `metadata.deletion.reason: "user"`; a wrong password
+is recorded as `user.delete.failure`. Better Auth's own delete-user endpoint
+stays disabled.
+
+For an account that signs in through single sign-on there is no password to
+ask for; signing in again later creates a new, empty account (through
+just-in-time provisioning), which the confirmation explains. If that is not
+wanted, leave the switch off for roles whose people sign in that way, or limit
+who may sign in under [Identity](identity.md).
 
 ### Projects
 
@@ -139,8 +177,12 @@ offered only when all three are on, and never in temporary chats.
   the source (`tool` or `person`), how the change was made (`tool`,
   `settings`, `undo` or `retention`) and ids, never the text.
   `memory.settings.update` records a person switching memory on or off.
-  Retention writes one `memory.delete` per run with the number of notes and
-  people affected.
+  Since v0.10 every deleted note has its own `memory.delete`, a
+  [deletion event](compliance.md#deletion-events), including those removed by
+  retention (no actor) or by deleting all notes.
+- **Legal hold.** A person on [legal hold](compliance.md#legal-hold) cannot
+  delete notes (in Settings, with `forget` or by undoing a saved note), and
+  retention skips their notes.
 - **Export.** A person's full export includes their notes as `memory.json`.
   Deleting an account deletes its notes.
 
@@ -338,6 +380,34 @@ forgive uncertain spend or take over active generations.
 
 The amounts held while a response generates are the **Budget held per
 response** and **Tokens held per response** values under **Instance-wide**.
+
+### Sign-in attempts
+
+**Sign-in attempts per minute** (`RATE_LIMIT_AUTH_PER_MINUTE`, default 10)
+limits how fast credentials and tokens can be tried. It counts every request
+to sign in with a password or single sign-on, sign up, request or complete a
+password reset, and send or follow a verification link, successful or not, in
+two counters with the same limit:
+
+- **per client address**, the address the web container's proxy reports
+  ([behind another proxy](../OPERATIONS.md#behind-another-proxy-or-an-ingress), set `TRUSTED_PROXIES`), so one machine cannot try many accounts;
+- **per account**, the email address in the request, so many machines cannot
+  try one account.
+
+Past the limit the request is refused with `429 Too Many Requests` and a
+`Retry-After` header until the minute ends; the sign-in page shows *Too many
+attempts. Wait a minute and try again.* The first refusal in each minute for
+an address or account is audited as `auth.rate_limited` (the address, the
+account tried, the endpoint and which counter refused), so a flood of refused
+requests does not flood the audit log too. Refused requests never reach the
+sign-in code, so they are not also recorded as failed sign-ins.
+
+The counters live in Redis, so every API replica shares them; without Redis
+each replica counts on its own (as for the other limits). Many people behind
+one address, such as a campus network, share the per-address counter: raise
+the value if they meet it at the start of a class. Signing out, reading the
+session and changing a password while signed in are not counted. Better
+Auth's own built-in limiter still applies on top in production.
 
 ## Retention
 

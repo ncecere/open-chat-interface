@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
   searches: [] as string[],
   writes: [] as unknown[],
   searchDown: false,
+  searchFallback: false,
 }));
 vi.mock('../../db/index.js', () => ({
   get db() {
@@ -111,14 +112,18 @@ vi.mock('../../services/search/index.js', async (importOriginal) => ({
       const { providerError } = await import('../../lib/errors.js');
       throw providerError('The web search provider did not respond');
     }
-    return [
-      {
-        title: 'Library hours',
-        url: 'https://library.test/hours',
-        snippet: 'SECRET_SNIPPET opens 9am',
-      },
-      { title: 'City guide', url: 'https://city.test/guide', snippet: 'Hours vary' },
-    ];
+    return {
+      results: [
+        {
+          title: 'Library hours',
+          url: 'https://library.test/hours',
+          snippet: 'SECRET_SNIPPET opens 9am',
+        },
+        { title: 'City guide', url: 'https://city.test/guide', snippet: 'Hours vary' },
+      ],
+      provider: state.searchFallback ? 'Brave Search' : 'SearXNG',
+      fallback: state.searchFallback,
+    };
   },
 }));
 // A write tool exists only in this test: production has no registration API.
@@ -261,6 +266,7 @@ describe.skipIf(!available)('live tool calling', () => {
     state.searches = [];
     state.writes = [];
     state.searchDown = false;
+    state.searchFallback = false;
     // The test write tool is off by default like any write tool; allow it here.
     state.settings.set('roleTools', { roles: { user: { send_note: true } } });
   });
@@ -384,6 +390,18 @@ describe.skipIf(!available)('live tool calling', () => {
       expect(reply.parts.filter((part) => part.type === 'source-url')).toHaveLength(2);
     });
 
+    it('records which provider answered the search before the reply', async () => {
+      state.capabilities = [];
+      state.searchFallback = true;
+      const chat = await thread();
+      script(textStep('Hello'));
+      const { reply } = await turn(chat.id, 'Opening hours?');
+      const grounding = reply.parts.find((part) => part.type === 'data-search-grounding') as
+        | { data?: { provider?: string; fallback?: boolean } }
+        | undefined;
+      expect(grounding?.data).toMatchObject({ provider: 'Brave Search', fallback: true });
+    });
+
     it('goes ahead without results when the search before the reply fails, and says why', async () => {
       state.capabilities = [];
       state.searchDown = true;
@@ -447,7 +465,7 @@ describe.skipIf(!available)('live tool calling', () => {
           type: 'tool-web_search',
           state: 'output-available',
           input: { query: 'library hours' },
-          output: expect.objectContaining({ results: expect.any(Array) }),
+          output: expect.objectContaining({ results: expect.any(Array), provider: 'SearXNG' }),
         }),
       ]);
       expect(

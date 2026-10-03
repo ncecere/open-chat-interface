@@ -17,6 +17,7 @@ const MAILPIT_SMTP_PORT = Number(process.env.MAILPIT_SMTP_PORT ?? 1025);
 
 /** Only the SMTP settings are stubbed; nodemailer stays real. */
 const stub = vi.hoisted(() => ({
+  appName: 'Acme Research' as string | undefined,
   smtp: {
     host: null,
     port: null,
@@ -28,7 +29,8 @@ const stub = vi.hoisted(() => ({
 }));
 
 vi.mock('../../services/settings.js', () => ({
-  getSetting: async (key: string) => (key === 'smtp' ? stub.smtp : {}),
+  getSetting: async (key: string) =>
+    key === 'smtp' ? stub.smtp : key === 'branding' ? { appName: stub.appName } : {},
 }));
 
 /**
@@ -60,7 +62,7 @@ interface MailpitSummary {
   ID: string;
   Subject: string;
   To: { Address: string }[];
-  From: { Address: string };
+  From: { Address: string; Name: string };
 }
 
 async function mailpitReachable(): Promise<boolean> {
@@ -104,6 +106,7 @@ async function messageText(id: string): Promise<string> {
 describe.skipIf(!available)('live SMTP: outbound email', () => {
   beforeEach(async () => {
     log.entries.length = 0;
+    stub.appName = 'Acme Research';
     stub.smtp = {
       host: MAILPIT_SMTP_HOST,
       port: MAILPIT_SMTP_PORT,
@@ -146,8 +149,12 @@ describe.skipIf(!available)('live SMTP: outbound email', () => {
     expect(result.delivered).toBe(true);
 
     const message = await waitForMessage(to);
-    expect(message.Subject).toBe('Reset your password');
-    expect(await messageText(message.ID)).toContain(url);
+    // Branding (v0.10): the subject, body and sender name the instance.
+    expect(message.Subject).toBe('Reset your Acme Research password');
+    expect(message.From).toMatchObject({ Name: 'Acme Research', Address: 'no-reply@oci.test' });
+    const text = await messageText(message.ID);
+    expect(text).toContain(url);
+    expect(text).toContain('your Acme Research account');
   });
 
   it('delivers a verification email', async () => {
@@ -158,8 +165,29 @@ describe.skipIf(!available)('live SMTP: outbound email', () => {
     expect(result.delivered).toBe(true);
 
     const message = await waitForMessage(to);
-    expect(message.Subject).toBe('Verify your email address');
-    expect(await messageText(message.ID)).toContain(url);
+    expect(message.Subject).toBe('Verify your email address for Acme Research');
+    expect(message.From.Name).toBe('Acme Research');
+    const text = await messageText(message.ID);
+    expect(text).toContain(url);
+    expect(text).toContain('your Acme Research account');
+  });
+
+  it('names the product when Branding has no name, and keeps a configured sender name', async () => {
+    stub.appName = undefined;
+    stub.smtp = { ...stub.smtp, fromAddress: 'Help Desk <help@oci.test>' };
+    const to = 'unbranded@example.com';
+
+    expect((await sendVerificationEmail({ to, url: 'http://localhost/v' })).delivered).toBe(true);
+
+    const message = await waitForMessage(to);
+    expect(message.Subject).toBe('Verify your email address for Open Chat Interface');
+    expect(message.From).toMatchObject({ Name: 'Help Desk', Address: 'help@oci.test' });
+  });
+
+  it('reads the instance name for an invitation when the caller does not give one', async () => {
+    const to = 'invitee-branding@example.com';
+    await sendInviteEmail({ to, url: 'http://localhost/auth/accept-invite#token=t' });
+    expect((await waitForMessage(to)).Subject).toBe('You have been invited to Acme Research');
   });
 
   it('reports SMTP unusable when it is not configured', async () => {

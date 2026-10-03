@@ -469,6 +469,15 @@ describe.skipIf(!available)('live artifacts', () => {
       expect(systemOf(model)).not.toContain('Artifacts');
     });
 
+    it('draws diagrams in the colour theme when no accent colour is set (v0.10)', async () => {
+      state.settings.set('branding', { colorTheme: 'violet', accentColor: null });
+      const chat = await thread();
+      const model = script(textStep('Hello'));
+      await turn(chat.id, 'Hi');
+      expect(systemOf(model)).toContain('Use the accent #7f22fe');
+      expect(systemOf(model)).not.toContain('#eb6c36');
+    });
+
     it('drops the diagram guidance when the administrator turns it off', async () => {
       state.settings.set('chat', { defaultSystemPrompt: null, diagramGuidance: false });
       const chat = await thread();
