@@ -51,6 +51,10 @@ filtered to their address.
 Conversation **titles only**. An administrator managing an account has no reason
 to read its contents, and this page does not make that easy.
 
+A person on [legal hold](compliance.md#legal-hold) is marked **Legal hold** here
+and in the list, with the reason on this page. Their account cannot be deleted
+until the hold is lifted.
+
 ### Actions
 
 - **Role** — the same selector as the list, with the same confirmation for

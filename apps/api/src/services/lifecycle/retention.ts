@@ -2,6 +2,9 @@ import { and, eq, isNull, lte, notInArray, or, schema, sql } from '@oci/db';
 import { PROTECTED_AUDIT_ACTIONS } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { exportCursor } from '../compliance/cursor.js';
+import { notOnLegalHold } from '../compliance/holds.js';
+import { getSetting } from '../settings.js';
 import { lockLifecycleOwner } from './owner-lock.js';
 import { getRetentionSettings } from './settings.js';
 import { trashLockedThread } from './trash-thread.js';
@@ -31,6 +34,8 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
   const conditions = [
     isNull(schema.thread.deletedAt),
     eq(schema.thread.temporary, false),
+    // People on legal hold keep everything until the hold is lifted.
+    notOnLegalHold(schema.thread.userId),
     // Inactivity is measured by the last message, falling back to creation for
     // a thread that never received one.
     or(
@@ -140,10 +145,16 @@ export async function pruneUsageEvents(now: Date = new Date()): Promise<number> 
 /**
  * Prunes audit history, retaining security-relevant actions regardless of age.
  * Those are the entries an incident review needs and they are low volume.
+ *
+ * Also kept: entries by or about a person on legal hold, and, while the
+ * compliance export is on, entries it has not exported yet, so retention can
+ * never open a gap in the export.
  */
 export async function pruneAuditLog(now: Date = new Date()): Promise<number> {
   const { auditLogRetentionDays } = await getRetentionSettings();
   const cutoff = daysAgo(auditLogRetentionDays, now);
+  const exportOn = (await getSetting('compliance'))?.enabled === true;
+  const exported = exportOn ? ((await exportCursor('audit')) ?? 0) : null;
 
   const removed = await db
     .delete(schema.auditLog)
@@ -153,6 +164,12 @@ export async function pruneAuditLog(now: Date = new Date()): Promise<number> {
         // Drizzle expands an interpolated array into a parameter list, which
         // PostgreSQL rejects for `<> all(...)`; this always failed at runtime.
         notInArray(schema.auditLog.action, [...PROTECTED_AUDIT_ACTIONS]),
+        exported === null ? undefined : lte(schema.auditLog.seq, exported),
+        sql`not exists (select 1 from ${schema.legalHold}
+          where ${schema.legalHold.liftedAt} is null
+            and (${schema.legalHold.userId} = ${schema.auditLog.actorUserId}
+              or (${schema.auditLog.targetType} = 'user'
+                and ${schema.legalHold.userId} = ${schema.auditLog.targetId})))`,
       ),
     )
     .returning({ id: schema.auditLog.id });

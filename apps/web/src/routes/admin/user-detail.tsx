@@ -1,7 +1,7 @@
 import type { AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Ban } from 'lucide-react';
+import { ArrowLeft, Ban, Scale } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
@@ -45,6 +45,8 @@ interface AuditRow {
 
 interface UserDetail {
   user: AdminUser;
+  /** Null (or absent, before v0.9) when the person is not on legal hold. */
+  legalHold?: { reason: string; placedAt: string; placedByEmail: string | null } | null;
   storage: { bytesUsed: number; fileCount: number };
   sessions: SessionRow[];
   recentThreads: ThreadRow[];
@@ -201,6 +203,7 @@ export function AdminUserDetailPage() {
           {ROLE_LABELS[user.role]}
         </Badge>
         {user.banned && <Badge variant="danger">Banned</Badge>}
+        {user.legalHold && <Badge variant="warning">Legal hold</Badge>}
         {!user.emailVerified && <Badge variant="neutral">Unverified</Badge>}
       </div>
 
@@ -212,6 +215,25 @@ export function AdminUserDetailPage() {
             <p className="mt-1 break-words text-[var(--text-muted)]">
               {user.banReason ? `Reason: ${user.banReason}` : 'No reason was recorded.'} They cannot
               sign in until the ban is lifted.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {data.legalHold && (
+        <div className="mt-4 flex gap-3 rounded-xl border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-4 text-sm">
+          <Scale className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="font-medium text-[var(--text-primary)]">This person is on legal hold</p>
+            <p className="mt-1 break-words text-[var(--text-muted)]">
+              Reason: {data.legalHold.reason}. Placed {formatRelativeTime(data.legalHold.placedAt)}
+              {data.legalHold.placedByEmail ? ` by ${data.legalHold.placedByEmail}` : ''}.
+              Retention, trash purging, temporary chat expiry and account deletion skip their data
+              until the hold is lifted under{' '}
+              <Link to="/admin/compliance" className="text-[var(--accent-bright)] hover:underline">
+                Compliance
+              </Link>
+              .
             </p>
           </div>
         </div>

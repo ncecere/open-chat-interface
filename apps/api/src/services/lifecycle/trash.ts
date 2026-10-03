@@ -1,9 +1,19 @@
 import { and, eq, inArray, isNotNull, isNull, lte, schema, sql } from '@oci/db';
 import { type TrashedThread, USER_ROLES } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { notFound } from '../../lib/errors.js';
+import { conflict, notFound } from '../../lib/errors.js';
+import {
+  HELD_PERMANENT_DELETION_MESSAGE,
+  isOnLegalHold,
+  notOnLegalHold,
+} from '../compliance/holds.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
-import { attachmentTotals, lockStorageUsage } from '../storage/usage.js';
+import {
+  artifactBytes,
+  attachmentTotals,
+  lockStorageUsage,
+  threadArtifactBytes,
+} from '../storage/usage.js';
 import { lockLifecycleOwner } from './owner-lock.js';
 import { getRetentionSettings } from './settings.js';
 import { type DeleteReason, trashLockedThread } from './trash-thread.js';
@@ -97,17 +107,25 @@ export async function restoreThread(threadId: string, userId: string): Promise<v
       .orderBy(schema.attachment.id)
       .for('update', { of: schema.attachment });
 
-    if (attachments.length > 0) {
+    // The conversation's artifacts count towards storage again once restored.
+    const restoredArtifactBytes = await threadArtifactBytes(tx, threadId);
+    if (attachments.length > 0 || restoredArtifactBytes > 0) {
       await lockStorageUsage(tx, { organizationId: thread.organizationId, userId });
       const totals = await attachmentTotals(tx, userId);
+      // Already includes this conversation's artifacts: it is out of the trash above.
+      const artifacts = await artifactBytes(tx, userId);
+      const bytes = attachments.reduce((total, attachment) => total + attachment.sizeBytes, 0);
       assertStorageAllowanceForUsage(
-        { ...totals, ...limits },
+        { ...totals, liveBytes: totals.liveBytes + artifacts - restoredArtifactBytes, ...limits },
         {
-          incomingBytes: attachments.reduce((total, attachment) => total + attachment.sizeBytes, 0),
+          incomingBytes: bytes + restoredArtifactBytes,
           incomingFiles: attachments.length,
           checkFileSize: false,
         },
       );
+    }
+    if (attachments.length > 0) {
+      const totals = await attachmentTotals(tx, userId);
       await tx
         .update(schema.attachment)
         .set({ deletedAt: null, deletedReason: null })
@@ -173,6 +191,8 @@ export async function listTrashedThreads(userId: string): Promise<TrashedThread[
  * only way to make something genuinely gone before the window elapses.
  */
 export async function purgeTrashedThread(threadId: string, userId: string): Promise<void> {
+  // Moving to the trash still works under a legal hold; destroying does not.
+  if (await isOnLegalHold(userId)) throw conflict(HELD_PERMANENT_DELETION_MESSAGE);
   const deleted = await db
     .delete(schema.thread)
     .where(
@@ -189,6 +209,7 @@ export async function purgeTrashedThread(threadId: string, userId: string): Prom
 
 /** Destroys everything currently in a user's trash. */
 export async function emptyTrash(userId: string): Promise<number> {
+  if (await isOnLegalHold(userId)) throw conflict(HELD_PERMANENT_DELETION_MESSAGE);
   const deleted = await db
     .delete(schema.thread)
     .where(and(eq(schema.thread.userId, userId), isNotNull(schema.thread.deletedAt)))
@@ -202,6 +223,7 @@ export async function emptyTrash(userId: string): Promise<number> {
  *
  * Attachment blobs are removed by the delete trigger, which enqueues them for
  * the storage reaper, so nothing here needs to touch object storage directly.
+ * The trash of people on legal hold is kept until the hold is lifted.
  */
 export async function purgeExpiredTrash(now: Date = new Date()): Promise<number> {
   const { trashRetentionDays } = await getRetentionSettings();
@@ -209,13 +231,25 @@ export async function purgeExpiredTrash(now: Date = new Date()): Promise<number>
 
   const threads = await db
     .delete(schema.thread)
-    .where(and(isNotNull(schema.thread.deletedAt), lte(schema.thread.deletedAt, cutoff)))
+    .where(
+      and(
+        isNotNull(schema.thread.deletedAt),
+        lte(schema.thread.deletedAt, cutoff),
+        notOnLegalHold(schema.thread.userId),
+      ),
+    )
     .returning({ id: schema.thread.id });
 
   // Attachments soft-deleted on their own, rather than with a thread.
   const attachments = await db
     .delete(schema.attachment)
-    .where(and(isNotNull(schema.attachment.deletedAt), lte(schema.attachment.deletedAt, cutoff)))
+    .where(
+      and(
+        isNotNull(schema.attachment.deletedAt),
+        lte(schema.attachment.deletedAt, cutoff),
+        notOnLegalHold(schema.attachment.userId),
+      ),
+    )
     .returning({ id: schema.attachment.id });
 
   return threads.length + attachments.length;

@@ -57,6 +57,8 @@ export interface TestMcpServer {
     /** Lifetime of issued access tokens, in seconds. */
     accessTtl: number;
     failRefresh: boolean;
+    /** Milliseconds a refresh grant waits before answering, to hold concurrent callers. */
+    refreshDelayMs: number;
     clients: Map<string, OAuthClient>;
     registrations: number;
     grantTypes: string[];
@@ -122,6 +124,7 @@ export async function startTestMcpServer(): Promise<TestMcpServer> {
       supportsRegistration: true,
       accessTtl: 3600,
       failRefresh: false,
+      refreshDelayMs: 0,
       clients: new Map(),
       registrations: 0,
       grantTypes: [],
@@ -289,6 +292,8 @@ export async function startTestMcpServer(): Promise<TestMcpServer> {
         return true;
       }
       if (grantType === 'refresh_token') {
+        if (server.oauth.refreshDelayMs > 0)
+          await new Promise((resolve) => setTimeout(resolve, server.oauth.refreshDelayMs));
         const presented = form.get('refresh_token') ?? '';
         const grant = server.oauth.refreshTokens.get(presented);
         if (server.oauth.failRefresh || !grant || grant.clientId !== client.clientId) {

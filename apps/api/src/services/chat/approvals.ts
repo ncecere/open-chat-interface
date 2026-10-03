@@ -115,6 +115,7 @@ export async function setupApprovalContinuation(
     userId: user.id,
     capabilities: resolved.capabilities,
     webSearch: reply.webSearchUsed,
+    temporary: thread.temporary,
   });
   const [prompt] = await db
     .select({ parts: schema.message.parts })
@@ -250,6 +251,20 @@ export async function setupApprovalContinuation(
           refused: claimed.answered.refused,
           existingParts: claimed.answered.parts,
         },
+        // A continued reply recovers from an overlong input like a new one:
+        // fewer turns, the reply being continued still last.
+        recoverOverflow: async () => {
+          if (model.sentHistoryUnits <= 0) return null;
+          const rebuilt = await buildModelContext(context, reply.id, {
+            maxHistoryUnits: Math.floor(model.sentHistoryUnits / 2),
+          });
+          return {
+            uiMessages: [...rebuilt.uiMessages, continuing],
+            system: rebuilt.system,
+            contextLimited: rebuilt.contextLimited,
+          };
+        },
+        compactionCheck: model.compactionCheck,
       },
       run: {
         ...resources,

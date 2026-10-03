@@ -51,6 +51,91 @@ describe('project search note', () => {
     expect(note?.getAttribute('data-project-search')).toBe('search');
   });
 
+  it('says when passages were found by meaning as well as keywords', async () => {
+    const note = await render(
+      reply([
+        {
+          type: 'data-project-search',
+          data: { mode: 'search', ranking: 'hybrid', files: [{ name: 'a.txt', passages: 1 }] },
+        },
+      ]),
+    );
+    expect(note?.textContent).toBe(
+      'Searched project files by meaning and keywords. Used passages from a.txt (1 passage).',
+    );
+    expect(note?.getAttribute('data-project-ranking')).toBe('hybrid');
+  });
+
+  it('says when the results were reranked, and not when reranking fell back', async () => {
+    const hybrid = await render(
+      reply([
+        {
+          type: 'data-project-search',
+          data: {
+            mode: 'search',
+            ranking: 'hybrid',
+            reranked: true,
+            files: [{ name: 'a.txt', passages: 1 }],
+          },
+        },
+      ]),
+    );
+    expect(hybrid?.textContent).toBe(
+      'Searched project files by meaning and keywords and reranked the results. Used passages from a.txt (1 passage).',
+    );
+    expect(hybrid?.getAttribute('data-project-reranked')).toBe('true');
+
+    const keyword = await render(
+      reply([
+        {
+          type: 'data-project-search',
+          data: {
+            mode: 'search',
+            ranking: 'keyword',
+            reranked: true,
+            files: [{ name: 'a.txt', passages: 2 }],
+          },
+        },
+      ]),
+    );
+    expect(keyword?.textContent).toBe(
+      'Searched project files and reranked the results. Used passages from a.txt (2 passages).',
+    );
+
+    const fellBack = await render(
+      reply([
+        {
+          type: 'data-project-search',
+          data: {
+            mode: 'search',
+            ranking: 'keyword',
+            reranked: false,
+            files: [{ name: 'a.txt', passages: 1 }],
+          },
+        },
+      ]),
+    );
+    expect(fellBack?.textContent).toBe(
+      'Searched project files. Used passages from a.txt (1 passage).',
+    );
+    expect(fellBack?.getAttribute('data-project-reranked')).toBe('false');
+  });
+
+  it('reads replies stored before reranking existed', async () => {
+    const note = await render(
+      reply([
+        {
+          type: 'data-project-search',
+          data: { mode: 'search', files: [{ name: 'old.txt', passages: 1 }] },
+        },
+      ]),
+    );
+    expect(note?.textContent).toBe(
+      'Searched project files. Used passages from old.txt (1 passage).',
+    );
+    expect(note?.hasAttribute('data-project-reranked')).toBe(false);
+  });
+
   it('explains when the opening passages were used because nothing matched', async () => {
     const note = await render(
       reply([
@@ -72,6 +157,7 @@ describe('project search note', () => {
       { mode: 'other', files: [{ name: 'a.txt', passages: 1 }] },
       { mode: 'search', files: [{ name: 'a.txt', passages: 0 }] },
       { mode: 'search', files: [{ name: 42, passages: 1 }] },
+      { mode: 'search', reranked: 'yes', files: [{ name: 'a.txt', passages: 1 }] },
     ]) {
       const message = reply([{ type: 'data-project-search', data }]);
       expect(projectSearchOf(message)).toBeNull();

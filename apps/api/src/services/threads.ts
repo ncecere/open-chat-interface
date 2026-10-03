@@ -3,7 +3,10 @@ import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared
 import { db } from '../db/index.js';
 import { forbidden, notFound, validationFailed } from '../lib/errors.js';
 import { containsPattern } from '../lib/like.js';
+import { copyArtifactsToFork } from './artifacts/store.js';
+import { copyCompactionToFork } from './chat/compaction-fork.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
+import { notOnLegalHold } from './compliance/holds.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 
@@ -35,7 +38,14 @@ export async function assertBranchingAllowed(role: UserRole): Promise<void> {
 export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<number> {
   const expired = await db
     .delete(schema.thread)
-    .where(and(eq(schema.thread.temporary, true), lte(schema.thread.expiresAt, now)))
+    .where(
+      and(
+        eq(schema.thread.temporary, true),
+        lte(schema.thread.expiresAt, now),
+        // Kept (still invisible to their owner) while the owner is on legal hold.
+        notOnLegalHold(schema.thread.userId),
+      ),
+    )
     .returning({ id: schema.thread.id });
 
   return expired.length;
@@ -182,26 +192,42 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
     // The fork reads as the conversation did through the selected message:
     // one reply per turn, never the alternatives a retry left behind.
     const copiedMessages = pathThrough(sourceMessages, selected.id) ?? [];
-    await tx.insert(schema.message).values(
-      copiedMessages.map((message) => ({
-        threadId: fork.id,
-        userId,
-        role: message.role,
-        parts: message.parts,
-        position: message.position,
-        parentMessageId: message.id,
-        modelSlug: message.modelSlug,
-        effort: message.effort,
-        webSearchUsed: message.webSearchUsed,
-        status: message.status,
-        errorMessage: message.errorMessage,
-        tokensIn: message.tokensIn,
-        tokensOut: message.tokensOut,
-        durationMs: message.durationMs,
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-      })),
-    );
+    const copies = await tx
+      .insert(schema.message)
+      .values(
+        copiedMessages.map((message) => ({
+          threadId: fork.id,
+          userId,
+          role: message.role,
+          parts: message.parts,
+          position: message.position,
+          parentMessageId: message.id,
+          modelSlug: message.modelSlug,
+          effort: message.effort,
+          webSearchUsed: message.webSearchUsed,
+          status: message.status,
+          errorMessage: message.errorMessage,
+          tokensIn: message.tokensIn,
+          tokensOut: message.tokensOut,
+          durationMs: message.durationMs,
+          createdAt: message.createdAt,
+          updatedAt: message.updatedAt,
+        })),
+      )
+      .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
+    const copied = new Map(copies.map((copy) => [copy.sourceId!, copy.id]));
+    await copyCompactionToFork(tx, {
+      sourceThreadId: sourceThread.id,
+      threadId: fork.id,
+      userId,
+      copied,
+    });
+    await copyArtifactsToFork(tx, {
+      sourceThreadId: sourceThread.id,
+      threadId: fork.id,
+      userId,
+      copied,
+    });
 
     return fork;
   });
@@ -260,26 +286,42 @@ export async function branchFromUserMessage(
       .slice(0, selectedIndex)
       .filter((message) => message.supersededAt === null);
     if (priorMessages.length > 0) {
-      await tx.insert(schema.message).values(
-        priorMessages.map((message) => ({
-          threadId: branch.id,
-          userId,
-          role: message.role,
-          parts: message.parts,
-          position: message.position,
-          parentMessageId: message.id,
-          modelSlug: message.modelSlug,
-          effort: message.effort,
-          webSearchUsed: message.webSearchUsed,
-          status: message.status,
-          errorMessage: message.errorMessage,
-          tokensIn: message.tokensIn,
-          tokensOut: message.tokensOut,
-          durationMs: message.durationMs,
-          createdAt: message.createdAt,
-          updatedAt: message.updatedAt,
-        })),
-      );
+      const copies = await tx
+        .insert(schema.message)
+        .values(
+          priorMessages.map((message) => ({
+            threadId: branch.id,
+            userId,
+            role: message.role,
+            parts: message.parts,
+            position: message.position,
+            parentMessageId: message.id,
+            modelSlug: message.modelSlug,
+            effort: message.effort,
+            webSearchUsed: message.webSearchUsed,
+            status: message.status,
+            errorMessage: message.errorMessage,
+            tokensIn: message.tokensIn,
+            tokensOut: message.tokensOut,
+            durationMs: message.durationMs,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+          })),
+        )
+        .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
+      const copied = new Map(copies.map((copy) => [copy.sourceId!, copy.id]));
+      await copyCompactionToFork(tx, {
+        sourceThreadId: sourceThread.id,
+        threadId: branch.id,
+        userId,
+        copied,
+      });
+      await copyArtifactsToFork(tx, {
+        sourceThreadId: sourceThread.id,
+        threadId: branch.id,
+        userId,
+        copied,
+      });
     }
 
     const [replacement] = await tx

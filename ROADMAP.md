@@ -2,7 +2,7 @@
 
 Where Open Chat Interface (OCI) stands, what comparable products offer, and
 what we intend to build next. Written against **v0.6.1** and updated for
-**v0.7.0** in **October 2026**.
+**v0.7.0** and **v0.8.0** in **October 2026**.
 
 This is a plan, not a promise. Priorities change as we learn, and an item moves
 into a release only when it has a design, tests and documentation. Review this
@@ -12,8 +12,9 @@ document at every minor release.
 - [Where OCI stands](#where-oci-stands)
 - [Principles for new features](#principles-for-new-features)
 - [Shipped — v0.7: organise and find](#shipped--v07-organise-and-find)
-- [Now — v0.8: tools and connected knowledge](#now--v08-tools-and-connected-knowledge)
-- [Next — v0.9: make and operate](#next--v09-make-and-operate)
+- [Shipped — v0.8: tools and connected knowledge](#shipped--v08-tools-and-connected-knowledge)
+- [Now — v0.9: make and operate](#now--v09-make-and-operate)
+- [Next — v0.10: finish and harden](#next--v010-finish-and-harden)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -76,10 +77,10 @@ version. For OCI, ◐ means partial and is explained in the item below.
 | Search inside conversation content | ✓ | ✓ | ✓ | ✓ v0.7 |
 | Prompt library and slash commands | ◐ | ✓ | ✓ | — |
 | User memory with controls | ✓ | ✓ | ✓ | — |
-| Large project files searched instead of cut off | ◐ | ✓ | ✓ | — |
-| Organisation documents searched where they live, with citations | ✓ | ◐ | ◐ | — |
-| Model tool calling | ✓ | ✓ | ✓ | — |
-| MCP connectors with admin governance | ✓ | ✓ | ✓ | — |
+| Large project files searched instead of cut off | ◐ | ✓ | ✓ | ◐ keyword (v0.8) |
+| Organisation documents searched where they live, with citations | ✓ | ◐ | ◐ | ✓ connectors (v0.8) |
+| Model tool calling | ✓ | ✓ | ✓ | ✓ v0.8 |
+| MCP connectors with admin governance | ✓ | ✓ | ✓ | ✓ v0.8 |
 | Custom assistants / skills | ✓ | ✓ | ✓ | — |
 | Artifacts / canvas | ✓ | ✓ | ✓ | — |
 | Code execution / data analysis | ✓ | ✓ | ✓ | — |
@@ -97,9 +98,8 @@ version. For OCI, ◐ means partial and is explained in the item below.
 | Installable app (PWA) | ✓ | ✓ | ✓ | — |
 
 The smaller gaps found while reviewing v0.6.1 (Mermaid diagrams, bulk export
-and import, and switching between retried replies) shipped in v0.7. Web search
-still runs one server-side query per message rather than letting the model
-search; v0.8 changes that.
+and import, and switching between retried replies) shipped in v0.7, and web
+search became a tool the model uses when it chooses in v0.8.
 
 ## Principles for new features
 
@@ -137,19 +137,20 @@ upgrade notes.
 | **Rendering and reading** | Mermaid diagrams in an editorial style after Diagram Design; wrapping long code lines; a switcher between retried replies, which also fixed retries sending both replies to the model. | Switching earlier turns; editing an earlier message still starts a new conversation. |
 | **Data portability** | Export of every conversation as a zip (Markdown, JSON and files), and background import of ChatGPT and Claude exports. | ChatGPT attachment files, Claude projects, and other branches are not imported. |
 
-## Now — v0.8: tools and connected knowledge
+## Shipped — v0.8: tools and connected knowledge
 
-Let the model act and look things up, under the same governance, and reach
-institutional knowledge where it already lives.
+Released as v0.8.0 in October 2026. See `CHANGELOG.md` for the details and
+upgrade notes, and `docs/dev/tools-design.md` for the design.
 
-| Item | Why | Notes |
+| Item | What shipped | Left for later |
 | --- | --- | --- |
-| **Tool-calling foundation** | Prerequisite for search-as-a-tool, project-file search, MCP, assistants and code execution. | A tool registry with per-role allow, an approval step for actions that change things, budget accounting for tool calls, and audit events. Show tool use in the conversation. |
-| **Web search as a tool** | Today one query is run before every reply. | The model decides when and what to search, can search more than once, and cites results. The existing providers remain. |
-| **Large project files** | v0.7 projects put every file in front of the model on every message, so a file that does not fit is left out and every message pays for all of them. Claude already switches to search in this situation. | Files load in full while they fit the context; beyond that, OCI searches them for the passages relevant to each message and cites file and passage. Indexed with PostgreSQL full-text (keyword) search by background jobs, so no new service or model is needed. The conversation shows when search is in use. Meaning-based search follows in v0.9. |
-| **MCP connectors** | The standard way to reach other systems, and where institutional knowledge comes from: documents are searched where they already live rather than copied into OCI, as ChatGPT's company knowledge and Claude's enterprise search do. | Remote MCP over Streamable HTTP with OAuth, so searches respect each person's existing permissions in systems such as SharePoint and Google Drive; answers cite the source document. Administrators allowlist servers and individual tools per role; credentials are held per person; write actions ask for approval; all calls are audited. |
+| **Tool-calling foundation** | Tools offered to models tagged for tool calling, per-role tool switches, a step limit that still ends with an answer, approval for tools that change things, metadata-only audit, and tool steps in the conversation, shares and exports. | A "connect your account" hint in the composer. |
+| **Web search as a tool** | The model decides when and what to search and cites results; SerpApi and SearchApi join the providers; the Web search page asks only for what a provider needs and can test it. | Retrying or falling back when a provider is slow. |
+| **Large project files** | Passages indexed with PostgreSQL keyword search; large projects send the best-matching passages instead of leaving files out. | Meaning-based (hybrid) search, below. |
+| **MCP connectors** | Remote MCP servers with no authentication, a shared credential or per-person OAuth; read and write tools allowed per role; guarded outbound requests. | Reusing connections, coordinating token refresh across replicas, older MCP transports. |
 
-## Next — v0.9: make and operate
+## Now — v0.9: make and operate
+
 
 Answers people can keep and reuse, and the operational features larger
 institutions need. Artifact editing through the model builds on v0.8's tool
@@ -157,15 +158,32 @@ calling.
 
 | Item | Why | Notes |
 | --- | --- | --- |
-| **Meaning-based search for project files** | v0.8 project search matches words, so it misses passages that say the same thing differently ("time off" against "annual leave"), and large projects make that more likely. | Hybrid search: keyword and vector rankings merged, so exact names and codes still match while paraphrases are found too. Optional: used when an administrator configures an embeddings model (set up like a chat provider) and PostgreSQL has the pgvector extension (the `pgvector/pgvector` image, enabled once by the operator, since migrations cannot create extensions); otherwise search stays keyword-only. Passages are embedded on upload and existing files by a background job; embedding cost counts against budgets. The same embeddings can later serve conversation search and large chat attachments. |
+| **Meaning-based search for project files** | v0.8 project search matches words, so it misses passages that say the same thing differently ("time off" against "annual leave"), and large projects make that more likely. | Hybrid search: keyword and vector rankings merged, so exact names and codes still match while paraphrases are found too. Optional: used when an administrator configures an embeddings model (set up like a chat provider) and PostgreSQL has the pgvector extension (the `pgvector/pgvector` image, enabled once by the operator, since migrations cannot create extensions); otherwise search stays keyword-only. Passages are embedded on upload and existing files by a background job; embedding cost counts against budgets. An optional reranking model (Cohere-compatible `/rerank`) then reorders the best candidates for accuracy, with or without pgvector. The same embeddings can later serve conversation search and large chat attachments. |
 | **Artifacts** | Documents, diagrams and small apps are easier to read, reuse and revise as objects of their own than as text in a message. | Inline first: substantial HTML, SVG, Mermaid and document blocks in a reply are saved as versioned artifacts and shown in the conversation, with a side panel (full screen on phones) to expand them. This works with every model. Once the tool-calling foundation exists, capable models also get tools to create and revise artifacts, so a change makes a new version instead of a rewrite. HTML and SVG run in a sandboxed frame with a throwaway origin and no network access, using a small set of libraries served by OCI; the same sandbox applies on share links. Documents can be edited directly; HTML and SVG are revised through the model. Artifacts are shared as part of a conversation's share link, follow its retention, count towards storage and have a per-role switch. Editorial diagrams: models draw SVG following the [Diagram Design](https://github.com/cathrynlavery/diagram-design) style guide (MIT, with attribution), mapped to the instance's colours, on by default with an administrator switch. React apps, which need a separate bundler service, are not in the first version. |
 | **File output** | People need answers as documents. | Export a reply or artifact as DOCX, PDF, XLSX or PPTX, built on the stored artifacts above. |
 | **User memory** | Expected from every hosted product. | Opt-in and off by default; every entry visible, editable, deletable and exportable; never used in temporary chats; per-role entitlement and retention. |
-| **Long conversations** | Earlier context is dropped silently when a conversation outgrows the model. | Summarise older turns instead of dropping them, and show when it has happened. |
+| **Long conversations** | Earlier context is dropped silently when a conversation outgrows the model. | Compaction, after the approach of the [pi coding agent](https://pi.dev): when the conversation nears the model's input limit, older turns are summarised into a structured summary (topics, facts and decisions, preferences, open questions) while recent turns are kept verbatim; later compactions update the previous summary. Cuts fall only between turns, never inside a tool step. Nothing is deleted: the full history stays visible, exportable and searchable, and the reply shows that earlier turns were summarised. Summaries are made in the background and never make the person wait. People can also ask for one with optional instructions; a provider "too long" error triggers one retry with fewer earlier turns. Summarising counts towards usage. |
 | **Compliance export** | eDiscovery, records requests and security monitoring. | Stream audit events and, where policy allows, conversation content as JSONL to storage or a SIEM; legal hold that pauses retention for named people. |
-| **SCIM provisioning** | Large institutions provision and deprovision accounts centrally. | SCIM 2.0 users and groups; groups mapped to roles. LDAP sign-in as an optional addition. |
 | **Observability and events** | Operators need metrics and integrations beyond the health page. | OpenTelemetry traces and metrics, a Prometheus endpoint, and signed webhooks for selected events. |
 | **Automated backups** | Backups are documented but manual. | Scheduled `pg_dump` and attachment snapshots to S3-compatible storage, with retention and a restore check on System health. |
+
+## Next — v0.10: finish and harden
+
+The gaps v0.9 left open, closed before new features. Each is small on its own;
+together they make compliance, backups, exports and artifacts complete.
+
+| Item | Gap in v0.9 | Plan |
+| --- | --- | --- |
+| **Legal hold covers everything** | A hold pauses conversation retention, trash purging, temporary-chat expiry, memory retention and permanent deletion, but removing a held person's project still deletes its files at once, and their usage events are still pruned. | Holds also pause project file deletion and usage-event pruning, with tests that every deletion path checks the hold. |
+| **Deletions in the compliance export** | The export streams audit events and content, but not what was deleted, so a downstream archive cannot tell a deletion from a gap. | Deletions (conversations, messages, attachments, artifacts, memory) exported as events with who, what and when, never the deleted content. |
+| **Backups include files** | Automated backups copy the database and list every attachment object with its checksum, but do not copy the attachments themselves; operators protect the storage separately. | Incremental attachment copies to the backup destination alongside each database backup, covered by retention and the restore check. |
+| **PDF export in every script** | Exported PDFs cover Latin scripts only; Chinese, Japanese, Korean, Arabic, Hebrew and others are replaced. | Embedded fonts with wide script coverage (and right-to-left layout), chosen per document. |
+| **Resizable artifact panel** | The docked panel is a fixed share of the window. | A drag handle and keyboard-operable resizing, remembered per person. |
+| **Long artifact streams after a reload** | Reloading during a very long artifact can fail to resume, because a stored reply keeps a bounded number of stream events. | Resume from the saved draft instead of replaying every event. |
+| **Failed summaries are reported** | When a summary someone asked for fails in the background, the "Summarising" state simply disappears. | Tell the person it failed and why (allowance, model error), with a retry. |
+| **Slow search providers** | SearchApi occasionally times out, and a slow provider fails the search. | Retry once, then fall back to a second configured provider when one is set. |
+| **S3 suites in CI** | CI has no S3 (MinIO) service or PostgreSQL 17 client tools, so storage, backup and compliance-export tests skip there and their coverage floors are enforced only locally. | A MinIO service and matching `pg_dump` in CI, so those suites run on every pull request and their floors apply there too. |
+| **One place for operations pages** | The Backups and Compliance pages repeat the same destination and schedule controls. | Shared components for destinations, schedules and run history. |
 
 ## Later — v1.0 and beyond: assistants and media
 
@@ -198,6 +216,10 @@ Ideas with merit that need more evidence or design before they are scheduled.
 - **Native PDF input** to models that support it, instead of always extracting
   text.
 - **Multi-architecture images** (linux/arm64) for the published containers.
+- **SCIM provisioning** (SCIM 2.0 users and groups mapped to roles, with LDAP
+  sign-in as an optional addition). Large institutions provision accounts
+  centrally, but single sign-on with just-in-time provisioning and claim-to-role
+  mapping covers sign-up today; deprovisioning is the main gap.
 
 ## Not planned
 

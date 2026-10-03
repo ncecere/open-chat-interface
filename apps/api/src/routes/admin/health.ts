@@ -4,6 +4,13 @@ import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { sharedRedis } from '../../services/chat-streams.js';
+import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
+import {
+  backupHealthCheck,
+  complianceHealthCheck,
+  observabilityStatus,
+  webhookHealthCheck,
+} from '../../services/observability/health-checks.js';
 import { getSetting } from '../../services/settings.js';
 
 export const healthRoutes = new Hono<AppBindings>();
@@ -219,6 +226,31 @@ async function connectorCheck(): Promise<Check> {
   };
 }
 
+/** pgvector and meaning-based search for project files (v0.9). */
+async function embeddingsCheck(): Promise<Check> {
+  try {
+    return await embeddingsHealthCheck();
+  } catch (error) {
+    logger.error({ error }, 'Admin health: embeddings check failed');
+    return {
+      id: 'embeddings',
+      label: 'Meaning-based search',
+      status: 'warn',
+      detail: 'Could not be checked',
+    };
+  }
+}
+
+/** Backups and webhooks (v0.9): a check that throws becomes a warning, not a failed page. */
+async function guarded(id: string, label: string, check: () => Promise<Check>): Promise<Check> {
+  try {
+    return await check();
+  } catch (error) {
+    logger.error({ error, check: id }, 'Admin health: check failed');
+    return { id, label, status: 'warn', detail: 'Could not be checked' };
+  }
+}
+
 /**
  * Operational state in one place.
  *
@@ -237,6 +269,10 @@ healthRoutes.get('/', async (c) => {
     emailCheck(),
     storageCheck(),
     connectorCheck(),
+    embeddingsCheck(),
+    guarded('backups', 'Backups', backupHealthCheck),
+    guarded('webhooks', 'Webhooks', webhookHealthCheck),
+    guarded('compliance', 'Compliance export', complianceHealthCheck),
   ]);
 
   const recentJobs = await db
@@ -264,6 +300,8 @@ healthRoutes.get('/', async (c) => {
   return c.json({
     status,
     checks,
+    // Configured by environment only; shown read-only.
+    observability: observabilityStatus(),
     recentJobs: recentJobs.map((job) => ({
       ...job,
       startedAt: job.startedAt.toISOString(),

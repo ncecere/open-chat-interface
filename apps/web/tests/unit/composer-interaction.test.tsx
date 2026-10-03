@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Composer } from '../../src/components/chat/composer';
 import { ThemeProvider } from '../../src/providers/theme-provider';
 
+// The connect hint needs a query client and router; it has its own tests.
+vi.mock('../../src/components/chat/composer-connect-hint', () => ({
+  ComposerConnectHint: () => null,
+}));
+
 type Props = ComponentProps<typeof Composer>;
 const model: CatalogModel = {
   id: 'reasoner',
@@ -153,6 +158,31 @@ describe('Composer interaction', () => {
     await act(() => button('Stop generating').click());
     expect(props.onStop).toHaveBeenCalledOnce();
     expect(props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('draws the Stop and Send icons in the accent foreground, never the page text colour', async () => {
+    // On the neutral theme the accent is the page text colour, which hid the icons.
+    await render({ streaming: true });
+    expect(button('Stop generating').className).toContain('text-[var(--accent-button-foreground)]');
+    await render({ streaming: false, value: 'Hello' });
+    expect(button('Send message').className).toContain('text-[var(--accent-button-foreground)]');
+    expect(button('Send message').className).not.toContain('text-[var(--text-primary)]');
+  });
+
+  it('focuses the message field on mount only when asked', async () => {
+    await render();
+    expect(document.activeElement).not.toBe(textarea());
+    await act(() => root.unmount());
+    root = createRoot(container);
+    await render({ autoFocus: true });
+    expect(document.activeElement).toBe(textarea());
+  });
+
+  it('marks focus inside the composer border, with nothing drawn outside it', async () => {
+    await render();
+    const box = container.querySelector('textarea')?.parentElement;
+    expect(box?.className).toContain('focus-within:-outline-offset-1');
+    expect(box?.className).not.toContain('focus-within:outline-offset-2');
   });
 
   it('enables Send after an upload completes and uses the latest callback', async () => {

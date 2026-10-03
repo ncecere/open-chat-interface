@@ -61,6 +61,12 @@ const FEATURE_SECTIONS: Array<{
         label: 'File attachments',
         description: 'Permit file uploads and attaching supported files to model messages.',
       },
+      {
+        key: 'memory',
+        label: 'User memory',
+        description:
+          'Let people opt in to short notes about themselves that are included in their conversations. Models with tools can save and remove notes; people see, edit and delete every note in Settings → Memory. Off by default.',
+      },
     ],
   },
 ];
@@ -379,6 +385,123 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
   );
 }
 
+/** Whether long conversations are summarised instead of losing their oldest turns. */
+function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
+  const queryClient = useQueryClient();
+  const [saved, setSaved] = useState(initialEnabled ?? true);
+  const [draft, setDraft] = useState(initialEnabled ?? true);
+  const [successMessage, setSuccessMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: (autoCompact: boolean) =>
+      api.patch<{ ok: boolean }>('/admin/settings', { autoCompact }),
+    onSuccess: (_response, autoCompact) => {
+      setSaved(autoCompact);
+      setErrorMessage(null);
+      setSuccessMessage(true);
+      queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
+        current ? { ...current, autoCompact } : current,
+      );
+    },
+    onError: (error) => {
+      setSuccessMessage(false);
+      setErrorMessage(
+        error instanceof ApiError ? error.message : 'Unable to save the compaction setting.',
+      );
+    },
+  });
+
+  return (
+    <form
+      className="flex flex-col gap-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (draft !== saved) save.mutate(draft);
+      }}
+    >
+      <ToggleSetting
+        id="auto-compact"
+        label="Summarise long conversations"
+        description="When a conversation nears the model's input limit, its earlier messages are summarised in the background by the conversation's model (counting towards the person's usage) instead of being left out. Nobody waits for a summary. People can still ask for one themselves when this is off."
+        checked={draft}
+        disabled={save.isPending}
+        onCheckedChange={(checked) => {
+          setDraft(checked);
+          setErrorMessage(null);
+          setSuccessMessage(false);
+        }}
+      />
+      <SaveRow
+        hasChanges={draft !== saved}
+        isPending={save.isPending}
+        errorMessage={errorMessage}
+        successMessage={successMessage ? 'Compaction setting saved.' : null}
+      />
+    </form>
+  );
+}
+
+/**
+ * Whether models are asked to draw diagrams following the Diagram Design style
+ * guide (MIT, Cathryn Lavery) when artifacts are available.
+ */
+function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
+  const queryClient = useQueryClient();
+  const [saved, setSaved] = useState(initialEnabled ?? true);
+  const [draft, setDraft] = useState(initialEnabled ?? true);
+  const [successMessage, setSuccessMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: (diagramGuidance: boolean) =>
+      api.patch<{ ok: boolean }>('/admin/settings', { diagramGuidance }),
+    onSuccess: (_response, diagramGuidance) => {
+      setSaved(diagramGuidance);
+      setErrorMessage(null);
+      setSuccessMessage(true);
+      queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
+        current ? { ...current, diagramGuidance } : current,
+      );
+    },
+    onError: (error) => {
+      setSuccessMessage(false);
+      setErrorMessage(
+        error instanceof ApiError ? error.message : 'Unable to save the diagram setting.',
+      );
+    },
+  });
+
+  return (
+    <form
+      className="flex flex-col gap-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (draft !== saved) save.mutate(draft);
+      }}
+    >
+      <ToggleSetting
+        id="diagram-guidance"
+        label="Editorial diagrams"
+        description="When artifacts are available, ask models to draw diagrams as SVG artifacts following the Diagram Design style guide (MIT, Cathryn Lavery), using this instance's accent color. Artifacts themselves are switched per role on Roles & access."
+        checked={draft}
+        disabled={save.isPending}
+        onCheckedChange={(checked) => {
+          setDraft(checked);
+          setErrorMessage(null);
+          setSuccessMessage(false);
+        }}
+      />
+      <SaveRow
+        hasChanges={draft !== saved}
+        isPending={save.isPending}
+        errorMessage={errorMessage}
+        successMessage={successMessage ? 'Diagram setting saved.' : null}
+      />
+    </form>
+  );
+}
+
 export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
   return (
     <div className="flex flex-col gap-8">
@@ -390,6 +513,8 @@ export function GeneralSettings({ settings }: { settings: InstanceSettings }) {
           <DefaultPromptForm initialPrompt={settings.defaultSystemPrompt} />
           <DefaultEffortForm initialEffort={settings.defaultEffort} />
           <ToolStepLimitForm initialSteps={settings.maxToolSteps} />
+          <AutoCompactForm initialEnabled={settings.autoCompact} />
+          <DiagramGuidanceForm initialEnabled={settings.diagramGuidance} />
         </div>
       </SettingsSection>
 

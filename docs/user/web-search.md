@@ -47,6 +47,11 @@ failed** with the reason, and the model is told to say that current sources
 could not be checked. A model using the search tool sees the failure as the
 step's result and answers accordingly.
 
+A search that times out or cannot reach the provider is tried once more before
+it counts as failed, so a brief network problem usually goes unnoticed. A
+rejected key or a rate limit is reported straight away, since trying again
+would not help. Either way a search gives up within about 25 seconds.
+
 ## When it helps and when it does not
 
 **Worth turning on:** anything recent, anything with a date attached, anything

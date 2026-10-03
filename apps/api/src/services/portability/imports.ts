@@ -10,7 +10,7 @@ import { recordAudit } from '../audit.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { getStorageDriver, type StorageDriver } from '../storage/index.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
-import { attachmentTotals, lockStorageUsage, type StorageTransaction } from '../storage/usage.js';
+import { admissionTotals, lockStorageUsage, type StorageTransaction } from '../storage/usage.js';
 import {
   detectConversationSource,
   type ImportedConversation,
@@ -155,7 +155,7 @@ export async function createImport(params: {
       // The storage-usage row is the per-person admission mutex for uploads.
       await lockStorageUsage(tx, { organizationId, userId: params.userId });
       await assertNoActiveImport(params.userId, tx);
-      const totals = await attachmentTotals(tx, params.userId);
+      const totals = await admissionTotals(tx, params.userId);
       assertStorageAllowanceForUsage(
         { ...totals, ...limits },
         // An export is one transient file, not an attachment: only total bytes apply.

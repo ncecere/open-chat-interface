@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import { Download, FolderInput, History, PanelLeft, Plus, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { CompactConversationControl } from '~/components/chat/compact-thread-dialog';
 import { ShareThreadDialog } from '~/components/chat/share-thread-dialog';
 import { ThemeMenu } from '~/components/layout/theme-menu';
 import { MoveToProjectDialog } from '~/components/projects/project-dialogs';
@@ -49,7 +50,10 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
       )}
     >
       {!sidebarOpen && (
-        <div className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1">
+        <div
+          data-floating-controls
+          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+        >
           <Button variant="ghost" size="icon-sm" onClick={onOpenSidebar} aria-label="Open sidebar">
             <PanelLeft />
           </Button>
@@ -70,7 +74,10 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         </div>
       )}
 
-      <div className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1">
+      <div
+        data-floating-controls
+        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+      >
         {params.threadId && (
           <Button
             variant="ghost"
@@ -92,6 +99,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         {params.threadId && data?.features.projects && (
           <MoveToProjectControl threadId={params.threadId} />
         )}
+        {params.threadId && <CompactConversationControl threadId={params.threadId} />}
         <Button
           variant="ghost"
           size="icon-sm"

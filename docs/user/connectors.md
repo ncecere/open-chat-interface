@@ -21,9 +21,18 @@ From then on, tool-capable models can use the service's tools in your
 conversations, with your account. Until you connect, those tools are not
 offered to the model at all.
 
+While a model that can use tools is selected, a small note above the message
+box reminds you of a service you have not connected yet: "Connect Docs to let
+the model use its tools". The link opens Settings → Connectors. Select the
+**×** next to it to dismiss the note for that service. OCI then suggests the
+next unconnected service, if there is one. Dismissals are remembered in this
+browser only. Services you dismissed stay listed in Settings → Connectors,
+where you can still connect them.
+
 If a connection expires or the service refuses it, the service shows
-**Connection expired** and a **Reconnect** button. A reply that tried to use
-it says to connect again.
+**Connection expired** and a **Reconnect** button, and the note above the
+message box says **Reconnect** instead. A reply that tried to use it says to
+connect again.
 
 ## Disconnecting
 

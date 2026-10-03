@@ -20,7 +20,10 @@ describe('admin navigation catalogue', () => {
         ['Users /admin/users', 'Invitations /admin/invites', 'Roles & access /admin/roles'],
       ],
       ['Models', ['Providers & Models /admin/models', 'Usage budgets /admin/quotas']],
-      ['Tools & integrations', ['Web search /admin/search', 'Connectors /admin/connectors']],
+      [
+        'Tools & integrations',
+        ['Web search /admin/search', 'Connectors /admin/connectors', 'Webhooks /admin/webhooks'],
+      ],
       [
         'Sign-in & security',
         [
@@ -31,7 +34,13 @@ describe('admin navigation catalogue', () => {
       ],
       [
         'Data & storage',
-        ['Storage /admin/storage', 'Retention /admin/retention', 'System health /admin/health'],
+        [
+          'Storage /admin/storage',
+          'Retention /admin/retention',
+          'Backups /admin/backups',
+          'Compliance /admin/compliance',
+          'System health /admin/health',
+        ],
       ],
       ['Insights', ['Usage /admin/usage', 'Reports /admin/reports', 'Audit log /admin/audit']],
       [

@@ -1,12 +1,14 @@
+import { isToolPart } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { type Dispatch, memo, type SetStateAction } from 'react';
+import { ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
 import { MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
   metadataOf,
-  reasoningOf,
+  partGroupsOf,
   textOf,
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
@@ -18,10 +20,16 @@ import {
   SearchSourcesPanel,
   searchGroundingOf,
 } from '~/components/chat/search-grounding';
-import { type AnswerApproval, ToolSteps } from '~/components/chat/tool-steps';
+import { type AnswerApproval, ToolSteps, toolLimitOf } from '~/components/chat/tool-steps';
+import { cn } from '~/lib/utils';
+
+const toolIdsOf = (parts: readonly UIMessage['parts'][number][]) =>
+  parts.map((part) => (part as { toolCallId?: string }).toolCallId ?? '').join('\n');
 
 interface MessageRowProps {
   message: UIMessage;
+  /** The saved conversation; finished replies then offer "Export as…". */
+  threadId?: string;
   streaming: boolean;
   editing: boolean;
   onEditingChange: Dispatch<SetStateAction<string | null>>;
@@ -41,6 +49,7 @@ interface MessageRowProps {
  */
 export const MessageRow = memo(function MessageRow({
   message,
+  threadId,
   streaming,
   editing,
   onEditingChange,
@@ -84,9 +93,12 @@ export const MessageRow = memo(function MessageRow({
     );
   }
 
-  const reasoning = reasoningOf(message);
   const grounding = searchGroundingOf(message);
   const metadata = metadataOf(message);
+  // The reply's reasoning, tool calls and text in the order they were written.
+  const groups = partGroupsOf(message.parts, isToolPart);
+  const lastTools = groups.findLastIndex((group) => group.type === 'tools');
+  const limitOnly = lastTools === -1 && toolLimitOf(message) !== null;
 
   return (
     <article
@@ -100,14 +112,51 @@ export const MessageRow = memo(function MessageRow({
         </p>
       )}
       <ProjectSearchNote message={message} />
-      <ToolSteps message={message} onAnswer={onAnswerApproval} disabled={streaming} />
       {grounding && <SearchSourcesPanel grounding={grounding} />}
-      {reasoning && (
-        <ReasoningPanel text={reasoning} streaming={streaming} answerStarted={Boolean(text)} />
-      )}
-      <div className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
-        <Markdown className={MARKDOWN_PROSE}>{text}</Markdown>
-      </div>
+      {limitOnly && <ToolSteps message={message} only="" />}
+      {groups.map((group, index) => {
+        if (group.type === 'reasoning') {
+          // Still thinking until the next part (a tool call or the answer) starts.
+          return (
+            <div key={group.key} data-reply-group="reasoning">
+              <ReasoningPanel
+                text={group.text}
+                thinking={streaming && index === groups.length - 1}
+              />
+            </div>
+          );
+        }
+        if (group.type === 'tools')
+          return (
+            <div key={group.key} data-reply-group="tools">
+              <ToolSteps
+                message={message}
+                only={toolIdsOf(group.parts)}
+                showLimit={index === lastTools}
+                onAnswer={onAnswerApproval}
+                disabled={streaming}
+                streaming={streaming}
+              />
+            </div>
+          );
+        return (
+          <div
+            key={group.key}
+            data-reply-group="text"
+            className={cn(
+              'text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]',
+              index < groups.length - 1 && 'mb-4',
+            )}
+          >
+            <ReplyMarkdown
+              messageId={message.id}
+              text={text}
+              range={{ start: group.start, end: group.end }}
+              className={MARKDOWN_PROSE}
+            />
+          </div>
+        );
+      })}
       {grounding && <SearchGroundingDetails grounding={grounding} />}
       {(replySwitch || !streaming) && (
         <div className="flex flex-wrap items-center gap-1">
@@ -119,6 +168,11 @@ export const MessageRow = memo(function MessageRow({
                 onFork && metadata.status !== 'streaming' ? () => onFork(message.id) : undefined
               }
               onRetry={onRetry}
+              exportTarget={
+                threadId && metadata.status !== 'streaming'
+                  ? { threadId, messageId: message.id }
+                  : undefined
+              }
               modelSlug={metadata.modelSlug}
               effort={metadata.effort}
               searched={Boolean(grounding)}

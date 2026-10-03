@@ -7,6 +7,143 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Long conversations are summarised in the background instead of cut
+  off.** After a reply, a conversation past 75% of the model's input budget
+  has its older turns summarised by the conversation's own model into a
+  structured summary (topic, facts and decisions, preferences, open
+  questions, critical details) while recent turns are kept verbatim, after
+  the approach of the [pi coding agent](https://pi.dev). Summaries are made
+  by the job runner, never while a reply waits: sending, retrying, switching
+  replies and approving never wait for one or are refused because of one.
+  Requests survive restarts and run once per conversation across replicas.
+  Later summaries build on the previous one, and cuts fall only between user
+  turns. **Summarise earlier messages now** asks for one, with optional
+  instructions, and returns at once. A provider context-length error retries
+  once with fewer earlier turns. Nothing is deleted: a quiet line marks where
+  messages were summarised and expands to the summary, and exports, search
+  and share links keep the full history. Each summary is a usage event.
+  General settings has an on/off switch for automatic summaries (on by
+  default). Migration `0028_conversation_compaction`.
+- **Meaning-based search for project files.** With an embeddings model
+  configured under **Providers & Models → Embeddings** and the pgvector
+  extension enabled by the operator, project search merges keyword and vector
+  rankings, so paraphrases are found while exact names and codes still match.
+  Without either, search stays keyword-only as in v0.8. Passages are embedded
+  on upload and by a background job; embedding calls are usage events. OCI
+  never creates the extension. Migration `0029_embeddings`.
+- **Optional reranking** of project-file passages through any
+  Cohere-compatible `/rerank` endpoint (LiteLLM, vLLM, Jina, Cohere), with or
+  without pgvector. A failure or timeout keeps the previous order.
+- **Artifacts.** HTML pages, SVG images, Mermaid diagrams and documents from
+  replies are kept as versioned artifacts, and tool-capable models can create
+  and revise them (`create_artifact`, `update_artifact`). They open in a side
+  panel with preview, source, versions, copy and download; Markdown documents
+  can be edited directly. HTML and SVG run in a sandboxed frame with an opaque
+  origin and no network access, also on share links. The frame page writes
+  nothing unless it is sandboxed, so it stays safe behind a proxy that sends
+  no policy for it; operators with their own proxy should still send the
+  documented headers for `/artifact-frame.html`. Per-role switch, a
+  General settings switch for Diagram Design guidance (MIT, Cathryn Lavery),
+  storage accounting, export and forks. Migration `0032_artifacts`.
+  - **Written live.** While a model writes an artifact, the reply shows a
+    card with its title, line count and latest lines, and revisions show
+    their changes. On wide screens the panel opens beside the conversation
+    by itself for replies written in that tab, shows the source as it
+    arrives and switches to the preview when it is saved, without moving
+    focus; on phones the card shows progress and opens the panel when
+    tapped. Settings → Customization → **Open artifacts automatically**
+    (on by default).
+  - **Full screen** from the panel header, also on phones and share links.
+  - **Readable steps.** Expanding an artifact step shows its title, kind,
+    size and each change as before-and-after text instead of the tool's
+    JSON input.
+  - Source views are syntax-highlighted like code blocks in chat.
+  - Models are asked to keep program code in the reply as code blocks, use
+    Markdown artifacts only for long documents the person asked for, and
+    not link to artifacts.
+- **Export as DOCX, PDF, XLSX or PPTX** from replies and Markdown artifacts,
+  generated server-side in a worker thread. XLSX takes the reply's tables;
+  PPTX makes a slide per heading; PDFs cover Western European characters.
+  Owner only, size- and rate-limited, audited without content.
+- **User memory**, opt-in at three levels: the instance (off by default), the
+  role and each person (Settings → Memory). Tool-capable models get `remember`
+  and `forget`, never in temporary chats, and the reply shows "Memory updated"
+  with Undo. Notes join the system prompt within a budget, are exported, can
+  expire through a retention setting, and are audited without their text.
+  Migration `0033_user_memory`.
+- **Compliance export and legal hold.** Audit events, and optionally
+  conversation content, are exported on a schedule as verified JSON Lines
+  objects to S3, exactly once per event across restarts. Legal holds keep a
+  named person's data: retention, trash purging, temporary-chat expiry, audit
+  pruning and memory retention skip them, and their account cannot be deleted
+  by any path. Data & storage → Compliance. Migration `0034_compliance`.
+- **Automated backups.** Scheduled `pg_dump` streamed to S3, verified by
+  reading it back (`pg_restore --list` and checksums), with daily and weekly
+  retention and a manifest of attachment objects. Data & storage → Backups.
+  The API image now includes the PostgreSQL client tools.
+- **Observability and webhooks.** A Prometheus `/metrics` endpoint, served
+  only when `METRICS_TOKEN` is set; OpenTelemetry traces when
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set (no content in spans); signed
+  (HMAC-SHA256), retried webhooks for audit events under Tools & integrations
+  → Webhooks. Migration `0030_backups_webhooks`.
+- **A composer hint** to connect an account when a connector's tools are
+  allowed but the person has not connected.
+- **A live reasoning preview.** While a model thinks, a three-line window
+  under "Thinking…" shows its latest reasoning; it collapses to "Reasoning"
+  when the answer starts, and expanding it shows everything.
+
+### Changed
+
+- **A timed-out web search is retried once** within the tool's time limit.
+- **Connector token refresh is coordinated across API replicas**, so a
+  rotating refresh token is used once and every caller gets the new token.
+- **Replies show their parts in the order they were written** (reasoning,
+  tool steps, text), also on share links and in Markdown exports, instead of
+  every tool step first.
+- In your own conversations, a link the safety rules refuse shows as its
+  text instead of "[blocked]"; share links keep the marker.
+- The message box's focus line is drawn inside its border.
+- **Project search adds only relevant passages.** Keyword matches on common
+  words no longer count on their own, and passages far weaker than the best
+  match are left out, so a question the project's files do not cover adds
+  none (and shows no note) instead of filling the context with unrelated
+  sections. Meaning-based search and reranking have floors of their own. The
+  opening sections of every file are no longer sent when nothing matches.
+
+### Fixed
+
+- Scrolling past the end of a conversation could scroll the whole page and
+  carry the message box off screen (hidden screen-reader text escaped the
+  conversation's scroll area).
+- The Stop and Send icons were invisible on the neutral colour theme.
+- Highlighted code followed the operating system's light or dark setting
+  instead of OCI's theme, which made it hard to read when they differed.
+- Starting a conversation from the home page dropped the cursor out of the
+  message box.
+- The first message of a conversation, and a just-sent question moved to
+  the top, could sit under the top bar's buttons on phones and narrower
+  windows.
+
+### Removed
+
+- **`user_preference.boring_mode`**, unused since v0.8 (migration
+  `0031_drop_boring_mode`).
+
+### Known limitations
+
+Planned for v0.10 (see `ROADMAP.md`):
+
+- Legal hold does not yet pause project file deletion or usage-event pruning,
+  and deletions are not exported as compliance events.
+- Backups list attachment objects in a manifest rather than copying them; use
+  bucket versioning or volume snapshots for attachment data.
+- Exported PDFs cover Latin scripts only.
+- The artifact panel cannot be resized, and reloading during a very long
+  artifact may not resume its stream.
+- A summary someone asked for that fails in the background is not reported.
+
 ## [0.8.0] - 2026-10-02
 
 Tools and connected knowledge: tool calling with per-role switches, approval

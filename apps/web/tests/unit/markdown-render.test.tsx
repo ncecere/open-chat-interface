@@ -10,6 +10,11 @@ vi.mock('streamdown', () => ({
     renderStreamdown(props);
     return <div>{props.children}</div>;
   },
+  defaultRehypePlugins: {
+    raw: 'raw',
+    sanitize: 'sanitize',
+    harden: ['harden', { allowedLinkPrefixes: ['*'] }],
+  },
 }));
 vi.mock('@streamdown/code', () => ({ code: {} }));
 vi.mock('@streamdown/math', () => ({ createMathPlugin: () => ({}) }));
@@ -59,4 +64,20 @@ it('does not cache past changed HTML safety, URL policy or styling', async () =>
       className: 'new-style',
     }),
   );
+});
+
+it('renders refused links as text in a conversation, keeping share pages strict', async () => {
+  await render({ children: 'A [link](plan.md)' });
+  await vi.waitFor(() => expect(renderStreamdown).toHaveBeenCalled());
+  expect(renderStreamdown).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      rehypePlugins: [
+        'raw',
+        'sanitize',
+        ['harden', { allowedLinkPrefixes: ['*'], linkBlockPolicy: 'text-only' }],
+      ],
+    }),
+  );
+  await render({ children: 'A [link](plan.md)', skipHtml: true, urlTransform: () => null });
+  expect(renderStreamdown.mock.lastCall?.[0]).not.toHaveProperty('rehypePlugins');
 });

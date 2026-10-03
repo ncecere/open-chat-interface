@@ -226,6 +226,88 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('admin backups has no violations', async ({ page }) => {
+    // The real page against the live API: settings form, status and (empty) history.
+    await signIn(page);
+    await page.goto('/admin/backups');
+    await expect(page.getByRole('heading', { name: 'Backups', level: 1 })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Back up automatically' })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('admin compliance has no violations', async ({ page }) => {
+    // The real page against the live API: status, settings, legal holds and history.
+    await signIn(page);
+    await page.goto('/admin/compliance');
+    await expect(page.getByRole('heading', { name: 'Compliance', level: 1 })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Export automatically' })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Include conversation content' })).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('admin webhooks has no violations', async ({ page }) => {
+    // A routed endpoint with a failing delivery, so the card and its log are scanned too.
+    await page.route('**/api/admin/webhooks', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          webhooks: [
+            {
+              id: 'w1',
+              url: 'https://hooks.example.test/oci',
+              description: 'SIEM',
+              actions: ['user.*', 'backup.run'],
+              allActions: false,
+              enabled: true,
+              allowPrivateNetwork: false,
+              secretRotatedAt: '2026-10-01T09:00:00.000Z',
+              lastSuccessAt: '2026-10-01T10:00:00.000Z',
+              lastFailureAt: '2026-10-01T11:00:00.000Z',
+              lastError: 'The endpoint answered HTTP 500.',
+              pendingDeliveries: 1,
+              createdAt: '2026-10-01T09:00:00.000Z',
+              updatedAt: '2026-10-01T09:00:00.000Z',
+            },
+          ],
+        }),
+      }),
+    );
+    await page.route('**/api/admin/webhooks/w1/deliveries', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          deliveries: [
+            {
+              id: 'd1',
+              event: 'user.create',
+              status: 'pending',
+              attempts: 1,
+              maxAttempts: 8,
+              nextAttemptAt: '2026-10-01T11:01:00.000Z',
+              lastAttemptAt: '2026-10-01T11:00:00.000Z',
+              lastStatusCode: 500,
+              lastError: 'The endpoint answered HTTP 500.',
+              deliveredAt: null,
+              createdAt: '2026-10-01T11:00:00.000Z',
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/admin/webhooks');
+    await expect(page.getByRole('heading', { name: 'Webhooks', level: 1 })).toBeVisible();
+    await page.getByRole('button', { name: 'Show deliveries' }).click();
+    await expect(page.getByRole('table')).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('settings connectors has no violations', async ({ page }) => {
     await page.route('**/api/connectors', (route) =>
       route.fulfill({
@@ -311,6 +393,42 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     const dialog = page.getByRole('dialog', { name: 'Move to project' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('radio', { name: 'No project' })).toBeChecked();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('the export menu on a reply has no violations while open', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    await page.route('**/api/chat/a11y-export/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-export', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-export-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'A table, please' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            {
+              id: 'a11y-export-reply',
+              role: 'assistant',
+              parts: [{ type: 'text', text: '| Region | Sales |\n| --- | --- |\n| North | 12 |' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-export');
+    const reply = page.getByRole('article', { name: 'Assistant message' });
+    await expect(reply.getByRole('table')).toBeVisible();
+    await reply.getByRole('button', { name: 'Export as\u2026' }).click();
+    const menu = page.getByRole('menu');
+    await expect(menu.getByRole('menuitem', { name: 'Spreadsheet (.xlsx)' })).toBeVisible();
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');
@@ -407,6 +525,113 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('the artifact panel and an artifact step have no violations', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    const html = '<!doctype html>\n<title>Plan page</title>\n<h1>Plan</h1>\n<p>Hello</p>';
+    const artifact = {
+      id: 'a11y-artifact',
+      threadId: 'a11y-artifacts',
+      messageId: 'a11y-artifact-reply',
+      sourceKey: 'tool:a11y-call',
+      title: 'Plan page',
+      kind: 'html',
+      currentVersion: 1,
+      sizeBytes: html.length,
+      createdAt: created,
+      updatedAt: created,
+    };
+    await page.route('**/api/chat/a11y-artifacts/messages', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-artifacts', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-artifact-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'A page, please' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            {
+              id: 'a11y-artifact-reply',
+              role: 'assistant',
+              parts: [
+                { type: 'step-start' },
+                { type: 'reasoning', text: 'A short page.' },
+                {
+                  type: 'tool-create_artifact',
+                  toolCallId: 'a11y-call',
+                  state: 'output-available',
+                  input: { title: 'Plan page', kind: 'html', content: html },
+                  output: { artifactId: artifact.id, title: 'Plan page', kind: 'html', version: 1 },
+                },
+                { type: 'step-start' },
+                { type: 'text', text: 'Here it is.' },
+              ],
+              metadata: { status: 'complete', createdAt: created },
+            },
+          ],
+          replies: [],
+        }),
+      }),
+    );
+    await page.route('**/api/artifacts?threadId=a11y-artifacts', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ artifacts: [artifact] }),
+      }),
+    );
+    await page.route(`**/api/artifacts/${artifact.id}`, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          artifact,
+          versions: [
+            {
+              version: 1,
+              sizeBytes: html.length,
+              source: 'reply',
+              messageId: artifact.messageId,
+              createdAt: created,
+            },
+          ],
+          content: html,
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-artifacts');
+    await page.getByRole('button', { name: 'Details: Plan page' }).click();
+    await page.getByRole('button', { name: 'Open artifact: Plan page' }).click();
+    // Docked beside the conversation on wide screens, a dialog on phones.
+    const panel = page.locator('[data-artifact-panel]');
+    await expect(panel).toBeVisible();
+    // The source view (the preview is a sandboxed frame axe cannot enter).
+    await panel.getByRole('tab', { name: 'Source' }).click();
+    await expect(panel.getByRole('tabpanel', { name: 'Source' })).toContainText('Plan page');
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+
+    // Full screen: a modal dialog over the whole window, same views. The browser
+    // runs with a light system colour scheme and OCI's dark theme, so the
+    // highlighted source must follow OCI's theme, not the system's.
+    await panel.getByRole('button', { name: 'Full screen', exact: true }).click();
+    const full = page.getByRole('dialog', { name: 'Plan page' });
+    await expect(full).toHaveAttribute('data-full-screen', '');
+    const source = full.getByRole('tabpanel', { name: 'Source' });
+    await expect(source).toContainText('Plan page');
+    await expect(
+      source.locator('[data-streamdown="code-block-body"] span[style]').first(),
+    ).toBeVisible();
+    const sourceResults = await scan(page);
+    expect(describeViolations(sourceResults), describeViolations(sourceResults)).toBe('');
+    await full.getByRole('tab', { name: 'Versions' }).click();
+    await expect(full.getByRole('tabpanel', { name: 'Versions' })).toContainText('Version 1');
+    const fullResults = await scan(page);
+    expect(describeViolations(fullResults), describeViolations(fullResults)).toBe('');
   });
 
   test('a dialog has no violations while open', async ({ page }) => {

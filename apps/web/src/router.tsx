@@ -195,6 +195,10 @@ const SETTINGS_TABS = [
     component: lazyRouteComponent(() => import('~/routes/settings/history'), 'SettingsHistoryPage'),
   },
   {
+    path: '/settings/memory',
+    component: lazyRouteComponent(() => import('~/routes/settings/memory'), 'SettingsMemoryPage'),
+  },
+  {
     path: '/settings/models',
     component: lazyRouteComponent(() => import('~/routes/settings/models'), 'SettingsModelsPage'),
   },
@@ -398,6 +402,24 @@ const adminStorageRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/storage'), 'AdminStoragePage'),
 });
 
+const adminWebhooksRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/webhooks',
+  component: lazyRouteComponent(() => import('~/routes/admin/webhooks'), 'AdminWebhooksPage'),
+});
+
+const adminBackupsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/backups',
+  component: lazyRouteComponent(() => import('~/routes/admin/backups'), 'AdminBackupsPage'),
+});
+
+const adminComplianceRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/compliance',
+  component: lazyRouteComponent(() => import('~/routes/admin/compliance'), 'AdminCompliancePage'),
+});
+
 const adminRetentionRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/retention',
@@ -457,6 +479,9 @@ const routeTree = rootRoute.addChildren([
     adminQuotasRoute,
     adminSearchRoute,
     adminConnectorsRoute,
+    adminWebhooksRoute,
+    adminBackupsRoute,
+    adminComplianceRoute,
     adminStorageRoute,
     adminStorageLimitsRoute,
     adminRateLimitsRoute,

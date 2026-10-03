@@ -1,11 +1,14 @@
 import { ArrowUp, Square } from 'lucide-react';
-import { type KeyboardEvent, memo, useLayoutEffect, useRef } from 'react';
+import { type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef } from 'react';
 import { AttachmentChips } from '~/components/chat/attachment-chips';
+import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
 import type { PendingAttachment } from '~/hooks/use-attachments';
 import { cn } from '~/lib/utils';
 
 interface ComposerProps extends ComposerOptionsProps {
+  /** Focus the message field when it first appears. */
+  autoFocus?: boolean;
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
@@ -39,8 +42,16 @@ export const Composer = memo(function Composer({
   onAttachFiles,
   onRemoveAttachment,
   placeholder = 'Type your message here...',
+  autoFocus = false,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Only on mount: a conversation started from the home page replaces the
+  // composer the person was typing in, which would otherwise drop focus.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
+  useEffect(() => {
+    if (autoFocus) textareaRef.current?.focus({ preventScroll: true });
+  }, []);
 
   // Re-measure whenever the text changes so the field grows with its content.
   // biome-ignore lint/correctness/useExhaustiveDependencies: value drives the resize
@@ -66,7 +77,8 @@ export const Composer = memo(function Composer({
 
   return (
     <div className="mx-auto w-full max-w-[47rem] px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-3 md:pb-0">
-      <div className="rounded-[1.25rem] border border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent-bright)] md:rounded-b-none md:border-b-0">
+      <ComposerConnectHint selectedModel={selectedModel} />
+      <div className="rounded-[1.25rem] border border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-[var(--text-faint)] md:rounded-b-none md:border-b-0">
         <AttachmentChips items={attachments} onRemove={(id) => onRemoveAttachment?.(id)} />
 
         <textarea
@@ -103,7 +115,7 @@ export const Composer = memo(function Composer({
               type="button"
               onClick={onStop}
               aria-label="Stop generating"
-              className="ml-auto inline-flex size-[2.125rem] items-center justify-center rounded-lg border border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--text-primary)] transition-colors hover:bg-[var(--accent-send-hover)]"
+              className="ml-auto inline-flex size-[2.125rem] items-center justify-center rounded-lg border border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--accent-button-foreground)] transition-colors hover:bg-[var(--accent-send-hover)]"
             >
               <Square className="size-3.5 fill-current" />
             </button>
@@ -116,7 +128,7 @@ export const Composer = memo(function Composer({
               className={cn(
                 'ml-auto inline-flex size-[2.125rem] items-center justify-center rounded-lg border transition-colors',
                 canSubmit
-                  ? 'border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--text-primary)] hover:bg-[var(--accent-send-hover)]'
+                  ? 'border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--accent-button-foreground)] hover:bg-[var(--accent-send-hover)]'
                   : 'border-[var(--border-strong)] bg-[var(--accent-soft)] text-[var(--text-faint)]',
               )}
             >

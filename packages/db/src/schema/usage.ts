@@ -1,4 +1,5 @@
 import type { QuotaMetric, QuotaWindowKind, UserRole } from '@oci/shared';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
@@ -242,10 +243,16 @@ export const auditLog = pgTable(
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     ipAddress: text('ip_address'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Insertion order (migration 0034), the compliance export's cursor. Drawn
+     * from a sequence by the database; never set by the application.
+     */
+    seq: bigint('seq', { mode: 'number' }).notNull().default(sql`nextval('audit_log_seq_seq')`),
   },
   (t) => [
     index('audit_log_created_idx').on(t.createdAt),
     index('audit_log_actor_idx').on(t.actorUserId),
+    uniqueIndex('audit_log_seq_unique').on(t.seq),
   ],
 );
 
@@ -271,6 +278,11 @@ export const userPreference = pgTable(
      * so a returning user is never asked again after finishing it once.
      */
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
+    /**
+     * The person's own opt-in to user memory (migration 0033), off by default.
+     * Memory is used only when this, the instance switch and the role allow it.
+     */
+    memoryEnabled: boolean('memory_enabled').notNull().default(false),
     ...timestamps(),
   },
   (t) => [index('user_preference_user_idx').on(t.userId)],

@@ -21,6 +21,8 @@ export interface UserPreferences {
   traits: string[];
   additionalContext: string | null;
   defaultModelSlug: string | null;
+  /** The person's own memory switch; absent from an API before v0.9. */
+  memoryEnabled?: boolean;
 }
 
 export interface CurrentFeatures {
@@ -31,6 +33,13 @@ export interface CurrentFeatures {
   branching: boolean;
   /** Decided by the role alone; projects have no instance-wide switch. */
   projects: boolean;
+  /**
+   * User memory is offered: the instance and the role allow it. The person
+   * still switches it on in Settings → Memory. Absent before v0.9.
+   */
+  memory?: boolean;
+  /** Decided by the role alone (v0.9). Optional so an older API's response still renders. */
+  artifacts?: boolean;
 }
 
 interface CurrentChatDefaults {

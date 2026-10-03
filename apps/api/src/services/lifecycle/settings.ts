@@ -54,6 +54,8 @@ export async function getRetentionSettings(): Promise<RetentionSettings> {
     auditLogRetentionDays:
       stored.auditLogRetentionDays ??
       positiveInt(env.RETENTION_AUDIT_LOG_DAYS, DEFAULT_AUDIT_LOG_RETENTION_DAYS),
+    // Off by default: memories are the person's own notes, kept until deleted.
+    memoryRetentionDays: stored.memoryRetentionDays ?? null,
     displayTimezone: stored.displayTimezone ?? env.DISPLAY_TIMEZONE ?? 'UTC',
   };
 }
@@ -184,6 +186,7 @@ export async function getConfigSources(): Promise<ConfigSources> {
         retention.auditLogRetentionDays,
         env.RETENTION_AUDIT_LOG_DAYS,
       ),
+      memoryRetentionDays: retention.memoryRetentionDays !== undefined ? 'database' : 'default',
       displayTimezone: sourceOf(retention.displayTimezone, env.DISPLAY_TIMEZONE, Boolean),
     },
     rateLimits: {

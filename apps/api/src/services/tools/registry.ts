@@ -2,7 +2,9 @@ import type { UserRole } from '@oci/shared';
 import { type ToolSet, tool } from 'ai';
 import { AppError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
+import { memoryTools } from '../memory/tools.js';
 import { getSetting } from '../settings.js';
+import { ARTIFACT_TOOLS } from './artifacts.js';
 import { recordToolCall, type ToolApprovalAnswer } from './audit.js';
 import { registeredTools } from './catalog.js';
 import { resolveRoleToolAllowed } from './role-tools.js';
@@ -30,13 +32,16 @@ export const toolDefinition = (tools: TurnTools, id: string) =>
  * composer has a switch, for this message), allowed for the person's role,
  * usable by the model (`tool_calling`) and, for an OAuth connector, connected
  * by this person. A model without tool calling gets none and behaves exactly
- * as in v0.7.
+ * as in v0.7. The memory tools are added when memory is on for this person
+ * and the chat is not temporary.
  */
 export async function resolveTurnTools(turn: {
   role: UserRole;
   userId: string;
   capabilities: readonly string[];
   webSearch: boolean;
+  /** Temporary chats never get the memory tools. */
+  temporary: boolean;
 }): Promise<TurnTools> {
   if (!turn.capabilities.includes('tool_calling')) return NO_TOOLS;
   const [stored, registered] = await Promise.all([getSetting('roleTools'), registeredTools()]);
@@ -44,6 +49,7 @@ export async function resolveTurnTools(turn: {
     role: turn.role,
     userId: turn.userId,
     webSearch: turn.webSearch,
+    temporary: turn.temporary,
     memo: new Map(),
   };
   const offered: ToolDefinition[] = [];
@@ -51,6 +57,16 @@ export async function resolveTurnTools(turn: {
     if (!resolveRoleToolAllowed(turn.role, definition, stored)) continue;
     if (!(await definition.available(input))) continue;
     offered.push(definition);
+  }
+  // `remember` and `forget` follow the role's `memory` switch (with the
+  // instance switch and the person's opt-in), not a per-tool role setting.
+  for (const definition of memoryTools) {
+    if (await definition.available(input)) offered.push(definition);
+  }
+  // Artifact tools follow the role's `artifacts` switch, not the tool list:
+  // they change only this conversation's artifacts (see tools/artifacts.ts).
+  for (const definition of ARTIFACT_TOOLS) {
+    if (await definition.available(input)) offered.push(definition);
   }
   return { definitions: offered };
 }
@@ -129,7 +145,11 @@ export function buildSdkTools(
             });
           let raw: unknown;
           try {
-            raw = await definition.execute(input, { signal, caller });
+            raw = await definition.execute(input, {
+              signal,
+              caller,
+              toolCallId: options.toolCallId,
+            });
           } catch (error) {
             await audit('error', null);
             if (!(error instanceof AppError))

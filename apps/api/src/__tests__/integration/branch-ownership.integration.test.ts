@@ -123,7 +123,10 @@ describe('integration with mocked DB: immutable branch ownership', () => {
       select: vi
         .fn()
         .mockReturnValueOnce(limitedQuery([sourceThread]))
-        .mockReturnValueOnce(orderedQuery(sourceMessages)),
+        .mockReturnValueOnce(orderedQuery(sourceMessages))
+        // The source has no compaction and no artifacts to copy.
+        .mockReturnValueOnce(orderedQuery([]))
+        .mockReturnValueOnce(orderedQuery([])),
       insert: vi
         .fn()
         .mockReturnValueOnce({
@@ -133,9 +136,17 @@ describe('integration with mocked DB: immutable branch ownership', () => {
           }),
         })
         .mockReturnValueOnce({
-          values: vi.fn((value) => {
+          values: vi.fn((value: Array<{ parentMessageId: string }>) => {
             inserted.push(value);
-            return Promise.resolve();
+            return {
+              returning: () =>
+                Promise.resolve(
+                  value.map((row) => ({
+                    id: `copy-${row.parentMessageId}`,
+                    sourceId: row.parentMessageId,
+                  })),
+                ),
+            };
           }),
         }),
     };
@@ -152,6 +163,8 @@ describe('integration with mocked DB: immutable branch ownership', () => {
     );
     if (selectedId === 'message-2') expect(copied[1]?.modelSlug).toBe('model-a');
     expect(sourceMessages).toHaveLength(3);
+    // Only the thread and its messages were written.
+    expect(tx.insert).toHaveBeenCalledTimes(2);
   });
 
   it('rejects a message ID that is not part of the owned source thread', async () => {

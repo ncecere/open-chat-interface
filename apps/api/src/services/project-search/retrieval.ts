@@ -1,6 +1,11 @@
 import { sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { stripControls, tsqueryOperand } from '../../lib/text.js';
+import {
+  KEYWORD_DISTINCTIVE_MAX_SHARE,
+  KEYWORD_DISTINCTIVE_MIN_CHUNKS,
+  nearBest,
+} from './relevance.js';
 
 /**
  * Keyword retrieval over one project's file chunks.
@@ -12,6 +17,11 @@ import { stripControls, tsqueryOperand } from '../../lib/text.js';
  * and passages are ranked by how many of the words they contain, how often,
  * and how rare each word is in the project's files: a word found in nearly
  * every passage (such as "the") counts for little.
+ *
+ * Since v0.9 a passage must also be relevant enough to be used at all (see
+ * relevance.ts): it must contain at least one distinctive word of the message,
+ * and score close enough to the best passage. A message that shares only
+ * common words with the files finds nothing.
  */
 
 /** Only the start of a long message is searched; the rest rarely helps ranking. */
@@ -31,34 +41,51 @@ export interface RetrievedChunk {
 }
 
 /** A bound text[] literal: one parameter per element, never spliced as SQL. */
-function textArray(values: string[]) {
+export function textArray(values: string[]) {
   return sql`array[${sql.join(
     values.map((value) => sql`${value}`),
     sql`, `,
   )}]::text[]`;
 }
 
+/** One searchable word of a message. */
+export interface SearchTerm {
+  /** A single-term tsquery operand, such as `'kestrel':*`. */
+  operand: string;
+  /**
+   * An English stop word ("what", "about", "is"), by PostgreSQL's own list.
+   * It still counts towards a passage's score but never qualifies a passage
+   * on its own, even in files where it happens to be rare.
+   */
+  stopWord: boolean;
+}
+
 /**
- * The searchable words of a message as single-term tsquery operands, in the
- * order they first appear. Empty when nothing searchable is left.
+ * The searchable words of a message, in the order they first appear. Empty
+ * when nothing searchable is left.
  */
-export async function projectSearchTerms(raw: string): Promise<string[]> {
+export async function projectSearchTerms(raw: string): Promise<SearchTerm[]> {
   const text = stripControls(raw.normalize('NFC').slice(0, QUERY_MAX_CHARS)).trim();
   if (!text) return [];
-  const rows = await db.execute<{ lexeme: string }>(sql`
-    select lexeme
+  // The 'english_stem' dictionary returns an empty array for a stop word.
+  const rows = await db.execute<{ lexeme: string; stop_word: boolean }>(sql`
+    select lexeme,
+           coalesce(cardinality(ts_lexize('english_stem'::regdictionary, lexeme)) = 0, false)
+             as stop_word
     from unnest(to_tsvector('simple'::regconfig, ${text})) as words(lexeme, positions, weights)
     order by positions[1]
   `);
   return rows
-    .map((row) => row.lexeme)
-    .filter((lexeme) => {
+    .filter(({ lexeme }) => {
       const length = [...lexeme].length;
       // A lone letter (from "it's", or an initial) matches too much to help.
       return length > 1 && length <= MAX_LEXEME_CHARS;
     })
     .slice(0, MAX_TERMS)
-    .map((lexeme) => tsqueryOperand(lexeme, [...lexeme].length >= PREFIX_MIN_CHARS));
+    .map(({ lexeme, stop_word }) => ({
+      operand: tsqueryOperand(lexeme, [...lexeme].length >= PREFIX_MIN_CHARS),
+      stopWord: stop_word === true,
+    }));
 }
 
 /**
@@ -66,7 +93,7 @@ export async function projectSearchTerms(raw: string): Promise<string[]> {
  * already come from an owner- and project-scoped query; checking again here
  * keeps another person's or another project's chunks out even if they did not.
  */
-function scopedChunks(scope: { userId: string; projectId: string; fileIds: string[] }) {
+export function scopedChunks(scope: { userId: string; projectId: string; fileIds: string[] }) {
   return sql`
     select c.attachment_id, c.ordinal, c.start_offset, c.end_offset, c.content, c.search,
            a.filename
@@ -80,7 +107,7 @@ function scopedChunks(scope: { userId: string; projectId: string; fileIds: strin
   `;
 }
 
-type ChunkRow = {
+export type ChunkRow = {
   attachment_id: string;
   filename: string;
   ordinal: number;
@@ -89,7 +116,7 @@ type ChunkRow = {
   content: string;
 };
 
-function toChunk(row: ChunkRow): RetrievedChunk {
+export function toChunk(row: ChunkRow): RetrievedChunk {
   return {
     attachmentId: row.attachment_id,
     filename: row.filename,
@@ -101,33 +128,46 @@ function toChunk(row: ChunkRow): RetrievedChunk {
 }
 
 /**
- * The best-matching chunks, best first. Each word is its own tsquery: a chunk
+ * The relevant chunks, best first. Each word is its own tsquery: a chunk
  * scores the sum, over the words it contains, of the word's rarity among the
  * project's chunks (BM25's inverse document frequency) times a saturating
  * function of its `ts_rank_cd` for that word.
+ *
+ * Only chunks containing at least one distinctive word (in at most
+ * `KEYWORD_DISTINCTIVE_MAX_SHARE` of the project's chunks, or
+ * `KEYWORD_DISTINCTIVE_MIN_CHUNKS`, and not a stop word) qualify, and of
+ * those only the ones scoring at least `KEYWORD_RELATIVE_FLOOR` of the best
+ * (see relevance.ts).
  */
 export async function rankProjectChunks(
   scope: { userId: string; projectId: string; fileIds: string[] },
-  operands: string[],
+  terms: SearchTerm[],
   limit: number,
 ): Promise<RetrievedChunk[]> {
-  if (operands.length === 0 || scope.fileIds.length === 0 || limit <= 0) return [];
+  if (terms.length === 0 || scope.fileIds.length === 0 || limit <= 0) return [];
+  const operands = terms.map((term) => term.operand);
+  const stopWords = terms.filter((term) => term.stopWord).map((term) => term.operand);
   const rows = await db.execute<ChunkRow & { score: number }>(sql`
     with scope as materialized (${scopedChunks(scope)}),
     total as (select count(*)::float8 as n from scope),
     terms as (
-      select operand, operand::tsquery as query
+      select operand, operand::tsquery as query,
+             operand = any(${textArray(stopWords)}) as stop_word
       from unnest(${textArray(operands)}) as given(operand)
     ),
     hits as materialized (
-      select s.attachment_id, s.ordinal, t.operand, ts_rank_cd(s.search, t.query) as rank
+      select s.attachment_id, s.ordinal, t.operand, t.stop_word,
+             ts_rank_cd(s.search, t.query) as rank
       from scope s
       cross join terms t
       where s.search @@ t.query
     ),
     rarity as (
       select h.operand,
-             ln(1 + (total.n - count(*) + 0.5) / (count(*) + 0.5)) as idf
+             ln(1 + (total.n - count(*) + 0.5) / (count(*) + 0.5)) as idf,
+             count(*) <= greatest(${KEYWORD_DISTINCTIVE_MIN_CHUNKS}::float8,
+                                  total.n * ${KEYWORD_DISTINCTIVE_MAX_SHARE}::float8)
+               and not bool_or(h.stop_word) as distinctive
       from hits h
       cross join total
       group by h.operand, total.n
@@ -137,6 +177,7 @@ export async function rankProjectChunks(
       from hits h
       join rarity r on r.operand = h.operand
       group by h.attachment_id, h.ordinal
+      having bool_or(r.distinctive)
     )
     select s.attachment_id, s.filename, s.ordinal, s.start_offset, s.end_offset, s.content,
            scored.score::float8 as score
@@ -145,26 +186,9 @@ export async function rankProjectChunks(
     order by scored.score desc, s.attachment_id, s.ordinal
     limit ${limit}
   `);
-  return rows.map(toChunk);
-}
-
-/**
- * The opening chunks of every file, taken in turn (each file's first, then
- * each file's second, ...), for a message with nothing to search for or
- * nothing that matched.
- */
-export async function openingProjectChunks(
-  scope: { userId: string; projectId: string; fileIds: string[] },
-  limit: number,
-): Promise<RetrievedChunk[]> {
-  if (scope.fileIds.length === 0 || limit <= 0) return [];
-  const rows = await db.execute<ChunkRow>(sql`
-    select s.attachment_id, s.filename, s.ordinal, s.start_offset, s.end_offset, s.content
-    from (${scopedChunks(scope)}) s
-    order by s.ordinal, array_position(${textArray(scope.fileIds)}, s.attachment_id)
-    limit ${limit}
-  `);
-  return rows.map(toChunk);
+  // Sorted best first, so the cut relative to the best is the same before or
+  // after the limit.
+  return nearBest(rows.map((row) => ({ ...row, score: Number(row.score) }))).map(toChunk);
 }
 
 /** Chunk counts of the given files that have been indexed; unindexed files are absent. */

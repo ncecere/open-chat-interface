@@ -1,4 +1,20 @@
-import { providerError } from '../../lib/errors.js';
+import { type AppError, providerError } from '../../lib/errors.js';
+
+/**
+ * Failures worth one more attempt: the provider did not answer in time or could
+ * not be reached. A refused key, a rate limit, another HTTP error or an invalid
+ * response would fail the same way again, so they are never retried.
+ */
+const transientFailures = new WeakSet<Error>();
+
+function transient(error: AppError): AppError {
+  transientFailures.add(error);
+  return error;
+}
+
+export function isTransientSearchFailure(error: unknown): boolean {
+  return error instanceof Error && transientFailures.has(error);
+}
 
 export function validateSearchEndpoint(endpoint: URL): URL {
   if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') {
@@ -30,9 +46,9 @@ export async function searchFetch(
     response = await fetch(trustedEndpoint, init);
   } catch (error) {
     if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
-      throw providerError(`${provider} did not answer in time.`);
+      throw transient(providerError(`${provider} did not answer in time.`));
     }
-    throw providerError(`${provider} could not be reached.`);
+    throw transient(providerError(`${provider} could not be reached.`));
   }
 
   if (!response.ok) {

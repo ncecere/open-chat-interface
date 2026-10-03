@@ -112,6 +112,17 @@ export const PROTECTED_AUDIT_ACTIONS = [
   'sso.update',
   'sso.delete',
   'settings.auth.update',
+  // Webhooks send audit events outside OCI; backups copy all of its data.
+  'webhook.create',
+  'webhook.update',
+  'webhook.delete',
+  'webhook.rotate',
+  'backup.settings.update',
+  // Compliance export copies audit events (and possibly content) outside OCI;
+  // legal holds decide what retention and deletion may remove.
+  'compliance.settings.update',
+  'compliance.hold.place',
+  'compliance.hold.lift',
 ] as const;
 
 /** Rate limiting and concurrency defaults, overridable per role by an admin. */

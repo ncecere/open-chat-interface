@@ -20,6 +20,7 @@ and [Release process](../RELEASING.md) for GitHub Actions and GHCR publishing.
 12. [Historical verification evidence](email-verification-provenance.md) — provenance limits, safe aggregate inspection, and owner decisions before account-access changes.
 13. [Release validation checkpoint](release-validation.md) — full live-service/browser results, corrected onboarding coverage, isolated source-built MinIO, and remaining gates.
 14. [Tools and connected knowledge](tools-design.md) — the v0.8 design: tool registry, approvals, web search as a tool, project-file search and MCP connectors.
+15. [Make and operate](v0.9-design.md) — the v0.9 design: compaction, meaning-based search, artifacts, file output, memory, compliance export, observability and backups.
 
 ## The shape of it
 

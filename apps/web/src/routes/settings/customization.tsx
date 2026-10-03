@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useState } from 'react';
+import { type KeyboardEvent, useEffect, useId, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
 import { useCurrentUser } from '~/hooks/use-current-user';
@@ -93,13 +93,27 @@ function ToggleRow({
   checked: boolean;
   onChange: (value: boolean) => void;
 }) {
+  const id = useId();
   return (
     <div className="flex items-start justify-between gap-6">
       <div>
-        <p className="text-sm font-medium text-[var(--text-primary)]">{label}</p>
-        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">{description}</p>
+        <p id={`${id}-label`} className="text-sm font-medium text-[var(--text-primary)]">
+          {label}
+        </p>
+        <p
+          id={`${id}-description`}
+          className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]"
+        >
+          {description}
+        </p>
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} className="mt-1 shrink-0" />
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={`${id}-description`}
+        className="mt-1 shrink-0"
+      />
     </div>
   );
 }
@@ -107,7 +121,7 @@ function ToggleRow({
 export function SettingsCustomizationPage() {
   const { data } = useCurrentUser();
   const queryClient = useQueryClient();
-  const { codeWrap, setCodeWrap } = useTheme();
+  const { codeWrap, setCodeWrap, autoOpenArtifacts, setAutoOpenArtifacts } = useTheme();
 
   const [name, setName] = useState('');
   const [occupation, setOccupation] = useState('');
@@ -274,6 +288,12 @@ export function SettingsCustomizationPage() {
           description="Wrap long lines in code blocks instead of scrolling them sideways."
           checked={codeWrap}
           onChange={setCodeWrap}
+        />
+        <ToggleRow
+          label="Open artifacts automatically"
+          description="On wide screens, open the artifact panel beside the conversation when a reply starts writing a page, image, diagram or document, so you can watch it being written."
+          checked={autoOpenArtifacts}
+          onChange={setAutoOpenArtifacts}
         />
         <ToggleRow
           label="Hide Personal Information"

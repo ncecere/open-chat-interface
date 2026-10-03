@@ -1,4 +1,16 @@
+import type { UserConnector } from '@oci/shared';
 import { api } from '~/lib/api-client';
+
+/**
+ * GET /connectors: OAuth connectors with a tool allowed for the person's role,
+ * and whether each is connected. Shared by Settings → Connectors and the
+ * composer's connect hint, so connecting or disconnecting updates both.
+ */
+export const USER_CONNECTORS_QUERY_KEY = ['connectors'] as const;
+
+export function fetchUserConnectors() {
+  return api.get<{ connectors: UserConnector[] }>('/connectors');
+}
 
 /** Messages for the outcome of connecting an account, carried back in the URL. */
 export const CONNECT_OUTCOMES: Record<string, string> = {

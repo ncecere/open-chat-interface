@@ -1,7 +1,9 @@
 import { eq, schema } from '@oci/db';
 import {
   branchMessageSchema,
+  compactThreadSchema,
   createThreadSchema,
+  DOCUMENT_FORMATS,
   forkMessageSchema,
   THREAD_SEARCH_DEFAULT_LIMIT,
   THREAD_SEARCH_MAX_LIMIT,
@@ -11,8 +13,18 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/index.js';
+import { clientIp } from '../lib/client-ip.js';
+import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import { recordAudit } from '../services/audit.js';
+import {
+  assertCompactionPossible,
+  latestReplyModel,
+  NOTHING_TO_COMPACT,
+} from '../services/chat/compaction.js';
+import { compactionState, requestCompaction } from '../services/chat/compaction-queue.js';
+import { consumeFileExport, exportReply } from '../services/documents/export.js';
 import { exportFilename, exportThreadMarkdown } from '../services/export.js';
 import {
   emptyTrash,
@@ -21,6 +33,8 @@ import {
   restoreThread,
   softDeleteThread,
 } from '../services/lifecycle/trash.js';
+import { chatRateLimit } from '../services/limits/rate-limit.js';
+import { resolveModelForRole } from '../services/models.js';
 import {
   assertProjectsAllowed,
   getOwnedProject,
@@ -30,6 +44,7 @@ import { activateReply } from '../services/replies.js';
 import { searchThreads } from '../services/thread-search.js';
 import {
   assertBranchingAllowed,
+  assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
   forkFromMessage,
@@ -66,6 +81,8 @@ const searchQuerySchema = z.object({
     .default(THREAD_SEARCH_DEFAULT_LIMIT)
     .transform((value) => Math.min(value, THREAD_SEARCH_MAX_LIMIT)),
 });
+
+const documentQuerySchema = z.object({ format: z.enum(DOCUMENT_FORMATS) });
 
 function serializeThread(thread: typeof schema.thread.$inferSelect) {
   return {
@@ -162,12 +179,48 @@ threadRoutes.delete('/:id/permanent', async (c) => {
 threadRoutes.get('/:id/export', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
-  const markdown = await exportThreadMarkdown(thread.id);
+  // Shares the hourly allowance with document exports (file output, v0.9).
+  await consumeFileExport(user.id);
+  const markdown = await exportThreadMarkdown(thread.id, user.id);
 
   return c.body(markdown, 200, {
     'content-type': 'text/markdown; charset=utf-8',
     'content-disposition': `attachment; filename="${exportFilename(thread.title)}"`,
     'cache-control': 'no-store',
+  });
+});
+
+/**
+ * Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX.
+ *
+ * XLSX holds its tables (422 when it has none). Owner only: 404 for anyone else, for
+ * conversations in the trash, user messages and replaced replies. Counts
+ * towards the hourly download allowance and is audited as `message.export`
+ * with the format and size only.
+ */
+threadRoutes.get('/:id/messages/:messageId/export', async (c) => {
+  const user = currentUser(c);
+  const { format } = parseQuery(c, documentQuerySchema);
+  const file = await exportReply({
+    userId: user.id,
+    threadId: c.req.param('id'),
+    messageId: c.req.param('messageId'),
+    format,
+  });
+  await recordAudit({
+    actorUserId: user.id,
+    actorEmail: user.email,
+    action: 'message.export',
+    targetType: 'message',
+    targetId: file.messageId,
+    metadata: { format, threadId: file.threadId, sizeBytes: file.bytes.byteLength },
+    ipAddress: clientIp(c),
+  });
+  return c.body(file.bytes, 200, {
+    'content-type': file.contentType,
+    'content-disposition': file.disposition,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
   });
 });
 
@@ -215,6 +268,57 @@ threadRoutes.patch('/:id/messages/:messageId/active', async (c) => {
   const thread = await getOwnedThread(c.req.param('id'), user.id);
   const result = await activateReply(thread.id, user.id, c.req.param('messageId'));
   return c.json(result);
+});
+
+/**
+ * The compaction in use (its summary and where the verbatim messages start)
+ * and whether a background summary is queued or being made (`pending`).
+ */
+threadRoutes.get('/:id/compaction', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  c.header('cache-control', 'no-store');
+  return c.json(await compactionState(thread.id, user.id));
+});
+
+/**
+ * "Summarise earlier messages now": queues a background summary of the
+ * earlier turns, optionally with instructions for it, using the given model
+ * (the composer's) or the latest reply's, and returns 202 at once with the
+ * same body as GET. A request while one is queued or running is that
+ * request. Never refused because a reply is generating. Owner only (404
+ * otherwise); 422 when there is nothing to summarise yet or the model is too
+ * small to summarise with; 429 when the person's allowance is spent. The
+ * summary counts towards the person's usage.
+ */
+threadRoutes.post('/:id/compact', async (c) => {
+  const user = currentUser(c);
+  const thread = await getOwnedThread(c.req.param('id'), user.id);
+  if (thread.temporary) await assertTemporaryChatAllowed(user.role);
+  const limit = await chatRateLimit(user.id, user.role);
+  if (!limit.allowed)
+    throw rateLimited(
+      'You are sending messages too quickly. Try again in a moment.',
+      limit.retryAfterSeconds,
+    );
+  const input = await parseBody(c, compactThreadSchema);
+  const slug = input.modelSlug ?? (await latestReplyModel(thread.id));
+  if (!slug) throw validationFailed(NOTHING_TO_COMPACT);
+  const model = await resolveModelForRole(slug, user.role);
+  await assertCompactionPossible({
+    user,
+    threadId: thread.id,
+    model,
+    instructions: input.instructions,
+  });
+  await requestCompaction({
+    threadId: thread.id,
+    userId: user.id,
+    modelSlug: model.slug,
+    reason: 'manual',
+    instructions: input.instructions,
+  });
+  return c.json(await compactionState(thread.id, user.id), 202);
 });
 
 threadRoutes.get('/:id', async (c) => {

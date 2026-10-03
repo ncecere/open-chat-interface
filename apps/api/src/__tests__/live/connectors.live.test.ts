@@ -66,6 +66,12 @@ const defaults: Record<string, unknown> = {
   },
   search: { enabled: false, provider: null, baseUrl: null, encryptedApiKey: null, maxResults: 5 },
   chat: { defaultSystemPrompt: null },
+  // The artifact tools (v0.9) have their own suite; keep this one's tool sets exact.
+  roleFeatures: {
+    roles: Object.fromEntries(
+      ['admin', 'auditor', 'user', 'restricted'].map((role) => [role, { artifacts: false }]),
+    ),
+  },
 };
 vi.mock('../../services/settings.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/settings.js')>()),
@@ -1024,6 +1030,74 @@ describe.skipIf(!available)('live MCP connectors', () => {
       const model = script(textStep('Reconnect'));
       await turn(alice, 'Search');
       expect(offered(model)).toEqual([]);
+    });
+
+    it('refreshes once across replicas with rotating refresh tokens, and every caller gets the new token', async () => {
+      const connector = await oauthSetup();
+      await allow(['mcp__docs__search']);
+      await connect(connector.id, alice, 'alice');
+      // Two "replicas": separate module instances, so separate in-process
+      // single-flight maps, sharing only the database.
+      const replicaA = await import('../../services/connectors/oauth.js');
+      vi.resetModules();
+      const replicaB = await import('../../services/connectors/oauth.js');
+      expect(replicaB.connectionAuthFor).not.toBe(replicaA.connectionAuthFor);
+
+      const [row] = await pool.db
+        .select()
+        .from(schema.connector)
+        .where(eq(schema.connector.id, connector.id));
+      const aliceAccount = () =>
+        pool.db
+          .select()
+          .from(schema.connectorAccount)
+          .where(eq(schema.connectorAccount.userId, alice))
+          .then((rows) => rows[0]);
+      const expire = () =>
+        pool.db
+          .update(schema.connectorAccount)
+          .set({ expiresAt: new Date(Date.now() - 1_000) })
+          .where(eq(schema.connectorAccount.userId, alice));
+      const refreshes = () => mcp.oauth.grantTypes.filter((grant) => grant === 'refresh_token');
+      const accessTokenOf = async (auth: { authProvider?: { tokens(): unknown } }) =>
+        ((await auth.authProvider?.tokens()) as { access_token?: string } | undefined)
+          ?.access_token;
+
+      await expire();
+      const issuedBefore = new Set(mcp.oauth.accessTokens.keys());
+      // Slow refresh: both replicas read the expired tokens before either finishes.
+      mcp.oauth.refreshDelayMs = 300;
+      const [first, second] = await Promise.all([
+        replicaA.connectionAuthFor(row!, alice),
+        replicaB.connectionAuthFor(row!, alice),
+      ]);
+      expect(refreshes()).toHaveLength(1);
+      const fresh = await accessTokenOf(first);
+      expect(fresh).toBeTruthy();
+      expect(issuedBefore.has(fresh!)).toBe(false);
+      expect(mcp.oauth.accessTokens.has(fresh!)).toBe(true);
+      expect(await accessTokenOf(second)).toBe(fresh);
+      expect(await aliceAccount()).toMatchObject({ disconnectedReason: null });
+      expect((await aliceAccount())?.expiresAt?.getTime()).toBeGreaterThan(Date.now());
+
+      // A caller still holding the replaced tokens (as after a 401 mid-call) is
+      // refused by the rotating server; it adopts the stored replacement and
+      // refreshes with that rather than disconnecting the person.
+      mcp.oauth.refreshDelayMs = 0;
+      await expire();
+      const replaced = await replicaB.connectionAuthFor(row!, alice);
+      expect(refreshes()).toHaveLength(2);
+      const { auth } = await import('@ai-sdk/mcp');
+      const stale = first.authProvider!;
+      await expect(auth(stale, { serverUrl: row!.url })).resolves.toBe('AUTHORIZED');
+      expect(mcp.oauth.grantTypes.slice(-2)).toEqual(['refresh_token', 'refresh_token']);
+      const latest = await accessTokenOf(first);
+      expect(latest).not.toBe(fresh);
+      expect(latest).not.toBe(await accessTokenOf(replaced));
+      expect(mcp.oauth.accessTokens.has(latest!)).toBe(true);
+      const account = await aliceAccount();
+      expect(account?.encryptedTokens).toBeTruthy();
+      expect(account?.disconnectedReason).toBeNull();
     });
 
     it('disconnects, revoking the token, and audits it', async () => {

@@ -5,6 +5,7 @@ import { loadEnv } from './config/env.js';
 import { type AppBindings, sessionMiddleware } from './middleware/context.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createApiRoutes } from './routes/index.js';
+import { metricsRoutes, observeRequests } from './services/observability/http.js';
 import { APP_VERSION } from './version.js';
 
 export function createApp() {
@@ -12,6 +13,10 @@ export function createApp() {
   const app = new Hono<AppBindings>();
 
   app.use('*', requestId());
+  app.use('*', observeRequests);
+  // Before the session middleware: a scrape carries a token, not a session.
+  // Served at the API root, which the bundled web proxy does not forward.
+  app.route('/metrics', metricsRoutes);
   app.use('*', secureHeaders());
   app.use('*', sessionMiddleware);
 

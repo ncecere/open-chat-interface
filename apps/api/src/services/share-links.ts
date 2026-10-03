@@ -1,5 +1,12 @@
 import { and, asc, desc, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
-import { ERROR_CODES, isToolPart, summarizeToolPart, type UserRole } from '@oci/shared';
+import {
+  ERROR_CODES,
+  isToolPart,
+  MAX_ARTIFACT_TITLE_LENGTH,
+  type PublicArtifact,
+  summarizeToolPart,
+  type UserRole,
+} from '@oci/shared';
 import { db } from '../db/index.js';
 import { AppError, notFound, validationFailed } from '../lib/errors.js';
 import { pathThrough } from './chat/reply-path.js';
@@ -258,6 +265,63 @@ export function sanitizePublicParts(parts: unknown): PublicMessagePart[] {
   });
 }
 
+type Reader = Pick<Parameters<Parameters<typeof db.transaction>[0]>[0], 'select'>;
+
+/**
+ * The artifacts a share shows: those created by a shared reply, each at the
+ * newest version made by a shared reply or by the owner's own edits (for a
+ * snapshot, edits made before the link was created). Versions made by replies
+ * outside the share (later turns, replies a retry replaced) are not shown.
+ * Content and titles are redacted like message text; every renderer shows
+ * HTML and SVG only inside the sandboxed artifact frame.
+ */
+async function publicArtifacts(
+  tx: Reader,
+  messageIds: readonly string[],
+  snapshotAt: Date | null,
+): Promise<PublicArtifact[]> {
+  if (messageIds.length === 0) return [];
+  const shown = new Set(messageIds);
+  const rows = await tx
+    .select({
+      artifactId: schema.artifact.id,
+      messageId: schema.artifact.messageId,
+      sourceKey: schema.artifact.sourceKey,
+      title: schema.artifact.title,
+      kind: schema.artifact.kind,
+      version: schema.artifactVersion.version,
+      source: schema.artifactVersion.source,
+      versionMessageId: schema.artifactVersion.messageId,
+      createdAt: schema.artifactVersion.createdAt,
+      content: schema.artifactVersion.content,
+    })
+    .from(schema.artifact)
+    .innerJoin(schema.artifactVersion, eq(schema.artifactVersion.artifactId, schema.artifact.id))
+    .where(inArray(schema.artifact.messageId, [...messageIds]))
+    .orderBy(
+      asc(schema.artifact.createdAt),
+      asc(schema.artifact.id),
+      desc(schema.artifactVersion.version),
+    );
+  const chosen = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (chosen.has(row.artifactId)) continue;
+    const visible =
+      row.source === 'person'
+        ? snapshotAt === null || row.createdAt.getTime() <= snapshotAt.getTime()
+        : row.versionMessageId !== null && shown.has(row.versionMessageId);
+    if (visible) chosen.set(row.artifactId, row);
+  }
+  return [...chosen.values()].map((row) => ({
+    messageId: row.messageId,
+    sourceKey: row.sourceKey,
+    title: redactCredentials(row.title.slice(0, MAX_ARTIFACT_TITLE_LENGTH)),
+    kind: row.kind,
+    version: row.version,
+    content: redactCredentials(row.content),
+  }));
+}
+
 export async function getPublicShare(slug: string) {
   await assertPublicSharingEnabled();
 
@@ -350,6 +414,12 @@ export async function getPublicShare(slug: string) {
       throw unavailable(latest?.revokedAt ? 'revoked' : 'expired');
     }
 
+    const artifacts = await publicArtifacts(
+      tx,
+      messages.filter((message) => message.role === 'assistant').map((message) => message.id),
+      link.upToMessageId ? link.createdAt : null,
+    );
+
     return {
       thread: {
         title: redactCredentials(link.title.slice(0, 200)),
@@ -361,6 +431,7 @@ export async function getPublicShare(slug: string) {
         parts: sanitizePublicParts(message.parts),
         createdAt: message.createdAt.toISOString(),
       })),
+      artifacts,
       snapshot: link.upToMessageId !== null,
       expiresAt: link.expiresAt?.toISOString() ?? null,
     };

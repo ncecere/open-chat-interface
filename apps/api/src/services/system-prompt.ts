@@ -1,12 +1,31 @@
 import { eq, schema } from '@oci/db';
+import type { UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
+import { artifactGuidance } from './artifacts/guidance.js';
 import { getSetting } from './settings.js';
 
 /**
  * Composes the system prompt from the instance default plus the user's
- * customization settings.
+ * customization settings. With a conversation `context`, it ends with the
+ * artifacts guidance when the person's role allows artifacts.
  */
-export async function buildSystemPrompt(userId: string, userName: string): Promise<string> {
+export async function buildSystemPrompt(
+  userId: string,
+  userName: string,
+  context?: { role: UserRole; threadId: string; artifactTools: boolean },
+): Promise<string> {
+  const base = await basePrompt(userId, userName);
+  if (!context) return base;
+  const artifacts = await artifactGuidance({
+    role: context.role,
+    userId,
+    threadId: context.threadId,
+    tools: context.artifactTools,
+  });
+  return artifacts ? `${base}\n\n${artifacts}` : base;
+}
+
+async function basePrompt(userId: string, userName: string): Promise<string> {
   const [chat, preference] = await Promise.all([
     getSetting('chat'),
     db

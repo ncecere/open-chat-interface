@@ -28,6 +28,8 @@ const ROLE_FEATURE_DENIED: Record<RoleFeatureKey, string> = {
   temporaryChat: 'Temporary chats are not available for your role',
   branching: 'Branching is not available for your role',
   projects: 'Projects are not available for your role',
+  memory: 'Memory is not available for your role',
+  artifacts: 'Artifacts are not available for your role',
 };
 
 /**
@@ -76,6 +78,10 @@ export function combineFeatures(
     temporaryChat: role.temporaryChat && Boolean(instance.temporaryChat),
     branching: role.branching && Boolean(instance.branching),
     projects: role.projects,
+    // Each person must also opt in; see services/memory/access.ts.
+    memory: role.memory && Boolean(instance.memory),
+    // Like projects, artifacts have no instance-wide switch: the role decides.
+    artifacts: role.artifacts,
     reasoningEfforts: [...role.reasoningEfforts],
   };
 }

@@ -21,7 +21,11 @@ export type SettingKey =
   | 'retention'
   | 'rateLimits'
   | 'roleFeatures'
-  | 'roleTools';
+  | 'roleTools'
+  | 'embeddings'
+  | 'reranking'
+  | 'backups'
+  | 'compliance';
 
 export interface BrandingSettings {
   appName: string;
@@ -74,6 +78,8 @@ export interface FeatureSettings {
   webSearch: boolean;
   attachments: boolean;
   branching: boolean;
+  /** User memory (v0.9). Absent before v0.9; read as off. */
+  memory: boolean;
 }
 
 /**
@@ -90,7 +96,7 @@ export function normalizeAuthSettings(value: AuthSettings): AuthSettings {
   };
 }
 
-/** Drops the retired persona flag from settings written by older releases. */
+/** Drops retired flags and reads a missing memory switch (before v0.9) as off. */
 export function normalizeFeatureSettings(value: FeatureSettings): FeatureSettings {
   // Retired switches that never controlled anything. Dropping them on read
   // also removes them from storage the next time features are saved.
@@ -100,7 +106,8 @@ export function normalizeFeatureSettings(value: FeatureSettings): FeatureSetting
     mcp: _mcp,
     ...normalized
   } = value as FeatureSettings & { personas?: boolean; canvas?: boolean; mcp?: boolean };
-  return normalized;
+  // Memory is off unless an administrator switched it on.
+  return { ...normalized, memory: normalized.memory === true };
 }
 
 export interface S3StorageSettings {
@@ -170,6 +177,10 @@ export interface ChatSettings {
   defaultEffort?: ReasoningEffort;
   /** Model steps per reply when tools are used. Absent before v0.8; read as the default (8). */
   maxToolSteps?: number;
+  /** Summarise earlier turns when a conversation outgrows the model. Absent before v0.9; read as on. */
+  autoCompact?: boolean;
+  /** Diagram Design guidance in the artifacts prompt. Absent before v0.9; read as on. */
+  diagramGuidance?: boolean;
 }
 
 /**
@@ -182,6 +193,8 @@ export interface StoredRetentionSettings {
   exemptPinnedThreads?: boolean;
   usageEventRetentionDays?: number;
   auditLogRetentionDays?: number;
+  /** User memory (v0.9): delete memories not updated for this many days; null keeps them. */
+  memoryRetentionDays?: number | null;
   /** Presentation only; policy timezones govern when limits actually reset. */
   displayTimezone?: string;
 }
@@ -217,6 +230,58 @@ export interface StoredRoleFeatureSettings {
   roles?: Partial<Record<UserRole, Partial<RoleFeatures>>>;
 }
 
+/**
+ * Meaning-based search for project files (v0.9). Sparse: never saved means
+ * off. Normalised by `embeddingsSettings` in services/embeddings/config.ts.
+ */
+export interface StoredEmbeddingsSettings {
+  enabled?: boolean;
+  providerId?: string | null;
+  modelId?: string | null;
+  dimensions?: number | null;
+  inputPriceMicros?: number | null;
+}
+
+/**
+ * Reranking of project search results (v0.9). Sparse: never saved means off.
+ * Normalised by `rerankingSettings` in services/reranking/config.ts.
+ */
+export interface StoredRerankingSettings {
+  enabled?: boolean;
+  providerId?: string | null;
+  modelId?: string | null;
+  searchPriceMicros?: number | null;
+}
+
+/**
+ * Automated backups (v0.9). Sparse: never saved means off. Normalised by
+ * `backupSettings` in services/backups/settings.ts.
+ */
+export interface StoredBackupSettings {
+  enabled?: boolean;
+  hourUtc?: number;
+  destination?: 'storage' | 'separate';
+  prefix?: string;
+  s3?: Partial<S3StorageSettings>;
+  keepDaily?: number;
+  keepWeekly?: number;
+}
+
+/**
+ * Compliance export (v0.9). Sparse: never saved means off. Normalised by
+ * `complianceSettings` in services/compliance/settings.ts.
+ */
+export interface StoredComplianceSettings {
+  enabled?: boolean;
+  schedule?: 'hourly' | 'daily';
+  hourUtc?: number;
+  destination?: 'storage' | 'separate';
+  prefix?: string;
+  s3?: Partial<S3StorageSettings>;
+  includeContent?: boolean;
+  keepDays?: number | null;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -229,6 +294,10 @@ interface SettingsMap {
   rateLimits: StoredRateLimitSettings;
   roleFeatures: StoredRoleFeatureSettings;
   roleTools: StoredRoleToolSettings;
+  embeddings: StoredEmbeddingsSettings;
+  reranking: StoredRerankingSettings;
+  backups: StoredBackupSettings;
+  compliance: StoredComplianceSettings;
 }
 
 /**

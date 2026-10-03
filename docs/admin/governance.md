@@ -19,8 +19,8 @@ For each role:
   provider) the role can see. Visibility is set per model on
   [Providers & Models](models-providers.md).
 - **Features** — editable switches for web search, file attachments, share
-  links, temporary chats, branching and projects, plus the reasoning levels the
-  role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
+  links, temporary chats, branching, projects and artifacts, plus the reasoning
+  levels the role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).
 - **Fixed rules** — what is always true for the role and no setting changes:
   administrators have full access; auditors can view administration but not
   change it.
@@ -36,7 +36,8 @@ account), and the cost and tokens reserved while a response generates.
 
 Each role has its own switches for **web search**, **file attachments**,
 **share links**, **temporary chats**, **branching** (forking a conversation
-or editing an earlier message into a new branch) and **projects**. A role switch
+or editing an earlier message into a new branch), **projects** and **user
+memory**. A role switch
 can only narrow what the instance offers. Somebody can use a feature when both
 of these are on:
 
@@ -60,13 +61,15 @@ shown without effort control.
 Out of the box the switches reproduce the rules that were fixed before they
 were configurable: the `restricted` role cannot upload attachments, create
 share links or start temporary chats, and every other role can use everything
-the instance offers, at every reasoning level. Projects, added later, follow the
-same line and are off for `restricted` until you turn them on. Saving sends only
+the instance offers, at every reasoning level. Projects, user memory and
+artifacts, added later, follow the same line and are off for `restricted`
+until you turn them on; user memory is also off instance-wide by default.
+Saving sends only
 the fields you changed, and each save is recorded in the audit log as
 `role.features.update` with the previous and new values. Auditors see the
 switches but cannot change them. API: `PUT /api/admin/roles/:role` with any of
 `webSearch`, `attachments`, `shareLinks`, `temporaryChat`, `branching`,
-`projects` (booleans) and `reasoningEfforts` (a list that must include
+`projects`, `memory`, `artifacts` (booleans) and `reasoningEfforts` (a list that must include
 `instant`).
 
 ### Projects
@@ -102,6 +105,83 @@ switch alone decides. Governance follows the features projects reuse:
 The level a new conversation starts at is set instance-wide as **Default
 reasoning level** on [General settings](instance-settings.md). When the chosen
 model or the person's role does not allow it, the composer starts at Instant.
+
+### User memory
+
+[Memory](../user/memory.md) is a list of short notes about a person (at most
+200, each up to 500 characters) that OCI adds to their system prompt. It takes
+three switches, all off for a new instance: **User memory** under
+**Appearance & features → General** (instance-wide, off by default), the
+role's **User memory** switch here (on for every role except `restricted`, but
+only effective while the instance switch is on), and each person's own **Use
+memory** in Settings → Memory (off by default). Notes are read and the tools
+offered only when all three are on, and never in temporary chats.
+
+- **How notes are made.** People write them in Settings → Memory. With a
+  `tool_calling` model, the built-in `remember` and `forget` tools let the
+  model save and remove notes. They are not listed under the role's tools
+  below: the role's **User memory** switch governs them. They need no
+  approval, although they write data, because they change only the person's
+  own notes inside OCI, the person opted in, and every change is shown in the
+  reply with an **Undo** and listed in Settings.
+- **Context.** Notes are appended to the system prompt after the instance
+  prompt, the person's personalisation and any project instructions, newest
+  first, in a delimited section that presents them as notes about the person,
+  not instructions. They take at most 5% of the model's input budget and never
+  more than 8 KiB; older notes that do not fit are left out. A compaction
+  summary follows them and is budgeted after them.
+- **Switching it off** (instance or role) stops notes being read or written
+  at once. People keep their notes and can still list, delete and export them;
+  adding and editing are refused with `403`.
+- **Retention.** **Memory retention** on [Retention](#retention) deletes notes
+  not updated for that many days. Off by default.
+- **Audit.** `memory.add`, `memory.update` and `memory.delete` record counts,
+  the source (`tool` or `person`), how the change was made (`tool`,
+  `settings`, `undo` or `retention`) and ids, never the text.
+  `memory.settings.update` records a person switching memory on or off.
+  Retention writes one `memory.delete` per run with the number of notes and
+  people affected.
+- **Export.** A person's full export includes their notes as `memory.json`.
+  Deleting an account deletes its notes.
+
+### Artifacts
+
+[Artifacts](../user/artifacts.md) (v0.9) keep HTML pages, SVG images, Mermaid
+diagrams and documents from replies as versioned objects. There is no
+instance-wide switch: the role's **Artifacts** switch alone decides (on for
+every role except `restricted`).
+
+- **What it controls.** With the switch on, finished replies' HTML, SVG and
+  Mermaid blocks are saved as artifacts; tool-capable models are offered
+  `create_artifact` and `update_artifact`; the system prompt gains a short
+  section on how to make them; and people can edit Markdown documents. With it
+  off, none of these happen and an edit is refused with `403` ("Artifacts are
+  not available for your role"); existing artifacts stay readable by their
+  owner.
+- **Artifact tools** change only OCI's own data in the current conversation,
+  so they need no approval and are not listed under the role's tools. Each call
+  is still a `tool.call` audit event (kind `read`).
+- **Sandbox.** HTML and SVG run in a frame with `sandbox="allow-scripts"` and
+  no `allow-same-origin`, under a Content-Security-Policy that allows no
+  network access, served from `/artifact-frame.html`. Share links use the same
+  frame. A reverse proxy in front of OCI must serve that one path with its own
+  policy and allow it to be framed by OCI itself (see
+  [Operations](../OPERATIONS.md#artifacts-migration-0032)).
+- **Limits.** A version is at most 512 KB, an artifact has at most 100
+  versions and a conversation at most 200 artifacts.
+- **Storage, retention, export.** Every version counts towards the owner's
+  [storage allowance](#storage-allowance) while the conversation is not in the
+  trash. Artifacts are deleted with their conversation (trash purge,
+  retention, temporary chats, account deletion), included with all versions in
+  the JSON export, and shared through the conversation's share link at the
+  shared version, with credentials redacted like message text.
+- **Diagram guidance.** **Editorial diagrams** on
+  [General settings](instance-settings.md#general) (on by default) asks models
+  to draw diagrams as SVG artifacts following the
+  [Diagram Design](https://github.com/cathrynlavery/diagram-design) style guide
+  (MIT, Cathryn Lavery), using the instance's accent colour. Turn it off to
+  keep only the general artifact guidance. API: `PATCH /api/admin/settings`
+  with `{ "diagramGuidance": false }`.
 
 ### Tools
 
@@ -225,6 +305,9 @@ limit; a blank per-file size falls back to the instance upload limit on
 [Storage](operations.md#storage). **Enforce allowance** switches the allowance off without losing the values; a
 role with nothing saved is unlimited. Set on **People → Roles & access**.
 
+Artifact versions count towards total storage (not towards the file count)
+while their conversation is not in the trash.
+
 Storage is a **gauge, not a flow**: it measures what somebody holds now, not
 what they have ever uploaded. In-progress uploads reserve space. Deleting files
 or moving their conversation to trash frees allowance immediately, even while
@@ -273,11 +356,18 @@ entries are kept. Each field shows
 - **Usage history** — per-message usage rows. Daily totals are kept regardless.
 - **Reporting timezone** — where a day starts and ends on the Usage page. Budgets
   reset on their own timezone, which this does not change.
+- **Memory retention** — [user memory](#user-memory) notes not updated for
+  this long are deleted by a daily job; blank (the default) keeps them until
+  the person deletes them.
 - **Audit log** — how long the record of administrative action survives.
   Check what your institution requires before shortening this. Access-control
   and security changes are kept regardless: account creation, edits and
   deletion, role changes (including bulk role, ban and unban), provider and
-  single sign-on changes, and sign-in policy changes.
+  single sign-on changes, sign-in policy changes, webhook endpoint changes,
+  backup and compliance export settings changes, and legal holds.
+
+People on [legal hold](compliance.md#legal-hold) are skipped by conversation,
+trash, audit and memory retention until the hold is lifted.
 
 Retention is easier to introduce early and shorten later than to impose on an
 instance where people have accumulated two years of work.

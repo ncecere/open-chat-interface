@@ -7,40 +7,78 @@ import { cn } from '~/lib/utils';
  * bundle. Loading it on demand keeps that cost out of the initial payload; the
  * fallback preserves the text so nothing disappears while it resolves.
  */
-const StreamdownMarkdown = lazy(() =>
+const loadRenderer = () =>
   Promise.all([
     import('streamdown'),
     import('@streamdown/code'),
     import('@streamdown/math'),
     import('~/components/chat/mermaid-plugin'),
-  ]).then(([{ Streamdown }, { code }, { createMathPlugin }, { createEditorialMermaidPlugin }]) => {
-    // Single-dollar inline math is off by default, but models commonly emit it.
-    // Mermaid itself loads only when a diagram is first rendered.
-    const plugins = {
-      code,
-      math: createMathPlugin({ singleDollarTextMath: true }),
-      mermaid: createEditorialMermaidPlugin(),
-    };
+  ]);
 
-    return {
-      default: ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
-        <Streamdown
-          plugins={plugins}
-          className={className}
-          // The reference interface shows plain code without a gutter.
-          lineNumbers={false}
-          linkSafety={MARKDOWN_LINK_SAFETY}
-          {...(skipHtml ? { skipHtml } : {})}
-          {...(urlTransform
-            ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
-            : {})}
-        >
-          {normalizeMathDelimiters(children)}
-        </Streamdown>
-      ),
-    };
-  }),
+const StreamdownMarkdown = lazy(() =>
+  loadRenderer().then(
+    ([
+      { Streamdown, defaultRehypePlugins },
+      { code },
+      { createMathPlugin },
+      { createEditorialMermaidPlugin },
+    ]) => {
+      const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
+      // Single-dollar inline math is off by default, but models commonly emit it.
+      // Mermaid itself loads only when a diagram is first rendered.
+      const plugins = {
+        code,
+        math: createMathPlugin({ singleDollarTextMath: true }),
+        mermaid: createEditorialMermaidPlugin(),
+      };
+
+      return {
+        default: ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
+          <Streamdown
+            plugins={plugins}
+            className={className}
+            // The reference interface shows plain code without a gutter.
+            lineNumbers={false}
+            linkSafety={MARKDOWN_LINK_SAFETY}
+            // Share pages pass their own URL policy and keep the visible marker.
+            {...(!skipHtml && !urlTransform && ownerRehypePlugins
+              ? { rehypePlugins: ownerRehypePlugins }
+              : {})}
+            {...(skipHtml ? { skipHtml } : {})}
+            {...(urlTransform
+              ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
+              : {})}
+          >
+            {normalizeMathDelimiters(children)}
+          </Streamdown>
+        ),
+      };
+    },
+  ),
 );
+
+type Pluggable = NonNullable<
+  ComponentProps<typeof import('streamdown').Streamdown>['rehypePlugins']
+>[number];
+
+/**
+ * Streamdown's own rehype plugins (raw HTML, sanitizing, hardening), with one
+ * change for a person's own conversation: a link the hardening refuses (a
+ * relative path, or a scheme such as `sandbox:` that models invent) shows as
+ * its plain text instead of "text [blocked]". Its destination is still
+ * dropped. Null when the defaults are not in the expected shape.
+ */
+function conversationRehypePlugins(
+  defaults: Record<string, Pluggable> | undefined,
+): Pluggable[] | null {
+  const harden = defaults?.harden;
+  if (!defaults || !Array.isArray(harden) || typeof harden[1] !== 'object') return null;
+  return Object.entries(defaults).map(([name, plugin]) =>
+    name === 'harden'
+      ? ([harden[0], { ...(harden[1] as object), linkBlockPolicy: 'text-only' }] as Pluggable)
+      : plugin,
+  );
+}
 
 /**
  * Rewrites LaTeX bracket delimiters into the dollar forms the math plugin
@@ -63,6 +101,65 @@ export function normalizeMathDelimiters(markdown: string): string {
     })
     .join('');
 }
+
+/**
+ * One fenced block of source code, highlighted by the same Streamdown code
+ * plugin (Shiki, the same themes) as code blocks in replies, from the same
+ * lazily loaded chunk. Static mode: the text is never treated as unfinished
+ * Markdown. The block's own copy and download controls are hidden; the caller
+ * offers its own.
+ */
+const StreamdownCode = lazy(() =>
+  loadRenderer().then(([{ Streamdown }, { code }]) => {
+    const plugins = { code };
+    return {
+      default: ({ source, language, className }: HighlightedCodeProps) => (
+        <Streamdown
+          plugins={plugins}
+          mode="static"
+          controls={false}
+          lineNumbers={false}
+          className={className}
+        >
+          {codeFence(source, language)}
+        </Streamdown>
+      ),
+    };
+  }),
+);
+
+/** A fenced code block that holds `source` exactly, whatever backticks it contains. */
+function codeFence(source: string, language: string): string {
+  const longest = Math.max(0, ...(source.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  return `${fence}${language}\n${source}\n${fence}`;
+}
+
+interface HighlightedCodeProps {
+  source: string;
+  /** A Shiki language id or alias. */
+  language: string;
+  className?: string;
+}
+
+/** Source code highlighted like a reply's code blocks; plain text until the highlighter loads. */
+export const HighlightedCode = memo(function HighlightedCode({
+  source,
+  language,
+  className,
+}: HighlightedCodeProps) {
+  return (
+    <Suspense
+      fallback={
+        <pre className={cn('m-0 whitespace-pre-wrap break-words font-mono text-xs', className)}>
+          <code>{source}</code>
+        </pre>
+      }
+    >
+      <StreamdownCode source={source} language={language} className={className} />
+    </Suspense>
+  );
+});
 
 export interface MarkdownProps {
   children: string;

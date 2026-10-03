@@ -5,6 +5,7 @@ import {
   Boxes,
   ChartColumn,
   Cpu,
+  DatabaseBackup,
   FileText,
   Gauge,
   LayoutDashboard,
@@ -14,6 +15,7 @@ import {
   Megaphone,
   Palette,
   Plug,
+  Scale,
   ScrollText,
   Search,
   Send,
@@ -21,6 +23,7 @@ import {
   ShieldCheck,
   UserCog,
   Users,
+  Webhook,
 } from 'lucide-react';
 
 /** Every static admin route the router knows about, so a typo fails typecheck. */
@@ -69,6 +72,7 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     items: [
       { to: '/admin/search', label: 'Web search', icon: Search },
       { to: '/admin/connectors', label: 'Connectors', icon: Plug },
+      { to: '/admin/webhooks', label: 'Webhooks', icon: Webhook },
     ],
   },
   {
@@ -84,6 +88,8 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     items: [
       { to: '/admin/storage', label: 'Storage', icon: Boxes },
       { to: '/admin/retention', label: 'Retention', icon: Archive },
+      { to: '/admin/backups', label: 'Backups', icon: DatabaseBackup },
+      { to: '/admin/compliance', label: 'Compliance', icon: Scale },
       { to: '/admin/health', label: 'System health', icon: Activity },
     ],
   },

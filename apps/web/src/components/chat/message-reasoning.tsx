@@ -1,40 +1,90 @@
 import { Brain, ChevronDown, Info } from 'lucide-react';
 import { memo, useState } from 'react';
 import { Markdown } from '~/components/chat/markdown';
+import { useMediaQuery } from '~/hooks/use-media-query';
 import { cn } from '~/lib/utils';
 
+/** How much of the end of the reasoning the live preview keeps: a little more than it shows. */
+const PREVIEW_CHARS = 600;
+
+/**
+ * The latest reasoning as plain text for the live preview: a bounded slice of
+ * the end, with the commonest Markdown markers dropped. Cheap enough to run on
+ * every streamed token, unlike rendering Markdown.
+ */
+export function reasoningTail(text: string): string {
+  const recent = text.length > PREVIEW_CHARS ? text.slice(-PREVIEW_CHARS) : text;
+  return recent
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+}
+
+/**
+ * A reply's reasoning: a disclosure, collapsed by default.
+ *
+ * While the model is still thinking (`thinking`), the collapsed disclosure
+ * shows a small window under its header with the latest few lines, pinned to
+ * the end as they arrive. It is decorative (hidden from screen readers, who
+ * get the disclosure and, expanded, the full text) and goes once the thinking
+ * is over. Expanding or collapsing it is the person's choice and wins over
+ * this for the rest of the reply.
+ */
 export const ReasoningPanel = memo(function ReasoningPanel({
   text,
-  streaming,
-  answerStarted,
+  thinking,
 }: {
   text: string;
-  streaming: boolean;
-  answerStarted: boolean;
+  /** The reasoning is still being written: nothing has followed it yet. */
+  thinking: boolean;
 }) {
   const [choice, setChoice] = useState<boolean | null>(null);
-
-  // Expand while reasoning is all we have; collapse once the answer starts.
-  // An explicit user choice always wins.
-  const open = choice ?? (streaming && !answerStarted);
+  const open = choice ?? false;
+  const preview = thinking && choice === null;
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 
   return (
-    <div className="mb-6">
+    <div className="mb-6" data-reasoning={thinking ? 'thinking' : 'done'}>
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setChoice(!open)}
         className="flex w-fit items-center gap-2 text-left text-[0.8125rem] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
       >
-        <Brain className={cn('size-4 shrink-0', streaming && 'animate-pulse')} />
-        <span>{streaming ? 'Thinking...' : 'Reasoning'}</span>
-        <ChevronDown
+        <Brain
+          aria-hidden="true"
+          data-thinking-indicator={thinking ? '' : undefined}
           className={cn(
-            'size-3.5 text-[var(--text-muted)] transition-transform',
+            'size-4 shrink-0',
+            thinking && !reduceMotion && 'motion-safe:animate-pulse',
+          )}
+        />
+        <span>{thinking ? 'Thinking…' : 'Reasoning'}</span>
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            'size-3.5 text-[var(--text-muted)] transition-transform motion-reduce:transition-none',
             open && 'rotate-180',
           )}
         />
       </button>
+      {preview && (
+        // A pointer shortcut only: the header button is the keyboard route.
+        <div
+          aria-hidden="true"
+          data-reasoning-preview=""
+          onClick={() => setChoice(true)}
+          className={cn(
+            // About three lines, the newest at the bottom; older ones fade out at the top.
+            'mt-2 flex h-[3.75rem] cursor-pointer flex-col justify-end overflow-hidden',
+            'text-[0.75rem] leading-5 text-[var(--text-muted)]',
+            '[mask-image:linear-gradient(to_bottom,transparent,black_1.75rem)]',
+          )}
+        >
+          <p className="m-0 whitespace-pre-line break-words">{reasoningTail(text)}</p>
+        </div>
+      )}
       {open && (
         <>
           <div className="mt-4 rounded-lg bg-black/15 px-3 py-3 text-[0.9375rem] leading-7 text-[var(--text-secondary)]">

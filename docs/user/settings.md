@@ -32,7 +32,12 @@ Being specific pays off more than being thorough. Three precise sentences beat a
 paragraph of generalities.
 
 Further down, **Behaviour options** control the interface itself — fonts,
-density, and whether to reduce visual flourish.
+density, and whether to reduce visual flourish. Under **Visual options**,
+**Wrap Long Code Lines** wraps code instead of scrolling it sideways, and
+**Open artifacts automatically** (on by default) opens the artifact panel
+beside the conversation when a reply starts writing a page, image, diagram or
+document, so you can watch it being written. It applies on wide screens only;
+see [Artifacts](artifacts.md). Both choices are kept in this browser.
 
 ## History and sync
 
@@ -50,6 +55,11 @@ when the oldest conversations will be removed.
 The **Your data** section at the bottom downloads all of your conversations and
 files at once, and imports history from ChatGPT or Claude. See
 [Your data](your-data.md).
+
+## Memory
+
+Your own switch for memory, and every note OCI keeps about you, to add, edit
+and delete. See [Memory](memory.md).
 
 ## Models
 

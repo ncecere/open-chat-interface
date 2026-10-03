@@ -159,6 +159,31 @@ function topInView(page: Page, text: string) {
   }, text);
 }
 
+/** Whether the top bar's floating button groups cover the latest question with this text. */
+function coveredByTopBar(page: Page, text: string) {
+  return page.evaluate((wanted) => {
+    const rows = [...document.querySelectorAll<HTMLElement>('[aria-label="Your message"]')];
+    const bubble = rows.findLast((row) => row.textContent?.includes(wanted))?.firstElementChild;
+    if (!bubble) return null;
+    const question = bubble.getBoundingClientRect();
+    // The top bar's floating button groups, found by their buttons.
+    const groups = ['Download this conversation', 'Open sidebar'].flatMap((name) => {
+      const button = document.querySelector(`[aria-label="${name}"]`);
+      return button?.parentElement ? [button.parentElement] : [];
+    });
+    if (groups.length === 0) return null;
+    return groups.some((control) => {
+      const box = control.getBoundingClientRect();
+      return (
+        box.left < question.right &&
+        box.right > question.left &&
+        box.top < question.bottom &&
+        box.bottom > question.top
+      );
+    });
+  }, text);
+}
+
 /** The message at the top of the view and where it sits, to compare reading positions. */
 function visibleAnchor(page: Page) {
   return scroller(page).evaluate((node) => {
@@ -212,6 +237,8 @@ test('a sent question moves to the top and the view follows the reply', async ({
   const pinnedTop = await topInView(page, 'Scroll behaviour question one');
   expect(pinnedTop).toBeGreaterThanOrEqual(0);
   expect(pinnedTop).toBeLessThan(80);
+  // Clear of the top bar's floating controls (on a phone the view runs under them).
+  expect(await coveredByTopBar(page, 'Scroll behaviour question one')).toBe(false);
 
   // Once the reply outgrows the view, the view follows it.
   await expect
@@ -252,9 +279,38 @@ test('scrolling up stops following until the reader jumps back', async ({ page }
 test('a conversation started from the home page also follows its first reply', async ({ page }) => {
   await send(page, 'Scroll behaviour from home');
   await expect(page).toHaveURL(new RegExp(`/chat/${NEW_THREAD_ID}$`));
+  // The conversation replaces the home composer; the cursor stays in the new one.
+  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeFocused();
   await expect
     .poll(() => topInView(page, 'Scroll behaviour from home'), { timeout: 15_000 })
     .toBeLessThan(0);
   await expectFollowing(page);
   await expect(stopButton(page)).toHaveCount(0, { timeout: 20_000 });
+});
+
+test('the page itself never scrolls, so the composer stays in view', async ({ page }) => {
+  await openLongConversation(page);
+  await send(page, 'Scroll behaviour question three');
+  await expect(stopButton(page)).toHaveCount(0, { timeout: 20_000 });
+
+  // Screen-reader-only text inside messages is positioned; it once escaped the
+  // conversation scroller, so scrolling past its end moved the whole page and
+  // carried the composer off screen.
+  const mainScroll = () =>
+    page.evaluate(() => {
+      const main = document.getElementById('main-content');
+      return main ? { overflow: main.scrollHeight - main.clientHeight, top: main.scrollTop } : null;
+    });
+  expect(await mainScroll()).toEqual({ overflow: 0, top: 0 });
+
+  // At the very top, the first message sits clear of the top bar's floating controls.
+  await scroller(page).evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  expect(await coveredByTopBar(page, 'History 0.')).toBe(false);
+
+  await scroller(page).hover();
+  for (let turn = 0; turn < 4; turn += 1) await page.mouse.wheel(0, 4000);
+  expect((await mainScroll())?.top).toBe(0);
+  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeInViewport();
 });

@@ -2,6 +2,14 @@
 @import "katex/dist/katex.min.css";
 @import "./tokens.css";
 
+/*
+ * `dark:` follows OCI's theme (the `dark` class the theme provider sets on the
+ * root), not the operating system's colour scheme: code highlighting uses it,
+ * and a light system with OCI's dark theme otherwise draws light-theme colours
+ * on a dark background.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   * {
     border-color: var(--border-subtle);

@@ -332,6 +332,40 @@ describe.skipIf(!available)('live Postgres: full account export', () => {
     expect(audits[0]?.count).toBeGreaterThan(0);
   });
 
+  it('includes the person’s memories, newest first, and nobody else’s', async () => {
+    await live.db.execute(sql`
+      insert into user_memory (user_id, content, source, thread_id, updated_at)
+      values (${ownerId}, 'Prefers metric units', 'person', null, '2026-01-01T00:00:00Z'),
+             (${ownerId}, 'Teaches chemistry', 'tool', ${activeThread}, '2026-02-01T00:00:00Z'),
+             (${strangerId}, 'Stranger memory', 'person', null, '2026-03-01T00:00:00Z')
+    `);
+    try {
+      const { files } = await download(ownerId);
+      const memory = JSON.parse(strFromU8(files['memory.json'] as Uint8Array));
+      expect(
+        memory.memories.map((entry: { content: string; source: string }) => [
+          entry.content,
+          entry.source,
+        ]),
+      ).toEqual([
+        ['Teaches chemistry', 'tool'],
+        ['Prefers metric units', 'person'],
+      ]);
+      expect(memory.memories[0].threadId).toBe(activeThread);
+      const manifest = JSON.parse(strFromU8(files['manifest.json'] as Uint8Array));
+      expect(manifest.counts.memories).toBe(2);
+      expect(strFromU8(files['README.txt'] as Uint8Array)).toContain('Memories: 2');
+
+      const other = await download(strangerId);
+      const theirs = JSON.parse(strFromU8(other.files['memory.json'] as Uint8Array));
+      expect(theirs.memories.map((entry: { content: string }) => entry.content)).toEqual([
+        'Stranger memory',
+      ]);
+    } finally {
+      await live.db.execute(sql`delete from user_memory`);
+    }
+  });
+
   it('gives another person an export of only their own data', async () => {
     const { names, files } = await download(strangerId);
     expect(names.filter((name) => name.startsWith('conversations/'))).toEqual([

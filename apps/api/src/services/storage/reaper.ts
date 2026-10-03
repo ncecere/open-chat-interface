@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
+import { BACKUP_STORAGE_PREFIX, COMPLIANCE_STORAGE_PREFIX } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { getStorageDriver } from './index.js';
@@ -126,9 +127,15 @@ export async function reconcileStorage(options?: {
     cursor = page.cursor;
 
     // Health-check probes write and remove their own objects; a listing that
-    // catches one mid-flight must not treat it as an orphan.
+    // catches one mid-flight must not treat it as an orphan. Backups kept in
+    // the attachment bucket have no attachment row by design, and neither
+    // do compliance exports.
     const candidates = page.objects.filter(
-      (object) => object.lastModified < cutoff && !object.key.startsWith('.oci-health-check/'),
+      (object) =>
+        object.lastModified < cutoff &&
+        !object.key.startsWith('.oci-health-check/') &&
+        !object.key.startsWith(BACKUP_STORAGE_PREFIX) &&
+        !object.key.startsWith(COMPLIANCE_STORAGE_PREFIX),
     );
     if (candidates.length === 0) continue;
 

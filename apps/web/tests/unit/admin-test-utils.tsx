@@ -127,6 +127,7 @@ export function roleAccessFixture(
       webSearch: false,
       branching: true,
       projects: role !== 'restricted',
+      memory: false,
     },
     // The built-in defaults: restricted cannot upload, share, go temporary or use projects.
     roleFeatures: {
@@ -136,6 +137,7 @@ export function roleAccessFixture(
       temporaryChat: role !== 'restricted',
       branching: true,
       projects: role !== 'restricted',
+      memory: role !== 'restricted',
       reasoningEfforts: ['instant', 'low', 'medium', 'high'],
     },
     // Built-in default: read tools on for every role except restricted.
@@ -178,6 +180,7 @@ export function configSourcesFixture() {
       exemptPinnedThreads: 'default',
       usageEventRetentionDays: 'environment',
       auditLogRetentionDays: 'default',
+      memoryRetentionDays: 'default',
       displayTimezone: 'default',
     },
     rateLimits: {

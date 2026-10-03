@@ -29,12 +29,44 @@ says the limit was reached. A higher limit lets a model research more thoroughly
 cost of more usage per reply. API: `PATCH /api/admin/settings` with
 `maxToolSteps`.
 
+**Summarise long conversations** (on by default): once a conversation takes
+up about three quarters of its model's input budget, its earlier messages are
+summarised in the background by the conversation's own model, and later turns
+are sent the summary in their place instead of leaving them out. Summaries are
+never made while a reply waits, and never block or refuse sending, retrying or
+approving. Each summary counts towards the person's usage as its own usage
+event (no message is counted) and is skipped, and tried again later, while the
+person's allowance is spent. Off, no summary is queued automatically (requests
+already queued are dropped) and the oldest turns are left out as in v0.8;
+people can still use **Summarise earlier messages now** themselves, and
+summaries made earlier stay in use. The single retry after a provider reports
+an input as too long leaves older turns out and does not depend on this
+switch. Messages are never changed or deleted either way; see
+[Long conversations](../user/conversations.md#long-conversations). API:
+`PATCH /api/admin/settings` with `autoCompact`.
+
+**Editorial diagrams** (on by default): when a person's role allows
+[artifacts](../user/artifacts.md), models are asked to draw diagrams as SVG
+artifacts following the [Diagram Design](https://github.com/cathrynlavery/diagram-design)
+style guide (MIT, Cathryn Lavery), mapped to the instance's accent colour. Off,
+only the general artifact guidance remains. Artifacts themselves are switched
+per role ([Governance](governance.md#artifacts)). API: `PATCH
+/api/admin/settings` with `diagramGuidance`.
+
 **Features** turn capabilities off instance-wide: share links, temporary chats,
-conversation branching, and file attachments. Turning one off removes it from
+conversation branching, file attachments and user memory. Turning one off removes it from
 the interface rather than leaving a control that fails. Each role can be
 narrowed further on
 [Roles & access](governance.md#features-and-reasoning-levels); a feature is
 available only when both allow it.
+
+**User memory** is off by default. Switched on, people can opt in (Settings →
+Memory) to short notes about themselves that are added to their conversations
+and that models with tools can save and remove. Each role must also allow it;
+see [User memory](governance.md#user-memory) for limits, context budget,
+retention and audit. API: `PATCH /api/admin/settings` with
+`features.memory`; a client that leaves `memory` out of `features` leaves it
+unchanged.
 
 Two things that used to live here have moved:
 

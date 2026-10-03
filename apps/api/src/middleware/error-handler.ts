@@ -4,6 +4,11 @@ import { HTTPException } from 'hono/http-exception';
 import { ZodError } from 'zod';
 import { AppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import {
+  HELD_ACCOUNT_DELETION_MESSAGE,
+  isLegalHoldViolation,
+} from '../services/compliance/hold-errors.js';
+import { errors } from '../services/observability/metrics.js';
 
 export function errorHandler(error: Error, c: Context): Response {
   if (error instanceof AppError) {
@@ -35,7 +40,16 @@ export function errorHandler(error: Error, c: Context): Response {
     return c.json(body, error.status);
   }
 
+  // The legal hold trigger refusing an account deletion on a path that did not check first.
+  if (isLegalHoldViolation(error)) {
+    const body: ApiErrorBody = {
+      error: { code: ERROR_CODES.CONFLICT, message: HELD_ACCOUNT_DELETION_MESSAGE },
+    };
+    return c.json(body, 409);
+  }
+
   logger.error({ err: error, path: c.req.path }, 'Unhandled error');
+  errors.inc({ source: 'http' });
 
   const body: ApiErrorBody = {
     error: { code: ERROR_CODES.INTERNAL_ERROR, message: 'An unexpected error occurred' },

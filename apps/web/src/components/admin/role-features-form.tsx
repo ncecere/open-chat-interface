@@ -45,6 +45,16 @@ const ROLE_FEATURE_LABELS: Record<RoleFeatureKey, { label: string; description: 
     description:
       'Group conversations under shared instructions and files. Project files also need file attachments. There is no instance-wide switch.',
   },
+  memory: {
+    label: 'User memory',
+    description:
+      'Opt in to notes about themselves that are included in their conversations and that models with tools can save. Needs the instance-wide switch; each person still switches it on.',
+  },
+  artifacts: {
+    label: 'Artifacts',
+    description:
+      'Keep HTML pages, SVG images, diagrams and documents from replies as versioned artifacts, and let tool-capable models create and revise them. They count towards storage. There is no instance-wide switch.',
+  },
 };
 
 export const EFFORT_LABELS: Record<ReasoningEffort, string> = {

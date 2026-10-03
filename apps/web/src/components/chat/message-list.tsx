@@ -1,5 +1,7 @@
+import type { ConversationCompaction } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { memo, useState } from 'react';
+import { CompactionDivider } from '~/components/chat/compaction-divider';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
 import { MessageRow } from '~/components/chat/message-row';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
@@ -8,6 +10,8 @@ import { type AnswerApproval, toolLimitOf, toolStepsOf } from '~/components/chat
 
 interface MessageListProps {
   messages: UIMessage[];
+  /** The saved conversation, for exporting replies as files. */
+  threadId?: string;
   streaming: boolean;
   onRetry: () => void;
   searching?: boolean;
@@ -17,17 +21,21 @@ interface MessageListProps {
   replySwitch?: ReplySwitch;
   /** Answers an approval on the latest reply. */
   onAnswerApproval?: AnswerApproval;
+  /** When earlier messages were summarised: shown above the first kept message. */
+  compaction?: ConversationCompaction | null;
 }
 
 /** Transcript composition only; editing drafts and presentation belong to rows. */
 export const MessageList = memo(function MessageList({
   messages,
+  threadId,
   streaming,
   onRetry,
   onEdit,
   onFork,
   replySwitch,
   onAnswerApproval,
+  compaction = null,
   searching = false,
 }: MessageListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -44,9 +52,13 @@ export const MessageList = memo(function MessageList({
   );
   const waitingLabel = lastReasoning ? 'Thinking' : 'Generating response';
 
+  // Room at the top for the top bar's floating controls, which the column runs under.
   return (
-    <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-8">
-      {messages.map((message, index) => (
+    <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 pb-8 pt-[4.5rem]">
+      {messages.flatMap((message, index) => [
+        ...(compaction?.firstKeptMessageId === message.id
+          ? [<CompactionDivider key={`compaction-${compaction.id}`} compaction={compaction} />]
+          : []),
         <MessageRow
           // Switching replies swaps the last message. Keying that row by its
           // prompt keeps it mounted, so focus stays on the switcher.
@@ -56,6 +68,7 @@ export const MessageList = memo(function MessageList({
               : message.id
           }
           message={message}
+          threadId={threadId}
           // Only the active assistant streams; user actions stay disabled
           // throughout generation. Historical assistants need no token updates.
           streaming={streaming && (message.role === 'user' || index === messages.length - 1)}
@@ -66,8 +79,8 @@ export const MessageList = memo(function MessageList({
           onAnswerApproval={index === messages.length - 1 ? onAnswerApproval : undefined}
           onFork={onFork}
           onEdit={onEdit}
-        />
-      ))}
+        />,
+      ])}
 
       {/* An empty assistant row is not visible progress. Keep feedback until
           text or reasoning arrives, including providers with hidden reasoning. */}

@@ -23,6 +23,12 @@ reported. The checks refresh every 30 seconds while the page is open; the old
 | Email delivery | Not configured | — |
 | Attachment storage | Uploads never attached to a message | — |
 | Connectors | An enabled [connector](connectors.md)'s latest exchange failed | — |
+| Backups | On, but no [backup](backups.md) completed in over a day, or objects were missing from the last one | The latest backup failed |
+| Webhooks | An enabled [webhook](observability.md#webhooks) endpoint's latest delivery failed, or deliveries are over 15 minutes overdue | — |
+
+Below the checks, **Observability** reports whether [metrics and
+traces](observability.md) are on. Both are set with environment variables, so
+the page only shows them.
 
 The summary takes the worst individual result, so a green banner above a failing
 row cannot happen.
@@ -127,6 +133,14 @@ and commits each thread separately. Busy accounts or threads are skipped. A fail
 pass can have completed some threads; retrying continues with those still eligible
 rather than repeating their storage adjustments.
 
+Conversation summaries (`chat.compact-conversations`) are queued per
+conversation. Besides the scheduled pass, each request starts a pass at once in
+the API process that received it; both claim a conversation's request with a
+15-minute lease, so replicas never summarise one conversation twice and a
+request left by a restart is taken over when its lease runs out. A failed
+summary is retried after 1, 5 and 30 minutes, then dropped; one waiting for a
+spent allowance is checked every 15 minutes for a day.
+
 `DATABASE_URL` must use a direct PostgreSQL connection or a session-mode pooler,
 not transaction pooling. Budget one additional connection per concurrently
 attempted job per API replica, separate from the regular application pool
@@ -143,7 +157,8 @@ running after restoring a backup, when the two can drift.
 Records with no object are reported, not repaired: deleting them would destroy a
 conversation's attachment metadata over what may be a temporary storage fault.
 Objects newer than 24 hours are never treated as orphans, because an upload
-writes its file before committing its record.
+writes its file before committing its record. [Backups](backups.md) kept in the
+attachment bucket (under `.oci-backups/`) are never treated as orphans either.
 
 Above it, **Storage in use** shows live bytes and files, what is in the trash,
 and how many objects are queued for removal.

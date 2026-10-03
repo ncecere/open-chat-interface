@@ -12,6 +12,16 @@ import {
   renderPassage,
   selectPassages,
 } from '../../services/project-search/passages.js';
+import {
+  aboveRerankFloor,
+  KEYWORD_DISTINCTIVE_MAX_SHARE,
+  KEYWORD_DISTINCTIVE_MIN_CHUNKS,
+  KEYWORD_RELATIVE_FLOOR,
+  nearBest,
+  RERANK_MIN_SCORE,
+  SEMANTIC_MIN_SIMILARITY,
+  similarEnough,
+} from '../../services/project-search/relevance.js';
 import type { RetrievedChunk } from '../../services/project-search/retrieval.js';
 
 function sentences(count: number, prefix = 'Sentence'): string {
@@ -194,5 +204,54 @@ describe('project passage selection', () => {
     expect(projectFileIndexStatus(undefined)).toEqual({ status: 'pending', passages: 0 });
     expect(projectFileIndexStatus(0)).toEqual({ status: 'no-text', passages: 0 });
     expect(projectFileIndexStatus(7)).toEqual({ status: 'indexed', passages: 7 });
+  });
+});
+
+describe('project search relevance floors', () => {
+  const scored = (...scores: number[]) => scores.map((score, id) => ({ id, score }));
+
+  it('keeps the keyword matches within the relative floor of the best', () => {
+    expect(KEYWORD_RELATIVE_FLOOR).toBe(0.35);
+    // The best scores 10: 3.5 is exactly on the floor, 3.49 just below it.
+    expect(nearBest(scored(10, 8, 3.5, 3.49, 1)).map((item) => item.id)).toEqual([0, 1, 2]);
+    // Only the ratio to the best matters, not the size of the scores.
+    expect(nearBest(scored(0.1, 0.035, 0.0349)).map((item) => item.id)).toEqual([0, 1]);
+    expect(nearBest(scored(1000, 350, 349)).map((item) => item.id)).toEqual([0, 1]);
+    expect(nearBest(scored(4, 3, 1), 0.5).map((item) => item.id)).toEqual([0, 1]);
+    // A lone match is always its own best.
+    expect(nearBest(scored(0.01))).toHaveLength(1);
+    expect(nearBest([])).toEqual([]);
+    expect(nearBest(scored(0, 0))).toEqual([]);
+  });
+
+  it('uses relative thresholds for distinctive words', () => {
+    // In at most a quarter of the chunks, or three however few there are.
+    expect(KEYWORD_DISTINCTIVE_MAX_SHARE).toBe(0.25);
+    expect(KEYWORD_DISTINCTIVE_MIN_CHUNKS).toBe(3);
+  });
+
+  it('keeps meaning-based matches at or above the similarity floor', () => {
+    expect(SEMANTIC_MIN_SIMILARITY).toBe(0.2);
+    const nearest = [0.1, 0.5, 0.8, 0.81, 1.2].map((distance, id) => ({ id, distance }));
+    // Cosine distance 0.8 is similarity 0.2: kept; 0.81 (similarity 0.19) is not.
+    expect(similarEnough(nearest).map((item) => item.id)).toEqual([0, 1, 2]);
+    expect(similarEnough(nearest, 0.5).map((item) => item.id)).toEqual([0, 1]);
+    expect(similarEnough([{ distance: Number.NaN }])).toEqual([]);
+    expect(similarEnough([])).toEqual([]);
+  });
+
+  it('cuts reranked results at the first relevance score below the floor', () => {
+    expect(RERANK_MIN_SCORE).toBe(0.05);
+    const ranking = (...scores: number[]) => scores.map((score, index) => ({ index, score }));
+    expect(aboveRerankFloor(ranking(0.9, 0.3, 0.05, 0.049, 0.01))).toEqual(ranking(0.9, 0.3, 0.05));
+    // Everything relevant: all kept. Nothing relevant: none.
+    expect(aboveRerankFloor(ranking(1, 0.5))).toEqual(ranking(1, 0.5));
+    expect(aboveRerankFloor(ranking(0.04, 0))).toEqual([]);
+    expect(aboveRerankFloor(ranking(0.9, 0.2), 0.5)).toEqual(ranking(0.9));
+    // Not the 0–1 relevance scale (raw logits, or none at all): no floor.
+    expect(aboveRerankFloor(ranking(7.2, -1.5))).toBeNull();
+    expect(aboveRerankFloor(ranking(0.9, -0.01))).toBeNull();
+    expect(aboveRerankFloor(ranking(1.01, 0.5))).toBeNull();
+    expect(aboveRerankFloor([])).toBeNull();
   });
 });

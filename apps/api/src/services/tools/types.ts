@@ -16,6 +16,8 @@ export interface ToolTurnInput {
   userId: string;
   /** The composer's Search switch for this message. */
   webSearch: boolean;
+  /** A temporary chat: never offered tools that read or write memory. */
+  temporary: boolean;
   /**
    * Shared by every tool's `available` check in one turn, so a lookup several
    * tools need (such as the person's connector accounts) runs once.
@@ -53,7 +55,7 @@ export interface ToolDefinition {
   /** Returns a JSON-serialisable result; the registry caps its size. */
   execute: (
     input: unknown,
-    options: { signal: AbortSignal; caller: ToolCaller },
+    options: { signal: AbortSignal; caller: ToolCaller; toolCallId?: string },
   ) => Promise<unknown>;
   /** Links in a finished result to show as the reply's sources, in order. */
   sources?: (output: unknown) => ToolSource[];

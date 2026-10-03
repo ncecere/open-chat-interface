@@ -67,6 +67,8 @@ async function currentSettingsSnapshot(): Promise<Record<string, unknown>> {
     defaultSystemPrompt: chat.defaultSystemPrompt,
     defaultEffort: chat.defaultEffort ?? 'instant',
     maxToolSteps: chat.maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS,
+    autoCompact: chat.autoCompact ?? true,
+    diagramGuidance: chat.diagramGuidance ?? true,
     features,
     // Redacted here rather than at the diff, because these arrive as whole
     // objects and carry encrypted credentials inside them.
@@ -103,6 +105,8 @@ settingsRoutes.get('/', async (c) => {
     defaultSystemPrompt: chat.defaultSystemPrompt,
     defaultEffort: chat.defaultEffort ?? 'instant',
     maxToolSteps: chat.maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS,
+    autoCompact: chat.autoCompact ?? true,
+    diagramGuidance: chat.diagramGuidance ?? true,
     features,
     storage: {
       driver: storage.driver,
@@ -269,7 +273,9 @@ settingsRoutes.patch('/', async (c) => {
   if (
     patch.defaultSystemPrompt !== undefined ||
     patch.defaultEffort !== undefined ||
-    patch.maxToolSteps !== undefined
+    patch.maxToolSteps !== undefined ||
+    patch.autoCompact !== undefined ||
+    patch.diagramGuidance !== undefined
   ) {
     await updateSetting('chat', {
       ...(patch.defaultSystemPrompt !== undefined && {
@@ -277,6 +283,8 @@ settingsRoutes.patch('/', async (c) => {
       }),
       ...(patch.defaultEffort !== undefined && { defaultEffort: patch.defaultEffort }),
       ...(patch.maxToolSteps !== undefined && { maxToolSteps: patch.maxToolSteps }),
+      ...(patch.autoCompact !== undefined && { autoCompact: patch.autoCompact }),
+      ...(patch.diagramGuidance !== undefined && { diagramGuidance: patch.diagramGuidance }),
     });
   }
 

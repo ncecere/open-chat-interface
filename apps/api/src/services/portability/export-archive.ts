@@ -1,8 +1,9 @@
-import { and, asc, eq, inArray, isNull, schema } from '@oci/db';
+import { and, asc, desc, eq, inArray, isNull, schema } from '@oci/db';
 import { EXPORT_ARCHIVE_VERSION } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
+import { artifactsWithVersions } from '../artifacts/store.js';
 import { activeMessage } from '../chat/reply-path.js';
 import { exportableParts, MAX_EXPORT_MESSAGES, renderMarkdown, safeTitleSlug } from '../export.js';
 import { getStorageDriver } from '../storage/index.js';
@@ -47,6 +48,7 @@ interface ExportedAttachment {
 
 interface ExportSummary {
   conversations: number;
+  memories: number;
   projects: number;
   messages: number;
   attachments: number;
@@ -230,14 +232,19 @@ function readme(summary: ExportSummary, createdAt: Date): string {
     '                 per conversation, including archived ones. Conversations',
     '                 in the trash and temporary chats are not included.',
     '                 Markdown leaves out model reasoning; the JSON keeps it.',
+    '                 Artifacts (with every version) are in the JSON; the',
+    '                 Markdown names them.',
     'attachments/     Files you attached, in a folder per conversation.',
     '                 Files uploaded but never sent are under attachments/unsent/.',
     "projects/        Each project's files, in a folder per project. Project names",
     '                 and instructions are in manifest.json.',
+    'memory.json      What OCI remembers about you (Settings > Memory), newest',
+    '                 first, whether or not memory is switched on.',
     'manifest.json    Counts, versions, and an index of every conversation.',
     '',
     `Conversations: ${summary.conversations}`,
     `Projects: ${summary.projects}`,
+    `Memories: ${summary.memories}`,
     `Messages: ${summary.messages}`,
     `Attachments: ${summary.attachments}`,
     summary.omittedAttachments > 0
@@ -274,6 +281,7 @@ export async function* exportArchive(
   const names = conversationNames(threads);
   const summary: ExportSummary = {
     conversations: 0,
+    memories: 0,
     projects: 0,
     messages: 0,
     attachments: 0,
@@ -283,8 +291,8 @@ export async function* exportArchive(
   };
   const index: Array<Record<string, unknown>> = [];
   const omitted: Array<{ id: string; filename: string; reason: string }> = [];
-  // Room for the manifest, README and at least the remaining conversation files.
-  const entryBudget = () => ZIP_MAX_ENTRIES - writer.entries - 2;
+  // Room for the manifest, README, memory file and the remaining conversation files.
+  const entryBudget = () => ZIP_MAX_ENTRIES - writer.entries - 3;
 
   async function* writeAttachments(
     directory: string,
@@ -371,11 +379,35 @@ export async function* exportArchive(
       ),
     );
 
+    // Summaries made when the conversation outgrew its model, oldest first.
+    // Messages are never changed by them, so the transcript above is complete.
+    const compactions = await db
+      .select()
+      .from(schema.conversationCompaction)
+      .where(
+        and(
+          eq(schema.conversationCompaction.threadId, thread.id),
+          eq(schema.conversationCompaction.userId, owner.id),
+        ),
+      )
+      .orderBy(asc(schema.conversationCompaction.createdAt), asc(schema.conversationCompaction.id));
+
+    // Artifacts the exported replies created, with every version (v0.9).
+    const artifacts = await artifactsWithVersions(
+      thread.id,
+      owner.id,
+      messages.map((message) => message.id),
+    );
+
     const markdownPath = `conversations/${name}.md`;
     const jsonPath = `conversations/${name}.json`;
-    writer.add(markdownPath, renderMarkdown(thread, messages.slice(0, MAX_EXPORT_MESSAGES)), {
-      mtime: thread.updatedAt,
-    });
+    writer.add(
+      markdownPath,
+      renderMarkdown(thread, messages.slice(0, MAX_EXPORT_MESSAGES), artifacts),
+      {
+        mtime: thread.updatedAt,
+      },
+    );
     writer.add(
       jsonPath,
       JSON.stringify(
@@ -384,6 +416,36 @@ export async function* exportArchive(
           thread: threadSummary(thread),
           messages: messages.map(serializeMessage),
           attachments,
+          compactions: compactions.map((compaction) => ({
+            id: compaction.id,
+            firstKeptMessageId: compaction.firstKeptMessageId,
+            summary: compaction.summary,
+            reason: compaction.reason,
+            messagesSummarized: compaction.messagesSummarized,
+            tokensSummarized: compaction.tokensSummarized,
+            modelSlug: compaction.modelSlug,
+            tokensIn: compaction.tokensIn,
+            tokensOut: compaction.tokensOut,
+            createdAt: compaction.createdAt.toISOString(),
+          })),
+          artifacts: artifacts.map((artifact) => ({
+            id: artifact.id,
+            messageId: artifact.messageId,
+            sourceKey: artifact.sourceKey,
+            title: artifact.title,
+            kind: artifact.kind,
+            currentVersion: artifact.currentVersion,
+            createdAt: artifact.createdAt.toISOString(),
+            updatedAt: artifact.updatedAt.toISOString(),
+            versions: artifact.versions.map((version) => ({
+              version: version.version,
+              content: version.content,
+              sizeBytes: version.sizeBytes,
+              source: version.source,
+              messageId: version.messageId,
+              createdAt: version.createdAt.toISOString(),
+            })),
+          })),
           truncatedMessages,
         },
         null,
@@ -436,6 +498,34 @@ export async function* exportArchive(
     summary.projects += 1;
   }
 
+  // Memories (v0.9): every entry, newest first, whatever the switches say:
+  // the person's data is theirs to take even after memory was switched off.
+  const memories = await db
+    .select()
+    .from(schema.userMemory)
+    .where(eq(schema.userMemory.userId, owner.id))
+    .orderBy(desc(schema.userMemory.updatedAt), desc(schema.userMemory.id));
+  summary.memories = memories.length;
+  writer.add(
+    'memory.json',
+    JSON.stringify(
+      {
+        exportVersion: EXPORT_ARCHIVE_VERSION,
+        memories: memories.map((memory) => ({
+          id: memory.id,
+          content: memory.content,
+          source: memory.source,
+          threadId: memory.threadId,
+          messageId: memory.messageId,
+          createdAt: memory.createdAt.toISOString(),
+          updatedAt: memory.updatedAt.toISOString(),
+        })),
+      },
+      null,
+      2,
+    ),
+  );
+
   writer.add(
     'manifest.json',
     JSON.stringify(
@@ -447,6 +537,7 @@ export async function* exportArchive(
         counts: {
           conversations: summary.conversations,
           projects: summary.projects,
+          memories: summary.memories,
           messages: summary.messages,
           attachments: summary.attachments,
           attachmentBytes: summary.attachmentBytes,

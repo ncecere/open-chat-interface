@@ -44,11 +44,18 @@ the sidebar rather than one overwritten by the other.
 ## Reasoning
 
 Some models work through a problem before answering. Where they do, that
-thinking appears above the reply in a panel of its own.
+thinking appears in the reply, where it happened, as a collapsed **Reasoning**
+heading you can select to read it in full. A reply that uses tools can think
+more than once, and each piece of reasoning sits before the step it led to.
 
-It opens automatically while thinking is the only thing happening — otherwise
-you would watch a blank screen during the longest wait — and collapses once the
-answer starts. Clicking it always wins over that behaviour.
+While the model is still thinking, the heading reads **Thinking…** and a small
+window under it shows the latest few lines as they arrive, so you can follow
+along without the reply jumping around. Select the heading or the window to
+read the whole reasoning so far. Once the model moves on (to a tool step or the
+answer) the window goes and the heading becomes **Reasoning** again. If you
+opened or collapsed the reasoning yourself, it stays the way you left it.
+Screen readers get the heading and, when expanded, the full text; the moving
+window is not read out.
 
 Models that support **effort control** let you ask for more or less of this.
 Higher effort means a slower, more considered answer; lower means a quicker one.
@@ -92,16 +99,68 @@ Opening another conversation will not send a pending new-chat prompt there.
 
 ## What the model can see
 
-The visible transcript is not always the entire input sent to a model. Older
-turns are omitted as needed to fit a bounded recent history. A notice above the
-reply tells you when earlier context was omitted; your stored messages are not
-deleted or rewritten.
+The visible transcript is not always the entire input sent to a model. When a
+conversation grows longer than the model can take in, its earlier messages are
+summarised (see [Long conversations](#long-conversations)). If they cannot be,
+older turns are left out to fit a bounded recent history, and a notice above
+the reply says that earlier context was omitted. Either way, your stored
+messages are not deleted or rewritten.
 
 Your latest request, system instructions, selected attachments and any current
 search grounding must fit together. If they do not, the request is refused
 before a new user turn is saved. Shorten it, remove files, or choose a model with
 more context. The application also has fixed safety ceilings, so choosing a
 larger model does not remove every limit.
+
+## Long conversations
+
+When a conversation grows long, OCI summarises its earlier messages in the
+background and from then on sends the model that summary followed by your most
+recent exchanges, word for word, instead of leaving the earlier part out. A
+quiet line appears above the first message the model still sees in full:
+**Earlier messages are summarised for the model**. Select it to read the
+summary the model receives.
+
+- **It never stops you.** Summaries are made in the background, after a reply
+  has finished. You can keep writing, sending, retrying, switching replies and
+  answering approvals while one is being made; nothing waits for it and nothing
+  is refused because of it.
+- **Nothing is deleted.** Every message above the line stays in the
+  conversation exactly as it was, and in search, exports and share links. Only
+  what is sent to the model changes. A full export (Settings → Your data) also
+  includes the summaries.
+- **What the summary keeps:** the topic and your goal; facts, figures and
+  decisions; your preferences and constraints; open questions and next steps;
+  and details to keep exactly, such as names, numbers, code and quotations.
+  Reasoning is not included, and long tool results are shortened.
+- **When it happens:** after a reply, once the conversation takes up about
+  three quarters of what the model can take in, so the summary is usually
+  ready before it is needed. The most recent exchanges, up to about half of
+  what the model can take in, are always kept in full, your latest exchange is
+  never summarised, and a conversation is never cut in the middle of a
+  question and its answer. A later summary builds on the previous one.
+- **If a reply comes before the summary is ready** and the conversation no
+  longer fits, that reply is sent the most recent exchanges that fit, without
+  the oldest ones, and says that earlier context was left out (as before
+  summaries existed). The same happens, once, if the model's provider reports
+  that the input was too long: the reply is tried again with fewer earlier
+  exchanges.
+- **It counts towards your usage.** The summary is written by the
+  conversation's own model, like a reply. When your usage allowance is spent,
+  no summary is made; OCI tries again later.
+- **Summarise it yourself.** **Summarise earlier messages now** (the folding
+  icon at the top right of a conversation) asks for a summary straight away,
+  keeping at most the latest half. You can say what the summary should keep,
+  for example "keep every figure in the budget". The dialog closes at once;
+  while the summary is made, the icon shows **Summarising earlier messages…**
+  and you can keep writing. Asking again meanwhile does not make a second one.
+  It uses the model of the latest reply.
+- **Forks and edits** carry the summary over when everything it covers was
+  copied into the new conversation.
+
+Your administrator can turn automatic summaries off; then earlier messages are
+left out instead, as described above, and you can still ask for a summary
+yourself.
 
 ## Organising the sidebar
 

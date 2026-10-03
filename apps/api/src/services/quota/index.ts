@@ -229,7 +229,8 @@ export async function getUsageSummary(userId: string, role: UserRole): Promise<U
 }
 
 /** Current catalog prices for a model, or nulls when it is unpriced. */
-async function modelPricing(modelSlug: string): Promise<ModelPricing> {
+/** The catalog price of a model; null prices when it is unpriced or unknown. */
+export async function modelPricing(modelSlug: string): Promise<ModelPricing> {
   const organizationId = await getDefaultOrganizationId();
 
   const [pricing] = await db

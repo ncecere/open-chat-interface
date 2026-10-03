@@ -1,5 +1,7 @@
 import { and, asc, eq, schema } from '@oci/db';
 import {
+  ARTIFACT_KIND_LABELS,
+  type ArtifactKind,
   isToolPart,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
@@ -7,26 +9,20 @@ import {
   toolLimitNote,
 } from '@oci/shared';
 import { db } from '../db/index.js';
+import { artifactsWithVersions } from './artifacts/store.js';
 import { activeMessage } from './chat/reply-path.js';
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
 export const MAX_EXPORT_MESSAGES = 2_000;
 
 interface ExportMessage {
+  /** Needed to show which artifacts a reply made; absent in older callers. */
+  id?: string;
   role: string;
   parts: Record<string, unknown>[];
   modelSlug: string | null;
   status: string;
   createdAt: Date;
-}
-
-function textFromParts(parts: Record<string, unknown>[]): string {
-  return parts
-    .flatMap((part) =>
-      part.type === 'text' && typeof part.text === 'string' ? [part.text.trim()] : [],
-    )
-    .filter(Boolean)
-    .join('\n\n');
 }
 
 function attachmentsFromParts(parts: Record<string, unknown>[]): string[] {
@@ -72,16 +68,59 @@ export function exportableParts(parts: Record<string, unknown>[]): Record<string
   });
 }
 
-function toolLinesFromParts(parts: Record<string, unknown>[]): string[] {
-  const lines = parts.filter(isToolPart).map((part) => `_${summarizeToolPart(part).summary}_`);
+/**
+ * A reply's tool steps (one summary line each) and text, in the order they
+ * were written: each run of tool steps, then the text after it, and so on.
+ * The note of a reply that hit its tool limit follows its last tool step.
+ * Each block ends with a blank line.
+ */
+export function orderedReplyLines(parts: Record<string, unknown>[]): string[] {
+  const blocks: Array<{ type: 'tools' | 'text'; lines: string[] }> = [];
+  const add = (type: 'tools' | 'text', line: string) => {
+    const last = blocks.at(-1);
+    if (last?.type === type) last.lines.push(line);
+    else blocks.push({ type, lines: [line] });
+  };
+  for (const part of parts) {
+    if (isToolPart(part)) add('tools', `_${summarizeToolPart(part).summary}_`);
+    else if (part.type === 'text' && typeof part.text === 'string' && part.text.trim())
+      add('text', part.text.trim());
+  }
   const limit = parts.find((part) => part.type === 'data-tool-limit')?.data as
     | { reason?: unknown; steps?: unknown }
     | undefined;
-  if (limit && TOOL_LIMIT_REASONS.includes(limit.reason as ToolLimitReason))
-    lines.push(
-      `_${toolLimitNote(limit.reason as ToolLimitReason, typeof limit.steps === 'number' ? limit.steps : undefined)}_`,
-    );
-  return lines;
+  if (limit && TOOL_LIMIT_REASONS.includes(limit.reason as ToolLimitReason)) {
+    const note = `_${toolLimitNote(limit.reason as ToolLimitReason, typeof limit.steps === 'number' ? limit.steps : undefined)}_`;
+    const lastTools = blocks.findLastIndex((block) => block.type === 'tools');
+    if (lastTools === -1) blocks.unshift({ type: 'tools', lines: [note] });
+    else blocks[lastTools]?.lines.push(note);
+  }
+  return blocks.flatMap((block) => [block.lines.join(block.type === 'text' ? '\n\n' : '\n'), '']);
+}
+
+/** An artifact as Markdown exports reference it (the JSON export carries the content). */
+interface ExportArtifactReference {
+  messageId: string;
+  title: string;
+  kind: ArtifactKind;
+  /** Versions made by each reply, so a reply that revised an artifact says so. */
+  versions: Array<{ version: number; messageId: string | null }>;
+}
+
+/** One line per artifact version a message made: "Artifact 'Report' (HTML, version 2)". */
+function artifactLines(
+  messageId: string | undefined,
+  artifacts: readonly ExportArtifactReference[],
+): string[] {
+  if (!messageId) return [];
+  return artifacts.flatMap((artifact) =>
+    artifact.versions
+      .filter((version) => version.messageId === messageId)
+      .map(
+        (version) =>
+          `_Artifact \u201c${artifact.title}\u201d (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${version.version})_`,
+      ),
+  );
 }
 
 /**
@@ -95,6 +134,7 @@ function toolLinesFromParts(parts: Record<string, unknown>[]): string[] {
 export function renderMarkdown(
   thread: { title: string; createdAt: Date },
   messages: ExportMessage[],
+  artifacts: readonly ExportArtifactReference[] = [],
 ): string {
   const lines: string[] = [
     `# ${thread.title}`,
@@ -127,11 +167,11 @@ export function renderMarkdown(
       lines.push(`_Attached: ${attachments.join(', ')}_`, '');
     }
 
-    const steps = toolLinesFromParts(message.parts);
-    if (steps.length > 0) lines.push(...steps, '');
+    // Tool steps and text in the order the reply wrote them.
+    lines.push(...orderedReplyLines(message.parts));
 
-    const text = textFromParts(message.parts);
-    if (text) lines.push(text, '');
+    const made = artifactLines(message.id, artifacts);
+    if (made.length > 0) lines.push(...made, '');
 
     const sources = sourcesFromParts(message.parts);
     if (sources.length > 0) {
@@ -166,7 +206,7 @@ export function exportFilename(title: string): string {
 }
 
 /** Ownership is enforced by the caller before this runs. */
-export async function exportThreadMarkdown(threadId: string): Promise<string> {
+export async function exportThreadMarkdown(threadId: string, userId: string): Promise<string> {
   const [thread] = await db
     .select({ title: schema.thread.title, createdAt: schema.thread.createdAt })
     .from(schema.thread)
@@ -177,6 +217,7 @@ export async function exportThreadMarkdown(threadId: string): Promise<string> {
 
   const messages = await db
     .select({
+      id: schema.message.id,
       role: schema.message.role,
       parts: schema.message.parts,
       modelSlug: schema.message.modelSlug,
@@ -189,5 +230,10 @@ export async function exportThreadMarkdown(threadId: string): Promise<string> {
     .orderBy(asc(schema.message.position))
     .limit(MAX_EXPORT_MESSAGES);
 
-  return renderMarkdown(thread, messages);
+  const artifacts = await artifactsWithVersions(
+    threadId,
+    userId,
+    messages.map((message) => message.id),
+  );
+  return renderMarkdown(thread, messages, artifacts);
 }

@@ -31,6 +31,7 @@ const defaultSettings: Record<string, Record<string, unknown>> = {
     webSearch: false,
     attachments: true,
     branching: true,
+    memory: false,
   },
   storage: {
     driver: 'local',

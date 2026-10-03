@@ -151,6 +151,8 @@ describe('integration with mocked DB: share ownership and expiry', () => {
         },
       ]),
     );
+    // The shared reply created no artifacts.
+    select.mockReturnValueOnce(limitedQuery([]));
     const returning = vi.fn().mockResolvedValue([{ available: true }]);
     const update = vi.fn(() => ({ set: () => ({ where: () => ({ returning }) }) }));
     mocks.transaction.mockImplementation(async (callback) => callback({ select, update }));
@@ -165,10 +167,11 @@ describe('integration with mocked DB: share ownership and expiry', () => {
           createdAt: createdAt.toISOString(),
         },
       ],
+      artifacts: [],
       snapshot,
       expiresAt: expiresAt?.toISOString() ?? null,
     });
-    expect(select).toHaveBeenCalledTimes(snapshot ? 3 : 2);
+    expect(select).toHaveBeenCalledTimes(snapshot ? 4 : 3);
     expect(returning).toHaveBeenCalledOnce();
   });
 

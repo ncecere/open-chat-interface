@@ -3,7 +3,8 @@
 You can download a copy of everything you have stored here, and you can bring
 your history in from ChatGPT or Claude. Both are under
 [Settings → History](settings.md#history-and-sync), in the **Your data**
-section.
+section. To save a single reply or document as a Word document, PDF,
+presentation or spreadsheet, see [Exporting as files](exporting.md).
 
 ## Exporting everything
 
@@ -20,6 +21,8 @@ The archive contains:
   and the list of attached files.
 - `attachments/` — the files you attached, in a folder per conversation. Files
   you uploaded but never sent are in `attachments/unsent/`.
+- `memory.json` — every [memory](memory.md) note, newest first, whether or
+  not memory is switched on.
 - `manifest.json` — when the export was made, the OCI version, how many
   conversations, messages and files it contains, and an index of every
   conversation.
