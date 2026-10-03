@@ -140,7 +140,8 @@ function focusAfterClose(opened: Opened) {
  * tools, showing its source as it arrives, or else at the first artifact
  * found in the reply's code blocks once it is finished. Never for replies
  * loaded from history, never when the person opened or closed something
- * during the reply, and never moving focus.
+ * during the reply, never over a panel the person made full screen (nor in
+ * full screen itself), and never moving focus.
  */
 export function ThreadArtifactsProvider({
   threadId,
@@ -176,6 +177,10 @@ export function ThreadArtifactsProvider({
   const reply = useRef<ReplySession | null>(null);
   const [fence, setFence] = useState<string | null>(null);
   const [opened, setOpened] = useState<Opened | null>(null);
+  // Only ever the person's choice; it ends when the panel closes or shows something else.
+  const [fullScreen, setFullScreen] = useState(false);
+  const fullScreenRef = useRef(false);
+  fullScreenRef.current = fullScreen && opened !== null;
   const [announcement, setAnnouncement] = useState('');
   const focusCount = useRef(0);
   const panel = useRef<HTMLElement>(null);
@@ -223,6 +228,8 @@ export function ThreadArtifactsProvider({
     const session = reply.current;
     if (!session) return;
     session.opened = true;
+    // Never over what the person is looking at full screen.
+    if (fullScreenRef.current) return;
     setOpened({ target, focusRequest: 0, returnTo: null });
     if (title) setAnnouncement(`Opened artifact: ${title}`);
     else if (target.type === 'draft') session.announce = target.toolCallId;
@@ -314,8 +321,13 @@ export function ThreadArtifactsProvider({
     );
   }, [opened, messages, lookup]);
 
+  useEffect(() => {
+    if (!opened) setFullScreen(false);
+  }, [opened]);
+
   const open = useCallback((ref: ArtifactRef) => {
     if (reply.current) reply.current.manual = true;
+    setFullScreen(false);
     setOpened({
       target: { type: 'artifact', ref },
       focusRequest: ++focusCount.current,
@@ -324,6 +336,7 @@ export function ThreadArtifactsProvider({
   }, []);
   const openDraft = useCallback((messageId: string, toolCallId: string) => {
     if (reply.current) reply.current.manual = true;
+    setFullScreen(false);
     setOpened({
       target: { type: 'draft', messageId, toolCallId },
       focusRequest: ++focusCount.current,
@@ -335,6 +348,7 @@ export function ThreadArtifactsProvider({
       if (reply.current) reply.current.dismissed = true;
       setFence(null);
       setOpened(null);
+      setFullScreen(false);
       // A dialog returns focus itself; a docked panel hands it back here.
       if (focusWasInside && opened) {
         const closed = opened;
@@ -376,13 +390,22 @@ export function ThreadArtifactsProvider({
             onClose={close}
             focusRequest={opened?.focusRequest ?? 0}
             panelRef={panel}
+            fullScreen={fullScreen}
+            onFullScreenChange={setFullScreen}
           />
         )}
         <p className="sr-only" aria-live="polite" aria-atomic="true" data-artifact-announcer="">
           {announcement}
         </p>
       </div>
-      {!docked && <ArtifactPanel view={view} onClose={close} />}
+      {!docked && (
+        <ArtifactPanel
+          view={view}
+          onClose={close}
+          fullScreen={fullScreen}
+          onFullScreenChange={setFullScreen}
+        />
+      )}
     </ArtifactsContextProvider>
   );
 }
@@ -413,9 +436,14 @@ export function PublicArtifactsProvider({
     [artifacts],
   );
   const [opened, setOpened] = useState<ArtifactRef | null>(null);
+  const [fullScreen, setFullScreen] = useState(false);
+  const open = useCallback((ref: ArtifactRef) => {
+    setFullScreen(false);
+    setOpened(ref);
+  }, []);
   const value = useMemo<ArtifactsContextValue>(
-    () => ({ ...lookups(refs), open: setOpened, mode: 'public', canEdit: false, markdownProps }),
-    [refs, markdownProps],
+    () => ({ ...lookups(refs), open, mode: 'public', canEdit: false, markdownProps }),
+    [refs, open, markdownProps],
   );
   // Share pages keep the dialog, opened only by the viewer.
   return (
@@ -423,7 +451,12 @@ export function PublicArtifactsProvider({
       {children}
       <ArtifactPanel
         view={opened ? { type: 'artifact', ref: opened } : null}
-        onClose={() => setOpened(null)}
+        onClose={() => {
+          setOpened(null);
+          setFullScreen(false);
+        }}
+        fullScreen={fullScreen}
+        onFullScreenChange={setFullScreen}
       />
     </ArtifactsContextProvider>
   );

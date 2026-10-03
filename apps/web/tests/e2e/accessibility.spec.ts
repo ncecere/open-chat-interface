@@ -614,6 +614,24 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');
+
+    // Full screen: a modal dialog over the whole window, same views. The browser
+    // runs with a light system colour scheme and OCI's dark theme, so the
+    // highlighted source must follow OCI's theme, not the system's.
+    await panel.getByRole('button', { name: 'Full screen', exact: true }).click();
+    const full = page.getByRole('dialog', { name: 'Plan page' });
+    await expect(full).toHaveAttribute('data-full-screen', '');
+    const source = full.getByRole('tabpanel', { name: 'Source' });
+    await expect(source).toContainText('Plan page');
+    await expect(
+      source.locator('[data-streamdown="code-block-body"] span[style]').first(),
+    ).toBeVisible();
+    const sourceResults = await scan(page);
+    expect(describeViolations(sourceResults), describeViolations(sourceResults)).toBe('');
+    await full.getByRole('tab', { name: 'Versions' }).click();
+    await expect(full.getByRole('tabpanel', { name: 'Versions' })).toContainText('Version 1');
+    const fullResults = await scan(page);
+    expect(describeViolations(fullResults), describeViolations(fullResults)).toBe('');
   });
 
   test('a dialog has no violations while open', async ({ page }) => {

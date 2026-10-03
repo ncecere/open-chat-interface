@@ -88,27 +88,3 @@ describe('streaming feedback', () => {
     expect(waitingState(messages, false).showIndicator).toBe(false);
   });
 });
-
-/** Mirrors the reasoning panel's default open state. */
-function panelOpen(choice: boolean | null, streaming: boolean, answerStarted: boolean): boolean {
-  return choice ?? (streaming && !answerStarted);
-}
-
-describe('reasoning panel disclosure', () => {
-  it('opens itself while reasoning is the only thing happening', () => {
-    expect(panelOpen(null, true, false)).toBe(true);
-  });
-
-  it('closes once the answer starts, which is what the reader wants', () => {
-    expect(panelOpen(null, true, true)).toBe(false);
-  });
-
-  it('stays closed on a finished message', () => {
-    expect(panelOpen(null, false, true)).toBe(false);
-  });
-
-  it('respects an explicit choice over the default', () => {
-    expect(panelOpen(false, true, false)).toBe(false);
-    expect(panelOpen(true, false, true)).toBe(true);
-  });
-});

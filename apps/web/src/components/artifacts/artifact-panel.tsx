@@ -7,7 +7,7 @@ import {
   type DocumentFormat,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Download, Pencil, X } from 'lucide-react';
+import { Check, Copy, Download, Maximize2, Minimize2, Pencil, X } from 'lucide-react';
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -91,6 +91,67 @@ interface Chrome {
   docked: boolean;
   headingId: string;
   onClose: (focusWasInside: boolean) => void;
+  /** Filling the whole window (always a modal dialog then). */
+  fullScreen: boolean;
+  /** Absent where the panel cannot go full screen. */
+  onToggleFullScreen?: () => void;
+}
+
+const TABBABLE = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'iframe',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+/**
+ * Keeps Tab inside a full-screen panel: everything else is inert, so tabbing
+ * past either end (including out of a preview's frame, whose key presses the
+ * page never sees) lands here and is sent round to the other end.
+ */
+function FocusGuard({ to }: { to: 'first' | 'last' }) {
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a focus guard only passes focus on.
+    <span
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a focus guard must be reachable by Tab.
+      tabIndex={0}
+      data-focus-guard={to}
+      className="pointer-events-none fixed size-px overflow-hidden opacity-0"
+      onFocus={(event) => {
+        const panel = event.currentTarget.closest('[data-artifact-panel]');
+        const items = [...(panel?.querySelectorAll<HTMLElement>(TABBABLE) ?? [])].filter(
+          (item) => !item.hasAttribute('data-focus-guard'),
+        );
+        (to === 'first' ? items[0] : items.at(-1))?.focus();
+      }}
+    />
+  );
+}
+
+/**
+ * Makes everything outside `element` inert (the way a modal dialog does),
+ * except live regions such as notifications, and returns how to undo it.
+ * Elements that were already inert are left alone.
+ */
+function inertOthers(element: HTMLElement): () => void {
+  const changed: Element[] = [];
+  let node: Element = element;
+  while (node.parentElement && node !== document.body) {
+    for (const sibling of node.parentElement.children) {
+      if (sibling === node || sibling.hasAttribute('inert')) continue;
+      if (sibling.hasAttribute('aria-live') || /^(SCRIPT|STYLE|TEMPLATE)$/.test(sibling.tagName))
+        continue;
+      sibling.setAttribute('inert', '');
+      changed.push(sibling);
+    }
+    node = node.parentElement;
+  }
+  return () => {
+    for (const sibling of changed) sibling.removeAttribute('inert');
+  };
 }
 
 function PanelHeading({ chrome, children }: { chrome: Chrome; children: ReactNode }) {
@@ -113,9 +174,9 @@ function PanelDescription({ chrome, children }: { chrome: Chrome; children: Reac
 }
 
 /**
- * The panel's header: title and description, the actions, then Close in its
- * own column at the end, so the actions wrap before they could ever run under
- * it.
+ * The panel's header: title and description, the actions, then Full screen
+ * and Close, each in its own column at the end, so the actions wrap before
+ * they could ever run under either.
  */
 function PanelHeader({
   chrome,
@@ -130,6 +191,7 @@ function PanelHeader({
   toolbar?: ReactNode;
   children?: ReactNode;
 }) {
+  const fullScreenName = chrome.fullScreen ? 'Exit full screen' : 'Full screen';
   const close = (
     <Button
       type="button"
@@ -156,6 +218,20 @@ function PanelHeader({
         {toolbar}
         {children}
       </div>
+      {chrome.onToggleFullScreen && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={fullScreenName}
+          title={fullScreenName}
+          data-panel-fullscreen=""
+          className="shrink-0"
+          onClick={chrome.onToggleFullScreen}
+        >
+          {chrome.fullScreen ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+        </Button>
+      )}
       {chrome.docked ? close : <DialogClose asChild>{close}</DialogClose>}
     </header>
   );
@@ -197,6 +273,11 @@ function useWritingAnnouncement(view: PanelView | null): string {
  * stay usable; Escape inside it or Close closes it. Elsewhere (phones, share
  * links) it is a modal dialog, full screen on phones; Escape leaves an edit
  * first, then closes, and focus returns to the card that opened it.
+ *
+ * Full screen (the person's choice, never automatic) makes either one a modal
+ * dialog over the whole window, above the sidebar and top bar: everything
+ * else is inert, focus stays on the toggle and Tab cycles inside. Escape
+ * leaves an edit, then full screen, then closes the panel.
  */
 export function ArtifactPanel({
   view,
@@ -204,6 +285,8 @@ export function ArtifactPanel({
   docked = false,
   focusRequest = 0,
   panelRef,
+  fullScreen = false,
+  onFullScreenChange,
 }: {
   view: PanelView | null;
   onClose: (focusWasInside: boolean) => void;
@@ -211,15 +294,65 @@ export function ArtifactPanel({
   /** Changes when focus should move into the docked panel (it was opened by the person). */
   focusRequest?: number;
   panelRef?: Ref<HTMLElement>;
+  /** Whether the panel fills the window; the owner resets it when the panel closes or changes. */
+  fullScreen?: boolean;
+  onFullScreenChange?: (fullScreen: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const headingId = useId();
   const status = useWritingAnnouncement(view);
-  const chrome: Chrome = { docked, headingId, onClose };
+  const aside = useRef<HTMLElement | null>(null);
+  // Focus goes to the toggle after the person enters or leaves full screen.
+  const focusToggle = useRef(false);
+  const setFullScreen = useCallback(
+    (next: boolean) => {
+      focusToggle.current = true;
+      onFullScreenChange?.(next);
+    },
+    [onFullScreenChange],
+  );
+  const chrome: Chrome = {
+    docked,
+    headingId,
+    onClose,
+    fullScreen,
+    onToggleFullScreen: onFullScreenChange ? () => setFullScreen(!fullScreen) : undefined,
+  };
+  const setAside = useCallback(
+    (element: HTMLElement | null) => {
+      aside.current = element;
+      if (typeof panelRef === 'function') panelRef(element);
+      else if (panelRef) panelRef.current = element;
+    },
+    [panelRef],
+  );
 
   useEffect(() => {
     if (docked && focusRequest) document.getElementById(headingId)?.focus();
   }, [docked, focusRequest, headingId]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when full screen changes.
+  useLayoutEffect(() => {
+    if (!focusToggle.current) return;
+    focusToggle.current = false;
+    document.querySelector<HTMLElement>('[data-artifact-panel] [data-panel-fullscreen]')?.focus();
+  }, [fullScreen]);
+
+  // Docked and full screen: a modal dialog, so the rest of the page is inert.
+  const shown = view !== null;
+  useEffect(() => {
+    const element = aside.current;
+    if (!docked || !fullScreen || !shown || !element) return;
+    return inertOthers(element);
+  }, [docked, fullScreen, shown]);
+
+  /** Escape: leave an edit, then full screen; true when it did either. */
+  const stepBack = () => {
+    if (editing) setEditing(false);
+    else if (fullScreen) setFullScreen(false);
+    else return false;
+    return true;
+  };
 
   const body = view ? (
     view.type === 'draft' ? (
@@ -242,33 +375,47 @@ export function ArtifactPanel({
 
   if (docked) {
     if (!view) return null;
+    const dockedSize = 'mb-2 mr-2 mt-16 w-[45%] min-w-[22rem] max-w-[56rem] shrink-0';
     return (
-      <aside
-        ref={panelRef}
-        aria-labelledby={headingId}
-        data-artifact-panel=""
-        data-docked=""
-        onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
-          // A menu inside the panel closes itself first (and marks the key used).
-          if (event.key !== 'Escape' || event.defaultPrevented) return;
-          event.preventDefault();
-          if (editing) setEditing(false);
-          else {
-            setEditing(false);
-            onClose(true);
-          }
-        }}
-        className={cn(
-          // Below the conversation controls that hang from the top bar.
-          // Positioned: its visually hidden status texts are laid out inside it.
-          'relative mb-2 mr-2 mt-16 flex min-h-0 shrink-0 flex-col overflow-hidden',
-          'w-[45%] min-w-[22rem] max-w-[56rem]',
-          'rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-[var(--shadow-popover)]',
-        )}
-      >
-        {body}
-        {announcer}
-      </aside>
+      <>
+        {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role and aria-modal switch together with full screen. */}
+        <aside
+          ref={setAside}
+          role={fullScreen ? 'dialog' : undefined}
+          aria-modal={fullScreen ? true : undefined}
+          aria-labelledby={headingId}
+          data-artifact-panel=""
+          data-docked=""
+          data-full-screen={fullScreen ? '' : undefined}
+          onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
+            // A menu inside the panel closes itself first (and marks the key used).
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            if (!stepBack()) onClose(true);
+          }}
+          className={cn(
+            // Positioned: its visually hidden status texts are laid out inside it.
+            'flex min-h-0 flex-col overflow-hidden bg-[var(--bg-elevated)]',
+            fullScreen
+              ? // Above the sidebar and top bar (z-30); menus, dialogs and toasts
+                // it opens are portalled after it, so they still come first.
+                'fixed inset-0 z-50'
+              : // Below the conversation controls that hang from the top bar.
+                cn(
+                  'relative',
+                  dockedSize,
+                  'rounded-xl border border-[var(--border-subtle)] shadow-[var(--shadow-popover)]',
+                ),
+          )}
+        >
+          {fullScreen && <FocusGuard to="last" />}
+          {body}
+          {announcer}
+          {fullScreen && <FocusGuard to="first" />}
+        </aside>
+        {/* Keeps the conversation's width while the panel fills the window. */}
+        {fullScreen && <div aria-hidden="true" data-panel-placeholder="" className={dockedSize} />}
+      </>
     );
   }
 
@@ -286,18 +433,19 @@ export function ArtifactPanel({
         <DialogContent
           data-artifact-panel=""
           closeButton={false}
+          aria-modal="true"
+          data-full-screen={fullScreen ? '' : undefined}
           onEscapeKeyDown={(event) => {
-            // Escape leaves an edit first; a second one closes the panel.
-            if (editing) {
-              event.preventDefault();
-              setEditing(false);
-            }
+            // Escape leaves an edit, then full screen; the next one closes the panel.
+            if (stepBack()) event.preventDefault();
           }}
           className={cn(
             'flex flex-col gap-0 overflow-hidden p-0',
-            // Phones: the whole screen. Wider screens: a panel on the right.
+            // Phones and full screen: the whole screen. Wider screens: a panel on the right.
             'inset-0 h-dvh w-full max-w-none translate-x-0 translate-y-0 rounded-none',
-            'md:left-auto md:right-0 md:w-[min(56rem,92vw)] md:rounded-none md:border-y-0 md:border-r-0',
+            fullScreen
+              ? 'border-0'
+              : 'md:left-auto md:right-0 md:w-[min(56rem,92vw)] md:rounded-none md:border-y-0 md:border-r-0',
           )}
         >
           {body}

@@ -116,14 +116,12 @@ export const MessageRow = memo(function MessageRow({
       {limitOnly && <ToolSteps message={message} only="" />}
       {groups.map((group, index) => {
         if (group.type === 'reasoning') {
-          // Still thinking while nothing but the answer's text follows it.
-          const later = groups.slice(index + 1);
+          // Still thinking until the next part (a tool call or the answer) starts.
           return (
             <div key={group.key} data-reply-group="reasoning">
               <ReasoningPanel
                 text={group.text}
-                streaming={streaming && later.every((next) => next.type === 'text')}
-                answerStarted={later.length > 0}
+                thinking={streaming && index === groups.length - 1}
               />
             </div>
           );

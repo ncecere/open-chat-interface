@@ -444,6 +444,69 @@ describe('opening artifacts automatically', () => {
     );
   });
 
+  it('never opens in full screen, and leaves full screen as the person set it', async () => {
+    await startLiveReply({ title: 'Sign-Up Page', kind: 'html', content: '<!doctype html>' });
+    const panel = docked()!;
+    expect(panel.hasAttribute('data-full-screen')).toBe(false);
+    expect(panel.getAttribute('role')).toBeNull();
+    expect(dialog()).toBeNull();
+    expect(findButton('Full screen')).toBeDefined();
+    expect(container.querySelector('[inert]')).toBeNull();
+    expect(document.activeElement).toBe(composer());
+
+    // The person goes full screen on the source; saving swaps in the preview
+    // without leaving full screen.
+    await click(button('Full screen'));
+    expect(dialog()).toBe(panel);
+    listed = [created()];
+    await stream([
+      prompt,
+      reply(
+        createPart(
+          'output-available',
+          { title: 'Sign-Up Page', kind: 'html', content: PAGE },
+          savedOutput,
+        ),
+      ),
+    ]);
+    expect(docked()?.querySelector('iframe[data-artifact-frame]')).not.toBeNull();
+    expect(docked()?.hasAttribute('data-full-screen')).toBe(true);
+    expect(findButton('Exit full screen')).toBeDefined();
+  });
+
+  it('does not replace what the person is looking at full screen', async () => {
+    listed = [
+      created({ id: 'art-old', messageId: 'old-reply', sourceKey: 'block:0', title: 'Old' }),
+    ];
+    const old: UIMessage = {
+      id: 'old-reply',
+      role: 'assistant',
+      parts: [{ type: 'text', text: ['```html', '<!doctype html><p>old</p>', '```'].join('\n') }],
+    };
+    await mount([prompt, old]);
+    await click(button('Open artifact: Old'));
+    await click(button('Full screen'));
+    const heading = () => document.getElementById(docked()!.getAttribute('aria-labelledby')!);
+    await stream([prompt, old, { ...prompt, id: 'prompt-2' }]);
+    await stream([
+      prompt,
+      old,
+      { ...prompt, id: 'prompt-2' },
+      reply(createPart('input-streaming', { title: 'New', content: '<p>' })),
+    ]);
+    expect(heading()?.textContent).toBe('Old');
+    expect(docked()?.hasAttribute('data-full-screen')).toBe(true);
+    // Leaving full screen later does not bring the new one in either.
+    await click(button('Exit full screen'));
+    await stream([
+      prompt,
+      old,
+      { ...prompt, id: 'prompt-2' },
+      reply(createPart('input-streaming', { title: 'New', content: '<p>more' })),
+    ]);
+    expect(heading()?.textContent).toBe('Old');
+  });
+
   it('does not open when the person turned it off', async () => {
     localStorage.setItem('oci.autoOpenArtifacts', 'false');
     await startLiveReply({ title: 'Sign-Up Page', content: '<p>' });

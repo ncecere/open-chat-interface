@@ -82,6 +82,22 @@ the panel) or select Close to go back to the conversation. After clicking
 inside a preview, press Tab to move out of it first: the preview is sealed off
 from the rest of OCI, so it does not pass on key presses.
 
+### Full screen
+
+Select **Full screen** (the arrows beside Close) to give the artifact the whole
+window, over the sidebar and the top bar. It works from the panel beside the
+conversation, on a phone and on share links, and the preview, source and
+versions all use the extra room. While the artifact is full screen, the
+conversation behind it is out of reach: Tab moves only between the panel's
+controls, and screen readers treat it as a dialog. Select **Exit full screen**
+or press Escape to go back to the panel as it was; a second Escape closes the
+panel. (If you are editing a document, the first Escape leaves the edit.)
+
+Full screen is only ever your choice. Closing the panel or opening another
+artifact ends it, a panel that opens by itself never starts full screen, and a
+reply that starts writing an artifact does not replace the one you are viewing
+full screen.
+
 Open artifacts from their cards. If a reply's text links to an artifact, or to
 anything else OCI cannot open, the link shows as plain text.
 

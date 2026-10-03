@@ -139,7 +139,7 @@ describe('a reply in written order', () => {
     expect(shown()).toEqual([
       'reasoning:Reasoning',
       "tools:Searched the web for 'one' · 0 results",
-      'reasoning:Thinking...',
+      'reasoning:Thinking…',
     ]);
     await render(
       row(
@@ -156,6 +156,8 @@ describe('a reply in written order', () => {
     );
     expect(shown().at(-1)).toBe('text:It opens');
     expect(shown()).toHaveLength(4);
+    // The answer has started: that reasoning is finished.
+    expect(shown()[2]).toBe('reasoning:Reasoning');
   });
 
   it('shows a reply with only text as before', async () => {
@@ -164,9 +166,11 @@ describe('a reply in written order', () => {
     expect(container.querySelector('[aria-label="Tool steps"]')).toBeNull();
   });
 
-  it('keeps a single-step reply without tools as reasoning then text, thinking until it ends', async () => {
+  it('keeps a single-step reply without tools as reasoning then text, thinking until the text starts', async () => {
+    await render(row(reply(step, reasoning('Hmm.')), true));
+    expect(shown()).toEqual(['reasoning:Thinking…']);
     await render(row(reply(step, reasoning('Hmm.'), text('Answer')), true));
-    expect(shown()).toEqual(['reasoning:Thinking...', 'text:Answer']);
+    expect(shown()).toEqual(['reasoning:Reasoning', 'text:Answer']);
     await render(row(reply(step, reasoning('Hmm.'), text('Answer.'))));
     expect(shown()).toEqual(['reasoning:Reasoning', 'text:Answer.']);
   });
