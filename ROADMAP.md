@@ -182,6 +182,7 @@ together they make compliance, backups, exports and artifacts complete.
 | **Long artifact streams after a reload** | Reloading during a very long artifact can fail to resume, because a stored reply keeps a bounded number of stream events. | Resume from the saved draft instead of replaying every event. |
 | **Failed summaries are reported** | When a summary someone asked for fails in the background, the "Summarising" state simply disappears. | Tell the person it failed and why (allowance, model error), with a retry. |
 | **Slow search providers** | SearchApi occasionally times out, and a slow provider fails the search. | Retry once, then fall back to a second configured provider when one is set. |
+| **S3 suites in CI** | CI has no S3 (MinIO) service or PostgreSQL 17 client tools, so storage, backup and compliance-export tests skip there and their coverage floors are enforced only locally. | A MinIO service and matching `pg_dump` in CI, so those suites run on every pull request and their floors apply there too. |
 | **One place for operations pages** | The Backups and Compliance pages repeat the same destination and schedule controls. | Shared components for destinations, schedules and run history. |
 
 ## Later — v1.0 and beyond: assistants and media

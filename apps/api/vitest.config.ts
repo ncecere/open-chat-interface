@@ -1,5 +1,26 @@
 import { defineConfig } from 'vitest/config';
 
+/**
+ * Floors for modules whose tests need S3 (MinIO) and PostgreSQL client tools.
+ * Those suites skip without them, so the floors apply only where they run:
+ * locally with the MinIO fixture. CI has no MinIO yet and sets
+ * `OCI_COVERAGE_WITHOUT_S3=1` (ROADMAP.md, v0.10: run these suites in CI).
+ */
+const s3Floors =
+  process.env.OCI_COVERAGE_WITHOUT_S3 === '1'
+    ? {}
+    : {
+        'src/services/backups/pg-tools.ts': { statements: 90, branches: 75, functions: 85 },
+        'src/services/backups/run.ts': { statements: 88, branches: 70, functions: 85 },
+        'src/services/backups/settings.ts': { statements: 93, branches: 88, functions: 90 },
+        'src/routes/admin/backups.ts': { statements: 85, branches: 50, functions: 100 },
+        'src/services/compliance/export.ts': { statements: 90, branches: 78, functions: 90 },
+        'src/services/compliance/cursor.ts': { statements: 82, branches: 75, functions: 80 },
+        'src/services/compliance/holds.ts': { statements: 75, branches: 60, functions: 75 },
+        'src/services/compliance/settings.ts': { statements: 98, branches: 95, functions: 100 },
+        'src/routes/admin/compliance.ts': { statements: 88, branches: 60, functions: 100 },
+      };
+
 export default defineConfig({
   test: {
     environment: 'node',
@@ -24,6 +45,7 @@ export default defineConfig({
        * ratchet against silent erosion, not a target to chase.
        */
       thresholds: {
+        ...s3Floors,
         'src/auth/permissions.ts': { statements: 100, branches: 100, functions: 100 },
         'src/auth/policy.ts': { statements: 85, branches: 85, functions: 100 },
         'src/lib/crypto.ts': { statements: 85, branches: 95, functions: 70 },
@@ -104,29 +126,20 @@ export default defineConfig({
         'src/services/webhooks/signing.ts': { statements: 100, branches: 100, functions: 100 },
         'src/services/webhooks/delivery.ts': { statements: 85, branches: 70, functions: 75 },
         'src/services/webhooks/endpoints.ts': { statements: 90, branches: 85, functions: 95 },
-        'src/services/backups/pg-tools.ts': { statements: 90, branches: 75, functions: 85 },
         'src/services/backups/retention.ts': { statements: 100, branches: 100, functions: 100 },
-        'src/services/backups/run.ts': { statements: 88, branches: 70, functions: 85 },
-        'src/services/backups/settings.ts': { statements: 93, branches: 88, functions: 90 },
         'src/services/observability/http.ts': { statements: 98, branches: 90, functions: 100 },
         'src/services/observability/metrics.ts': { statements: 95, branches: 75, functions: 100 },
         'src/services/observability/tracing.ts': { statements: 90, branches: 72, functions: 95 },
         'src/services/observability/events.ts': { statements: 100, branches: 100, functions: 100 },
         'src/routes/admin/webhooks.ts': { statements: 98, branches: 70, functions: 100 },
-        'src/routes/admin/backups.ts': { statements: 85, branches: 50, functions: 100 },
         // v0.9 compliance export and legal hold: the cursor (exactly once), what content
         // leaves OCI, and the holds that stop retention and deletion.
-        'src/services/compliance/export.ts': { statements: 90, branches: 78, functions: 90 },
-        'src/services/compliance/cursor.ts': { statements: 82, branches: 75, functions: 80 },
         'src/services/compliance/content.ts': { statements: 98, branches: 85, functions: 100 },
-        'src/services/compliance/holds.ts': { statements: 75, branches: 60, functions: 75 },
         'src/services/compliance/hold-errors.ts': {
           statements: 100,
           branches: 100,
           functions: 100,
         },
-        'src/services/compliance/settings.ts': { statements: 98, branches: 95, functions: 100 },
-        'src/routes/admin/compliance.ts': { statements: 88, branches: 60, functions: 100 },
         // v0.9 meaning-based search: provider credentials, runtime DDL, usage, fallback.
         'src/services/embeddings/config.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/embeddings/embed.ts': { statements: 95, branches: 90, functions: 100 },
