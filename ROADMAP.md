@@ -173,6 +173,7 @@ together they make compliance, backups, exports and artifacts complete.
 
 | Item | Gap in v0.9 | Plan |
 | --- | --- | --- |
+| **Fixes found writing the documentation site** | Checking every claim against the code found gaps: administrators cannot delete an account in the dashboard (the API can), three of the four listed keyboard shortcuts do nothing, the bundled Compose file passes an empty initial administrator password so the API refuses to start, conversations cannot be renamed, a model's context window and output limit cannot be set in the dashboard, the sharing guide omits live links and expiry, and behind another proxy the web container may record the proxy's address instead of the person's. | Delete user in People (confirmation, refused under legal hold), the shortcuts wired up, Compose fixed, rename in the sidebar and top bar, context and output limits editable per model, the guides corrected, and a trusted-proxy setting for the web container. Done first in v0.10. |
 | **Legal hold covers everything** | A hold pauses conversation retention, trash purging, temporary-chat expiry, memory retention and permanent deletion, but removing a held person's project still deletes its files at once, and their usage events are still pruned. | Holds also pause project file deletion and usage-event pruning, with tests that every deletion path checks the hold. |
 | **Deletions in the compliance export** | The export streams audit events and content, but not what was deleted, so a downstream archive cannot tell a deletion from a gap. | Deletions (conversations, messages, attachments, artifacts, memory) exported as events with who, what and when, never the deleted content. |
 | **Backups include files** | Automated backups copy the database and list every attachment object with its checksum, but do not copy the attachments themselves; operators protect the storage separately. | Incremental attachment copies to the backup destination alongside each database backup, covered by retention and the restore check. |
@@ -217,6 +218,7 @@ and embedding already run as background jobs. What is missing is below.
 | **Read-only maintenance mode** | For the rare change that cannot be online, down is the wrong fallback. | People can read and search while sending pauses, announced ahead with a scheduled banner. |
 | **Scale test harness** | OCI has not been measured at tens of thousands of people and tens of millions of messages. | A synthetic dataset at that size and a repeatable run that measures upgrade and migration time, page and search latency and job throughput before each release, with results published in the release notes. |
 | **Connection pooling** | OCI needs direct or session-mode connections, and many replicas against one cluster run out of them. | Transaction-mode pooling (PgBouncer) for ordinary queries, with a small direct pool for locks and jobs. Optional routing of heavy reads (search, reports, exports) to replicas. |
+| **Images for arm64** | Release images are published for linux/amd64 only. | linux/arm64 images alongside amd64, built and tested in CI. |
 | **Kubernetes Helm chart** | The zero-downtime procedure should be the default, not a runbook. | A first-party chart: migration job before the rollout, rolling updates, disruption budgets, readiness gating and autoscaling on OCI's metrics. |
 | **Draining replies on shutdown** | A replica that stops ends the replies it is writing, so every rolling upgrade cuts some off. | On shutdown a replica stops taking new turns, lets replies in progress finish within a limit, and saves anything left so it can continue elsewhere. |
 | **Separate worker role** | Embedding, imports, document rendering, exports and backups run on the same replicas as requests. | An optional worker role that runs background work and scales separately. |
@@ -264,7 +266,6 @@ Ideas with merit that need more evidence or design before they are scheduled.
   rate limits and the acceptable-use policy.
 - **Native PDF input** to models that support it, instead of always extracting
   text.
-- **Multi-architecture images** (linux/arm64) for the published containers.
 - **Changing your own email address.** For single sign-on accounts the
   identity provider owns the address, and OCI uses it to link sign-ins to
   accounts and to check domain allowlists, so a change in OCI could split an
