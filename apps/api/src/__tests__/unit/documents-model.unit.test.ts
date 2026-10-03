@@ -218,7 +218,9 @@ describe('document model: hostile input', () => {
     parseMarkdown('`a'.repeat(100_000));
     // micromark took over a minute on the table alone.
     expect(Date.now() - started).toBeLessThan(10_000);
-  });
+    // The test's own timeout must exceed the bound it asserts: a slow CI runner
+    // under coverage takes over the default five seconds while still linear.
+  }, 20_000);
 
   it('accepts only absolute, bounded http(s) and mailto links', () => {
     expect(safeHref(' https://example.com ')).toBe('https://example.com/');
