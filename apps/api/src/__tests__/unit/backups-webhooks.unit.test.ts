@@ -178,7 +178,8 @@ describe('pg_dump connection', () => {
     expect(pgToolPath('pg_dump', '/usr/lib/postgresql/17/bin')).toBe(
       '/usr/lib/postgresql/17/bin/pg_dump',
     );
-    expect(pgToolPath('pg_restore', undefined)).toBe('pg_restore');
+    // An empty directory means PATH; an explicit value, not BACKUP_PG_BIN_DIR, which CI sets.
+    expect(pgToolPath('pg_restore', '')).toBe('pg_restore');
   });
 });
 
