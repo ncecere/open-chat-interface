@@ -2,7 +2,7 @@
 
 Where Open Chat Interface (OCI) stands, what comparable products offer, and
 what we intend to build next. Written against **v0.6.1** and updated for
-**v0.7.0**, **v0.8.0** and **v0.9.0** in **October 2026**.
+**v0.7.0**, **v0.8.0**, **v0.9.0** and **v0.10.0** in **October 2026**.
 
 This is a plan, not a promise. Priorities change as we learn, and an item moves
 into a release only when it has a design, tests and documentation. Review this
@@ -14,8 +14,8 @@ document at every minor release.
 - [Shipped — v0.7: organise and find](#shipped--v07-organise-and-find)
 - [Shipped — v0.8: tools and connected knowledge](#shipped--v08-tools-and-connected-knowledge)
 - [Shipped — v0.9: make and operate](#shipped--v09-make-and-operate)
-- [Now — v0.10: finish and harden](#now--v010-finish-and-harden)
-- [Next — v0.11: always on](#next--v011-always-on)
+- [Shipped — v0.10: finish and harden](#shipped--v010-finish-and-harden)
+- [Now — v0.11: always on](#now--v011-always-on)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -166,32 +166,26 @@ upgrade notes, and `docs/dev/v0.9-design.md` for the design.
 | **Observability and events** | Prometheus metrics, OpenTelemetry traces and signed webhooks. | — |
 | **Automated backups** | Verified, scheduled `pg_dump` to S3 with retention and an attachment manifest. | Copying attachments (v0.10). |
 
-## Now — v0.10: finish and harden
+## Shipped — v0.10: finish and harden
 
-The gaps v0.9 left open, closed before new features. Each is small on its own;
-together they make compliance, backups, exports and artifacts complete.
+Released as v0.10.0 in October 2026. See `CHANGELOG.md` for the details and
+upgrade notes, and `docs/dev/v0.10-design.md` for the design.
 
-| Item | Gap in v0.9 | Plan |
+| Item | What shipped | Left for later |
 | --- | --- | --- |
-| **Fixes found writing the documentation site** | Checking every claim against the code found gaps: administrators cannot delete an account in the dashboard (the API can), three of the four listed keyboard shortcuts do nothing, the bundled Compose file passes an empty initial administrator password so the API refuses to start, conversations cannot be renamed, a model's context window and output limit cannot be set in the dashboard, the sharing guide omits live links and expiry, and behind another proxy the web container may record the proxy's address instead of the person's. | Delete user in People (confirmation, refused under legal hold), the shortcuts wired up, Compose fixed, rename in the sidebar and top bar, context and output limits editable per model, the guides corrected, and a trusted-proxy setting for the web container. Done first in v0.10. |
-| **Legal hold covers everything** | A hold pauses conversation retention, trash purging, temporary-chat expiry, memory retention and permanent deletion, but removing a held person's project still deletes its files at once, and their usage events are still pruned. | Holds also pause project file deletion and usage-event pruning, with tests that every deletion path checks the hold. |
-| **Deletions in the compliance export** | The export streams audit events and content, but not what was deleted, so a downstream archive cannot tell a deletion from a gap. | Deletions (conversations, messages, attachments, artifacts, memory) exported as events with who, what and when, never the deleted content. |
-| **Backups include files** | Automated backups copy the database and list every attachment object with its checksum, but do not copy the attachments themselves; operators protect the storage separately. | Incremental attachment copies to the backup destination alongside each database backup, covered by retention and the restore check. |
-| **PDF export in every script** | Exported PDFs cover Latin scripts only; Chinese, Japanese, Korean, Arabic, Hebrew and others are replaced. | Embedded fonts with wide script coverage (and right-to-left layout), chosen per document and loaded only when a document needs them, so the API image grows little. |
-| **Resizable artifact panel** | The docked panel is a fixed share of the window. | A drag handle and keyboard-operable resizing, remembered in the browser. |
-| **Long artifact streams after a reload** | Reloading during a very long artifact can fail to resume, because a stored reply keeps a bounded number of stream events. | Resume from the saved draft instead of replaying every event. |
-| **Failed summaries are reported** | When a summary someone asked for fails in the background, the "Summarising" state simply disappears. | Tell the person it failed and why (allowance, model error), with a retry. |
-| **Slow search providers** | SearchApi occasionally times out, and a slow provider fails the search. | Retry once, then fall back to a second configured provider when one is set. |
-| **S3 suites in CI** | CI has no S3 (MinIO) service or PostgreSQL 17 client tools, so storage, backup and compliance-export tests skip there and their coverage floors are enforced only locally. | A MinIO service and matching `pg_dump` in CI, so those suites run on every pull request and their floors apply there too. |
-| **Your shared links** | People can see a conversation's share link only from inside that conversation, so links shared long ago are easy to forget. | A Settings page listing every share link a person has made (conversation, created, expiry, view count) with Revoke and Revoke all, audited. |
-| **Default model and reasoning level per person** | The composer remembers the last model per browser only, so a new device starts from the instance default. | A default model and reasoning level in Settings, stored with the account, within what the person's role allows; the instance default still applies when unset or no longer allowed. |
-| **Self-service account deletion** | Settings no longer shows a Delete Account button (it never worked); administrators delete accounts under People. | An administrator setting (off by default, per role) that lets people delete their own account after typing a confirmation. Refused under legal hold; conversations, files, artifacts, memory and share links deleted, usage events kept for budgets; audited. For single sign-on accounts the next sign-in creates a new, empty account, which the confirmation explains. |
-| **Clearer project search** | Keyword search cannot tell two meanings of a word apart ("plan a trip" against "data management plans"); only the optional reranker drops such passages today. | Show which passages a reply used, and let the person leave a file out of search for a question. |
-| **Sidebar polish** | The remembered expanded projects do not sync between open tabs. | Sync the expanded state across tabs. |
-| **Branding applied everywhere** | Branding sets the name, logo, colour theme, default theme and sign-in message, but not every surface follows it: the browser tab always says "Open Chat Interface", there is no favicon from the logo, verification and password-reset emails do not name the instance, and diagrams read an accent colour the Branding page cannot set, so they always use the default orange. | An end-to-end check of every surface (sign-in, sidebar, tab title and icon, share pages, emails, artifacts and diagrams, exports) with a browser test that sets custom branding and asserts each one, and fixes for what does not follow it. Diagram colours follow the chosen colour theme. |
-| **One place for operations pages** | The Backups and Compliance pages repeat the same destination and schedule controls. | Shared components for destinations, schedules and run history. |
+| **Fixes found writing the documentation site** | Delete user in People, the listed shortcuts, renaming conversations, per-model context and output limits, Compose's initial administrator, corrected guides, and one trusted client address (also shipped as v0.9.2). | — |
+| **Legal hold covers everything** | Every deletion path checks holds, with a test that fails on any unlisted deletion. | Edits (renames, memory text) are not held; backup retention still deletes old backups. |
+| **Deletions in the compliance export** | Every deletion writes an audit entry (never content), carried by the exactly-once export. | — |
+| **Backups include files** | Incremental, checksummed copies of attachments, thumbnails and the logo, swept after retention, with a restore script. | A same-bucket copy shortcut; a database-side sweep list for very large instances. |
+| **PDF export in every script** | Noto fonts per run of text, Arabic and Hebrew shaped and right to left. | Colour emoji; italic for CJK, Arabic and Hebrew. |
+| **Artifacts and summaries** | A resizable panel, long replies resuming after a reload, failed summaries reported. | A per-account panel width. |
+| **Slow search providers** | Retry, then a fallback provider. | — |
+| **Clearer project search** | The passages a reply used, and leaving files out of a message. | Leaving files out of a new conversation's first message; headings stored at indexing. |
+| **People's settings** | Your shared links, a default model and reasoning level, self-service account deletion behind a per-role switch, usage kept anonymised after deletion. | — |
+| **Branding applied everywhere** | The OCI logo as the default mark, titles, icons, share pages, emails, diagrams and exports. | Link previews for share pages (needs server-rendered HTML); a web app manifest. |
+| **S3 suites in CI, operations pages, sidebar sync** | S3, backup and compliance suites run in CI on VersityGW; shared operations components; expanded projects synced across tabs. | — |
 
-## Next — v0.11: always on
+## Now — v0.11: always on
 
 Large deployments (tens of thousands of people, tens of millions of messages,
 a highly available PostgreSQL cluster such as Patroni) cannot take hours of
