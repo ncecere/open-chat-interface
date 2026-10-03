@@ -11,7 +11,11 @@ export function deletionConfirmed(typed: string, email: string): boolean {
 }
 
 const DELETED =
-  'conversations and their messages, uploaded files, projects, artifacts, memory, share links, connected accounts, saved views, usage records and preferences';
+  'conversations and their messages, uploaded files, projects, artifacts, memory, share links, connected accounts, saved views, limit overrides and preferences';
+
+/** Usage is kept for instance reports and budgets, without the person (v0.10). */
+const USAGE_KEPT =
+  'Usage records (messages, tokens and cost per model) are kept without anything that identifies';
 
 export function AccountDeletionText({
   subject,
@@ -27,7 +31,8 @@ export function AccountDeletionText({
         <br />
         <br />
         The audit log keeps every entry, including this deletion, with the email address it was
-        recorded with. Invites and announcements they created stay.
+        recorded with. Invites and announcements they created stay. {USAGE_KEPT} them, so usage
+        reports and budgets stay accurate; reports show them under Deleted accounts.
       </>
     );
   }
@@ -38,7 +43,8 @@ export function AccountDeletionText({
       <br />
       <br />
       The audit log keeps every entry, including this deletion, with your email address. Invites and
-      announcements you created stay.
+      announcements you created stay. {USAGE_KEPT} you, so your organisation’s usage totals stay
+      accurate.
     </>
   );
 }

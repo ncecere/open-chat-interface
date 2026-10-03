@@ -1,8 +1,16 @@
 import { and, eq, gte, inArray, schema, sql } from '@oci/db';
+import { DELETED_ACCOUNTS_LABEL } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { getDisplayTimezone } from '../lifecycle/settings.js';
 import { type Bounded, rangeStart } from './common.js';
 
+/**
+ * Instance totals. A deleted account's usage is kept without the person
+ * (migration 0038), so it stays in every sum; `activeUsers` counts the people
+ * who still have an account, since nothing is left to tell deleted ones apart.
+ * In-flight reservations are left out, as in every other figure here: they are
+ * estimates, and an account deletion removes them.
+ */
 export interface UsageTotals {
   messages: number;
   tokens: number;
@@ -19,7 +27,9 @@ export async function usageTotals(days: number): Promise<UsageTotals> {
       activeUsers: sql<number>`count(distinct ${schema.usageEvent.userId})::int`,
     })
     .from(schema.usageEvent)
-    .where(sql`${schema.usageEvent.occurredAt} >= ${rangeStart(days)}::timestamptz`);
+    .where(
+      sql`${schema.usageEvent.occurredAt} >= ${rangeStart(days)}::timestamptz and ${schema.usageEvent.pending} = false`,
+    );
 
   return {
     messages: Number(row?.messages ?? 0),
@@ -165,31 +175,36 @@ export async function modelUsage(days: number, limit = 25): Promise<Bounded<Mode
   };
 }
 
-export interface ConsumerUsage {
-  userId: string;
-  name: string;
-  email: string;
-  role: string;
+export type ConsumerUsage = {
   messages: number;
   tokens: number;
   costMicros: number;
-}
+} & (
+  | { deleted: false; userId: string; name: string; email: string; role: string }
+  /** Every deleted account's usage together, with nothing that identifies anyone. */
+  | { deleted: true; userId: null; name: string; email: null; role: null }
+);
 
-/** Heaviest consumers. Identity and counts only; never conversation content. */
+/**
+ * Heaviest consumers. Identity and counts only; never conversation content.
+ * The usage of deleted accounts, kept without the person, is one
+ * "Deleted accounts" row ranked with the rest.
+ */
 export async function topConsumers(days: number, limit = 10): Promise<Bounded<ConsumerUsage>> {
   // Grows with the user base, so the page shows a leaderboard and says how
-  // many people are behind it rather than listing everyone.
+  // many people are behind it rather than listing everyone. Deleted accounts
+  // count once, as the single row they are shown as.
   const [counted] = await db.execute<{ total: string }>(sql`
-    select count(distinct user_id) as total
+    select count(distinct user_id) + coalesce(bool_or(user_id is null), false)::int as total
     from usage_event
     where occurred_at >= ${rangeStart(days)}::timestamptz and pending = false
   `);
 
   const rows = await db.execute<{
-    user_id: string;
-    name: string;
-    email: string;
-    role: string;
+    user_id: string | null;
+    name: string | null;
+    email: string | null;
+    role: string | null;
     messages: string;
     tokens: string;
     cost_micros: string;
@@ -200,7 +215,7 @@ export async function topConsumers(days: number, limit = 10): Promise<Bounded<Co
       sum(e.tokens_in::bigint + e.tokens_out::bigint) as tokens,
       sum(e.cost_micros) as cost_micros
     from usage_event e
-    join "user" u on u.id = e.user_id
+    left join "user" u on u.id = e.user_id
     where e.occurred_at >= ${rangeStart(days)}::timestamptz and e.pending = false
     group by e.user_id, u.name, u.email, u.role
     order by sum(e.cost_micros) desc, sum(e.message_count) desc
@@ -208,15 +223,31 @@ export async function topConsumers(days: number, limit = 10): Promise<Bounded<Co
   `);
 
   return {
-    entries: rows.map((row) => ({
-      userId: row.user_id,
-      name: row.name,
-      email: row.email,
-      role: row.role,
-      messages: Number(row.messages),
-      tokens: Number(row.tokens),
-      costMicros: Number(row.cost_micros),
-    })),
+    entries: rows.map((row): ConsumerUsage => {
+      const amounts = {
+        messages: Number(row.messages),
+        tokens: Number(row.tokens),
+        costMicros: Number(row.cost_micros),
+      };
+      return row.user_id === null
+        ? {
+            deleted: true,
+            userId: null,
+            name: DELETED_ACCOUNTS_LABEL,
+            email: null,
+            role: null,
+            ...amounts,
+          }
+        : // The key guarantees the account exists while it is referenced.
+          {
+            deleted: false,
+            userId: row.user_id,
+            name: row.name!,
+            email: row.email!,
+            role: row.role!,
+            ...amounts,
+          };
+    }),
     totalCount: Number(counted?.total ?? 0),
   };
 }

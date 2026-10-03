@@ -78,13 +78,18 @@ will do anything, so the wrong account cannot be deleted with a stray click.
 Deleting is permanent. It removes the account and everything it owns: its
 conversations and their messages, uploaded files (the stored files are removed
 shortly after by the storage cleanup job), projects, artifacts, memory, share
-links, connected accounts, saved views, usage records, limit overrides and
-preferences. The person is signed out at once.
+links, connected accounts, saved views, limit overrides and preferences. The
+person is signed out at once.
 
 Kept: the **audit log**, including everything the person did (their entries
 keep the email address they were recorded with) and a `user.delete` entry
 naming the account and its role. Invitations and announcements they created
-stay too.
+stay too. **Usage records** (messages, tokens and cost per model, daily
+totals and limit refusals) are kept without anything that identifies the
+person, so usage reports and budget history do not change; reports show them
+as one **Deleted accounts** row (see
+[Usage](audit-reporting.md#usage)). Only a run still in progress loses its
+reserved allowance.
 
 The server refuses:
 

@@ -156,6 +156,11 @@ describe('Settings → Account', () => {
       expect(text).toContain('conversations and their messages');
       expect(text).toContain('share links');
       expect(text).toContain('The audit log keeps every entry');
+      // Usage is kept for reports, without the person (v0.10).
+      expect(text).toContain(
+        'Usage records (messages, tokens and cost per model) are kept without anything that identifies you',
+      );
+      expect(text).not.toMatch(/everything it owns:[^.]*usage records/);
       expect(text).not.toContain('a new, empty account');
       expect(confirmButton().disabled).toBe(true);
 

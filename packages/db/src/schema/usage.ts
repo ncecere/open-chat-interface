@@ -1,8 +1,10 @@
 import type { QuotaMetric, QuotaWindowKind, ReasoningEffort, UserRole } from '@oci/shared';
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -14,6 +16,19 @@ import { primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
 import { user } from './auth.js';
 import { organization } from './organization.js';
+
+/**
+ * The person a usage-reporting row belongs to, cleared rather than cascaded
+ * when the account is deleted. Named explicitly: migration 0038 replaced the
+ * original cascading key under a new name instead of rewriting it in place.
+ */
+function keptAfterDeletion(table: string, userId: AnyPgColumn) {
+  return foreignKey({
+    name: `${table}_user_id_set_null_fk`,
+    columns: [userId],
+    foreignColumns: [user.id],
+  }).onDelete('set null');
+}
 
 /**
  * A named, reusable limit. `limitValue` is in the metric's own unit: messages,
@@ -126,6 +141,10 @@ export const quotaPolicyRole = pgTable(
  * One row per admitted generation attempt. Policy evaluation reads these because a
  * daily rollup cannot answer a rolling or non-UTC calendar window correctly.
  * Prices are snapshotted so later catalog edits never rewrite past spend.
+ *
+ * `userId` is null once the account is deleted (migration 0038): the usage
+ * stays in instance totals and reports as "Deleted accounts", with nothing
+ * left that identifies the person.
  */
 export const usageEvent = pgTable(
   'usage_event',
@@ -134,9 +153,7 @@ export const usageEvent = pgTable(
     organizationId: text('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    userId: text('user_id'),
     modelSlug: text('model_slug').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
     messageCount: integer('message_count').notNull().default(1),
@@ -162,6 +179,7 @@ export const usageEvent = pgTable(
     reservedTokens: integer('reserved_tokens').notNull().default(0),
   },
   (t) => [
+    keptAfterDeletion('usage_event', t.userId),
     index('usage_event_user_occurred_idx').on(t.userId, t.occurredAt),
     index('usage_event_occurred_idx').on(t.occurredAt),
     index('usage_event_model_idx').on(t.modelSlug),
@@ -178,6 +196,7 @@ export const usageEvent = pgTable(
  *
  * Sustained denials usually mean a limit is set wrong rather than that someone
  * is misbehaving, which is exactly what an administrator currently cannot see.
+ * Kept, without the person, when the account is deleted (migration 0038).
  */
 export const quotaDenial = pgTable(
   'quota_denial',
@@ -186,9 +205,7 @@ export const quotaDenial = pgTable(
     organizationId: text('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    userId: text('user_id'),
     policyId: text('policy_id'),
     policyName: text('policy_name').notNull(),
     modelSlug: text('model_slug').notNull(),
@@ -197,12 +214,16 @@ export const quotaDenial = pgTable(
     ...timestamps(),
   },
   (t) => [
+    keptAfterDeletion('quota_denial', t.userId),
     uniqueIndex('quota_denial_unique').on(t.userId, t.policyId, t.modelSlug, t.day),
     index('quota_denial_day_idx').on(t.day),
   ],
 );
 
-/** Daily rollup used by the usage meter and admin analytics. */
+/**
+ * Daily rollup used by the usage meter and admin analytics. Kept, without the
+ * person, when the account is deleted (migration 0038).
+ */
 export const usageRecord = pgTable(
   'usage_record',
   {
@@ -210,9 +231,7 @@ export const usageRecord = pgTable(
     organizationId: text('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    userId: text('user_id'),
     modelSlug: text('model_slug').notNull(),
     day: text('day').notNull(),
     messageCount: integer('message_count').notNull().default(0),
@@ -222,6 +241,7 @@ export const usageRecord = pgTable(
     ...timestamps(),
   },
   (t) => [
+    keptAfterDeletion('usage_record', t.userId),
     index('usage_record_user_day_idx').on(t.userId, t.day),
     // Concurrent streams previously raced this rollup into duplicate rows.
     uniqueIndex('usage_record_user_model_day_unique').on(t.userId, t.modelSlug, t.day),

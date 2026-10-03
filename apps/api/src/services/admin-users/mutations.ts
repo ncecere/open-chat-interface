@@ -1,4 +1,4 @@
-import { eq, schema, sql } from '@oci/db';
+import { and, eq, schema, sql } from '@oci/db';
 import type { createUserSchema, updateUserSchema } from '@oci/shared';
 import type { z } from 'zod';
 import { auth } from '../../auth/index.js';
@@ -166,6 +166,12 @@ export const LAST_ADMIN_SELF_DELETION_MESSAGE =
  * person's own deletion is recorded with `reason: 'user'` and `self: true`.
  * Only the self path may delete the caller's own account: an administrator
  * cannot remove themselves from People by mistake.
+ *
+ * Usage is kept without the person (migration 0038): usage events, daily
+ * totals and limit refusals lose their `user_id`, so instance reports and
+ * budget history do not change after the fact. Only in-flight quota
+ * reservations, which hold an estimate rather than measured use, go with the
+ * account.
  */
 export async function deleteUser(
   actor: AdminUserActor,
@@ -233,6 +239,11 @@ export async function deleteUser(
           legacy: { email: target.email, role: target.role, ...(self ? { self: true } : {}) },
         },
       ]);
+      // The account row is locked, so no reservation can be added or settled
+      // until this commits (both lock the owner first).
+      await tx
+        .delete(schema.usageEvent)
+        .where(and(eq(schema.usageEvent.userId, targetId), eq(schema.usageEvent.pending, true)));
       await tx.delete(schema.user).where(eq(schema.user.id, targetId));
     });
   } catch (error) {

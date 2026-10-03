@@ -67,6 +67,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   branding; verification and password-reset emails name your instance;
   diagrams use the chosen colour theme's accent (neutral keeps the default
   orange); exports name your instance.
+- **Usage is kept after an account is deleted.** Deleting an account, by an
+  administrator or by the person, keeps its usage events, daily totals and
+  refusal counts with the link to the person removed (no name, email or role
+  is kept), so instance-wide reports and budget history stay accurate; Usage
+  shows them as **Deleted accounts**. Pending reservations, limit overrides
+  and the storage counter are still deleted. Migration
+  `0038_usage_kept_after_deletion` scans and rewrites no table. Usage of
+  accounts deleted before the upgrade is already gone.
 - **Project-search notes keep short excerpts.** To show which passages a
   reply used, the note now stores up to 24 passage starts with the reply.
   Share links never show the note.

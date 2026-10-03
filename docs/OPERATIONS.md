@@ -538,6 +538,23 @@ The composer no longer reads the last model picked from the browser
 People who relied on it start from the instance default, or the default they
 save, on every device.
 
+#### Usage kept after an account is deleted (migration 0038)
+
+Migration `0038_usage_kept_after_deletion` makes `user_id` nullable on
+`usage_event`, `usage_record` and `quota_denial`, and replaces each table's
+cascading key to `user` with one that sets `user_id` to null. Deleting an
+account now keeps its usage history without the person; reports show it as
+**Deleted accounts** ([Usage](admin/audit-reporting.md#deleted-accounts)).
+Usage of accounts deleted before the upgrade is already gone.
+
+Safe to apply before the new release is deployed: v0.9 replicas always write
+`user_id`. Dropping `NOT NULL` changes only the catalog. Each new key is added
+`NOT VALID` and the old key dropped, so nothing scans or rewrites a table and
+every lock is brief, whatever the number of usage events. The new keys are
+never validated, on purpose: the old keys already guaranteed every existing
+row refers to an account, and a `NOT VALID` key is still checked for new and
+changed rows and still sets `user_id` to null on deletion.
+
 Also in v0.10 without a migration: Settings → Sharing, and the **Delete own
 account** role switch, which is off for every role after the upgrade (see
 [Self-service account deletion](admin/governance.md#self-service-account-deletion)).
@@ -554,7 +571,9 @@ add another message. Partial reports merge cumulative counts without erasing
 previous actuals; a complete report replaces them, including downward corrections.
 Unresolved events are exempt from normal usage-event pruning until reconciled,
 retaining their identity and price snapshot. This does not extend their quota
-window, and account deletion still erases the account's usage history.
+window. Account deletion keeps the account's usage history without the person
+(migration `0038_usage_kept_after_deletion`, `user_id` set to null); such
+events are pruned by age even when unresolved, and the sweep skips them.
 A sweep processes at most 200 old unclaimed events,
 with one short transaction per event, and skips active matching assistant rows.
 It records uncertainty, not measured zero or proof that an old producer stopped.

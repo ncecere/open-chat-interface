@@ -58,7 +58,9 @@ async function buildUsageReport(windowDays: number, appName: string): Promise<st
 
   lines.push('', 'Heaviest use');
   for (const consumer of consumers.entries) {
-    lines.push(`  ${consumer.email}  ${consumer.messages.toLocaleString()} messages`);
+    // Deleted accounts are one row, named by the label rather than an address.
+    const who = consumer.deleted ? consumer.name : consumer.email;
+    lines.push(`  ${who}  ${consumer.messages.toLocaleString()} messages`);
   }
 
   return lines.join('\n');

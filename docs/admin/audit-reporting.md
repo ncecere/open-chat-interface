@@ -71,9 +71,30 @@ original UTC-day rollup without counting another message.
 
 Unresolved events are exempt from normal usage-event retention until resolved,
 so their identity and original prices remain available for reconciliation.
-Account deletion still removes that account's usage records. A quota meter can
-include held allowance not yet present in daily totals. Historical losses from
-older non-transactional accounting are not repaired automatically by an upgrade.
+A quota meter can include held allowance not yet present in daily totals.
+Historical losses from older non-transactional accounting are not repaired
+automatically by an upgrade.
+
+### Deleted accounts
+
+Deleting an account keeps its usage records (events, daily totals and limit
+refusals) without anything that identifies the person, so totals, the daily
+and per-model figures and scheduled reports do not change afterwards:
+
+- **Top consumers** and the scheduled report's **Heaviest use** show the usage
+  of every deleted account as one **Deleted accounts** row, ranked with
+  everyone else.
+- **People** (and **Active people** in reports) and **people affected** on the
+  Limits tab count accounts that still exist; a deleted person's usage stays
+  in every other figure.
+- A person's own usage meter and their page under People never include it.
+- Usage history retention prunes these records by age like any other,
+  including unresolved ones, since nothing can amend them any more.
+
+Only a run still in progress at the moment of deletion loses its reserved
+allowance; it was never part of the reports. Usage records written before
+this behaviour (v0.10) for accounts already deleted were removed at the time
+and cannot be recovered.
 
 Use it before setting a quota. A limit chosen from observed use lands better
 than one chosen from an assumption, and this page is how you find out what

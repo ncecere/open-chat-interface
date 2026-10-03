@@ -267,6 +267,13 @@
       "when": 1790539200017,
       "tag": "0037_compaction_failure",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790539200018,
+      "tag": "0038_usage_kept_after_deletion",
+      "breakpoints": true
     }
   ]
 }

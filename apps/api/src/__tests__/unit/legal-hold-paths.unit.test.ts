@@ -43,6 +43,10 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'checked',
     how: 'Refused with a clear message, and by the database trigger on every path (live rows "Deleting the account", "refuses account deletion in the database").',
   },
+  'services/admin-users/mutations.ts usageEvent': {
+    hold: 'checked',
+    how: 'Only in-flight reservations, in the account deletion transaction that the hold refuses (live rows "Deleting the account", "refuses account deletion in the database"); measured usage is kept without the person.',
+  },
   'services/lifecycle/retention.ts usageEvent': {
     hold: 'checked',
     how: 'Usage-event pruning skips held people (live row "Usage-event pruning").',

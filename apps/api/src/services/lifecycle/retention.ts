@@ -107,6 +107,9 @@ export async function applyThreadRetention(now: Date = new Date()): Promise<numb
  * still report usage, and amendments need the event's identity and price snapshot.
  * Nor are the events of people on legal hold: they record what each person
  * used, when and with which model.
+ *
+ * A deleted account's events (no owner) are pruned by age like any other, even
+ * when unresolved: nothing can amend them once their owner is gone.
  */
 export async function pruneUsageEvents(now: Date = new Date()): Promise<number> {
   const { usageEventRetentionDays } = await getRetentionSettings();
@@ -135,8 +138,10 @@ export async function pruneUsageEvents(now: Date = new Date()): Promise<number> 
       and(
         lte(schema.usageEvent.occurredAt, cutoff),
         // Preserve both active runs and unresolved accounting identities.
-        eq(schema.usageEvent.pending, false),
-        eq(schema.usageEvent.usageUnknown, false),
+        or(
+          and(eq(schema.usageEvent.pending, false), eq(schema.usageEvent.usageUnknown, false)),
+          isNull(schema.usageEvent.userId),
+        ),
         notOnLegalHold(schema.usageEvent.userId),
       ),
     )

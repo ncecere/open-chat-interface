@@ -1,4 +1,4 @@
-import { and, asc, eq, lt, schema, sql } from '@oci/db';
+import { and, asc, eq, isNotNull, lt, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { activeChatClaim, livePendingCutoff, SWEEP_BATCH_SIZE } from './reservation-state.js';
@@ -9,6 +9,9 @@ export async function sweepAbandonedReservations(now: Date = new Date()): Promis
   const eligible = () =>
     and(
       eq(schema.usageEvent.pending, true),
+      // A deleted account's reservations are removed with it; one left by an
+      // older release has no owner to settle for, and retention prunes it.
+      isNotNull(schema.usageEvent.userId),
       lt(schema.usageEvent.occurredAt, livePendingCutoff(now)),
       sql`not (${activeChatClaim()})`,
     );
@@ -23,7 +26,8 @@ export async function sweepAbandonedReservations(now: Date = new Date()): Promis
     // One event per transaction preserves parent-first ordering and bounds lock
     // duration. Other sweepers skip a claimed event; retries cannot add it twice.
     swept += await db.transaction(async (tx) => {
-      if (!(await lockUsageOwner(tx, candidate.userId))) return 0;
+      // Eligibility excludes events without an owner.
+      if (!(await lockUsageOwner(tx, candidate.userId!))) return 0;
       const [event] = await tx
         .select()
         .from(schema.usageEvent)

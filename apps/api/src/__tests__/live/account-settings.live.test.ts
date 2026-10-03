@@ -229,6 +229,17 @@ describe.skipIf(!available)('live: Settings → Account', () => {
       await updateSetting('roleFeatures', { roles: { user: { accountDeletion: true } } });
       try {
         const { user, email, cookie } = await signedIn();
+        const [usage] = await pool.db
+          .insert(schema.usageEvent)
+          .values({
+            organizationId: state.organizationId,
+            userId: user.id,
+            modelSlug: 'self-deleted-model',
+            tokensIn: 3,
+            tokensOut: 4,
+            costMicros: 700,
+          })
+          .returning({ id: schema.usageEvent.id });
         // Better Auth's own endpoint is still disabled with the switch on.
         expect((await authRequest('/delete-user', { password }, cookie)).status).not.toBe(200);
         expect((await me('', cookie)).status).toBe(200);
@@ -249,6 +260,18 @@ describe.skipIf(!available)('live: Settings → Account', () => {
           .from(schema.user)
           .where(eq(schema.user.id, user.id));
         expect(rows).toHaveLength(0);
+        // Their usage is kept for instance reports, without them (v0.10).
+        const kept = await pool.db
+          .select()
+          .from(schema.usageEvent)
+          .where(eq(schema.usageEvent.id, usage!.id));
+        expect(kept).toEqual([
+          expect.objectContaining({
+            userId: null,
+            modelSlug: 'self-deleted-model',
+            costMicros: 700,
+          }),
+        ]);
         // Signing in again is refused: the account is gone.
         expect((await authRequest('/sign-in/email', { email, password })).status).toBe(401);
       } finally {

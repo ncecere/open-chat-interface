@@ -1,4 +1,4 @@
-import { MICROS_PER_DOLLAR } from '@oci/shared';
+import { DELETED_ACCOUNTS_LABEL, MICROS_PER_DOLLAR } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AdminPageHeader, LoadError, Notice, SettingsSection } from '~/components/admin/admin-ui';
@@ -66,10 +66,12 @@ interface SpendResponse {
     costMicros: number;
     errors: number;
   }>;
+  /** `deleted` is the one row for every deleted account's usage (no identity). */
   consumers: Bounded<{
-    userId: string;
+    deleted: boolean;
+    userId: string | null;
     name: string;
-    email: string;
+    email: string | null;
     messages: number;
     costMicros: number;
   }>;
@@ -401,13 +403,13 @@ function SpendTab({ days }: { days: number }) {
 
       <SettingsSection
         title="Top consumers"
-        description="Who is using the most. Identity and volume only; conversations are never shown here."
+        description="Who is using the most. Identity and volume only; conversations are never shown here. Usage of deleted accounts is kept as one row."
       >
         <PeopleList
           entries={data.consumers.entries.map((consumer) => ({
-            userId: consumer.userId,
-            name: consumer.name,
-            email: consumer.email,
+            userId: consumer.userId ?? 'deleted-accounts',
+            name: consumer.deleted ? DELETED_ACCOUNTS_LABEL : consumer.name,
+            email: consumer.email ?? 'Kept without the people they belonged to',
             primary: money(consumer.costMicros),
             secondary: `${compact(consumer.messages)} messages`,
           }))}

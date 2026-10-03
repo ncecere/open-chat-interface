@@ -128,6 +128,31 @@ describe.skipIf(!available)('live: deleting an account', () => {
     expect(entry!.metadata).toMatchObject({ email: 'leaving@example.test', role: 'user' });
   });
 
+  it('keeps the account’s usage events without the link to the person', async () => {
+    const admin = await seedUser(live.db, state.organizationId, { role: 'admin' });
+    const target = await seedUser(live.db, state.organizationId);
+    const [event] = await live.db
+      .insert(schema.usageEvent)
+      .values({
+        organizationId: state.organizationId,
+        userId: target,
+        modelSlug: 'kept-model',
+        tokensIn: 40,
+        tokensOut: 60,
+        costMicros: 1_500,
+      })
+      .returning({ id: schema.usageEvent.id });
+
+    expect(await remove(appFor(admin), target)).toEqual({ status: 200, body: { ok: true } });
+    const kept = await live.db
+      .select()
+      .from(schema.usageEvent)
+      .where(eq(schema.usageEvent.id, event!.id));
+    expect(kept).toEqual([
+      expect.objectContaining({ userId: null, modelSlug: 'kept-model', costMicros: 1_500 }),
+    ]);
+  });
+
   it('answers 404 for an account that does not exist and records nothing', async () => {
     const admin = await seedUser(live.db, state.organizationId, { role: 'admin' });
     const before = await live.db.execute(sql`select count(*)::int as n from audit_log`);

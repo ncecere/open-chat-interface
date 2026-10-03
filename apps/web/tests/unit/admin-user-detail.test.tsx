@@ -240,6 +240,12 @@ describe('deleting an account', () => {
     expect(text).toContain('conversations and their messages, uploaded files');
     expect(text).toContain('share links');
     expect(text).toContain('The audit log keeps every entry');
+    // Usage is kept for reports, without the person (v0.10).
+    expect(text).toContain(
+      'Usage records (messages, tokens and cost per model) are kept without anything that identifies them',
+    );
+    expect(text).toContain('reports show them under Deleted accounts');
+    expect(text).not.toMatch(/everything it owns:[^.]*usage records/);
 
     const confirm = [...(dialog() as HTMLElement).querySelectorAll('button')].find(
       (candidate) => candidate.textContent === 'Delete user',

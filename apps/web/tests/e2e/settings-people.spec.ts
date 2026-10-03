@@ -179,6 +179,9 @@ test('a person deletes their own account when their role allows it', async ({ br
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Delete your account?' });
   await expect(dialog).toContainText('The audit log keeps every entry');
+  await expect(dialog).toContainText(
+    'Usage records (messages, tokens and cost per model) are kept without anything that identifies you',
+  );
   const confirm = dialog.getByRole('button', { name: 'Delete my account' });
   await expect(confirm).toBeDisabled();
   expect(await scan(page)).toBe('');

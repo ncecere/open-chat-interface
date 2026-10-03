@@ -93,6 +93,38 @@ describe('usage tabs in the URL', () => {
     expect(router.state.location.search).toEqual({});
   });
 
+  it('lists the usage of deleted accounts as one row, without identity', async () => {
+    const person = {
+      deleted: false,
+      userId: 'u-1',
+      name: 'Ada',
+      email: 'ada@example.test',
+      messages: 2,
+      costMicros: 2_000_000,
+    };
+    const deleted = {
+      deleted: true,
+      userId: null,
+      name: 'Deleted accounts',
+      email: null,
+      messages: 5,
+      costMicros: 1_000_000,
+    };
+    api.get.mockImplementation(async () => ({
+      range,
+      totals,
+      daily: [],
+      models: bounded,
+      consumers: { entries: [person, deleted], totalCount: 2 },
+      idleModels: bounded,
+    }));
+    ({ root } = await renderAdmin(<AdminUsagePage />, { path: '/admin/usage?tab=spend' }));
+    const text = document.getElementById('panel-spend')?.textContent ?? '';
+    expect(text).toContain('Adaada@example.test$2.00');
+    expect(text).toContain('Deleted accountsKept without the people they belonged to$1.00');
+    expect(text).toContain('5 messages');
+  });
+
   it('ignores unknown values', () => {
     expect(validateUsageSearch({ tab: 'secrets', range: 12 })).toEqual({});
     expect(validateUsageSearch({ tab: 'storage', range: '90' })).toEqual({

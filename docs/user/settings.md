@@ -42,10 +42,13 @@ You cannot change your email address yourself.
 If your administrator allows it for your role, **Delete account** at the
 bottom of the page deletes your account and everything it owns:
 conversations and their messages, uploaded files, projects, artifacts,
-memory, share links, connected accounts, saved views, usage records and
+memory, share links, connected accounts, saved views, limit overrides and
 preferences. You are signed out straight away, and it cannot be undone. The
 audit log keeps its entries, including one for the deletion, with your email
-address; invites and announcements you created stay.
+address; invites and announcements you created stay. Usage records (how many
+messages and tokens you used with each model, and what they cost) are kept
+without anything that identifies you, so your organisation's usage totals
+stay accurate.
 
 To confirm, type your email address and, if you have a password, enter it.
 If you sign in through your organisation, there is no password to enter;
