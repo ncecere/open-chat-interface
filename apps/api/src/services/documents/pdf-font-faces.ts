@@ -8,7 +8,7 @@
  *
  * This list is also what the API image keeps (`scripts/prune-pdf-fonts.mjs`
  * deletes every other file of these packages at build), so it is plain data
- * with no imports. See docs/dev/v0.10-design-artifacts.md.
+ * with no imports. See docs/dev/v0.10-design.md.
  */
 
 export type PdfFontFamily = 'sans' | 'arabic' | 'hebrew' | 'symbols' | 'sc' | 'jp' | 'kr';
