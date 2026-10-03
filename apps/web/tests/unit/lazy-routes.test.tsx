@@ -64,7 +64,6 @@ const lazyModules = [
   ['routes/settings/models', ['SettingsModelsPage']],
   ['routes/settings/connectors', ['SettingsConnectorsPage']],
   ['routes/settings/attachments', ['SettingsAttachmentsPage']],
-  ['routes/settings/simple-tabs', ['SettingsShortcutsPage', 'SettingsContactPage']],
 ] as const;
 type ModulePath = (typeof lazyModules)[number][0];
 
@@ -237,10 +236,10 @@ describe('real router lazy admin and settings routes', () => {
       'SettingsLayout',
     ],
     [
-      '/settings/contact',
+      '/settings/attachments',
       'components/settings/settings-layout',
-      'routes/settings/simple-tabs',
-      'SettingsContactPage',
+      'routes/settings/attachments',
+      'SettingsAttachmentsPage',
       'SettingsLayout',
     ],
   ] as const)(
@@ -282,6 +281,14 @@ describe('real router lazy admin and settings routes', () => {
     expect(router.state.location.pathname).toBe('/admin/settings/general');
     expect(container.querySelector('[data-page="AdminGeneralSettingsPage"]')).not.toBeNull();
   });
+
+  it.each(['/settings/shortcuts', '/settings/contact'])(
+    'redirects the retired tab %s to Settings',
+    async (path) => {
+      await renderRoute(path);
+      await vi.waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
+    },
+  );
 
   it('opens Roles & access through its own lazy module', async () => {
     await renderRoute('/admin/roles?role=restricted');

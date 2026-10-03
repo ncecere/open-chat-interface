@@ -2,6 +2,9 @@
 
 Reach settings from your name at the bottom of the sidebar.
 
+The sections are tabs across the top. Where they do not fit on one row, for
+example on a phone, a **Settings section** menu takes their place.
+
 ## Account
 
 ![Account settings](../images/user-settings-account.png)
@@ -84,9 +87,11 @@ Everything you have uploaded, with the conversation each belongs to, and how
 much space it occupies. Delete anything you no longer need — this is what frees
 space against a storage limit.
 
-## Shortcuts
+## Keyboard shortcuts and help
 
-The keyboard shortcuts. The ones worth learning:
+Every settings page shows your usage limits, a **Keyboard Shortcuts** card and
+a **Need help?** card: beside the page on a wide screen, below it on a narrow
+one. The shortcuts worth learning:
 
 | Shortcut | Does |
 | --- | --- |
@@ -94,3 +99,7 @@ The keyboard shortcuts. The ones worth learning:
 | `Cmd/Ctrl + Shift + O` | New conversation |
 | `Cmd/Ctrl + B` | Show or hide the sidebar |
 | `Cmd/Ctrl + /` | Open the model picker |
+| `Enter` | Send the message |
+| `Shift + Enter` | Start a new line |
+
+For help with your account, contact the administrator who runs your instance.
