@@ -7,6 +7,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Delete user** in People → a person: typing their email confirms. The
+  server refuses deleting yourself, the last administrator and a person on
+  legal hold; deleting a missing account returns not found instead of
+  succeeding. The audit entry records the deleted email and role.
+- **Rename a conversation** from the sidebar or the conversation's top bar.
+- **Context window and output limit per model** in Providers & Models; an
+  output limit that leaves no room for input is refused.
+
+### Fixed
+
+- The keyboard shortcuts Settings lists now work: Cmd/Ctrl+Shift+O (new chat),
+  Cmd/Ctrl+B (sidebar) and Cmd/Ctrl+/ (model picker), also while typing.
+- An empty optional environment variable counts as unset, so leaving
+  `INITIAL_ADMIN_PASSWORD` empty prints a one-time password as documented;
+  `AUTH_SECRET`, `ENCRYPTION_KEY` and `DATABASE_URL` still refuse empty values.
+- The sharing guide describes live and snapshot links and expiry.
+
 ## [0.9.2] - 2026-10-03
 
 ### Security
