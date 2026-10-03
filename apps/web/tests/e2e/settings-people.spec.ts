@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { type Browser, expect, type Page, test } from '@playwright/test';
+import { ensureCatalogModels } from './fixtures/catalog';
 
 /**
  * v0.10 settings for people in a real browser against the real API:
@@ -121,7 +122,10 @@ test('lists the person’s share links and revokes them all', async ({ browser }
 });
 
 test('saves a default model with the account', async ({ browser }) => {
-  const user = await disposableUser(browser);
+  // CI's catalog starts empty; make sure there is a model to choose.
+  const user = await disposableUser(browser, 'user', async (admin) => {
+    await ensureCatalogModels(admin.request);
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
   await signIn(page, user.email, user.password);

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { ensureCatalogModels } from './fixtures/catalog';
 
 /**
  * Real keyboard input against the real API: the global shortcuts from the
@@ -51,6 +52,10 @@ async function modifier(page: Page): Promise<'Meta' | 'Control'> {
 
 test('the global shortcuts work from the composer', async ({ page }) => {
   await signIn(page);
+  // The model picker needs models; CI's catalog starts empty.
+  await ensureCatalogModels(page.request);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
   const mod = await modifier(page);
   const composer = page.getByRole('textbox', { name: 'Message input' });
   const sidebar = page.locator('aside');
