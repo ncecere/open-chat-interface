@@ -347,7 +347,7 @@ export async function renderPdf(model: DocumentModel, maxBytes: number): Promise
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-    info: { Title: toWinAnsi(model.title), Creator: 'Open Chat Interface' },
+    info: { Title: toWinAnsi(model.title), Creator: toWinAnsi(model.creator) },
     compress: true,
   });
   const chunks: Buffer[] = [];

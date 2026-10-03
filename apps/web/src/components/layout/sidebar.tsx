@@ -63,16 +63,16 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
         >
           <PanelLeft />
         </Button>
-        <Link to="/" className="min-w-0 flex-1 px-1 text-center">
+        {/* Mark and name sit beside the toggle (v0.10): centring them needed a
+            spacer that left too little room for the full default name. */}
+        <Link to="/" className="flex min-w-0 flex-1 items-center px-2">
           <Wordmark
             name={branding?.appName}
             shortName={branding?.shortName}
             logoUrl={branding?.logoUrl}
             compact
-            className="mx-auto block truncate"
           />
         </Link>
-        <span className="size-8" />
       </div>
 
       <div className="hidden px-3 pb-2 md:block">

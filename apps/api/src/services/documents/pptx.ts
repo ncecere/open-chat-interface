@@ -319,7 +319,7 @@ export async function renderPptx(model: DocumentModel): Promise<Uint8Array> {
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';
   pptx.title = model.title;
-  pptx.author = 'Open Chat Interface';
+  pptx.author = model.creator;
   pptx.company = '';
 
   const cover = pptx.addSlide();

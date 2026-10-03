@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HEX_COLOR_PATTERN } from '../branding.js';
 import {
   COLOR_THEMES,
   QUOTA_METRICS,
@@ -173,6 +174,14 @@ export const instanceSettingsSchema = z.object({
 export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
   .omit({ smtp: true, search: true, storage: true, features: true })
   .extend({
+    // API-only diagram accent override (not on the Branding page, which
+    // offers colour themes); diagrams follow the colour theme while it is null.
+    accentColor: z
+      .string()
+      .trim()
+      .regex(HEX_COLOR_PATTERN, 'Use a hex colour such as #3366ff.')
+      .nullable()
+      .optional(),
     // `memory` arrived in v0.9: a client that does not know it must not
     // switch it off by leaving it out of the (otherwise whole) object.
     features: instanceSettingsSchema.shape.features

@@ -10,6 +10,7 @@ import {
 } from '@oci/shared';
 import { db } from '../db/index.js';
 import { artifactsWithVersions } from './artifacts/store.js';
+import { currentAppName } from './branding.js';
 import { activeMessage } from './chat/reply-path.js';
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
@@ -130,16 +131,20 @@ function artifactLines(
  * including it would make an export read as though the assistant said things
  * it never presented. Attachments appear by name only, since the bytes live in
  * object storage and a Markdown file cannot carry them.
+ *
+ * `source` is the instance name (Branding > App name) the header says the
+ * file came from; without it the header gives only the dates.
  */
 export function renderMarkdown(
   thread: { title: string; createdAt: Date },
   messages: ExportMessage[],
   artifacts: readonly ExportArtifactReference[] = [],
+  source?: string,
 ): string {
   const lines: string[] = [
     `# ${thread.title}`,
     '',
-    `Exported ${new Date().toISOString().slice(0, 10)} · started ${thread.createdAt
+    `Exported${source ? ` from ${source} on` : ''} ${new Date().toISOString().slice(0, 10)} · started ${thread.createdAt
       .toISOString()
       .slice(0, 10)}`,
     '',
@@ -235,5 +240,5 @@ export async function exportThreadMarkdown(threadId: string, userId: string): Pr
     userId,
     messages.map((message) => message.id),
   );
-  return renderMarkdown(thread, messages, artifacts);
+  return renderMarkdown(thread, messages, artifacts, await currentAppName());
 }

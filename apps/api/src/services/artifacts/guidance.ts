@@ -1,11 +1,8 @@
-import { ARTIFACT_LIBRARIES, type UserRole } from '@oci/shared';
+import { ARTIFACT_LIBRARIES, diagramAccent, type UserRole } from '@oci/shared';
 import { roleFeatures } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { describeArtifact } from '../tools/artifacts.js';
 import { artifactsForPrompt } from './store.js';
-
-/** Diagram Design's default accent, used when the instance has no accent colour of its own. */
-const DEFAULT_DIAGRAM_ACCENT = '#eb6c36';
 
 /**
  * Program code is an answer, not an artifact: people read, compare and copy it
@@ -30,7 +27,8 @@ const libraries = Object.entries(ARTIFACT_LIBRARIES)
 /**
  * Editorial diagram guidance, adapted in short from the Diagram Design skill
  * by Cathryn Lavery (MIT, https://github.com/cathrynlavery/diagram-design),
- * mapped to the instance's accent colour and to fonts the sandbox has offline.
+ * mapped to the instance's colour theme (see `diagramAccent`) and to fonts the
+ * sandbox has offline.
  */
 export function diagramGuidance(accent: string): string {
   return [
@@ -80,12 +78,9 @@ export async function artifactGuidance(context: {
   }
   const sections = [lines.join(' ')];
   if (await diagramGuidanceEnabled()) {
-    const branding = await getSetting('branding');
-    const accent =
-      typeof branding.accentColor === 'string' && /^#[0-9a-f]{3,8}$/i.test(branding.accentColor)
-        ? branding.accentColor
-        : DEFAULT_DIAGRAM_ACCENT;
-    sections.push(diagramGuidance(accent));
+    // Follows the Branding page's colour theme; an accentColor set through the
+    // API (it is not on the page) overrides it.
+    sections.push(diagramGuidance(diagramAccent(await getSetting('branding'))));
   }
   return sections.join('\n\n');
 }

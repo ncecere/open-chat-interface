@@ -8,10 +8,11 @@ import {
   updateInstanceSettingsSchema,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, CheckCircle2, ImageIcon, Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
+import { Check, CheckCircle2, Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
+import { TurnsMark } from '~/components/brand/turns-mark';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
@@ -29,8 +30,9 @@ type BrandingPatch = Partial<BrandingSettings>;
 type BrandingErrors = Partial<Record<keyof BrandingSettings, string>>;
 
 /**
- * The accent is one of the built-in color themes. The stored hex
- * `accentColor` is not read by the app, so it is neither shown nor sent.
+ * The accent is one of the built-in color themes, which diagrams follow too.
+ * The hex `accentColor` is an API-only override for diagram colours (see the
+ * administration guide), so this page neither shows nor sends it.
  */
 const COLOR_THEME_LABELS: Record<ColorTheme, string> = {
   neutral: 'Neutral',
@@ -217,12 +219,8 @@ function BrandingPreview({ settings }: { settings: BrandingSettings }) {
                   onError={() => setFailedLogo(logoUrl)}
                 />
               ) : (
-                <div
-                  className="flex size-11 items-center justify-center rounded-xl bg-[var(--accent)] text-[var(--accent-foreground)]"
-                  aria-hidden="true"
-                >
-                  <ImageIcon className="size-5" />
-                </div>
+                // Without a logo the app shows the Open Chat Interface mark.
+                <TurnsMark className="size-11" />
               )}
             </div>
             <h2 className="text-center text-xl font-semibold">
@@ -330,7 +328,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
               <Field
                 label="App name"
                 htmlFor="app-name"
-                hint="Shown in the sign-in page and app navigation. Maximum 80 characters."
+                hint="Shown on the sign-in pages, in the sidebar and browser tab, on shared conversations, in emails and in exported files. Maximum 80 characters."
               >
                 <Input
                   id="app-name"
@@ -351,7 +349,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
               <Field
                 label="Short name"
                 htmlFor="short-name"
-                hint="Optional compact mark for the sidebar. Initials of the full name are used when this is blank."
+                hint="Optional compact name for the sidebar and shared conversations. When blank, the full name is shown, or its initials if it is longer than 20 characters."
               >
                 <Input
                   id="short-name"
@@ -449,8 +447,8 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
                   })}
                 </div>
                 <p className="text-xs text-[var(--text-muted)]">
-                  Applied to buttons, links and highlights across the instance. Surfaces stay
-                  neutral.
+                  Applied to buttons, links and highlights across the instance, and to diagrams the
+                  assistant draws. Surfaces stay neutral.
                 </p>
               </fieldset>
 
@@ -580,7 +578,10 @@ function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }) {
   });
 
   return (
-    <Field label="Logo file" hint="PNG, JPEG, or WebP up to 1 MB.">
+    <Field
+      label="Logo file"
+      hint="PNG, JPEG, or WebP up to 1 MB. Shown in place of the Open Chat Interface mark and name, and used as the browser tab icon."
+    >
       <div className="flex flex-wrap items-center gap-3">
         {currentLogoUrl && (
           <img

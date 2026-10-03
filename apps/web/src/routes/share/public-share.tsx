@@ -9,7 +9,9 @@ import { Markdown } from '~/components/chat/markdown';
 import { partGroupsOf } from '~/components/chat/message-content';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+import { useAuthStatus } from '~/hooks/use-auth-status';
 import { ApiError, api } from '~/lib/api-client';
+import { usePageTitle } from '~/lib/document-title';
 import { cn } from '~/lib/utils';
 
 interface PublicTextPart {
@@ -239,6 +241,9 @@ export function PublicSharePage({ slug }: { slug: string }) {
     queryFn: () => api.get<PublicShareResponse>(`/share-links/${encodeURIComponent(slug)}`),
     retry: false,
   });
+  // `/auth/status` is public, so the header carries the instance's branding.
+  const branding = useAuthStatus().data?.branding;
+  usePageTitle(query.data?.thread.title);
 
   if (query.isLoading) {
     return (
@@ -293,7 +298,13 @@ export function PublicSharePage({ slug }: { slug: string }) {
     <div className="min-h-dvh bg-[var(--bg-root)]">
       <header className="sticky top-0 z-20 border-b border-[var(--border-panel)] bg-[var(--bg-app)]/95 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Wordmark className="shrink-0" />
+          <Wordmark
+            name={branding?.appName}
+            shortName={branding?.shortName}
+            logoUrl={branding?.logoUrl}
+            compact
+            className="min-w-0 shrink"
+          />
           <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
             <LockKeyhole className="size-3.5" aria-hidden="true" />
             Read-only share
