@@ -14,6 +14,7 @@ import {
   renderDocument,
   renderInWorker,
 } from '../../services/documents/render.js';
+import { inspectPdf } from './pdf-inspect.js';
 
 /** The format-independent checks around generation. */
 
@@ -111,6 +112,14 @@ describe('generation in a worker thread', () => {
   it('returns the file', async () => {
     const bytes = await renderInWorker('docx', 'Title', TABLE);
     expect(Buffer.from(bytes.slice(0, 2)).toString('latin1')).toBe('PK');
+  });
+
+  it('embeds the fonts a PDF in another script needs, from inside the worker', async () => {
+    const bytes = await renderInWorker('pdf', '你好', 'Привет, мир. 你好。 שלום');
+    const { embedded } = inspectPdf(bytes);
+    expect(embedded).toEqual(
+      expect.arrayContaining(['NotoSans-Regular', 'NotoSansSC-Regular', 'NotoSansHebrew-Regular']),
+    );
   });
 
   it('passes on refusals as they are', async () => {

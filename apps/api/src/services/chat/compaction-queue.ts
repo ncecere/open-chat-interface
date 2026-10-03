@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, or, schema, sql } from '@oci/db';
-import { type CompactionReason, type CompactionState, USER_ROLES } from '@oci/shared';
+import {
+  type CompactionFailureReason,
+  type CompactionReason,
+  type CompactionState,
+  USER_ROLES,
+} from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { AppError } from '../../lib/errors.js';
@@ -81,6 +86,8 @@ export async function requestCompaction(input: {
         updatedAt: new Date(),
       },
     });
+  // Asking again replaces the report of an earlier failure.
+  if (input.reason === 'manual') await clearCompactionFailure(input.threadId, input.userId);
   kickCompactionQueue();
 }
 
@@ -151,7 +158,8 @@ export async function scheduleCompactionAfterReply(input: {
  */
 export async function compactionState(threadId: string, userId: string): Promise<CompactionState> {
   const job = schema.conversationCompactionJob;
-  const [compaction, [pending]] = await Promise.all([
+  const failures = schema.conversationCompactionFailure;
+  const [compaction, [pending], [failure]] = await Promise.all([
     latestCompaction(threadId, userId),
     db
       .select({ threadId: job.threadId })
@@ -164,11 +172,91 @@ export async function compactionState(threadId: string, userId: string): Promise
         ),
       )
       .limit(1),
+    db
+      .select({
+        reason: failures.reason,
+        instructions: failures.instructions,
+        failedAt: failures.failedAt,
+      })
+      .from(failures)
+      .where(and(eq(failures.threadId, threadId), eq(failures.userId, userId)))
+      .limit(1),
   ]);
   return {
     compaction: compaction ? serializeCompaction(compaction) : null,
     pending: pending !== undefined,
+    failure: failure ? { ...failure, failedAt: failure.failedAt.toISOString() } : null,
   };
+}
+
+/** Removes the report of a failed manual summary (dismissed, asked again, or succeeded since). */
+export async function clearCompactionFailure(threadId: string, userId: string): Promise<void> {
+  const failures = schema.conversationCompactionFailure;
+  await db
+    .delete(schema.conversationCompactionFailure)
+    .where(and(eq(failures.threadId, threadId), eq(failures.userId, userId)));
+}
+
+/** Records why a summary the person asked for failed; a later failure replaces it. */
+async function recordCompactionFailure(
+  claimed: JobRow,
+  reason: CompactionFailureReason,
+): Promise<void> {
+  const failures = schema.conversationCompactionFailure;
+  const now = new Date();
+  try {
+    await db
+      .insert(failures)
+      .values({
+        threadId: claimed.threadId,
+        userId: claimed.userId,
+        reason,
+        instructions: claimed.instructions,
+        failedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: failures.threadId,
+        set: { reason, instructions: claimed.instructions, failedAt: now, updatedAt: now },
+      });
+  } catch (error) {
+    // The thread went meanwhile, or the database is unavailable: the summary
+    // still failed, but there is no one (or no way) to tell.
+    logger.warn({ error, threadId: claimed.threadId }, 'Could not record a failed summary');
+  }
+}
+
+/** The errors an error stands for: itself, its causes and a retry's attempts. */
+function errorChain(error: unknown, depth = 0): unknown[] {
+  if (!error || typeof error !== 'object' || depth > 4) return [error];
+  const { cause, errors, lastError } = error as {
+    cause?: unknown;
+    errors?: unknown;
+    lastError?: unknown;
+  };
+  const nested = [cause, lastError, ...(Array.isArray(errors) ? errors : [])].filter(
+    (item) => item !== undefined && item !== error,
+  );
+  return [error, ...nested.flatMap((item) => errorChain(item, depth + 1))];
+}
+
+/**
+ * The category reported for a summary that threw: the summary call's time
+ * limit (an abort or timeout anywhere in the error) or anything else the
+ * model or provider did (including refusing: model gone or too small).
+ */
+export function failureCategory(
+  error: unknown,
+): Extract<CompactionFailureReason, 'timeout' | 'model_error'> {
+  const timedOut = errorChain(error).some((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const { name, message } = item as { name?: unknown; message?: unknown };
+    return (
+      name === 'TimeoutError' ||
+      name === 'AbortError' ||
+      (typeof message === 'string' && /\btimed? ?out\b/i.test(message))
+    );
+  });
+  return timedOut ? 'timeout' : 'model_error';
 }
 
 /** Claims the next due request, or one whose worker's lease ran out. */
@@ -247,6 +335,15 @@ async function finish(
   });
 }
 
+/** A summary was made: an earlier failure of this thread no longer matters. */
+async function clearSucceeded(claimed: JobRow): Promise<void> {
+  try {
+    await clearCompactionFailure(claimed.threadId, claimed.userId);
+  } catch (error) {
+    logger.warn({ error, threadId: claimed.threadId }, 'Could not clear a failed summary');
+  }
+}
+
 /** Automatic compaction is best effort: a setting that cannot be read leaves it off. */
 async function automaticAllowed(): Promise<boolean> {
   try {
@@ -260,6 +357,7 @@ async function automaticAllowed(): Promise<boolean> {
 /** Runs one claimed request. */
 async function runClaimed(claimed: JobRow): Promise<void> {
   const done = { done: true } as const;
+  const manual = claimed.reason === 'manual';
   const [owner] = await db
     .select({ role: schema.user.role, temporary: schema.thread.temporary })
     .from(schema.thread)
@@ -285,7 +383,16 @@ async function runClaimed(claimed: JobRow): Promise<void> {
       reason: claimed.reason,
       instructions: claimed.instructions,
     });
+    if (outcome.status === 'created') await clearSucceeded(claimed);
+    if (outcome.status === 'nothing' && manual)
+      await recordCompactionFailure(claimed, 'nothing_to_summarise');
     if (outcome.status !== 'allowance') return finish(claimed, done);
+    // A person who asked is told at once rather than left waiting up to a
+    // day; they can ask again once their allowance allows it.
+    if (manual) {
+      await recordCompactionFailure(claimed, 'allowance');
+      return finish(claimed, done);
+    }
     if (Date.now() - claimed.createdAt.getTime() > GIVE_UP_AFTER_MS) return finish(claimed, done);
     // Waiting for the allowance is not a failed attempt.
     return finish(claimed, {
@@ -306,6 +413,8 @@ async function runClaimed(claimed: JobRow): Promise<void> {
       },
       'Background compaction failed',
     );
+    // Reported at the first failure; a retry that succeeds later removes it.
+    if (manual) await recordCompactionFailure(claimed, failureCategory(error));
     if (permanent || delay === undefined) return finish(claimed, done);
     return finish(claimed, { retryInMs: delay, attempts: claimed.attempts });
   }

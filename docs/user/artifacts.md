@@ -56,6 +56,12 @@ The panel does not open by itself:
 
 Share links never open artifacts by themselves.
 
+If you reload the page while a reply is still writing an artifact, the panel
+and card pick up where it is: you see what has been written so far, and the
+rest as it arrives. This works however long the artifact is (since v0.10;
+before, a very long one could stop with "Live replay is no longer
+available").
+
 ## Opening an artifact
 
 An artifact appears in the reply as a card with its title, its kind and its
@@ -81,6 +87,17 @@ spreadsheet ([Exporting as files](exporting.md)). Press Escape (with focus in
 the panel) or select Close to go back to the conversation. After clicking
 inside a preview, press Tab to move out of it first: the preview is sealed off
 from the rest of OCI, so it does not pass on key presses.
+
+### Making the panel wider or narrower
+
+On a wide screen, drag the panel's left edge to make it wider or narrower: at
+least 22rem (about 350 pixels) and at most 70% of the window.
+With the keyboard, Tab to the edge (**Resize artifact panel**) and use the
+left and right arrow keys (Shift for bigger steps); Home makes it as narrow as
+it goes and End as wide. Double-click the edge, or press Enter on it, to go
+back to the usual width. The width you choose is remembered in this browser
+for every conversation; in a smaller window the panel never takes more than
+70% of it. Full screen and phones are not affected.
 
 ### Full screen
 

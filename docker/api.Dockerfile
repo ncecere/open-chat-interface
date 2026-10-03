@@ -18,6 +18,9 @@ FROM deps AS build
 COPY packages ./packages
 COPY apps/api ./apps/api
 RUN pnpm --filter @oci/api... build
+# PDF export fonts (v0.10): keep only the faces the generator embeds (about
+# 10 MB of the Fontsource packages' 205 MB). See THIRD_PARTY_NOTICES.md.
+RUN node apps/api/scripts/prune-pdf-fonts.mjs
 
 FROM base AS runtime
 ARG OCI_VERSION=dev
@@ -42,6 +45,7 @@ COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY LICENSE /licenses/LICENSE
+COPY THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md
 
 # PostgreSQL 17 client tools (pg_dump, pg_restore) for automated backups. A
 # newer pg_dump can dump older servers, never the other way round, so this

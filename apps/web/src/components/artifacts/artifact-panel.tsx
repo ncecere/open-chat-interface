@@ -23,6 +23,11 @@ import type { ArtifactDraft } from '~/components/artifacts/artifact-drafts';
 import { ArtifactFrame } from '~/components/artifacts/artifact-frame';
 import { ArtifactSource } from '~/components/artifacts/artifact-source';
 import { type ArtifactRef, useArtifacts } from '~/components/artifacts/artifacts-context';
+import {
+  PanelResizeHandle,
+  useMeasuredWidth,
+  usePanelWidth,
+} from '~/components/artifacts/panel-resize';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { Button } from '~/components/ui/button';
@@ -300,8 +305,12 @@ export function ArtifactPanel({
 }) {
   const [editing, setEditing] = useState(false);
   const headingId = useId();
+  const panelId = useId();
   const status = useWritingAnnouncement(view);
   const aside = useRef<HTMLElement | null>(null);
+  const [asideElement, setAsideElement] = useState<HTMLElement | null>(null);
+  const measured = useMeasuredWidth(docked && !fullScreen ? asideElement : null);
+  const panelWidth = usePanelWidth(measured);
   // Focus goes to the toggle after the person enters or leaves full screen.
   const focusToggle = useRef(false);
   const setFullScreen = useCallback(
@@ -321,6 +330,7 @@ export function ArtifactPanel({
   const setAside = useCallback(
     (element: HTMLElement | null) => {
       aside.current = element;
+      setAsideElement(element);
       if (typeof panelRef === 'function') panelRef(element);
       else if (panelRef) panelRef.current = element;
     },
@@ -375,12 +385,20 @@ export function ArtifactPanel({
 
   if (docked) {
     if (!view) return null;
-    const dockedSize = 'mb-2 mr-2 mt-16 w-[45%] min-w-[22rem] max-w-[56rem] shrink-0';
+    // The default is a share of the layout; once the person resizes the
+    // panel, its width is theirs (clamped to the window).
+    const dockedSize = cn(
+      'mb-2 mr-2 mt-16 min-w-[22rem] shrink-0',
+      !panelWidth.custom && 'w-[45%] max-w-[56rem]',
+    );
+    const dockedStyle = panelWidth.custom ? { width: `${panelWidth.width}px` } : undefined;
     return (
       <>
         {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role and aria-modal switch together with full screen. */}
         <aside
           ref={setAside}
+          id={panelId}
+          style={fullScreen ? undefined : dockedStyle}
           role={fullScreen ? 'dialog' : undefined}
           aria-modal={fullScreen ? true : undefined}
           aria-labelledby={headingId}
@@ -409,12 +427,29 @@ export function ArtifactPanel({
           )}
         >
           {fullScreen && <FocusGuard to="last" />}
+          {!fullScreen && (
+            <PanelResizeHandle
+              width={panelWidth.width}
+              min={panelWidth.min}
+              max={panelWidth.max}
+              windowWidth={panelWidth.windowWidth}
+              controls={panelId}
+              onResize={panelWidth.set}
+            />
+          )}
           {body}
           {announcer}
           {fullScreen && <FocusGuard to="first" />}
         </aside>
         {/* Keeps the conversation's width while the panel fills the window. */}
-        {fullScreen && <div aria-hidden="true" data-panel-placeholder="" className={dockedSize} />}
+        {fullScreen && (
+          <div
+            aria-hidden="true"
+            data-panel-placeholder=""
+            className={dockedSize}
+            style={dockedStyle}
+          />
+        )}
       </>
     );
   }

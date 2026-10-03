@@ -155,6 +155,13 @@ summary the model receives.
   while the summary is made, the icon shows **Summarising earlier messages…**
   and you can keep writing. Asking again meanwhile does not make a second one.
   It uses the model of the latest reply.
+- **If a summary you asked for fails,** a quiet note under the conversation
+  says so and why: your usage allowance ran out, the model returned an error,
+  the model took too long, or there was nothing to summarise by then. Select
+  **Retry** to ask again with the same instructions, or **Dismiss**. The note
+  goes away by itself when a later summary succeeds (OCI also retries a model
+  error a few times in the background). Summaries OCI makes on its own are
+  never reported: if one fails, the conversation simply carries on as before.
 - **Forks and edits** carry the summary over when everything it covers was
   copied into the new conversation.
 

@@ -7,6 +7,7 @@ import {
 } from 'ai';
 import Redis from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { ReplaySnapshot } from '../../services/chat-stream-snapshot.js';
 import { ChatStreamStore } from '../../services/chat-streams.js';
 
 const redisUrl = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6389';
@@ -102,7 +103,7 @@ describe.skipIf(!available)('integration: Redis replay through the real AI SDK',
     for (const chunk of chunks) await store.append(identity.runId, sse(chunk));
   }
 
-  async function replay(identity: Identity) {
+  async function replay(identity: Identity, from: ChatStreamStore = store) {
     const abort = new AbortController();
     const chunks: UIMessageChunk[] = [];
     const messages: UIMessage[] = [];
@@ -110,7 +111,7 @@ describe.skipIf(!available)('integration: Redis replay through the real AI SDK',
     // reconstruction all use the SDK used by the actual browser transport.
     const transport = new DefaultChatTransport({
       fetch: async () =>
-        new Response(store.createReplayStream(identity, abort.signal), {
+        new Response(from.createReplayStream(identity, abort.signal), {
           headers: UI_MESSAGE_STREAM_HEADERS,
         }),
     });
@@ -223,6 +224,166 @@ describe.skipIf(!available)('integration: Redis replay through the real AI SDK',
     expect(await redis.xlen(eventsKey(identity))).toBeLessThan(10_305);
     expectFriendlyFailure(await (await replay(identity)).result);
   }, 10_000);
+
+  describe('a very long artifact after a reload (v0.10)', () => {
+    // Keep 40 events instead of 10,000: a snapshot every 10.
+    const small = new ChatStreamStore(redis, 60, { maxEvents: 40 });
+    const content = Array.from({ length: 300 }, (_, line) => `<p>line ${line}</p>`).join('\n');
+    const input = JSON.stringify({ title: 'Long page', kind: 'html', content });
+    // The tool input arrives in small pieces, as a model writes it.
+    const pieces = input.match(/[\s\S]{1,8}/g)!;
+    const opening: UIMessageChunk[] = [
+      { type: 'start', messageId: 'message-1' },
+      { type: 'start-step' },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Here ' },
+      { type: 'text-delta', id: 'text-1', delta: 'it is.' },
+      { type: 'text-end', id: 'text-1' },
+      { type: 'tool-input-start', toolCallId: 'call-1', toolName: 'create_artifact' },
+    ];
+    const deltas: UIMessageChunk[] = pieces.map((inputTextDelta) => ({
+      type: 'tool-input-delta',
+      toolCallId: 'call-1',
+      inputTextDelta,
+    }));
+    const closing: UIMessageChunk[] = [
+      {
+        type: 'tool-input-available',
+        toolCallId: 'call-1',
+        toolName: 'create_artifact',
+        input: JSON.parse(input),
+      },
+      {
+        type: 'tool-output-available',
+        toolCallId: 'call-1',
+        output: { artifactId: 'artifact-1', version: 1 },
+      },
+      { type: 'finish-step' },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+      { type: 'text-end', id: 'text-1' },
+      { type: 'finish', finishReason: 'stop' },
+    ];
+    // The reload happens 20 pieces before the end: what follows (27 events)
+    // fits in the 40 kept, as the 10,000 kept in production outlast any
+    // reader. (A reader that falls more than the limit behind still fails.)
+    const half = deltas.length - 20;
+
+    async function beginSmall(): Promise<Identity> {
+      const identity = {
+        runId: `${namespace}-${crypto.randomUUID()}`,
+        threadId: `${namespace}-thread-${crypto.randomUUID()}`,
+        userId: 'replay-owner',
+      };
+      identities.push(identity);
+      expect(await small.begin(identity)).toBe('available');
+      return identity;
+    }
+
+    async function firstKeptSequence(identity: Identity): Promise<number> {
+      const [first] = (await redis.xrange(eventsKey(identity), '-', '+', 'COUNT', 1)) as Row[];
+      return Number(first![1][first![1].indexOf('seq') + 1]);
+    }
+
+    it('fails without a snapshot once the oldest events are trimmed (the v0.9 defect)', async () => {
+      const identity = await beginSmall();
+      for (const chunk of [...opening, ...deltas.slice(0, half)])
+        await small.append(identity.runId, sse(chunk));
+      expect(await firstKeptSequence(identity)).toBeGreaterThan(1);
+      const session = await replay(identity, small);
+      for (const chunk of [...deltas.slice(half), ...closing])
+        await small.append(identity.runId, sse(chunk));
+      await small.finalize(identity, { status: 'complete' });
+      expectFriendlyFailure(await session.result);
+    }, 10_000);
+
+    it('reloading mid-artifact starts from the saved draft and continues with live events', async () => {
+      const identity = await beginSmall();
+      const snapshot = new ReplaySnapshot();
+      for (const chunk of [...opening, ...deltas.slice(0, half)])
+        await small.append(identity.runId, sse(chunk), snapshot);
+      // More than the limit was streamed: the start of the reply is gone.
+      expect(deltas.length).toBeGreaterThan(40 * 10);
+      expect(await firstKeptSequence(identity)).toBeGreaterThan(opening.length + 1);
+
+      // The reload: a replay starting while the artifact is still being written.
+      const session = await replay(identity, small);
+      for (const chunk of [...deltas.slice(half), ...closing])
+        await small.append(identity.runId, sse(chunk), snapshot);
+      await small.finalize(identity, { status: 'complete' });
+      const result = await session.result;
+      expect(result.error).toBeUndefined();
+
+      // The draft arrived as one delta carrying the input written so far,
+      // then the live deltas followed, so far fewer chunks than events.
+      const toolDeltas = result.chunks.filter((chunk) => chunk.type === 'tool-input-delta');
+      expect(toolDeltas[0]?.inputTextDelta.length).toBeGreaterThan(400);
+      expect(toolDeltas.map((chunk) => chunk.inputTextDelta).join('')).toBe(input);
+      expect(result.chunks.length).toBeLessThan(opening.length + deltas.length);
+      expect(result.chunks.slice(0, 3)).toEqual([
+        { type: 'start', messageId: 'message-1' },
+        { type: 'start-step' },
+        { type: 'text-start', id: 'text-1' },
+      ]);
+
+      // The same message as replaying every event.
+      expect(result.messages.at(-1)).toMatchObject({
+        id: 'message-1',
+        role: 'assistant',
+        parts: [
+          { type: 'step-start' },
+          { type: 'text', text: 'Here it is.', state: 'done' },
+          {
+            type: 'tool-create_artifact',
+            toolCallId: 'call-1',
+            state: 'output-available',
+            input: { title: 'Long page', kind: 'html', content },
+            output: { artifactId: 'artifact-1', version: 1 },
+          },
+          { type: 'text', text: 'Done.', state: 'done' },
+        ],
+      });
+      // While it was still being written, the reader saw a partial draft.
+      const drafts = result.messages
+        .flatMap((message) => message.parts)
+        .filter(
+          (part) =>
+            part.type === 'tool-create_artifact' &&
+            'state' in part &&
+            part.state === 'input-streaming',
+        );
+      expect(drafts.length).toBeGreaterThan(0);
+    }, 10_000);
+
+    it('replays a finished long reply from its snapshot too', async () => {
+      const identity = await beginSmall();
+      const snapshot = new ReplaySnapshot();
+      for (const chunk of [...opening, ...deltas, ...closing])
+        await small.append(identity.runId, sse(chunk), snapshot);
+      await small.finalize(identity, { status: 'complete' });
+      const result = await (await replay(identity, small)).result;
+      expect(result.error).toBeUndefined();
+      expect(result.messages.at(-1)?.parts.at(-1)).toMatchObject({ type: 'text', text: 'Done.' });
+    }, 10_000);
+
+    it('refuses a snapshot that no longer reaches the oldest kept event', async () => {
+      const identity = await beginSmall();
+      const snapshot = new ReplaySnapshot();
+      for (const chunk of [...opening, ...deltas.slice(0, half)])
+        await small.append(identity.runId, sse(chunk), snapshot);
+      const key = `oci:chat-stream:run:${identity.runId}:snapshot`;
+      await redis.set(
+        key,
+        JSON.stringify({ sequence: 2, frames: [sse(opening[0]!), sse(opening[1]!)] }),
+      );
+      const session = await replay(identity, small);
+      await small.finalize(identity, { status: 'complete' });
+      expectFriendlyFailure(await session.result);
+      // A malformed one too.
+      await redis.set(key, '{"sequence":"x"}');
+      expectFriendlyFailure(await (await replay(identity, small)).result);
+    }, 10_000);
+  });
 
   it('rejects a forcibly removed prefix without cancelling the active producer', async () => {
     const identity = await begin();

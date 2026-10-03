@@ -26,6 +26,10 @@ const allowedLicenses = new Set([
   // Python Software Foundation License 2.0, OSI-approved and permissive:
   // argparse, needed only by markdown-it's command-line entry point.
   'PSF-2.0',
+  // SIL Open Font License 1.1: the Noto fonts PDF export embeds (v0.10),
+  // optional Fontsource packages. The OFL allows bundling with software and
+  // embedding in documents; see THIRD_PARTY_NOTICES.md.
+  'OFL-1.1',
 ]);
 
 const result = spawnSync('pnpm', ['licenses', 'list', '--prod', '--json'], {

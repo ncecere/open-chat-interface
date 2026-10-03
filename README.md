@@ -350,4 +350,6 @@ read: connection strings, secrets, and the initial administrator.
 ## Licence
 
 Open Chat Interface is available under the [MIT License](LICENSE). Third-party
-model logos retain their upstream notices in `apps/web/public/logos/`.
+model logos retain their upstream notices in `apps/web/public/logos/`; the Noto
+fonts PDF export embeds are under the SIL Open Font License 1.1 (see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).

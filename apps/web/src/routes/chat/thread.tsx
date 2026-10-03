@@ -5,6 +5,7 @@ import type { UIMessage } from 'ai';
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThreadArtifactsProvider } from '~/components/artifacts/artifacts-provider';
+import { CompactionFailureNotice } from '~/components/chat/compaction-failure-notice';
 import { Composer } from '~/components/chat/composer';
 import { ConversationLoadError } from '~/components/chat/conversation-load-error';
 import { MessageList } from '~/components/chat/message-list';
@@ -295,6 +296,7 @@ function ThreadConversation({
                 replySwitch={replies.switcher}
                 compaction={compaction.data}
               />
+              <CompactionFailureNotice threadId={threadId} />
 
               {(session.error ||
                 session.recovery.error ||

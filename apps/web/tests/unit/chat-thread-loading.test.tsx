@@ -81,6 +81,9 @@ vi.mock('../../src/components/chat/composer', () => ({
     return <textarea aria-label="Message composer" />;
   },
 }));
+vi.mock('../../src/components/chat/compaction-failure-notice', () => ({
+  CompactionFailureNotice: () => null,
+}));
 vi.mock('../../src/components/chat/message-list', () => ({
   MessageList: (props: unknown) => {
     mocks.messageList(props);

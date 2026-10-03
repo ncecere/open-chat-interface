@@ -35,15 +35,39 @@ export const conversationCompactionSchema = z.object({
 });
 
 /**
+ * Why a summary the person asked for failed (v0.10): their allowance was
+ * spent, the model failed or refused, there was nothing to summarise by the
+ * time it ran, or the model took too long.
+ */
+export const COMPACTION_FAILURE_REASONS = [
+  'allowance',
+  'model_error',
+  'nothing_to_summarise',
+  'timeout',
+] as const;
+export type CompactionFailureReason = (typeof COMPACTION_FAILURE_REASONS)[number];
+
+/** The last failed manual summary, until dismissed, asked for again or followed by a success. */
+export const compactionFailureSchema = z.object({
+  reason: z.enum(COMPACTION_FAILURE_REASONS),
+  /** The failed request's instructions, so Retry can ask for the same summary. */
+  instructions: z.string().nullable(),
+  failedAt: z.string(),
+});
+
+/**
  * What `GET /api/threads/:id/compaction` and `POST /api/threads/:id/compact`
- * return: the summary in use and whether a background summary is queued or
- * running (one waiting for a later retry is not reported as pending).
+ * return: the summary in use, whether a background summary is queued or
+ * running (one waiting for a later retry is not reported as pending), and
+ * the last failure of a summary the person asked for (never an automatic one).
  */
 export const compactionStateSchema = z.object({
   compaction: conversationCompactionSchema.nullable(),
   pending: z.boolean(),
+  failure: compactionFailureSchema.nullable(),
 });
 
 export type CompactionState = z.infer<typeof compactionStateSchema>;
+export type CompactionFailure = z.infer<typeof compactionFailureSchema>;
 export type CompactThreadInput = z.infer<typeof compactThreadSchema>;
 export type ConversationCompaction = z.infer<typeof conversationCompactionSchema>;

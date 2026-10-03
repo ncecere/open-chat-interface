@@ -110,6 +110,9 @@ export default defineConfig({
         'src/services/documents/model.ts': { statements: 91, branches: 83, functions: 100 },
         'src/services/documents/docx.ts': { statements: 94, branches: 87, functions: 100 },
         'src/services/documents/pdf.ts': { statements: 92, branches: 77, functions: 100 },
+        // v0.10: text in every script (fonts per run, bidi) and the replay snapshot.
+        'src/services/documents/pdf-text.ts': { statements: 94, branches: 86, functions: 100 },
+        'src/services/chat-stream-snapshot.ts': { statements: 97, branches: 85, functions: 100 },
         'src/services/documents/xlsx.ts': { statements: 98, branches: 88, functions: 100 },
         'src/services/documents/pptx.ts': { statements: 95, branches: 85, functions: 100 },
         'src/services/chat/tool-loop.ts': { statements: 85, branches: 80, functions: 90 },

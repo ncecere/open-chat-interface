@@ -75,6 +75,10 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'Drops a queued summary job when its conversation moves to the trash; the conversation is kept.',
   },
+  'services/chat/compaction-queue.ts conversationCompactionFailure': {
+    hold: 'exempt',
+    how: 'The notice that a requested summary failed, removed when dismissed, asked again or succeeded; no record of the conversation.',
+  },
   'services/chat/compaction-queue.ts job': {
     hold: 'exempt',
     how: 'Finished summary jobs leave the queue; summaries add to a conversation and never delete messages.',

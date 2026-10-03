@@ -1,6 +1,7 @@
 import type Redis from 'ioredis';
 import type { OwnedRunState } from './chat/run-state.js';
 import { type ReplayValidator, validateReplayRun } from './chat-replay-validation.js';
+import { parseStoredSnapshot } from './chat-stream-snapshot.js';
 
 export const REPLAY_UNAVAILABLE_MESSAGE =
   'Live replay is no longer available. Reload this conversation to see saved messages; a response may still be running.';
@@ -32,10 +33,12 @@ export function createChatReplay(options: {
   identity: { runId: string; threadId: string; userId: string };
   metadataKey: string;
   eventsKey: string;
+  /** A compact copy of the stream's start, used when its oldest events were trimmed. */
+  snapshotKey?: string;
   signal?: AbortSignal;
   readState?: ReplayValidator<OwnedRunState>;
 }): ReadableStream<Uint8Array> {
-  const { redis, identity, metadataKey, eventsKey, readState } = options;
+  const { redis, identity, metadataKey, eventsKey, snapshotKey, readState } = options;
   const cancellation = new AbortController();
   const signal = options.signal
     ? AbortSignal.any([options.signal, cancellation.signal])
@@ -50,6 +53,10 @@ export function createChatReplay(options: {
   let finishDelivered = false;
   let durableTerminal = false;
   let terminalLimit: number | null = null;
+  // Seeding from a snapshot: its frames still to send, and the events it stands for.
+  let seeded = false;
+  let seedFrames: string[] = [];
+  let skipThrough = 0;
 
   return new ReadableStream<Uint8Array>({
     // Pull, rather than an eager start loop, bounds queued replay data to a
@@ -62,6 +69,12 @@ export function createChatReplay(options: {
             controller.close();
             return;
           }
+          if (seedFrames.length) {
+            const frame = seedFrames.shift()!;
+            controller.enqueue(encoder.encode(frame));
+            finishDelivered ||= isFinishFrame(frame);
+            return;
+          }
           if (index < batch.length) {
             const [id, fields] = batch[index++]!;
             const values: Record<string, string> = {};
@@ -70,8 +83,31 @@ export function createChatReplay(options: {
               const value = fields[i + 1];
               if (key !== undefined && value !== undefined) values[key] = value;
             }
-            if (sequence(values.seq) !== lastSequence + 1 || values.data === undefined)
+            const seq = sequence(values.seq);
+            // Already sent as part of the snapshot.
+            if (seq !== null && seq <= skipThrough) {
+              lastId = id;
+              continue;
+            }
+            if (seq !== lastSequence + 1 || values.data === undefined) {
+              // The oldest events were trimmed (a very long reply): start from
+              // the saved snapshot instead, once, then continue with events.
+              if (lastSequence === 0 && !seeded && snapshotKey && seq !== null && seq > 1) {
+                seeded = true;
+                const snapshot = parseStoredSnapshot(await redis.get(snapshotKey));
+                if (!snapshot || snapshot.sequence + 1 < seq)
+                  throw new Error('Replay sequence gap');
+                seedFrames = snapshot.frames;
+                lastSequence = snapshot.sequence;
+                skipThrough = snapshot.sequence;
+                // Read again from the start, skipping what the snapshot covers.
+                lastId = '0-0';
+                batch = [];
+                index = 0;
+                continue;
+              }
               throw new Error('Replay sequence gap');
+            }
             lastId = id;
             lastSequence++;
             controller.enqueue(encoder.encode(values.data));
