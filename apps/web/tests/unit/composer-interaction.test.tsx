@@ -160,6 +160,22 @@ describe('Composer interaction', () => {
     expect(props.onSubmit).not.toHaveBeenCalled();
   });
 
+  it('draws the Stop and Send icons in the accent foreground, never the page text colour', async () => {
+    // On the neutral theme the accent is the page text colour, which hid the icons.
+    await render({ streaming: true });
+    expect(button('Stop generating').className).toContain('text-[var(--accent-button-foreground)]');
+    await render({ streaming: false, value: 'Hello' });
+    expect(button('Send message').className).toContain('text-[var(--accent-button-foreground)]');
+    expect(button('Send message').className).not.toContain('text-[var(--text-primary)]');
+  });
+
+  it('marks focus inside the composer border, with nothing drawn outside it', async () => {
+    await render();
+    const box = container.querySelector('textarea')?.parentElement;
+    expect(box?.className).toContain('focus-within:-outline-offset-1');
+    expect(box?.className).not.toContain('focus-within:outline-offset-2');
+  });
+
   it('enables Send after an upload completes and uses the latest callback', async () => {
     const item = {
       localId: 'upload',

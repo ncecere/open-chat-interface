@@ -258,3 +258,24 @@ test('a conversation started from the home page also follows its first reply', a
   await expectFollowing(page);
   await expect(stopButton(page)).toHaveCount(0, { timeout: 20_000 });
 });
+
+test('the page itself never scrolls, so the composer stays in view', async ({ page }) => {
+  await openLongConversation(page);
+  await send(page, 'Scroll behaviour question three');
+  await expect(stopButton(page)).toHaveCount(0, { timeout: 20_000 });
+
+  // Screen-reader-only text inside messages is positioned; it once escaped the
+  // conversation scroller, so scrolling past its end moved the whole page and
+  // carried the composer off screen.
+  const mainScroll = () =>
+    page.evaluate(() => {
+      const main = document.getElementById('main-content');
+      return main ? { overflow: main.scrollHeight - main.clientHeight, top: main.scrollTop } : null;
+    });
+  expect(await mainScroll()).toEqual({ overflow: 0, top: 0 });
+
+  await scroller(page).hover();
+  for (let turn = 0; turn < 4; turn += 1) await page.mouse.wheel(0, 4000);
+  expect((await mainScroll())?.top).toBe(0);
+  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeInViewport();
+});

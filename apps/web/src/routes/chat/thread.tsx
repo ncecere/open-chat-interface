@@ -255,7 +255,9 @@ function ThreadConversation({
             ref={scroll.scrollRef}
             onScroll={scroll.onScroll}
             data-conversation-scroller
-            className="flex-1 overflow-y-auto"
+            // The containing block for anything positioned inside messages (such as
+            // screen-reader-only text), so nothing escapes the scroller and scrolls the page.
+            className="relative flex-1 overflow-y-auto"
           >
             <div ref={scroll.contentRef}>
               <MessageList
