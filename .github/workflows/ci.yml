@@ -19,7 +19,9 @@ jobs:
   verify:
     name: Application checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # The full run (static checks, coverage with live services, the browser
+    # suite) took 22-26 minutes at v0.9.1; leave room as the suites grow.
+    timeout-minutes: 45
     services:
       postgres:
         image: pgvector/pgvector:pg17

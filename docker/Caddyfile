@@ -1,6 +1,18 @@
 {
 	admin off
 	auto_https off
+
+	# The client address. With TRUSTED_PROXIES unset nothing in front is
+	# trusted and the client is whoever connected. Behind another proxy or a
+	# Kubernetes ingress, set it to that proxy's addresses (space-separated IPs
+	# or CIDR ranges, or private_ranges) and the client is read from the
+	# X-Forwarded-For it sends, right to left, skipping trusted hops, so a
+	# client cannot forge it by sending its own header.
+	servers {
+		trusted_proxies static {$TRUSTED_PROXIES:}
+		client_ip_headers X-Forwarded-For
+		trusted_proxies_strict
+	}
 }
 
 :8080 {
@@ -18,6 +30,15 @@
 				port {$API_UPSTREAM_PORT:3000}
 				refresh 10s
 			}
+
+			# The API trusts exactly one client address: the one worked out above.
+			# Replace whatever chain arrived, and drop the other client-address
+			# headers a client could send straight through.
+			header_up X-Forwarded-For {client_ip}
+			header_up -X-Real-IP
+			header_up -CF-Connecting-IP
+			header_up -True-Client-IP
+			header_up -Forwarded
 
 			# Streaming responses must not be buffered.
 			flush_interval -1

@@ -7,6 +7,29 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Security
+
+- **Client addresses could be spoofed.** The web container's Caddy passed
+  `CF-Connecting-IP` and `X-Real-IP` from the browser through to the API, and
+  the API trusted `CF-Connecting-IP` first, so any client could choose the
+  address recorded in the audit log and on sessions, and the address limits
+  were counted against. Caddy now sends the API exactly one address and drops
+  those headers; the API trusts only that one, validated as an IP. Behind a
+  load balancer, another proxy or a Kubernetes ingress, set the new
+  `TRUSTED_PROXIES` on the web container so the real client address is read
+  from it (docs/OPERATIONS.md, "Behind another proxy or an ingress").
+  Deployments with their own reverse proxy in front of the API should make
+  sure it sets `X-Forwarded-For` itself rather than passing on what the client
+  sent.
+
+### Fixed
+
+- The bundled Compose file passed unset optional variables (such as
+  `INITIAL_ADMIN_PASSWORD`) as empty strings; it now leaves them out.
+- CI gives the application checks 45 minutes. The v0.9.1 release could not be
+  published because validation outgrew the 25-minute limit; v0.9.1 has no
+  published images, so upgrade to v0.9.2.
+
 ## [0.9.1] - 2026-10-03
 
 ### Changed

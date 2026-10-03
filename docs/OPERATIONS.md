@@ -59,6 +59,50 @@ Historical GitLab releases and images remain on GitLab. GitHub Actions does not
 copy them or their release metadata; choose GHCR only for versions successfully
 published there.
 
+## Behind another proxy or an ingress
+
+OCI records a client address on sessions (**People** → a person's active
+sessions), in the audit log, and the authentication rate limit counts requests
+per address. The web
+container's Caddy decides that address and passes exactly one to the API, as
+`X-Forwarded-For`; the API believes nothing else. Caddy also drops
+`X-Real-IP`, `CF-Connecting-IP`, `True-Client-IP` and `Forwarded`, so a client
+cannot choose its own address by sending them.
+
+By default Caddy trusts nothing in front of it, so the address is whatever
+connected to the web container. Exposed directly, that is the client. Behind a
+load balancer, another reverse proxy or a Kubernetes ingress, it is that
+proxy, and every person appears to come from the same address — which also
+means they share one authentication rate limit.
+
+Set `TRUSTED_PROXIES` on the **web** container to the addresses of the proxies
+in front of it, separated by spaces. Each entry is an IP address or a CIDR
+range; `private_ranges` stands for all private and loopback ranges:
+
+```bash
+# docker/.env
+TRUSTED_PROXIES=10.0.0.0/8 192.168.10.5
+```
+
+Caddy then reads `X-Forwarded-For` from those proxies right to left, skipping
+trusted hops, and the first address that is not trusted is the client. A value
+the client put at the left of the header is never reached. Requests from any
+other address ignore the header, as before.
+
+Trust only addresses that really are your proxies, and make sure each one sets
+or appends `X-Forwarded-For` (most do by default; NGINX needs
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). In Kubernetes,
+use the ingress controller pods' range, or the cluster's pod CIDR. A proxy that
+replaces the client address entirely (TCP load balancers without the PROXY
+protocol) cannot be recovered from; use the load balancer's HTTP mode.
+
+The bundled Compose file passes `TRUSTED_PROXIES` through to the web container.
+Outside Compose, set it as an environment variable of the web image. Commas are
+not separators; use spaces. The API itself has no such setting: it trusts the
+web container's header and, if more than one address arrives, only the last.
+Do not route `/api` to the API service around the web container, or the API has
+no trustworthy address to record.
+
 ## Database connections for maintenance
 
 Background jobs use session-level advisory locks. `DATABASE_URL` must point to
