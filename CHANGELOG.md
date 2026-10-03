@@ -23,12 +23,47 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Settings. Where the tabs do not fit, a Settings section menu replaces them
   instead of wrapping onto a second row.
 
+- **Settings → Account works.** **Change password** appears when you can
+  use a password (email and password sign-in is on, or you are a verified
+  administrator) and the server refuses it otherwise. **Devices** lists where
+  you are signed in and signs out one device or all others. Password accounts
+  can edit their name; single sign-on accounts show that the name, email and
+  password come from the organisation. Password changes, name changes and
+  device sign-outs are audited.
+- **Settings → Customization:** **Invert Send/New Line Behavior** now works
+  (Enter adds a line, Cmd/Ctrl+Enter sends) and is kept in this browser;
+  **Appearance** chooses Light, Dark or System, and the settings header uses
+  the same menu as the chat. **Save Preferences** is available only when
+  something changed.
+- **Settings → History** (renamed from History & Sync): search by title,
+  **Load more** beyond the first 200 conversations, titles open the
+  conversation, **Select all**, project labels, and **Export** and **Import**
+  as buttons at the top.
+- **Settings → Attachments** lists project files (with a link to their
+  project) and splits storage into chat files, project files and artifacts,
+  so the totals match.
+- The Memory and Connectors tabs are hidden when there is nothing in them;
+  their addresses still work.
+
+### Removed
+
+- **Change Email** and **Delete Account** in Settings, which never worked.
+  Email addresses come from sign-in, and administrators delete accounts under
+  People → Users. Self-service deletion, behind an administrator setting, is
+  planned for v0.10.
+- **Hide Personal Information** in Settings → Customization, which was never
+  saved or applied.
+
 ### Fixed
 
 - Settings on a phone squeezed the page beside a desktop-width profile column;
   narrow screens now show the profile, the page and the cards one above the
   other.
 - Settings marked Account as the current section on every settings page.
+- The password-change audit entry recorded no actor unless other devices
+  were signed out at the same time.
+- The message editor's keyboard shortcuts ignore keys pressed while an input
+  method (IME) is composing text, as the composer already did.
 
 ## [0.9.0] - 2026-10-03
 
