@@ -255,6 +255,18 @@ describe.skipIf(!available)('live PostgreSQL and local blobs: storage admission'
     expect(await local.exists(queued!.storageKey)).toBe(false);
   });
 
+  it('drains a deletion queued earlier in the same millisecond', async () => {
+    // PostgreSQL keeps microseconds and JavaScript milliseconds.
+    await pool.db.execute(
+      sql`alter table attachment add constraint injected_upload_failure check (upload_pending = true) not valid`,
+    );
+    await expect(upload()).rejects.toThrow();
+    await pool.db.execute(
+      sql`update deleted_object set next_attempt_at = '2026-10-03T12:00:00.123456Z'`,
+    );
+    expect(await drainDeletedObjects(new Date('2026-10-03T12:00:00.123Z'))).toBe(1);
+  });
+
   it('preserves successfully committed metadata after a simulated lost completion reply', async () => {
     state.db = new Proxy(pool.db, {
       get(target, key) {
