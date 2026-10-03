@@ -1,4 +1,4 @@
-import type { ReasoningEffort, UserRole } from '@oci/shared';
+import type { ReasoningEffort, SignInMethods, UserRole } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '~/lib/api-client';
 
@@ -49,9 +49,20 @@ interface CurrentChatDefaults {
   reasoningEfforts: ReasoningEffort[];
 }
 
+/** What Settings needs to hide sections with nothing in them (v0.9.1). */
+export interface SettingsSummary {
+  memoryEntries: number;
+  /** Connectors the person's role could connect to. */
+  connectors: number;
+}
+
 interface MeResponse {
   user: CurrentUser;
   preferences: UserPreferences;
+  /** How the person signs in (v0.9.1); absent from an older API. */
+  signIn?: SignInMethods;
+  /** Absent from an older API; every section then shows. */
+  settingsSummary?: SettingsSummary;
   /** Instance switches narrowed by the person's role. */
   features: CurrentFeatures;
   /** Optional so a response from an older API still renders. */

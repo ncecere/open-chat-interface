@@ -216,21 +216,21 @@ const SETTINGS_TABS = [
       'SettingsAttachmentsPage',
     ),
   },
-  {
-    path: '/settings/shortcuts',
-    component: lazyRouteComponent(
-      () => import('~/routes/settings/simple-tabs'),
-      'SettingsShortcutsPage',
-    ),
-  },
-  {
-    path: '/settings/contact',
-    component: lazyRouteComponent(
-      () => import('~/routes/settings/simple-tabs'),
-      'SettingsContactPage',
-    ),
-  },
 ] as const;
+
+/**
+ * Shortcuts and Contact were tabs until v0.9.1; both now live in the cards
+ * beside every settings page, so old links land on Settings.
+ */
+const retiredSettingsRoutes = ['/settings/shortcuts', '/settings/contact'].map((path) =>
+  createRoute({
+    getParentRoute: () => settingsRoute,
+    path,
+    beforeLoad: () => {
+      throw redirect({ to: '/settings' });
+    },
+  }),
+);
 
 const settingsTabRoutes = SETTINGS_TABS.map((tab) =>
   createRoute({
@@ -459,7 +459,7 @@ const routeTree = rootRoute.addChildren([
   acceptInviteRoute,
   publicShareRoute,
   authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute, projectRoute]),
-  settingsRoute.addChildren(settingsTabRoutes),
+  settingsRoute.addChildren([...settingsTabRoutes, ...retiredSettingsRoutes]),
   adminRoute.addChildren([
     adminOverviewRoute,
     adminUsersRoute,

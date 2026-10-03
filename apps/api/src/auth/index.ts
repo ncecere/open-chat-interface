@@ -2,7 +2,7 @@ import { sso } from '@better-auth/sso';
 import { schema } from '@oci/db';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin as adminPlugin } from 'better-auth/plugins';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
@@ -14,7 +14,7 @@ import { getSetting } from '../services/settings.js';
 import { recordAuthEvent } from './audit.js';
 import { deliverVerificationEmail } from './email-verification.js';
 import { ac, roles } from './permissions.js';
-import { enforceAuthRequestPolicy } from './policy.js';
+import { enforceAuthRequestPolicy, enforceSelfServicePolicy } from './policy.js';
 import { applySsoProvisioning, SsoRoleRequiredError } from './provisioning.js';
 
 const env = loadEnv();
@@ -151,6 +151,16 @@ export const auth = betterAuth({
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === '/change-password' || ctx.path === '/update-user') {
+        const session = await getSessionFromCtx(ctx).catch(() => null);
+        const replaced = await enforceSelfServicePolicy(
+          ctx.path,
+          session?.user?.id ?? null,
+          ctx.body as Record<string, unknown> | undefined,
+        );
+        return replaced ? { context: { body: replaced.body } } : undefined;
+      }
+
       const policy = await enforceAuthRequestPolicy(
         ctx.path,
         ctx.body as Record<string, unknown> | undefined,
@@ -193,7 +203,9 @@ export const auth = betterAuth({
       // which is precisely backwards for the events worth having.
       const returned = ctx.context.returned as { status?: number; statusCode?: number } | undefined;
       const status = returned instanceof Response ? returned.status : (returned?.statusCode ?? 200);
-      const session = ctx.context.newSession;
+      // A new session (sign-in, or a password change that signs other devices
+      // out) names the actor; otherwise the session the request was made with.
+      const session = ctx.context.newSession ?? ctx.context.session;
 
       await recordAuthEvent({
         path: ctx.path,

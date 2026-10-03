@@ -5,6 +5,8 @@ import {
   createThreadSchema,
   DOCUMENT_FORMATS,
   forkMessageSchema,
+  THREAD_HISTORY_MAX_PAGE_SIZE,
+  THREAD_HISTORY_PAGE_SIZE,
   THREAD_SEARCH_DEFAULT_LIMIT,
   THREAD_SEARCH_MAX_LIMIT,
   type ThreadSearchResult,
@@ -41,15 +43,19 @@ import {
   moveThreadToProject,
 } from '../services/projects.js';
 import { activateReply } from '../services/replies.js';
+import { roleFeatures } from '../services/role-features.js';
 import { searchThreads } from '../services/thread-search.js';
+import { serializeThread } from '../services/thread-summary.js';
 import {
   assertBranchingAllowed,
   assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
+  decodeThreadHistoryCursor,
   forkFromMessage,
   getOwnedThread,
   listMessages,
+  listThreadHistory,
   listThreads,
 } from '../services/threads.js';
 
@@ -65,6 +71,20 @@ const listQuerySchema = z.object({
     .transform((value) => value === 'true'),
   /** Only conversations in this project (the caller's own). */
   projectId: z.string().min(1).max(200).optional(),
+  /**
+   * `sidebar` (v0.9.1): the sidebar's general list, which leaves out
+   * conversations in a project unless they are pinned. Those are listed under
+   * their project instead (GET /api/projects/sidebar), so they no longer
+   * crowd ordinary conversations out of the 200-row limit. Without the
+   * parameter every conversation is returned, as before.
+   */
+  view: z.enum(['sidebar', 'history']).optional(),
+  /**
+   * `view=history` only (v0.9.1): the page size, and the `nextCursor` of the
+   * previous page to continue from.
+   */
+  limit: z.coerce.number().int().min(1).max(THREAD_HISTORY_MAX_PAGE_SIZE).optional(),
+  before: z.string().max(300).optional(),
 });
 
 /**
@@ -84,31 +104,35 @@ const searchQuerySchema = z.object({
 
 const documentQuerySchema = z.object({ format: z.enum(DOCUMENT_FORMATS) });
 
-function serializeThread(thread: typeof schema.thread.$inferSelect) {
-  return {
-    id: thread.id,
-    title: thread.title,
-    pinned: thread.pinned,
-    archived: thread.archived,
-    temporary: thread.temporary,
-    expiresAt: thread.expiresAt?.toISOString() ?? null,
-    parentThreadId: thread.parentThreadId,
-    branchedFromMessageId: thread.branchedFromMessageId,
-    projectId: thread.projectId,
-    lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
-    createdAt: thread.createdAt.toISOString(),
-    updatedAt: thread.updatedAt.toISOString(),
-  };
-}
-
+/**
+ * Live conversations, pinned first then newest, at most 200; `view=sidebar`
+ * leaves out unpinned project conversations. `view=history` (Settings →
+ * History) pages through all of them, newest activity first, returning
+ * `nextCursor` (null on the last page) to pass back as `before`.
+ */
 threadRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const { search, archived, projectId } = parseQuery(c, listQuerySchema);
+  const { search, archived, projectId, view, limit, before } = parseQuery(c, listQuerySchema);
+  if (view === 'history') {
+    if (projectId) throw validationFailed('History is not filtered by project');
+    const cursor = before ? decodeThreadHistoryCursor(before) : undefined;
+    if (cursor === null) throw validationFailed('That page cursor is not valid');
+    const page = await listThreadHistory(user.id, {
+      search,
+      archived,
+      before: cursor,
+      limit: limit ?? THREAD_HISTORY_PAGE_SIZE,
+    });
+    return c.json({ threads: page.threads.map(serializeThread), nextCursor: page.nextCursor });
+  }
   if (projectId) {
     await assertProjectsAllowed(user.role);
     await getOwnedProject(projectId, user.id);
   }
-  const threads = await listThreads(user.id, { search, archived, projectId });
+  // A role without projects has no project tree in its sidebar, so its
+  // project conversations stay in the general list rather than vanish.
+  const outsideProjects = view === 'sidebar' && (await roleFeatures(user.role)).projects;
+  const threads = await listThreads(user.id, { search, archived, projectId, outsideProjects });
   return c.json({ threads: threads.map(serializeThread) });
 });
 

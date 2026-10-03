@@ -109,3 +109,120 @@ export async function enforceAuthRequestPolicy(
   // expose verification state through a pre-password error in this hook.
   return { requireEmailVerification: recoveryAdmin ? false : settings.emailVerificationRequired };
 }
+
+/** How a person signs in, from their linked accounts (Settings → Account). */
+export interface SignInMethods {
+  /** They have a password (a `credential` account) and may use it right now. */
+  password: boolean;
+  /** They have a password at all, whether or not local sign-in allows it. */
+  credential: boolean;
+  /** The organisation sign-in providers linked to the account, by label. */
+  sso: string[];
+}
+
+const CREDENTIAL_PROVIDER = 'credential';
+
+async function linkedAccounts(userId: string) {
+  return db
+    .select({ providerId: schema.account.providerId, label: schema.ssoProvider.label })
+    .from(schema.account)
+    .leftJoin(schema.ssoProvider, eq(schema.ssoProvider.providerId, schema.account.providerId))
+    .where(eq(schema.account.userId, userId));
+}
+
+/**
+ * Whether a password may be used now: local sign-in is on, or the person is a
+ * verified administrator (the break-glass path above). An unreadable policy
+ * leaves only that break-glass path, as sign-in does.
+ */
+async function passwordUsable(user: LocalUserPolicy): Promise<boolean> {
+  if (isRecoveryAdmin(user)) return true;
+  try {
+    return (await getAuthPolicySettings()).localAuthEnabled;
+  } catch {
+    return false;
+  }
+}
+
+export async function signInMethodsFor(user: {
+  id: string;
+  role: string;
+  emailVerified: boolean;
+}): Promise<SignInMethods> {
+  const accounts = await linkedAccounts(user.id);
+  const credential = accounts.some((account) => account.providerId === CREDENTIAL_PROVIDER);
+  const sso = [
+    ...new Set(
+      accounts
+        .filter((account) => account.providerId !== CREDENTIAL_PROVIDER)
+        .map((account) => account.label?.trim() || account.providerId),
+    ),
+  ];
+  return { password: credential && (await passwordUsable(user)), credential, sso };
+}
+
+export const MAX_PROFILE_NAME_LENGTH = 100;
+
+/**
+ * Rules for Better Auth endpoints a signed-in person calls about themselves,
+ * so Settings → Account is not the only thing enforcing them:
+ *
+ * - `/change-password` needs a usable password: local sign-in on, or a
+ *   verified administrator.
+ * - `/update-user` changes the name only (1–100 characters, trimmed), and
+ *   only on an account that does not sign in through the organisation, whose
+ *   name comes from there.
+ *
+ * Returns a replacement body for `/update-user`, otherwise null.
+ */
+export async function enforceSelfServicePolicy(
+  path: string,
+  userId: string | null,
+  body: Record<string, unknown> | undefined,
+): Promise<{ body: Record<string, unknown> } | null> {
+  if (path !== '/change-password' && path !== '/update-user') return null;
+  // Better Auth answers an anonymous request with its own 401.
+  if (!userId) return null;
+
+  const [user] = await db
+    .select({ role: schema.user.role, emailVerified: schema.user.emailVerified })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId))
+    .limit(1);
+  if (!user) return null;
+
+  if (path === '/change-password') {
+    if (isRecoveryAdmin(user)) return null;
+    // A policy outage refuses (getAuthPolicySettings throws), as sign-in does.
+    if (!(await getAuthPolicySettings()).localAuthEnabled) {
+      throw new APIError('FORBIDDEN', {
+        code: 'LOCAL_AUTH_DISABLED',
+        message: 'Email and password sign-in is turned off on this instance',
+      });
+    }
+    return null;
+  }
+
+  const keys = Object.keys(body ?? {});
+  if (keys.length !== 1 || keys[0] !== 'name' || typeof body?.name !== 'string') {
+    throw new APIError('BAD_REQUEST', {
+      code: 'PROFILE_NAME_ONLY',
+      message: 'Only your name can be changed here',
+    });
+  }
+  const name = body.name.trim();
+  if (name.length < 1 || name.length > MAX_PROFILE_NAME_LENGTH) {
+    throw new APIError('BAD_REQUEST', {
+      code: 'INVALID_NAME',
+      message: `Your name must be 1 to ${MAX_PROFILE_NAME_LENGTH} characters`,
+    });
+  }
+  const methods = await signInMethodsFor({ id: userId, ...user });
+  if (!methods.credential || methods.sso.length > 0) {
+    throw new APIError('FORBIDDEN', {
+      code: 'PROFILE_MANAGED_BY_SSO',
+      message: "Your name comes from your organisation's sign-in",
+    });
+  }
+  return { body: { name } };
+}

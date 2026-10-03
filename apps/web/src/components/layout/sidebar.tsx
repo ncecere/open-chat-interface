@@ -114,7 +114,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
         ) : (
           <>
             <SidebarProjects />
-            <ThreadList search="" />
+            <ThreadList />
           </>
         )}
       </nav>

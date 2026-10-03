@@ -32,9 +32,12 @@ function tableQuery(rows: unknown[]) {
   return chain;
 }
 
-/** Storage usage is read first, then artifact bytes, then the role's policy. */
+/**
+ * Storage usage is read first, then artifact bytes, the artifact count and
+ * project-file totals (the breakdown), then the role's policy.
+ */
 function respondWith(usage: unknown[], policy: unknown[], artifacts: unknown[] = []) {
-  const queue = [usage, artifacts, policy];
+  const queue = [usage, artifacts, [], [], policy];
   mocks.select.mockImplementation(() => tableQuery(queue.shift() ?? []));
 }
 

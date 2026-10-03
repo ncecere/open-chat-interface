@@ -11,9 +11,12 @@
 **Administrative action** — settings, models, providers, quotas, invitations,
 policies, announcements, bulk operations.
 
-**Authentication** — sign-in, sign-up, sign-out, password reset, email change,
+**Authentication** — sign-in, sign-up, sign-out, password reset and change,
 verification, and single sign-on. Including **failures**, and including for an
 account that does not exist, which is what makes a brute-force attempt visible.
+A person's own changes in Settings → Account are recorded too: their name
+(`auth.profile.updated`) and signing devices out (`auth.session.revoked`,
+`auth.sessions.revoked_others`).
 
 Only outcomes are recorded. No credentials, no tokens, no request bodies.
 

@@ -10,7 +10,7 @@ import { validationFailed } from '../../lib/errors.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { getSetting } from '../settings.js';
 
-import { artifactBytes } from './usage.js';
+import { artifactBytes, artifactCount, projectFileTotals } from './usage.js';
 
 export { adjustStorageUsage, recomputeStorageUsage } from './usage.js';
 
@@ -79,16 +79,31 @@ export async function getStorageLimits(role: UserRole) {
 /**
  * Live usage includes upload reservations and artifact versions; trashed
  * files and the artifacts of trashed conversations do not consume allowance.
+ *
+ * The breakdown (v0.9.1) splits the same total three ways. Chat files are
+ * the counted file total less project files, so the three always add up to
+ * `liveBytes` even if a counter and the rows briefly disagree.
  */
 export async function getStorageUsage(userId: string, role: UserRole): Promise<StorageUsage> {
-  const [[row], artifacts] = await Promise.all([
+  const [[row], artifacts, artifactsCount, project] = await Promise.all([
     db.select().from(schema.storageUsage).where(eq(schema.storageUsage.userId, userId)).limit(1),
     artifactBytes(db, userId),
+    artifactCount(db, userId),
+    projectFileTotals(db, userId),
   ]);
+  const fileBytes = Number(row?.liveBytes ?? 0);
+  const fileCount = row?.liveFileCount ?? 0;
+  const projectBytes = Math.min(project.bytes, fileBytes);
+  const projectCount = Math.min(project.count, fileCount);
   return {
-    liveBytes: Number(row?.liveBytes ?? 0) + artifacts,
+    liveBytes: fileBytes + artifacts,
     artifactBytes: artifacts,
-    liveFileCount: row?.liveFileCount ?? 0,
+    breakdown: {
+      chatFiles: { bytes: fileBytes - projectBytes, count: fileCount - projectCount },
+      projectFiles: { bytes: projectBytes, count: projectCount },
+      artifacts: { bytes: artifacts, count: artifactsCount },
+    },
+    liveFileCount: fileCount,
     pendingBytes: Number(row?.pendingBytes ?? 0),
     pendingFileCount: row?.pendingFileCount ?? 0,
     ...(await getStorageLimits(role)),

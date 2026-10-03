@@ -29,6 +29,7 @@ attachmentRoutes.get('/usage', async (c) => {
   return c.json(await getStorageUsage(user.id, user.role));
 });
 
+/** Chat files and project files (labelled with their project), newest first, at most 500. */
 attachmentRoutes.get('/', async (c) => {
   const user = currentUser(c);
   const rows = await listAttachments(user.id);
@@ -42,6 +43,8 @@ attachmentRoutes.get('/', async (c) => {
       url: `/api/attachments/${row.id}/content`,
       thumbnailUrl: null,
       createdAt: row.createdAt.toISOString(),
+      // A project file is managed (and deleted) from its project.
+      project: row.projectId ? { id: row.projectId, name: row.projectName ?? 'Project' } : null,
     })),
   });
 });

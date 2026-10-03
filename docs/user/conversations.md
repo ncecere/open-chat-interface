@@ -164,10 +164,18 @@ yourself.
 
 ## Organising the sidebar
 
+The sidebar lists your [projects](projects.md#projects-in-the-sidebar), each
+with its own conversations, and then your other conversations under **Pinned**,
+**Today**, **Yesterday** and **Older**. A conversation in a project is listed
+under its project, not in the date groupings.
+
 - **Pin** a conversation to hold it at the top, above the date groupings.
+  Pinned conversations are always listed under **Pinned**, including those in
+  a project, which show the project's name after their title.
 - **Archive** one to remove it from the list without deleting it. Archived
   conversations remain under [Settings → History](settings.md#history).
-- **Search** finds conversations by title and by what was said in them. See
+- **Search** finds conversations by title and by what was said in them,
+  including those in projects. See
   [Finding a conversation](#finding-a-conversation).
 
 ## Finding a conversation
@@ -188,8 +196,9 @@ lines underneath, matched words highlighted, best match first.
 ## Where conversations go
 
 Your institution may set a retention period, after which conversations are
-removed automatically. If one applies, it is described under
-[Settings → History](settings.md#history).
+removed automatically. Conversations it removes go to the trash first, where
+[Settings → History](settings.md#history) shows them as removed automatically
+and when each will be deleted.
 
 Deleting a conversation yourself moves it to a recoverable state first, so an
 accidental deletion is not immediately final. How long that lasts is set by your

@@ -231,9 +231,20 @@ describe.skipIf(!available)('live reply switching', () => {
     const response = await app.request(`/api/chat/${chat.id}/messages`);
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
+      thread: Record<string, unknown>;
       messages: Array<{ id: string; parts: unknown }>;
       replies: Array<{ id: string; parts: unknown }>;
     };
+    // The full summary (v0.9.1), so the sidebar can place an open conversation.
+    expect(body.thread).toMatchObject({
+      id: chat.id,
+      title: expect.any(String),
+      pinned: false,
+      archived: false,
+      temporary: false,
+      expiresAt: null,
+      projectId: null,
+    });
     expect(body.messages.map((message) => message.id)).toEqual([prompt, newReply]);
     expect(body.replies.map((reply) => reply.id)).toEqual([oldReply, newReply]);
     expect(body.replies[0]?.parts).toEqual([{ type: 'text', text: 'OLD_REPLY' }]);

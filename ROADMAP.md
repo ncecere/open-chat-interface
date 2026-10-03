@@ -15,6 +15,7 @@ document at every minor release.
 - [Shipped — v0.8: tools and connected knowledge](#shipped--v08-tools-and-connected-knowledge)
 - [Shipped — v0.9: make and operate](#shipped--v09-make-and-operate)
 - [Now — v0.10: finish and harden](#now--v010-finish-and-harden)
+- [Next — v0.11: always on](#next--v011-always-on)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -175,13 +176,63 @@ together they make compliance, backups, exports and artifacts complete.
 | **Legal hold covers everything** | A hold pauses conversation retention, trash purging, temporary-chat expiry, memory retention and permanent deletion, but removing a held person's project still deletes its files at once, and their usage events are still pruned. | Holds also pause project file deletion and usage-event pruning, with tests that every deletion path checks the hold. |
 | **Deletions in the compliance export** | The export streams audit events and content, but not what was deleted, so a downstream archive cannot tell a deletion from a gap. | Deletions (conversations, messages, attachments, artifacts, memory) exported as events with who, what and when, never the deleted content. |
 | **Backups include files** | Automated backups copy the database and list every attachment object with its checksum, but do not copy the attachments themselves; operators protect the storage separately. | Incremental attachment copies to the backup destination alongside each database backup, covered by retention and the restore check. |
-| **PDF export in every script** | Exported PDFs cover Latin scripts only; Chinese, Japanese, Korean, Arabic, Hebrew and others are replaced. | Embedded fonts with wide script coverage (and right-to-left layout), chosen per document. |
-| **Resizable artifact panel** | The docked panel is a fixed share of the window. | A drag handle and keyboard-operable resizing, remembered per person. |
+| **PDF export in every script** | Exported PDFs cover Latin scripts only; Chinese, Japanese, Korean, Arabic, Hebrew and others are replaced. | Embedded fonts with wide script coverage (and right-to-left layout), chosen per document and loaded only when a document needs them, so the API image grows little. |
+| **Resizable artifact panel** | The docked panel is a fixed share of the window. | A drag handle and keyboard-operable resizing, remembered in the browser. |
 | **Long artifact streams after a reload** | Reloading during a very long artifact can fail to resume, because a stored reply keeps a bounded number of stream events. | Resume from the saved draft instead of replaying every event. |
 | **Failed summaries are reported** | When a summary someone asked for fails in the background, the "Summarising" state simply disappears. | Tell the person it failed and why (allowance, model error), with a retry. |
 | **Slow search providers** | SearchApi occasionally times out, and a slow provider fails the search. | Retry once, then fall back to a second configured provider when one is set. |
 | **S3 suites in CI** | CI has no S3 (MinIO) service or PostgreSQL 17 client tools, so storage, backup and compliance-export tests skip there and their coverage floors are enforced only locally. | A MinIO service and matching `pg_dump` in CI, so those suites run on every pull request and their floors apply there too. |
+| **Your shared links** | People can see a conversation's share link only from inside that conversation, so links shared long ago are easy to forget. | A Settings page listing every share link a person has made (conversation, created, expiry, view count) with Revoke and Revoke all, audited. |
+| **Default model and reasoning level per person** | The composer remembers the last model per browser only, so a new device starts from the instance default. | A default model and reasoning level in Settings, stored with the account, within what the person's role allows; the instance default still applies when unset or no longer allowed. |
+| **Self-service account deletion** | Settings no longer shows a Delete Account button (it never worked); administrators delete accounts under People. | An administrator setting (off by default, per role) that lets people delete their own account after typing a confirmation. Refused under legal hold; conversations, files, artifacts, memory and share links deleted, usage events kept for budgets; audited. For single sign-on accounts the next sign-in creates a new, empty account, which the confirmation explains. |
+| **Clearer project search** | Keyword search cannot tell two meanings of a word apart ("plan a trip" against "data management plans"); only the optional reranker drops such passages today. | Show which passages a reply used, and let the person leave a file out of search for a question. |
+| **Sidebar polish** | The remembered expanded projects do not sync between open tabs. | Sync the expanded state across tabs. |
+| **Branding applied everywhere** | Branding sets the name, logo, colour theme, default theme and sign-in message, but not every surface follows it: the browser tab always says "Open Chat Interface", there is no favicon from the logo, verification and password-reset emails do not name the instance, and diagrams read an accent colour the Branding page cannot set, so they always use the default orange. | An end-to-end check of every surface (sign-in, sidebar, tab title and icon, share pages, emails, artifacts and diagrams, exports) with a browser test that sets custom branding and asserts each one, and fixes for what does not follow it. Diagram colours follow the chosen colour theme. |
 | **One place for operations pages** | The Backups and Compliance pages repeat the same destination and schedule controls. | Shared components for destinations, schedules and run history. |
+
+## Next — v0.11: always on
+
+Large deployments (tens of thousands of people, tens of millions of messages,
+a highly available PostgreSQL cluster such as Patroni) cannot take hours of
+downtime for an upgrade. In comparable products those hours go to database
+migrations that rewrite large tables, rebuilding vector indexes and
+re-indexing. The goal of v0.11 is that upgrading from the previous minor
+release needs **no downtime**, survives a database failover partway through,
+and that this is tested, not promised.
+
+OCI starts from a good place: migrations run once under a lock, releases keep
+the previous version working against the new schema, messages are rows rather
+than one document per conversation, vectors live in PostgreSQL, and indexing
+and embedding already run as background jobs. What is missing is below.
+
+| Item | Why | Plan |
+| --- | --- | --- |
+| **Two-phase migrations** | Migrations run in one transaction, so an index on a large table cannot be built concurrently and blocks writes while it builds, and data changes inside migrations take time proportional to the table. | After [GitLab's model](https://docs.gitlab.com/development/database/): a fast transactional schema step before the deploy, then post-deploy steps and batched background migrations run by the job runner while OCI serves (concurrent index builds, backfills in small batches with pauses, invalid indexes cleaned up and retried). Progress on System health; features that need a step degrade gracefully until it finishes; a release can require earlier background migrations to be complete before it upgrades. |
+| **Lock-safe migrations** | A migration waiting behind one long query queues every request behind it, so even a fast change can freeze the application. | Short lock and statement timeouts on every migration step, with automatic retry and backoff. |
+| **Failover-safe upgrades and jobs** | On a highly available cluster the primary can change during an upgrade, dropping connections and the advisory locks that guard migrations and jobs. | Migrations and background migrations resume cleanly after a failover; jobs re-acquire their locks; requests retry where it is safe. A failover drill (stopping the primary mid-upgrade and mid-backfill) runs in the test suite. |
+| **Migration linter** | Unsafe changes are easy to write and only show at scale. | CI blocks non-concurrent indexes on existing tables, table rewrites, unbatched data updates, `NOT NULL` without a default, and dropping a column the previous release still reads. |
+| **Rolling-upgrade tests** | "The previous release works against the new schema" is a convention today. | Every release upgrades a seeded database from the previous minor while the previous release serves traffic, and runs the previous release's checks against the new schema. Supported upgrade paths are published, including which releases cannot be skipped. |
+| **Upgrade preflight** | Operators cannot see what an upgrade will cost before starting it. | A command and an administration page listing pending migrations and background migrations with estimated work (table sizes, index builds, disk needed), and whether this upgrade can be rolling. |
+| **Vector and search rebuilds without a gap** | Changing the embeddings model, or a search index, must not leave search empty while it rebuilds. | A new embeddings model or index builds alongside the current one and takes over when complete; the old one is removed afterwards. Never inside a migration. |
+| **Read-only maintenance mode** | For the rare change that cannot be online, down is the wrong fallback. | People can read and search while sending pauses, announced ahead with a scheduled banner. |
+| **Scale test harness** | OCI has not been measured at tens of thousands of people and tens of millions of messages. | A synthetic dataset at that size and a repeatable run that measures upgrade and migration time, page and search latency and job throughput before each release, with results published in the release notes. |
+| **Connection pooling** | OCI needs direct or session-mode connections, and many replicas against one cluster run out of them. | Transaction-mode pooling (PgBouncer) for ordinary queries, with a small direct pool for locks and jobs. Optional routing of heavy reads (search, reports, exports) to replicas. |
+| **Kubernetes Helm chart** | The zero-downtime procedure should be the default, not a runbook. | A first-party chart: migration job before the rollout, rolling updates, disruption budgets, readiness gating and autoscaling on OCI's metrics. |
+| **Draining replies on shutdown** | A replica that stops ends the replies it is writing, so every rolling upgrade cuts some off. | On shutdown a replica stops taking new turns, lets replies in progress finish within a limit, and saves anything left so it can continue elsewhere. |
+| **Separate worker role** | Embedding, imports, document rendering, exports and backups run on the same replicas as requests. | An optional worker role that runs background work and scales separately. |
+| **Provider capacity** | At scale the model provider's rate limits are the bottleneck, and requests over them fail. | Shared per-provider and per-model limits across replicas, a fair queue with a visible position, and backoff on rate-limit errors. |
+| **Redis high availability** | Several replicas depend on Redis for reply streams and shared limits. | Sentinel and Redis Cluster support, documented behaviour when Redis is unavailable, and a tested failover. |
+| **Optional Qdrant** | Very large deployments may want vector search off the database cluster. | A vector store interface with pgvector as the default; Qdrant as an optional, rebuildable store (PostgreSQL stays the source of truth, blue/green collections, reliable deletes), if the scale harness shows the need. |
+| **Backups at scale** | `pg_dump` takes hours on a large cluster. | For clusters with their own backups (pgBackRest, WAL-G), OCI backs up attachments and verifies; recovery objectives and restore drills documented. |
+| **Fast usage reports and budgets** | Budgets and the Usage pages read raw usage events. | Hourly and daily rollups maintained in the background. |
+| **Background work visible** | Imports, indexing, re-embedding and background migrations run out of sight. | Queue depth, progress and failures on System health and in metrics. |
+
+Further items (cross-replica cache invalidation, batched pruning, loading
+long conversations in parts, sign-in storms, encryption key rotation, service
+objectives) and the design are in `docs/dev/v0.11-design.md`. Measured by the
+harness, later releases may also partition the largest append-only tables
+(usage events, audit log, webhook deliveries) so that retention drops old
+partitions instead of deleting rows.
 
 ## Later — v1.0 and beyond: assistants and media
 
@@ -214,6 +265,14 @@ Ideas with merit that need more evidence or design before they are scheduled.
 - **Native PDF input** to models that support it, instead of always extracting
   text.
 - **Multi-architecture images** (linux/arm64) for the published containers.
+- **Changing your own email address.** For single sign-on accounts the
+  identity provider owns the address, and OCI uses it to link sign-ins to
+  accounts and to check domain allowlists, so a change in OCI could split an
+  account in two or, without strict verification, let one person claim
+  another's institutional address. For password accounts it would need a
+  confirmation sent to the new address and a notice to the old one.
+  Administrators cannot change addresses either today; a person whose address
+  changes signs in with the new one (single sign-on) or is invited again.
 - **SCIM provisioning** (SCIM 2.0 users and groups mapped to roles, with LDAP
   sign-in as an optional addition). Large institutions provision accounts
   centrally, but single sign-on with just-in-time provisioning and claim-to-role

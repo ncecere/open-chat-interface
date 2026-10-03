@@ -13,6 +13,7 @@ import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
+import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
@@ -205,7 +206,8 @@ export function useChatSession(options: {
           requestRecovery.current();
         else clearRun(scope.runId);
       }
-      queryClient.invalidateQueries({ queryKey: ['threads'] });
+      // The reply reorders the sidebar and may have given the conversation a title.
+      void invalidateConversationLists(queryClient);
     },
   });
 

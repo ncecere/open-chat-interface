@@ -2,11 +2,17 @@ import type {
   CreateProjectInput,
   ProjectFile,
   ProjectSummary,
+  SidebarProject,
   ThreadSummary,
   UpdateProjectInput,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api } from '~/lib/api-client';
+import {
+  invalidateConversationLists,
+  SIDEBAR_PROJECTS_KEY,
+  updateCachedConversation,
+} from '~/lib/conversation-cache';
 import { useCurrentUser } from './use-current-user';
 
 /** Whether this person's role may use projects; false until /me has loaded. */
@@ -19,6 +25,20 @@ export function useProjects(enabled = true) {
   return useQuery({
     queryKey: ['projects'],
     queryFn: () => api.get<{ projects: ProjectSummary[] }>('/projects'),
+    select: (data) => data.projects,
+    enabled,
+  });
+}
+
+/**
+ * The sidebar's project tree: each project with its conversation count and
+ * newest unpinned conversations. Under `['projects']`, so every project and
+ * conversation change refreshes it.
+ */
+export function useSidebarProjects(enabled = true) {
+  return useQuery({
+    queryKey: SIDEBAR_PROJECTS_KEY,
+    queryFn: () => api.get<{ projects: SidebarProject[] }>('/projects/sidebar'),
     select: (data) => data.projects,
     enabled,
   });
@@ -77,12 +97,8 @@ export function useDeleteProject() {
       api.delete<{ ok: boolean; detachedThreads: number; removedFiles: number }>(
         `/projects/${encodeURIComponent(projectId)}`,
       ),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-        queryClient.invalidateQueries({ queryKey: ['threads'] }),
-      ]);
-    },
+    // Its conversations move to the general list.
+    onSuccess: () => invalidateConversationLists(queryClient),
   });
 }
 
@@ -130,11 +146,9 @@ export function useMoveThread() {
       api.patch<{ thread: ThreadSummary }>(`/threads/${encodeURIComponent(threadId)}`, {
         projectId,
       }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['threads'] }),
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-      ]);
+    onSuccess: (result) => {
+      if (result?.thread) updateCachedConversation(queryClient, result.thread);
+      return invalidateConversationLists(queryClient);
     },
   });
 }

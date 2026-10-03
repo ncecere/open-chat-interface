@@ -259,7 +259,7 @@ Generated from 41 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/attachments` | — |
+| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. |
 | POST | `/api/attachments` | — |
 | DELETE | `/api/attachments/:id` | — |
 | GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. |
@@ -323,6 +323,9 @@ Generated from 41 route files.
 | POST | `/api/me/onboarding/complete` | — |
 | POST | `/api/me/onboarding/skip` | — |
 | PATCH | `/api/me/preferences` | — |
+| GET | `/api/me/sessions` | Settings → Account → Devices: where this person is signed in, this device first. |
+| DELETE | `/api/me/sessions/:id` | Signs out one other device (404 for anyone else's or an unknown session). |
+| POST | `/api/me/sessions/revoke-others` | Signs out every other device. |
 | GET | `/api/me/usage` | — |
 
 ## `routes/memory.ts`
@@ -364,6 +367,7 @@ Generated from 41 route files.
 | GET | `/api/projects/:id/files` | The project's files, oldest first. |
 | POST | `/api/projects/:id/files` | Uploads through the same validation and storage path as chat attachments, so it also needs attachments to be allowed for the role and the instance, shares the upload rate limit, and counts against the storage allowance. |
 | DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright; its storage is released immediately. |
+| GET | `/api/projects/sidebar` | The sidebar's project tree: each project with its conversation count and up to five newest unpinned conversations. |
 
 ## `routes/share-links.ts`
 
@@ -378,7 +382,7 @@ Generated from 41 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/threads` | — |
+| GET | `/api/threads` | Live conversations, pinned first then newest, at most 200; `view=sidebar` leaves out unpinned project conversations. |
 | POST | `/api/threads` | — |
 | GET | `/api/threads/:id` | — |
 | PATCH | `/api/threads/:id` | — |

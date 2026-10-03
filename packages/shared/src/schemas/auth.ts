@@ -83,3 +83,34 @@ export type SignUpInput = z.infer<typeof signUpSchema>;
 export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
 export type AuthStatus = z.infer<typeof authStatusSchema>;
 export type SessionUser = z.infer<typeof sessionUserSchema>;
+
+/** Settings → Account: a name a person may set for themselves (v0.9.1). */
+export const PROFILE_NAME_MAX_LENGTH = 100;
+export const profileNameSchema = z.string().trim().min(1).max(PROFILE_NAME_MAX_LENGTH);
+
+/** How the signed-in person signs in (GET /api/me, `signIn`). */
+export const signInMethodsSchema = z.object({
+  /** They have a password and may use it now (local sign-in on, or a verified administrator). */
+  password: z.boolean(),
+  /** They have a password at all, usable or not. */
+  credential: z.boolean(),
+  /** Organisation sign-in providers linked to the account, by label. */
+  sso: z.array(z.string()),
+});
+
+/** One place the person is signed in (GET /api/me/sessions). */
+export const accountSessionSchema = z.object({
+  id: z.string(),
+  /** The session this request was made with. */
+  current: z.boolean(),
+  userAgent: z.string().nullable(),
+  /** Shortened (the last part replaced) so the list is safe to show on screen. */
+  ipAddress: z.string().nullable(),
+  /** Started by an administrator signing in as this person. */
+  impersonated: z.boolean(),
+  createdAt: z.string(),
+  lastActiveAt: z.string(),
+});
+
+export type SignInMethods = z.infer<typeof signInMethodsSchema>;
+export type AccountSession = z.infer<typeof accountSessionSchema>;

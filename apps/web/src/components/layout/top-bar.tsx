@@ -7,7 +7,7 @@ import { ThemeMenu } from '~/components/layout/theme-menu';
 import { MoveToProjectDialog } from '~/components/projects/project-dialogs';
 import { Button } from '~/components/ui/button';
 import { useCurrentUser } from '~/hooks/use-current-user';
-import { useThreads } from '~/hooks/use-threads';
+import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -124,10 +124,9 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
 /** Opens the Move to project dialog for the conversation on screen. */
 function MoveToProjectControl({ threadId }: { threadId: string }) {
   const [open, setOpen] = useState(false);
-  // The sidebar's list is already cached; archived conversations are not in
-  // it and simply start from "No project" until moved.
-  const { data: threads } = useThreads();
-  const current = threads?.find((thread) => thread.id === threadId)?.projectId ?? null;
+  // From the sidebar's cached lists, or the conversation's own history when
+  // the sidebar does not list it (an older project conversation).
+  const current = useOpenConversation(threadId)?.thread.projectId ?? null;
 
   return (
     <>

@@ -24,7 +24,8 @@ way regardless of which model you pick.
 9. [Connectors](connectors.md) — connecting your account to services models can
    use.
 10. [Sharing](sharing.md) — publishing a conversation read-only.
-11. [Settings](settings.md) — your account, personalisation, history, models.
+11. [Settings](settings.md) — your account, password and devices, appearance and
+    personalisation, history, models, attachments.
 12. [Memory](memory.md) — notes about you that models can use in every
     conversation, and how to see, change and delete them.
 13. [Limits](limits.md) — what a usage warning means and what to do about it.
@@ -33,8 +34,8 @@ way regardless of which model you pick.
 
 ## The parts of the screen
 
-**The sidebar** holds your projects and your conversations, newest first, with
-pinned ones at the top. Search finds a conversation by its title or by what was said in it, and
+**The sidebar** holds your projects, each with its own recent conversations,
+and your other conversations, newest first, with pinned ones at the top. Search finds a conversation by its title or by what was said in it, and
 opens it at the matching message.
 
 **The composer** at the bottom is where you type. The controls along its edge

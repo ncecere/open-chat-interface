@@ -502,11 +502,15 @@ describe.skipIf(!available)('live: projects', () => {
         404,
       );
 
-      // Not a loose upload: not listed or deletable as one.
-      const attachments = await json<{ attachments: Array<{ id: string }> }>(
-        await call(owner, 'GET', '/attachments'),
-      );
-      expect(attachments.attachments.map((entry) => entry.id)).not.toContain(file.id);
+      // Listed in Settings "Attachments" with its project (v0.9.1), but not
+      // deletable as a loose upload: it is removed through its project.
+      const attachments = await json<{
+        attachments: Array<{ id: string; project: { id: string; name: string } | null }>;
+      }>(await call(owner, 'GET', '/attachments'));
+      expect(attachments.attachments.find((entry) => entry.id === file.id)?.project).toEqual({
+        id: project.id,
+        name: project.name,
+      });
       expect((await call(owner, 'DELETE', `/attachments/${file.id}`)).status).toBe(404);
 
       // Another person cannot remove it, even knowing both ids.
@@ -757,6 +761,46 @@ describe.skipIf(!available)('live: projects', () => {
       expect(manifest.unsentAttachments).toEqual([]);
       expect(JSON.stringify(manifest)).not.toContain('secret instructions');
       expect(strFromU8(files['README.txt']!)).toContain('Projects: 2');
+    });
+  });
+
+  describe('Settings → Attachments (v0.9.1)', () => {
+    it('lists chat and project files, and breaks storage down to the meter total', async () => {
+      const person = await seedUser(live.db, state.organizationId);
+      const project = await createProject(person, 'Reading list');
+      await json(await uploadTo(person, project.id, 'notes.txt', 'Project notes here'), 201);
+      const chat = await appFor(person).request('/api/attachments', {
+        method: 'POST',
+        body: form([{ name: 'chat.txt', body: 'Chat file' }]),
+      });
+      expect(chat.status).toBe(201);
+
+      const listed = await json<{
+        attachments: Array<{ filename: string; project: { id: string; name: string } | null }>;
+      }>(await call(person, 'GET', '/attachments'));
+      expect(
+        listed.attachments.map((entry) => [entry.filename, entry.project?.name ?? null]).sort(),
+      ).toEqual([
+        ['chat.txt', null],
+        ['notes.txt', 'Reading list'],
+      ]);
+
+      const usage = await json<{
+        liveBytes: number;
+        liveFileCount: number;
+        breakdown: Record<
+          'chatFiles' | 'projectFiles' | 'artifacts',
+          { bytes: number; count: number }
+        >;
+      }>(await call(person, 'GET', '/attachments/usage'));
+      expect(usage.breakdown).toEqual({
+        chatFiles: { bytes: Buffer.byteLength('Chat file'), count: 1 },
+        projectFiles: { bytes: Buffer.byteLength('Project notes here'), count: 1 },
+        artifacts: { bytes: 0, count: 0 },
+      });
+      const { chatFiles, projectFiles, artifacts } = usage.breakdown;
+      expect(chatFiles.bytes + projectFiles.bytes + artifacts.bytes).toBe(usage.liveBytes);
+      expect(chatFiles.count + projectFiles.count).toBe(usage.liveFileCount);
     });
   });
 });

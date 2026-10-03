@@ -10,6 +10,7 @@ import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
 import { cancelActiveChatRun, resumeActiveChatRun } from '../services/chat-streams.js';
 import { chatRateLimit } from '../services/limits/rate-limit.js';
+import { serializeThread } from '../services/thread-summary.js';
 import { getOwnedThread, listConversation } from '../services/threads.js';
 
 export const chatRoutes = new Hono<AppBindings>();
@@ -104,6 +105,10 @@ function toUIMessage(message: StoredMessage) {
  * Returns stored messages in the AI SDK UI format for hydration: the active
  * conversation, plus `replies`, every reply to the latest turn (oldest first)
  * when it was retried, so the reader can switch between them. Empty otherwise.
+ *
+ * `thread` is the full conversation summary (v0.9.1; before, only its id,
+ * `temporary` and `expiresAt`), so the sidebar can list an open project
+ * conversation under its project even when it is not among the newest.
  */
 chatRoutes.get('/:threadId/messages', async (c) => {
   const user = currentUser(c);
@@ -111,11 +116,7 @@ chatRoutes.get('/:threadId/messages', async (c) => {
   const { messages, replies } = await listConversation(thread.id);
 
   return c.json({
-    thread: {
-      id: thread.id,
-      temporary: thread.temporary,
-      expiresAt: thread.expiresAt?.toISOString() ?? null,
-    },
+    thread: serializeThread(thread),
     messages: messages.map(toUIMessage),
     replies: replies.map(toUIMessage),
   });

@@ -54,9 +54,30 @@ To move an existing conversation, open it and select **Move to project** (the
 folder button at the top right). Choose a project, or **No project** to take
 it out. The change applies from the next reply.
 
-In the sidebar, a conversation in a project shows the project's name after its
-title. Forks and edited branches stay in the same project as the conversation
-they came from.
+Forks and edited branches stay in the same project as the conversation they
+came from.
+
+## Projects in the sidebar
+
+Under **Projects** in the sidebar, each project has an arrow that shows or
+hides its conversations; select the project's name to open its page.
+
+- Projects start collapsed. Whether you open or close each one is remembered
+  in this browser.
+- An open project lists its five most recent conversations. When it has more,
+  **Show all (*n*)** opens the project's **Conversations** tab; *n* counts
+  every conversation in the project, pinned ones included, but not archived
+  ones.
+- The project of the conversation or project page you are viewing opens by
+  itself while you are there, without changing what is remembered. The open
+  conversation is listed and highlighted under its project even when it is not
+  among the five most recent.
+- Pinned conversations are listed only under **Pinned**, with the project's
+  name after their title, not under their project. A project whose only
+  conversations are pinned shows just **Show all (*n*)**.
+- Conversations in a project are not repeated in the sidebar's date groupings.
+  Searching the sidebar or `Cmd/Ctrl + K` still finds them, with their
+  project's name.
 
 ## What the model receives
 

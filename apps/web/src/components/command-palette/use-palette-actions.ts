@@ -85,7 +85,8 @@ export function usePaletteActions({
             label: 'Show keyboard shortcuts',
             keywords: 'hotkeys commands',
             icon: Keyboard,
-            onSelect: () => navigate({ to: '/settings/shortcuts' }),
+            // Listed in the Keyboard Shortcuts card beside every settings page.
+            onSelect: () => navigate({ to: '/settings' }),
           },
           {
             id: 'toggle-theme',

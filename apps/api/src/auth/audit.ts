@@ -21,6 +21,13 @@ const AUDITED_PATHS = new Map<string, string>([
   ['/change-password', 'auth.password.changed'],
   ['/change-email', 'auth.email.change_requested'],
   ['/verify-email', 'auth.email.verified'],
+  // Settings "Account" (v0.9.1): a person's own name and devices. The devices
+  // list uses /api/me/sessions, which records the same actions; these cover
+  // Better Auth's own endpoints when called directly.
+  ['/update-user', 'auth.profile.updated'],
+  ['/revoke-session', 'auth.session.revoked'],
+  ['/revoke-sessions', 'auth.sessions.revoked'],
+  ['/revoke-other-sessions', 'auth.sessions.revoked_others'],
 ]);
 
 /** Path prefixes whose outcome is a completed SSO sign-in. */

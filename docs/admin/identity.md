@@ -41,6 +41,12 @@ deliberately, so the setting cannot lock everybody out. That safety net depends
 on at least one administrator having a verified address and a password somebody
 knows — check that before turning it off.
 
+The same rule covers changing a password in Settings → Account: while local
+authentication is off, only a verified administrator can change their password
+there, and the server refuses anyone else. People cannot change their own email
+address or delete their own account; Settings tells them to ask you (see
+[People](people.md)).
+
 ### Required email verification
 
 When required, local signup does not issue a session until the address is

@@ -1,5 +1,6 @@
+import type { ThemeMode } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Monitor, Moon, Plus, Sun } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
@@ -82,6 +83,84 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+const APPEARANCES = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+] as const;
+
+/**
+ * Light, Dark or System, the same choice as the chat's appearance menu and
+ * kept per browser. Native radio buttons, so arrow keys and screen readers
+ * work as they do everywhere else.
+ */
+function AppearanceRow() {
+  const { theme, setTheme } = useTheme();
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <div>
+        <p id={`${id}-label`} className="text-sm font-medium text-[var(--text-primary)]">
+          Appearance
+        </p>
+        <p
+          id={`${id}-description`}
+          className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]"
+        >
+          Light, dark, or follow your device's setting. Saved in this browser.
+        </p>
+      </div>
+      <div
+        role="radiogroup"
+        aria-labelledby={`${id}-label`}
+        aria-describedby={`${id}-description`}
+        className="inline-flex shrink-0 gap-1 self-start rounded-xl bg-[var(--bg-segment-track)] p-1"
+      >
+        {APPEARANCES.map((option) => (
+          <label
+            key={option.value}
+            className={cn(
+              'flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
+              'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--accent-bright)]',
+              theme === option.value
+                ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+            )}
+          >
+            <input
+              type="radio"
+              name={`${id}-appearance`}
+              value={option.value}
+              checked={theme === option.value}
+              onChange={() => setTheme(option.value as ThemeMode)}
+              className="sr-only"
+            />
+            <option.icon className="size-3.5" aria-hidden="true" />
+            {option.label}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface Personalisation {
+  displayName: string | null;
+  occupation: string | null;
+  traits: string[];
+  additionalContext: string | null;
+}
+
+function samePersonalisation(left: Personalisation, right: Personalisation): boolean {
+  return (
+    left.displayName === right.displayName &&
+    left.occupation === right.occupation &&
+    left.additionalContext === right.additionalContext &&
+    left.traits.length === right.traits.length &&
+    left.traits.every((trait, index) => trait === right.traits[index])
+  );
+}
+
 function ToggleRow({
   label,
   description,
@@ -121,7 +200,14 @@ function ToggleRow({
 export function SettingsCustomizationPage() {
   const { data } = useCurrentUser();
   const queryClient = useQueryClient();
-  const { codeWrap, setCodeWrap, autoOpenArtifacts, setAutoOpenArtifacts } = useTheme();
+  const {
+    codeWrap,
+    setCodeWrap,
+    autoOpenArtifacts,
+    setAutoOpenArtifacts,
+    invertSend,
+    setInvertSend,
+  } = useTheme();
 
   const [name, setName] = useState('');
   const [occupation, setOccupation] = useState('');
@@ -129,8 +215,6 @@ export function SettingsCustomizationPage() {
   const [traits, setTraits] = useState<string[]>([]);
   const [context, setContext] = useState('');
   const [saved, setSaved] = useState(false);
-  const [hidePersonalInfo, setHidePersonalInfo] = useState(false);
-  const [invertSend, setInvertSend] = useState(false);
 
   // Hydrate once the preferences arrive.
   useEffect(() => {
@@ -140,6 +224,23 @@ export function SettingsCustomizationPage() {
     setTraits(data.preferences.traits ?? []);
     setContext(data.preferences.additionalContext ?? '');
   }, [data]);
+
+  // What Save would send, and what is stored: Save stays off until they differ.
+  const draft: Personalisation = {
+    displayName: name.trim() || null,
+    occupation: occupation.trim() || null,
+    traits,
+    additionalContext: context.trim() || null,
+  };
+  const stored: Personalisation | null = data
+    ? {
+        displayName: data.preferences.displayName?.trim() || null,
+        occupation: data.preferences.occupation?.trim() || null,
+        traits: data.preferences.traits ?? [],
+        additionalContext: data.preferences.additionalContext?.trim() || null,
+      }
+    : null;
+  const dirty = stored !== null && !samePersonalisation(draft, stored);
 
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) => api.patch('/me/preferences', patch),
@@ -255,28 +356,32 @@ export function SettingsCustomizationPage() {
         </div>
 
         <div className="flex items-center justify-end gap-3">
-          {saved && <span className="text-xs text-[var(--success)]">Saved</span>}
+          <span role="status" className="text-xs text-[var(--success)]">
+            {saved ? 'Saved' : ''}
+          </span>
+          {save.isError && (
+            <span role="alert" className="text-xs text-[var(--danger)]">
+              Your preferences could not be saved. Try again.
+            </span>
+          )}
           <Button
             variant="accent"
-            disabled={save.isPending}
-            onClick={() =>
-              save.mutate({
-                displayName: name.trim() || null,
-                occupation: occupation.trim() || null,
-                traits,
-                additionalContext: context.trim() || null,
-              })
-            }
+            disabled={save.isPending || !dirty}
+            onClick={() => save.mutate({ ...draft })}
           >
             Save Preferences
           </Button>
         </div>
       </div>
 
+      <Section title="Appearance">
+        <AppearanceRow />
+      </Section>
+
       <Section title="Behavior Options">
         <ToggleRow
           label="Invert Send/New Line Behavior"
-          description="When enabled, use Enter for newlines and a modifier key + Enter to send messages. When disabled, use Enter to send and Shift + Enter for new lines."
+          description="When enabled, Enter starts a new line and Cmd/Ctrl + Enter sends. When disabled, Enter sends and Shift + Enter starts a new line. Saved in this browser."
           checked={invertSend}
           onChange={setInvertSend}
         />
@@ -294,12 +399,6 @@ export function SettingsCustomizationPage() {
           description="On wide screens, open the artifact panel beside the conversation when a reply starts writing a page, image, diagram or document, so you can watch it being written."
           checked={autoOpenArtifacts}
           onChange={setAutoOpenArtifacts}
-        />
-        <ToggleRow
-          label="Hide Personal Information"
-          description="Hides your name and email from the UI."
-          checked={hidePersonalInfo}
-          onChange={setHidePersonalInfo}
         />
       </Section>
     </div>

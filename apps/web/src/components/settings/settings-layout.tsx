@@ -1,10 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Moon, Sun } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { ThemeMenu } from '~/components/layout/theme-menu';
 import { UsageLimits } from '~/components/settings/usage-limits';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { useCurrentUser } from '~/hooks/use-current-user';
+import { Select } from '~/components/ui/select';
+import {
+  type CurrentFeatures,
+  type SettingsSummary,
+  useCurrentUser,
+} from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
@@ -13,13 +19,13 @@ const TABS = [
   { to: '/settings', label: 'Account', exact: true },
   { to: '/settings/customization', label: 'Customization' },
   { to: '/settings/memory', label: 'Memory' },
-  { to: '/settings/history', label: 'History & Sync' },
+  { to: '/settings/history', label: 'History' },
   { to: '/settings/models', label: 'Models' },
   { to: '/settings/connectors', label: 'Connectors' },
   { to: '/settings/attachments', label: 'Attachments' },
-  { to: '/settings/shortcuts', label: 'Shortcuts' },
-  { to: '/settings/contact', label: 'Contact Us' },
 ] as const;
+
+type Tab = (typeof TABS)[number];
 
 const SHORTCUTS = [
   { label: 'Search', keys: ['⌘', 'K'] },
@@ -28,7 +34,49 @@ const SHORTCUTS = [
   { label: 'Open Model Picker', keys: ['⌘', '/'] },
 ];
 
-function IdentityRail() {
+/** Send and New Line follow "Invert Send/New Line Behavior" (Customization). */
+function messageShortcuts(invertSend: boolean) {
+  return invertSend
+    ? [
+        { label: 'Send Message', keys: ['⌘', 'Enter'] },
+        { label: 'New Line', keys: ['Enter'] },
+      ]
+    : [
+        { label: 'Send Message', keys: ['Enter'] },
+        { label: 'New Line', keys: ['⇧', 'Enter'] },
+      ];
+}
+
+function isActive(tab: Tab, pathname: string) {
+  return 'exact' in tab && tab.exact ? pathname === tab.to : pathname.startsWith(tab.to);
+}
+
+/**
+ * Sections with nothing in them for this person are left out of the
+ * navigation (v0.9.1): Memory when it is not offered to them and they have no
+ * saved notes, Connectors when their role has nothing to connect. Their
+ * addresses still work, and the section shows while it is open. Until /me
+ * says otherwise (or from an older API) every section shows.
+ */
+function visibleTabs(
+  pathname: string,
+  features: Partial<CurrentFeatures> | undefined,
+  summary: SettingsSummary | undefined,
+): Tab[] {
+  return TABS.filter((tab) => {
+    if (isActive(tab, pathname) || !summary) return true;
+    if (tab.to === '/settings/memory')
+      return features?.memory !== false || summary.memoryEntries > 0;
+    if (tab.to === '/settings/connectors') return summary.connectors > 0;
+    return true;
+  });
+}
+
+/**
+ * Who is signed in: a large avatar above the side cards on wide screens, a
+ * compact row above the page on narrow ones.
+ */
+function Identity() {
   const { data } = useCurrentUser();
   if (!data) return null;
 
@@ -41,45 +89,110 @@ function IdentityRail() {
     .toUpperCase();
 
   return (
-    <div className="flex w-60 shrink-0 flex-col items-center gap-6">
-      <div className="flex flex-col items-center gap-3 pt-2">
-        {user.image ? (
-          <img src={user.image} alt="" className="size-40 rounded-full object-cover" />
-        ) : (
-          <span className="flex size-40 items-center justify-center rounded-full bg-[var(--accent)] text-4xl font-semibold text-[var(--accent-foreground)]">
-            {initials}
-          </span>
-        )}
-        <div className="text-center">
-          <p className="text-xl font-bold text-[var(--text-primary)]">{user.name}</p>
-          <p className="text-sm text-[var(--text-muted)]">{user.email}</p>
-        </div>
-        <Badge variant="accent" className="px-3 py-1 text-xs capitalize">
-          {user.role}
-        </Badge>
+    <div className="flex min-w-0 items-center gap-4 lg:flex-col lg:gap-3 lg:pt-2">
+      {user.image ? (
+        <img src={user.image} alt="" className="size-12 rounded-full object-cover lg:size-24" />
+      ) : (
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-base font-semibold text-[var(--accent-foreground)] lg:size-24 lg:text-2xl">
+          {initials}
+        </span>
+      )}
+      <div className="min-w-0 flex-1 lg:flex-none lg:text-center">
+        <p className="truncate text-base font-bold text-[var(--text-primary)] lg:text-xl">
+          {user.name}
+        </p>
+        <p className="truncate text-sm text-[var(--text-muted)]">{user.email}</p>
       </div>
+      <Badge variant="accent" className="shrink-0 px-3 py-1 text-xs capitalize">
+        {user.role}
+      </Badge>
+    </div>
+  );
+}
 
-      <UsageLimits />
+function ShortcutsCard() {
+  const { invertSend } = useTheme();
+  return (
+    <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
+      <h2 className="mb-3 text-sm font-semibold">Keyboard Shortcuts</h2>
+      <div className="flex flex-col gap-3">
+        {[...SHORTCUTS, ...messageShortcuts(invertSend)].map((shortcut) => (
+          <div key={shortcut.label} className="flex items-center justify-between gap-3">
+            <span className="text-sm text-[var(--text-secondary)]">{shortcut.label}</span>
+            <span className="flex gap-1">
+              {shortcut.keys.map((key) => (
+                <kbd
+                  key={key}
+                  className="rounded bg-[var(--bg-control-hover)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--text-secondary)]"
+                >
+                  {key}
+                </kbd>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
-        <p className="mb-3 text-sm font-semibold">Keyboard Shortcuts</p>
-        <div className="flex flex-col gap-3">
-          {SHORTCUTS.map((shortcut) => (
-            <div key={shortcut.label} className="flex items-center justify-between">
-              <span className="text-sm text-[var(--text-secondary)]">{shortcut.label}</span>
-              <span className="flex gap-1">
-                {shortcut.keys.map((key) => (
-                  <kbd
-                    key={key}
-                    className="rounded bg-[var(--bg-control-hover)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--text-secondary)]"
-                  >
-                    {key}
-                  </kbd>
-                ))}
-              </span>
-            </div>
-          ))}
-        </div>
+function HelpCard() {
+  return (
+    <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
+      <h2 className="mb-2 text-sm font-semibold">Need help?</h2>
+      <p className="text-sm text-[var(--text-muted)]">
+        The administrator who runs this instance can reset passwords, change your role and enable
+        more models.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The settings sections: tabs on one row where they fit, otherwise one menu.
+ * Decided by the width of the content column (a container query), so it holds
+ * whatever the window, sidebar or font size; the row never wraps or scrolls.
+ */
+function SectionNav({ pathname }: { pathname: string }) {
+  const navigate = useNavigate();
+  const { data } = useCurrentUser();
+  const tabs = visibleTabs(pathname, data?.features, data?.settingsSummary);
+  const current = tabs.find((tab) => isActive(tab, pathname)) ?? TABS[0];
+  return (
+    <div className="@container">
+      <nav
+        aria-label="Settings sections"
+        className="hidden flex-nowrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1 @[46rem]:inline-flex"
+      >
+        {tabs.map((tab) => {
+          const active = isActive(tab, pathname);
+          return (
+            <Link
+              key={tab.to}
+              to={tab.to}
+              // The router marks its own active link; Account must match exactly or
+              // it would be "current" on every settings page.
+              activeOptions={{ exact: 'exact' in tab && tab.exact }}
+              className={cn(
+                'whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm transition-colors',
+                active
+                  ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+              )}
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="@[46rem]:hidden">
+        <Select
+          aria-label="Settings section"
+          value={current.to}
+          onChange={(to) => void navigate({ to })}
+          options={tabs.map((tab) => ({ value: tab.to, label: tab.label }))}
+          className="h-11"
+        />
       </div>
     </div>
   );
@@ -89,7 +202,6 @@ export function SettingsLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { resolvedTheme, setTheme } = useTheme();
 
   async function handleSignOut() {
     await authClient.signOut();
@@ -99,7 +211,7 @@ export function SettingsLayout() {
 
   return (
     <div className="min-h-dvh bg-[var(--bg-settings)]">
-      <div className="mx-auto w-full max-w-[75rem] px-6 py-6">
+      <div className="mx-auto w-full max-w-[75rem] px-4 py-6 sm:px-6">
         <header className="flex items-center justify-between">
           <Button variant="ghost" size="sm" asChild>
             <Link to="/">
@@ -109,49 +221,33 @@ export function SettingsLayout() {
           </Button>
 
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Toggle theme"
-              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-            >
-              {resolvedTheme === 'dark' ? <Moon /> : <Sun />}
-            </Button>
+            <ThemeMenu />
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
               Sign out
             </Button>
           </div>
         </header>
 
-        <div className="mt-8 flex gap-10">
-          <IdentityRail />
+        {/*
+          One grid, one copy of each part. Wide: identity and cards in a left
+          column beside the page. Narrow: identity, then the page, then the cards.
+        */}
+        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-10">
+          <div className="lg:col-start-1 lg:row-start-1">
+            <Identity />
+          </div>
 
-          <div className="min-w-0 flex-1">
-            <nav className="inline-flex flex-wrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1">
-              {TABS.map((tab) => {
-                const active =
-                  'exact' in tab && tab.exact ? pathname === tab.to : pathname.startsWith(tab.to);
-
-                return (
-                  <Link
-                    key={tab.to}
-                    to={tab.to}
-                    className={cn(
-                      'rounded-lg px-3 py-1.5 text-sm transition-colors',
-                      active
-                        ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-                    )}
-                  >
-                    {tab.label}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div className="mt-8 pb-16">
+          <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+            <SectionNav pathname={pathname} />
+            <div className="mt-8 lg:pb-16">
               <Outlet />
             </div>
+          </div>
+
+          <div className="flex flex-col gap-6 pb-16 lg:col-start-1 lg:row-start-2 lg:self-start">
+            <UsageLimits />
+            <ShortcutsCard />
+            <HelpCard />
           </div>
         </div>
       </div>

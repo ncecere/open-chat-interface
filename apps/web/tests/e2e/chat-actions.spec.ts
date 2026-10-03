@@ -53,42 +53,46 @@ async function signIn(page: import('@playwright/test').Page) {
 }
 
 test('sidebar exposes fork lineage and collapses pinned threads', async ({ page }) => {
-  await page.route('**/api/threads', async (route) => {
-    if (route.request().method() !== 'GET') return route.continue();
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        threads: [
-          {
-            id: 'pinned-thread',
-            title: 'Pinned fixture',
-            pinned: true,
-            archived: false,
-            temporary: false,
-            expiresAt: null,
-            parentThreadId: null,
-            branchedFromMessageId: null,
-            lastMessageAt: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: 'forked-thread',
-            title: 'Forked fixture',
-            pinned: false,
-            archived: false,
-            temporary: false,
-            expiresAt: null,
-            parentThreadId: 'parent-thread',
-            branchedFromMessageId: 'source-message',
-            lastMessageAt: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      }),
-    });
-  });
+  // By path: the sidebar asks for its view with `?view=sidebar` (v0.9.1).
+  await page.route(
+    (url) => url.pathname === '/api/threads',
+    async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          threads: [
+            {
+              id: 'pinned-thread',
+              title: 'Pinned fixture',
+              pinned: true,
+              archived: false,
+              temporary: false,
+              expiresAt: null,
+              parentThreadId: null,
+              branchedFromMessageId: null,
+              lastMessageAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            {
+              id: 'forked-thread',
+              title: 'Forked fixture',
+              pinned: false,
+              archived: false,
+              temporary: false,
+              expiresAt: null,
+              parentThreadId: 'parent-thread',
+              branchedFromMessageId: 'source-message',
+              lastMessageAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        }),
+      });
+    },
+  );
   await signIn(page);
   const openSidebar = page.getByRole('button', { name: 'Open sidebar' });
   if (await openSidebar.isVisible()) await openSidebar.click();
