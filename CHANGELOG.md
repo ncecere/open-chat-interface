@@ -7,6 +7,29 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- **Project conversations live under their project in the sidebar.**
+  Projects is a plain heading; each project expands to its five most recent
+  conversations, with **Show all (N)** opening the project's Conversations
+  tab. Projects start collapsed, your choice is remembered in this browser,
+  and the project of the open conversation opens while you are in it. The
+  Today, Yesterday and Older lists show conversations outside projects;
+  pinned conversations stay in Pinned. `GET /api/projects/sidebar` and
+  `GET /api/threads?view=sidebar` serve the new layout; no migration.
+- **Settings has seven sections on one row.** Shortcuts and Contact Us are
+  no longer tabs: every settings page shows a Keyboard Shortcuts card with
+  every shortcut and a Need help? card, and the old addresses redirect to
+  Settings. Where the tabs do not fit, a Settings section menu replaces them
+  instead of wrapping onto a second row.
+
+### Fixed
+
+- Settings on a phone squeezed the page beside a desktop-width profile column;
+  narrow screens now show the profile, the page and the cards one above the
+  other.
+- Settings marked Account as the current section on every settings page.
+
 ## [0.9.0] - 2026-10-03
 
 ### Added
