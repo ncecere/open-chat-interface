@@ -83,7 +83,7 @@ installation; existing instances must follow the drained upgrade procedure in
 [Production operations](docs/OPERATIONS.md) before starting new API producers:
 
 ```bash
-export OCI_VERSION=v0.9.1
+export OCI_VERSION=v0.9.2
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
