@@ -13,7 +13,7 @@ independent and is not enforced by the workflow. Supply a personal access token 
 commit registry credentials or put them in `.env.example`.
 
 ```bash
-export OCI_VERSION=v0.9.2
+export OCI_VERSION=v0.10.0
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 # GHCR_READ_TOKEN is supplied externally by your secret manager.
 printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u ncecere --password-stdin
