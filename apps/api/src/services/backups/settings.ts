@@ -1,5 +1,6 @@
 import {
   BACKUP_STORAGE_PREFIX,
+  type BackupFileVerification,
   type BackupSettings,
   DEFAULT_BACKUP_KEEP_DAILY,
   DEFAULT_BACKUP_KEEP_WEEKLY,
@@ -36,12 +37,25 @@ export interface ResolvedBackupSettings {
   s3: S3StorageSettings;
   keepDaily: number;
   keepWeekly: number;
+  /** Copy attachment files to `<root>objects/<sha256>`; see `normalizeBackupSettings`. */
+  copyFiles: boolean;
+  verifyFiles: BackupFileVerification;
 }
 
 const DEFAULT_BACKUP_PREFIX = 'oci-backups/';
 
+/**
+ * Copying attachment files is on for a new configuration (nothing saved yet)
+ * and off for an instance that saved backup settings before v0.10, where it
+ * stays off until an administrator turns it on: the first copy can be as
+ * large as all attachment storage, so it should never start, and start
+ * costing, on an upgrade alone. The page says plainly when files are not
+ * copied. Saving settings stores the value explicitly from then on.
+ */
 export function normalizeBackupSettings(stored: StoredBackupSettings): ResolvedBackupSettings {
   return {
+    copyFiles: stored.copyFiles ?? Object.keys(stored).length === 0,
+    verifyFiles: stored.verifyFiles ?? 'sample',
     enabled: stored.enabled ?? false,
     hourUtc: stored.hourUtc ?? 3,
     destination: stored.destination ?? 'storage',
@@ -73,6 +87,8 @@ export function toPublicBackupSettings(settings: ResolvedBackupSettings): Backup
     },
     keepDaily: settings.keepDaily,
     keepWeekly: settings.keepWeekly,
+    copyFiles: settings.copyFiles,
+    verifyFiles: settings.verifyFiles,
   };
 }
 
@@ -102,6 +118,8 @@ export function changedBackupFields(
     'prefix',
     'keepDaily',
     'keepWeekly',
+    'copyFiles',
+    'verifyFiles',
   ] as const)
     if (before[key] !== after[key]) fields.push(key);
   for (const key of ['bucket', 'region', 'endpoint', 'accessKeyId', 'forcePathStyle'] as const)

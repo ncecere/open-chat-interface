@@ -1,25 +1,24 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Floors for modules whose tests need S3 (MinIO) and PostgreSQL client tools.
- * Those suites skip without them, so the floors apply only where they run:
- * locally with the MinIO fixture. CI has no MinIO yet and sets
- * `OCI_COVERAGE_WITHOUT_S3=1` (ROADMAP.md, v0.10: run these suites in CI).
+ * Floors for modules whose tests need S3 and PostgreSQL client tools. They
+ * apply everywhere: CI runs an S3-compatible server (VersityGW) and installs
+ * the PostgreSQL 17 client tools, and in CI an unreachable S3 server fails
+ * the suites instead of skipping them (test/live-backup-tools.ts).
  */
-const s3Floors =
-  process.env.OCI_COVERAGE_WITHOUT_S3 === '1'
-    ? {}
-    : {
-        'src/services/backups/pg-tools.ts': { statements: 90, branches: 75, functions: 85 },
-        'src/services/backups/run.ts': { statements: 88, branches: 70, functions: 85 },
-        'src/services/backups/settings.ts': { statements: 93, branches: 88, functions: 90 },
-        'src/routes/admin/backups.ts': { statements: 85, branches: 50, functions: 100 },
-        'src/services/compliance/export.ts': { statements: 90, branches: 78, functions: 90 },
-        'src/services/compliance/cursor.ts': { statements: 82, branches: 75, functions: 80 },
-        'src/services/compliance/holds.ts': { statements: 75, branches: 60, functions: 75 },
-        'src/services/compliance/settings.ts': { statements: 98, branches: 95, functions: 100 },
-        'src/routes/admin/compliance.ts': { statements: 88, branches: 60, functions: 100 },
-      };
+const s3Floors = {
+  'src/services/backups/pg-tools.ts': { statements: 90, branches: 75, functions: 85 },
+  'src/services/backups/run.ts': { statements: 88, branches: 70, functions: 85 },
+  'src/services/backups/settings.ts': { statements: 93, branches: 88, functions: 90 },
+  'src/services/backups/files.ts': { statements: 90, branches: 85, functions: 100 },
+  'src/services/backups/restore-files.ts': { statements: 90, branches: 80, functions: 100 },
+  'src/routes/admin/backups.ts': { statements: 85, branches: 50, functions: 100 },
+  'src/services/compliance/export.ts': { statements: 90, branches: 78, functions: 90 },
+  'src/services/compliance/cursor.ts': { statements: 82, branches: 75, functions: 80 },
+  'src/services/compliance/holds.ts': { statements: 75, branches: 60, functions: 75 },
+  'src/services/compliance/settings.ts': { statements: 98, branches: 95, functions: 100 },
+  'src/routes/admin/compliance.ts': { statements: 88, branches: 60, functions: 100 },
+};
 
 export default defineConfig({
   test: {

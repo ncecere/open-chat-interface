@@ -1,4 +1,10 @@
-import type { BackupDestination, BackupRun, BackupStatus } from '@oci/shared';
+import {
+  BACKUP_FILE_SAMPLE_SIZE,
+  type BackupDestination,
+  type BackupFileVerification,
+  type BackupRun,
+  type BackupStatus,
+} from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, DatabaseBackup, Play, TriangleAlert } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
@@ -36,6 +42,11 @@ const DESTINATIONS: Array<{ value: BackupDestination; label: string }> = [
   { value: 'separate', label: 'Separate S3 bucket (recommended)' },
 ];
 
+const VERIFICATION: Array<{ value: BackupFileVerification; label: string }> = [
+  { value: 'sample', label: `A random sample (${BACKUP_FILE_SAMPLE_SIZE} files)` },
+  { value: 'all', label: 'Every file' },
+];
+
 interface Draft {
   enabled: boolean;
   hourUtc: number;
@@ -49,6 +60,8 @@ interface Draft {
   secretAccessKey: string;
   keepDaily: string;
   keepWeekly: string;
+  copyFiles: boolean;
+  verifyFiles: BackupFileVerification;
 }
 
 function draftFrom(status: BackupStatus): Draft {
@@ -66,6 +79,8 @@ function draftFrom(status: BackupStatus): Draft {
     secretAccessKey: '',
     keepDaily: String(settings.keepDaily),
     keepWeekly: String(settings.keepWeekly),
+    copyFiles: settings.copyFiles,
+    verifyFiles: settings.verifyFiles,
   };
 }
 
@@ -81,6 +96,8 @@ export function backupChanges(status: BackupStatus, draft: Draft): Record<string
   const keepWeekly = Number(draft.keepWeekly);
   if (keepDaily !== settings.keepDaily) patch.keepDaily = keepDaily;
   if (keepWeekly !== settings.keepWeekly) patch.keepWeekly = keepWeekly;
+  if (draft.copyFiles !== settings.copyFiles) patch.copyFiles = draft.copyFiles;
+  if (draft.verifyFiles !== settings.verifyFiles) patch.verifyFiles = draft.verifyFiles;
   const s3: Record<string, unknown> = {};
   if (draft.bucket.trim() !== settings.s3.bucket) s3.bucket = draft.bucket.trim();
   if (draft.region.trim() !== settings.s3.region) s3.region = draft.region.trim();
@@ -95,6 +112,17 @@ export function backupChanges(status: BackupStatus, draft: Draft): Record<string
 }
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
+
+/** What a run did with attachment files, for the history. Exported for tests. */
+export function filesSummary(files: NonNullable<BackupRun['files']>): string {
+  const parts = [
+    `${files.copiedObjects} files copied (${formatBytes(files.copiedBytes)})`,
+    `${files.skippedObjects} already backed up (${formatBytes(files.skippedBytes)})`,
+    `${files.verifiedObjects} read back`,
+  ];
+  if (files.sweptObjects) parts.push(`${files.sweptObjects} unused copies deleted`);
+  return parts.join(' · ');
+}
 
 function RunIcon({ run }: { run: BackupRun }) {
   const Icon =
@@ -158,6 +186,13 @@ function Overview({ status }: { status: BackupStatus }) {
               <li key={issue}>{issue}</li>
             ))}
           </ul>
+        </Notice>
+      )}
+      {!status.settings.copyFiles && (
+        <Notice tone="info" title="Attachment files are not copied">
+          Backups list every attachment with its checksum but do not copy the files, so a backup
+          alone cannot restore attachments. Turn on <em>Copy attachment files</em> below, or protect
+          attachment storage separately.
         </Notice>
       )}
       {latest?.status === 'failed' && (
@@ -238,6 +273,28 @@ function SettingsForm({
         disabled={false}
         onCheckedChange={(enabled) => set('enabled', enabled)}
       />
+      <ToggleSetting
+        id="backups-copy-files"
+        label="Copy attachment files"
+        description={`Copies every attachment file to the destination, stored once by content: the first backup copies everything (as much storage again as attachments use now${status.attachmentStorage.driver === 's3' ? ', billed by your S3 provider' : ''}), later ones only new files. Copies no kept backup needs are deleted after retention.`}
+        checked={draft.copyFiles}
+        disabled={false}
+        onCheckedChange={(copyFiles) => set('copyFiles', copyFiles)}
+      />
+      {draft.copyFiles && (
+        <Field
+          label="Files checked after each backup"
+          htmlFor="backups-verify-files"
+          hint="Read back from the destination and checksummed. Checking every file reads all of them on every run."
+        >
+          <Select
+            id="backups-verify-files"
+            value={draft.verifyFiles}
+            onChange={(value) => set('verifyFiles', value as BackupFileVerification)}
+            options={VERIFICATION}
+          />
+        </Field>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="Time of day"
@@ -448,6 +505,11 @@ function History({ runs }: { runs: BackupRun[] }) {
                   ? 'Running…'
                   : (run.errorMessage ?? 'Failed')}
             </p>
+            {run.files && run.status === 'succeeded' && (
+              <p className="text-xs text-[var(--text-muted)]" data-testid="backup-run-files">
+                {filesSummary(run.files)}
+              </p>
+            )}
             {run.dumpKey && run.status === 'succeeded' && !run.prunedAt && (
               <p className="truncate font-mono text-xs text-[var(--text-muted)]">{run.dumpKey}</p>
             )}
@@ -475,7 +537,7 @@ export function AdminBackupsPage() {
     <div>
       <AdminPageHeader
         title="Backups"
-        description="A daily database dump and a checksummed manifest of attachment objects, written to S3-compatible storage and verified after every run. Restoring is a manual step, described in the administrator guide."
+        description="A daily database dump, a checksummed manifest of attachment objects and, when turned on, copies of the files, written to S3-compatible storage and verified after every run. Restoring is a manual step, described in the administrator guide."
       />
       {status.isLoading ? (
         <div className="py-8" role="status" aria-label="Loading backups">
@@ -507,7 +569,7 @@ export function AdminBackupsPage() {
           <SettingsSection
             editable={false}
             title="History"
-            description="The last 20 runs. Attachment objects are listed with their checksums, not copied; see the guide for what that means for a restore."
+            description="The last 20 runs, with what each copied. Without file copies, attachment objects are only listed with their checksums; see the guide for what that means for a restore."
           >
             <History runs={status.data.runs} />
           </SettingsSection>

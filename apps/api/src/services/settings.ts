@@ -265,6 +265,13 @@ export interface StoredBackupSettings {
   s3?: Partial<S3StorageSettings>;
   keepDaily?: number;
   keepWeekly?: number;
+  /**
+   * Copy attachment files to the destination (v0.10). Absent on instances
+   * that saved backup settings before v0.10, which keeps them off until an
+   * administrator turns copying on; see `normalizeBackupSettings`.
+   */
+  copyFiles?: boolean;
+  verifyFiles?: 'sample' | 'all';
 }
 
 /**

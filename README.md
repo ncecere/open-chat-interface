@@ -189,10 +189,10 @@ erosion without inviting number-chasing.
 
 GitHub Actions validates pull requests and `main` with read-only permissions,
 using Node 22 and pnpm 11.18.0. Checks cover lint, type checking, builds,
-unit/integration tests, API coverage floors, live PostgreSQL/Redis/Mailpit and
-browser tests, production dependency auditing, and license policy. S3-dependent
-live tests can skip when S3 is unavailable; a green run does not establish S3
-coverage. GitLab SAST and dependency-scanning report parity is not provided.
+unit/integration tests, API coverage floors, live PostgreSQL/Redis/Mailpit/S3
+and browser tests, production dependency auditing, and license policy. The S3
+and backup suites run against an S3-compatible service and fail rather than
+skip in CI. GitLab SAST and dependency-scanning report parity is not provided.
 
 **Publish containers** runs for stable `vX.Y.Z` tag pushes or a manual dispatch
 for an existing stable tag. It checks `main` ancestry, package versions, and the

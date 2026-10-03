@@ -45,6 +45,27 @@ jobs:
           MP_SMTP_AUTH_ACCEPT_ANY: '1'
           MP_SMTP_AUTH_ALLOW_INSECURE: '1'
         ports: ['1025:1025', '8025:8025']
+      # S3 for the storage, backup and compliance-export suites. VersityGW
+      # (Apache-2.0) is an S3 gateway over a directory: one small static
+      # binary, configured entirely by environment, so it runs as a service.
+      # MinIO no longer publishes community images. Object metadata goes to a
+      # sidecar directory, so nothing depends on xattr support. Test-only
+      # credentials. See docs/dev/testing.md, "S3 in CI".
+      s3:
+        image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
+        env:
+          ROOT_ACCESS_KEY: oci_ci_s3
+          ROOT_SECRET_KEY: ci-only-s3-secret-key
+          VGW_BACKEND: posix
+          VGW_BACKEND_ARG: /data
+          VGW_META_SIDECAR: /meta
+          VGW_HEALTH: /health
+          VGW_QUIET: 'true'
+        ports: ['7070:7070']
+        options: >-
+          --tmpfs /data --tmpfs /meta
+          --health-cmd "wget -q --spider http://127.0.0.1:7070/health"
+          --health-interval 2s --health-timeout 5s --health-retries 15
     env:
       DATABASE_URL: postgres://oci:ci-only-password@127.0.0.1:5439/oci_ci
       TEST_DATABASE_URL: postgres://oci:ci-only-password@127.0.0.1:5439/oci_ci
@@ -59,6 +80,10 @@ jobs:
       INITIAL_ADMIN_PASSWORD: ci-admin-password-1234
       E2E_ADMIN_EMAIL: admin@example.test
       E2E_ADMIN_PASSWORD: ci-admin-password-1234
+      S3_TEST_ENDPOINT: http://127.0.0.1:7070
+      S3_TEST_BUCKET: oci-ci-attachments
+      S3_TEST_ACCESS_KEY_ID: oci_ci_s3
+      S3_TEST_SECRET_ACCESS_KEY: ci-only-s3-secret-key
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,11 +112,31 @@ jobs:
           if compgen -G 'scripts/*.test.mjs' > /dev/null; then
             node --test scripts/*.test.mjs
           fi
-      - name: Coverage with PostgreSQL, Redis and SMTP
+      - name: PostgreSQL 17 client tools for the backup suite
+        # pg_dump must match the server's major version (pgvector/pgvector:pg17),
+        # so it comes from the PostgreSQL project's apt repository, its signing
+        # key checked against the published fingerprint. The major version is
+        # pinned and checked; PGDG keeps only current minor releases, so a
+        # minor pin would break the build at the next PostgreSQL release.
         run: |
-          echo 'S3 tests are not provided with a MinIO service and may skip; this is not S3 validation.'
-          echo 'Coverage floors for S3-only modules (backups, compliance export) are enforced locally, not here.'
-          OCI_COVERAGE_WITHOUT_S3=1 pnpm test:coverage
+          set -euo pipefail
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$RUNNER_TEMP/pgdg.asc"
+          fingerprint=$(gpg --show-keys --with-colons "$RUNNER_TEMP/pgdg.asc" | awk -F: '/^fpr:/ { print $10; exit }')
+          test "$fingerprint" = B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+          sudo install -d -m 0755 /etc/apt/keyrings
+          sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/pgdg.gpg "$RUNNER_TEMP/pgdg.asc"
+          echo "deb [signed-by=/etc/apt/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -o Dir::Etc::sourcelist=sources.list.d/pgdg.list \
+            -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version | grep -E '^pg_dump \(PostgreSQL\) 17\.'
+          echo BACKUP_PG_BIN_DIR=/usr/lib/postgresql/17/bin >> "$GITHUB_ENV"
+      - name: Coverage with PostgreSQL, Redis, SMTP and S3
+        # Every live suite runs, S3 included; with CI set an unreachable S3
+        # server fails them rather than skipping, and every floor applies.
+        run: |
+          pnpm test:coverage
           if test -f scripts/smoke-saml.mjs; then node scripts/smoke-saml.mjs; fi
       - name: Browser and accessibility regression tests
         run: |

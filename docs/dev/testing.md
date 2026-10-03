@@ -72,10 +72,48 @@ structure. Whether an error message actually helps still needs a person.
 Pull requests and `main` pushes run read-only validation with Node 22 and pnpm
 11.18.0: lint, type checking, builds, unit/integration tests, API coverage floors,
 production dependency auditing, license policy, and live/browser tests.
-PostgreSQL, Redis, and Mailpit provide CI dependencies. S3-dependent live suites
-can skip when S3 is unavailable; inspect the test output rather than treating a
-green run as proof that S3 was exercised. Run those suites against local S3
-infrastructure when changing storage behavior.
+PostgreSQL, Redis, Mailpit and an S3-compatible server provide CI dependencies,
+and the PostgreSQL 17 client tools are installed for the backup suite, so every
+live suite runs on every pull request and every coverage floor applies there.
+
+### S3 in CI
+
+The storage, backup and compliance-export suites need S3 (and the backup suite
+`pg_dump`/`pg_restore`). CI provides:
+
+- **VersityGW** (`versity/versitygw`, Apache-2.0), pinned by tag and digest, as
+  a service container: an S3 gateway over a directory (a `tmpfs`, with object
+  metadata in a sidecar directory). It is one small static binary configured
+  entirely by environment, starts in about a second, and supports what OCI uses:
+  multipart uploads, `ListObjectsV2` with prefixes and continuation, `HeadObject`,
+  bucket creation and path-style addressing. MinIO no longer publishes community
+  images, and building it from source in CI costs minutes per run.
+- **`postgresql-client-17`** from the PostgreSQL project's apt repository, its
+  signing key checked against the published fingerprint, matching the
+  `pgvector/pgvector:pg17` server. The major version is pinned and checked.
+
+With `CI` set, `liveS3Available()` (`apps/api/test/live-backup-tools.ts`)
+throws instead of returning false, so an unreachable S3 server fails the
+suites rather than skipping them, and the backup suite always requires the
+client tools.
+
+The suites read `S3_TEST_ENDPOINT`, `S3_TEST_BUCKET`, `S3_TEST_ACCESS_KEY_ID`
+and `S3_TEST_SECRET_ACCESS_KEY` (the older `MINIO_TEST_BUCKET`,
+`MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` still work). To run them locally
+against the CI server:
+
+```bash
+docker run -d --name oci-test-s3 -p 127.0.0.1:7070:7070 \
+  -e ROOT_ACCESS_KEY=oci_test -e ROOT_SECRET_KEY=oci_test_password \
+  -e VGW_BACKEND=posix -e VGW_BACKEND_ARG=/data -e VGW_META_SIDECAR=/meta \
+  --tmpfs /data --tmpfs /meta versity/versitygw:v1.8.0
+S3_TEST_ENDPOINT=http://127.0.0.1:7070 TEST_DATABASE_URL=... \
+  pnpm --filter @oci/api exec vitest run src/__tests__/live/s3-storage.live.test.ts \
+  src/__tests__/live/backups.live.test.ts src/__tests__/live/compliance.live.test.ts
+```
+
+The MinIO fixture ([Release validation](release-validation.md)) works too;
+the suites assert S3 behaviour, not one server's error names.
 
 **Publish containers** reuses validation against the exact checked-out release
 tag before publishing to GHCR. It is separate from PR/`main` CI and is the only

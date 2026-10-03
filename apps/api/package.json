@@ -13,6 +13,7 @@
     "test:unit": "vitest run src/__tests__/unit src/services/share-links.test.ts src/services/storage/config.test.ts",
     "test:integration": "vitest run src/__tests__/integration",
     "admin:promote": "tsx --env-file=../../.env src/scripts/promote-admin.ts",
+    "backup:restore-files": "tsx src/scripts/restore-backup-files.ts",
     "test:live": "vitest run src/__tests__/live",
     "test:coverage": "vitest run --coverage"
   },

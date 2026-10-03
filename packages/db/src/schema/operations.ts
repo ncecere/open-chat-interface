@@ -41,6 +41,19 @@ export const backupRun = pgTable(
     attachmentBytes: bigint('attachment_bytes', { mode: 'number' }),
     /** Attachment rows whose object could not be read when the manifest was made. */
     missingObjects: integer('missing_objects'),
+    /**
+     * Attachment files (migration 0035), copied content addressed to
+     * `<key_prefix>objects/<sha256>`. NULL when the run did not copy files.
+     */
+    copiedObjects: integer('copied_objects'),
+    copiedBytes: bigint('copied_bytes', { mode: 'number' }),
+    /** Objects already at the destination, so not copied again. */
+    skippedObjects: integer('skipped_objects'),
+    skippedBytes: bigint('skipped_bytes', { mode: 'number' }),
+    /** Copied objects read back from the destination and checksummed. */
+    verifiedObjects: integer('verified_objects'),
+    /** Unreferenced copied objects deleted by the sweep after retention. */
+    sweptObjects: integer('swept_objects'),
     verified: boolean('verified').notNull().default(false),
     verificationDetail: text('verification_detail'),
     errorMessage: text('error_message'),

@@ -34,6 +34,8 @@ function status(overrides: Partial<BackupStatus> = {}): BackupStatus {
       },
       keepDaily: 7,
       keepWeekly: 4,
+      copyFiles: true,
+      verifyFiles: 'sample',
     },
     issues: [],
     pgDumpVersion: 'pg_dump (PostgreSQL) 17.6',
@@ -56,6 +58,7 @@ function status(overrides: Partial<BackupStatus> = {}): BackupStatus {
         attachmentCount: null,
         attachmentBytes: null,
         missingObjects: null,
+        files: null,
         verified: false,
         verificationDetail: null,
         errorMessage: 'pg_dump failed (exit 1): connection refused',
@@ -75,6 +78,14 @@ function status(overrides: Partial<BackupStatus> = {}): BackupStatus {
         attachmentCount: 12,
         attachmentBytes: 2048,
         missingObjects: 1,
+        files: {
+          copiedObjects: 3,
+          copiedBytes: 3 * 1024 * 1024,
+          skippedObjects: 9,
+          skippedBytes: 1024,
+          verifiedObjects: 12,
+          sweptObjects: 2,
+        },
         verified: true,
         verificationDetail: '312 archive entries, 40 tables',
         errorMessage: null,
@@ -117,6 +128,11 @@ describe('Backups admin page', () => {
     expect(text).toContain('Verified');
     expect(text).toContain('1 missing objects');
     expect(document.querySelectorAll('[data-testid="backup-run"]')).toHaveLength(2);
+    // What the run copied, and that copying is on (no warning about it).
+    expect(document.querySelector('[data-testid="backup-run-files"]')?.textContent).toBe(
+      '3 files copied (3.0 MB) · 9 already backed up (1 KB) · 12 read back · 2 unused copies deleted',
+    );
+    expect(text).not.toContain('Attachment files are not copied');
     // The secret is never shown, only whether it is set.
     expect(text).toContain('Set. Leave empty to keep it');
   });
@@ -143,6 +159,19 @@ describe('Backups admin page', () => {
       keepDaily: 14,
       s3: { bucket: 'other-bucket', secretAccessKey: 'new-secret' },
     });
+  });
+
+  it('turns copying files on and chooses how many are checked', async () => {
+    current = status({
+      settings: { ...status().settings, copyFiles: false },
+    });
+    await render();
+    expect(document.body.textContent).toContain('Attachment files are not copied');
+    expect(document.getElementById('backups-verify-files')).toBeNull();
+    await click(document.getElementById('backups-copy-files') as HTMLElement);
+    expect(document.getElementById('backups-verify-files')).not.toBeNull();
+    await click(button('Save changes'));
+    expect(api.patch).toHaveBeenCalledWith('/admin/backups/settings', { copyFiles: true });
   });
 
   it('tests the saved destination', async () => {
@@ -225,8 +254,14 @@ describe('backup settings changes', () => {
       secretAccessKey: '',
       keepDaily: '7',
       keepWeekly: '4',
+      copyFiles: true,
+      verifyFiles: 'sample' as const,
     };
     expect(backupChanges(saved, draft)).toEqual({});
+    expect(backupChanges(saved, { ...draft, copyFiles: false, verifyFiles: 'all' })).toEqual({
+      copyFiles: false,
+      verifyFiles: 'all',
+    });
     expect(backupChanges(saved, { ...draft, endpoint: ' ', enabled: false, hourUtc: 5 })).toEqual({
       enabled: false,
       hourUtc: 5,

@@ -36,7 +36,10 @@ export interface StorageDriver {
    */
   putFile?(key: string, path: string, contentType: string): Promise<StoredObject>;
   getStream?(key: string): Promise<NodeJS.ReadableStream>;
-  /** Uploads a stream of unknown length without holding it in memory (S3 only). */
+  /**
+   * Writes a stream of unknown length without holding it in memory. A source
+   * that throws never leaves a partial object behind.
+   */
   putStream?(
     key: string,
     source: AsyncIterable<Uint8Array>,

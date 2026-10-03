@@ -143,9 +143,12 @@ and verify attachment downloads.
 From v0.9, OCI can run the database backup itself, daily, to S3-compatible
 storage, with a checksummed manifest of attachment objects and verification
 after every run: **Admin → Data & storage → Backups**
-([Backups](admin/backups.md)). The manifest lists attachment objects but does
-not copy them, so attachment storage still needs versioning or snapshots as
-above.
+([Backups](admin/backups.md)). From v0.10 it can also copy the attachment
+files there (**Copy attachment files**), incrementally and by content, and
+`backup:restore-files` puts them back; with copying on, a backup restores
+everything but the deployment secrets. With copying off (the default for
+instances that configured backups before v0.10), the manifest only lists the
+objects, so attachment storage still needs versioning or snapshots as above.
 
 ## Upgrade
 
@@ -491,6 +494,36 @@ per-person allowance of 60 an hour, shared with single-conversation Markdown
 downloads (which had no limit before), in the existing rate-limit store. Each
 export is audited as `message.export` or `artifact.export` with the format and
 size, never the content.
+
+### Upgrading to v0.10
+
+#### Backups include files (migration 0035)
+
+Migration `0035_backup_files` adds six nullable columns to `backup_run`
+(what each run copied, skipped, read back and swept). It is catalog-only under
+a brief exclusive lock on `backup_run`, a small table only the backup job
+writes; v0.9 replicas name their columns and keep working during a rolling
+upgrade.
+
+Backups can now copy attachment files (and the uploaded instance logo) to the
+backup destination, under `<prefix>objects/<sha256>`
+([Attachment files](admin/backups.md#attachment-files)):
+
+- **Instances that saved backup settings before v0.10 keep the old behaviour**
+  (a manifest, no copies) until an administrator turns on **Copy attachment
+  files**: the first copy can be as large as all attachment storage, and should
+  be a decision, not a side effect of an upgrade. A new configuration has it on.
+  The Backups page says when files are not copied.
+- The first backup after turning it on reads and copies every attachment
+  object, so it takes longer and uses as much storage again as attachments use
+  now (at the backup destination; in the attachment bucket itself with the
+  *Attachment storage bucket* destination). Later backups copy only new files.
+  Plan bucket capacity and egress accordingly.
+- The backup credential now also needs `s3:ListBucket` on the prefix: after
+  retention, copies no kept backup references are found by listing
+  `objects/` and deleted (only once they are a day old).
+- A bucket and prefix belong to one OCI instance: never point two instances'
+  backups at the same prefix, or one's sweep deletes the other's copies.
 
 ## Usage accounting after an interrupted run
 

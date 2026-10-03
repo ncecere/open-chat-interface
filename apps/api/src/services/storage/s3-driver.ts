@@ -219,11 +219,13 @@ export class S3StorageDriver implements StorageDriver {
     }
   }
 
-  async list(options?: { cursor?: string; limit?: number }): Promise<ListPage> {
+  /** Lists a page of objects; `prefix` limits it to keys below a folder (backups use it). */
+  async list(options?: { cursor?: string; limit?: number; prefix?: string }): Promise<ListPage> {
     const result = await this.client.send(
       new ListObjectsV2Command({
         Bucket: this.bucket,
         MaxKeys: Math.max(1, Math.min(options?.limit ?? 1_000, 1_000)),
+        ...(options?.prefix ? { Prefix: options.prefix } : {}),
         ...(options?.cursor ? { ContinuationToken: options.cursor } : {}),
       }),
     );

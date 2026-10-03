@@ -6,17 +6,27 @@ import { S3StorageDriver } from '../src/services/storage/s3-driver.js';
 import { containerRunning } from './live-postgres.js';
 
 /**
- * Shared by the backup live tests: where MinIO is (the same configuration as
- * `s3-storage.live.test.ts`) and where PostgreSQL's client tools are.
+ * Shared by the S3 live tests (storage, backups, compliance export): where the
+ * S3-compatible server is and where PostgreSQL's client tools are. CI runs
+ * VersityGW as a service (.github/workflows/ci.yml); locally the MinIO
+ * fixture from docker/compose.auth-test.yaml or any server named by
+ * `S3_TEST_ENDPOINT` will do. See docs/dev/testing.md.
  */
 export const liveS3Config = {
-  bucket: process.env.MINIO_TEST_BUCKET ?? 'oci-test-attachments',
+  bucket: process.env.S3_TEST_BUCKET ?? process.env.MINIO_TEST_BUCKET ?? 'oci-test-attachments',
   region: 'us-east-1',
   endpoint:
     process.env.S3_TEST_ENDPOINT ?? `http://127.0.0.1:${process.env.MINIO_TEST_PORT ?? '9020'}`,
-  accessKeyId: process.env.MINIO_ROOT_USER ?? process.env.MINIO_TEST_ROOT_USER ?? 'oci_test',
+  accessKeyId:
+    process.env.S3_TEST_ACCESS_KEY_ID ??
+    process.env.MINIO_ROOT_USER ??
+    process.env.MINIO_TEST_ROOT_USER ??
+    'oci_test',
   secretAccessKey:
-    process.env.MINIO_ROOT_PASSWORD ?? process.env.MINIO_TEST_ROOT_PASSWORD ?? 'oci_test_password',
+    process.env.S3_TEST_SECRET_ACCESS_KEY ??
+    process.env.MINIO_ROOT_PASSWORD ??
+    process.env.MINIO_TEST_ROOT_PASSWORD ??
+    'oci_test_password',
   forcePathStyle: true,
 };
 
@@ -45,14 +55,27 @@ export async function ensureBucket(bucket: string): Promise<void> {
   }
 }
 
-/** True when MinIO answers; suites skip otherwise (CI has no MinIO service). */
+/**
+ * True when the S3 server answers (the test bucket is created if needed).
+ * Locally the suites skip without one, so `pnpm test:live` works with only
+ * PostgreSQL; in CI (`CI` set) an unreachable server is an error instead,
+ * since a skipped S3 suite there would silently drop its coverage.
+ */
 export async function liveS3Available(): Promise<boolean> {
-  if (!process.env.S3_TEST_ENDPOINT && !containerRunning('oci-auth-test-minio')) return false;
+  const required = Boolean(process.env.CI);
+  if (!process.env.S3_TEST_ENDPOINT && !containerRunning('oci-auth-test-minio')) {
+    if (required) throw new Error('CI must provide S3 for the live suites: set S3_TEST_ENDPOINT.');
+    return false;
+  }
   try {
     await ensureBucket(liveS3Config.bucket);
     await new S3StorageDriver(liveS3Config).checkReadAccess();
     return true;
-  } catch {
+  } catch (error) {
+    if (required)
+      throw new Error(
+        `The S3 test server at ${liveS3Config.endpoint} is not usable: ${error instanceof Error ? error.message : String(error)}`,
+      );
     return false;
   }
 }
