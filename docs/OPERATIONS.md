@@ -6,17 +6,14 @@ provider configuration before relying on them in production.
 
 ## Deploy a released version
 
-Authenticate to GHCR and select a release tag. The repository is private;
-verify both GHCR packages are also private, since package visibility is
-independent and is not enforced by the workflow. Supply a personal access token (classic) with
-`read:packages` and repository/package access through your secret manager; never
-commit registry credentials or put them in `.env.example`.
+Select a release tag. The images on GHCR are public, so pulling them needs no
+registry login. If you mirror them into a private registry, keep its
+credentials in your secret manager; never commit them or put them in
+`.env.example`.
 
 ```bash
 export OCI_VERSION=v0.10.1
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
-# GHCR_READ_TOKEN is supplied externally by your secret manager.
-printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u ncecere --password-stdin
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
 ```
@@ -55,9 +52,8 @@ Compose still defaults to local source builds when `OCI_API_IMAGE` and
 `OCI_WEB_IMAGE` are unset. For released deployments, keep both overrides set
 and use `--no-build` on startup and rollout commands.
 
-Historical GitLab releases and images remain on GitLab. GitHub Actions does not
-copy them or their release metadata; choose GHCR only for versions successfully
-published there.
+Versions before 0.5 were not published to GHCR; choose a version whose images
+are there.
 
 ## Behind another proxy or an ingress
 
