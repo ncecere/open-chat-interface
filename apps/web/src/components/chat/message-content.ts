@@ -82,3 +82,59 @@ export function partGroupsOf<P extends { type: string }>(
   });
   return groups;
 }
+
+/** Where a tool call shows: in the work block, outside it (a card, an approval, a memory note), or both. */
+export type ToolPlace = 'work' | 'result' | 'both';
+
+export type WorkEntry<P> =
+  | { type: 'reasoning'; key: string; text: string }
+  | { type: 'tool'; key: string; part: P };
+
+/**
+ * A reply laid out as the conversation shows it (v0.10.1):
+ *
+ * - `work`: everything the model did before answering, every reasoning run
+ *   and tool call of every step, in written order. One block shows it.
+ * - `results`: tool calls whose outcome must stay in sight below that block:
+ *   artifact cards, approvals waiting for an answer, memory notes.
+ * - `text`: the reply's text runs, in order, below both.
+ *
+ * `last` is the kind of the latest group, so a streaming reply knows whether
+ * it is thinking, using a tool or answering; `lastTool` is its latest tool call.
+ */
+export interface ReplyLayout<P> {
+  work: WorkEntry<P>[];
+  results: P[];
+  text: Array<{ key: string; start: number; end: number }>;
+  last: 'reasoning' | 'tools' | 'text' | null;
+  lastTool: P | null;
+}
+
+export function replyLayoutOf<P extends { type: string }>(
+  parts: readonly P[],
+  isTool: (part: P) => boolean,
+  placeOf: (part: P) => ToolPlace,
+  keyOf: (part: P) => string,
+): ReplyLayout<P> {
+  const layout: ReplyLayout<P> = { work: [], results: [], text: [], last: null, lastTool: null };
+  for (const group of partGroupsOf(parts, isTool)) {
+    layout.last = group.type;
+    if (group.type === 'reasoning')
+      layout.work.push({ type: 'reasoning', key: group.key, text: group.text });
+    else if (group.type === 'text')
+      layout.text.push({ key: group.key, start: group.start, end: group.end });
+    else {
+      for (const part of group.parts) {
+        const place = placeOf(part);
+        if (place !== 'result') layout.work.push({ type: 'tool', key: keyOf(part), part });
+        if (place !== 'work') layout.results.push(part);
+      }
+      layout.lastTool = group.parts.at(-1) ?? null;
+    }
+  }
+  return layout;
+}
+
+/** One reasoning run and nothing else: shown as the plain "Reasoning" disclosure. */
+export const isReasoningOnly = (work: readonly WorkEntry<unknown>[]) =>
+  work.length === 1 && work[0]?.type === 'reasoning';

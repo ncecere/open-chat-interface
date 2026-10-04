@@ -1,12 +1,21 @@
-import type { PublicArtifact } from '@oci/shared';
+import { type PublicArtifact, toolLabel } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
-import { ExternalLink, Link2Off, LockKeyhole, MessageSquareText } from 'lucide-react';
+import {
+  ExternalLink,
+  Globe2,
+  Link2Off,
+  LockKeyhole,
+  MessageSquareText,
+  Wrench,
+} from 'lucide-react';
 import { PublicArtifactsProvider } from '~/components/artifacts/artifacts-provider';
 import { CreatedArtifactCards, ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { Wordmark } from '~/components/brand/wordmark';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { Markdown } from '~/components/chat/markdown';
 import { partGroupsOf } from '~/components/chat/message-content';
+import { WorkDisclosure } from '~/components/chat/reply-work';
+import { type WorkStep, workSummary } from '~/components/chat/work-summary';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
@@ -152,18 +161,48 @@ function Sources({ parts }: { parts: PublicPart[] }) {
   );
 }
 
-function ToolStepSummaries({ steps }: { steps: PublicToolStepPart[] }) {
+/** A shared step for the work summary: share links carry only its tool and summary line. */
+function workStepOf(step: PublicToolStepPart): WorkStep {
+  const used = /^Used (.+)$/.exec(step.summary)?.[1];
+  return {
+    toolId: step.toolId,
+    label: used ?? toolLabel(step.toolId),
+    state: / failed$/.test(step.summary)
+      ? 'error'
+      : / was not run( \(.*\))?$/.test(step.summary)
+        ? 'denied'
+        : 'done',
+  };
+}
+
+/**
+ * A shared reply's tool steps as one collapsed block, summarised as in the
+ * conversation ("Searched the web twice"); expanded, each step's line.
+ */
+function SharedWork({ steps }: { steps: PublicToolStepPart[] }) {
   if (steps.length === 0) return null;
+  const work = steps.map(workStepOf);
   return (
-    <ul className="mb-3 space-y-1 text-xs text-[var(--text-muted)]" aria-label="Tool steps">
-      {steps.map((step, index) => (
-        // Summaries carry no stable id; the list is static once loaded.
-        // biome-ignore lint/suspicious/noArrayIndexKey: never reordered.
-        <li key={`${step.toolId}-${index}`} className="break-words">
-          {step.summary}
-        </li>
-      ))}
-    </ul>
+    <WorkDisclosure
+      label={workSummary({ reasoning: false, steps: work })}
+      icon={work.every((step) => step.toolId === 'web_search') ? Globe2 : Wrench}
+      active={false}
+      kind="work"
+    >
+      <ol
+        aria-label="Steps"
+        data-work-timeline=""
+        className="mt-3 ml-2 space-y-2 border-l border-[var(--border-subtle)] pl-4 text-xs text-[var(--text-muted)]"
+      >
+        {steps.map((step, index) => (
+          // Summaries carry no stable id; the list is static once loaded.
+          // biome-ignore lint/suspicious/noArrayIndexKey: never reordered.
+          <li key={`${step.toolId}-${index}`} className="break-words">
+            {step.summary}
+          </li>
+        ))}
+      </ol>
+    </WorkDisclosure>
   );
 }
 
@@ -204,19 +243,19 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
   return (
     <article aria-label="Assistant message">
       <Sources parts={message.parts} />
-      {/* Tool steps and text in the order they were written. */}
+      {/* The work, then what it made, then the text in the order it was written. */}
+      <SharedWork
+        steps={message.parts.filter(
+          (part): part is PublicToolStepPart => part.type === 'tool-step',
+        )}
+      />
+      <CreatedArtifactCards messageId={message.id} />
       {partGroupsOf(message.parts, (part) => part.type === 'tool-step').map((group) =>
-        group.type === 'tools' ? (
-          <ToolStepSummaries
-            key={group.key}
-            steps={group.parts.filter(
-              (part): part is PublicToolStepPart => part.type === 'tool-step',
-            )}
-          />
-        ) : group.type === 'text' ? (
+        group.type === 'text' ? (
           <div
             key={group.key}
-            className="text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]"
+            data-reply-group="text"
+            className="mb-4 text-[0.9375rem] leading-relaxed text-[var(--text-secondary)] last:mb-0"
           >
             <ReplyMarkdown
               messageId={message.id}
@@ -229,7 +268,6 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
           </div>
         ) : null,
       )}
-      <CreatedArtifactCards messageId={message.id} />
     </article>
   );
 }

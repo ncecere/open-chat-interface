@@ -19,7 +19,13 @@ their tools are not offered. See [Connectors](connectors.md).
 
 ## What a tool step looks like
 
-Each tool call appears in the reply as a short line, for example:
+A reply's tool calls, with any reasoning around them, are gathered into one
+collapsed block at the top of the reply, summarised in a few words, such as
+**Searched the web twice** or **Thought · used Service Desk lookup** (see
+[Conversations](conversations.md#how-a-reply-shows-the-models-work)). While
+the model works, the block's heading says what it is doing now, for example
+**Searching the web…**. Expand the block to see each call as a short line,
+for example:
 
 > Searched the web for 'library opening hours' · 5 results
 
@@ -31,14 +37,15 @@ search sources always have.
 A reply can use tools for a set number of steps (8 unless your administrator
 changed it). If it reaches that limit, the model answers with what it has found
 so far and a note says so. If your usage allowance runs out part-way through,
-the reply stops and says so under the tool steps. Ask a narrower
+the reply stops and says so below the block. Ask a narrower
 question, or continue in a new message.
 
 ## Approvals
 
 Tools that only look things up run without asking. Tools that **change
 something elsewhere** — sending a message, creating a record — always ask you
-first. The reply pauses and shows a card with:
+first. The reply pauses and shows a card below the work block, never hidden
+inside it, with:
 
 - the tool, and the connector it belongs to, if any;
 - the exact inputs it will run with.
@@ -54,8 +61,9 @@ answered", and the tool does not run.
 
 ## Shared and exported conversations
 
-Share links and exports show each tool step as its one-line summary. The raw
-results a tool returned are left out.
+Share links show the same collapsed block, summarising the tool steps; expanded,
+it lists each step's one-line summary. Exports list each tool step as its
+one-line summary. The raw results a tool returned are left out of both.
 
 ## Privacy
 

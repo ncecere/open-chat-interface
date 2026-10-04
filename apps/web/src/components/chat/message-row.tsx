@@ -1,6 +1,8 @@
 import { isToolPart } from '@oci/shared';
 import type { UIMessage } from 'ai';
-import { type Dispatch, memo, type SetStateAction } from 'react';
+import { type Dispatch, memo, type SetStateAction, useRef } from 'react';
+import { showsArtifactCard } from '~/components/artifacts/artifact-tool-step';
+import { useArtifacts } from '~/components/artifacts/artifacts-context';
 import { ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
@@ -8,23 +10,25 @@ import { MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
   metadataOf,
-  partGroupsOf,
+  replyLayoutOf,
   textOf,
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
-import { ReasoningPanel } from '~/components/chat/message-reasoning';
 import { ProjectSearchNote } from '~/components/chat/project-search-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
+import { WorkBlock } from '~/components/chat/reply-work';
 import {
   SearchGroundingDetails,
   SearchSourcesPanel,
   searchGroundingOf,
 } from '~/components/chat/search-grounding';
-import { type AnswerApproval, ToolSteps, toolLimitOf } from '~/components/chat/tool-steps';
+import {
+  type AnswerApproval,
+  ReplyResults,
+  type ToolPart,
+  toolPlaceOf,
+} from '~/components/chat/tool-steps';
 import { cn } from '~/lib/utils';
-
-const toolIdsOf = (parts: readonly UIMessage['parts'][number][]) =>
-  parts.map((part) => (part as { toolCallId?: string }).toolCallId ?? '').join('\n');
 
 interface MessageRowProps {
   message: UIMessage;
@@ -95,10 +99,6 @@ export const MessageRow = memo(function MessageRow({
 
   const grounding = searchGroundingOf(message);
   const metadata = metadataOf(message);
-  // The reply's reasoning, tool calls and text in the order they were written.
-  const groups = partGroupsOf(message.parts, isToolPart);
-  const lastTools = groups.findLastIndex((group) => group.type === 'tools');
-  const limitOnly = lastTools === -1 && toolLimitOf(message) !== null;
 
   return (
     <article
@@ -113,50 +113,14 @@ export const MessageRow = memo(function MessageRow({
       )}
       <ProjectSearchNote message={message} />
       {grounding && <SearchSourcesPanel grounding={grounding} />}
-      {limitOnly && <ToolSteps message={message} only="" />}
-      {groups.map((group, index) => {
-        if (group.type === 'reasoning') {
-          // Still thinking until the next part (a tool call or the answer) starts.
-          return (
-            <div key={group.key} data-reply-group="reasoning">
-              <ReasoningPanel
-                text={group.text}
-                thinking={streaming && index === groups.length - 1}
-              />
-            </div>
-          );
-        }
-        if (group.type === 'tools')
-          return (
-            <div key={group.key} data-reply-group="tools">
-              <ToolSteps
-                message={message}
-                only={toolIdsOf(group.parts)}
-                showLimit={index === lastTools}
-                onAnswer={onAnswerApproval}
-                disabled={streaming}
-                streaming={streaming}
-              />
-            </div>
-          );
-        return (
-          <div
-            key={group.key}
-            data-reply-group="text"
-            className={cn(
-              'text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]',
-              index < groups.length - 1 && 'mb-4',
-            )}
-          >
-            <ReplyMarkdown
-              messageId={message.id}
-              text={text}
-              range={{ start: group.start, end: group.end }}
-              className={MARKDOWN_PROSE}
-            />
-          </div>
-        );
-      })}
+      {/* Keyed: switching replies starts each one's block collapsed. */}
+      <ReplyBody
+        key={message.id}
+        message={message}
+        text={text}
+        streaming={streaming}
+        onAnswerApproval={onAnswerApproval}
+      />
       {grounding && <SearchGroundingDetails grounding={grounding} />}
       {(replySwitch || !streaming) && (
         <div className="flex flex-wrap items-center gap-1">
@@ -183,3 +147,67 @@ export const MessageRow = memo(function MessageRow({
     </article>
   );
 });
+
+/**
+ * A reply's work, results and text (v0.10.1): one block with everything the
+ * model did before answering, then what that work made or needs (artifact
+ * cards, approvals, memory notes), then the text in the order it was written.
+ */
+function ReplyBody({
+  message,
+  text,
+  streaming,
+  onAnswerApproval,
+}: {
+  message: UIMessage;
+  text: string;
+  streaming: boolean;
+  onAnswerApproval?: AnswerApproval;
+}) {
+  const artifacts = useArtifacts();
+  // Approvals answered in this view, so focus can follow the step they become.
+  const answeredHere = useRef(new Set<string>()).current;
+  const layout = replyLayoutOf(
+    message.parts as ToolPart[],
+    isToolPart,
+    (part) => toolPlaceOf(part, showsArtifactCard(artifacts, message.id, part, streaming)),
+    (part) => `tool-${part.toolCallId}`,
+  );
+  return (
+    <>
+      {layout.work.length > 0 && (
+        <WorkBlock
+          messageId={message.id}
+          layout={layout}
+          streaming={streaming}
+          answeredHere={answeredHere}
+        />
+      )}
+      <ReplyResults
+        message={message}
+        parts={layout.results}
+        onAnswer={onAnswerApproval}
+        disabled={streaming}
+        streaming={streaming}
+        answeredHere={answeredHere}
+      />
+      {layout.text.map((group, index) => (
+        <div
+          key={group.key}
+          data-reply-group="text"
+          className={cn(
+            'text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]',
+            index < layout.text.length - 1 && 'mb-4',
+          )}
+        >
+          <ReplyMarkdown
+            messageId={message.id}
+            text={text}
+            range={{ start: group.start, end: group.end }}
+            className={MARKDOWN_PROSE}
+          />
+        </div>
+      ))}
+    </>
+  );
+}

@@ -29,6 +29,7 @@ export function ArtifactCardButton({
   live = false,
   preview,
   cardKey,
+  arrow = true,
   className,
 }: {
   kind: ArtifactKind | null;
@@ -43,6 +44,8 @@ export function ArtifactCardButton({
   preview?: readonly string[];
   /** Marks the card so focus can come back to it from the panel. */
   cardKey: string;
+  /** The arrow that says the card opens; off where a details chevron sits beside it. */
+  arrow?: boolean;
   className?: string;
 }) {
   const docked = useArtifacts()?.docked ?? false;
@@ -98,9 +101,9 @@ export function ArtifactCardButton({
             />
           ))}
         </span>
-      ) : (
+      ) : arrow ? (
         <ChevronRight className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-      )}
+      ) : null}
     </button>
   );
 }

@@ -178,16 +178,28 @@ describe('reasoning while it streams', () => {
     expect(preview()).toBeNull();
   });
 
-  it('gives each reasoning block of a multi-step reply its own window while it is the latest', async () => {
+  it('shows the window of the latest reasoning under the one block of a multi-step reply', async () => {
     await render(
       reply(step, reasoning('Search first.'), search('s1'), step, reasoning('Now')),
       true,
     );
-    const [first, second] = panels();
-    expect(header(first).textContent).toBe('Reasoning');
-    expect(preview(first)).toBeNull();
-    expect(header(second).textContent).toBe('Thinking…');
-    expect(preview(second)?.textContent).toBe('Now');
+    // No second "Reasoning" disclosure: one work block, thinking again.
+    expect(panels()).toHaveLength(0);
+    const blocks = container.querySelectorAll<HTMLElement>('[data-reply-group="work"]');
+    expect(blocks).toHaveLength(1);
+    const block = blocks[0]!;
+    expect(header(block).textContent).toBe('Thinking…');
+    expect(header(block).getAttribute('aria-expanded')).toBe('false');
+    expect(preview(block)?.textContent).toBe('Now');
+    expect(preview(block)?.getAttribute('aria-hidden')).toBe('true');
+    // The window expands the block, like the header.
+    await clickOn(preview(block)!);
+    expect(header(block).getAttribute('aria-expanded')).toBe('true');
+    expect(preview(block)).toBeNull();
+    expect([...block.querySelectorAll('[data-markdown]')].map((node) => node.textContent)).toEqual([
+      'Search first.',
+      'Now',
+    ]);
   });
 
   it('animates the indicator only while thinking, and not with reduced motion', async () => {

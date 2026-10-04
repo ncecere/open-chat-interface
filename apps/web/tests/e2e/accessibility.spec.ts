@@ -576,6 +576,7 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     await page.goto('/chat/a11y-tools');
     const card = page.getByRole('region', { name: 'Allow Send note?' });
     await expect(card.getByRole('button', { name: 'Approve' })).toBeVisible();
+    await page.locator('[data-reply-group="work"] > button').click();
     await page
       .getByRole('button', { name: "Searched the web for 'opening hours' · 0 results" })
       .click();
@@ -661,7 +662,11 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     );
     await signIn(page);
     await page.goto('/chat/a11y-artifacts');
-    await page.getByRole('button', { name: 'Details: Plan page' }).click();
+    // The work block expanded, and the details inside the card.
+    await page.getByRole('button', { name: 'Thought · created an artifact' }).click();
+    await expect(page.getByRole('list', { name: 'Steps' })).toBeVisible();
+    await page.getByRole('button', { name: 'Show details for Plan page' }).click();
+    await expect(page.getByRole('button', { name: 'Open artifact (version 1)' })).toBeVisible();
     await page.getByRole('button', { name: 'Open artifact: Plan page' }).click();
     // Docked beside the conversation on wide screens, a dialog on phones.
     const panel = page.locator('[data-artifact-panel]');

@@ -170,8 +170,16 @@ test('shows a search as a collapsed tool step that expands to its inputs and res
   await signIn(page);
   await page.goto(`/chat/${THREAD_ID}`);
 
+  // The reply's tool use is one collapsed block named for what it did.
+  const block = assistant(page).first().locator('[data-reply-group="work"] > button');
+  await expect(block).toHaveText('Searched the web');
+  await expect(block).toHaveAttribute('aria-expanded', 'false');
+  await expect(assistant(page).first()).toContainText('It opens at 9.');
+  await block.click();
+  await expect(block).toHaveAttribute('aria-expanded', 'true');
   const step = assistant(page)
     .first()
+    .getByRole('list', { name: 'Steps' })
     .getByRole('button', { name: "Searched the web for 'library opening hours' · 2 results" });
   await expect(step).toHaveAttribute('aria-expanded', 'false');
   await expect(assistant(page).first()).not.toContainText('"query"');
@@ -193,6 +201,14 @@ test('approves a tool call, continues the same reply and keeps it after a reload
   const card = page.getByRole('region', { name: 'Allow Send note?' });
   await expect(card).toBeVisible();
   await expect(card).toContainText('"to": "Ada"');
+  // The approval is in sight above the reply's text, not in a collapsed block.
+  const above = await card.evaluate((element) => {
+    const text = element.closest('article')?.querySelector('[data-reply-group="text"]');
+    return Boolean(
+      text && element.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+  expect(above).toBe(true);
   await expect(card.getByRole('status')).toHaveText('Send note is waiting for your approval.');
   const fits = await page.evaluate(
     () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
@@ -205,8 +221,16 @@ test('approves a tool call, continues the same reply and keeps it after a reload
 
   await expect(assistant(page).last()).toContainText('Sent the note to Ada.');
   await expect(page.getByRole('region', { name: 'Allow Send note?' })).toHaveCount(0);
+  // Run, the step joins the reply's work block, and focus stays with the reply.
+  const work = assistant(page).last().locator('[data-reply-group="work"] > button');
+  await expect(work).toHaveText('Used Send note');
+  await expect(work).toBeFocused();
+  await work.click();
   await expect(
-    assistant(page).last().getByRole('button', { name: 'Used Send note' }),
+    assistant(page)
+      .last()
+      .getByRole('list', { name: 'Steps' })
+      .getByRole('button', { name: 'Used Send note' }),
   ).toBeVisible();
   // The same reply continued: still two replies on screen.
   await expect(assistant(page)).toHaveCount(2);

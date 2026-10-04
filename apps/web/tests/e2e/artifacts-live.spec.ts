@@ -8,10 +8,13 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
  * the composer. On phones nothing opens by itself; the live card shows the
  * writing.
  *
- * Before the tool call the reply reasons: while it does, the reasoning shows
- * as a collapsed "Thinking…" disclosure with a small window of its latest
- * lines, collapsing to "Reasoning" once the tool call starts. The saved
- * artifact can then be viewed full screen.
+ * Before the tool call the reply reasons, and it reasons again before its
+ * answer. Everything before the answer is one work block (v0.10.1): while the
+ * model thinks it is a collapsed "Thinking…" header with a small window of
+ * the latest lines; while it writes, "Writing Sign-Up Page…" with the live
+ * card below the block; once the answer starts, "Thought · created an
+ * artifact". The card's details open inside the card. The saved artifact can
+ * then be viewed full screen.
  *
  * Self-contained: the model catalog is routed and an in-page stand-in for the
  * chat and artifact APIs streams a real UI message stream. The reasoning and
@@ -195,6 +198,15 @@ async function installChatApi(page: Page) {
               );
               controller.enqueue(event({ type: 'finish-step' }));
               controller.enqueue(event({ type: 'start-step' }));
+              controller.enqueue(event({ type: 'reasoning-start', id: 'thought-2' }));
+              controller.enqueue(
+                event({
+                  type: 'reasoning-delta',
+                  id: 'thought-2',
+                  delta: 'REASONING_SECOND: tell them it is ready.',
+                }),
+              );
+              controller.enqueue(event({ type: 'reasoning-end', id: 'thought-2' }));
               controller.enqueue(event({ type: 'text-start', id: 'text' }));
               controller.enqueue(
                 event({ type: 'text-delta', id: 'text', delta: 'Your sign-up page is ready.' }),
@@ -231,6 +243,67 @@ async function expectFillsViewport(page: Page, element: Locator) {
   expect(Math.abs(box!.height - viewport.height)).toBeLessThanOrEqual(1);
 }
 
+/**
+ * The finished reply: one collapsed work block ("Thought · created an
+ * artifact"), not two "Reasoning" headers around the card; the card below
+ * the block and above the answer; expanded, a timeline of both reasoning
+ * runs and a one-line row for the artifact.
+ */
+async function expectOneWorkBlock(reply: Locator) {
+  const header = reply.locator('[data-reply-group] > button[aria-expanded]');
+  await expect(header).toHaveCount(1);
+  await expect(header).toHaveText('Thought · created an artifact');
+  await expect(header).toHaveAttribute('aria-expanded', 'false');
+  await expect(reply.getByRole('button', { name: 'Reasoning', exact: true })).toHaveCount(0);
+  await expect(reply.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+  const order = await reply.evaluate((article) => {
+    const at = (selector: string) => article.querySelector(selector);
+    const block = at('[data-reply-group="work"]');
+    const card = at('[data-artifact-card="tool:live-call"]');
+    const text = at('[data-reply-group="text"]');
+    const follows = (a: Element | null, b: Element | null) =>
+      Boolean(a && b && a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return {
+      inside: Boolean(block?.contains(card)),
+      ordered: follows(block, card) && follows(card, text),
+    };
+  });
+  expect(order).toEqual({ inside: false, ordered: true });
+  await header.click();
+  const steps = reply.getByRole('list', { name: 'Steps' });
+  await expect(steps.getByRole('listitem')).toHaveCount(3);
+  await expect(steps).toContainText('REASONING_FIRST');
+  await expect(steps).toContainText('REASONING_SECOND');
+  await expect(
+    steps.getByRole('button', { name: /Created artifact 'Sign-Up Page'/ }),
+  ).toBeVisible();
+  await expect(steps.locator('[data-artifact-card]')).toHaveCount(0);
+  await header.click();
+  await expect(steps).toHaveCount(0);
+}
+
+/** The card's own chevron opens its details inside the card's border. */
+async function expectDetailsInCard(reply: Locator) {
+  const toggle = reply.getByRole('button', { name: 'Show details for Sign-Up Page' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  const step = reply.locator('[data-artifact-step="live-call"]');
+  const before = await step.boundingBox();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const details = step.locator('[data-artifact-details]');
+  await expect(details).toContainText('Title');
+  await expect(details.getByRole('button', { name: 'Open artifact (version 1)' })).toBeVisible();
+  const after = await step.boundingBox();
+  const inside = await details.boundingBox();
+  // The card grew to hold the details, within its own width.
+  expect(before && after && inside && after.height > before.height).toBe(true);
+  expect(
+    inside && after && inside.x >= after.x && inside.x + inside.width <= after.x + after.width + 1,
+  ).toBe(true);
+  await toggle.click();
+  await expect(details).toHaveCount(0);
+}
+
 async function signIn(page: Page) {
   const email = process.env.E2E_ADMIN_EMAIL;
   const password = process.env.E2E_ADMIN_PASSWORD;
@@ -258,10 +331,12 @@ test('an artifact is watched as it is written, docked on wide screens only', asy
 
   const reply = page.getByRole('article', { name: 'Assistant message' });
 
-  // Reasoning: a collapsed "Thinking…" disclosure with a decorative window of
+  // Reasoning: a collapsed "Thinking…" header with a decorative window of
   // the latest lines, not the full text.
-  const thinking = reply.getByRole('button', { name: 'Thinking…', exact: true });
-  await expect(thinking).toHaveAttribute('aria-expanded', 'false');
+  const header = reply.locator('[data-reply-group] > button[aria-expanded]');
+  await expect(header).toHaveCount(1);
+  await expect(header).toHaveText('Thinking…');
+  await expect(header).toHaveAttribute('aria-expanded', 'false');
   const tail = reply.locator('[data-reasoning-preview]');
   await expect(tail).toContainText('REASONING_LATEST: write it as one HTML page.');
   await expect(tail).toHaveAttribute('aria-hidden', 'true');
@@ -273,10 +348,13 @@ test('an artifact is watched as it is written, docked on wide screens only', asy
   await page.evaluate(() =>
     (window as unknown as { __releaseReasoning: () => void }).__releaseReasoning(),
   );
-  // Finished: collapsed to "Reasoning", the window gone; the full text is a click away.
-  const finished = reply.getByRole('button', { name: 'Reasoning', exact: true });
-  await expect(finished).toHaveAttribute('aria-expanded', 'false');
+  // Writing: the same header names the artifact, the window is gone, and the
+  // live card is below the block, not inside it.
+  await expect(header).toHaveText('Writing Sign-Up Page…');
+  await expect(header).toHaveAttribute('aria-expanded', 'false');
   await expect(tail).toHaveCount(0);
+  const block = reply.locator('[data-reply-group="work"]');
+  await expect(block.locator('[data-artifact-card]')).toHaveCount(0);
 
   const liveCard = reply.locator('[data-artifact-card="tool:live-call"]');
   await expect(liveCard).toContainText('Writing Sign-Up Page…');
@@ -297,6 +375,8 @@ test('an artifact is watched as it is written, docked on wide screens only', asy
     const card = reply.getByRole('button', { name: 'Open artifact: Sign-Up Page' });
     await expect(card).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expectOneWorkBlock(reply);
+    await expectDetailsInCard(reply);
 
     // Full screen from the phone dialog: Escape leaves full screen, then closes.
     await card.click();
@@ -346,6 +426,8 @@ test('an artifact is watched as it is written, docked on wide screens only', asy
   const card = reply.getByRole('button', { name: 'Open artifact: Sign-Up Page' });
   await expect(card).toBeVisible();
   await expect(composer).toBeFocused();
+  await expectOneWorkBlock(reply);
+  await expectDetailsInCard(reply);
 
   // Full screen: a modal dialog over the whole window, above the sidebar and
   // top bar, with the preview filling it. Escape leaves full screen, then closes.

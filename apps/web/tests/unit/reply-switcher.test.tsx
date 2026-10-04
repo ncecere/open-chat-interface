@@ -155,6 +155,53 @@ describe('useReplySwitcher', () => {
     expect(activateReply.mock.calls.map(([, id]) => id)).toEqual(['reply-3', 'reply-2', 'reply-1']);
   });
 
+  it("shows each reply's own work block, collapsed, as the person switches", async () => {
+    const worked: UIMessage = {
+      id: 'reply-1',
+      role: 'assistant',
+      parts: [
+        { type: 'step-start' },
+        { type: 'reasoning', text: 'Search first.' },
+        {
+          type: 'tool-web_search',
+          toolCallId: 's1',
+          state: 'output-available',
+          input: { query: 'hours' },
+          output: { results: [] },
+        } as never,
+        { type: 'step-start' },
+        { type: 'reasoning', text: 'Then answer.' },
+        { type: 'text', text: 'Nine.' },
+      ],
+    };
+    const thought: UIMessage = {
+      id: 'reply-2',
+      role: 'assistant',
+      parts: [
+        { type: 'step-start' },
+        { type: 'reasoning', text: 'Easy.' },
+        { type: 'text', text: 'Ten.' },
+      ],
+    };
+    await mount({ initialMessages: [prompt, thought], initialReplies: [worked, thought] });
+    const headers = () =>
+      [...container.querySelectorAll('[data-reply-group] > button[aria-expanded]')].map(
+        (header) => `${header.textContent}:${header.getAttribute('aria-expanded')}`,
+      );
+    expect(headers()).toEqual(['Reasoning:false']);
+    await act(() =>
+      container.querySelector<HTMLButtonElement>('[data-reply-group] > button')!.click(),
+    );
+    expect(headers()).toEqual(['Reasoning:true']);
+
+    await act(() => button('Previous reply').click());
+    await act(() => api.settled());
+    // One block for the whole multi-step reply, not the other reply's state.
+    expect(headers()).toEqual(['Thought · searched the web:false']);
+    expect(container.querySelectorAll('[data-reply-group="work"]')).toHaveLength(1);
+    expect(container.textContent).toContain('Nine.');
+  });
+
   it('is unavailable while a switch is saving, and restores the reply when saving fails', async () => {
     let fail!: (error: Error) => void;
     activateReply.mockReturnValueOnce(

@@ -35,17 +35,34 @@ const prompt = {
   parts: [{ type: 'text', text: 'Name a colour' }],
   metadata: { status: 'complete', createdAt: created },
 };
-const reply = (id: string, text: string) => ({
+const reply = (id: string, text: string, work: Record<string, unknown>[] = []) => ({
   id,
   role: 'assistant',
-  parts: [{ type: 'text', text }],
+  parts: [...work, { type: 'text', text }],
   metadata: { modelSlug: MODEL.slug, status: 'complete', createdAt: created },
 });
+/** Two steps of work before the first reply's answer: reasoning, a search, reasoning. */
+const twoSteps = [
+  { type: 'step-start' },
+  { type: 'reasoning', text: 'Pick a colour; check what is popular.' },
+  {
+    type: 'tool-web_search',
+    toolCallId: 'colour-search',
+    state: 'output-available',
+    input: { query: 'popular colours' },
+    output: { query: 'popular colours', results: [] },
+  },
+  { type: 'step-start' },
+  { type: 'reasoning', text: 'Red it is.' },
+];
 
 /** Routes the conversation APIs, recording every switch and retry the page makes. */
 async function installServer(page: Page) {
   const server = {
-    replies: [reply('reply-1', 'First answer: red'), reply('reply-2', 'Second answer: green')],
+    replies: [
+      reply('reply-1', 'First answer: red', twoSteps),
+      reply('reply-2', 'Second answer: green'),
+    ],
     active: 'reply-2',
     switches: [] as string[],
     retries: [] as Array<{ trigger: string; messages: Array<{ id?: string }> }>,
@@ -139,11 +156,19 @@ test('switches between retried replies, retries again and reloads the chosen rep
   await expect(assistant(page)).not.toContainText('green');
   await expect(replies(page).getByRole('status')).toHaveText('Reply 1 of 2');
   await expect.poll(() => server.switches).toEqual(['reply-1']);
+  // That reply's two steps of work are one collapsed block, not two "Reasoning" headers.
+  const work = assistant(page).locator('[data-reply-group="work"] > button');
+  await expect(work).toHaveText('Thought · searched the web');
+  await expect(work).toHaveAttribute('aria-expanded', 'false');
+  await expect(assistant(page).getByRole('button', { name: 'Reasoning', exact: true })).toHaveCount(
+    0,
+  );
 
   // Keyboard operable; focus stays on the control when it becomes unavailable.
   await next(page).focus();
   await page.keyboard.press('Enter');
   await expect(assistant(page)).toContainText('Second answer: green');
+  await expect(assistant(page).locator('[data-reply-group="work"]')).toHaveCount(0);
   await expect(next(page)).toBeFocused();
   await expect(next(page)).toHaveAttribute('aria-disabled', 'true');
   await page.keyboard.press('Enter');

@@ -1,6 +1,6 @@
 import { ARTIFACT_KIND_LABELS, type ToolStepSummary, toolKey } from '@oci/shared';
-import { ChevronDown, Wrench } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { ArrowDown, ChevronDown, FileCode2, Wrench } from 'lucide-react';
+import { type MouseEvent, useEffect, useId, useState } from 'react';
 import { ArtifactCardButton, artifactMeta } from '~/components/artifacts/artifact-card';
 import {
   type ArtifactDraft,
@@ -13,10 +13,9 @@ import {
   type ArtifactsContextValue,
   useArtifacts,
 } from '~/components/artifacts/artifacts-context';
+import type { ToolPart } from '~/components/chat/tool-steps';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-
-type ToolPart = Record<string, unknown> & { type: string; toolCallId: string };
 
 /** How much of a live source the step's details show; the panel shows all of it. */
 const LIVE_TAIL = 1_200;
@@ -76,99 +75,89 @@ function liveLabel(draft: ArtifactDraft, title: string | null): string {
   return title ? `Writing ${title}…` : 'Writing an artifact…';
 }
 
-/**
- * An artifact tool call in a reply, shown as its card rather than as a tool
- * step plus a card that say the same thing. While the model writes the
- * artifact the card is live ("Writing Sales chart…") and opens the panel on
- * the source as it arrives; once saved it is the ordinary card. "Details"
- * shows a readable summary of the call (never its raw JSON input). A call
- * that failed or stopped is a one-line step with the same details.
- */
-export function ArtifactToolStep({
-  messageId,
-  part,
-  step,
-  streaming,
-}: {
-  messageId: string;
-  part: ToolPart;
-  step: ToolStepSummary;
-  streaming: boolean;
-}) {
-  const artifacts = useArtifacts();
-  const [open, setOpen] = useState(false);
-  const detailsId = useId();
+/** A call that failed, or stopped before it was saved: only its row shows, with details. */
+const isFailed = (draft: ArtifactDraft, streaming: boolean) =>
+  draft.state === 'failed' || (draft.state === 'writing' && !streaming);
+
+/** What an artifact call is about so far: from its input, its result, or the artifact it revises. */
+function artifactStepOf(
+  artifacts: ArtifactsContextValue | null,
+  messageId: string,
+  part: ToolPart,
+  streaming: boolean,
+) {
   const draft = artifactDraftOf(messageId, part);
-  // Nothing written yet: the model may send its text in one piece at the end.
-  const preparing =
-    streaming && draft?.state === 'writing' && draft.mode !== 'edits' && draft.content.length === 0;
-  const waited = useElapsedSeconds(preparing);
   if (!draft) return null;
   const existing =
     draft.tool === 'update_artifact' && draft.artifactId
       ? artifacts?.findById(draft.artifactId)
       : undefined;
   const saved = savedRef(artifacts, draft);
-  const title = draft.title ?? saved?.title ?? existing?.title ?? null;
-  const kind = draft.kind ?? saved?.kind ?? existing?.kind ?? null;
-  const writing = draft.state === 'writing' && streaming;
+  return {
+    draft,
+    existing,
+    saved,
+    title: draft.title ?? saved?.title ?? existing?.title ?? null,
+    kind: draft.kind ?? saved?.kind ?? existing?.kind ?? null,
+    writing: draft.state === 'writing' && streaming,
+    failed: isFailed(draft, streaming),
+  };
+}
+
+/** Whether an artifact call shows as its card below the work block; otherwise only as a row. */
+export function showsArtifactCard(
+  artifacts: ArtifactsContextValue | null,
+  messageId: string,
+  part: ToolPart,
+  streaming: boolean,
+): boolean {
+  const draft = artifactDraftOf(messageId, part);
+  return Boolean(artifacts && draft && !isFailed(draft, streaming));
+}
+
+/** The title an artifact call has so far, for the work block's "Writing …" header. */
+export function artifactStepTitle(
+  artifacts: ArtifactsContextValue | null,
+  messageId: string,
+  part: ToolPart,
+): string | null {
+  return artifactStepOf(artifacts, messageId, part, true)?.title ?? null;
+}
+
+/**
+ * An artifact tool call in a reply, shown as its card below the reply's work
+ * block rather than as a tool step plus a card that say the same thing. While
+ * the model writes the artifact the card is live ("Writing Sales chart…") and
+ * opens the panel on the source as it arrives; once saved it is the ordinary
+ * card. A chevron at the card's right edge shows a readable summary of the
+ * call inside the card (never its raw JSON input). A call that failed or
+ * stopped has no card: its row in the work block has the same details.
+ */
+export function ArtifactToolStep({
+  messageId,
+  part,
+  streaming,
+}: {
+  messageId: string;
+  part: ToolPart;
+  streaming: boolean;
+}) {
+  const artifacts = useArtifacts();
+  const [open, setOpen] = useState(false);
+  const detailsId = useId();
+  const info = artifactStepOf(artifacts, messageId, part, streaming);
+  // Nothing written yet: the model may send its text in one piece at the end.
+  const preparing = Boolean(
+    streaming &&
+      info?.draft.state === 'writing' &&
+      info.draft.mode !== 'edits' &&
+      info.draft.content.length === 0,
+  );
+  const waited = useElapsedSeconds(preparing);
+  if (!info || !artifacts || info.failed) return null;
+  const { draft, existing, saved, title, kind, writing } = info;
   const cardKey = toolKey(draft.toolCallId);
-  const openDraft = artifacts?.openDraft;
-
-  const details = (
-    <div
-      id={detailsId}
-      className="mt-2 space-y-3 rounded-lg bg-black/10 px-3 py-2 text-xs text-[var(--text-secondary)]"
-    >
-      <ArtifactStepDetails
-        draft={draft}
-        part={part}
-        title={title}
-        kind={kind}
-        writing={writing}
-        saved={saved}
-        artifacts={artifacts}
-      />
-    </div>
-  );
-  const toggle = (name: string, className?: string) => (
-    <button
-      type="button"
-      aria-expanded={open}
-      aria-controls={detailsId}
-      aria-label={name}
-      onClick={() => setOpen(!open)}
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:outline-[var(--accent-bright)]',
-        className,
-      )}
-    >
-      Details
-      <ChevronDown
-        className={cn('size-3.5 transition-transform', open && 'rotate-180')}
-        aria-hidden="true"
-      />
-    </button>
-  );
-
-  // Failed, stopped, or outside a conversation page: the step line alone.
-  const failed = draft.state === 'failed' || (draft.state === 'writing' && !streaming);
-  if (!artifacts || failed) {
-    const summary =
-      draft.state === 'writing' && !streaming
-        ? `${title ? `'${title}'` : 'The artifact'} was not finished`
-        : step.summary;
-    return (
-      <div className="min-w-0" data-artifact-step={draft.toolCallId}>
-        <div className="flex min-w-0 items-center gap-2 text-[0.8125rem] text-[var(--text-muted)]">
-          <Wrench className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 break-words">{summary}</span>
-          {toggle(`Details: ${summary}`)}
-        </div>
-        {open && details}
-      </div>
-    );
-  }
+  const openDraft = artifacts.openDraft;
 
   let card: {
     title: string;
@@ -222,8 +211,11 @@ export function ArtifactToolStep({
   }
 
   return (
-    <div className="min-w-0" data-artifact-step={draft.toolCallId}>
-      <div className="flex max-w-lg items-center gap-1">
+    <div
+      className="min-w-0 max-w-md rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/50"
+      data-artifact-step={draft.toolCallId}
+    >
+      <div className="flex min-w-0 items-stretch">
         <ArtifactCardButton
           kind={kind}
           title={card.title}
@@ -233,11 +225,137 @@ export function ArtifactToolStep({
           live={card.live}
           preview={card.preview}
           cardKey={cardKey}
-          className="my-0 min-w-0 flex-1"
+          arrow={false}
+          className="my-0 min-w-0 max-w-none flex-1 border-0 bg-transparent disabled:hover:bg-transparent"
         />
-        {toggle(`Details: ${title ?? 'artifact'}`)}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={detailsId}
+          aria-label={`Show details for ${title ?? 'artifact'}`}
+          data-artifact-details-toggle=""
+          onClick={() => setOpen(!open)}
+          className="flex shrink-0 items-center rounded-xl px-3 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-bright)]"
+        >
+          <ChevronDown
+            className={cn(
+              'size-4 transition-transform motion-reduce:transition-none',
+              open && 'rotate-180',
+            )}
+            aria-hidden="true"
+          />
+        </button>
       </div>
-      {open && details}
+      {open && (
+        <div
+          id={detailsId}
+          data-artifact-details=""
+          className="space-y-3 border-t border-[var(--border-subtle)] px-3 py-2.5 text-xs text-[var(--text-secondary)]"
+        >
+          <ArtifactStepDetails
+            draft={draft}
+            part={part}
+            title={title}
+            kind={kind}
+            writing={writing}
+            saved={saved}
+            artifacts={artifacts}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * An artifact call in the work block's timeline: one line. When its card is
+ * shown below the block the line points to it ("Created artifact 'Sales
+ * chart'"); a call that failed or stopped, or one outside a conversation
+ * page, expands to the call's details instead.
+ */
+export function ArtifactStepRow({
+  messageId,
+  part,
+  step,
+  streaming,
+}: {
+  messageId: string;
+  part: ToolPart;
+  step: ToolStepSummary;
+  streaming: boolean;
+}) {
+  const artifacts = useArtifacts();
+  const [open, setOpen] = useState(false);
+  const detailsId = useId();
+  const info = artifactStepOf(artifacts, messageId, part, streaming);
+  if (!info) return null;
+  const { draft, title } = info;
+
+  if (artifacts && !info.failed) {
+    const label = draft.state === 'saved' ? step.summary : liveLabel(draft, title);
+    const cardKey = toolKey(draft.toolCallId);
+    const goToCard = (event: MouseEvent<HTMLButtonElement>) => {
+      const card = event.currentTarget
+        .closest('article')
+        ?.querySelector<HTMLElement>(`[data-artifact-card="${CSS.escape(cardKey)}"]`);
+      if (!card) return;
+      const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      card.scrollIntoView?.({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
+      card.focus({ preventScroll: true });
+    };
+    return (
+      <button
+        type="button"
+        data-artifact-step-row={draft.toolCallId}
+        onClick={goToCard}
+        className="flex w-full min-w-0 items-center gap-2 text-left text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+      >
+        <FileCode2 className="size-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 break-words">
+          {label}
+          <span className="sr-only"> (go to its card)</span>
+        </span>
+        <ArrowDown className="size-3.5 shrink-0" aria-hidden="true" />
+      </button>
+    );
+  }
+
+  const summary =
+    draft.state === 'writing' && !streaming
+      ? `${title ? `'${title}'` : 'The artifact'} was not finished`
+      : step.summary;
+  return (
+    <div className="min-w-0" data-artifact-step={draft.toolCallId}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={detailsId}
+        onClick={() => setOpen(!open)}
+        className="flex w-full min-w-0 items-center gap-2 text-left text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+      >
+        <Wrench className="size-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 break-words">{summary}</span>
+        <ChevronDown
+          className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-180')}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
+        <div
+          id={detailsId}
+          className="mt-2 space-y-3 rounded-lg bg-black/10 px-3 py-2 text-xs text-[var(--text-secondary)]"
+        >
+          <ArtifactStepDetails
+            draft={draft}
+            part={part}
+            title={title}
+            kind={info.kind}
+            writing={info.writing}
+            saved={info.saved}
+            artifacts={artifacts}
+          />
+        </div>
+      )}
     </div>
   );
 }
