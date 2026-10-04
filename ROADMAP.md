@@ -223,6 +223,14 @@ and embedding already run as background jobs. What is missing is below.
 | **Fast usage reports and budgets** | Budgets and the Usage pages read raw usage events. | Hourly and daily rollups maintained in the background. |
 | **Background work visible** | Imports, indexing, re-embedding and background migrations run out of sight. | Queue depth, progress and failures on System health and in metrics. |
 
+**Progress on `v0.11/always-on`:** done — lock-safe migrations, the migration
+linter, rolling-upgrade tests, the scale harness, and draining replies on
+shutdown. The harness's first measurements reorder the rest: fast usage
+reports come before batched pruning (admin and usage pages are the slowest at
+size), and Qdrant isn't needed for now (an exact pgvector scan within a
+project takes about 20 ms). Next: two-phase migrations and the upgrade
+preflight, then the worker role and failover safety.
+
 Further items (cross-replica cache invalidation, batched pruning, loading
 long conversations in parts, sign-in storms, encryption key rotation, service
 objectives) and the design are in `docs/dev/v0.11-design.md`. Measured by the
