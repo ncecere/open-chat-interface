@@ -99,6 +99,30 @@ describe('Composer interaction', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('sends once for a held Enter: auto-repeat neither sends nor adds lines', async () => {
+    await render();
+    await enter();
+    for (let repeat = 0; repeat < 20; repeat += 1) {
+      const event = await enter({ repeat: true });
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(props.onSubmit).toHaveBeenCalledOnce();
+  });
+
+  it('gates Send and Enter while a submission is in flight, without showing Stop', async () => {
+    await render({ submitting: true });
+    expect(button('Send message').disabled).toBe(true);
+    expect(button('Send message').getAttribute('aria-busy')).toBe('true');
+    expect(container.querySelector('[aria-label="Stop generating"]')).toBeNull();
+    await act(() => button('Send message').click());
+    const event = await enter();
+    expect(event.defaultPrevented).toBe(true);
+    expect(props.onSubmit).not.toHaveBeenCalled();
+    await render({ submitting: false });
+    expect(button('Send message').disabled).toBe(false);
+    expect(button('Send message').hasAttribute('aria-busy')).toBe(false);
+  });
+
   it('leaves Shift+Enter available for a newline', async () => {
     await render();
     const event = await enter({ shiftKey: true });

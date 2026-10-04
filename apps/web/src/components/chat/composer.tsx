@@ -17,6 +17,8 @@ interface ComposerProps extends ComposerOptionsProps {
   onSubmit: () => void;
   onStop?: () => void;
   streaming?: boolean;
+  /** A send is being handed over (the home page creating its conversation): no second one. */
+  submitting?: boolean;
   attachments?: PendingAttachment[];
   onRemoveAttachment?: (localId: string) => void;
   placeholder?: string;
@@ -39,6 +41,7 @@ export const Composer = memo(function Composer({
   onSubmit,
   onStop,
   streaming,
+  submitting = false,
   models,
   selectedModel,
   onSelectModel,
@@ -78,14 +81,17 @@ export const Composer = memo(function Composer({
   }, [value]);
 
   const uploading = attachments.some((item) => item.status === 'uploading');
-  const canSubmit = value.trim().length > 0 && Boolean(selectedModel) && !streaming && !uploading;
+  const canSubmit =
+    value.trim().length > 0 && Boolean(selectedModel) && !streaming && !uploading && !submitting;
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Enter that confirms an IME candidate never sends (see isSendKey). Any
     // other Enter that does not send is left to add a new line.
     if (isSendKey(event, { invert: invertSend })) {
       event.preventDefault();
-      if (canSubmit) onSubmit();
+      // A held key sends once: its auto-repeats are not further messages
+      // (v0.10.2; on the home page each one started another conversation).
+      if (canSubmit && !event.repeat) onSubmit();
     }
   }
 
@@ -145,6 +151,7 @@ export const Composer = memo(function Composer({
             <button
               type="button"
               disabled={!canSubmit}
+              aria-busy={submitting || undefined}
               onClick={onSubmit}
               aria-label="Send message"
               aria-keyshortcuts={sendKeyShortcuts(invertSend)}

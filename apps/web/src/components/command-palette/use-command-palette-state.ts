@@ -14,6 +14,15 @@ import type { CommandPaletteProps, PaletteGroup, PaletteItem } from './types';
 import { usePaletteActions } from './use-palette-actions';
 
 const PENDING_PROMPT_KEY = 'oci.pendingPrompt';
+const PENDING_THREAD_KEY = 'oci.pendingThreadId';
+/** Left by an earlier handover from the home page; they would apply to this one. */
+const OTHER_PENDING_KEYS = [
+  'oci.pendingAttachments',
+  'oci.pendingEffort',
+  'oci.pendingModel',
+  'oci.pendingWebSearch',
+  'oci.pendingComposerFocus',
+];
 
 function matches(item: PaletteItem, query: string) {
   if (!query) return true;
@@ -33,6 +42,8 @@ export function useCommandPaletteState({
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const keepFocusOnClose = useRef(false);
+  /** One conversation per choice, however often Enter arrives before the palette closes. */
+  const startingChat = useRef(false);
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const normalizedDebouncedQuery = debouncedQuery.trim();
@@ -98,10 +109,21 @@ export function useCommandPaletteState({
             keywords: prompt,
             icon: Plus,
             onSelect: async () => {
-              if (createThread.isPending) return;
-              const { thread } = await createThread.mutateAsync(undefined);
-              sessionStorage.setItem(PENDING_PROMPT_KEY, prompt);
-              await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
+              // isPending is only as fresh as the last render; the ref is not.
+              if (startingChat.current || createThread.isPending) return;
+              startingChat.current = true;
+              try {
+                const { thread } = await createThread.mutateAsync(undefined);
+                // The conversation sends the prompt only when it is addressed to it
+                // (v0.10.2; before, the prompt stayed unsent in an empty "New Chat").
+                sessionStorage.removeItem(PENDING_THREAD_KEY);
+                for (const key of OTHER_PENDING_KEYS) sessionStorage.removeItem(key);
+                sessionStorage.setItem(PENDING_PROMPT_KEY, prompt);
+                sessionStorage.setItem(PENDING_THREAD_KEY, thread.id);
+                await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
+              } finally {
+                startingChat.current = false;
+              }
             },
           },
         ],

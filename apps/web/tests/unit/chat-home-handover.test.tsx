@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Composer } from '../../src/components/chat/composer';
+import { ApiError } from '../../src/lib/api-client';
 import { ChatHomePage } from '../../src/routes/chat/home';
 
 const mocks = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ vi.mock('../../src/components/chat/composer', () => ({
   },
 }));
 let root: Root;
+let container: HTMLDivElement;
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   sessionStorage.clear();
@@ -59,7 +61,8 @@ beforeEach(async () => {
   mocks.create.mockResolvedValue({ thread: { id: 'destination' } });
   mocks.navigate.mockReset();
   mocks.navigate.mockResolvedValue(undefined);
-  root = createRoot(document.createElement('div'));
+  container = document.createElement('div');
+  root = createRoot(container);
   await act(() => root.render(<ChatHomePage />));
   await act(() => mocks.composer!.onChange('Question'));
 });
@@ -81,6 +84,99 @@ it('scopes the complete prompt/upload handover before navigating to its new thre
     to: '/chat/$threadId',
     params: { threadId: 'destination' },
   });
+});
+
+it('creates one conversation however often it is submitted while creating it', async () => {
+  // The v0.10.1 incident: every send key that reached the home composer before
+  // the navigation committed was another POST /api/threads.
+  let finish!: (value: { thread: { id: string } }) => void;
+  mocks.create.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const first = mocks.composer!.onSubmit() as unknown as Promise<void>;
+  await act(async () => {});
+  expect(mocks.composer?.submitting).toBe(true);
+  for (let press = 0; press < 50; press += 1) {
+    await act(async () => {
+      await mocks.composer!.onSubmit();
+    });
+  }
+  // A suggested prompt is guarded by the same flag.
+  const suggestion = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'How does AI work?',
+  );
+  await act(async () => suggestion?.click());
+  expect(mocks.create).toHaveBeenCalledOnce();
+
+  await act(async () => {
+    finish({ thread: { id: 'destination' } });
+    await first;
+  });
+  expect(mocks.create).toHaveBeenCalledOnce();
+  expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
+    to: '/chat/$threadId',
+    params: { threadId: 'destination' },
+  });
+});
+
+it('stays guarded after handing over, until the draft is edited', async () => {
+  await act(() => mocks.composer!.onSubmit());
+  // Navigation resolved but this page is still shown (the route change has not
+  // rendered yet, or another navigation replaced it): the prompt already
+  // belongs to the conversation just created.
+  await act(() => mocks.composer!.onSubmit());
+  expect(mocks.create).toHaveBeenCalledOnce();
+  expect(mocks.navigate).toHaveBeenCalledOnce();
+  expect(mocks.composer?.submitting).toBe(true);
+
+  // Editing is a deliberate new message.
+  await act(() => mocks.composer!.onChange('Another question'));
+  expect(mocks.composer?.submitting).toBe(false);
+  await act(() => mocks.composer!.onSubmit());
+  expect(mocks.create).toHaveBeenCalledTimes(2);
+});
+
+it('allows another try after a failed creation', async () => {
+  mocks.create.mockRejectedValueOnce(new Error('Unavailable'));
+  await act(async () => {
+    await expect(mocks.composer!.onSubmit()).rejects.toThrow('Unavailable');
+  });
+  expect(mocks.composer?.submitting).toBe(false);
+  await act(() => mocks.composer!.onSubmit());
+  expect(mocks.create).toHaveBeenCalledTimes(2);
+  expect(mocks.navigate).toHaveBeenCalledOnce();
+});
+
+it('says why when the server refuses to start a conversation', async () => {
+  mocks.create.mockRejectedValueOnce(
+    new ApiError(
+      429,
+      'RATE_LIMITED',
+      'You are starting conversations too quickly. Try again in a moment.',
+    ),
+  );
+  await act(async () => {
+    await expect(mocks.composer!.onSubmit()).rejects.toThrow('too quickly');
+  });
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    'You are starting conversations too quickly. Try again in a moment.',
+  );
+  // The next attempt clears it.
+  await act(() => mocks.composer!.onSubmit());
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+});
+
+it('allows another try when the navigation itself fails', async () => {
+  mocks.navigate.mockRejectedValueOnce(new Error('Route failed'));
+  await act(async () => {
+    await expect(mocks.composer!.onSubmit()).rejects.toThrow('Route failed');
+  });
+  expect(mocks.composer?.submitting).toBe(false);
+  await act(() => mocks.composer!.onSubmit());
+  expect(mocks.create).toHaveBeenCalledTimes(2);
 });
 
 it('invalidates the old destination before a partial session-storage write can fail', async () => {

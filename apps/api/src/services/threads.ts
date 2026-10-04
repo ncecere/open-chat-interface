@@ -1,7 +1,20 @@
-import { and, asc, type Database, desc, eq, ilike, isNull, lte, or, schema, sql } from '@oci/db';
+import {
+  and,
+  asc,
+  type Database,
+  desc,
+  eq,
+  gte,
+  ilike,
+  isNull,
+  lte,
+  or,
+  schema,
+  sql,
+} from '@oci/db';
 import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
 import { db } from '../db/index.js';
-import { forbidden, notFound, validationFailed } from '../lib/errors.js';
+import { forbidden, notFound, rateLimited, validationFailed } from '../lib/errors.js';
 import { containsPattern } from '../lib/like.js';
 import { copyArtifactsToFork } from './artifacts/store.js';
 import { copyCompactionToFork } from './chat/compaction-fork.js';
@@ -48,6 +61,94 @@ export async function purgeExpiredTemporaryThreads(now = new Date()): Promise<nu
   );
 
   return expired.length;
+}
+
+/** The title of a conversation until its first message names it. */
+const UNTITLED = 'New Chat';
+
+/** A conversation nobody has written in: still untitled, without a single message. */
+function unused() {
+  return and(
+    eq(schema.thread.title, UNTITLED),
+    sql`not exists (select 1 from ${schema.message}
+      where ${schema.message.threadId} = ${schema.thread.id})`,
+  );
+}
+
+/**
+ * How many unused (untitled, message-less) conversations one person may have
+ * started in the last minute before another untitled one is refused
+ * (v0.10.2, POST /api/threads only).
+ *
+ * The home page creates a conversation and its first message follows within
+ * a second, so normal use leaves at most one unused at a time; one is left
+ * behind only when that hand-over fails. Ten in a minute means a client is
+ * looping, as in v0.10.1, when one send created 16,389 of them. This is a
+ * backstop under the per-person rate limit, counted in PostgreSQL, so it
+ * holds even when Redis is down and replicas count separately.
+ */
+export const MAX_RECENT_UNUSED_THREADS = 10;
+const UNUSED_WINDOW_MS = 60_000;
+export const UNUSED_THREADS_MESSAGE =
+  'You have started several conversations without sending anything. Wait a minute, then try again.';
+
+/** Refuses a request for another untitled conversation; see MAX_RECENT_UNUSED_THREADS. */
+export async function assertNotLeavingUnusedThreads(
+  userId: string,
+  title: string | undefined,
+  now = new Date(),
+): Promise<void> {
+  // Only an untitled conversation can be another unused one.
+  if ((title?.trim() || UNTITLED) !== UNTITLED) return;
+  const since = new Date(now.getTime() - UNUSED_WINDOW_MS);
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.thread)
+    .where(
+      and(
+        eq(schema.thread.userId, userId),
+        // Unused conversations are never updated, so this bound uses the
+        // (user_id, updated_at) index.
+        gte(schema.thread.updatedAt, since),
+        gte(schema.thread.createdAt, since),
+        isNull(schema.thread.deletedAt),
+        unused(),
+      ),
+    );
+  if ((row?.count ?? 0) >= MAX_RECENT_UNUSED_THREADS) {
+    throw rateLimited(UNUSED_THREADS_MESSAGE, Math.ceil(UNUSED_WINDOW_MS / 1000));
+  }
+}
+
+/** How long an unused conversation is kept before the cleanup job removes it. */
+export const UNUSED_THREAD_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes conversations that were started and never used: still untitled,
+ * without a message, untouched for a day (v0.10.2). They are left behind when
+ * the hand-over from the home page to a new conversation fails, and hold
+ * nothing to keep. Pinned, archived, trashed (the trash purges those),
+ * imported and temporary ones (they expire on their own) are left alone, as
+ * is everything of a person on legal hold.
+ */
+export async function purgeUnusedThreads(now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - UNUSED_THREAD_TTL_MS);
+  const removed = await destroyThreads(
+    and(
+      unused(),
+      lte(schema.thread.createdAt, cutoff),
+      lte(schema.thread.updatedAt, cutoff),
+      isNull(schema.thread.lastMessageAt),
+      eq(schema.thread.pinned, false),
+      eq(schema.thread.archived, false),
+      eq(schema.thread.temporary, false),
+      isNull(schema.thread.deletedAt),
+      isNull(schema.thread.importSource),
+      notOnLegalHold(schema.thread.userId),
+    ),
+    { reason: 'unused_expiry', actorUserId: null, skipLocked: true, all: true },
+  );
+  return removed.length;
 }
 
 export async function listThreads(
@@ -169,11 +270,12 @@ export async function createThread(options: {
     await assertRoleFeature(options.role, 'projects');
     if (options.temporary) throw validationFailed('Temporary chats cannot be added to a project');
   }
+  const title = options.title?.trim() || UNTITLED;
 
   const values = {
     organizationId: options.organizationId,
     userId: options.userId,
-    title: options.title?.trim() || 'New Chat',
+    title,
     temporary: options.temporary ?? false,
     expiresAt: options.temporary ? new Date(Date.now() + TEMPORARY_THREAD_TTL_MS) : null,
     projectId: options.projectId ?? null,

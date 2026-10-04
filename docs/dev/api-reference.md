@@ -387,7 +387,7 @@ Generated from 41 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/threads` | Live conversations, pinned first then newest, at most 200; `view=sidebar` leaves out unpinned project conversations. |
-| POST | `/api/threads` | — |
+| POST | `/api/threads` | Starts a conversation, or answers 429 with Retry-After when the person starts them faster than their role's messages per minute or already has ten unused untitled ones from the last minute (v0.10.2). |
 | GET | `/api/threads/:id` | — |
 | PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |

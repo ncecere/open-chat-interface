@@ -100,6 +100,26 @@ export async function chatRateLimit(userId: string, role: UserRole): Promise<Rat
   });
 }
 
+/**
+ * Starting a conversation (POST /api/threads, v0.10.2). Every new
+ * conversation is followed by its first message, so the allowance is the
+ * role's chat requests per minute, counted separately: a person who can send
+ * N messages a minute can also start N conversations, and a client stuck in a
+ * loop cannot create conversations without bound (v0.10.1 created 16,389 in
+ * 20 seconds for one person).
+ */
+export async function threadCreateRateLimit(
+  userId: string,
+  role: UserRole,
+): Promise<RateLimitResult> {
+  const settings = await getRateLimitSettings();
+  return consumeRateLimit({
+    bucket: 'thread-create',
+    identifier: userId,
+    limit: settings.roles[role].chatRequestsPerMinute,
+  });
+}
+
 export async function uploadRateLimit(userId: string, role: UserRole): Promise<RateLimitResult> {
   const settings = await getRateLimitSettings();
   return consumeRateLimit({

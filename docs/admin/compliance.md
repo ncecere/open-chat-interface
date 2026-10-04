@@ -50,7 +50,7 @@ Since v0.10, everything that moves a person's data to the trash, restores it
 or deletes it writes one audit entry, so a downstream archive can tell a
 deletion from a gap. That includes the person themselves, an administrator
 and the background jobs (retention, trash purging, temporary chat expiry,
-memory retention). Each entry is written in the same database transaction as
+unused conversation cleanup, memory retention). Each entry is written in the same database transaction as
 the change: a deletion is never committed without its entry, and an entry is
 never written for a deletion that rolled back. They travel in the audit
 stream, so they are exported exactly once like every other audit event, can
@@ -61,7 +61,7 @@ retention while unexported or while their owner is on legal hold.
 | --- | --- | --- |
 | `conversation.trash` | A conversation moves to the trash: by its owner (`reason: user`) or by conversation retention (`retention`). | `attachments`: files that went to the trash with it. |
 | `conversation.restore` | Its owner restores it from the trash. | |
-| `conversation.delete` | A conversation is destroyed: deleted forever or the trash emptied (`user`), the trash window elapsed (`trash_expiry`), a temporary chat expired (`temporary_expiry`). | `messages`, `attachments`, `artifacts`: what was destroyed with it; `temporary`, `projectId`. |
+| `conversation.delete` | A conversation is destroyed: deleted forever or the trash emptied (`user`), the trash window elapsed (`trash_expiry`), a temporary chat expired (`temporary_expiry`), a conversation started and never used (untitled, no message, untouched for a day; not pinned, archived or imported) was cleaned up (`unused_expiry`, v0.10.2). | `messages`, `attachments`, `artifacts`: what was destroyed with it; `temporary`, `projectId`. |
 | `attachment.trash` | A chat file is deleted on its own (it goes to the trash). | `threadId`, `messageId`, `sizeBytes`. |
 | `attachment.delete` | A project file is deleted (`user`), or a file trashed on its own is purged (`trash_expiry`). | `threadId`, `messageId` or `projectId`; `sizeBytes`. |
 | `project.delete` | A project is deleted. | `fileIds` and `files`: its files, deleted with it; `conversationsDetached`: its conversations, which are kept. |
@@ -75,7 +75,7 @@ Every one of them has the same `metadata.deletion` object:
 | `type` | `conversation`, `attachment`, `project`, `memory` or `user`. |
 | `id` | The id of what was trashed, restored or deleted. |
 | `ownerUserId`, `ownerEmail` | Whose data it was. Kept even after the account is deleted, when `actorUserId` of the person's own entries becomes null. |
-| `reason` | `user`, `admin`, `tool`, `retention`, `trash_expiry` or `temporary_expiry`. |
+| `reason` | `user`, `admin`, `tool`, `retention`, `trash_expiry`, `temporary_expiry` or `unused_expiry`. |
 | `permanent` | `true` for `*.delete`; `false` for trash and restore. |
 
 **Who** is `actorUserId` and `actorEmail`: the owner, the administrator, or
@@ -259,6 +259,7 @@ While a person is on hold:
 | [Conversation retention](governance.md#retention) moves inactive conversations to the trash | Skipped for this person |
 | The trash is purged after its retention window | Skipped: their trash (conversations and files) is kept |
 | Expired temporary chats are deleted | Kept (still invisible to them) |
+| Conversations started and never used are deleted after a day | Kept |
 | Audit retention prunes old entries | Entries by or about them are kept, including [deletion events](#deletion-events) for their data |
 | [Memory retention](governance.md#user-memory) deletes notes not updated for a while | Their notes are kept |
 | Usage history is pruned after its retention window | Their usage events are kept (daily totals are always kept) |

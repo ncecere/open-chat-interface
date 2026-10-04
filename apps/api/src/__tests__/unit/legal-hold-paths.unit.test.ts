@@ -21,7 +21,7 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   // Conversations, messages, files and artifacts.
   'services/lifecycle/destroy.ts thread': {
     hold: 'checked',
-    how: 'Every caller excludes held owners: delete forever and empty trash refuse; trash purge, temporary expiry and opening an expired temporary chat skip them (live rows "Delete forever", "Empty trash", "Trash purge: conversations", "Temporary chat expiry", "Opening an expired temporary chat").',
+    how: 'Every caller excludes held owners: delete forever and empty trash refuse; trash purge, temporary expiry, unused conversation cleanup and opening an expired temporary chat skip them (live rows "Delete forever", "Empty trash", "Trash purge: conversations", "Temporary chat expiry", "Unused conversation cleanup", "Opening an expired temporary chat").',
   },
   'services/lifecycle/destroy.ts attachment': {
     hold: 'checked',

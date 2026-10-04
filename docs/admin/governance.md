@@ -365,6 +365,17 @@ also on **Roles & access**. Each value shows
 These are not a budget — that is what usage budgets are for. They stop one client
 overwhelming the instance, and a person working normally should never meet one.
 
+**Starting conversations** (v0.10.2) is limited by the same messages-per-minute
+value, counted separately: every new conversation is followed by its first
+message, so a person can start as many conversations a minute as they can send
+messages. On top of that, a person who already has ten conversations from the
+last minute that are still untitled and empty is refused another until one is
+used or a minute passes. Both answer 429 with `Retry-After`. Together they stop
+a looping client, such as a misbehaving browser automation, from filling an
+account with empty "New Chat" conversations. Conversations that were started
+and never used are deleted after a day (see
+[compliance](compliance.md)).
+
 The concurrency cap does double duty: it bounds how far a quota can be overshot
 by simultaneous requests, since each reserves budget before anybody knows what
 it will cost. These are estimates, not a guarantee that a provider bill cannot
