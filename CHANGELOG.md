@@ -7,6 +7,30 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-03
+
+### Fixed
+
+- **One send starts one conversation.** On v0.10.1, sending from the new-chat
+  page could start another conversation for every key press that arrived
+  before the page had moved to the new one, which once left thousands of empty
+  conversations. A second start is now blocked while one is under way, Send is
+  disabled meanwhile, and holding Enter sends once.
+- **"New chat with query" in the command palette** now sends its query; it
+  used to leave an empty conversation instead.
+
+### Added
+
+- **A limit on starting conversations.** Each person can start as many
+  conversations a minute as their role's messages per minute, and an eleventh
+  unused conversation within a minute is refused. Both answer 429 with
+  Retry-After.
+- **Unused conversations are cleaned up.** An hourly job deletes conversations
+  that are still untitled, have no messages and have not been touched for a
+  day. Pinned, archived, imported and temporary conversations are left alone,
+  as is everything belonging to someone on legal hold. Each deletion is
+  recorded in the audit log as `unused_expiry`.
+
 ## [0.10.1] - 2026-10-03
 
 ### Changed
@@ -1098,7 +1122,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.10.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.10.2...main
+[0.10.2]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.2
 [0.10.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.1
 [0.10.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.0
 [0.9.2]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.9.2
