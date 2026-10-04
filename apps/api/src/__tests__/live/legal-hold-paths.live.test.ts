@@ -260,6 +260,21 @@ describe.skipIf(!available)('live: legal hold covers every deletion path', () =>
       present: (id) => exists('thread', id),
     },
     {
+      path: 'Unused conversation cleanup (threads.purge-unused)',
+      outcome: 'skipped',
+      // Started and never written in: untitled, no message, untouched for long.
+      seed: async (user) => {
+        const [row] = await pool.db.execute<{ id: string }>(sql`
+          insert into thread (organization_id, user_id, title, created_at, updated_at)
+          values (${state.organizationId}, ${user}, 'New Chat',
+            ${old().toISOString()}::timestamptz, ${old().toISOString()}::timestamptz)
+          returning id`);
+        return row!.id;
+      },
+      act: async () => (await services()).threads.purgeUnusedThreads(),
+      present: (id) => exists('thread', id),
+    },
+    {
       path: 'Opening an expired temporary chat (deleted on access)',
       outcome: 'kept',
       seed: (user) => thread(user, { temporary: true, expiresAt: old() }),

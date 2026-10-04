@@ -43,7 +43,7 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 vi.mock('../../services/limits/rate-limit.js', () => {
   const allowed = async () => ({ allowed: true, limit: 100, remaining: 99, retryAfterSeconds: 1 });
-  return { consumeRateLimit: allowed, uploadRateLimit: allowed };
+  return { consumeRateLimit: allowed, uploadRateLimit: allowed, threadCreateRateLimit: allowed };
 });
 vi.mock('../../services/settings.js', () => ({
   getSetting: async (key: string) => {

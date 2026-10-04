@@ -1,7 +1,7 @@
 import type { CatalogModel } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
 import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
@@ -10,6 +10,7 @@ import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
+import { apiErrorMessage } from '~/lib/api-client';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
 import { cn } from '~/lib/utils';
@@ -44,7 +45,27 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const temporary = temporaryMode && !projectId;
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftValue] = useState('');
+  /**
+   * One conversation per send (v0.10.2). `started` is set synchronously before
+   * the first await, so a key that repeats, an automated browser flooding
+   * Enter, or a second click cannot start another conversation while the
+   * first is being created; in v0.10.1 each one was another empty "New Chat".
+   * It stays set once the prompt is handed over, because this page can still
+   * be on screen before the conversation renders. A failure releases it, and
+   * so does editing the draft once nothing is outstanding.
+   */
+  const started = useRef(false);
+  const creating = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const setDraft = useCallback((value: string) => {
+    setDraftValue(value);
+    if (started.current && !creating.current) {
+      started.current = false;
+      setSubmitting(false);
+    }
+  }, []);
   const [webSearch, setWebSearch] = useState(false);
   // A model picked here applies to the conversation it starts; otherwise the
   // person's own default (Settings → Models), then the instance default.
@@ -64,10 +85,8 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
 
   const selectModel = useCallback((model: CatalogModel) => setModelSlug(model.slug), []);
 
-  const startThread = useCallback(
-    async (text: string) => {
-      const content = text.trim();
-      if (!content || !selectedModel) return;
+  const handOver = useCallback(
+    async (content: string, selectedModel: CatalogModel) => {
       // Read before any await: the composer is replaced when the conversation opens.
       const typing =
         document.activeElement instanceof HTMLTextAreaElement &&
@@ -103,16 +122,30 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
       sessionStorage.setItem(PENDING_THREAD_KEY, thread.id);
       await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
     },
-    [
-      selectedModel,
-      createThread,
-      temporary,
-      projectId,
-      effort,
-      webSearch,
-      attachmentItems,
-      navigate,
-    ],
+    [createThread, temporary, projectId, effort, webSearch, attachmentItems, navigate],
+  );
+
+  const startThread = useCallback(
+    async (text: string) => {
+      const content = text.trim();
+      if (!content || !selectedModel || started.current) return;
+      started.current = true;
+      creating.current = true;
+      setSubmitting(true);
+      setStartError(null);
+      try {
+        await handOver(content, selectedModel);
+      } catch (error) {
+        started.current = false;
+        setSubmitting(false);
+        // Such as the server's limit on starting conversations (429).
+        setStartError(apiErrorMessage(error, 'The conversation could not be started. Try again.'));
+        throw error;
+      } finally {
+        creating.current = false;
+      }
+    },
+    [selectedModel, handOver],
   );
 
   const submit = useCallback(() => startThread(draft), [startThread, draft]);
@@ -173,7 +206,11 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
               <button
                 key={prompt}
                 type="button"
-                onClick={() => startThread(prompt)}
+                disabled={submitting}
+                onClick={() => {
+                  // Failures leave the page as it was, ready to try again.
+                  startThread(prompt).catch(() => undefined);
+                }}
                 className={cn(
                   'block h-[3.0625rem] w-full pr-8 text-left text-[0.9375rem] text-[var(--text-secondary)]',
                   'transition-colors hover:text-[var(--text-primary)]',
@@ -191,6 +228,14 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
               model in the catalog.
             </p>
           )}
+          {startError && (
+            <p
+              role="alert"
+              className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+            >
+              {startError}
+            </p>
+          )}
         </div>
       </div>
 
@@ -198,6 +243,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
         value={draft}
         onChange={setDraft}
         onSubmit={submit}
+        submitting={submitting}
         models={models}
         selectedModel={selectedModel}
         onSelectModel={selectModel}

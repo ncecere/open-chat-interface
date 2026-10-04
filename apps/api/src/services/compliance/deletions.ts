@@ -45,7 +45,9 @@ export type DeletionReason =
   /** The trash's retention window elapsed. */
   | 'trash_expiry'
   /** A temporary chat expired. */
-  | 'temporary_expiry';
+  | 'temporary_expiry'
+  /** A conversation started and never used (no message, still untitled) for a day (v0.10.2). */
+  | 'unused_expiry';
 
 export type DeletionAction =
   | 'conversation.trash'

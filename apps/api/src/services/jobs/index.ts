@@ -18,7 +18,7 @@ import { sweepAbandonedReservations } from '../quota/index.js';
 import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
 import { drainDeletedObjects, pruneDrainedObjects } from '../storage/reaper.js';
-import { purgeExpiredTemporaryThreads } from '../threads.js';
+import { purgeExpiredTemporaryThreads, purgeUnusedThreads } from '../threads.js';
 import { processWebhookDeliveries } from '../webhooks/delivery.js';
 import { type JobDefinition, runExclusively, startJobs } from './runner.js';
 
@@ -86,6 +86,13 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'threads.purge-temporary',
       intervalMs: HOUR,
       run: () => purgeExpiredTemporaryThreads(),
+    },
+    {
+      // Conversations started but never written in, left when a hand-over
+      // from the home page failed (v0.10.2). A day old before they go.
+      name: 'threads.purge-unused',
+      intervalMs: HOUR,
+      run: () => purgeUnusedThreads(),
     },
     {
       name: 'trash.purge-expired',

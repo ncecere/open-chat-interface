@@ -39,7 +39,7 @@ import {
   restoreThread,
   softDeleteThread,
 } from '../services/lifecycle/trash.js';
-import { chatRateLimit } from '../services/limits/rate-limit.js';
+import { chatRateLimit, threadCreateRateLimit } from '../services/limits/rate-limit.js';
 import { resolveModelForRole } from '../services/models.js';
 import {
   assertProjectsAllowed,
@@ -52,6 +52,7 @@ import { searchThreads } from '../services/thread-search.js';
 import { serializeThread } from '../services/thread-summary.js';
 import {
   assertBranchingAllowed,
+  assertNotLeavingUnusedThreads,
   assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
@@ -140,9 +141,22 @@ threadRoutes.get('/', async (c) => {
   return c.json({ threads: threads.map(serializeThread) });
 });
 
+/**
+ * Starts a conversation, or answers 429 with Retry-After when the person starts them faster than their role's messages per minute or already has ten unused untitled ones from the last minute (v0.10.2).
+ */
 threadRoutes.post('/', async (c) => {
   const user = currentUser(c);
+  // Before any work, like sending a message: bounds how fast conversations
+  // can be started (v0.10.2), then refuses a tenth unused one in a minute.
+  const limit = await threadCreateRateLimit(user.id, user.role);
+  if (!limit.allowed) {
+    throw rateLimited(
+      'You are starting conversations too quickly. Try again in a moment.',
+      limit.retryAfterSeconds,
+    );
+  }
   const input = await parseBody(c, createThreadSchema);
+  await assertNotLeavingUnusedThreads(user.id, input.title);
   const thread = await createThread({
     userId: user.id,
     organizationId: user.organizationId,
