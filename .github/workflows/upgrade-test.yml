@@ -1,0 +1,124 @@
+name: Rolling-upgrade test
+
+# Upgrades a published release (FROM) to this source (TO) under load, with two
+# API replicas replaced one at a time, and fails on server errors, lock stalls
+# or a broken previous-release smoke suite. See docs/dev/rolling-upgrades.md.
+# Builds TO locally; publishes nothing. FROM images are public on GHCR, so no
+# registry login is needed.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/db/drizzle/**'
+      - 'packages/db/src/**'
+      - 'tools/upgrade-test/**'
+      - '.github/workflows/upgrade-test.yml'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      from:
+        description: FROM release tag (empty = newest published stable tag older than the source version)
+        required: false
+        type: string
+        default: ''
+      to:
+        description: TO release tag to pull from GHCR (empty = build this ref from source)
+        required: false
+        type: string
+        default: ''
+      inject:
+        description: Negative control to inject into TO (the run must then fail)
+        required: false
+        type: choice
+        default: ''
+        options: ['', index, drop-column, rename-column, rewrite, lock]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upgrade-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upgrade:
+    name: Rolling upgrade under load
+    runs-on: ubuntu-24.04
+    # About 12-15 minutes: image builds (cached), seeding, then a fixed
+    # sequence of phases under load. The limit leaves room for a cold cache.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tags are the fallback for choosing FROM when GHCR cannot be listed.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.0'
+      - name: Source version
+        id: source
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: ${{ !inputs.to }}
+      - name: Build TO API image (no publication)
+        if: ${{ !inputs.to }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: oci-upgrade-api:to
+          build-args: |
+            OCI_VERSION=${{ steps.source.outputs.version }}
+            OCI_REVISION=${{ github.sha }}
+          # Reuses the CI workflow's container cache; writes none of its own.
+          cache-from: type=gha,scope=api
+      - name: Build TO web image (no publication)
+        if: ${{ !inputs.to }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: oci-upgrade-web:to
+          build-args: |
+            OCI_VERSION=${{ steps.source.outputs.version }}
+            OCI_REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=web
+      - name: Run the rolling-upgrade test
+        env:
+          FROM_TAG: ${{ inputs.from }}
+          TO_TAG: ${{ inputs.to }}
+          INJECT: ${{ inputs.inject }}
+        run: |
+          set -euo pipefail
+          args=(--out "$RUNNER_TEMP/upgrade-test")
+          if [ -n "$FROM_TAG" ]; then args+=(--from "$FROM_TAG"); fi
+          if [ -n "$TO_TAG" ]; then
+            args+=(--to-api "ghcr.io/ncecere/open-chat-interface/api:$TO_TAG" \
+                   --to-web "ghcr.io/ncecere/open-chat-interface/web:$TO_TAG")
+          else
+            args+=(--to-api oci-upgrade-api:to --to-web oci-upgrade-web:to)
+          fi
+          if [ -n "$INJECT" ]; then args+=(--inject "$INJECT" --expect-fail); fi
+          node tools/upgrade-test/run.mjs "${args[@]}"
+      - name: Summary
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/upgrade-test/report.md"; then
+            cat "$RUNNER_TEMP/upgrade-test/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: upgrade-test-report
+          retention-days: 14
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/upgrade-test

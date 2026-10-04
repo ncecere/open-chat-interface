@@ -1,0 +1,147 @@
+# Rolling-upgrade test stack. Driven by tools/upgrade-test/run.mjs, which sets
+# the image variables; see docs/dev/rolling-upgrades.md. Every value here is a
+# throwaway test credential. Ports bind to 127.0.0.1 only.
+#
+# Two API replicas (api-1, api-2) and two web proxies (web-1, web-2) are
+# separate services so the runner can replace them one at a time with another
+# image. Both API services answer to the DNS name `api`, which the web proxy's
+# Caddyfile re-resolves every 10 s, as a scaled `api` service would.
+name: oci-upgrade
+
+x-api: &api
+  restart: 'no'
+  stop_grace_period: ${OCI_UPGRADE_STOP_GRACE:-30s}
+  environment: &api-env
+    NODE_ENV: production
+    API_PORT: 3000
+    APP_URL: http://127.0.0.1:${OCI_UPGRADE_PORT:-18480}
+    AUTH_TRUSTED_ORIGINS: http://127.0.0.1:${OCI_UPGRADE_PORT2:-18481}
+    DATABASE_URL: postgres://oci:upgrade-test-only@postgres:5432/oci
+    REDIS_URL: redis://redis:6379
+    AUTH_SECRET: upgrade-test-auth-secret-not-for-production
+    ENCRYPTION_KEY: upgrade-test-encryption-key-not-for-production
+    INITIAL_ADMIN_EMAIL: admin@upgrade.test
+    INITIAL_ADMIN_PASSWORD: upgrade-test-admin-password
+    STORAGE_LOCAL_PATH: /data/storage
+    RUN_MIGRATIONS: 'false'
+    LOG_LEVEL: ${OCI_UPGRADE_LOG_LEVEL:-warn}
+    # The load signs in and sends far faster than a person.
+    RATE_LIMIT_AUTH_PER_MINUTE: '100000'
+    RATE_LIMIT_CHAT_PER_MINUTE: '100000'
+    RATE_LIMIT_MAX_CONCURRENT_STREAMS: '50'
+  volumes:
+    - storage_data:/data/storage
+  networks:
+    default:
+      aliases: [api]
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+    interval: 2s
+    timeout: 5s
+    retries: 60
+    start_period: 60s
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+x-web: &web
+  restart: 'no'
+  environment:
+    API_UPSTREAM: api:3000
+    # The load sends one forwarded address per simulated person; trust it from
+    # the Docker network, as a deployment behind a load balancer would.
+    TRUSTED_PROXIES: private_ranges
+
+services:
+  postgres:
+    image: ${OCI_UPGRADE_POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    restart: 'no'
+    environment:
+      POSTGRES_USER: oci
+      POSTGRES_PASSWORD: upgrade-test-only
+      POSTGRES_DB: oci
+    # Lock waits longer than deadlock_timeout are logged, which the report
+    # quotes as evidence when a migration blocks the application.
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - log_lock_waits=on
+      - -c
+      - deadlock_timeout=1s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oci -d oci']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: ${OCI_UPGRADE_REDIS_IMAGE:-redis:7-alpine}
+    restart: 'no'
+    command: redis-server --save '' --appendonly no --loglevel warning
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  stub:
+    image: ${OCI_UPGRADE_NODE_IMAGE:-node:22-alpine}
+    restart: 'no'
+    environment:
+      STUB_PORT: '4181'
+      STUB_CHUNKS: ${OCI_UPGRADE_STUB_CHUNKS:-40}
+      STUB_CHUNK_MS: ${OCI_UPGRADE_STUB_CHUNK_MS:-100}
+    volumes:
+      - ./stub-model.mjs:/stub/stub-model.mjs:ro
+    command: ['node', '/stub/stub-model.mjs']
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:4181/health']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # The pre-deploy migration job: `docker compose --profile tools run --rm migrate`.
+  migrate:
+    image: ${OCI_MIGRATE_IMAGE:-oci-upgrade-api:to}
+    profiles: ['tools']
+    restart: 'no'
+    environment:
+      <<: *api-env
+    command: ['node', 'dist/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-1:
+    <<: *api
+    image: ${OCI_API1_IMAGE:-oci-upgrade-api:from}
+
+  api-2:
+    <<: *api
+    image: ${OCI_API2_IMAGE:-oci-upgrade-api:from}
+
+  web-1:
+    <<: *web
+    image: ${OCI_WEB1_IMAGE:-oci-upgrade-web:from}
+    ports:
+      - '127.0.0.1:${OCI_UPGRADE_PORT:-18480}:8080'
+
+  web-2:
+    <<: *web
+    image: ${OCI_WEB2_IMAGE:-oci-upgrade-web:from}
+    ports:
+      - '127.0.0.1:${OCI_UPGRADE_PORT2:-18481}:8080'
+
+volumes:
+  postgres_data:
+  storage_data:
