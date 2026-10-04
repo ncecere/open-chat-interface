@@ -249,6 +249,39 @@ export const backupRuns = register(
 export const backupDuration = register(
   new Histogram('oci_backup_duration_seconds', 'Automated backup duration.', [], LONG_BUCKETS),
 );
+/**
+ * Provider capacity (v0.11 design, item 15). `provider` is the provider's
+ * display name and `model` the model's slug, both chosen by administrators.
+ */
+export const providerQueueWaits = register(
+  new Counter(
+    'oci_provider_queue_waits_total',
+    'Turns that waited for provider capacity, by outcome (admitted, timeout, cancelled, handoff).',
+    ['provider', 'model', 'outcome'],
+  ),
+);
+export const providerQueueWaitDuration = register(
+  new Histogram(
+    'oci_provider_queue_wait_seconds',
+    'How long turns waited for provider capacity.',
+    ['provider', 'model'],
+    [0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600, 1800],
+  ),
+);
+export const providerThrottles = register(
+  new Counter(
+    'oci_provider_throttled_total',
+    'Provider answers asking OCI to slow down or retry (429, 408, 409, 5xx, overloaded), by status.',
+    ['provider', 'model', 'status'],
+  ),
+);
+export const providerRetries = register(
+  new Counter(
+    'oci_provider_retries_total',
+    'Provider requests sent again, after a 429 or overload, before the reply’s first output.',
+    ['provider', 'model'],
+  ),
+);
 export const errors = register(
   new Counter('oci_errors_total', 'Unexpected server errors by source.', ['source']),
 );

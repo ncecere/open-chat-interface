@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, ne, schema, sql } from '@oci/db';
+import { and, asc, eq, gt, inArray, isNull, ne, schema, sql } from '@oci/db';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { retryOnConnectionError } from '../../lib/db-connection.js';
@@ -10,6 +10,7 @@ import {
   historicalAttachmentAvailable,
   type ModelAttachment,
 } from './attachment-context.js';
+import { CAPACITY_HANDOFF_MESSAGE } from './capacity-wait.js';
 import { textFromParts } from './message-parts.js';
 import { activeMessage, RETRY_LATEST_ONLY } from './reply-path.js';
 import type { AcquiredRun } from './run-lifecycle.js';
@@ -233,6 +234,22 @@ async function persistTurnOnce(
         )
         .limit(1);
       if (later) throw validationFailed(RETRY_LATEST_ONLY);
+      // A reply handed back by a draining replica before its model was called
+      // (v0.11): the browser sent the turn again, which replaces it rather than
+      // leaving an empty reply beside the new one.
+      await tx
+        .delete(schema.message)
+        .where(
+          and(
+            eq(schema.message.threadId, thread.id),
+            eq(schema.message.role, 'assistant'),
+            ne(schema.message.id, claim.id),
+            gt(schema.message.position, target.position),
+            eq(schema.message.status, 'cancelled'),
+            eq(schema.message.errorMessage, CAPACITY_HANDOFF_MESSAGE),
+            isNull(schema.message.tokensOut),
+          ),
+        );
       await tx
         .update(schema.message)
         .set({ supersededAt: new Date() })

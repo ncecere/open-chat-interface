@@ -56,6 +56,11 @@ scrape_configs:
 | `oci_backup_runs_total` | counter | `outcome`: `succeeded`, `failed` |
 | `oci_backup_duration_seconds` | histogram | |
 | `oci_backup_last_success_timestamp_seconds` | gauge | Absent until a backup succeeds |
+| `oci_provider_queue_waits_total` | counter | `provider` (its display name), `model` (its slug), `outcome`: `admitted`, `timeout`, `cancelled`, `handoff`. Messages that waited for [provider capacity](models-providers.md#provider-capacity) |
+| `oci_provider_queue_wait_seconds` | histogram | `provider`, `model` |
+| `oci_provider_queue_waiting` | gauge | Messages waiting on this replica now |
+| `oci_provider_throttled_total` | counter | `provider`, `model`, `status`: the provider's `429`, `408`, `409`, `5xx`, or `529` for an overload reported in the stream |
+| `oci_provider_retries_total` | counter | `provider`, `model`: requests sent again before the reply's first output |
 | `oci_errors_total` | counter | `source`: unexpected server errors |
 | `oci_build_info` | gauge | `version` |
 | `process_resident_memory_bytes`, `nodejs_heap_used_bytes`, `process_uptime_seconds` | gauge | |
@@ -74,6 +79,12 @@ Useful alerts:
   expr: sum(rate(oci_chat_replies_total{status="error"}[15m])) / sum(rate(oci_chat_replies_total[15m])) > 0.05
 - alert: OciWebhookBacklog
   expr: max(oci_webhook_deliveries_pending) > 100
+- alert: OciProviderThrottling
+  # The provider refuses requests: set or lower its limits under Providers & Models.
+  expr: sum by (provider) (rate(oci_provider_throttled_total{status="429"}[15m])) > 0.1
+- alert: OciProviderQueueTimeouts
+  # Messages give up waiting for a busy model.
+  expr: sum by (provider) (increase(oci_provider_queue_waits_total{outcome="timeout"}[15m])) > 0
 ```
 
 ## Traces

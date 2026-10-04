@@ -1,7 +1,9 @@
 import { and, eq, schema } from '@oci/db';
 import {
+  type CapacityLimits,
   COLOR_THEMES,
   type ColorTheme,
+  type QueuePriority,
   type ReasoningEffort,
   type RoleFeatures,
   type SearchProviderKind,
@@ -25,7 +27,8 @@ export type SettingKey =
   | 'embeddings'
   | 'reranking'
   | 'backups'
-  | 'compliance';
+  | 'compliance'
+  | 'providerCapacity';
 
 export interface BrandingSettings {
   appName: string;
@@ -297,6 +300,20 @@ export interface StoredComplianceSettings {
   keepDays?: number | null;
 }
 
+/**
+ * Provider capacity (v0.11): limits per provider and per model, keyed by their
+ * ids, and the queue's settings. Sparse: nothing saved means no limits.
+ * Normalised by services/limits/capacity/settings.ts.
+ */
+export interface StoredProviderCapacitySettings {
+  providers?: Record<string, Partial<CapacityLimits>>;
+  models?: Record<string, Partial<CapacityLimits>>;
+  queue?: {
+    maxWaitSeconds?: number;
+    rolePriority?: Partial<Record<UserRole, QueuePriority>>;
+  };
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -313,6 +330,7 @@ interface SettingsMap {
   reranking: StoredRerankingSettings;
   backups: StoredBackupSettings;
   compliance: StoredComplianceSettings;
+  providerCapacity: StoredProviderCapacitySettings;
 }
 
 /**

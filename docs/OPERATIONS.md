@@ -1087,6 +1087,63 @@ The `oci-web` Deployment is the API one under
 `OCI_ROLE=web`. During an upgrade, replace workers like any other replica;
 jobs that stop mid-batch are safe to run again.
 
+## Provider capacity
+
+From v0.11 administrators can set limits per model provider and per model
+(requests and tokens per minute, replies at once) under
+[Providers & Models](admin/models-providers.md#provider-capacity). Every
+replica enforces them together through Redis, and a message over them waits
+in a fair queue instead of failing. With no limit set (the default) nothing
+waits and no Redis key is written.
+
+**Redis keys**, all under `oci:capacity:{<provider id>}:` (the braces keep a
+provider's keys in one hash slot for Redis Cluster). Each change is one Lua
+script, timed by Redis's own clock (`TIME`), never a replica's:
+
+| Key | Type | Holds | Expires |
+| --- | --- | --- | --- |
+| `q` | sorted set | Waiting messages by queue order | Members leave when admitted, stopped, timed out or abandoned |
+| `t:<run id>` | hash | A waiting message: model, estimated tokens, state | 10 s after its replica last polled it |
+| `last:<person id>` | string | The person's latest queue position, for spacing | 10 minutes |
+| `p:rb`, `p:tb`, `m:<model id>:rb`, `m:<model id>:tb` | hash | Request and token buckets (level and time) of the provider and each limited model | 3 minutes idle |
+| `p:st`, `m:<model id>:st` | sorted set | Stream leases by expiry | A lease lapses 30 s after its last renewal (every 10 s while the reply runs) |
+| `p:cool`, `m:<model id>:cool` | string | Pause after a `429`, as long as the provider asked | That long (at most a minute) |
+| `adm` | sorted set | Admissions in the last minute, for the estimated wait | 2 minutes |
+| `thr`, `waits` | sorted set | Throttles and waits in the last hour, for System health | 1 hour |
+| `handoff:<prompt id>` | string | The place of a message handed back by a draining replica | 2 minutes |
+
+**Replicas that crash.** A crashed replica's stream leases lapse within 30
+seconds and its waiting messages leave the queue within 10, so it never holds
+capacity for long. A replica polls its own waiting messages together, four
+times a second, with one script per provider; any replica's poll admits the
+head of the queue, whichever replica it waits on, and the owner picks the
+admission up on its next poll (unclaimed, it lapses in 10 seconds).
+
+**Without Redis** (not configured, or unreachable) each replica enforces the
+whole limit on its own, so N replicas may together reach N times the limit;
+the queue's order and fairness hold within each replica. A replica whose
+Redis fails while messages wait moves them to its own queue, keeping their
+order. The Providers tab and System health say which applies. Run Redis for
+more than one replica.
+
+**Draining.** A replica that begins draining hands its waiting messages back
+at once rather than letting them wait through the drain: each ends without a
+reply (saved as `cancelled`, "The server restarted before this reply
+started"), its place is kept for two minutes, and the web app sends it again,
+to a running replica, which takes the place and replaces the empty reply.
+Nothing was sent to the provider, so nothing is billed twice. A person who
+has closed the page sees the note and **Retry**.
+
+**Retries.** Every reply (limits or not) sends a request the provider
+refused for now (`429`, `408`, `409`, `5xx`, "overloaded") again before its
+first output only, after `Retry-After` or with backoff: at most three
+retries within a minute. This replaces the AI SDK's own two retries.
+
+**Metrics** (per replica): `oci_provider_queue_waits_total`,
+`oci_provider_queue_wait_seconds`, `oci_provider_queue_waiting`,
+`oci_provider_throttled_total` and `oci_provider_retries_total`; see
+[Observability](admin/observability.md).
+
 ## Database failover
 
 From v0.11 OCI rides out a change of PostgreSQL primary (Patroni, a managed

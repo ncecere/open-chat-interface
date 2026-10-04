@@ -4,6 +4,7 @@ import { type Dispatch, memo, type SetStateAction, useRef } from 'react';
 import { showsArtifactCard } from '~/components/artifacts/artifact-tool-step';
 import { useArtifacts } from '~/components/artifacts/artifacts-context';
 import { ReplyMarkdown } from '~/components/artifacts/reply-content';
+import { CapacityNote, CapacityWait, capacityWaitOf } from '~/components/chat/capacity-wait';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
 import { MessageAttachments } from '~/components/chat/message-attachments';
@@ -44,6 +45,8 @@ interface MessageRowProps {
   replySwitch?: ReplySwitch;
   /** Answers this reply's open approvals; only the latest reply can be answered. */
   onAnswerApproval?: AnswerApproval;
+  /** Stops the latest reply; offered while it waits for its model. */
+  onStop?: () => void;
 }
 
 /**
@@ -63,6 +66,7 @@ export const MessageRow = memo(function MessageRow({
   onFork,
   replySwitch,
   onAnswerApproval,
+  onStop,
 }: MessageRowProps) {
   const text = textOf(message);
 
@@ -101,6 +105,7 @@ export const MessageRow = memo(function MessageRow({
   const grounding = searchGroundingOf(message);
   const metadata = metadataOf(message);
   const interruption = interruptionOf(message);
+  const capacity = capacityWaitOf(message);
 
   return (
     <article
@@ -114,6 +119,12 @@ export const MessageRow = memo(function MessageRow({
         </p>
       )}
       <ProjectSearchNote message={message} />
+      {capacity &&
+        (streaming ? (
+          capacity.state === 'waiting' && <CapacityWait wait={capacity} onStop={onStop} />
+        ) : (
+          <CapacityNote wait={capacity} />
+        ))}
       {grounding && <SearchSourcesPanel grounding={grounding} />}
       {/* Keyed: switching replies starts each one's block collapsed. */}
       <ReplyBody

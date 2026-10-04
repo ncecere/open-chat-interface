@@ -290,6 +290,7 @@ function ThreadConversation({
                   session.webSearch && !session.selectedModel?.capabilities.includes('tool_calling')
                 }
                 onAnswerApproval={session.answerApproval}
+                onStop={stop}
                 onRetry={retry}
                 onFork={session.features?.branching ? forkAtMessage : undefined}
                 onEdit={session.features?.branching ? editAndBranch : undefined}

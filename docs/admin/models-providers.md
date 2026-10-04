@@ -110,6 +110,94 @@ the default. If the default stops being usable — disabled, its provider
 disabled, or hidden from the `user` role — the page and the
 [setup checklist](first-run.md#3-choose-a-default-model) say so.
 
+## Provider capacity
+
+From v0.11, OCI can keep below a provider's own rate limits instead of
+passing every message on and letting the provider refuse the excess. At
+scale the provider's limits (requests and tokens per minute, replies at
+once), not OCI, are what runs out first; without limits set here, messages
+over them fail with an error.
+
+Nothing changes until you set a limit: by default no message ever waits.
+
+### Limits per provider and per model
+
+The gauge button on a provider's row (Providers tab) or a model's row
+(Models tab) sets:
+
+| Limit | Counts |
+| --- | --- |
+| **Requests per minute** | Every request to the model. A reply that uses tools makes one per step, and a retry is another. |
+| **Tokens per minute** | Input and output. Before a request OCI estimates its input (about three bytes a token, from the same count that budgets the context) plus the output it reserves (**Max output**), as providers count it; when the reply ends the estimate is replaced by the usage the provider reported. |
+| **Replies at once** | Replies streaming at the same time, across every replica. |
+
+Empty means no limit. A provider's limits are shared by all of its models; a
+model's apply on top of its provider's, for that model only (useful when a
+provider limits each model separately, as OpenAI does). Set them a little
+below what the provider allows you, since other applications using the same
+key count too. Requests and tokens are metered as a bucket that refills
+continuously over a minute, as providers meter them, so a quiet minute
+allows a short burst up to the whole limit.
+
+The limits are stored in the instance settings (`providerCapacity`) and
+reach every replica within 30 seconds. Changes are audited as
+`provider.capacity` and `model.capacity`.
+
+### The queue
+
+A message that would go over a limit **waits** instead of failing. Its reply
+shows "Waiting for *model* — you're number *N*", an estimate when there is
+one (from how many messages started in the last minute), and **Stop**. The
+place is part of the reply's stream, so it survives a reload and shows on
+another device. Stop takes the message out of the queue; it never reached
+the provider and uses none of the person's allowance.
+
+- **Fair between people.** One queue per provider, ordered so that a person's
+  waiting messages are spaced ten seconds apart: somebody with many tabs
+  open takes every other place at most, and somebody with one message goes
+  next. A message blocked only by its own model's limit is passed over by
+  messages for the provider's other models; one blocked by the provider is
+  never overtaken.
+- **Priority by role** (Providers tab, **Capacity**): **High** starts a minute
+  ahead of **Normal**, **Low** a minute behind. A message never waits behind
+  a higher role for ever, only until it has waited a minute longer than the
+  newcomer. Everyone is Normal by default.
+- **Longest wait** (default 120 seconds, 5 to 1,800): a message that waits
+  longer fails with "*Model* is busy… try again in a few minutes", and the
+  reply says so.
+- **Tool steps never queue again.** Once a reply has started it keeps its
+  place for every step: re-queuing a reply half way through behind newcomers
+  would stall a reply people are already reading, after its earlier steps
+  were paid for. Its later requests still count against the per-minute
+  limits, so newcomers wait a little longer instead.
+- Continuing a reply after answering its tool approvals is a new request
+  and queues like a message.
+
+### When the provider still says "too many requests"
+
+A request the provider refuses for now (`429`, `408`, `409`, a `5xx`, or an
+"overloaded" error before any output) is sent again, **before the reply's
+first output only**, so nothing is ever shown twice: after the time the
+provider asks for (`Retry-After` or `retry-after-ms`), or else after 1, 2
+and 4 seconds (with jitter). At most three retries and one minute in all;
+a wait longer than what is left fails at once. An error after the reply has
+started is shown as it is.
+
+When the model or its provider has limits, a `429` also pauses new
+admissions to it for the time the provider asked (two seconds if it did not
+say, a minute at most), so waiting messages do not meet the same refusal
+and replies already admitted retry first.
+
+### Watching it
+
+The **Capacity** section of the Providers tab shows, per provider, its
+limits, the messages waiting now, replies streaming, messages that waited in
+the last hour (and the longest wait), and how often the provider throttled
+OCI. **System health** has a **Provider capacity** check, a warning while
+messages wait or a provider throttles. Prometheus metrics are listed in
+[Observability](observability.md); Redis keys and behaviour without Redis in
+[Operations](../OPERATIONS.md#provider-capacity).
+
 ## Embeddings
 
 The **Embeddings** tab (`/admin/models?tab=embeddings`) turns on meaning-based

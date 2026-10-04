@@ -5,6 +5,7 @@ import { type RetryOptions, retryOnConnectionError } from '../../lib/db-connecti
 import { logger } from '../../lib/logger.js';
 import { saveDetectedArtifacts } from '../artifacts/store.js';
 import type { ChatRunStatus } from '../chat-streams.js';
+import { releaseReservation } from '../quota/index.js';
 import { touchThread } from '../threads.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
@@ -68,6 +69,12 @@ export async function persistAssistant(
   getUsage: () => Promise<ReplyUsage>,
   /** Stopped by this replica shutting down, not by the person. */
   interrupted = false,
+  /**
+   * A turn that ended while waiting for provider capacity (v0.11): why, and
+   * that its model was never called, so its reservation is released rather
+   * than settled as an attempt.
+   */
+  unadmitted?: { errorMessage?: string },
 ) {
   const usage = await getUsage();
   const tokensIn = usage?.inputTokens ?? null;
@@ -82,8 +89,9 @@ export async function persistAssistant(
           .set({
             parts: responseMessage.parts as unknown as Record<string, unknown>[],
             status,
-            errorMessage:
-              status === 'error'
+            errorMessage: unadmitted?.errorMessage
+              ? unadmitted.errorMessage
+              : status === 'error'
                 ? 'The model failed to generate a response'
                 : interrupted
                   ? INTERRUPTED_REPLY_MESSAGE
@@ -136,9 +144,11 @@ export async function persistAssistant(
   // with a secondary settlement error. Report the latter separately.
   try {
     // After a save that already spent the retry budget, one attempt.
+    const settle = () =>
+      unadmitted ? releaseReservation(reservation) : settleUsage(reservation, usage ?? null);
     await (persistenceFailure
-      ? settleUsage(reservation, usage ?? null)
-      : retryOnConnectionError(() => settleUsage(reservation, usage ?? null), {
+      ? settle()
+      : retryOnConnectionError(settle, {
           ...finalSaveRetry,
           onRetry: onRetry(runIdentity.runId, 'usage'),
         }));

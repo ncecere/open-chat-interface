@@ -53,6 +53,25 @@ Moving a conversation to trash also frees its files' allowance immediately.
 Restoring it requires enough free space again. In-progress uploads reserve
 allowance too. Manage files in [Settings → Attachments](settings.md#attachments).
 
+## Waiting for a busy model
+
+The companies that run the models limit how much an institution can send
+them each minute. When everyone is busy at once, your message may wait its
+turn before the reply starts. The reply then shows "Waiting for *model* —
+you're number *N*", and an estimate when there is one.
+
+- The wait is fair: people take turns, so somebody sending many messages at
+  once does not hold you back.
+- Your place is kept if you reload the page or open the conversation
+  elsewhere.
+- **Stop** takes your message out of the queue. It was never sent to the
+  model, so it costs none of your allowance.
+- If the wait runs too long (two minutes unless your institution chose
+  otherwise), the reply says the model is busy; try again in a few minutes,
+  or choose another model.
+- Rarely the reply says the server restarted before it started. Your message
+  is usually sent again by itself; if not, use **Retry**.
+
 ## Rate limits
 
 Separately from quotas, an instance limits how quickly requests can be made and

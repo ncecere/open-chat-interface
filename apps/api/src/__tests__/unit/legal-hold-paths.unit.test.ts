@@ -71,6 +71,10 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'Removes the empty, parentless reply placeholder of a turn that was never committed.',
   },
+  'services/chat/persist-turn.ts message': {
+    hold: 'exempt',
+    how: 'Replaces, when the turn is sent again, a reply handed back by a draining replica before its model was called: it holds no generated content (provider-capacity.live.test.ts).',
+  },
   'services/quota/settlement.ts usageEvent': {
     hold: 'exempt',
     how: 'Releases a reservation for a reply that never started: no usage happened.',

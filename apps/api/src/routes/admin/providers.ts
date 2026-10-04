@@ -1,5 +1,11 @@
 import { count, desc, eq, schema } from '@oci/db';
-import { type Provider, updateProviderSchema, upsertProviderSchema } from '@oci/shared';
+import {
+  capacityLimitsSchema,
+  type Provider,
+  updateCapacityQueueSchema,
+  updateProviderSchema,
+  upsertProviderSchema,
+} from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { credentialHint, decryptSecret, encryptSecret } from '../../lib/crypto.js';
@@ -7,6 +13,8 @@ import { notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { capacityOverview } from '../../services/limits/capacity/overview.js';
+import { saveProviderLimits, saveQueueSettings } from '../../services/limits/capacity/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
 import {
   applyProviderPatch,
@@ -59,6 +67,44 @@ providerRoutes.get('/', async (c) => {
   }));
 
   return c.json({ providers });
+});
+
+/**
+ * Provider capacity (v0.11): limits, queue settings, and each provider's
+ * queue now. Registered before `/:id` routes.
+ */
+providerRoutes.get('/capacity', async (c) => c.json(await capacityOverview()));
+
+providerRoutes.put('/capacity', async (c) => {
+  const actor = currentUser(c);
+  const input = await parseBody(c, updateCapacityQueueSchema);
+  const queue = await saveQueueSettings(input);
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'provider.capacity.queue',
+    targetType: 'setting',
+    targetId: 'providerCapacity',
+    metadata: { ...queue },
+  });
+  return c.json({ queue });
+});
+
+providerRoutes.put('/:id/capacity', async (c) => {
+  const actor = currentUser(c);
+  const id = c.req.param('id');
+  await loadProviderOrThrow(id);
+  const limits = await parseBody(c, capacityLimitsSchema);
+  await saveProviderLimits(id, limits);
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'provider.capacity',
+    targetType: 'provider',
+    targetId: id,
+    metadata: { ...limits },
+  });
+  return c.json({ limits });
 });
 
 providerRoutes.post('/', async (c) => {

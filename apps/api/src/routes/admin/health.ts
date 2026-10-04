@@ -7,6 +7,7 @@ import type { AppBindings } from '../../middleware/context.js';
 import { sharedRedis } from '../../services/chat-streams.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
 import { liveReplicas, workersHealthCheck } from '../../services/jobs/workers.js';
+import { capacityHealthCheck } from '../../services/limits/capacity/overview.js';
 import {
   backupHealthCheck,
   complianceHealthCheck,
@@ -277,6 +278,8 @@ healthRoutes.get('/', async (c) => {
     guarded('compliance', 'Compliance export', complianceHealthCheck),
     // v0.11: a deployment of OCI_ROLE=web replicas only runs no background jobs.
     guarded('workers', 'Background workers', workersHealthCheck),
+    // v0.11: turns waiting for, and providers throttling, model capacity.
+    guarded('capacity', 'Provider capacity', capacityHealthCheck),
   ]);
   const replicas = await liveReplicas().catch(() => null);
 
