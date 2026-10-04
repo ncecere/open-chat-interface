@@ -1,0 +1,41 @@
+Open Chat Interface {{ include "oci.imageTag" (dict "root" . "image" .Values.image.api) }} is installed as "{{ .Release.Name }}".
+
+  Web (all traffic, /api included): service/{{ include "oci.web.name" . }}:{{ .Values.web.service.port }}
+  API: deployment/{{ include "oci.api.name" . }} (OCI_ROLE={{ include "oci.apiRole" . }}, {{ if .Values.api.autoscaling.enabled }}autoscaled{{ else }}{{ .Values.api.replicaCount }} replicas{{ end }})
+{{- if .Values.worker.enabled }}
+  Worker: deployment/{{ include "oci.worker.name" . }} (OCI_ROLE=worker, {{ .Values.worker.replicaCount }} replicas)
+{{- end }}
+
+Check it:
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "oci.web.name" . }} 8080:{{ .Values.web.service.port }}
+  curl http://127.0.0.1:8080/api/health/ready
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- if .Values.migrations.enabled }}
+
+Upgrades run `migrate` (pre-upgrade hook), a rolling update, then `migrate --post`
+(post-upgrade hook, after every API and worker pod runs the new release). Run the
+preflight first and give Helm enough time for the hooks:
+  kubectl -n {{ .Release.Namespace }} run oci-upgrade-check --rm -i --restart=Never \
+    --image=<target api image> --overrides='{"spec":{"containers":[{"name":"oci-upgrade-check","image":"<target api image>","command":["node","dist/scripts/upgrade-check.js"],"envFrom":[{"secretRef":{"name":"{{ include "oci.secretName" . }}"}}]}]}}'
+  helm upgrade {{ .Release.Name }} ... --timeout 30m
+Hook logs: kubectl -n {{ .Release.Namespace }} logs job/{{ include "oci.migrate.name" . }}
+           kubectl -n {{ .Release.Namespace }} logs job/{{ include "oci.migratePost.name" . }} --all-containers
+{{- end }}
+{{- if not .Values.web.trustedProxies }}
+
+NOTE: web.trustedProxies is empty, so every person appears to come from your
+ingress controller's address (sessions, audit log, sign-in rate limit). Set it
+to the ingress controller's pod range.
+{{- end }}
+{{- if not .Values.storage.persistence.enabled }}
+
+NOTE: attachment storage is local in an emptyDir: files are lost when a pod is
+replaced, and pods do not share them. Configure S3-compatible storage under
+Admin -> Data & storage -> Storage before people upload files, or enable
+storage.persistence with a ReadWriteMany claim.
+{{- end }}
+{{- if not .Values.secrets.existingSecret }}
+
+NOTE: the runtime Secret was created from secrets.values (evaluation only).
+Use secrets.existingSecret in production.
+{{- end }}

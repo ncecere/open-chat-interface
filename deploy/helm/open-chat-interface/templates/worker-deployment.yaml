@@ -1,0 +1,93 @@
+{{- if .Values.worker.enabled }}
+{{- include "oci.validate" . }}
+{{- $v := .Values.worker }}
+# Background jobs (OCI_ROLE=worker). Serves only /api/health/{live,ready} and
+# /metrics; never behind the web proxy. On SIGTERM it finishes the job batch
+# in hand within SHUTDOWN_DRAIN_TIMEOUT_MS; jobs hold advisory locks, so any
+# number of workers can run side by side.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oci.worker.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "worker") | nindent 4 }}
+spec:
+  replicas: {{ $v.replicaCount }}
+  revisionHistoryLimit: 5
+  strategy:
+    {{- toYaml $v.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" . "component" "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oci.labels" (dict "root" . "component" "worker") | nindent 8 }}
+        {{- with $v.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $v.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "oci.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with (include "oci.pullSecrets" . | trim) }}{{ . | nindent 6 }}{{- end }}
+      terminationGracePeriodSeconds: {{ $v.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext.api | nindent 8 }}
+      {{- with (include "oci.scheduling" (dict "root" . "values" $v "component" "worker") | trim) }}{{ . | nindent 6 }}{{- end }}
+      containers:
+        - name: worker
+          image: {{ include "oci.image" (dict "root" . "image" .Values.image.api) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- include "oci.env" (dict "root" . "role" "worker" "component" "worker") | nindent 12 }}
+          envFrom:
+            {{- include "oci.envFrom" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          startupProbe:
+            {{- toYaml $v.startupProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $v.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml $v.livenessProbe | nindent 12 }}
+          resources:
+            {{- toYaml $v.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext.api | nindent 12 }}
+          volumeMounts:
+            {{- include "oci.apiVolumeMounts" . | nindent 12 }}
+            {{- with $v.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "oci.apiVolumes" . | nindent 8 }}
+        {{- with $v.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+---
+# For metrics scraping only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oci.worker.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "worker") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "oci.selectorLabels" (dict "root" . "component" "worker") | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- end }}

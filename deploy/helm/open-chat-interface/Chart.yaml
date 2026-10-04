@@ -1,0 +1,23 @@
+apiVersion: v2
+name: open-chat-interface
+description: >-
+  Open Chat Interface (OCI): a self-hostable multi-model chat application. API,
+  background workers and the web proxy, with zero-downtime upgrades (migration
+  hooks, rolling updates and draining).
+type: application
+# The chart is released with the application: `version` is the release without
+# the "v" and `appVersion` is the image tag. `pnpm release:check` fails when
+# either differs from the package versions.
+version: 0.10.2
+appVersion: "v0.10.2"
+kubeVersion: ">=1.27.0-0"
+home: https://github.com/ncecere/open-chat-interface
+sources:
+  - https://github.com/ncecere/open-chat-interface
+icon: https://raw.githubusercontent.com/ncecere/open-chat-interface/main/apps/web/public/apple-touch-icon.png
+keywords:
+  - chat
+  - llm
+  - ai
+annotations:
+  artifacthub.io/license: MIT

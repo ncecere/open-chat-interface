@@ -1,0 +1,73 @@
+{{- include "oci.validate" . }}
+{{- $v := .Values.api }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oci.api.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "api") | nindent 4 }}
+spec:
+  {{- if not $v.autoscaling.enabled }}
+  replicas: {{ $v.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    {{- toYaml $v.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oci.labels" (dict "root" . "component" "api") | nindent 8 }}
+        {{- with $v.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $v.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "oci.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with (include "oci.pullSecrets" . | trim) }}{{ . | nindent 6 }}{{- end }}
+      # SIGTERM -> readiness 503 -> replies finish within SHUTDOWN_DRAIN_TIMEOUT_MS
+      # -> exit 0. The grace period counts from the start of preStop.
+      terminationGracePeriodSeconds: {{ $v.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext.api | nindent 8 }}
+      {{- with (include "oci.scheduling" (dict "root" . "values" $v "component" "api") | trim) }}{{ . | nindent 6 }}{{- end }}
+      containers:
+        - name: api
+          image: {{ include "oci.image" (dict "root" . "image" .Values.image.api) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- include "oci.env" (dict "root" . "role" (include "oci.apiRole" .) "component" "api") | nindent 12 }}
+          envFrom:
+            {{- include "oci.envFrom" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          startupProbe:
+            {{- toYaml $v.startupProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $v.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml $v.livenessProbe | nindent 12 }}
+          {{- with (include "oci.preStop" (dict "seconds" $v.preStopSleepSeconds "native" $v.preStopSleepAction) | trim) }}{{ . | nindent 10 }}{{- end }}
+          resources:
+            {{- toYaml $v.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext.api | nindent 12 }}
+          volumeMounts:
+            {{- include "oci.apiVolumeMounts" . | nindent 12 }}
+            {{- with $v.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "oci.apiVolumes" . | nindent 8 }}
+        {{- with $v.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

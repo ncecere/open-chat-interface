@@ -1,0 +1,106 @@
+# Single-pod PostgreSQL and Redis for the chart's kind test
+# (.github/workflows/helm.yml) and local evaluation only: no persistence, no
+# backups, fixed test credentials. Pod Security "restricted" compliant. Production uses a PostgreSQL operator or a
+# managed service and Redis with high availability (docs/OPERATIONS.md,
+# "Kubernetes with Helm"). Apply before `helm install`, which migrates from a
+# pre-install hook:
+#   kubectl apply -n oci -f deploy/helm/dev/dependencies.yaml
+#   kubectl wait -n oci --for=condition=available deployment/oci-dev-postgres deployment/oci-dev-redis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oci-dev-postgres
+  labels: { app.kubernetes.io/name: oci-dev-postgres }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: oci-dev-postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: oci-dev-postgres }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          env:
+            - { name: POSTGRES_USER, value: oci }
+            - { name: POSTGRES_PASSWORD, value: kind-only-password }
+            - { name: POSTGRES_DB, value: oci }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - { name: postgres, containerPort: 5432 }
+          readinessProbe:
+            exec: { command: [pg_isready, -U, oci, -d, oci] }
+            periodSeconds: 2
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oci-dev-postgres
+spec:
+  selector: { app.kubernetes.io/name: oci-dev-postgres }
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oci-dev-redis
+  labels: { app.kubernetes.io/name: oci-dev-redis }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: oci-dev-redis }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: oci-dev-redis }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: [--save, "", --appendonly, "no"]
+          ports:
+            - { name: redis, containerPort: 6379 }
+          readinessProbe:
+            exec: { command: [redis-cli, ping] }
+            periodSeconds: 2
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oci-dev-redis
+spec:
+  selector: { app.kubernetes.io/name: oci-dev-redis }
+  ports:
+    - { name: redis, port: 6379, targetPort: redis }

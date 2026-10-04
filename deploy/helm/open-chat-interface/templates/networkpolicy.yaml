@@ -1,0 +1,112 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+# The API trusts the X-Forwarded-For the web pods send. Only they (and metrics
+# scrapers) may connect to it, so nothing else in the cluster can claim a
+# client address.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "oci.api.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "api") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "oci.selectorLabels" (dict "root" . "component" "web") | nindent 14 }}
+        {{- with $np.metricsFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 3000
+{{- if .Values.worker.enabled }}
+---
+# Workers serve only health and /metrics.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "oci.worker.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "worker") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" . "component" "worker") | nindent 6 }}
+  policyTypes: [Ingress]
+  {{- if $np.metricsFrom }}
+  ingress:
+    - from:
+        {{- toYaml $np.metricsFrom | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 3000
+  {{- else }}
+  ingress: []
+  {{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "oci.web.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+  policyTypes: [Ingress{{ if $np.egress.enabled }}, Egress{{ end }}]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+      {{- with $np.webFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if $np.egress.enabled }}
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "oci.selectorLabels" (dict "root" . "component" "api") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 3000
+  {{- end }}
+{{- if $np.egress.enabled }}
+{{- range $component := list "api" "worker" "migrate" }}
+---
+# Egress for the API image: DNS plus networkPolicy.egress.extraEgress (the
+# database, Redis, S3, model providers; the post-deploy hook also needs the
+# Kubernetes API when migrations.post.waitForRollout is on).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "oci.componentName" (dict "root" $ "component" (printf "%s-egress" $component)) }}
+  labels:
+    {{- include "oci.labels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    {{- with $np.egress.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

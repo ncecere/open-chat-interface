@@ -1,0 +1,27 @@
+{{- $p := .Values.storage.persistence }}
+{{- if and $p.enabled (not $p.existingClaim) }}
+# Local attachment storage shared by the API and worker pods. With more than
+# one pod on more than one node it must be ReadWriteMany; S3-compatible storage
+# (Admin -> Data & storage -> Storage) needs no volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "oci.componentName" (dict "root" . "component" "storage") }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "storage") | nindent 4 }}
+  annotations:
+    # Attachments outlive the release.
+    helm.sh/resource-policy: keep
+    {{- with $p.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $p.accessModes | nindent 4 }}
+  {{- with $p.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $p.size }}
+{{- end }}

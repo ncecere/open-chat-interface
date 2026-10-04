@@ -10,7 +10,10 @@ The workflow does not create GitHub Releases.
 ## Prepare
 
 1. Create a release-preparation branch from current `main`.
-2. Set the same version in the root and all workspace `package.json` files.
+2. Set the same version in the root and all workspace `package.json` files,
+   and in the Helm chart (`deploy/helm/open-chat-interface/Chart.yaml`:
+   `version: X.Y.Z`, `appVersion: "vX.Y.Z"`; `pnpm release:check` fails when
+   they differ).
 3. Move completed entries from `Unreleased` into a dated `CHANGELOG.md` section
    named `## [X.Y.Z] - YYYY-MM-DD`.
 4. Run:
@@ -98,10 +101,17 @@ unit/integration tests, coverage floors, live PostgreSQL/Redis/Mailpit/S3
 checks. In CI the S3 and backup suites fail rather than skip when their
 services are missing ([Testing](dev/testing.md#s3-in-ci)).
 
-Images are published for `linux/amd64` only to:
+Images are published for `linux/amd64` and `linux/arm64` (from v0.11; earlier
+releases are `linux/amd64` only) to:
 
 - `ghcr.io/ncecere/open-chat-interface/api`
 - `ghcr.io/ncecere/open-chat-interface/web`
+
+Each architecture is built natively, on `ubuntu-24.04` and `ubuntu-24.04-arm`
+runners, and pushed untagged by digest with its provenance and SBOM; the
+`publish` job then joins the two into one image index, also pushed by digest
+only. Tags point at that index, so `docker pull` and Kubernetes nodes pick
+their own architecture.
 
 Each image receives the version tag (for example, `v0.4.1`) and an eight-character
 commit SHA tag. The workflow uses `GITHUB_TOKEN` with `packages:write`; no saved
@@ -112,8 +122,10 @@ publication of a new package.
 `latest` is promoted only after both images succeed and the release tag is the
 newest stable tag on `main`. Publishing an older tag does not roll `latest`
 back. Each run first pushes a candidate by digest only, with provenance and an
-SBOM. Version/SHA aliases are assigned only after verifying platform and OCI
-labels. Existing matching aliases retain their original digest even if a rebuilt
+SBOM. Version/SHA aliases are assigned only after verifying that the index
+holds exactly one `linux/amd64` and one `linux/arm64` image (besides
+attestations) and that each image's configuration is for its platform and
+carries this release's OCI labels. Existing matching aliases retain their original digest even if a rebuilt
 candidate differs; conflicts fail rather than overwriting a release. Untagged
 candidate versions can remain after retries; any package cleanup must preserve
 release, SHA and `latest` tags.
@@ -141,18 +153,39 @@ or recreate the tag to add one. After these workflows are merged into `main`:
 The same manual dispatch can retry an existing stable release tag. Run it from
 `main`; the `tag` input selects the source to validate and publish.
 
+From v0.11 the workflow publishes every release for both `linux/amd64` and
+`linux/arm64`, also when it publishes an older tag for the first time (such as
+v0.9.1, which has no images). Releases already published for `linux/amd64` only
+(v0.5.0 to v0.10.2) are immutable and cannot be retried: their existing
+version and SHA tags no longer match a two-platform release, so the workflow
+refuses rather than overwriting them.
+
 ## Verify
 
 - Confirm **Publish containers** and its validation jobs are green; inspect
   skipped live tests.
 - Confirm both GHCR packages are public and contain `vX.Y.Z` and the
   eight-character SHA tag with the expected source revision label.
+- Confirm each tag is multi-platform, for both images:
+
+  ```bash
+  docker buildx imagetools inspect ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z
+  # Platforms: linux/amd64, linux/arm64 (plus unknown/unknown attestations)
+  docker run --rm --platform linux/arm64 ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
+    node -p 'process.arch + " " + process.env.OCI_VERSION'   # arm64 vX.Y.Z
+  docker run --rm --platform linux/amd64 ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
+    node -p 'process.arch + " " + process.env.OCI_VERSION'   # x64 vX.Y.Z
+  ```
 - For the newest stable tag on `main`, confirm `latest` points to that release
   for both images. An older release must leave `latest` unchanged.
 - If a GitHub Release page is needed, create it separately with the matching
   changelog notes and image links; the workflow does not create one.
 - Deploy the versioned images to a staging instance and verify
   `/api/health/ready`, sign-in, one model response, and attachment persistence.
+  If you have arm64 nodes, run one replica there too. The **Helm chart**
+  workflow installs and upgrades the chart with images built from source on
+  both architectures; with the published images, `helm upgrade` a staging
+  release to the new chart and check both hook jobs completed.
 - Record any operational caveat in the release notes before announcing it.
 
 ## Failed releases

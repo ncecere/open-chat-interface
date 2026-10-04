@@ -1,0 +1,39 @@
+{{- if .Values.tests.enabled }}
+# `helm test <release>`: the API answers ready through the web proxy, as a
+# browser reaches it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "oci.componentName" (dict "root" . "component" "test-health") }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "test") | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  {{- with (include "oci.pullSecrets" . | trim) }}{{ . | nindent 2 }}{{- end }}
+  securityContext:
+    {{- toYaml .Values.podSecurityContext.web | nindent 4 }}
+  containers:
+    - name: health
+      image: {{ include "oci.image" (dict "root" . "image" .Values.image.web) | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command:
+        - wget
+        - -q
+        - -O-
+        - {{ printf "http://%s:%v/api/health/ready" (include "oci.web.name" .) .Values.web.service.port | quote }}
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: { drop: [ALL] }
+{{- end }}

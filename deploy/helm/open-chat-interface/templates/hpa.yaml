@@ -1,0 +1,43 @@
+{{- range $component := list "api" "web" }}
+{{- $a := (index $.Values $component).autoscaling }}
+{{- if $a.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "oci.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "oci.labels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "oci.componentName" (dict "root" $ "component" $component) }}
+  minReplicas: {{ $a.minReplicas }}
+  maxReplicas: {{ $a.maxReplicas }}
+  metrics:
+    {{- with $a.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ . }}
+    {{- end }}
+    {{- with $a.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ . }}
+    {{- end }}
+    {{- with $a.metrics }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $a.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

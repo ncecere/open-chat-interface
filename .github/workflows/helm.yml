@@ -1,0 +1,175 @@
+name: Helm chart
+
+# The chart (deploy/helm/open-chat-interface): lint, render against its
+# schema, validate the manifests, then install and upgrade it on kind with
+# images built from this commit (docs/OPERATIONS.md, "Kubernetes with Helm").
+on:
+  pull_request:
+    paths:
+      - deploy/helm/**
+      - docker/**
+      - .github/workflows/helm.yml
+  push:
+    branches: [main]
+    paths:
+      - deploy/helm/**
+      - docker/**
+      - .github/workflows/helm.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHART: deploy/helm/open-chat-interface
+  KUBECONFORM_VERSION: v0.8.0
+  KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+  KIND_VERSION: v0.33.0
+
+jobs:
+  lint:
+    name: Lint and validate (Helm ${{ matrix.helm }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        helm: [v3.22.0, v4.3.0]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ matrix.helm }}
+      - name: Install kubeconform (checksum verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+            "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz"
+          echo "$KUBECONFORM_SHA256  $RUNNER_TEMP/kubeconform.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: helm lint
+        run: |
+          helm lint --strict "$CHART" -f deploy/helm/dev/values-kind.yaml
+          helm lint --strict "$CHART" -f deploy/helm/dev/values-render-all.yaml
+      - name: helm template with the values schema, then kubeconform
+        run: |
+          set -euo pipefail
+          crds='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          for values in values-kind.yaml values-render-all.yaml; do
+            helm template oci "$CHART" -n oci -f "deploy/helm/dev/$values" > "$RUNNER_TEMP/rendered.yaml"
+            for version in 1.29.0 1.33.0; do
+              kubeconform -strict -summary -kubernetes-version "$version" \
+                -schema-location default -schema-location "$crds" "$RUNNER_TEMP/rendered.yaml"
+            done
+          done
+          # Single replica, no worker, no hooks, no network policy.
+          helm template oci "$CHART" -f deploy/helm/dev/values-kind.yaml \
+            --set worker.enabled=false --set migrations.enabled=false \
+            --set api.replicaCount=1 --set networkPolicy.enabled=false \
+            | kubeconform -strict -summary -schema-location default
+      - name: Unsafe values are refused
+        run: |
+          set -uo pipefail
+          refuse() {
+            local expected=$1; shift
+            if output=$(helm template oci "$CHART" "$@" 2>&1); then
+              echo "Rendered, but should have failed: $*"; exit 1
+            fi
+            grep -q -- "$expected" <<< "$output" || { echo "Unexpected error for $*: $output"; exit 1; }
+            echo "Refused as expected: $*"
+          }
+          secret=(--set secrets.existingSecret=oci-runtime)
+          refuse 'config.appUrl is required' "${secret[@]}"
+          refuse 'secrets.existingSecret' --set config.appUrl=https://chat.example.com
+          refuse 'maxUnavailable' "${secret[@]}" --set config.appUrl=https://chat.example.com \
+            --set api.strategy.rollingUpdate.maxUnavailable=1
+          refuse 'terminationGracePeriodSeconds' "${secret[@]}" --set config.appUrl=https://chat.example.com \
+            --set api.terminationGracePeriodSeconds=30
+          refuse 'one replica only' "${secret[@]}" --set config.appUrl=https://chat.example.com \
+            --set migrations.enabled=false
+          refuse 'trustedProxies' "${secret[@]}" --set config.appUrl=https://chat.example.com \
+            --set-string 'web.trustedProxies=10.0.0.0/8\,192.168.0.0/16'
+
+  kind:
+    # Both release architectures, each on a native runner: the images are
+    # built and run on linux/amd64 and linux/arm64.
+    name: Install and upgrade on kind (${{ matrix.arch }})
+    needs: lint
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            cache: ''
+            kind_sha256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            cache: -arm64
+            kind_sha256: 20022bee6cfcd5086cb7234d218e3454e6090022f2a8f55d1fa7fcf42c3867a2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Built from this commit, reusing the CI and publication image caches.
+      - name: Build the API image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: oci-helm-test/api:local,oci-helm-test/api:local2
+          cache-from: type=gha,scope=api${{ matrix.cache }}
+      - name: Build the web image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: oci-helm-test/web:local,oci-helm-test/web:local2
+          cache-from: type=gha,scope=web${{ matrix.cache }}
+      - name: Create the kind cluster (kind binary checksum verified)
+        env:
+          ARCH: ${{ matrix.arch }}
+          KIND_SHA256: ${{ matrix.kind_sha256 }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/kind" \
+            "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-$ARCH"
+          echo "$KIND_SHA256  $RUNNER_TEMP/kind" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/kind"
+          if ! command -v kubectl > /dev/null; then
+            version=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+            curl -fsSL -o "$RUNNER_TEMP/kubectl" "https://dl.k8s.io/release/$version/bin/linux/$ARCH/kubectl"
+            echo "$(curl -fsSL "https://dl.k8s.io/release/$version/bin/linux/$ARCH/kubectl.sha256")  $RUNNER_TEMP/kubectl" | sha256sum -c -
+            chmod +x "$RUNNER_TEMP/kubectl"
+          fi
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          export PATH="$RUNNER_TEMP:$PATH"
+          "$RUNNER_TEMP/kind" create cluster --name oci-helm --wait 120s
+          kubectl version
+      - name: Load the images
+        run: |
+          kind load docker-image --name oci-helm \
+            oci-helm-test/api:local oci-helm-test/api:local2 \
+            oci-helm-test/web:local oci-helm-test/web:local2
+      # Install (pre-install migrate, rollout, post-install migrate --post),
+      # readiness through the web Service, helm test, the API network policy,
+      # then helm upgrade to a new tag under load with no failed request.
+      - name: Install and upgrade the chart
+        run: deploy/helm/dev/kind-test.sh

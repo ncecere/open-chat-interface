@@ -53,6 +53,23 @@ if (fallback !== version) {
   );
 }
 
+// The Helm chart is released with the application: its version is the
+// release and its appVersion the image tag, which is the default it deploys.
+const chartFile = 'deploy/helm/open-chat-interface/Chart.yaml';
+const chart = await readFile(chartFile, 'utf8');
+const chartField = (field) =>
+  chart
+    .split('\n')
+    .find((line) => line.startsWith(`${field}:`))
+    ?.slice(field.length + 1)
+    .trim()
+    .replace(/^"(.*)"$/, '$1');
+if (chartField('version') !== version || chartField('appVersion') !== tag) {
+  throw new Error(
+    `${chartFile} must have version: ${version} and appVersion: "${tag}"; found ${chartField('version') ?? 'none'} and ${chartField('appVersion') ?? 'none'}`,
+  );
+}
+
 const changelog = await readFile('CHANGELOG.md', 'utf8');
 
 // Located by literal prefix rather than a regex built from the version. The
@@ -87,7 +104,7 @@ releaseNotes += '\n';
 if (output) await writeFile(output, releaseNotes);
 
 console.log(
-  `Release ${tag} is consistent across ${manifests.length} package manifests and CHANGELOG.md${
+  `Release ${tag} is consistent across ${manifests.length} package manifests, the Helm chart and CHANGELOG.md${
     output ? `; wrote ${output}` : ''
   }.`,
 );

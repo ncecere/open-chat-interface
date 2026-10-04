@@ -18,9 +18,11 @@ export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
 ```
 
-Published images are `linux/amd64` only, matching the previous release
-architecture. Confirm **Publish containers** succeeded for your version before
-pulling. Historical `v0.4.1` publication uses the manual dispatch described
+From v0.11, published images are multi-platform: each tag is one index with a
+`linux/amd64` and a `linux/arm64` image, built natively and verified alike, so
+`docker pull` and Kubernetes pick the node's architecture. Releases before
+v0.11 are `linux/amd64` only. Confirm **Publish containers** succeeded for your
+version before pulling. Historical `v0.4.1` publication uses the manual dispatch described
 in [Release process](RELEASING.md). CI publishing uses `GITHUB_TOKEN`; the token
 above is a deployment credential, not a saved CI PAT.
 
@@ -54,6 +56,111 @@ and use `--no-build` on startup and rollout commands.
 
 Versions before 0.5 were not published to GHCR; choose a version whose images
 are there.
+
+## Kubernetes with Helm
+
+From v0.11 the repository has a Helm chart,
+[`deploy/helm/open-chat-interface`](../deploy/helm/open-chat-interface/README.md),
+released with the application (chart `0.11.0` deploys images `v0.11.0`). It
+runs the API (`OCI_ROLE=web`), a worker Deployment (`OCI_ROLE=worker`), the web
+proxy, and the migration jobs as Helm hooks. PostgreSQL, Redis and S3 are
+external: an operator (CloudNativePG, Crunchy, Patroni; a Redis operator with
+Sentinel) or managed services. The chart README lists every value.
+
+### Installing with Helm
+
+1. Create the runtime Secret from your secret manager (External Secrets, Sealed
+   Secrets, Vault) with at least `DATABASE_URL`, `AUTH_SECRET`,
+   `ENCRYPTION_KEY` and `REDIS_URL`; every key becomes an environment variable,
+   so `METRICS_TOKEN`, `INITIAL_ADMIN_EMAIL`, SMTP and the v0.11
+   `CONTROL_DATABASE_URL`, `READ_DATABASE_URL` and Redis Sentinel or Cluster
+   settings go there too. Never put secrets in values.
+2. Install:
+
+   ```bash
+   helm install oci deploy/helm/open-chat-interface -n oci \
+     --set secrets.existingSecret=oci-runtime \
+     --set config.appUrl=https://chat.example.com \
+     --set web.trustedProxies='10.244.0.0/16' \
+     --set ingress.enabled=true --set ingress.className=nginx \
+     --set 'ingress.hosts[0].host=chat.example.com'
+   ```
+
+3. Configure S3-compatible attachment storage under **Admin → Data & storage
+   → Storage** before people upload files: several API and worker pods share
+   attachments, and without S3 or `storage.persistence` (a `ReadWriteMany`
+   claim) local files are in an emptyDir and lost with the pod.
+
+For production values: at least two API and two web replicas (the defaults),
+one or two workers, `web.trustedProxies` set to your ingress controller's pod
+range (see [Behind another proxy or an ingress](#behind-another-proxy-or-an-ingress)),
+streaming-friendly ingress settings (response buffering off, read timeout of
+an hour), `metrics.serviceMonitor.enabled` with `METRICS_TOKEN`, and an
+image digest pin. `DATABASE_URL` must be direct or a session-mode pooler, as
+above.
+
+### Upgrading with Helm
+
+```bash
+# Preflight, changing nothing (Upgrade, step 4)
+kubectl -n oci run oci-upgrade-check --rm -i --restart=Never \
+  --image=ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
+  --overrides='{"spec":{"containers":[{"name":"oci-upgrade-check","image":"ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z","command":["node","dist/scripts/upgrade-check.js"],"envFrom":[{"secretRef":{"name":"oci-runtime"}}]}]}}'
+helm upgrade oci deploy/helm/open-chat-interface -n oci --reuse-values --timeout 30m
+```
+
+`helm upgrade` is the three-phase upgrade below:
+
+1. **Pre-upgrade hook** `node dist/migrate.js`: the pre-deploy migrations,
+   with the previous release still serving. If it fails, nothing is replaced.
+2. **Rolling update** of the API, worker and web Deployments, one pod at a
+   time (`maxUnavailable: 0`), every API pod draining as it stops. Pods run
+   with `RUN_MIGRATIONS=false` and `RUN_POST_MIGRATIONS=false`.
+3. **Post-upgrade hook** `node dist/migrate.js --post`. Its init container
+   first waits until the API and worker rollouts have finished and no pod of
+   the previous release is still terminating (it reads the Deployments and
+   lists Pods with a token and Role that exist only for the hook), so
+   post-deploy steps never run beside the previous release, even without
+   `--wait`.
+
+Helm waits for hooks at most `--timeout` (default 5 minutes); give it the
+preflight's estimate for index builds. The hook Jobs are kept until the next
+upgrade (`kubectl -n oci logs job/<release>-open-chat-interface-migrate-post
+--all-containers`). A failed post-upgrade hook leaves the new release running
+without its new indexes; fix the cause and run `helm upgrade` again, which
+resumes. Background migrations then run on the worker.
+
+### Draining and probes in the chart
+
+The chart applies [Shutting down and draining → Kubernetes](#kubernetes):
+a 5-second `preStop` sleep, readiness on `/api/health/ready` every 2 s with one
+failure, liveness on `/api/health/live`, a startup probe, and
+`terminationGracePeriodSeconds: 40` against `SHUTDOWN_DRAIN_TIMEOUT_MS` of
+25 s (the chart refuses a grace period that does not exceed drain plus
+`preStop`). PodDisruptionBudgets let a node drain stop one pod of each kind at
+a time. The web pods find API pods through a headless Service, which lists
+only ready pods, and Caddy balances across them itself, so its passive checks
+take a single draining pod out of rotation. Workers get the same grace period
+and no `preStop` (nothing routes to them).
+
+### Chart security
+
+All pods run as non-root with read-only root filesystems, the `RuntimeDefault`
+seccomp profile and no privilege escalation, and pass the Pod Security
+`restricted` profile; only `/tmp`, the attachment directory and Caddy's
+`/data` and `/config` are writable (emptyDir or the storage volume). No pod
+mounts a service account token. A NetworkPolicy (on by default) lets only the
+web pods and metrics scrapers reach the API, which is what keeps the client
+address trustworthy; egress rules are optional (`networkPolicy.egress`).
+
+### Testing the chart
+
+`.github/workflows/helm.yml` lints and renders the chart with Helm 3 and 4,
+validates the manifests with kubeconform, and on linux/amd64 and linux/arm64
+runs `deploy/helm/dev/kind-test.sh` on kind: install with single-pod test
+PostgreSQL and Redis in a namespace enforcing `restricted`, readiness through
+the web Service, `helm test`, the network policy, then `helm upgrade` to a new
+tag under load with no failed request.
 
 ## Behind another proxy or an ingress
 
@@ -97,7 +204,9 @@ Outside Compose, set it as an environment variable of the web image. Commas are
 not separators; use spaces. The API itself has no such setting: it trusts the
 web container's header and, if more than one address arrives, only the last.
 Do not route `/api` to the API service around the web container, or the API has
-no trustworthy address to record.
+no trustworthy address to record. The Helm chart routes everything to the web
+Service and, with its default NetworkPolicy, lets only the web pods connect to
+the API.
 
 ## Database connections for maintenance
 
@@ -239,7 +348,8 @@ Run the same image as three kinds of pod: a pre-upgrade Job (`node
 dist/migrate.js`), the API Deployment with `RUN_MIGRATIONS=false` (rolling
 update), and, after the rollout finishes (`kubectl rollout status
 deployment/oci-api`), a post-upgrade Job (`node dist/migrate.js --post`).
-With Helm, these are `pre-upgrade` and `post-upgrade` hooks. Give the
+With Helm, these are `pre-upgrade` and `post-upgrade` hooks, as the bundled
+chart does ([Kubernetes with Helm](#kubernetes-with-helm)). Give the
 post-upgrade Job no `activeDeadlineSeconds` shorter than its index builds
 (the preflight estimates them), and `backoffLimit` above zero: a rerun
 resumes. The preflight runs as a one-off pod: `kubectl run oci-upgrade-check

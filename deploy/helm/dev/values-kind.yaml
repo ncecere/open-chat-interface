@@ -1,0 +1,43 @@
+# Values for the kind test (.github/workflows/helm.yml) and local evaluation
+# with deploy/helm/dev/dependencies.yaml. Images are built from source and
+# loaded into kind (`kind load docker-image`); credentials are test-only.
+image:
+  api:
+    repository: oci-helm-test/api
+    tag: local
+  web:
+    repository: oci-helm-test/web
+    tag: local
+  pullPolicy: Never
+
+secrets:
+  values:
+    DATABASE_URL: postgres://oci:kind-only-password@oci-dev-postgres:5432/oci
+    REDIS_URL: redis://oci-dev-redis:6379
+    AUTH_SECRET: kind-only-auth-secret-at-least-32-characters
+    ENCRYPTION_KEY: kind-only-encryption-key-at-least-32-characters
+    METRICS_TOKEN: kind-only-metrics-token
+    INITIAL_ADMIN_EMAIL: admin@example.test
+    INITIAL_ADMIN_PASSWORD: kind-only-admin-password
+
+config:
+  appUrl: http://localhost:8080
+
+api:
+  replicaCount: 2
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { memory: 1Gi }
+worker:
+  replicaCount: 1
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { memory: 1Gi }
+web:
+  replicaCount: 2
+  # kind's pod network.
+  trustedProxies: 10.244.0.0/16
+migrations:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 1Gi }

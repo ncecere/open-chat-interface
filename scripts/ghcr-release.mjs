@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { assertStableTag } from './release-target.mjs';
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
+/** Every release image is one index with exactly these runnable platforms. */
+export const releasePlatforms = ['linux/amd64', 'linux/arm64'];
 const manifestTypes = [
   'application/vnd.oci.image.index.v1+json',
   'application/vnd.oci.image.manifest.v1+json',
@@ -49,41 +51,56 @@ export function registryClient(image, username, password, fetcher = fetch) {
       throw new Error('GHCR returned an unexpected manifest digest');
     return { digest, body: await response.json() };
   }
-  async function config(root) {
-    let runnable = root;
-    if (root.body.manifests) {
-      const images = root.body.manifests.filter((entry) => entry.platform?.os !== 'unknown');
-      if (
-        images.length !== 1 ||
-        images[0].platform?.os !== 'linux' ||
-        images[0].platform?.architecture !== 'amd64'
-      ) {
-        throw new Error('Expected exactly one linux/amd64 image plus optional attestations');
-      }
-      runnable = await manifest(images[0].digest);
+  /** The config of every runnable image in a release index, with its platform. */
+  async function configs(root) {
+    const expected = `exactly one image each for ${releasePlatforms.join(' and ')} plus optional attestations`;
+    if (!root.body.manifests) throw new Error(`Expected a multi-platform index with ${expected}`);
+    // Attestation manifests (provenance, SBOM) are listed as unknown/unknown.
+    const images = root.body.manifests.filter((entry) => entry.platform?.os !== 'unknown');
+    const platforms = images.map(
+      (entry) => `${entry.platform?.os}/${entry.platform?.architecture}`,
+    );
+    if (
+      platforms.length !== releasePlatforms.length ||
+      [...platforms].sort().join() !== [...releasePlatforms].sort().join()
+    ) {
+      throw new Error(`Expected ${expected}; found ${platforms.join(', ') || 'none'}`);
     }
-    const digest = runnable.body.config?.digest;
-    if (!digestPattern.test(digest ?? '')) throw new Error('Image config digest is missing');
-    const response = await fetcher(`https://ghcr.io/v2/${name}/blobs/${digest}`, {
-      headers: await headers(),
-    });
-    if (!response.ok) throw new Error(`Cannot read image config (${response.status})`);
-    return response.json();
+    return Promise.all(
+      images.map(async (entry, index) => {
+        const runnable = await manifest(entry.digest);
+        const digest = runnable.body.config?.digest;
+        if (!digestPattern.test(digest ?? '')) throw new Error('Image config digest is missing');
+        const response = await fetcher(`https://ghcr.io/v2/${name}/blobs/${digest}`, {
+          headers: await headers(),
+        });
+        if (!response.ok) throw new Error(`Cannot read image config (${response.status})`);
+        return { platform: platforms[index], config: await response.json() };
+      }),
+    );
   }
-  return { manifest, config };
+  return { manifest, configs };
 }
 
+/** Each platform's image must be built for that platform from this release. */
 export async function verifyImage(client, root, { tag, sha, source }) {
-  const config = await client.config(root);
-  const labels = config.config?.Labels ?? {};
-  if (
-    config.os !== 'linux' ||
-    config.architecture !== 'amd64' ||
-    labels['org.opencontainers.image.revision'] !== sha ||
-    labels['org.opencontainers.image.version'] !== tag ||
-    labels['org.opencontainers.image.source'] !== source
-  ) {
-    throw new Error('Existing/candidate image platform or OCI labels do not match this release');
+  const images = await client.configs(root);
+  const platforms = images.map(({ platform }) => platform).sort();
+  if (platforms.join() !== [...releasePlatforms].sort().join()) {
+    throw new Error('Existing/candidate image platforms do not match this release');
+  }
+  for (const { platform, config } of images) {
+    const labels = config.config?.Labels ?? {};
+    if (
+      `${config.os}/${config.architecture}` !== platform ||
+      labels['org.opencontainers.image.revision'] !== sha ||
+      labels['org.opencontainers.image.version'] !== tag ||
+      labels['org.opencontainers.image.source'] !== source
+    ) {
+      throw new Error(
+        `Existing/candidate ${platform} image platform or OCI labels do not match this release`,
+      );
+    }
   }
 }
 
