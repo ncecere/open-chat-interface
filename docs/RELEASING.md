@@ -24,9 +24,34 @@ The workflow does not create GitHub Releases.
    pnpm licenses:check
    ```
 
-5. Merge the release-preparation pull request only after GitHub Actions CI
+5. Check the release's database work (v0.11 three-phase migrations,
+   [Database](dev/database.md#three-kinds-of-migration)):
+
+   - **A new minor release** adds an entry to `packages/db/releases.json`
+     naming its first pre-deploy migration (`firstMigration`), so the
+     migrator and the preflight know which release each migration belongs
+     to. A patch release adds no entry.
+   - **Required earlier work.** If the release relies on an earlier
+     release's background migration or post-deploy step being finished (a
+     `NOT NULL` on a backfilled column, dropping a fallback, a query that
+     needs an index), list it under `requires` in that entry. The migrator
+     then refuses the release's pre-deploy migrations until it is finished,
+     naming it. Name only work at least one release older: the previous
+     release must have shipped and scheduled it, or nobody can finish it
+     without skipping your release.
+   - **Changelog.** State the required work and what an operator does
+     ("finish background migration X on v0.N before upgrading"), every
+     post-deploy step and the index it builds, and any background migration
+     the release schedules. `node dist/scripts/upgrade-check.js` against a
+     copy of a previous-release database shows what an operator will see.
+   - **Keep** every background-migration definition and post-deploy step of
+     earlier releases: an instance that never ran `migrate --post` must still
+     be able to finish them.
+   - `pnpm lint:migrations` and the rolling-upgrade test (which runs
+     `migrate --post` and waits for background migrations) pass.
+6. Merge the release-preparation pull request only after GitHub Actions CI
    passes. Review audit findings and any skipped live tests.
-6. Configure branch protection or a ruleset requiring review and CI on `main`,
+7. Configure branch protection or a ruleset requiring review and CI on `main`,
    and restrict creation, updates, and deletion of `v*` tags to release
    maintainers where your GitHub plan supports it. These are recommendations,
    not confirmation that protection is configured; verify the settings before

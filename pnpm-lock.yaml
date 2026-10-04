@@ -319,6 +319,9 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.4)(postgres@3.4.9(patch_hash=bfcf548baceb328833bff7730630db37afeca5344b1209407ac4755516955a61))
+      libpg-query:
+        specifier: 18.1.5
+        version: 18.1.5
       postgres:
         specifier: 3.4.9
         version: 3.4.9(patch_hash=bfcf548baceb328833bff7730630db37afeca5344b1209407ac4755516955a61)

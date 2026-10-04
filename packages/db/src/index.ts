@@ -18,10 +18,20 @@ export {
   or,
   sql,
 } from 'drizzle-orm';
+export {
+  type BackgroundBatchInput,
+  type BackgroundBatchResult,
+  type BackgroundMigrationDefinition,
+  type BatchTransaction,
+  backgroundMigrations,
+  rewriteMessagesInPlace,
+  TEST_BACKGROUND_MIGRATIONS_ENV,
+} from './background/index.js';
 export * from './client.js';
 export {
   DEFAULT_MIGRATION_LOCK_TIMEOUT_MS,
   DEFAULT_MIGRATION_STATEMENT_TIMEOUT_MS,
+  DEFAULT_POST_MIGRATION_STATEMENT_TIMEOUT_MS,
   type LockBlocker,
   type LockWait,
   MIGRATION_LOCK_TIMEOUT_LIMITS,
@@ -31,6 +41,8 @@ export {
   type MigrationTimeouts,
   migrationRetryDelay,
   migrationTimeoutsFromEnv,
+  postgresErrorCode,
+  postMigrationTimeoutsFromEnv,
 } from './migration-safety.js';
 export {
   type MigrationOptions,
@@ -39,5 +51,47 @@ export {
   runMigrations,
   runMigrationsWithLock,
 } from './migrator.js';
+export {
+  type PostMigrationOptions,
+  type PostMigrationResult,
+  type PostStep,
+  type PostStepResult,
+  type PostStepState,
+  postStepStates,
+  preDeployApplied,
+  readPostSteps,
+  runPostMigrations,
+  scheduleBackgroundMigrations,
+} from './post-migrator.js';
+export {
+  DEFAULT_MIGRATIONS_FOLDER,
+  DEFAULT_POST_FOLDER,
+  DEFAULT_RELEASE_MANIFEST,
+  describeRequirement,
+  type JournalEntry,
+  type MigrationHistory,
+  migrationHistory,
+  pendingMigrations,
+  type ReleaseEntry,
+  type ReleaseRequirements,
+  readJournal,
+  readReleaseManifest,
+  releaseOf,
+  type UnfinishedRequirement,
+  UnfinishedRequirementsError,
+  unfinishedRequirements,
+} from './release-manifest.js';
 export * as schema from './schema/index.js';
 export { seedDatabase } from './seed.js';
+export {
+  type IndexBuild,
+  indexBuild,
+  loadSqlParser,
+  mustRunOutsideTransaction,
+  type ParsedStatement,
+  parseStatements,
+  type StatementCost,
+  statementCost,
+  tablesCreated,
+  tablesTouched,
+} from './sql-analysis.js';

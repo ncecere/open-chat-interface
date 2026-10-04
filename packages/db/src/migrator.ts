@@ -18,6 +18,11 @@ import {
   migrationTimeoutsFromEnv,
   startLockMonitor,
 } from './migration-safety.js';
+import {
+  type ReleaseEntry,
+  UnfinishedRequirementsError,
+  unfinishedRequirements,
+} from './release-manifest.js';
 import * as schema from './schema/index.js';
 
 const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), '../drizzle');
@@ -67,6 +72,12 @@ export interface MigrationOptions {
   onRetry?: (event: MigrationRetryEvent) => void;
   /** A structured logger (pino's shape) for retry warnings, instead of stderr. */
   logger?: MigrationLogger;
+  /**
+   * Test seam: the release manifest (default `releases.json`). Pending
+   * migrations of a release that requires unfinished post-deploy steps or
+   * background migrations are refused before anything is applied.
+   */
+  releaseManifest?: ReleaseEntry[];
 }
 
 /** The part of a pino-style logger the migrator uses. */
@@ -180,6 +191,14 @@ export async function runMigrationsWithLock(
               schema,
               casing: 'snake_case',
             });
+            // Finalisation (v0.11 design, section 1): a release may rely on an
+            // earlier release's backfill or index. Checked under the lock, so
+            // the answer cannot change before the migrations below run.
+            const unfinished = await unfinishedRequirements(transaction, {
+              migrationsFolder: options.migrationsFolder ?? migrationsFolder,
+              manifest: options.releaseManifest,
+            });
+            if (unfinished.length > 0) throw new UnfinishedRequirementsError(unfinished);
             await runMigrations(db, options.migrationsFolder);
             return { applied: true };
           } finally {

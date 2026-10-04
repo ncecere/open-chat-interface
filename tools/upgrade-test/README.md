@@ -2,7 +2,9 @@
 
 Upgrades a published release to this checkout under load, with two API
 replicas replaced one at a time (then restarted on the new release, which is
-where draining on shutdown is measured), and fails on server errors, lock
+where draining on shutdown is measured), runs the post-deploy phase
+(`migrate --post`) and waits for background migrations to finish under load,
+and fails on server errors, lock
 stalls, replies cut by a draining replica, cut replies left unrecovered or a
 broken previous-release smoke suite. What it proves, how to run it and the
 results so far: [docs/dev/rolling-upgrades.md](../../docs/dev/rolling-upgrades.md).

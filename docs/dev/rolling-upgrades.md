@@ -19,6 +19,10 @@ replicas ([Operations](../OPERATIONS.md#upgrade)):
    `RUN_MIGRATIONS=false`.
 2. Replace the API replicas one at a time.
 3. Replace the web proxies.
+4. Run the post-deploy phase once (`docker compose --profile tools run --rm
+   migrate-post`): concurrent index builds and other post-deploy steps, and
+   scheduling the release's background migrations, which the replicas then
+   run while OCI serves.
 
 Between steps 1 and 2 the previous release runs on the new schema. That is
 only safe because migrations follow the rules in [Database](database.md):
@@ -70,11 +74,20 @@ remove a column over two releases.
    - `replace-web-1`, `replace-web-2`: take the proxy out of the load's
      rotation (as a load balancer drains a node), stop it, start TO, put it
      back;
+   - `post-deploy`: TO's `migrate --post` (`--no-post-deploy` skips it and the
+     background phase). It builds the release's indexes `CONCURRENTLY` and
+     schedules the test-only background migration
+     `oci-test.rewrite-messages-in-place` (`--background ''` for none), which
+     rewrites every seeded message in place, 1,000 per batch, taking row
+     locks on the table the load writes most;
    - `restart-api-1`, `restart-api-2`: the same stop and start, TO replacing
      TO, now that every proxy and replica runs the new release (`--no-restart-api`
      skips them). This is the next upgrade's replacement step, and where
      draining on shutdown (design item 13) is measured: FROM may be a release
-     that cannot drain;
+     that cannot drain. The background migration is running meanwhile, so
+     each stop also hands it from one replica to the other;
+   - `background`: wait (up to `--background-timeout-seconds`, 300) for every
+     background migration to finish, under load;
    - `smoke-new`: the smoke suite against TO, where every endpoint must exist;
    - `cooldown` (10 s).
 6. **Report**: `report.json` and `report.md` in `--out` (default
@@ -113,6 +126,8 @@ client never calls it.
 | Draining replicas exit 0 within the grace period, and the reply streaming on each when it was stopped finishes | Every stop of a release that drains (TO always; FROM from v0.11.0). |
 | Requests while an API replica is stopping | Checked in full (`--allow-shutdown-gaps` reports them instead). For a replica on a release before v0.11.0, from SIGTERM until 15 s after it exits (`--gap-tail-ms`), failures and latency are **reported, not failed**: that release keeps taking work until it is killed. |
 | Load ran in every phase; a reply was in flight at each API stop | |
+| The post-deploy job succeeds and every step finishes | Step durations are reported. The lock monitor leaves out the post-deploy session's own waits (a concurrent build waits for older transactions); application queries waiting on it count. |
+| Background migrations finish under load | Within `--background-timeout-seconds`; rows, batches and duration are reported. |
 
 A cut reply is one whose stream ended without `finish`. The load then does
 what the web app does, `GET /api/chat/:id/stream`, and records whether the
@@ -228,6 +243,19 @@ The longest request during a TO restart, 1.1 s, is one request per proxy
 dialling the replica's address just after it exited (`dial_timeout 1s`), then
 retried on the other replica; passive health keeps the rest away.
 
+### With the post-deploy and background phases (design section 1)
+
+4 October 2026, FROM v0.10.2, TO = this source with section 1 (migration 0039,
+post-deploy steps 0001 and 0002, the test background migration), same machine
+and dataset: **Pass.** `migrate` 1.4 s (0039); `migrate --post` 1.5 s, the
+two concurrent index builds on the 300,000-message table 134 ms and 67 ms;
+the background migration rewrote 300,342 rows in 301 batches over 25.0 s,
+running through both TO restarts (each replica exited 0 in 3.3 s and 3.4 s,
+handing it over) and finishing 12.6 s into the `background` phase. 2,000
+requests outside the FROM stop windows, none failed, p99 142 ms, max 1.11 s,
+no lock waits observed; both smoke suites 52/52; 197 replies, 1 cut by
+v0.10.2 and recovered.
+
 ## Known gaps found
 
 These are product behaviour, reported by the test rather than fixed by it.
@@ -310,8 +338,9 @@ It does not prove:
   attachments, imports, exports beyond Markdown, connectors, SSO or sharing;
 - the web application itself: requests are made the way the web app makes
   them, but no browser runs;
-- post-deploy steps and background migrations (design section 1): not built
-  yet, so the test has no phase for them;
+- background migrations that change data: the test runs a test-only one that
+  rewrites rows with their own values, which exercises leases, batches,
+  throttling and handover between replicas, not a real backfill's queries;
 - database failover (design section 3), Redis failover, or several web
   proxies behind a real load balancer;
 - upgrades that skip a minor.

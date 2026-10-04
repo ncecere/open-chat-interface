@@ -92,6 +92,62 @@ const envSchema = z.object({
   OTEL_SERVICE_NAME: z.string().trim().min(1).default('oci-api'),
   /** Directory holding pg_dump and pg_restore; found on PATH when unset. */
   BACKUP_PG_BIN_DIR: z.string().trim().min(1).optional(),
+
+  // --- Three-phase migrations (v0.11 design, section 1; docs/OPERATIONS.md) ---
+  /**
+   * Per-step limit for post-deploy steps (`migrate --post`), which run
+   * outside a transaction and may build an index over the largest table
+   * without blocking it. Read by packages/db itself; declared here so a bad
+   * value fails at startup. 0 disables it. Default four hours.
+   */
+  POST_MIGRATION_STATEMENT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(86_400_000)
+    .default(14_400_000),
+  /**
+   * Whether this process applies post-deploy steps and schedules background
+   * migrations itself, from a background job. Unset follows RUN_MIGRATIONS: a
+   * replica that migrates itself at startup is a single instance, so once it
+   * runs, every replica runs this release. With several replicas leave it
+   * false and run `migrate --post` after replacing them all.
+   */
+  RUN_POST_MIGRATIONS: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === 'true')),
+  /** Whether this process runs background migration batches (default true). */
+  BACKGROUND_MIGRATIONS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  /**
+   * Throttles: batches wait while a standby's replay lag (pg_stat_replication,
+   * needs pg_monitor) or the oldest open transaction is over these limits.
+   * 0 turns a check off.
+   */
+  BACKGROUND_MIGRATION_MAX_REPLICATION_LAG_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(3_600_000)
+    .default(10_000),
+  BACKGROUND_MIGRATION_MAX_TRANSACTION_AGE_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(86_400_000)
+    .default(300_000),
+  /** statement_timeout for one batch's transaction. */
+  BACKGROUND_MIGRATION_BATCH_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(3_600_000)
+    .default(30_000),
+  /** Test only: test background migrations to enable, comma-separated (packages/db). */
+  OCI_TEST_BACKGROUND_MIGRATIONS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

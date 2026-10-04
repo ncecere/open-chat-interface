@@ -183,6 +183,21 @@ export default defineConfig({
         'src/services/reranking/usage.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/project-search/rerank.ts': { statements: 95, branches: 95, functions: 100 },
         'src/routes/admin/reranking.ts': { statements: 95, branches: 95, functions: 100 },
+        // v0.11 three-phase migrations: the batch/cursor transaction and its lease,
+        // throttles, administrator controls and the upgrade preflight.
+        'src/services/migrations/background-runner.ts': {
+          statements: 93,
+          branches: 90,
+          functions: 90,
+        },
+        'src/services/migrations/background-admin.ts': {
+          statements: 95,
+          branches: 80,
+          functions: 90,
+        },
+        'src/services/migrations/preflight.ts': { statements: 93, branches: 78, functions: 95 },
+        'src/services/migrations/readiness.ts': { statements: 93, branches: 75, functions: 100 },
+        'src/routes/admin/migrations.ts': { statements: 98, branches: 95, functions: 100 },
       },
     },
   },

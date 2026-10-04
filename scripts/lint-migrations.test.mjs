@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -8,12 +16,14 @@ import {
   allowCommentsAbove,
   applyBaseline,
   buildBaseline,
+  checkReleaseManifest,
   lintMigrations,
   loadParser,
   main,
   parseArgs,
   RULES,
   readMigrationsFolder,
+  readPostFolder,
   splitStatements,
 } from './lint-migrations.mjs';
 
@@ -30,13 +40,28 @@ function lint(...sqls) {
   );
 }
 
+/** Lints pre-deploy migrations, then post-deploy steps (`post/0000_p0.sql`, ...). */
+function lintPhases(pre, post) {
+  return lintMigrations([
+    ...pre.map((sql, index) => ({ name: `${String(index).padStart(4, '0')}_m${index}.sql`, sql })),
+    ...post.map((sql, index) => ({
+      name: `post/${String(index).padStart(4, '0')}_p${index}.sql`,
+      sql,
+      phase: 'post',
+    })),
+  ]);
+}
+
 function readFixture(rule) {
   const text = readFileSync(join(fixtures, 'rules', `${rule}.sql`), 'utf8');
-  const sections = {};
+  const sections = { phase: 'pre' };
   let current;
   for (const line of text.split('\n')) {
     const marker = line.match(/^-- fixture: ([a-z-]+)$/);
-    if (marker) {
+    const phase = line.match(/^-- fixture-phase: (pre|post)$/);
+    if (phase && !current) {
+      sections.phase = phase[1];
+    } else if (marker) {
       current = marker[1];
       sections[current] = [];
     } else if (current) {
@@ -44,7 +69,10 @@ function readFixture(rule) {
     }
   }
   return Object.fromEntries(
-    Object.entries(sections).map(([name, lines]) => [name, lines.join('\n').trim()]),
+    Object.entries(sections).map(([name, lines]) => [
+      name,
+      Array.isArray(lines) ? lines.join('\n').trim() : lines,
+    ]),
   );
 }
 
@@ -70,7 +98,12 @@ describe('rule fixtures', () => {
       const fixture = readFixture(rule);
       const run = (section) => {
         assert.ok(fixture[section], `${rule}.sql needs a "${section}" section`);
-        const result = lint(fixture.setup, fixture[section]);
+        // A post-deploy fixture lints its sections as post-deploy step 1 (as
+        // 0001_m1.sql, so the assertions below read the same for both).
+        const result = lintMigrations([
+          { name: '0000_m0.sql', sql: fixture.setup },
+          { name: '0001_m1.sql', sql: fixture[section], phase: fixture.phase },
+        ]);
         assert.deepEqual(
           result.violations.filter((v) => v.file === '0000_m0.sql'),
           [],
@@ -498,6 +531,222 @@ describe('baseline', () => {
       { file: 'a.sql', rule: 'lock-table', statement: 2, fingerprint: 'f1' },
       { file: 'b.sql', rule: 'cluster', statement: 1, fingerprint: 'f2' },
     ]);
+  });
+});
+
+describe('post-deploy rules', () => {
+  const setup = 'CREATE TABLE "t" ("id" text PRIMARY KEY, "a" text);';
+  const rules = (post) => lintPhases([setup], [post]).violations.map((v) => v.rule);
+  const errorRules = (pre, post) => lintPhases(pre, post).errors.map((e) => e.rule);
+
+  it('accepts CONCURRENTLY, which pre-deploy cannot run', () => {
+    const index = 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "t_a_idx" ON "t" ("a");';
+    assert.deepEqual(rules(index), []);
+    assert.deepEqual(
+      lint(setup, index).violations.map((v) => v.rule),
+      ['concurrent-in-transaction'],
+    );
+    assert.deepEqual(rules('REINDEX INDEX CONCURRENTLY "t_a_idx";'), []);
+  });
+
+  it('requires CONCURRENTLY for every index: all tables exist by then', () => {
+    assert.deepEqual(rules('CREATE INDEX IF NOT EXISTS "t_a_idx" ON "t" ("a");'), [
+      'index-not-concurrent',
+    ]);
+  });
+
+  it('allows a drop only with a reason, and never in pre-deploy', () => {
+    const drop = 'ALTER TABLE "t" DROP COLUMN IF EXISTS "a";';
+    const allowed = `-- oci:lint-allow drop-column: v0.10 stopped reading a\n${drop}`;
+    assert.deepEqual(rules(drop), ['drop-column']);
+    assert.deepEqual(rules(allowed), []);
+    // The same allow comment in a pre-deploy migration is refused.
+    const pre = lint(setup, allowed);
+    assert.deepEqual(
+      pre.violations.map((v) => v.rule),
+      ['drop-column'],
+    );
+    assert.deepEqual(
+      pre.errors.map((e) => e.rule),
+      ['allow-not-permitted'],
+    );
+    assert.match(pre.errors[0].message, /post-deploy step/);
+  });
+
+  it('requires idempotent statements', () => {
+    assert.deepEqual(rules('DROP INDEX CONCURRENTLY "t_a_idx";'), ['post-not-idempotent']);
+    assert.deepEqual(
+      rules('-- oci:lint-allow drop-column: unused since v0.10\nALTER TABLE "t" DROP COLUMN "a";'),
+      ['post-not-idempotent'],
+    );
+    assert.deepEqual(rules('ALTER TABLE "t" ADD COLUMN "b" text;'), ['post-not-idempotent']);
+    assert.deepEqual(rules('ALTER TABLE "t" ADD COLUMN IF NOT EXISTS "b" text;'), []);
+  });
+
+  it('refuses transactions, DO blocks and data changes', () => {
+    assert.deepEqual(rules('BEGIN;'), ['post-transaction']);
+    assert.deepEqual(rules('COMMIT;'), ['post-transaction']);
+    assert.deepEqual(rules('UPDATE "t" SET "a" = \'x\';'), ['data-change']);
+    assert.match(RULES['data-change'].hint, /background migration/);
+  });
+
+  it('is exactly one statement per step', () => {
+    assert.deepEqual(
+      errorRules(
+        [setup],
+        ['ANALYZE "t";\nCREATE INDEX CONCURRENTLY IF NOT EXISTS "t_a_idx" ON "t" ("a");'],
+      ),
+      ['post-one-statement'],
+    );
+    assert.deepEqual(errorRules([setup], [`ANALYZE "t";${BP}ANALYZE "t";`]), [
+      'post-one-statement',
+    ]);
+    assert.deepEqual(errorRules([setup], ['-- nothing here\n']), ['post-one-statement']);
+  });
+
+  it('points pre-deploy rule hints at post-deploy steps and background migrations', () => {
+    for (const rule of [
+      'index-not-concurrent',
+      'concurrent-in-transaction',
+      'constraint-not-valid',
+    ]) {
+      assert.match(RULES[rule].hint, /post-deploy step \(packages\/db\/post/);
+      assert.doesNotMatch(RULES[rule].hint, /coming in v0\.11/);
+    }
+    for (const rule of ['data-change', 'alter-column-type', 'volatile-default']) {
+      assert.match(RULES[rule].hint, /background migration/);
+    }
+  });
+});
+
+describe('post-deploy folder', () => {
+  let work;
+  before(() => {
+    work = mkdtempSync(join(tmpdir(), 'oci-lint-post-'));
+  });
+  after(() => rmSync(work, { recursive: true, force: true }));
+
+  function postFolder(name, steps, extra = {}) {
+    const dir = join(work, name);
+    cpSync(join(fixtures, 'folder'), join(dir, 'drizzle'), { recursive: true });
+    const post = join(dir, 'post');
+    mkdirSync(post, { recursive: true });
+    writeFileSync(
+      join(post, 'journal.json'),
+      JSON.stringify({
+        steps: Object.keys(steps).map((tag, idx) => ({ idx, tag, release: '0.11.0' })),
+      }),
+    );
+    for (const [tag, sql] of Object.entries({ ...steps, ...extra })) {
+      if (sql !== null) writeFileSync(join(post, `${tag}.sql`), sql);
+    }
+    return dir;
+  }
+
+  const args = (dir) => [
+    '--dir',
+    join(dir, 'drizzle'),
+    '--post-dir',
+    join(dir, 'post'),
+    '--baseline',
+    join(dir, 'drizzle', 'baseline.json'),
+  ];
+
+  it('lints steps after every pre-deploy migration and passes clean ones', async () => {
+    const dir = postFolder('clean', {
+      '0001_index': 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "message_id_idx" ON "message" ("id");',
+      '0002_drop':
+        '-- oci:lint-allow drop-column: the previous release no longer reads it\nALTER TABLE "message" DROP COLUMN IF EXISTS "body";',
+    });
+    const { out, err, io } = capture();
+    assert.equal(await main(args(dir), io), 0, err.join('\n'));
+    assert.match(out.join('\n'), /and 2 post-deploy step\(s\)/);
+  });
+
+  it('fails a bad step, naming its file under the post folder', async () => {
+    const dir = postFolder('bad', { '0001_drop': 'ALTER TABLE "message" DROP COLUMN "body";' });
+    const { err, io } = capture();
+    assert.equal(await main(args(dir), io), 1);
+    const text = err.join('\n');
+    assert.match(text, /post\/0001_drop\.sql:1 statement 1 \[drop-column\]/);
+    assert.match(text, /\[post-not-idempotent\]/);
+    assert.match(text, /previous release no longer reads it/);
+  });
+
+  it('checks the journal against the files', () => {
+    const dir = postFolder(
+      'journal',
+      { '0001_ok': 'ANALYZE "message";', '0002_missing': null },
+      { '0003_orphan': 'ANALYZE "message";' },
+    );
+    const { migrations, errors } = readPostFolder(join(dir, 'post'));
+    assert.deepEqual(
+      migrations.map((m) => [m.name, m.phase]),
+      [['post/0001_ok.sql', 'post']],
+    );
+    assert.deepEqual(
+      errors.map((e) => [e.rule, e.file]),
+      [
+        ['journal', 'post/0002_missing.sql'],
+        ['journal', 'post/0003_orphan.sql'],
+      ],
+    );
+    assert.deepEqual(readPostFolder(join(work, 'nowhere')), { migrations: [], errors: [] });
+  });
+
+  it('lints only the Drizzle folder given with --dir unless --post-dir is given', () => {
+    assert.equal(parseArgs(['--dir', 'x']).postDir, undefined);
+    assert.match(parseArgs([]).postDir, /packages\/db\/post$/);
+  });
+});
+
+describe('release manifest', () => {
+  const input = (releases) => ({
+    manifest: { releases },
+    migrations: ['0000_a.sql', '0001_b.sql', '0002_c.sql'],
+    postSteps: ['0001_index'],
+    backgroundSource: "export const x = { name: '0.11.backfill' };",
+  });
+
+  it('accepts releases that start at real migrations and require real work', () => {
+    assert.deepEqual(
+      checkReleaseManifest(
+        input([
+          { version: '0.1.0', firstMigration: '0000_a' },
+          {
+            version: '0.2.0',
+            firstMigration: '0002_c',
+            requires: { postSteps: ['0001_index'], backgroundMigrations: ['0.11.backfill'] },
+          },
+        ]),
+      ),
+      [],
+    );
+  });
+
+  it('reports unknown migrations, misordered releases and missing requirements', () => {
+    const errors = checkReleaseManifest(
+      input([
+        { version: '0.1.0', firstMigration: '0001_b' },
+        { version: '0.2.0', firstMigration: '0000_a' },
+        { version: '0.3.0', firstMigration: '9999_none' },
+        {
+          version: '0.4.0',
+          firstMigration: '0002_c',
+          requires: { postSteps: ['0009_gone'], backgroundMigrations: ['0.9.gone'] },
+        },
+      ]),
+    );
+    assert.deepEqual(
+      errors.map((error) => error.message),
+      [
+        'Release 0.2.0 does not start after the release before it.',
+        'Release 0.3.0 starts at 9999_none, which is not in the journal.',
+        'Release 0.4.0 requires post-deploy step 0009_gone, which is not in post/journal.json.',
+        'Release 0.4.0 requires background migration 0.9.gone, which no definition in packages/db/src/background names.',
+      ],
+    );
+    assert.ok(errors.every((error) => error.rule === 'release-manifest'));
   });
 });
 

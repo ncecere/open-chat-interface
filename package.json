@@ -32,6 +32,8 @@
     "test:coverage": "pnpm --filter @oci/api test:coverage",
     "db:generate": "pnpm --filter @oci/db generate",
     "db:migrate": "pnpm --filter @oci/db migrate",
+    "db:migrate:post": "pnpm --filter @oci/db migrate --post",
+    "upgrade:check": "pnpm --filter @oci/api upgrade:check",
     "db:seed": "pnpm --filter @oci/db seed",
     "db:studio": "pnpm --filter @oci/db studio",
     "infra:up": "docker compose -f docker/compose.dev.yaml up -d",

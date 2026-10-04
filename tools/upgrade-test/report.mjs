@@ -96,6 +96,37 @@ export function analyse({ events, replies, run, bounds }) {
     run.migration?.exitCode === 0,
     run.migration ? `exit ${run.migration.exitCode} in ${fmt(run.migration.ms)}` : 'not run',
   );
+  if (run.postDeploy) {
+    const unfinished = run.postDeploy.steps.filter((step) => !step.finished);
+    add(
+      'post-deploy job succeeded and every step finished',
+      run.postDeploy.exitCode === 0 && unfinished.length === 0,
+      `exit ${run.postDeploy.exitCode} in ${fmt(run.postDeploy.ms)}; ${
+        run.postDeploy.steps
+          .map(
+            (step) => `${step.name} ${step.finished ? fmt(step.durationMs ?? 0) : 'not finished'}`,
+          )
+          .join(', ') || 'no steps'
+      }`,
+    );
+  }
+  if (run.background) {
+    const failed = run.background.migrations.filter((m) => m.status !== 'finished');
+    add(
+      'background migrations finished under load',
+      !run.background.timedOut && failed.length === 0,
+      run.background.migrations.length === 0
+        ? 'none scheduled'
+        : `${run.background.migrations
+            .map(
+              (m) =>
+                `${m.name} ${m.status}: ${m.rowsProcessed} rows, ${m.batches} batches${m.ms === null ? '' : ` in ${fmt(m.ms)}`}`,
+            )
+            .join(
+              '; ',
+            )}${run.background.timedOut ? ` (gave up after ${fmt(run.background.timeoutMs)})` : ''}`,
+    );
+  }
   const scope = windows.length
     ? bounds.allowShutdownGaps
       ? ' outside replica-shutdown windows'
@@ -338,6 +369,25 @@ function markdown(report) {
   lines.push(
     `- Migrations applied by the new release: ${run.migration?.applied?.join(', ') || 'none'} (${fmt(run.migration?.ms ?? 0)})`,
   );
+  if (run.postDeploy) {
+    lines.push(
+      `- Post-deploy job (\`migrate --post\`): exit ${run.postDeploy.exitCode} in ${fmt(run.postDeploy.ms)}; ${
+        run.postDeploy.steps
+          .map(
+            (step) =>
+              `${step.name} ${step.finished ? `${fmt(step.durationMs ?? 0)}` : 'not finished'} (${step.attempts} attempt${step.attempts === 1 ? '' : 's'})`,
+          )
+          .join(', ') || 'no steps'
+      }`,
+    );
+  }
+  if (run.background) {
+    for (const m of run.background.migrations) {
+      lines.push(
+        `- Background migration ${m.name}: ${m.status}, ${m.rowsProcessed} rows in ${m.batches} batches${m.ms === null ? '' : ` over ${fmt(m.ms)}`}${m.attempts ? `, ${m.attempts} failed batch(es) in a row` : ''}${m.lastError ? ` (last error: ${m.lastError})` : ''}`,
+      );
+    }
+  }
   lines.push('');
   lines.push('## Verdict');
   lines.push('');

@@ -12,6 +12,7 @@ import {
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
 import { applyMemoryRetention } from '../memory/store.js';
+import { migrationJobs } from '../migrations/jobs.js';
 import { processPendingImports } from '../portability/imports.js';
 import { embedPendingProjectPassages } from '../project-search/embedding.js';
 import { indexPendingProjectFiles } from '../project-search/indexing.js';
@@ -183,6 +184,8 @@ export function lifecycleJobs(): JobDefinition[] {
       intervalMs: 5 * MINUTE,
       run: () => runScheduledComplianceExport(),
     },
+    // Background migrations and, on a single instance, post-deploy steps (v0.11).
+    ...migrationJobs(),
   ];
 }
 

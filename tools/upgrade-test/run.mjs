@@ -12,9 +12,12 @@
  * 4. Under load: TO's pre-deploy migrations (the compose `migrate` job), the
  *    smoke suite against FROM on the new schema, then each API replica and web
  *    proxy replaced with TO one at a time (SIGTERM, start TO, wait healthy),
- *    then each API replica restarted on TO (a rolling restart of the new
- *    release, which is where draining on shutdown is measured), then the
- *    smoke suite against TO.
+ *    then the post-deploy phase (`migrate --post`: concurrent index builds,
+ *    and scheduling the background migrations), then each API replica
+ *    restarted on TO (a rolling restart of the new release, which is where
+ *    draining on shutdown is measured, while a background migration runs),
+ *    then a wait for the background migrations to finish, then the smoke
+ *    suite against TO.
  * 5. Verdict and report (report.json, report.md) in --out.
  *
  * `--inject <case>` adds a deliberately unsafe migration to TO (inject.mjs) as
@@ -49,8 +52,9 @@ const REGISTRY = 'ghcr.io/ncecere/open-chat-interface';
 const STABLE = /^v(\d+)\.(\d+)\.(\d+)$/;
 /** The first release whose API drains on shutdown (design item 13). */
 const FIRST_DRAINING = 'v0.11.0';
-/** The migrator's advisory lock key (packages/db/src/migrator.ts), split as pg_locks shows it. */
+/** The migrators' advisory lock keys (packages/db/src/migrator.ts, post-migrator.ts). */
 const MIGRATION_LOCK = 8374920115573001n;
+const POST_MIGRATION_LOCK = 8374920115573002n;
 
 const spec = {
   from: { default: '' },
@@ -94,6 +98,14 @@ const spec = {
   'replace-web': { type: 'boolean', default: true },
   /** After the upgrade, restart each API replica on TO, as the next upgrade will. */
   'restart-api': { type: 'boolean', default: true },
+  /** Run the post-deploy phase (`migrate --post`) once every replica runs TO. */
+  'post-deploy': { type: 'boolean', default: true },
+  /**
+   * Test-only background migrations TO runs (comma-separated; empty for none):
+   * the default rewrites every seeded message in place, a batch at a time.
+   */
+  background: { default: 'oci-test.rewrite-messages-in-place' },
+  'background-timeout-seconds': { type: 'number', default: 300 },
   'expect-fail': { type: 'boolean', default: false },
   /** Pull FROM (and --to-*) images even when a local copy exists. */
   pull: { type: 'boolean', default: false },
@@ -131,6 +143,7 @@ const env = {
   OCI_UPGRADE_STOP_GRACE: `${options['stop-timeout']}s`,
   OCI_UPGRADE_STUB_CHUNKS: String(options['stub-chunks']),
   OCI_UPGRADE_STUB_CHUNK_MS: String(options['stub-chunk-ms']),
+  OCI_UPGRADE_TEST_BACKGROUND: options.background,
 };
 
 /* ------------------------------------------------------------------------ */
@@ -222,6 +235,60 @@ async function readJournal(image) {
   return JSON.parse(r.stdout).entries;
 }
 
+/** Post-deploy steps recorded by `migrate --post`. */
+async function postSteps() {
+  const out = await psql(
+    `select name, coalesce(duration_ms, -1), attempts, finished_at is not null
+       from oci_post_migration order by name;`,
+    env,
+  ).catch(() => '');
+  return out
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [name, durationMs, attempts, finished] = line.split('\t');
+      return {
+        name,
+        durationMs: Number(durationMs) < 0 ? null : Number(durationMs),
+        attempts: Number(attempts),
+        finished: finished === 't',
+      };
+    });
+}
+
+/** Background migrations and their progress. */
+async function backgroundMigrations() {
+  const out = await psql(
+    `select name, status, rows_processed, batches, attempts, coalesce(last_error, ''),
+            coalesce(throttled_reason, ''),
+            coalesce((extract(epoch from started_at) * 1000)::bigint, 0),
+            coalesce((extract(epoch from finished_at) * 1000)::bigint, 0)
+       from background_migration order by name;`,
+    env,
+  ).catch(() => '');
+  return out
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [name, status, rows, batches, attempts, lastError, throttled, started, finished] =
+        line.split('\t');
+      return {
+        name,
+        status,
+        rowsProcessed: Number(rows),
+        batches: Number(batches),
+        attempts: Number(attempts),
+        lastError: lastError || null,
+        throttledReason: throttled || null,
+        startedAt: Number(started) || null,
+        finishedAt: Number(finished) || null,
+        ms: Number(started) && Number(finished) ? Number(finished) - Number(started) : null,
+      };
+    });
+}
+
 async function appliedMigrationTimes() {
   const out = await psql(
     'select created_at from drizzle.__drizzle_migrations order by created_at;',
@@ -235,8 +302,11 @@ async function appliedMigrationTimes() {
 /* ------------------------------------------------------------------------ */
 
 function startLockMonitor(currentPhase, intervalMs = 1000) {
-  const high = Number(MIGRATION_LOCK >> 32n);
-  const low = Number(MIGRATION_LOCK & 0xffffffffn);
+  // The migrators' own sessions wait by design (a concurrent index build
+  // waits for every older transaction); what matters is who waits on them.
+  const keys = [MIGRATION_LOCK, POST_MIGRATION_LOCK]
+    .map((key) => `(${Number(key >> 32n)}, ${Number(key & 0xffffffffn)})`)
+    .join(', ');
   const query = `
     select a.pid,
            (extract(epoch from clock_timestamp() - a.query_start) * 1000)::bigint,
@@ -247,7 +317,7 @@ function startLockMonitor(currentPhase, intervalMs = 1000) {
       from pg_stat_activity a
      where a.wait_event_type = 'Lock' and a.backend_type = 'client backend'
        and not exists (select 1 from pg_locks l where l.pid = a.pid and l.locktype = 'advisory'
-                        and l.classid = ${high} and l.objid = ${low} and l.granted);`;
+                        and (l.classid::bigint, l.objid::bigint) in (${keys}) and l.granted);`;
   const waits = new Map();
   let running = true;
   const loop = (async () => {
@@ -528,7 +598,34 @@ async function main() {
           ]
         : []),
     ];
+    const postDeploy = async () => {
+      // --- Post-deploy phase: every replica now runs TO -------------------
+      setPhase('post-deploy');
+      const p0 = Date.now();
+      const post = await compose(['--profile', 'tools', 'run', '--rm', 'migrate-post'], env);
+      R.postDeploy = {
+        exitCode: post.code,
+        ms: Date.now() - p0,
+        steps: await postSteps(),
+        scheduled: (await backgroundMigrations()).map((m) => m.name),
+        output: (post.stdout + post.stderr).slice(-4000),
+      };
+      log(
+        `migrate --post exit ${post.code} in ${(R.postDeploy.ms / 1000).toFixed(1)} s; steps: ${
+          R.postDeploy.steps
+            .map(
+              (step) => `${step.name} ${step.finished ? `${step.durationMs} ms` : 'NOT FINISHED'}`,
+            )
+            .join(', ') || 'none'
+        }; background migrations scheduled: ${R.postDeploy.scheduled.join(', ') || 'none'}`,
+      );
+    };
+    let postDone = !options['post-deploy'];
     for (const [service, variable, image, kind, drains] of targets) {
+      if (kind === 'restart' && !postDone) {
+        await postDeploy();
+        postDone = true;
+      }
       setPhase(`${kind}-${service}`);
       const isWeb = service.startsWith('web');
       const webBase = service === 'web-1' ? bases[0] : bases[1];
@@ -572,6 +669,39 @@ async function main() {
       await sleep(options['settle-seconds'] * 1000);
     }
 
+    if (!postDone) await postDeploy();
+
+    // --- Background migrations, under load --------------------------------------
+    if (options['post-deploy']) {
+      setPhase('background');
+      const b0 = Date.now();
+      const deadline = b0 + options['background-timeout-seconds'] * 1000;
+      let migrations = await backgroundMigrations();
+      while (
+        migrations.some((m) => !['finished', 'failed', 'paused'].includes(m.status)) &&
+        Date.now() < deadline
+      ) {
+        await sleep(2000);
+        migrations = await backgroundMigrations();
+      }
+      R.background = {
+        waitedMs: Date.now() - b0,
+        timedOut: migrations.some((m) => !['finished', 'failed', 'paused'].includes(m.status)),
+        timeoutMs: options['background-timeout-seconds'] * 1000,
+        migrations,
+      };
+      log(
+        `background migrations: ${
+          migrations
+            .map(
+              (m) =>
+                `${m.name} ${m.status}, ${m.rowsProcessed} rows in ${m.batches} batches${m.ms === null ? '' : ` over ${(m.ms / 1000).toFixed(1)} s`}`,
+            )
+            .join('; ') || 'none'
+        } (waited ${(R.background.waitedMs / 1000).toFixed(1)} s after the restarts)`,
+      );
+    }
+
     // --- TO --------------------------------------------------------------------
     setPhase('smoke-new');
     R.smokeNew = await runSmoke({
@@ -582,8 +712,6 @@ async function main() {
       requireAll: true,
     });
     log(`smoke (new release): ${R.smokeNew.total - R.smokeNew.failed}/${R.smokeNew.total}`);
-    R.postDeploy =
-      'not run: post-deploy steps and background migrations (design section 1) are not built yet';
 
     setPhase('cooldown');
     await sleep(options['cooldown-seconds'] * 1000);

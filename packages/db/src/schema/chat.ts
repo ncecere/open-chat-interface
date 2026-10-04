@@ -143,6 +143,13 @@ export const message = pgTable(
     // this the count scans the whole table once per row returned, which at two
     // million messages takes the page from milliseconds to minutes.
     index('message_user_idx').on(t.userId),
+    // The admin overview counts messages per day and the usage page counts
+    // failed replies since a date. Built CONCURRENTLY by post-deploy step
+    // 0001_message_created_at_index (`migrate --post`, v0.11), never by a
+    // pre-deploy migration: building it in one blocks writes to `message`.
+    index('message_created_at_idx').on(t.createdAt),
+    // Failed replies since a date, for the usage page (post-deploy step 0002).
+    index('message_error_created_at_idx').on(t.createdAt).where(sql`${t.status} = 'error'`),
     // Conversation search over `text` parts only (migration 0023). Queries
     // must use exactly this expression; see services/thread-search.ts.
     index('message_text_search_idx').using(

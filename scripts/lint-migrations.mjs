@@ -7,8 +7,14 @@
 // journal order, or not created by any migration at all; a table created
 // earlier in the same file is new and empty, so anything goes.
 //
-//   pnpm lint:migrations                      lint packages/db/drizzle
-//   pnpm lint:migrations --dir <folder>       lint another Drizzle folder
+// Post-deploy steps (packages/db/post, v0.11 design section 1) are linted
+// after every pre-deploy migration, with post-deploy rules: every table
+// exists, CONCURRENTLY is required (and possible: steps run outside a
+// transaction), a step is exactly one idempotent statement, and drops are
+// allowed only here, with a reason.
+//
+//   pnpm lint:migrations                      lint packages/db/drizzle and packages/db/post
+//   pnpm lint:migrations --dir <folder>       lint another Drizzle folder (and --post-dir)
 //   pnpm lint:migrations --update-baseline    rewrite the baseline (never in CI)
 //
 // An exception is a comment directly above the statement:
@@ -23,12 +29,18 @@ import { fingerprintSync, loadModule, parsePlPgSQLSync, parseSync } from 'libpg-
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_MIGRATIONS_DIR = join(repoRoot, 'packages/db/drizzle');
+export const DEFAULT_POST_DIR = join(repoRoot, 'packages/db/post');
+export const DEFAULT_RELEASE_MANIFEST = join(repoRoot, 'packages/db/releases.json');
+export const DEFAULT_BACKGROUND_DIR = join(repoRoot, 'packages/db/src/background');
 export const DEFAULT_BASELINE = join(repoRoot, 'scripts/lint-migrations/baseline.json');
 const BREAKPOINT = '--> statement-breakpoint';
 
 const BACKGROUND =
-  'Change existing rows in a background migration (batched, resumable; coming in v0.11).';
-const POST_DEPLOY = 'post-deploy step (non-transactional; coming in v0.11)';
+  'Change existing rows in a background migration (packages/db/src/background: batched, throttled, resumable; docs/dev/database.md, "Background migrations").';
+const POST_DEPLOY =
+  'post-deploy step (packages/db/post, run by `migrate --post` outside a transaction; docs/dev/database.md, "Post-deploy steps")';
+const DROP_REASON =
+  'In a post-deploy step, allow it with a reason that states the previous release no longer reads it: -- oci:lint-allow <rule>: <release> stopped reading it';
 
 /** Statement rules. Each can be allowed inline or grandfathered in the baseline. */
 export const RULES = {
@@ -38,7 +50,7 @@ export const RULES = {
   },
   'concurrent-in-transaction': {
     summary: 'CONCURRENTLY cannot run inside the transactional pre-deploy migrator',
-    hint: `Move the statement to a ${POST_DEPLOY}. Until those exist, a plain CREATE INDEX on a new table is fine.`,
+    hint: `Move the statement to a ${POST_DEPLOY}. A plain CREATE INDEX on a table created in the same release is fine in pre-deploy.`,
   },
   'alter-column-type': {
     summary: 'ALTER COLUMN TYPE on an existing table rewrites it under an ACCESS EXCLUSIVE lock',
@@ -67,12 +79,17 @@ export const RULES = {
   },
   'drop-column': {
     summary:
-      'DROP COLUMN in a pre-deploy migration breaks the previous release while it still runs',
-    hint: `Stop reading the column in release N, drop it in a ${POST_DEPLOY} of release N+1 (docs/dev/database.md, "Removing a column").`,
+      'DROP COLUMN breaks the previous release while it still runs; allowed only in a post-deploy step, with a reason',
+    hint: `Stop reading the column in release N, drop it in a ${POST_DEPLOY} of release N+1, so a rollback to N still works (docs/dev/database.md, "Removing a column"). ${DROP_REASON}.`,
+    preDeployOnlyHint:
+      'A pre-deploy drop cannot be allowed: move the statement to a post-deploy step.',
   },
   'drop-table': {
-    summary: 'DROP TABLE in a pre-deploy migration breaks the previous release while it still runs',
-    hint: `Stop using the table in release N, drop it in a ${POST_DEPLOY} of release N+1.`,
+    summary:
+      'DROP TABLE breaks the previous release while it still runs; allowed only in a post-deploy step, with a reason',
+    hint: `Stop using the table in release N, drop it in a ${POST_DEPLOY} of release N+1, so a rollback to N still works. ${DROP_REASON}.`,
+    preDeployOnlyHint:
+      'A pre-deploy drop cannot be allowed: move the statement to a post-deploy step.',
   },
   'lock-table': {
     summary: 'LOCK TABLE holds a table lock for the rest of the migration transaction',
@@ -94,6 +111,16 @@ export const RULES = {
     summary: 'EXECUTE of dynamic SQL inside a DO block cannot be checked',
     hint: 'Write the statements out so they can be linted, or allow it with a reason that states what it does.',
   },
+  'post-not-idempotent': {
+    summary:
+      'A post-deploy step is repeated after an interruption, so it must succeed when it already ran',
+    hint: 'Use CREATE INDEX CONCURRENTLY IF NOT EXISTS, DROP ... IF EXISTS, DROP COLUMN IF EXISTS or ADD COLUMN IF NOT EXISTS.',
+  },
+  'post-transaction': {
+    summary:
+      'A post-deploy step runs outside a transaction: no BEGIN/COMMIT, and no DO block (which runs as one transaction and cannot build CONCURRENTLY)',
+    hint: 'Write one plain statement per step; split work that must be atomic into a pre-deploy migration instead.',
+  },
 };
 
 /**
@@ -105,7 +132,12 @@ export const META_RULES = {
   'allow-missing-reason': 'oci:lint-allow needs a reason: -- oci:lint-allow <rule>: <reason>',
   'allow-unknown-rule': 'oci:lint-allow names a rule that does not exist',
   'allow-unused': 'oci:lint-allow does not match a violation of the statement below it',
+  'allow-not-permitted':
+    'this rule cannot be allowed in a pre-deploy migration; move the statement to a post-deploy step',
+  'post-one-statement': 'a post-deploy step is exactly one statement (packages/db/post)',
   journal: 'the journal and the migration files disagree',
+  'release-manifest':
+    'packages/db/releases.json names a migration, post-deploy step or background migration that does not exist',
 };
 
 const VOLATILE_FUNCTIONS = new Set([
@@ -310,6 +342,7 @@ function checksFor(state, table) {
  */
 function inspect(stmt, state, file) {
   const found = [];
+  const post = file.phase === 'post';
   const isNew = (table) => file.created.has(table);
   const existing = (table) => !isNew(table);
   const where = (table) => {
@@ -360,6 +393,9 @@ function inspect(stmt, state, file) {
       break;
     }
     case 'DropStmt': {
+      if (post && !node.missing_ok) {
+        flag('post-not-idempotent', 'DROP without IF EXISTS in a post-deploy step.');
+      }
       if (node.removeType !== 'OBJECT_TABLE') break;
       for (const object of node.objects ?? []) {
         const table = nameFromList(object.List?.items ?? []);
@@ -374,7 +410,7 @@ function inspect(stmt, state, file) {
       if (node.objtype !== 'OBJECT_TABLE') break;
       const table = qualifiedName(node.relation);
       for (const { AlterTableCmd: cmd } of node.cmds ?? []) {
-        if (cmd) inspectAlter(cmd, table, { state, existing, where, flag });
+        if (cmd) inspectAlter(cmd, table, { state, existing, where, flag, post });
       }
       break;
     }
@@ -383,11 +419,16 @@ function inspect(stmt, state, file) {
       if (node.idxname) {
         state.indexes.set(`${node.relation.schemaname ?? 'public'}.${node.idxname}`, table);
       }
+      if (post && !node.if_not_exists) {
+        flag('post-not-idempotent', `CREATE INDEX without IF NOT EXISTS on ${table}.`);
+      }
       if (node.concurrent) {
-        flag(
-          'concurrent-in-transaction',
-          `CREATE INDEX CONCURRENTLY on ${table} cannot run inside the migration transaction.`,
-        );
+        if (!post) {
+          flag(
+            'concurrent-in-transaction',
+            `CREATE INDEX CONCURRENTLY on ${table} cannot run inside the migration transaction.`,
+          );
+        }
       } else if (existing(table)) {
         flag('index-not-concurrent', `CREATE INDEX without CONCURRENTLY on ${where(table)}.`);
       }
@@ -398,7 +439,12 @@ function inspect(stmt, state, file) {
         (param) => param.DefElem?.defname === 'concurrently',
       );
       if (concurrent) {
-        flag('concurrent-in-transaction', 'REINDEX CONCURRENTLY cannot run inside a transaction.');
+        if (!post) {
+          flag(
+            'concurrent-in-transaction',
+            'REINDEX CONCURRENTLY cannot run inside a transaction.',
+          );
+        }
         break;
       }
       const target = node.relation ? qualifiedName(node.relation) : null;
@@ -455,15 +501,25 @@ function inspect(stmt, state, file) {
     case 'ClusterStmt':
       flag('cluster', 'CLUSTER in a migration.');
       break;
+    case 'TransactionStmt':
+      if (post)
+        flag('post-transaction', `${node.kind.replace(/^TRANS_STMT_/, '')} in a post-deploy step.`);
+      break;
     default:
       break;
   }
   return found;
 }
 
-function inspectAlter(cmd, table, { state, existing, where, flag }) {
+function inspectAlter(cmd, table, { state, existing, where, flag, post }) {
   switch (cmd.subtype) {
     case 'AT_AddColumn': {
+      if (post && !cmd.missing_ok) {
+        flag(
+          'post-not-idempotent',
+          `ADD COLUMN without IF NOT EXISTS on ${table} in a post-deploy step.`,
+        );
+      }
       if (!existing(table)) break;
       const column = cmd.def?.ColumnDef;
       const typeName = column?.typeName?.names?.at(-1)?.String?.sval;
@@ -557,6 +613,9 @@ function inspectAlter(cmd, table, { state, existing, where, flag }) {
       state.notNullChecks.get(table)?.delete(cmd.name);
       break;
     case 'AT_DropColumn':
+      if (post && !cmd.missing_ok) {
+        flag('post-not-idempotent', `DROP COLUMN ${cmd.name} without IF EXISTS on ${table}.`);
+      }
       if (existing(table)) flag('drop-column', `DROP COLUMN ${cmd.name} of ${where(table)}.`);
       break;
     default:
@@ -580,6 +639,9 @@ function doBlockStatements(text) {
 function inspectTopLevel(stmt, text, state, file) {
   if (!stmt.DoStmt) return inspect(stmt, state, file);
   const found = [];
+  if (file.phase === 'post') {
+    found.push({ rule: 'post-transaction', message: 'DO block in a post-deploy step.' });
+  }
   let block;
   try {
     block = doBlockStatements(text);
@@ -609,8 +671,16 @@ function inspectTopLevel(stmt, text, state, file) {
   return found;
 }
 
+/** Rules an allow comment cannot waive in a pre-deploy migration. */
+const POST_DEPLOY_ONLY = new Set(
+  Object.entries(RULES)
+    .filter(([, rule]) => rule.preDeployOnlyHint)
+    .map(([name]) => name),
+);
+
 /**
- * Lints migrations in journal order. `migrations` is [{ name, sql }]. Returns
+ * Lints migrations in journal order. `migrations` is [{ name, sql, phase? }],
+ * pre-deploy first; `phase: 'post'` marks a post-deploy step. Returns
  * statement violations (each with a fingerprint for the baseline) and meta
  * errors (bad allow comments, parse failures), which can never be suppressed.
  */
@@ -619,8 +689,17 @@ export function lintMigrations(migrations, state = createSchemaState()) {
   const errors = [];
   let statementCount = 0;
   for (const migration of migrations) {
-    const file = { name: migration.name, created: new Set() };
+    const phase = migration.phase === 'post' ? 'post' : 'pre';
+    const file = { name: migration.name, created: new Set(), phase };
     const { statements, errors: parseErrors } = splitStatements(migration.sql);
+    if (phase === 'post' && parseErrors.length === 0 && statements.length !== 1) {
+      errors.push({
+        rule: 'post-one-statement',
+        file: migration.name,
+        line: statements[1] ? lineOf(migration.sql, statements[1].offset) : 1,
+        message: `Post-deploy step has ${statements.length} statements; split it into one file per statement.`,
+      });
+    }
     for (const failure of parseErrors) {
       errors.push({
         rule: 'parse-error',
@@ -658,7 +737,14 @@ export function lintMigrations(migrations, state = createSchemaState()) {
           continue;
         }
         const allow = allows.find((entry) => entry.rule === violation.rule && entry.reason);
-        if (allow) {
+        if (allow && phase === 'pre' && POST_DEPLOY_ONLY.has(violation.rule)) {
+          used.add(allow);
+          errors.push({
+            ...location,
+            rule: 'allow-not-permitted',
+            message: `oci:lint-allow ${allow.rule} (line ${allow.line}) is not accepted in a pre-deploy migration. ${RULES[allow.rule].preDeployOnlyHint}`,
+          });
+        } else if (allow) {
           used.add(allow);
           continue;
         }
@@ -720,6 +806,106 @@ export function readMigrationsFolder(dir) {
   return { migrations, errors };
 }
 
+/** Prefix of post-deploy step names in reports and the baseline. */
+export const POST_PREFIX = 'post/';
+
+/**
+ * Reads a post-deploy folder (`journal.json` listing `NNNN_name.sql` files) in
+ * journal order, as `{ name: 'post/<file>', sql, phase: 'post' }`, and checks
+ * the journal and files agree. A missing folder has no steps.
+ */
+export function readPostFolder(dir) {
+  const journalPath = join(dir, 'journal.json');
+  if (!existsSync(journalPath)) return { migrations: [], errors: [] };
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
+  const migrations = [];
+  const errors = [];
+  (journal.steps ?? []).forEach((entry, index) => {
+    if (entry.idx !== index) {
+      errors.push({
+        rule: 'journal',
+        file: `${POST_PREFIX}journal.json`,
+        message: `Step ${index} (${entry.tag}) has idx ${entry.idx}; indexes must be sequential.`,
+      });
+    }
+    if (!entry.release) {
+      errors.push({
+        rule: 'journal',
+        file: `${POST_PREFIX}journal.json`,
+        message: `Step ${entry.tag} names no release.`,
+      });
+    }
+    const name = `${entry.tag}.sql`;
+    if (!existsSync(join(dir, name))) {
+      errors.push({
+        rule: 'journal',
+        file: `${POST_PREFIX}${name}`,
+        message: `Post-deploy journal entry ${entry.tag} has no file.`,
+      });
+      return;
+    }
+    migrations.push({
+      name: `${POST_PREFIX}${name}`,
+      sql: readFileSync(join(dir, name), 'utf8'),
+      phase: 'post',
+    });
+  });
+  const listed = new Set((journal.steps ?? []).map((entry) => `${entry.tag}.sql`));
+  for (const name of readdirSync(dir)
+    .filter((entry) => entry.endsWith('.sql'))
+    .sort()) {
+    if (!listed.has(name)) {
+      errors.push({
+        rule: 'journal',
+        file: `${POST_PREFIX}${name}`,
+        message: `${name} is not in journal.json, so \`migrate --post\` will never run it.`,
+      });
+    }
+  }
+  return { migrations, errors };
+}
+
+/**
+ * Checks packages/db/releases.json against what exists: each release's first
+ * migration is in the journal, in release order, and every required
+ * post-deploy step is in the post journal and every required background
+ * migration is a name defined in packages/db/src/background.
+ */
+export function checkReleaseManifest({ manifest, migrations, postSteps, backgroundSource }) {
+  const errors = [];
+  const fail = (message) =>
+    errors.push({ rule: 'release-manifest', file: '../releases.json', message });
+  const position = new Map(migrations.map((name, index) => [name.replace(/\.sql$/, ''), index]));
+  let previous = -1;
+  for (const release of manifest.releases ?? []) {
+    const at = position.get(release.firstMigration);
+    if (at === undefined) {
+      fail(
+        `Release ${release.version} starts at ${release.firstMigration}, which is not in the journal.`,
+      );
+      continue;
+    }
+    if (at <= previous)
+      fail(`Release ${release.version} does not start after the release before it.`);
+    previous = at;
+    for (const step of release.requires?.postSteps ?? []) {
+      if (!postSteps.includes(step)) {
+        fail(
+          `Release ${release.version} requires post-deploy step ${step}, which is not in post/journal.json.`,
+        );
+      }
+    }
+    for (const name of release.requires?.backgroundMigrations ?? []) {
+      if (!backgroundSource.includes(`'${name}'`)) {
+        fail(
+          `Release ${release.version} requires background migration ${name}, which no definition in packages/db/src/background names.`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
 function baselineKey(entry) {
   return `${entry.file}\u0000${entry.rule}\u0000${entry.fingerprint}`;
 }
@@ -763,8 +949,12 @@ export function buildBaseline(violations) {
   };
 }
 
-function formatProblem(problem, dir) {
-  const where = `${relative(process.cwd(), join(dir, problem.file)) || problem.file}${problem.line ? `:${problem.line}` : ''}`;
+function formatProblem(problem, dir, postDir) {
+  const path =
+    postDir && problem.file.startsWith(POST_PREFIX)
+      ? join(postDir, problem.file.slice(POST_PREFIX.length))
+      : join(dir, problem.file);
+  const where = `${relative(process.cwd(), path) || problem.file}${problem.line ? `:${problem.line}` : ''}`;
   const statement = problem.statement ? ` statement ${problem.statement}` : '';
   const rule = RULES[problem.rule];
   const lines = [`${where}${statement} [${problem.rule}] ${problem.message}`];
@@ -779,15 +969,26 @@ function formatProblem(problem, dir) {
 }
 
 export function parseArgs(argv) {
-  const options = { dir: DEFAULT_MIGRATIONS_DIR, baseline: DEFAULT_BASELINE, update: false };
+  const options = {
+    dir: DEFAULT_MIGRATIONS_DIR,
+    postDir: undefined,
+    baseline: DEFAULT_BASELINE,
+    update: false,
+  };
+  let dirGiven = false;
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === '--update-baseline') options.update = true;
-    else if (arg === '--dir') options.dir = resolve(argv[++index] ?? '');
+    else if (arg === '--dir') {
+      options.dir = resolve(argv[++index] ?? '');
+      dirGiven = true;
+    } else if (arg === '--post-dir') options.postDir = resolve(argv[++index] ?? '');
     else if (arg === '--baseline') options.baseline = resolve(argv[++index] ?? '');
     else if (arg === '--help' || arg === '-h') options.help = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
+  // Another Drizzle folder has no post-deploy steps unless they are named.
+  if (options.postDir === undefined && !dirGiven) options.postDir = DEFAULT_POST_DIR;
   return options;
 }
 
@@ -805,14 +1006,30 @@ export async function main(
   }
   if (options.help) {
     log(
-      'Usage: node scripts/lint-migrations.mjs [--dir <drizzle folder>] [--baseline <file>] [--update-baseline]',
+      'Usage: node scripts/lint-migrations.mjs [--dir <drizzle folder>] [--post-dir <post-deploy folder>] [--baseline <file>] [--update-baseline]',
     );
     return 0;
   }
   await loadParser();
   const { migrations, errors: journalErrors } = readMigrationsFolder(options.dir);
-  const result = lintMigrations(migrations);
-  const errors = [...journalErrors, ...result.errors];
+  const post = options.postDir ? readPostFolder(options.postDir) : { migrations: [], errors: [] };
+  const result = lintMigrations([...migrations, ...post.migrations]);
+  const errors = [...journalErrors, ...post.errors, ...result.errors];
+  if (options.postDir === DEFAULT_POST_DIR && existsSync(DEFAULT_RELEASE_MANIFEST)) {
+    const backgroundSource = readdirSync(DEFAULT_BACKGROUND_DIR)
+      .filter((name) => name.endsWith('.ts'))
+      .map((name) => readFileSync(join(DEFAULT_BACKGROUND_DIR, name), 'utf8'))
+      .join('\n');
+    errors.push(
+      ...checkReleaseManifest({
+        manifest: JSON.parse(readFileSync(DEFAULT_RELEASE_MANIFEST, 'utf8')),
+        migrations: migrations.map((migration) => migration.name),
+        postSteps: post.migrations.map((step) => step.name.slice(POST_PREFIX.length, -4)),
+        backgroundSource,
+      }),
+    );
+  }
+  const format = (problem) => formatProblem(problem, options.dir, options.postDir);
 
   if (options.update) {
     if (env.CI) {
@@ -822,7 +1039,7 @@ export async function main(
       return 2;
     }
     if (errors.length) {
-      for (const problem of errors) error(formatProblem(problem, options.dir));
+      for (const problem of errors) error(format(problem));
       error('Fix the errors above before updating the baseline.');
       return 1;
     }
@@ -840,7 +1057,7 @@ export async function main(
     ? JSON.parse(readFileSync(options.baseline, 'utf8'))
     : { entries: [] };
   const { grandfathered, fresh, stale } = applyBaseline(result.violations, baseline);
-  for (const problem of [...errors, ...fresh]) error(`${formatProblem(problem, options.dir)}\n`);
+  for (const problem of [...errors, ...fresh]) error(`${format(problem)}\n`);
   for (const entry of stale) {
     error(
       `${entry.file} statement ${entry.statement} [${entry.rule}] stale baseline entry: no matching violation. ` +
@@ -848,9 +1065,12 @@ export async function main(
     );
   }
   const failed = errors.length + fresh.length + stale.length;
+  const postSummary = options.postDir
+    ? ` and ${post.migrations.length} post-deploy step(s) in ${relative(process.cwd(), options.postDir) || basename(options.postDir)}`
+    : '';
   const summary =
     `Checked ${migrations.length} migrations (${result.statementCount} statements) in ` +
-    `${relative(process.cwd(), options.dir) || basename(options.dir)}: ` +
+    `${relative(process.cwd(), options.dir) || basename(options.dir)}${postSummary}: ` +
     `${grandfathered.length} grandfathered by the baseline, ${fresh.length} new violation(s), ` +
     `${errors.length} error(s), ${stale.length} stale baseline entr${stale.length === 1 ? 'y' : 'ies'}.`;
   (failed ? error : log)(summary);

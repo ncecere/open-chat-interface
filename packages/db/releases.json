@@ -1,0 +1,14 @@
+{
+  "description": "Which pre-deploy migration starts each minor release, and what a release needs finished before its own pre-deploy migrations may run. The migrator and the upgrade preflight read this file; see docs/dev/database.md, \"Requiring earlier work\", and docs/RELEASING.md.",
+  "releases": [
+    { "version": "0.7.0", "firstMigration": "0022_conversation_imports" },
+    { "version": "0.8.0", "firstMigration": "0026_project_file_chunks" },
+    { "version": "0.9.0", "firstMigration": "0028_conversation_compaction" },
+    { "version": "0.10.0", "firstMigration": "0035_backup_files" },
+    {
+      "version": "0.11.0",
+      "firstMigration": "0039_three_phase_migrations",
+      "requires": { "postSteps": [], "backgroundMigrations": [] }
+    }
+  ]
+}

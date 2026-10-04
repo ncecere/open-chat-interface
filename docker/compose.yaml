@@ -92,6 +92,28 @@ services:
       postgres:
         condition: service_healthy
 
+  # Post-deploy phase (v0.11): once every API replica runs the new release,
+  #   docker compose --profile tools run --rm migrate-post
+  # builds the release's indexes concurrently, applies its other post-deploy
+  # steps and schedules its background migrations (docs/OPERATIONS.md,
+  # "Upgrade"). Refuses to run before `migrate`. The preflight runs from the
+  # same image: docker compose --profile tools run --rm migrate node dist/scripts/upgrade-check.js
+  migrate-post:
+    image: ${OCI_API_IMAGE:-oci-api:local}
+    profiles: ['tools']
+    restart: 'no'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      MIGRATION_LOCK_TIMEOUT_MS:
+      POST_MIGRATION_STATEMENT_TIMEOUT_MS:
+    command: ['node', 'dist/migrate.js', '--post']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped

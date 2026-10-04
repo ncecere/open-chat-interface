@@ -9,6 +9,7 @@ import { embeddingsRoutes } from './embeddings.js';
 import { healthRoutes as adminHealthRoutes } from './health.js';
 import { inviteRoutes } from './invites.js';
 import { lifecycleRoutes } from './lifecycle.js';
+import { migrationRoutes } from './migrations.js';
 import { modelRoutes } from './models.js';
 import { overrideRoutes } from './overrides.js';
 import { overviewRoutes } from './overview.js';
@@ -53,6 +54,7 @@ adminRoutes.route('/sso', ssoRoutes);
 
 adminRoutes.route('/audit', auditRoutes);
 adminRoutes.route('/health', adminHealthRoutes);
+adminRoutes.route('/migrations', migrationRoutes);
 adminRoutes.route('/views', viewRoutes);
 adminRoutes.route('/reports', reportRoutes);
 adminRoutes.route('/backups', backupRoutes);

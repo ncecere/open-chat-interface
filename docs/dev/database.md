@@ -33,6 +33,199 @@ meaningless without the parent; `restrict` where deleting the parent would
 destroy evidence — a policy somebody accepted, for instance; `set null` where
 the reference is informational.
 
+## Three kinds of migration
+
+From v0.11 a release changes the database in three phases
+([v0.11 design](v0.11-design.md), section 1), after
+[GitLab's model](https://docs.gitlab.com/development/database/):
+
+| Kind | Lives in | Runs | Must be |
+| --- | --- | --- | --- |
+| **Pre-deploy migration** | `packages/db/drizzle/NNNN_name.sql` (Drizzle journal) | `migrate`, before replicas are replaced, while the previous release serves | Transactional and fast: seconds, never proportional to data |
+| **Post-deploy step** | `packages/db/post/NNNN_name.sql` (`post/journal.json`) | `migrate --post`, after every replica runs the release | One idempotent statement, run outside a transaction |
+| **Background migration** | `packages/db/src/background/<name>.ts` (registered in `index.ts`) | The API job runner, in batches, while OCI serves; scheduled by `migrate --post` | Idempotent per batch, resumable, throttled |
+
+Pick by what the change does to **existing rows**:
+
+- A new table, a nullable column, a constraint added `NOT VALID`, an index
+  on a table created in the same release: **pre-deploy**.
+- An index on an existing table (`CREATE INDEX CONCURRENTLY`), `VALIDATE
+  CONSTRAINT`, dropping a column or table the previous release no longer
+  reads: **post-deploy**.
+- Filling a new column, rewriting values, moving data between tables:
+  **background**. Release N's own code writes new rows correctly; the
+  background migration converts the rows that existed before.
+
+The linter ([below](#migration-linter)) enforces the split; operators' view:
+[Operations](../OPERATIONS.md#upgrade).
+
+### Post-deploy steps
+
+A step is one statement in `packages/db/post/NNNN_name.sql`, listed in
+`packages/db/post/journal.json` with the release that introduced it:
+
+```json
+{ "idx": 0, "tag": "0001_message_created_at_index", "release": "0.11.0" }
+```
+
+```sql
+-- Why the index exists, and which query it serves.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "message_created_at_idx" ON "message" ("created_at");
+```
+
+`migrate --post` (`node dist/migrate.js --post` in the API image, `pnpm
+db:migrate:post` in a checkout; code in `packages/db/src/post-migrator.ts`):
+
+- refuses to run until every bundled pre-deploy migration is applied;
+- takes a session advisory lock (one `migrate --post` at a time; a second
+  waits up to a minute);
+- runs the steps in journal order, each outside a transaction with
+  `lock_timeout` (`MIGRATION_LOCK_TIMEOUT_MS`, 3 s), `statement_timeout`
+  (`POST_MIGRATION_STATEMENT_TIMEOUT_MS`, four hours) and a 10-second
+  `idle_in_transaction_session_timeout`. Lock timeouts are retried with the
+  pre-deploy migrator's backoff (ten attempts, about three minutes); any other
+  error stops the run at that step, since later steps may depend on it;
+- records each step in `oci_post_migration` (name, checksum, started,
+  finished, duration, attempts, last error): started before the statement
+  runs, finished after. A step without `finished_at` (a killed job, a lost
+  connection, a failover, a failed statement) runs again next time; a
+  finished one is never run again, and a warning is logged if its file has
+  changed since;
+- before a step that builds an index, drops an `INVALID` index of that name
+  (`pg_index.indisvalid`) with `DROP INDEX CONCURRENTLY`. An interrupted
+  `CREATE INDEX CONCURRENTLY` leaves one behind, and running the statement
+  again with `IF NOT EXISTS` would succeed without building anything (the
+  live test reproduces this first). It refuses if another session is still
+  building that index (`pg_stat_progress_create_index`);
+- finally schedules the release's background migrations (below).
+
+Rules for a step: exactly one statement; idempotent (`IF NOT EXISTS`, `IF
+EXISTS`); no `BEGIN`/`COMMIT` and no `DO` block; `CONCURRENTLY` for every
+index (all tables exist by now); no data changes (those are background
+migrations). Name the index: an unnamed one cannot be checked for an
+`INVALID` copy. A `REINDEX ... CONCURRENTLY` interrupted part-way leaves a
+`_ccnew` index the runner does not clean up; drop it by hand.
+
+### Background migrations
+
+A definition (`packages/db/src/background/types.ts`) names the migration
+(permanently: `0.12.message-search-vector`), its release, its table, a
+description for System health, a default batch size and pause, and a
+`batch(sql, { cursor, batchSize })` function:
+
+```ts
+export const fillSearchVector: BackgroundMigrationDefinition = {
+  name: '0.12.message-search-vector',
+  release: '0.12.0',
+  table: 'public.message',
+  description: 'Stores the search vector of messages written before 0.12.',
+  batchSize: 1_000,
+  pauseMs: 100,
+  async batch(sql, { cursor, batchSize }) {
+    const [row] = await sql<[{ rows: number; last: string | null }]>`
+      with batch as (
+        select id from message where ${cursor === null ? sql`true` : sql`id > ${cursor}`}
+        order by id limit ${batchSize}
+      ), updated as (
+        update message m set search_vector = to_tsvector('simple', ...)
+        from batch where m.id = batch.id and m.search_vector is null
+        returning m.id
+      )
+      select (select count(*) from updated)::integer as rows,
+             (select id from batch order by id desc limit 1) as last`;
+    return { cursor: row?.last ?? cursor, rows: row?.rows ?? 0, done: (row?.rows ?? 0) < batchSize };
+  },
+};
+```
+
+Add it to `RELEASE_BACKGROUND_MIGRATIONS` in `src/background/index.ts`, and
+keep it there in later releases. Rules:
+
+- **All writes through `sql`**, the transaction the runner gives the batch.
+  The runner advances the cursor in the same transaction and commits both,
+  so a crash, a cancelled statement or a failover rolls the rows and the
+  cursor back together: nothing is lost, and nothing is repeated except a
+  batch whose commit was lost to asynchronous replication.
+- **Idempotent**: that batch is then run again (`where search_vector is
+  null`, `on conflict do nothing`).
+- **Walk the key in SQL** (`where id > cursor order by id limit n`) and take
+  the last key from SQL too: JavaScript string order differs from the
+  column's collation. Every OCI table's `id` is a UUID, so the cursor's place
+  in the key space is also the progress System health shows.
+- **Rows written after it starts must not need it**: release N writes them
+  correctly. That is why `migrate --post`, after every replica runs N, is
+  what schedules background migrations, never `migrate`.
+- **Short batches**: each holds its row locks until it commits, and has
+  `lock_timeout` 3 s and `statement_timeout` `BACKGROUND_MIGRATION_BATCH_TIMEOUT_MS`
+  (30 s). Aim for well under a second.
+
+The runner (`apps/api/src/services/migrations/background-runner.ts`) is the
+job `migrations.background`, every 30 seconds on each replica. A tick claims
+one migration with a lease in its `background_migration` row (`for update
+skip locked`, as the compaction queue does; two minutes, renewed by every
+batch), runs batches for up to 25 seconds, and hands the lease back, so any
+replica's next tick continues. Each batch transaction locks the row and
+checks the lease is still its own and the migration still `running`, so a
+worker whose lease ran out, or that an administrator paused, stops without
+writing. Between batches it waits `pause_ms`, and stops when the replica
+starts draining, when its budget is spent, or when the database is under
+pressure: a standby's replay lag over
+`BACKGROUND_MIGRATION_MAX_REPLICATION_LAG_MS` (10 s; reading it needs the
+`pg_monitor` role) or a transaction in the database open longer than
+`BACKGROUND_MIGRATION_MAX_TRANSACTION_AGE_MS` (5 minutes: vacuum cannot clean
+up behind a batch while one is open). A throttled migration is tried again
+after 30 seconds, with the reason shown on System health. A failed batch is
+retried with backoff (30 s doubling); after five in a row the migration is
+`failed` until an administrator resumes it.
+
+Statuses: `pending` (scheduled), `running`, `paused`, `finished`, `failed`.
+A replica only claims migrations its release defines, so one scheduled by a
+newer release waits for that release. Test-only definitions
+(`src/background/test-definitions.ts`) are inert unless named in
+`OCI_TEST_BACKGROUND_MIGRATIONS`; `oci-test.rewrite-messages-in-place`
+rewrites every message with its own values and is what the live tests and
+the rolling-upgrade test run.
+
+### Requiring earlier work
+
+`packages/db/releases.json` names each minor release's first pre-deploy
+migration and what the release needs finished first:
+
+```json
+{ "version": "0.12.0", "firstMigration": "0042_search_vector_not_null",
+  "requires": { "backgroundMigrations": ["0.12.message-search-vector"], "postSteps": [] } }
+```
+
+When `migrate` would apply a migration of a release with `requires`, it first
+checks, under the migration lock, that each named post-deploy step is
+finished and each background migration `finished`. If not, it applies
+nothing and fails naming them (`UnfinishedRequirementsError`). A new database
+is never refused: there is nothing to backfill. This is how release N+1 can
+rely on N's backfill (a `NOT NULL`, a dropped fallback) without blocking N's
+own upgrade on it; the operator finishes N's work on N, then upgrades. The
+preflight reports the same.
+
+### Code during the gap
+
+Between `migrate` and the end of the background phase, release N runs with
+its indexes possibly unbuilt and its backfills unfinished. Code that depends
+on one checks and falls back
+(`apps/api/src/services/migrations/readiness.ts`):
+
+```ts
+if (await isBackgroundMigrationDone('0.12.message-search-vector')) {
+  // use the stored column
+} else {
+  // compute it as before
+}
+```
+
+`isPostStepDone(name)` and `isBackgroundMigrationDone(name)` cache a true
+answer for the life of the process and a false one for 30 seconds; a
+database that cannot answer reads as not ready. An index needs no flag when
+the query is the same with or without it: the planner uses it once it is
+valid.
+
 ## Adding a migration
 
 Change the schema, then:
@@ -62,12 +255,17 @@ Sometimes clearer than the generated diff, for something needing `IF EXISTS`
 for instance. Add the file, then add its entry to
 `drizzle/meta/_journal.json`. The index must be sequential and the tag must
 match the filename, or the runner will not find it (the linter checks both).
-Changing existing rows does not belong in a schema migration; see
-[Migration linter](#migration-linter).
+Changing existing rows does not belong in a schema migration: write a
+[background migration](#background-migrations). An index on an existing
+table is a [post-deploy step](#post-deploy-steps); declare it in the Drizzle
+schema too, with a comment naming the step, and never let `db:generate` turn
+it into a pre-deploy migration.
 
 ## Indexes
 
-Add one for any column a list filters or sorts on. This has already bitten:
+Add one for any column a list filters or sorts on, as a
+[post-deploy step](#post-deploy-steps) when the table already exists. This
+has already bitten:
 the administrative user list counted messages per account with a correlated
 subquery against an unindexed `message.user_id`, which at two million rows took
 the page from milliseconds to over a minute.
@@ -81,6 +279,14 @@ from "user" u order by u.created_at desc limit 50;
 ```
 
 A `Seq Scan` on a large table in a per-row subquery is the shape of the problem.
+
+The first post-deploy steps (v0.11) index `message.created_at` for the admin
+overview's per-day counts, and failed replies by date for the usage page.
+Measured on the scale harness's `small` dataset (500,000 messages, a 905 MB
+table): the overview's counts went from parallel sequential scans (46 ms,
+46 ms and 138 ms) to index-only scans (1.0, 1.4 and 22 ms) and the page from
+126 ms to 22 ms; the usage page's error count from 43 ms to 1.6 ms. The
+builds took 381 ms and 136 ms.
 
 ## Migrations under several replicas
 
@@ -110,9 +316,10 @@ Every statement of the migration transaction runs with `lock_timeout`
 `set_config(..., true)` (that is, `SET LOCAL`) right after `BEGIN`; the session
 also gets a 10-second `idle_in_transaction_session_timeout`. Code is in
 `packages/db/src/migrator.ts` and `migration-safety.ts`. This covers the API's
-startup migration and the `migrate` job (`apps/api/src/migrate.ts`); the
-development command `pnpm db:migrate` (`packages/db/src/migrate.ts`) still runs
-Drizzle's plain migrator, without the advisory lock or these timeouts.
+startup migration, the `migrate` job (`apps/api/src/migrate.ts`) and the
+development command `pnpm db:migrate` (`packages/db/src/migrate.ts`), which all
+use the same migrator. Post-deploy steps get the same lock timeout and their
+own statement timeout ([above](#post-deploy-steps)).
 
 The lock timeout is what keeps an upgrade from stopping the application. A
 statement waiting for a lock queues every later request for that table behind
@@ -146,30 +353,46 @@ runtime-created `project_file_embedding`), is existing. CI runs the linter
 first in Application checks. Its tests are `scripts/lint-migrations.test.mjs`,
 with one fixture per rule in `scripts/lint-migrations/fixtures/rules/`.
 
+Post-deploy steps (`packages/db/post`, in `post/journal.json` order) are
+linted after every pre-deploy migration, with post-deploy rules: every table
+exists by then, `CONCURRENTLY` is required for indexes (and allowed: steps
+run outside a transaction, so `concurrent-in-transaction` does not apply),
+each step is exactly one idempotent statement, and drops are allowed, with a
+reason. Reports name them `post/NNNN_name.sql`. `--dir` lints another Drizzle
+folder and no post-deploy steps unless `--post-dir` names a folder too.
+
 | Rule | Fails on (existing tables only, unless noted) | Instead |
 | --- | --- | --- |
-| `index-not-concurrent` | `CREATE INDEX` or `REINDEX` without `CONCURRENTLY` | `CREATE INDEX CONCURRENTLY` in a post-deploy step |
-| `concurrent-in-transaction` | any `CONCURRENTLY` index build (any table): the migrator is one transaction | a post-deploy step (v0.11); a plain index on a new table is fine |
+| `index-not-concurrent` | `CREATE INDEX` or `REINDEX` without `CONCURRENTLY` (in post-deploy: any table) | `CREATE INDEX CONCURRENTLY` in a post-deploy step |
+| `concurrent-in-transaction` | any `CONCURRENTLY` index build in pre-deploy (any table): the migrator is one transaction | a post-deploy step; a plain index on a new table is fine |
 | `alter-column-type` | `ALTER COLUMN ... TYPE` | new column, background backfill, switch, drop later |
 | `volatile-default` | `ADD COLUMN` with a volatile default (`gen_random_uuid()`, `random()`, `clock_timestamp()`, `nextval()`, ...), serial, identity or stored generated column; also `now()`/`CURRENT_TIMESTAMP` | add without the default, backfill in the background |
 | `set-not-null` | `SET NOT NULL` without an earlier validated `CHECK (col IS NOT NULL)` | add the check `NOT VALID`, validate it, then `SET NOT NULL` |
 | `constraint-not-valid` | `ADD CONSTRAINT` `FOREIGN KEY`/`CHECK` without `NOT VALID`, or a column added with inline `REFERENCES`/`CHECK` | `NOT VALID` now, `VALIDATE CONSTRAINT` post-deploy |
 | `unique-constraint` | `UNIQUE`, `PRIMARY KEY` or `EXCLUDE` added by `ALTER TABLE` (builds an index) | unique index concurrently, then `ADD CONSTRAINT ... USING INDEX` |
-| `data-change` | `UPDATE`, `DELETE`, `TRUNCATE`, `MERGE`, `INSERT ... SELECT` | a background migration; `INSERT ... VALUES` seed rows are fine |
-| `drop-column`, `drop-table` | any drop in a pre-deploy migration | stop using it first, drop it a release later ([below](#removing-a-column)) |
+| `data-change` | `UPDATE`, `DELETE`, `TRUNCATE`, `MERGE`, `INSERT ... SELECT` (pre- and post-deploy) | a background migration; `INSERT ... VALUES` seed rows are fine |
+| `drop-column`, `drop-table` | any drop. In pre-deploy an allow comment is refused (`allow-not-permitted`) | stop using it first, drop it in a post-deploy step with an allow whose reason says the previous release no longer reads it ([below](#removing-a-column)) |
 | `lock-table` | `LOCK TABLE` (any table) | nothing; statements take the locks they need |
 | `refresh-not-concurrent` | `REFRESH MATERIALIZED VIEW` without `CONCURRENTLY` | `CONCURRENTLY` |
 | `vacuum-full`, `cluster` | `VACUUM FULL`, `CLUSTER` (any table) | autovacuum, or `pg_repack` outside migrations |
 | `dynamic-sql` | `EXECUTE` inside a `DO` block, which cannot be checked | write the statements out |
+| `post-not-idempotent` | post-deploy: `CREATE INDEX` without `IF NOT EXISTS`, `DROP` without `IF EXISTS`, `ADD`/`DROP COLUMN` without `IF [NOT] EXISTS` | the guarded form: an interrupted step runs again |
+| `post-transaction` | post-deploy: `BEGIN`, `COMMIT`, ... and `DO` blocks | one plain statement; atomic work belongs in pre-deploy |
+
+A post-deploy file with more or fewer than one statement fails with
+`post-one-statement`, which cannot be allowed. Checking a drop against the
+previous release's Drizzle schema (the design's stretch goal) is not built:
+the allow comment's reason is the reviewer's check.
 
 `now()` and `CURRENT_TIMESTAMP` are `STABLE`, not volatile: PostgreSQL 11 and
 later evaluates them once and does not rewrite the table, but every existing
 row gets the migration's timestamp. They are flagged so that is a decision.
 
-**Data changes** to existing rows go into background migrations (batched,
-resumable, run by the job runner while OCI serves) once they exist in v0.11,
-and index builds and constraint validation into post-deploy steps. Until then,
-a data change that is truly bounded (a handful of rows) can be allowed.
+**Data changes** to existing rows go into [background
+migrations](#background-migrations) (batched, resumable, run by the job runner
+while OCI serves), and index builds and constraint validation into
+[post-deploy steps](#post-deploy-steps). A data change that is truly bounded
+(a handful of rows) can still be allowed in a pre-deploy migration.
 
 **Allowing an exception.** Put a comment directly above the statement (no
 blank line between; above a `DO` block it covers the statements inside):
@@ -204,7 +427,12 @@ releases:
 
 1. Stop reading and writing it, and remove it from the Drizzle schema. The
    column must have a default or allow `NULL`, so inserts keep working.
-2. In the next release, drop it in a migration (`DROP COLUMN IF EXISTS`).
+2. In the next release, drop it in a post-deploy step (`ALTER TABLE ... DROP
+   COLUMN IF EXISTS`, with `-- oci:lint-allow drop-column: <release> stopped
+   reading it`). By the time `migrate --post` runs, every replica runs a
+   release that does not read it, and the release before it (the one a
+   rollback would return to) does not either. A drop in a pre-deploy
+   migration fails the linter even with an allow comment.
 
 Pending second steps: none.
 

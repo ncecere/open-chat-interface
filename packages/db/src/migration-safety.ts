@@ -37,6 +37,13 @@ export const DEFAULT_MIGRATION_MAX_ATTEMPTS = 10;
 export const DEFAULT_MIGRATION_RETRY_DELAY_MS = 1_000;
 export const DEFAULT_MIGRATION_MAX_RETRY_DELAY_MS = 30_000;
 
+/**
+ * Post-deploy steps run outside a transaction while OCI serves, and one
+ * statement may build an index over the largest table: a concurrent build
+ * blocks no reads or writes, so it gets hours, not the pre-deploy minutes.
+ */
+export const DEFAULT_POST_MIGRATION_STATEMENT_TIMEOUT_MS = 4 * 60 * 60_000;
+
 export const MIGRATION_LOCK_TIMEOUT_LIMITS = { min: 100, max: 600_000 } as const;
 export const MIGRATION_STATEMENT_TIMEOUT_LIMITS = { min: 0, max: 86_400_000 } as const;
 
@@ -79,6 +86,25 @@ export function migrationTimeoutsFromEnv(
       MIGRATION_STATEMENT_TIMEOUT_LIMITS,
     ),
     idleInTransactionTimeoutMs: DEFAULT_MIGRATION_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+  };
+}
+
+/**
+ * Timeouts for `migrate --post`: the same lock timeout as pre-deploy
+ * migrations (MIGRATION_LOCK_TIMEOUT_MS) and POST_MIGRATION_STATEMENT_TIMEOUT_MS
+ * (default four hours, 0 for none) per step.
+ */
+export function postMigrationTimeoutsFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): MigrationTimeouts {
+  return {
+    ...migrationTimeoutsFromEnv(env),
+    statementTimeoutMs: readMilliseconds(
+      env,
+      'POST_MIGRATION_STATEMENT_TIMEOUT_MS',
+      DEFAULT_POST_MIGRATION_STATEMENT_TIMEOUT_MS,
+      MIGRATION_STATEMENT_TIMEOUT_LIMITS,
+    ),
   };
 }
 

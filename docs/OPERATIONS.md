@@ -148,11 +148,40 @@ objects, so attachment storage still needs versioning or snapshots as above.
 
 ## Upgrade
 
+From v0.11 an upgrade changes the database in three phases
+([database development](dev/database.md#three-kinds-of-migration)):
+**pre-deploy** migrations before replicas are replaced (fast, transactional),
+**post-deploy** steps after every replica runs the new release (concurrent
+index builds, validations, drops), and **background** migrations that the API
+replicas work through afterwards while OCI serves.
+
 1. Read every changelog entry between the deployed and target versions.
 2. Back up PostgreSQL, attachment objects, and deployment secrets.
 3. Pull the target versioned API and web images.
-4. For a multi-replica deployment, run migrations once before replacing API
-   replicas:
+4. **Check.** Run the target image's preflight against the production
+   database. It changes nothing:
+
+   ```bash
+   # Compose: OCI_API_IMAGE set to the target image
+   docker compose --profile tools run --rm migrate node dist/scripts/upgrade-check.js
+   # Any container runtime
+   docker run --rm -e DATABASE_URL=postgres://... ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
+     node dist/scripts/upgrade-check.js            # --json for the report as JSON
+   ```
+
+   It lists the release and schema, the pending pre-deploy migrations with
+   the rows and size of every table each statement touches, the post-deploy
+   steps with the indexes they build and roughly how much disk each needs
+   (OCI cannot read free disk space through SQL; keep twice the estimate
+   free), background migrations, any unfinished work an earlier release left
+   that this one requires, and a verdict. Exit code 0: a rolling upgrade (or
+   nothing to do); 2: needs a maintenance window (a pre-deploy statement
+   grows with a large table, or the database is more than one minor behind);
+   3: cannot run yet (required work unfinished, or the database was migrated
+   by a newer release); 1: the check failed. **Admin → System health →
+   Upgrades** shows the same report for the running release.
+5. **Pre-deploy.** For a multi-replica deployment, run migrations once before
+   replacing API replicas:
 
    ```bash
    docker compose --profile tools run --rm migrate
@@ -167,12 +196,89 @@ objects, so attachment storage still needs versioning or snapshots as above.
    With `RUN_MIGRATIONS=false`, startup refuses to serve unless the latest bundled
    migration's timestamp is recorded. That marker is not a schema-integrity check
    or evidence that reverting an image after newer migrations is safe.
-   Replace API replicas one at a time. From v0.11 each one drains when it is
-   stopped (see [Shutting down and draining](#shutting-down-and-draining));
+   `migrate` refuses, changing nothing, if the release requires an earlier
+   release's background migration or post-deploy step that has not finished;
+   the message names it. Finish it on the release you are running (step 7),
+   then upgrade.
+6. **Replace** API replicas one at a time. From v0.11 each one drains when it
+   is stopped (see [Shutting down and draining](#shutting-down-and-draining));
    a replica on an older release still cuts the replies it is writing, which
-   v0.11 replicas then save as interrupted.
-5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
-   attachment access.
+   v0.11 replicas then save as interrupted. Wait for `/api/health/ready`,
+   then verify authentication, chat, search, and attachment access.
+7. **Post-deploy**, once every replica runs the new release:
+
+   ```bash
+   docker compose --profile tools run --rm migrate-post
+   # or, with any runtime: node dist/migrate.js --post
+   ```
+
+   It refuses to run until every pre-deploy migration of the release is
+   applied. Each step runs outside a transaction, with the migration lock
+   timeout and `POST_MIGRATION_STATEMENT_TIMEOUT_MS`; an index is built
+   `CONCURRENTLY`, so reads and writes continue. It is safe to run again at
+   any time: finished steps are skipped, an interrupted one (a killed job, a
+   failover) is repeated, and an index an interrupted build left `INVALID` is
+   dropped and rebuilt. Then it schedules the release's background migrations.
+   Until it has run, the release works, without the new indexes' speed-up.
+8. **Background migrations** run on the API replicas on their own and show on
+   **System health → Background work** with their progress. Nothing needs to
+   wait for them, except the next upgrade if its release requires them (the
+   preflight says so).
+
+A single instance with `RUN_MIGRATIONS=true` does steps 5 and 7 itself: it
+migrates at startup and, once serving, applies its post-deploy steps from a
+background job (`RUN_POST_MIGRATIONS` defaults to `RUN_MIGRATIONS`). With
+several replicas keep `RUN_POST_MIGRATIONS=false` (the default when
+`RUN_MIGRATIONS=false`) and run step 7 yourself: nothing in the database tells
+OCI that every replica runs the new release, and a post-deploy step may drop
+something the previous release still reads.
+
+### Upgrading on Kubernetes
+
+Run the same image as three kinds of pod: a pre-upgrade Job (`node
+dist/migrate.js`), the API Deployment with `RUN_MIGRATIONS=false` (rolling
+update), and, after the rollout finishes (`kubectl rollout status
+deployment/oci-api`), a post-upgrade Job (`node dist/migrate.js --post`).
+With Helm, these are `pre-upgrade` and `post-upgrade` hooks. Give the
+post-upgrade Job no `activeDeadlineSeconds` shorter than its index builds
+(the preflight estimates them), and `backoffLimit` above zero: a rerun
+resumes. The preflight runs as a one-off pod: `kubectl run oci-upgrade-check
+--rm -i --restart=Never --image=<target image> --env=DATABASE_URL=... --
+node dist/scripts/upgrade-check.js`.
+
+### Background migrations
+
+Each API replica runs the job `migrations.background` every 30 seconds. One
+replica at a time works on a migration (a lease in the `background_migration`
+table), in batches, each batch and its progress committed together, so a
+crash, a restart or a failover loses or repeats at most one batch. A replica
+that is stopped finishes its current batch and hands the migration on.
+Batches wait while the database is under pressure:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BACKGROUND_MIGRATIONS_ENABLED` | `true` | Whether this replica runs batches at all. |
+| `BACKGROUND_MIGRATION_MAX_REPLICATION_LAG_MS` | `10000` | Wait while any standby's replay lag (`pg_stat_replication`) is over this; `0` turns the check off. Needs `GRANT pg_monitor TO <oci user>`, without which PostgreSQL hides the lag and the check sees none. |
+| `BACKGROUND_MIGRATION_MAX_TRANSACTION_AGE_MS` | `300000` | Wait while a transaction in this database has been open longer (a long report, `pg_dump`); vacuum cannot clean up after batches meanwhile. `0` turns it off. |
+| `BACKGROUND_MIGRATION_BATCH_TIMEOUT_MS` | `30000` | `statement_timeout` for one batch. |
+
+On **System health → Background work** administrators can pause and resume a
+migration and change its batch size and the pause between batches (taking
+effect at the next batch; each change is in the audit log as
+`background_migration.pause`, `.resume` or `.update`); auditors see the
+same page read-only. A migration whose batches fail five times in a row stops
+as `failed` with the error shown; resume it once the cause is fixed. Metrics:
+`oci_background_migration_rows_processed`,
+`oci_background_migration_progress_ratio` and
+`oci_background_migration_status{status}`, and the job's own
+`oci_job_runs_total{job="migrations.background"}`.
+
+### Post-deploy settings
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `RUN_POST_MIGRATIONS` | same as `RUN_MIGRATIONS` | Whether this replica applies post-deploy steps itself (single instance). |
+| `POST_MIGRATION_STATEMENT_TIMEOUT_MS` | `14400000` (four hours) | How long one post-deploy step may run; `0` means no limit. The lock timeout is `MIGRATION_LOCK_TIMEOUT_MS`. |
 
 ### Migration timeouts
 
@@ -594,6 +700,21 @@ changed rows and still sets `user_id` to null on deletion.
 Also in v0.10 without a migration: Settings → Sharing, and the **Delete own
 account** role switch, which is off for every role after the upgrade (see
 [Self-service account deletion](admin/governance.md#self-service-account-deletion)).
+
+### Upgrading to v0.11
+
+#### Three-phase migrations (migration 0039, post-deploy steps 0001 and 0002)
+
+Migration 0039 adds two tables, `oci_post_migration` and
+`background_migration`; nothing else in the schema changes before replicas
+are replaced. After every replica runs v0.11, `migrate --post` (step 7 of
+[Upgrade](#upgrade)) builds two indexes on `message` concurrently:
+`message_created_at_idx` (the admin overview's per-day counts) and the small
+partial `message_error_created_at_idx` (the usage page's failed replies).
+At 500,000 messages they took 0.4 s and 0.1 s and the first is about 11 MB;
+at 20 million messages expect a minute or two and about 450 MB. Until they
+exist those pages are as slow as in v0.10. v0.11 ships no background
+migration.
 
 ## Shutting down and draining
 
