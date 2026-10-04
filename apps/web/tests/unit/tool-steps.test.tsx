@@ -4,7 +4,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../src/components/chat/message-list';
-import { ToolSteps } from '../../src/components/chat/tool-steps';
+import { MessageRow } from '../../src/components/chat/message-row';
+import type { AnswerApproval } from '../../src/components/chat/tool-steps';
 import {
   approvalResponsesOf,
   denyUnansweredApprovals,
@@ -58,9 +59,34 @@ const button = (name: string) =>
     candidate.textContent?.includes(name),
   );
 
+function show(
+  message: UIMessage,
+  { onAnswer, streaming = false }: { onAnswer?: AnswerApproval; streaming?: boolean } = {},
+) {
+  return act(() =>
+    root.render(
+      <MessageRow
+        message={message}
+        streaming={streaming}
+        editing={false}
+        onEditingChange={() => {}}
+        onAnswerApproval={onAnswer}
+      />,
+    ),
+  );
+}
+const block = () => container.querySelector<HTMLElement>('[data-reply-group="work"]');
+const blockHeader = () => block()!.querySelector<HTMLButtonElement>('button')!;
+const expandBlock = () => act(async () => blockHeader().click());
+
 describe('tool steps', () => {
   it('shows a collapsed one-line summary that expands to inputs and a result summary', async () => {
-    await act(() => root.render(<ToolSteps message={reply(searched)} />));
+    await show(reply(searched));
+    // A reply with tool calls and no reasoning: the work block names what it did.
+    expect(blockHeader().textContent).toBe('Searched the web');
+    expect(blockHeader().getAttribute('aria-expanded')).toBe('false');
+    expect(button("Searched the web for 'library opening hours'")).toBeUndefined();
+    await expandBlock();
     const toggle = button("Searched the web for 'library opening hours' · 2 results")!;
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.textContent).not.toContain('Library hours');
@@ -75,25 +101,31 @@ describe('tool steps', () => {
     expect(container.textContent).not.toContain('RAW_SNIPPET');
   });
 
-  it('shows the note when a reply hit its step limit', async () => {
-    await act(() =>
-      root.render(
-        <ToolSteps
-          message={reply(searched, {
-            type: 'data-tool-limit',
-            data: { reason: 'steps', steps: 8 },
-          })}
-        />,
-      ),
+  it('shows the note when a reply hit its step limit, outside the block', async () => {
+    await show(
+      reply(searched, {
+        type: 'data-tool-limit',
+        data: { reason: 'steps', steps: 8 },
+      }),
     );
-    expect(container.querySelector('[role="note"]')?.textContent).toBe(
+    const note = container.querySelector('[role="note"]')!;
+    expect(note.textContent).toBe(
       'This reply reached the limit of 8 tool steps, so it answered with what it had found.',
+    );
+    expect(block()!.contains(note)).toBe(false);
+  });
+
+  it('shows the limit note alone when the reply made no tool call', async () => {
+    await show(reply({ type: 'data-tool-limit', data: { reason: 'allowance' } }));
+    expect(block()).toBeNull();
+    expect(container.querySelector('[role="note"]')?.textContent).toContain(
+      'usage allowance ran out',
     );
   });
 
   it('asks for approval with the tool, its connector and the exact inputs', async () => {
     const onAnswer = vi.fn();
-    await act(() => root.render(<ToolSteps message={reply(awaiting)} onAnswer={onAnswer} />));
+    await show(reply(awaiting), { onAnswer });
     const card = container.querySelector('section[data-testid="tool-approval"]')!;
     const heading = card.querySelector('h3')!;
     expect(card.getAttribute('aria-labelledby')).toBe(heading.id);
@@ -113,24 +145,46 @@ describe('tool steps', () => {
     expect(document.activeElement).toBe(status);
   });
 
+  it('keeps a waiting approval outside the collapsed block, above the text', async () => {
+    await show(
+      reply(
+        { type: 'reasoning', text: 'Search, then note.' },
+        searched,
+        { type: 'reasoning', text: 'Now the note.' },
+        { type: 'text', text: 'I can send that note.' },
+        awaiting,
+      ),
+      { onAnswer: vi.fn() },
+    );
+    expect(blockHeader().textContent).toBe('Thought · searched the web');
+    expect(blockHeader().getAttribute('aria-expanded')).toBe('false');
+    const card = container.querySelector('section[data-testid="tool-approval"]')!;
+    expect(block()!.contains(card)).toBe(false);
+    const text = container.querySelector('[data-reply-group="text"]')!;
+    expect(block()!.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Expanded, the timeline has the steps but not the approval.
+    await expandBlock();
+    expect(block()!.querySelector('ol[aria-label="Steps"]')?.children).toHaveLength(3);
+    expect(block()!.textContent).not.toContain('create_note');
+  });
+
   it('denies with the Deny button and disables answers while a reply streams', async () => {
     const onAnswer = vi.fn();
-    await act(() =>
-      root.render(<ToolSteps message={reply(awaiting)} onAnswer={onAnswer} disabled />),
-    );
+    await show(reply(awaiting), { onAnswer, streaming: true });
     expect(button('Approve')!.disabled).toBe(true);
-    await act(() => root.render(<ToolSteps message={reply(awaiting)} onAnswer={onAnswer} />));
+    await show(reply(awaiting), { onAnswer });
     await act(async () => button('Deny')!.click());
     expect(onAnswer).toHaveBeenCalledWith('approval-1', false);
   });
 
-  it('shows an answered approval without buttons, then the finished step', async () => {
+  it('shows an answered approval without buttons, then the finished step in the block', async () => {
     const responded = {
       ...awaiting,
       state: 'approval-responded',
       approval: { id: 'approval-1', approved: true },
     };
-    await act(() => root.render(<ToolSteps message={reply(responded)} onAnswer={vi.fn()} />));
+    await show(reply(responded), { onAnswer: vi.fn() });
     expect(button('Approve')).toBeUndefined();
     expect(container.textContent).toContain('Approved. Continuing the reply…');
     const denied = {
@@ -138,9 +192,23 @@ describe('tool steps', () => {
       state: 'output-denied',
       approval: { id: 'approval-1', approved: false, reason: 'not answered' },
     };
-    await act(() => root.render(<ToolSteps message={reply(denied)} />));
+    await show(reply(denied));
     expect(container.querySelector('section[data-testid="tool-approval"]')).toBeNull();
+    expect(blockHeader().textContent).toBe('A step was not run');
+    await expandBlock();
     expect(container.textContent).toContain('mcp__crm__create_note was not run (not answered)');
+  });
+
+  it('moves focus to the block once an approval answered here has run', async () => {
+    const onAnswer = vi.fn();
+    await show(reply(awaiting), { onAnswer });
+    await act(async () => button('Approve')!.click());
+    await show(reply({ ...awaiting, state: 'output-available', output: { ok: true } }), {
+      onAnswer,
+      streaming: true,
+    });
+    expect(container.querySelector('section[data-testid="tool-approval"]')).toBeNull();
+    expect(document.activeElement).toBe(blockHeader());
   });
 
   it('counts a tool step as visible progress in the conversation', async () => {
@@ -157,7 +225,7 @@ describe('tool steps', () => {
         />,
       ),
     );
-    expect(container.textContent).toContain("Searching the web for 'library opening hours'");
+    expect(container.textContent).toContain('Searching the web…');
     expect(container.querySelector('[aria-label="Generating response"]')).toBeNull();
   });
 });

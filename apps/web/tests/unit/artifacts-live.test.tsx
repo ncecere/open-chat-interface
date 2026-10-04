@@ -12,7 +12,6 @@ import {
 } from '../../src/components/artifacts/artifacts-provider';
 import { CreatedArtifactCards } from '../../src/components/artifacts/reply-content';
 import { MessageList } from '../../src/components/chat/message-list';
-import { ToolSteps } from '../../src/components/chat/tool-steps';
 import { button, cleanup, click, dialog, findButton, settle } from './admin-test-utils';
 
 /**
@@ -593,11 +592,117 @@ describe('opening artifacts automatically', () => {
   });
 });
 
+describe('a reply that reasoned, created an artifact, then reasoned again', () => {
+  const twoStep = (state: 'writing' | 'saved') =>
+    reply(
+      { type: 'step-start' },
+      { type: 'reasoning', text: 'They want a sign-up page.' },
+      state === 'saved'
+        ? createPart(
+            'output-available',
+            { title: 'Sign-Up Page', kind: 'html', content: PAGE },
+            savedOutput,
+          )
+        : createPart('input-streaming', { title: 'Sign-Up Page', kind: 'html', content: '<p>' }),
+      ...(state === 'saved'
+        ? ([
+            { type: 'step-start' },
+            { type: 'reasoning', text: 'Now explain it.' },
+            { type: 'text', text: 'Your page is ready.' },
+          ] as UIMessage['parts'])
+        : []),
+    );
+  const article = () =>
+    container.querySelector<HTMLElement>('article[aria-label="Assistant message"]')!;
+  const block = () => article().querySelector<HTMLElement>('[data-reply-group="work"]')!;
+  const card = () => article().querySelector<HTMLElement>('[data-artifact-card="tool:call-1"]')!;
+
+  it('shows one block summarising the work, the card below it and the answer last', async () => {
+    listed = [created()];
+    await mount([prompt, twoStep('saved')]);
+    // One block, no second "Reasoning", no loose "Details" link.
+    expect(article().querySelectorAll('[data-reply-group="reasoning"]')).toHaveLength(0);
+    expect(article().querySelectorAll('[data-reply-group="work"]')).toHaveLength(1);
+    const header = block().querySelector('button')!;
+    expect(header.textContent).toBe('Thought · created an artifact');
+    expect(header.getAttribute('aria-expanded')).toBe('false');
+    expect(findButton('Details')).toBeUndefined();
+    // The card is outside the collapsed block, above the answer.
+    expect(block().contains(card())).toBe(false);
+    expect(card().getAttribute('aria-label')).toBe('Open artifact: Sign-Up Page');
+    const answer = article().querySelector('[data-reply-group="text"]')!;
+    expect(block().compareDocumentPosition(card()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card().compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('lists the artifact as a compact row in the timeline that leads to its card', async () => {
+    listed = [created()];
+    await mount([prompt, twoStep('saved')]);
+    await click(block().querySelector('button')!);
+    const items = [...block().querySelectorAll('ol[aria-label="Steps"] > li')];
+    expect(items.map((item) => item.getAttribute('data-work-entry'))).toEqual([
+      'reasoning',
+      'tool',
+      'reasoning',
+    ]);
+    // Not the full card: one line naming what was made.
+    expect(block().querySelector('[data-artifact-card]')).toBeNull();
+    const row = items[1]!.querySelector<HTMLButtonElement>('button')!;
+    expect(row.textContent).toContain("Created artifact 'Sign-Up Page'");
+    await click(row);
+    expect(document.activeElement).toBe(card());
+  });
+
+  it('shows the live card below the block at once while the block says what is written', async () => {
+    mockViewport(390);
+    await mount();
+    await stream([prompt]);
+    await stream([prompt, twoStep('writing')]);
+    expect(block().querySelector('button')!.textContent).toBe('Writing Sign-Up Page…');
+    expect(block().getAttribute('data-work')).toBe('active');
+    expect(card().hasAttribute('data-live')).toBe(true);
+    expect(card().textContent).toContain('Writing Sign-Up Page…');
+    expect(block().contains(card())).toBe(false);
+    expect(article().querySelector('[role="status"][aria-live="polite"]')?.textContent).toBe(
+      'Writing an artifact…',
+    );
+  });
+});
+
 describe('artifact tool call details', () => {
   async function renderSteps(message: UIMessage, streaming: boolean) {
     await mount([prompt, message], streaming);
   }
-  const details = (name: string) => button(`Details: ${name}`);
+  const details = (name: string) => button(`Show details for ${name}`);
+  const step = (id = 'call-1') =>
+    container.querySelector<HTMLElement>(`[data-artifact-step="${id}"]`)!;
+
+  it('open from a chevron inside the card, closed by default', async () => {
+    listed = [created()];
+    await renderSteps(
+      reply(
+        createPart(
+          'output-available',
+          { title: 'Sign-Up Page', kind: 'html', content: PAGE },
+          savedOutput,
+        ),
+      ),
+      false,
+    );
+    const toggle = details('Sign-Up Page');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(step().contains(toggle)).toBe(true);
+    expect(container.querySelector('[data-artifact-details]')).toBeNull();
+    await click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const panel = container.querySelector<HTMLElement>('[data-artifact-details]')!;
+    expect(panel.id).toBe(toggle.getAttribute('aria-controls'));
+    // Inside the card's own border, not beside it.
+    expect(step().contains(panel)).toBe(true);
+    // The card body still opens the panel.
+    await click(button('Open artifact: Sign-Up Page'));
+    expect(container.querySelector('[data-artifact-panel]') ?? dialog()).not.toBeNull();
+  });
 
   it('summarise a saved call readably, never as JSON, with a way to open that version', async () => {
     listed = [created({ currentVersion: 2 })];
@@ -669,16 +774,15 @@ describe('artifact tool call details', () => {
       false,
     );
     expect(container.querySelector('[data-artifact-card]')).toBeNull();
-    expect(container.textContent).toContain('Creating an artifact failed');
-    await click(details('Creating an artifact failed'));
+    // Nothing was made: the block says so, and its row has the details.
+    const block = container.querySelector<HTMLElement>('[data-reply-group="work"]')!;
+    expect(block.querySelector('button')?.textContent).toBe('A step failed');
+    await click(block.querySelector('button')!);
+    await click(button('Creating an artifact failed'));
     expect(container.textContent).toContain('Too large.');
   });
 
   it('keep the JSON inputs view for other tools', async () => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    container = document.createElement('div');
-    document.body.append(container);
-    root = createRoot(container);
     const search: UIMessage = reply({
       type: 'tool-web_search',
       toolCallId: 's1',
@@ -686,9 +790,10 @@ describe('artifact tool call details', () => {
       input: { query: 'hours' },
       output: { query: 'hours', results: [] },
     } as never);
-    await act(async () => root!.render(<ToolSteps message={search} />));
+    await renderSteps(search, false);
+    await click(button('Searched the web'));
     await click(button("Searched the web for 'hours' · 0 results"));
     expect(container.textContent).toContain('"query": "hours"');
-    expect(findButton('Details: hours')).toBeUndefined();
+    expect(container.querySelector('[aria-label^="Show details for"]')).toBeNull();
   });
 });

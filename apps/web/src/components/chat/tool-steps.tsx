@@ -11,16 +11,17 @@ import {
 } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { ChevronDown, Globe2, ShieldQuestion, Wrench } from 'lucide-react';
-import { memo, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ArtifactToolStep } from '~/components/artifacts/artifact-tool-step';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { MemoryNote } from '~/components/chat/memory-note';
+import type { ToolPlace } from '~/components/chat/message-content';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
 export type AnswerApproval = (approvalId: string, approved: boolean) => void | PromiseLike<void>;
 
-type ToolPart = Record<string, unknown> & { type: string; toolCallId: string };
+export type ToolPart = Record<string, unknown> & { type: string; toolCallId: string };
 
 /** The tool parts of a message, with the summary every renderer shows. */
 export function toolStepsOf(message: UIMessage): Array<{ part: ToolPart; step: ToolStepSummary }> {
@@ -95,7 +96,8 @@ function ResultSummary({ part, step }: { part: ToolPart; step: ToolStepSummary }
   return <p className="text-[var(--text-muted)]">Finished.</p>;
 }
 
-function ToolStepRow({
+/** One tool call: a one-line summary that expands to its inputs and a summary of its result. */
+export function ToolStepRow({
   part,
   step,
   focusOnMount,
@@ -261,86 +263,94 @@ function ApprovalCard({
   );
 }
 
-const isArtifactStep = (toolId: string) =>
+export const isArtifactStep = (toolId: string) =>
   (ARTIFACT_TOOL_IDS as readonly string[]).includes(toolId);
 
+const isMemoryStep = (toolId: string) => toolId === 'remember' || toolId === 'forget';
+
+/** A step the person answers, or has just answered, in its approval card. */
+const isApprovalStep = (part: ToolPart, step: ToolStepSummary) =>
+  step.state === 'awaiting-approval' ||
+  ((step.state === 'approved' || step.state === 'denied') && part.state === 'approval-responded');
+
 /**
- * A reply's tool use: each call as a collapsed step, approvals inline in the
- * same place, and the note when the reply hit a limit. Artifact calls show as
- * their artifact's card instead (live while the model writes it).
+ * Where a tool call shows in its reply. Artifact calls are a row in the work
+ * block and their card below it (`showsCard` false, when the card cannot be
+ * shown, leaves only the row). Approvals waiting for an answer and memory
+ * changes stay below the block, in sight. Everything else is in the block.
  */
-export const ToolSteps = memo(function ToolSteps({
+export function toolPlaceOf(part: ToolPart, showsCard: boolean): ToolPlace {
+  const step = summarizeToolPart(part);
+  if (isArtifactStep(step.toolId) && !step.approvalId && part.state !== 'approval-responded')
+    return showsCard ? 'both' : 'work';
+  if (isMemoryStep(step.toolId) || isApprovalStep(part, step)) return 'result';
+  return 'work';
+}
+
+/**
+ * What a reply's tool use made or needs, kept in sight between its work block
+ * and its text: artifact cards (live while written), approvals waiting for
+ * the person, memory notes with Undo, and the note when the reply hit a limit.
+ */
+export function ReplyResults({
   message,
+  parts,
   onAnswer,
   disabled = false,
   streaming = false,
-  only,
-  showLimit = true,
+  answeredHere,
 }: {
   message: UIMessage;
+  /** The tool parts shown here, in written order. */
+  parts: readonly ToolPart[];
   /** Absent for replies that can no longer be answered. */
   onAnswer?: AnswerApproval;
   disabled?: boolean;
   /** This reply is being written now. */
   streaming?: boolean;
-  /** The tool calls of one run of the reply (by toolCallId); all of them when absent. */
-  only?: string;
-  /** Whether this group shows the note when the reply hit a limit. */
-  showLimit?: boolean;
+  /** Steps whose approval was answered in this view, to keep focus with them. */
+  answeredHere: Set<string>;
 }) {
-  const shown = only === undefined ? null : new Set(only.split('\n'));
-  const steps = toolStepsOf(message).filter(({ step }) => !shown || shown.has(step.toolCallId));
-  const limit = showLimit ? toolLimitOf(message) : null;
-  const answeredHere = useRef(new Set<string>());
-  if (steps.length === 0 && !limit) return null;
+  const limit = toolLimitOf(message);
+  if (parts.length === 0 && !limit) return null;
+  const steps = parts.map((part) => ({ part, step: summarizeToolPart(part) }));
   const wrapped: AnswerApproval | undefined = onAnswer
     ? (approvalId, approved) => {
         const answered = steps.find(({ step }) => step.approvalId === approvalId);
-        if (answered) answeredHere.current.add(answered.step.toolCallId);
+        if (answered) answeredHere.add(answered.step.toolCallId);
         return onAnswer(approvalId, approved);
       }
     : undefined;
   return (
-    <div className="mb-4 space-y-2">
-      {steps.length > 0 && (
-        <ul className="space-y-2" aria-label="Tool steps">
-          {steps.map(({ part, step }) => {
-            // A saved or removed memory is shown with its text and Undo.
-            const memory = memoryChangeOf(part);
-            return (
-              <li key={step.toolCallId} className="min-w-0">
-                {isArtifactStep(step.toolId) &&
-                !step.approvalId &&
-                part.state !== 'approval-responded' ? (
-                  <ArtifactToolStep
-                    messageId={message.id}
-                    part={part}
-                    step={step}
-                    streaming={streaming}
-                  />
-                ) : memory ? (
-                  <MemoryNote
-                    messageId={message.id}
-                    toolCallId={step.toolCallId}
-                    change={memory}
-                    canUndo={!disabled}
-                  />
-                ) : step.state === 'awaiting-approval' ||
-                  (step.state === 'approved' && part.state === 'approval-responded') ||
-                  (step.state === 'denied' && part.state === 'approval-responded') ? (
-                  <ApprovalCard part={part} step={step} onAnswer={wrapped} disabled={disabled} />
-                ) : (
-                  <ToolStepRow
-                    part={part}
-                    step={step}
-                    focusOnMount={answeredHere.current.has(step.toolCallId)}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+    <div className="mb-4 space-y-2" data-reply-results="">
+      {steps.map(({ part, step }) => {
+        // A saved or removed memory is shown with its text and Undo.
+        const memory = memoryChangeOf(part);
+        return (
+          <div key={step.toolCallId} className="min-w-0">
+            {isArtifactStep(step.toolId) &&
+            !step.approvalId &&
+            part.state !== 'approval-responded' ? (
+              <ArtifactToolStep messageId={message.id} part={part} streaming={streaming} />
+            ) : memory ? (
+              <MemoryNote
+                messageId={message.id}
+                toolCallId={step.toolCallId}
+                change={memory}
+                canUndo={!disabled}
+              />
+            ) : isApprovalStep(part, step) ? (
+              <ApprovalCard part={part} step={step} onAnswer={wrapped} disabled={disabled} />
+            ) : (
+              <ToolStepRow
+                part={part}
+                step={step}
+                focusOnMount={answeredHere.has(step.toolCallId)}
+              />
+            )}
+          </div>
+        );
+      })}
       {limit && (
         <p role="note" className="text-xs text-[var(--text-muted)]">
           {limit}
@@ -348,4 +358,4 @@ export const ToolSteps = memo(function ToolSteps({
       )}
     </div>
   );
-});
+}

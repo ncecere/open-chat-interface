@@ -41,21 +41,43 @@ This is worth reaching for more often than people do. Asking "what if we did it
 the other way?" as a fork means you end up with both answers side by side in
 the sidebar rather than one overwritten by the other.
 
-## Reasoning
+## How a reply shows the model's work
 
-Some models work through a problem before answering. Where they do, that
-thinking appears in the reply, where it happened, as a collapsed **Reasoning**
-heading you can select to read it in full. A reply that uses tools can think
-more than once, and each piece of reasoning sits before the step it led to.
+Some models work through a problem before answering, and some use tools (a
+web search, an artifact, a connector). Everything a reply did before its
+answer is gathered into **one collapsed block** at the top of the reply, so
+the answer reads cleanly however many steps it took.
 
-While the model is still thinking, the heading reads **Thinking…** and a small
-window under it shows the latest few lines as they arrive, so you can follow
-along without the reply jumping around. Select the heading or the window to
-read the whole reasoning so far. Once the model moves on (to a tool step or the
-answer) the window goes and the heading becomes **Reasoning** again. If you
-opened or collapsed the reasoning yourself, it stays the way you left it.
-Screen readers get the heading and, when expanded, the full text; the moving
-window is not read out.
+- A reply that only thought once shows a **Reasoning** heading. Select it to
+  read the thinking in full.
+- A reply that took more than one step, or used a tool, shows a one-line
+  summary instead, for example **Thought · created an artifact**,
+  **Thought · searched the web twice**, **Searched the web**, or
+  **Worked · 3 steps** when it did several different things. Select it to see
+  a timeline of every piece of reasoning and every tool step in the order
+  they happened; each tool step expands to its inputs and result.
+
+What the work **made or needs from you** stays in sight below the block and
+above the answer: artifact cards, tool approvals waiting for an answer, and
+"Memory updated" notes. Nothing you need to act on is hidden in the
+collapsed block.
+
+While the model works, the block's heading says what it is doing now:
+**Thinking…**, **Searching the web…**, **Writing *Title*…**. While it
+thinks, a small window under the heading shows the latest few lines as they
+arrive, so you can follow along without the reply jumping around; select the
+heading or the window to read everything so far. When the answer starts, the
+block collapses to its summary. If you opened or collapsed it yourself, it
+stays the way you left it.
+
+The heading is a button that says whether it is expanded, and the timeline
+is a list. Screen readers hear each new step as it starts (once, not every
+word); the moving window is not read out. Animation stops if your system asks
+for reduced motion.
+
+The same block appears when you reload a conversation, switch between
+retried replies, and on share links (which show the tool steps' one-line
+summaries, not reasoning).
 
 Models that support **effort control** let you ask for more or less of this.
 Higher effort means a slower, more considered answer; lower means a quicker one.

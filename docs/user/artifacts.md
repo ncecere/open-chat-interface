@@ -22,8 +22,9 @@ without tools write a code block and OCI saves it once the reply is finished.
 ## Watching an artifact being written
 
 When a model that can use tools writes an artifact, the reply shows its card
-straight away, in the place where the model started writing it (after its
-reasoning, before the text that follows):
+straight away, below the reply's work block (see
+[Conversations](conversations.md#how-a-reply-shows-the-models-work)) and
+above its answer, while the block's heading reads **Writing *Title*…**:
 
 - **Preparing *Title*…** until the first text arrives. Some providers send the
   whole artifact at once at the end; after a few seconds the card shows how
@@ -33,9 +34,15 @@ reasoning, before the text that follows):
   **Revising *Title*… (2 changes)**.
 - Once the artifact is saved, the card becomes the ordinary card that opens it.
 
-Select **Details** next to a card to see the title, kind and size, each change
-of a revision as a before-and-after snippet, and **Open artifact** for the
-version that call made.
+Select the small arrow at the right edge of a card (**Show details for
+*Title*** to a screen reader) to open the details inside the card: the title,
+kind and size, each change of a revision as a before-and-after snippet, the
+latest source while it is being written, and **Open artifact (version *N*)**
+for the version that call made. Selecting the rest of the card still opens
+the artifact. In the expanded work block the same call is one line, such as
+**Created artifact 'Title'**; select it to jump to the card. A call that
+failed has no card; its line in the work block opens the same details and
+the error.
 
 On a wide screen (a computer, or a tablet held sideways) the artifact panel
 **opens by itself** beside the conversation for the first artifact a reply
