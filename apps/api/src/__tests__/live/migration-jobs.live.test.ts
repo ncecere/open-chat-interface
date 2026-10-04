@@ -82,9 +82,9 @@ describe.skipIf(!available)('live PostgreSQL migration jobs', () => {
     state.env = { DATABASE_URL: live.connectionString, RUN_MIGRATIONS: true };
     expect(await jobs.postWorkPending()).toBe(true);
     const job = jobs.migrationJobs().find((entry) => entry.name === 'migrations.post-deploy')!;
-    // Two steps applied, two background migrations scheduled (the usage
+    // Six steps applied, two background migrations scheduled (the usage
     // rollup backfill every instance has, and the test one).
-    expect(await job.run()).toBe(4);
+    expect(await job.run()).toBe(8);
     expect(await jobs.postWorkPending()).toBe(false);
     expect(await job.run()).toBe(0);
 

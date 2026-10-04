@@ -35,6 +35,7 @@ import {
   inspect,
   must,
   PERSON_PASSWORD,
+  PROJECT,
   parseArgs,
   psql,
   REPO_ROOT,
@@ -45,7 +46,13 @@ import {
   waitHttp,
 } from './lib.mjs';
 import { analyse, writeReports } from './report.mjs';
-import { seedConversations, seededThreadsFor, setupThroughApi, WORDS } from './seed.mjs';
+import {
+  seedConversations,
+  seededThreadsFor,
+  seedUsageEvents,
+  setupThroughApi,
+  WORDS,
+} from './seed.mjs';
 import { runSmoke } from './smoke.mjs';
 
 const REGISTRY = 'ghcr.io/ncecere/open-chat-interface';
@@ -68,6 +75,8 @@ const spec = {
   people: { type: 'number', default: 40 },
   threads: { type: 'number', default: 10_000 },
   'messages-per-thread': { type: 'number', default: 30 },
+  /** Usage events seeded (one per seeded reply first, then spread over 60 days). */
+  'usage-events': { type: 'number', default: 240_000 },
   vus: { type: 'number', default: 6 },
   'think-ms': { type: 'number', default: 400 },
   'send-every': { type: 'number', default: 2 },
@@ -196,7 +205,8 @@ async function ensureImage(image) {
 }
 
 async function buildFromSource(app, version) {
-  const image = `oci-upgrade-${app}:to`;
+  // Named after the compose project, so runs with --project never share an image.
+  const image = `${PROJECT}-${app}:to`;
   const revision = (await run('git', ['rev-parse', 'HEAD'])).stdout.trim() || 'unknown';
   log(`building ${image} from source (${version}, ${revision.slice(0, 8)})`);
   const t0 = Date.now();
@@ -287,6 +297,128 @@ async function backgroundMigrations() {
         ms: Number(started) && Number(finished) ? Number(finished) - Number(started) : null,
       };
     });
+}
+
+/** The usage-rollup backfill (migration 0040, v0.11); its rollups are checked after it. */
+const USAGE_ROLLUP_BACKFILL = '0.11.usage-rollups';
+
+const ROLLUP_AMOUNTS = [
+  'events',
+  'settled_events',
+  'messages',
+  'tokens_in',
+  'tokens_out',
+  'cost_micros',
+  'quota_messages',
+  'quota_tokens',
+  'quota_cost_micros',
+];
+const MODEL_AMOUNTS = ROLLUP_AMOUNTS.slice(0, 6);
+
+/**
+ * Compares the usage rollups with the raw events, in one statement (one
+ * snapshot, so the load's writes and the fold job cannot make them disagree
+ * mid-check): every (UTC hour, person, model) of `usage_rollup_hour` plus the
+ * change log not folded yet, and every (hour, model) of
+ * `usage_rollup_model_hour` plus the log, against a `group by` over every
+ * event, amount by amount (docs/dev/database.md, "Usage rollups"). A rollup
+ * key whose amounts all net to zero is no key. Null when TO has no rollups.
+ */
+async function usageRollupCheck() {
+  const [exists] = (
+    await psql(`select to_regclass('usage_rollup_hour') is not null;`, env).catch(() => 'f')
+  ).trim();
+  if (exists !== 't') return null;
+  const eventAmounts = `count(*) as events,
+      count(*) filter (where not pending) as settled_events,
+      coalesce(sum(message_count) filter (where not pending), 0) as messages,
+      coalesce(sum(tokens_in) filter (where not pending), 0) as tokens_in,
+      coalesce(sum(tokens_out) filter (where not pending), 0) as tokens_out,
+      coalesce(sum(cost_micros) filter (where not pending), 0) as cost_micros,
+      sum(message_count) as quota_messages,
+      sum(tokens_in::bigint + tokens_out + reserved_tokens) as quota_tokens,
+      sum(cost_micros + reserved_cost_micros) as quota_cost_micros`;
+  const sums = (names) => names.map((name) => `sum(${name})::bigint as ${name}`).join(', ');
+  const nonZero = (names) => `not (${names.map((name) => `sum(${name}) = 0`).join(' and ')})`;
+  const differs = (names) =>
+    `(${names.map((n) => `e.${n}`).join(', ')}) is distinct from (${names.map((n) => `r.${n}`).join(', ')})`;
+  const out = await psql(
+    `with e as (
+       select date_trunc('hour', occurred_at, 'UTC') as hour, user_id, model_slug, ${eventAmounts}
+       from usage_event group by 1, 2, 3
+     ), em as (
+       select hour, model_slug, ${sums(MODEL_AMOUNTS)} from e group by 1, 2
+     ), r as (
+       select hour, user_id, model_slug, ${sums(ROLLUP_AMOUNTS)}
+       from (select hour, user_id, model_slug, ${ROLLUP_AMOUNTS.join(', ')} from usage_rollup_hour
+             union all
+             select hour, user_id, model_slug, ${ROLLUP_AMOUNTS.join(', ')} from usage_rollup_change) x
+       group by 1, 2, 3 having ${nonZero(ROLLUP_AMOUNTS)}
+     ), rm as (
+       select hour, model_slug, ${sums(MODEL_AMOUNTS)}
+       from (select hour, model_slug, ${MODEL_AMOUNTS.join(', ')} from usage_rollup_model_hour
+             union all
+             select hour, model_slug, ${MODEL_AMOUNTS.join(', ')} from usage_rollup_change) x
+       group by 1, 2 having ${nonZero(MODEL_AMOUNTS)}
+     )
+     select
+       (select count(*) from usage_event),
+       (select count(*) from usage_event where in_rollup is not true),
+       (select count(*) from usage_event where user_id is null),
+       (select count(*) from e),
+       (select count(*) from e full join r
+          on r.hour = e.hour and r.user_id is not distinct from e.user_id and r.model_slug = e.model_slug
+        where ${differs(ROLLUP_AMOUNTS)}),
+       (select count(*) from em),
+       (select count(*) from em e full join rm r on r.hour = e.hour and r.model_slug = e.model_slug
+        where ${differs(MODEL_AMOUNTS)}),
+       (select count(*) from usage_rollup_hour),
+       (select count(*) from usage_rollup_change),
+       (select coalesce(sum(events), 0) from e), (select coalesce(sum(events), 0) from r),
+       (select coalesce(sum(cost_micros), 0) from e), (select coalesce(sum(cost_micros), 0) from r),
+       (select coalesce(sum(quota_tokens), 0) from e), (select coalesce(sum(quota_tokens), 0) from r);`,
+    env,
+  );
+  const [
+    events,
+    unmarked,
+    deletedAccounts,
+    personKeys,
+    personDiffering,
+    modelKeys,
+    modelDiffering,
+    rollupRows,
+    unfolded,
+    eventsTotal,
+    rollupEventsTotal,
+    costTotal,
+    rollupCostTotal,
+    quotaTokensTotal,
+    rollupQuotaTokensTotal,
+  ] = out.trim().split('\t').map(Number);
+  return {
+    events,
+    unmarked,
+    deletedAccounts,
+    personKeys,
+    personDiffering,
+    modelKeys,
+    modelDiffering,
+    rollupRows,
+    unfolded,
+    totals: {
+      events: [eventsTotal, rollupEventsTotal],
+      costMicros: [costTotal, rollupCostTotal],
+      quotaTokens: [quotaTokensTotal, rollupQuotaTokensTotal],
+    },
+    exact:
+      unmarked === 0 &&
+      personDiffering === 0 &&
+      modelDiffering === 0 &&
+      eventsTotal === rollupEventsTotal &&
+      costTotal === rollupCostTotal &&
+      quotaTokensTotal === rollupQuotaTokensTotal,
+  };
 }
 
 async function appliedMigrationTimes() {
@@ -477,6 +609,16 @@ async function main() {
   };
   log(
     `seeded ${R.seed.messages} messages (${R.seed.messageTableSize}) in ${Math.round(R.seed.totalMs / 1000)} s`,
+  );
+  R.seed.usage = await seedUsageEvents({
+    env,
+    total: options['usage-events'],
+    log: (m) => console.log(m),
+  });
+  log(
+    R.seed.usage.skipped
+      ? `no usage events seeded: ${R.seed.usage.skipped}`
+      : `seeded ${R.seed.usage.events} usage events (${R.seed.usage.tableSize}; ${R.seed.usage.fromReplies} for seeded replies, ${R.seed.usage.deletedAccounts} of deleted accounts, ${R.seed.usage.models} models, ${R.seed.usage.pending} unsettled) in ${(R.seed.usage.totalMs / 1000).toFixed(1)} s`,
   );
   const loadPeople = people.slice(0, Math.min(options.vus, people.length - 1));
   const smokePerson = people.at(-1);
@@ -700,6 +842,26 @@ async function main() {
             .join('; ') || 'none'
         } (waited ${(R.background.waitedMs / 1000).toFixed(1)} s after the restarts)`,
       );
+
+      // The usage-rollup backfill: its batches and duration, then whether the
+      // rollups equal the raw events (checked under load, in one snapshot).
+      const backfill = migrations.find((m) => m.name === USAGE_ROLLUP_BACKFILL) ?? null;
+      const c0 = Date.now();
+      const check = await usageRollupCheck();
+      if (backfill || check) {
+        R.usageRollups = { backfill, check, checkMs: Date.now() - c0 };
+        log(
+          `usage rollups: backfill ${
+            backfill
+              ? `${backfill.status}, ${backfill.rowsProcessed} events in ${backfill.batches} batches${backfill.ms === null ? '' : ` over ${(backfill.ms / 1000).toFixed(1)} s`}`
+              : 'not scheduled'
+          }; ${
+            check
+              ? `${check.events} events, ${check.personKeys} (hour, person, model) keys, ${check.personDiffering} differing; ${check.modelKeys} (hour, model) keys, ${check.modelDiffering} differing; ${check.unmarked} unmarked, ${check.unfolded} unfolded changes: ${check.exact ? 'EXACT' : 'MISMATCH'}`
+              : 'no rollup tables'
+          } (checked in ${R.usageRollups.checkMs} ms)`,
+        );
+      }
     }
 
     // --- TO --------------------------------------------------------------------

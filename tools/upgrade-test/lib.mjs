@@ -11,7 +11,11 @@ import { fileURLToPath } from 'node:url';
 
 export const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(TOOL_DIR, '../..');
-export const PROJECT = 'oci-upgrade';
+/**
+ * The compose project. `OCI_UPGRADE_PROJECT` runs a second test beside one
+ * already running (with `--port` set apart too); TO images are named after it.
+ */
+export const PROJECT = process.env.OCI_UPGRADE_PROJECT || 'oci-upgrade';
 export const COMPOSE_FILE = resolve(TOOL_DIR, 'compose.yaml');
 
 export const ADMIN = { email: 'admin@upgrade.test', password: 'upgrade-test-admin-password' };

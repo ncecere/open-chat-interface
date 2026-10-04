@@ -292,13 +292,25 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
     expect(row).toMatchObject({ status: 'pending', batch_size: 10 });
   });
 
-  it('applies the bundled steps: the message indexes for the overview and usage pages', async () => {
+  it('applies the bundled steps: the message and thread indexes for the overview and usage pages', async () => {
     const result = await runPostMigrations(live.connectionString, { logger: quiet });
     expect(result.steps.map((step) => [step.name, step.outcome])).toEqual([
       ['0001_message_created_at_index', 'applied'],
       ['0002_message_error_created_at_index', 'applied'],
+      ['0003_message_sent_created_at_index', 'applied'],
+      ['0004_message_web_search_created_at_index', 'applied'],
+      ['0005_message_cancelled_created_at_index', 'applied'],
+      ['0006_thread_created_at_index', 'applied'],
     ]);
-    expect(await indexState('message_created_at_idx')).toBe('valid');
-    expect(await indexState('message_error_created_at_idx')).toBe('valid');
+    for (const name of [
+      'message_created_at_idx',
+      'message_error_created_at_idx',
+      'message_sent_created_at_idx',
+      'message_web_search_created_at_idx',
+      'message_cancelled_created_at_idx',
+      'thread_created_at_idx',
+    ]) {
+      expect(await indexState(name)).toBe('valid');
+    }
   });
 });

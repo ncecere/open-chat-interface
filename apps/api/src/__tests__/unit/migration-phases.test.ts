@@ -238,6 +238,10 @@ describe('post-deploy folder', () => {
     expect(steps.map((step) => [step.name, step.release, step.index?.name])).toEqual([
       ['0001_message_created_at_index', '0.11.0', 'message_created_at_idx'],
       ['0002_message_error_created_at_index', '0.11.0', 'message_error_created_at_idx'],
+      ['0003_message_sent_created_at_index', '0.11.0', 'message_sent_created_at_idx'],
+      ['0004_message_web_search_created_at_index', '0.11.0', 'message_web_search_created_at_idx'],
+      ['0005_message_cancelled_created_at_index', '0.11.0', 'message_cancelled_created_at_idx'],
+      ['0006_thread_created_at_index', '0.11.0', 'thread_created_at_idx'],
     ]);
     expect(steps.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);

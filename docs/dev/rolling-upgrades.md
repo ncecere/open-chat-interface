@@ -48,8 +48,14 @@ remove a column over two releases.
 3. **Data.** Through the API, as a client would: the initial administrator
    signs in, adds the stub provider and model, and creates 40 people. Through
    SQL, for volume: **10,000 conversations of 30 messages, 300,000 messages
-   (a `message` table of about 330 MB with its indexes)**, seeded in about 20 s.
-   The SQL is generated from `information_schema` at run time: known columns
+   (a `message` table of about 330 MB with its indexes)**, seeded in about 20 s,
+   and **240,000 usage events** (`--usage-events`, about 100 MB, a few
+   seconds): one for each of the 150,000 seeded replies, at the reply's time
+   and for its person, over four chat models, and 90,000 more spread over the
+   last 60 days, a third of them for embeddings and reranking (no messages),
+   one in twelve of a deleted account (`user_id` null, where FROM allows it:
+   v0.10.0 and later), one in a thousand an unsettled reservation, one in a
+   hundred with usage unknown. The SQL is generated from `information_schema` at run time: known columns
    get meaningful values, and any other `NOT NULL` column without a default
    gets a neutral value for its type, so the seeder keeps working as the
    schema grows. (The accounts are marked email-verified in SQL; the test has
@@ -76,7 +82,9 @@ remove a column over two releases.
      back;
    - `post-deploy`: TO's `migrate --post` (`--no-post-deploy` skips it and the
      background phase). It builds the release's indexes `CONCURRENTLY` and
-     schedules the test-only background migration
+     schedules the release's background migrations: from v0.11,
+     `0.11.usage-rollups` (the usage-rollup backfill, 2,000 events per
+     batch, while the load writes and settles events) and the test-only
      `oci-test.rewrite-messages-in-place` (`--background ''` for none), which
      rewrites every seeded message in place, 1,000 per batch, taking row
      locks on the table the load writes most;
@@ -87,7 +95,12 @@ remove a column over two releases.
      that cannot drain. The background migration is running meanwhile, so
      each stop also hands it from one replica to the other;
    - `background`: wait (up to `--background-timeout-seconds`, 300) for every
-     background migration to finish, under load;
+     background migration to finish, under load; then, still under load,
+     compare the usage rollups with the raw events in one statement (one
+     snapshot): every (UTC hour, person, model) of `usage_rollup_hour` plus
+     the change log not folded yet, and every (hour, model) of
+     `usage_rollup_model_hour` plus the log, against a `group by` over every
+     event, all nine amounts, and count events not marked `in_rollup`;
    - `smoke-new`: the smoke suite against TO, where every endpoint must exist;
    - `cooldown` (10 s).
 6. **Report**: `report.json` and `report.md` in `--out` (default
@@ -128,6 +141,7 @@ client never calls it.
 | Load ran in every phase; a reply was in flight at each API stop | |
 | The post-deploy job succeeds and every step finishes | Step durations are reported. The lock monitor leaves out the post-deploy session's own waits (a concurrent build waits for older transactions); application queries waiting on it count. |
 | Background migrations finish under load | Within `--background-timeout-seconds`; rows, batches and duration are reported. |
+| The usage rollups equal the raw events after the backfill | When TO has rollups: `0.11.usage-rollups` finished, 0 differing keys at either level, 0 unmarked events, equal totals. Batches, duration and key counts are reported. |
 
 A cut reply is one whose stream ended without `finish`. The load then does
 what the web app does, `GET /api/chat/:id/stream`, and records whether the
@@ -150,15 +164,18 @@ node tools/upgrade-test/run.mjs --from v0.9.2           # another FROM
 node tools/upgrade-test/run.mjs --to-api oci-upgrade-api:to --to-web oci-upgrade-web:to  # reuse a build
 node tools/upgrade-test/run.mjs --inject index --expect-fail   # a negative control
 node tools/upgrade-test/run.mjs --keep                  # leave the stack up afterwards
+OCI_UPGRADE_PROJECT=oci-upgrade-b node tools/upgrade-test/run.mjs --port 18580   # beside another run
 node tools/upgrade-test/run.mjs --help
 ```
 
-A run takes about 5-6 minutes after the images exist: a minute to start and
+A run takes about 6 minutes after the images exist: a minute to start and
 seed, then the fixed phases. It tears its project and volumes down at the
 end (`--keep` leaves them; `docker compose -p oci-upgrade -f
 tools/upgrade-test/compose.yaml --profile tools down -v` removes them). The
 TO images it builds stay tagged `oci-upgrade-api:to` and `oci-upgrade-web:to`
-for reuse; injected ones are `oci-upgrade-api:inject-<case>`.
+for reuse (named after the project: `OCI_UPGRADE_PROJECT` runs a second test
+beside a running one, with `--port` set apart, and its own images); injected
+ones are `oci-upgrade-api:inject-<case>`.
 
 Released images are `linux/amd64` only. On an arm64 machine FROM runs
 emulated, which is slower but was well within the bounds on an Apple silicon
@@ -255,6 +272,30 @@ handing it over) and finishing 12.6 s into the `background` phase. 2,000
 requests outside the FROM stop windows, none failed, p99 142 ms, max 1.11 s,
 no lock waits observed; both smoke suites 52/52; 197 replies, 1 cut by
 v0.10.2 and recovered.
+
+### With seeded usage events and the rollup check (design item 18)
+
+4 October 2026, FROM v0.10.2, TO = this source (post-deploy steps 0001-0006),
+same machine, 300,000 messages plus 240,000 seeded usage events (104 MB;
+150,000 for seeded replies, 7,500 of deleted accounts, six models, 90
+unsettled reservations; seeded in 3.7 s): **Pass.** `migrate` 4.7 s (0039,
+0040); `migrate --post` 2.1 s, the six concurrent builds 5-126 ms. The
+usage-rollup backfill marked **240,171 events in 121 batches over 21.3 s**
+(the 240,000 seeded plus what the load had written by then) alongside the
+test migration (300,394 rows, 301 batches, 30.2 s), across both TO restarts;
+both finished 39.8 s into the `background` phase. The check afterwards, under
+load: 240,206 events, **0 of 81,291 (hour, person, model) keys and 0 of 8,642
+(hour, model) keys differing**, 0 unmarked events, 42 changes not folded yet
+(included), totals equal; 1.7 s. 2,392 requests outside the FROM stop
+windows, none failed, p99 165 ms, max 1.17 s, no lock waits; both smoke
+suites 52/52; 223 replies, all complete. The run took 6 minutes 10 s with the
+images built (8 minutes 50 s including building both, 114 s and 44 s here),
+about 30 s more than before: the usage seed and the backfill overlap the
+existing phases. A first run on the same code failed the `max` bound (search
+requests to FROM of 14-18 s during `baseline` and `migrate`) while the
+Docker VM was out of memory: another stack's PostgreSQL in it had just been
+killed by the kernel. Every later phase of that run met the bounds and its
+rollup check was exact (0 of 81,354 keys differing).
 
 ## Known gaps found
 

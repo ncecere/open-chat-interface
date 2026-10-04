@@ -513,6 +513,82 @@ same transactions instead, as synchronous rollups would, took 17.4 ms (1,836
 against 12,842 runs a second): that hot row is why the triggers append to a
 change log and a job folds it. Folding 615,000 changes took 1.9 s.
 
+### The Overview tab's activity counts
+
+After the rollups, the Usage page's Overview tab (`GET
+/api/admin/usage/overview`: range, totals, activity summary, daily activity,
+run in parallel) was still slow because `activitySummary`
+(`services/usage-report/activity.ts`) counts rows of the conversation
+tables, not usage events, and must keep doing so: a sent message, a reply that
+searched the web, a failed or cancelled reply and a conversation created are
+not usage events. Its statements at `medium` (4 M messages, 1.33 M in the last
+30 days, 629,000 of them sent by people; `EXPLAIN ANALYZE`, warm, median of
+five):
+
+| Statement (30 days) | Before | After |
+| --- | ---: | ---: |
+| Messages sent, searched, failed, cancelled: one pass with four `count(*) filter (...)` (a parallel bitmap heap scan over 1.33 M rows through `message_created_at_idx`) | 578 ms | 48 ms |
+| Conversations created, temporary, branched (sequential scan of `thread`) | 24 ms | 10 ms |
+| Active people and messages per local day (rollups, per day and person) | 162 ms | 133 ms |
+
+At `small` the message counts went from 53 ms to 8 ms and the thread counts
+from 6.2 ms to 1.3 ms.
+
+**The fix keeps every number's meaning and its exact value:**
+
+- Post-deploy steps `0003_message_sent_created_at_index`,
+  `0004_message_web_search_created_at_index` and
+  `0005_message_cancelled_created_at_index` build partial indexes on
+  `message (created_at)` where `role = 'user'`, `web_search_used` and `status
+  = 'cancelled'` (failed replies already had `message_error_created_at_idx`,
+  step 0002). Once step 0005 is finished (`isPostStepDone`), the statement is
+  four scalar counts, each with exactly its index's predicate, so each is an
+  index-only scan of only the rows it counts; before that the single pass is
+  kept (four counts without the indexes would be four passes). At `medium`
+  the indexes are 41 MB (sent), 1.4 MB, 160 kB and built in 2.6 s, 1.4 s and
+  1.5 s; at `small` 5.2 MB, 192 kB, 40 kB. A single covering index
+  `(created_at) INCLUDE (role, status, web_search_used)` was also tried: one
+  index-only pass, 15 ms at `small` against 8 ms for the partial indexes, and
+  22 MB against 5.4 MB.
+- Post-deploy step `0006_thread_created_at_index` builds `thread (created_at)
+  INCLUDE (temporary, parent_thread_id)`, which turns the unchanged thread
+  statement into an index-only scan (15 MB at `medium`, 0.25 s); the admin
+  overview's conversations in the last 24 and 48 hours use it too.
+- Daily activity from the rollups groups by the local day as a timestamp and
+  formats it once per day instead of once per rollup row.
+
+The live test `usage-activity.live.test.ts` generates conversations and
+messages (every role and status, web search on and off, temporary and branched
+conversations, conversations in the trash, rows exactly on and a millisecond
+either side of each range start, ranges ending at different times of day) and
+checks the two ways against each other and against counts made from the
+generated rows, without the indexes, with them, and after deleting an account
+(its messages go with it) and changing reply statuses; then that each count
+is an index-only scan of its own index. Deliberately changing one `>=` to `>`
+makes it fail. The rollup change is covered by `usage-rollups.live.test.ts`
+(seven zones).
+
+**Report pages in isolation** (`k6/reports.js`, same stacks and machine as
+above but busier: other projects kept the host's load average between 14 and
+27 throughout, so the Spend tab, which did not change, moved by up to 20 %
+between rounds; median / p95 in ms, best of three rounds of 30 at `small` and
+20 at `medium`):
+
+| Page | `small` before | `small` after | `medium` before | `medium` after |
+| --- | ---: | ---: | ---: | ---: |
+| Usage, Overview tab, 30 days | 70 / 97 | 16 / 18 | 606 / 649 | 94 / 145 |
+| Usage, Spend tab, 30 days (unchanged) | 9 / 15 | 7 / 9 | 43 / 46 | 44 / 99 |
+| Admin overview | 20 / 30 | 21 / 23 | 189 / 218 | 199 / 242 |
+
+The Overview tab now costs what its slowest part costs, active people per day
+from the per-person rollups (about 100 ms at `medium`, reading 159,000
+rollup rows for 30 days); a faster figure there would need a per-day,
+per-person table in each display zone, which the rollup design rejected. The
+admin overview is unchanged: its remaining cost is the 14-day messages-per-day
+count (an index-only scan of `message_created_at_idx` grouping 600,000 rows
+by day, 178 ms) and the unfiltered `count(*)` of `message` (69 ms), the next
+candidates if it matters.
+
 ## Limits
 
 - The baseline machine also ran PostgreSQL, k6 and other workloads; treat

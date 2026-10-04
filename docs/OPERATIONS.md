@@ -703,7 +703,7 @@ account** role switch, which is off for every role after the upgrade (see
 
 ### Upgrading to v0.11
 
-#### Three-phase migrations (migration 0039, post-deploy steps 0001 and 0002)
+#### Three-phase migrations (migration 0039, post-deploy steps 0001 to 0006)
 
 Migration 0039 adds two tables, `oci_post_migration` and
 `background_migration`; nothing else in the schema changes before replicas
@@ -712,8 +712,14 @@ are replaced. After every replica runs v0.11, `migrate --post` (step 7 of
 `message_created_at_idx` (the admin overview's per-day counts) and the small
 partial `message_error_created_at_idx` (the usage page's failed replies).
 At 500,000 messages they took 0.4 s and 0.1 s and the first is about 11 MB;
-at 20 million messages expect a minute or two and about 450 MB. Until they
-exist those pages are as slow as in v0.10.
+at 20 million messages expect a minute or two and about 450 MB. Steps 0003
+to 0005 add small partial indexes on `message(created_at)` for sent messages,
+web searches and cancelled replies, and step 0006 adds
+`thread(created_at) INCLUDE (temporary, parent_thread_id)`; together they
+serve the usage page's Overview tab (at 4 million messages about 41 MB,
+1.4 MB, 160 kB and 15 MB). Until they exist those pages are as slow as in
+v0.10, and the Overview tab keeps its single pass over messages until step
+0005 has finished.
 
 #### Usage rollups (migration 0040, background migration 0.11.usage-rollups)
 

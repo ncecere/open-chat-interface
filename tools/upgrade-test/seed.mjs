@@ -4,7 +4,10 @@
  * 1. Through the API, as a client would: sign in as the initial administrator,
  *    add the stub model's provider and model, and create people.
  * 2. Through SQL, for volume: conversations and messages for those people,
- *    generated with `INSERT ... SELECT generate_series(...)`.
+ *    generated with `INSERT ... SELECT generate_series(...)`, and usage events:
+ *    one per seeded reply plus others spread over two months (several models,
+ *    embeddings and reranking, deleted accounts, a few unsettled
+ *    reservations), so TO's usage-rollup backfill has real work to do.
  *
  * The SQL is built from `information_schema` at run time rather than written
  * against one release's columns: known columns get meaningful values, and any
@@ -224,6 +227,135 @@ export async function seedConversations({ env, threads, perThread, log }) {
     messages: Number(messageCount),
     messageTableSize: messageSize,
     threadMs,
+    totalMs: Date.now() - started,
+  };
+}
+
+/** Chat models the seeded usage is spread over (the first is the stub the load uses). */
+export const USAGE_MODELS = [MODEL_SLUG, 'gpt-4o-mini', 'claude-sonnet-4', 'llama-3.3-70b'];
+/** Models with usage but no messages, as embeddings and reranking record. */
+export const NON_CHAT_MODELS = ['embedding:text-small', 'rerank:fast'];
+
+/**
+ * Seeds about `total` usage events, through SQL generated from FROM's
+ * `usage_event` columns like the conversations:
+ *
+ * - one event per seeded assistant reply, at the reply's time, for its
+ *   person, over the chat models;
+ * - the rest spread over the last 60 days: a third embeddings and reranking
+ *   (no messages), one in twelve with the account deleted (`user_id` null,
+ *   when FROM's column allows it, as it does from v0.10.0), one in a thousand
+ *   an unsettled reservation, one in a hundred with usage unknown.
+ *
+ * Run after `seedConversations`. Returns counts and timings.
+ */
+export async function seedUsageEvents({ env, total, log }) {
+  const started = Date.now();
+  const columns = await columnsOf('usage_event', env);
+  if (!columns.length) return { skipped: 'FROM has no usage_event table', events: 0 };
+  const userIdNullable = columns.find((column) => column.name === 'user_id')?.nullable === true;
+  const chat = `ARRAY[${USAGE_MODELS.map(literal).join(',')}]`;
+  const other = `ARRAY[${NON_CHAT_MODELS.map(literal).join(',')}]`;
+  const nChat = USAGE_MODELS.length;
+  const prices = {
+    input_price_micros: '2500000',
+    output_price_micros: '10000000',
+  };
+
+  // Replies: one event each (pending false: they finished).
+  const replies = projection(columns, {
+    id: 'gen_random_uuid()::text',
+    organization_id: 't.organization_id',
+    user_id: 'm.user_id',
+    model_slug: `(${chat})[1 + ((hashtext(m.id)::bigint & 2147483647) % ${nChat})]`,
+    occurred_at: `m.created_at + interval '2 seconds'`,
+    message_count: '1',
+    tokens_in: 'r.tokens_in',
+    tokens_out: 'r.tokens_out',
+    cost_micros: '(r.tokens_in * 2500 + r.tokens_out * 10000) / 1000',
+    ...prices,
+    pending: 'false',
+    usage_unknown: 'false',
+    reserved_cost_micros: '0',
+    reserved_tokens: '0',
+  });
+  const replyCount = Number(
+    (
+      await psql(
+        `select count(*) from "message" m join "thread" t on t.id = m.thread_id
+          where t.title like 'Seeded %' and m.role = 'assistant';`,
+        env,
+      )
+    ).trim(),
+  );
+  const fromReplies = Math.min(replyCount, total);
+  await psql(
+    `insert into "usage_event" (${replies.names})
+       select ${replies.values}
+         from (select m.id, m.user_id, m.created_at, m.thread_id
+                 from "message" m join "thread" t on t.id = m.thread_id
+                where t.title like 'Seeded %' and m.role = 'assistant'
+                order by m.created_at desc limit ${fromReplies}) m
+         join "thread" t on t.id = m.thread_id
+         cross join lateral (select 200 + ((hashtext(m.id || 'i')::bigint & 2147483647) % 4000) as tokens_in,
+                                    40 + ((hashtext(m.id || 'o')::bigint & 2147483647) % 900) as tokens_out) r;`,
+    env,
+  );
+
+  // The rest, spread over two months, in batches.
+  const rest = Math.max(0, total - fromReplies);
+  const people = `(select id, organization_id, (row_number() over (order by email)) - 1 as rn
+                     from "user" where email like 'person%@upgrade.test')`;
+  const person = `(select count(*) from "user" where email like 'person%@upgrade.test')`;
+  const nonChat = 'g % 3 = 0';
+  const pending = 'g % 1000 = 7';
+  const spread = projection(columns, {
+    id: 'gen_random_uuid()::text',
+    organization_id: 'u.organization_id',
+    user_id: userIdNullable ? `case when g % 12 = 5 then null else u.id end` : 'u.id',
+    model_slug: `case when ${nonChat} then (${other})[1 + (g / 3) % 2] else (${chat})[1 + g % ${nChat}] end`,
+    occurred_at: `now() - ((hashtext(g::text)::bigint & 2147483647) % (60 * 86400))::double precision * interval '1 second' - interval '1 minute'`,
+    message_count: `case when ${nonChat} then 0 else 1 end`,
+    tokens_in: `case when ${pending} then 0 else 50 + (hashtext(g::text || 'i')::bigint & 2147483647) % 6000 end`,
+    tokens_out: `case when ${pending} or ${nonChat} then 0 else 20 + (hashtext(g::text || 'o')::bigint & 2147483647) % 1200 end`,
+    cost_micros: `case when ${pending} then 0 else ((hashtext(g::text || 'c')::bigint & 2147483647) % 40000) end`,
+    ...prices,
+    pending: pending,
+    usage_unknown: `g % 100 = 3`,
+    reserved_cost_micros: `case when ${pending} then 30000 else 0 end`,
+    reserved_tokens: `case when ${pending} then 5000 else 0 end`,
+  });
+  const batch = 50_000;
+  for (let from = 1; from <= rest; from += batch) {
+    const to = Math.min(rest, from + batch - 1);
+    await psql(
+      `insert into "usage_event" (${spread.names})
+         select ${spread.values}
+           from generate_series(${from}, ${to}) as g
+           join ${people} u on u.rn = g % ${person};`,
+      env,
+    );
+    log?.(`  usage events ${fromReplies + from}-${fromReplies + to} of ${total}`);
+  }
+  await psql('vacuum analyze "usage_event";', env, { tuples: false });
+  const [events, deleted, models, pendingCount, size] = (
+    await psql(
+      `select count(*), count(*) filter (where user_id is null), count(distinct model_slug),
+              count(*) filter (where pending), pg_size_pretty(pg_total_relation_size('usage_event'))
+         from "usage_event";`,
+      env,
+    )
+  )
+    .trim()
+    .split('\t');
+  return {
+    events: Number(events),
+    fromReplies,
+    deletedAccounts: Number(deleted),
+    deletedAccountsPossible: userIdNullable,
+    models: Number(models),
+    pending: Number(pendingCount),
+    tableSize: size,
     totalMs: Date.now() - started,
   };
 }

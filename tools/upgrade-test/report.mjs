@@ -127,6 +127,22 @@ export function analyse({ events, replies, run, bounds }) {
             )}${run.background.timedOut ? ` (gave up after ${fmt(run.background.timeoutMs)})` : ''}`,
     );
   }
+  if (run.usageRollups) {
+    const { backfill, check } = run.usageRollups;
+    add(
+      'usage rollups equal the raw events after the backfill',
+      backfill?.status === 'finished' && check?.exact === true,
+      `${
+        backfill
+          ? `backfill ${backfill.status}: ${backfill.rowsProcessed} events, ${backfill.batches} batches${backfill.ms === null ? '' : ` in ${fmt(backfill.ms)}`}`
+          : 'backfill not scheduled'
+      }; ${
+        check
+          ? `${check.events} events: ${check.personDiffering} of ${check.personKeys} (hour, person, model) keys and ${check.modelDiffering} of ${check.modelKeys} (hour, model) keys differ, ${check.unmarked} events unmarked; totals ${check.totals.events[0]}/${check.totals.events[1]} events, ${check.totals.costMicros[0]}/${check.totals.costMicros[1]} cost micros (events/rollups)`
+          : 'no rollup tables'
+      }`,
+    );
+  }
   const scope = windows.length
     ? bounds.allowShutdownGaps
       ? ' outside replica-shutdown windows'
@@ -363,6 +379,14 @@ function markdown(report) {
   lines.push(
     `- Dataset: ${run.seed?.people} people, ${run.seed?.threads} conversations, ${run.seed?.messages} messages (message table ${run.seed?.messageTableSize}); seeded in ${fmt(run.seed?.totalMs ?? 0)}`,
   );
+  if (run.seed?.usage) {
+    const usage = run.seed.usage;
+    lines.push(
+      usage.skipped
+        ? `- Usage events: none (${usage.skipped})`
+        : `- Usage events: ${usage.events} (table ${usage.tableSize}; ${usage.fromReplies} for seeded replies, ${usage.deletedAccounts} of deleted accounts, ${usage.models} models, ${usage.pending} unsettled); seeded in ${fmt(usage.totalMs)}`,
+    );
+  }
   lines.push(
     `- Load: ${run.load.vus} virtual users through ${run.load.bases.length} web replicas; ${verdict.overall.count} requests`,
   );
@@ -387,6 +411,12 @@ function markdown(report) {
         `- Background migration ${m.name}: ${m.status}, ${m.rowsProcessed} rows in ${m.batches} batches${m.ms === null ? '' : ` over ${fmt(m.ms)}`}${m.attempts ? `, ${m.attempts} failed batch(es) in a row` : ''}${m.lastError ? ` (last error: ${m.lastError})` : ''}`,
       );
     }
+  }
+  if (run.usageRollups?.check) {
+    const c = run.usageRollups.check;
+    lines.push(
+      `- Usage rollups after the backfill (one snapshot, under load): ${c.events} events, ${c.deletedAccounts} of deleted accounts; ${c.personKeys} (hour, person, model) keys with ${c.personDiffering} differing, ${c.modelKeys} (hour, model) keys with ${c.modelDiffering} differing; ${c.rollupRows} rollup rows and ${c.unfolded} unfolded changes; ${c.exact ? 'exact' : '**not exact**'} (checked in ${fmt(run.usageRollups.checkMs)})`,
+    );
   }
   lines.push('');
   lines.push('## Verdict');
