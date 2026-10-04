@@ -66,8 +66,7 @@ with read-only permissions and does not publish images. Checks include builds,
 coverage, production dependency auditing, license policy, and live/browser tests
 alongside lint, types, and unit tests, with an S3-compatible service for the
 storage, backup and compliance suites. Locally, S3 tests skip without an S3
-server; in CI they fail instead. GitLab SAST and dependency-scanning
-reports are not reproduced by these workflows; `.gitlab-ci.yml` is legacy only.
+server; in CI they fail instead.
 
 ## Releases
 

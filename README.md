@@ -87,17 +87,12 @@ export OCI_VERSION=v0.10.1
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
-# GHCR_READ_TOKEN must come from your secret manager, not a committed file.
-printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u ncecere --password-stdin
 cd docker
 docker compose pull api web migrate
 docker compose up -d --no-build
 ```
 
-The repository is private. Keep both GHCR packages private and verify their
-visibility after publication: package visibility is independent of repository
-visibility. Private pulls require a personal access token (classic) with
-`read:packages` and access to the repository/packages; never commit it. Published images target `linux/amd64` only. Unset `OCI_API_IMAGE` and
+The images are public, so pulling them needs no registry login. Published images target `linux/amd64` only. Unset `OCI_API_IMAGE` and
 `OCI_WEB_IMAGE` to retain Compose's local source-build defaults.
 
 Confirm publication succeeded for the selected version before pulling it.
@@ -192,7 +187,7 @@ using Node 22 and pnpm 11.18.0. Checks cover lint, type checking, builds,
 unit/integration tests, API coverage floors, live PostgreSQL/Redis/Mailpit/S3
 and browser tests, production dependency auditing, and license policy. The S3
 and backup suites run against an S3-compatible service and fail rather than
-skip in CI. GitLab SAST and dependency-scanning report parity is not provided.
+skip in CI.
 
 **Publish containers** runs for stable `vX.Y.Z` tag pushes or a manual dispatch
 for an existing stable tag. It checks `main` ancestry, package versions, and the
@@ -201,10 +196,8 @@ and web images to GHCR. PR and `main` validation never publish images. Publishin
 uses `GITHUB_TOKEN` with `packages:write`, not a stored PAT. See the
 [release process](docs/RELEASING.md) for tags, retries, and `latest` promotion.
 
-`.gitlab-ci.yml` remains as legacy configuration only. Existing GitLab releases,
-images, and history remain hosted there; their historical changelog links are
-preserved. GitHub Actions does not create GitHub Releases or import GitLab
-release metadata.
+Versions 0.1 to 0.4 were first released elsewhere; their tags and history are
+in this repository. GitHub Actions does not create GitHub Releases.
 
 ## Live integration tests
 

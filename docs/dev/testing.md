@@ -117,8 +117,7 @@ the suites assert S3 behaviour, not one server's error names.
 
 **Publish containers** reuses validation against the exact checked-out release
 tag before publishing to GHCR. It is separate from PR/`main` CI and is the only
-workflow that publishes images. GitLab SAST and dependency-scanning report
-parity is not provided; `.gitlab-ci.yml` is retained as legacy configuration.
+workflow that publishes images.
 See [Release process](../RELEASING.md) for release gates and manual dispatch.
 
 ## What to reach for

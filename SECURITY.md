@@ -7,7 +7,7 @@ release only.
 
 | Version | Supported |
 |---|---|
-| 0.4.x | Yes |
+| 0.10.x | Yes |
 | Earlier versions | No |
 
 ## Reporting a vulnerability
@@ -17,10 +17,9 @@ chat channels. Ordinary GitHub issues are not confidential security reports.
 
 Use **Report a vulnerability** in the
 [GitHub repository's Security tab](https://github.com/ncecere/open-chat-interface/security)
-if private vulnerability reporting is enabled and available to you. Its
-availability has not been verified for this private repository. Otherwise,
-contact a project maintainer through an established private channel and ask for
-a secure reporting path before sharing details. Include in the private report:
+(private vulnerability reporting). If it is unavailable to you, contact the
+maintainer through an established private channel and ask for a secure
+reporting path before sharing details. Include in the private report:
 
 - the affected version or commit;
 - the deployment conditions required to reproduce it;

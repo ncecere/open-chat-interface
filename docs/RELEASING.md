@@ -5,9 +5,7 @@ builds and publishes API and web images to GHCR on a stable `vX.Y.Z` tag push,
 or on manual dispatch with an existing stable tag. Pull requests and `main`
 pushes validate only; they do not publish images.
 
-The workflow does not create GitHub Releases or import GitLab release metadata.
-Existing GitLab releases, images, history, and historical changelog links remain
-on GitLab. `.gitlab-ci.yml` is retained as legacy configuration only.
+The workflow does not create GitHub Releases.
 
 ## Prepare
 
@@ -27,13 +25,12 @@ on GitLab. `.gitlab-ci.yml` is retained as legacy configuration only.
    ```
 
 5. Merge the release-preparation pull request only after GitHub Actions CI
-   passes. Review audit findings and any skipped live tests; GitHub CI does not
-   provide GitLab SAST or dependency-scanning report parity.
+   passes. Review audit findings and any skipped live tests.
 6. Configure branch protection or a ruleset requiring review and CI on `main`,
    and restrict creation, updates, and deletion of `v*` tags to release
    maintainers where your GitHub plan supports it. These are recommendations,
-   not confirmation that protection is configured or available for this private
-   repository; verify the settings before releasing.
+   not confirmation that protection is configured; verify the settings before
+   releasing.
 
 ## Refresh the documentation
 
@@ -83,9 +80,9 @@ Images are published for `linux/amd64` only to:
 
 Each image receives the version tag (for example, `v0.4.1`) and an eight-character
 commit SHA tag. The workflow uses `GITHUB_TOKEN` with `packages:write`; no saved
-PAT is required for CI. The repository is private; keep both GHCR packages
-private and verify their visibility after publication. The workflow does not
-change or enforce package visibility.
+PAT is required for CI. Both GHCR packages are public; the
+workflow does not change package visibility, so check it after the first
+publication of a new package.
 
 `latest` is promoted only after both images succeed and the release tag is the
 newest stable tag on `main`. Publishing an older tag does not roll `latest`
@@ -123,7 +120,7 @@ The same manual dispatch can retry an existing stable release tag. Run it from
 
 - Confirm **Publish containers** and its validation jobs are green; inspect
   skipped live tests.
-- Confirm both GHCR packages are private and contain `vX.Y.Z` and the
+- Confirm both GHCR packages are public and contain `vX.Y.Z` and the
   eight-character SHA tag with the expected source revision label.
 - For the newest stable tag on `main`, confirm `latest` points to that release
   for both images. An older release must leave `latest` unchanged.
