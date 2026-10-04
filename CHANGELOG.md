@@ -7,6 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- **One block for the model's work.** A reply that reasoned and used tools in
+  several steps showed a "Reasoning" disclosure for each step around its tool
+  steps. Everything the model did before its answer now sits in one
+  disclosure, in order, summarised as for example "Thought · created an
+  artifact" or "Thought · searched the web twice"; while the reply is written
+  its header names the current step ("Thinking…", "Writing *title*…").
+  Artifact cards and anything waiting for your approval stay visible below it.
+  Replies with a single reasoning step look as before.
+- **Artifact details open inside the card,** from a chevron at its edge,
+  instead of a separate Details link beside it.
+
 ## [0.10.0] - 2026-10-03
 
 ### Added
