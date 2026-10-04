@@ -1,4 +1,3 @@
-import { and, eq, schema, sql } from '@oci/db';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -6,9 +5,7 @@ import {
   streamText,
   type UIMessage,
 } from 'ai';
-import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
-import { saveDetectedArtifacts } from '../artifacts/store.js';
 import {
   type ChatRunStatus,
   captureChatRun,
@@ -16,15 +13,14 @@ import {
   registerLocalChatRun,
 } from '../chat-streams.js';
 import { observeChatReply } from '../observability/events.js';
-import { touchThread } from '../threads.js';
 import { buildSdkTools, toolApprovalPolicy } from '../tools/registry.js';
 import { stoppedByShutdown, trackRun } from './active-runs.js';
 import { isContextOverflowError } from './compaction-plan.js';
 import { scheduleCompactionAfterReply } from './compaction-queue.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { failRunSetup, releaseRunHandles } from './run-cleanup.js';
-import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
-import { INTERRUPTED_REPLY_MESSAGE } from './run-recovery.js';
+import type { AcquiredRun } from './run-lifecycle.js';
+import { persistAssistant, type ReplyUsage } from './run-save.js';
 import { createToolLoop, stepsTaken, toolStreamErrorText } from './tool-loop.js';
 
 type RunOutcome = { status: Exclude<ChatRunStatus, 'active'>; error?: string };
@@ -50,12 +46,6 @@ async function overflowedBeforeOutput(
   }
 }
 
-type ReplyUsage = {
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  partial?: boolean;
-} | null;
-
 /**
  * Usage of this run. With tools the SDK's total covers every finished step of
  * a completed reply, but is empty after a stop; the loop's per-step tally then
@@ -73,91 +63,6 @@ async function runUsage(
     total = undefined;
   }
   return loop ? loop.settlement(total, status === 'complete') : (total ?? null);
-}
-
-/** A continued reply adds this run's figures to the ones it already has. */
-const added = (
-  column:
-    | typeof schema.message.tokensIn
-    | typeof schema.message.tokensOut
-    | typeof schema.message.durationMs,
-  value: number,
-) => sql<number>`coalesce(${column}, 0) + ${value}`;
-
-async function persistAssistant(
-  { thread, user, continuation }: PreparedTurn,
-  { assistantMessage, startedAt, reservation }: AcquiredRun,
-  responseMessage: UIMessage,
-  status: RunOutcome['status'],
-  getUsage: () => Promise<ReplyUsage>,
-  /** Stopped by this replica shutting down, not by the person. */
-  interrupted = false,
-) {
-  const usage = await getUsage();
-  const tokensIn = usage?.inputTokens ?? null;
-  const tokensOut = usage?.outputTokens ?? null;
-  const durationMs = Date.now() - startedAt;
-  let persistenceFailure: { error: unknown } | undefined;
-  try {
-    await db
-      .update(schema.message)
-      .set({
-        parts: responseMessage.parts as unknown as Record<string, unknown>[],
-        status,
-        errorMessage:
-          status === 'error'
-            ? 'The model failed to generate a response'
-            : interrupted
-              ? INTERRUPTED_REPLY_MESSAGE
-              : null,
-        ...(continuation
-          ? {
-              ...(tokensIn != null && { tokensIn: added(schema.message.tokensIn, tokensIn) }),
-              ...(tokensOut != null && { tokensOut: added(schema.message.tokensOut, tokensOut) }),
-              durationMs: added(schema.message.durationMs, durationMs),
-            }
-          : { tokensIn, tokensOut, durationMs }),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(schema.message.id, assistantMessage.id),
-          eq(schema.message.threadId, thread.id),
-          eq(schema.message.userId, user.id),
-        ),
-      );
-
-    await touchThread(thread.id);
-  } catch (error) {
-    persistenceFailure = { error };
-  }
-  // A finished reply's HTML, SVG and Mermaid blocks become artifacts. Best
-  // effort and idempotent: a failure leaves them as ordinary code blocks.
-  if (!persistenceFailure && status === 'complete') {
-    try {
-      await saveDetectedArtifacts({
-        userId: user.id,
-        role: user.role,
-        threadId: thread.id,
-        messageId: assistantMessage.id,
-        parts: responseMessage.parts,
-      });
-    } catch (error) {
-      logger.warn({ error, threadId: thread.id }, 'Saving detected artifacts failed');
-    }
-  }
-  // Attempt both operations, but never replace the initiating persistence error
-  // with a secondary settlement error. Report the latter separately.
-  try {
-    await settleUsage(reservation, usage ?? null);
-  } catch (error) {
-    logger.error(
-      { error, threadId: thread.id, reservationId: reservation?.id },
-      'Failed to settle chat usage',
-    );
-    if (!persistenceFailure) throw error;
-  }
-  if (persistenceFailure) throw persistenceFailure.error;
 }
 
 /** Start the provider and compose its persisted, resumable SDK response. */

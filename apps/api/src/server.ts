@@ -12,21 +12,29 @@ import {
   withDrain,
 } from './lib/drain.js';
 import { logger } from './lib/logger.js';
+import { processRole } from './lib/role.js';
+import { withReadRetry } from './middleware/read-retry.js';
 import { activeRunCount, interruptActiveRuns } from './services/chat/active-runs.js';
 import { closeChatStreams, endChatReplays } from './services/chat-streams.js';
 import { runningJobCount, startLifecycleJobs, stopJobs } from './services/jobs/index.js';
+import { startReplicaHeartbeat, watchForWorkers } from './services/jobs/workers.js';
 import { initTracing, shutdownTracing } from './services/observability/tracing.js';
 import { purgeExpiredTemporaryThreads } from './services/threads.js';
+import { createWorkerApp } from './worker-app.js';
 
 /**
- * How long a shutdown waits for a background job already running. Jobs are
- * safe to re-run, so one still going after this (a backup, say) is left to
- * the next tick on another replica rather than holding the drain open.
+ * How long a shutdown of an `all` replica waits for a background job already
+ * running. Jobs are safe to re-run, so one still going after this (a backup,
+ * say) is left to the next tick on another replica rather than holding the
+ * drain open; replies come first on a replica that serves them. A worker
+ * gives its jobs the whole drain limit instead (SHUTDOWN_DRAIN_TIMEOUT_MS).
  */
 const JOB_DRAIN_MS = 5_000;
 
 async function main() {
   const env = loadEnv();
+  const role = processRole();
+  const runsJobs = role !== 'web';
 
   // Loads the OpenTelemetry SDK only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
   await initTracing().catch((error) =>
@@ -57,21 +65,34 @@ async function main() {
   }
 
   await ensureInitialAdmin();
-  await purgeExpiredTemporaryThreads().catch((error) =>
-    logger.error({ error }, 'Failed to purge expired temporary chats at startup'),
-  );
 
   /**
    * Maintenance runs on interval timers guarded by per-job advisory locks.
-   * Every replica ticks, but only the one that wins a job's lock performs it,
-   * so cleanup with side effects cannot run N times concurrently.
+   * Every replica that runs jobs (OCI_ROLE=worker or all) ticks, but only the
+   * one that wins a job's lock performs it, so cleanup with side effects
+   * cannot run N times concurrently. A `web` replica runs none and asks a
+   * worker for work its requests start (services/jobs/requests.ts).
    */
-  startLifecycleJobs();
+  if (runsJobs) {
+    await purgeExpiredTemporaryThreads().catch((error) =>
+      logger.error({ error }, 'Failed to purge expired temporary chats at startup'),
+    );
+    await startLifecycleJobs();
+  }
+  const stopHeartbeat = startReplicaHeartbeat(role);
+  const stopWatchingWorkers = role === 'web' ? watchForWorkers() : () => {};
 
-  const app = createApp();
+  // A worker serves health and metrics only (worker-app.ts).
+  const app = role === 'worker' ? createWorkerApp() : createApp();
 
-  const server = serve({ fetch: withDrain(app.fetch), port: env.API_PORT }, (info) => {
-    logger.info(`API listening on http://localhost:${info.port}`);
+  const fetch = withDrain(withReadRetry(app.fetch));
+  const server = serve({ fetch, port: env.API_PORT }, (info) => {
+    logger.info(
+      { role },
+      role === 'worker'
+        ? `Worker running background jobs; health and metrics on http://localhost:${info.port}`
+        : `API listening on http://localhost:${info.port}`,
+    );
   }) as Server;
   // Keep idle connections open longer than a proxy keeps them in its pool
   // (the bundled Caddy: 30 s; most load balancers: 60 s). Otherwise the API
@@ -87,7 +108,11 @@ async function main() {
     drainTimeoutMs: env.SHUTDOWN_DRAIN_TIMEOUT_MS,
     stopIntake: () => {
       stopJobs();
-      jobsUntil.at = Date.now() + JOB_DRAIN_MS;
+      stopWatchingWorkers();
+      void stopHeartbeat();
+      // Jobs stop at their next check between batches (jobMayContinue).
+      jobsUntil.at =
+        Date.now() + (role === 'worker' ? env.SHUTDOWN_DRAIN_TIMEOUT_MS : JOB_DRAIN_MS);
     },
     workInProgress: () =>
       activeRunCount() +

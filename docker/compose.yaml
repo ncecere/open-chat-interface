@@ -50,6 +50,9 @@ services:
       # How long a stopping replica lets replies finish (default 25000). Keep
       # it below stop_grace_period, which must leave time for the final saves.
       SHUTDOWN_DRAIN_TIMEOUT_MS:
+      # all (default): API and background jobs. web: API only, when the
+      # worker below runs the jobs (docs/OPERATIONS.md, "Process roles").
+      OCI_ROLE: ${OCI_API_ROLE:-all}
     # SIGTERM, then SIGKILL after this: longer than the drain above.
     stop_grace_period: 30s
     volumes:
@@ -68,6 +71,52 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  # Background jobs in their own container (OCI_ROLE=worker): imports,
+  # embeddings, summaries, webhooks, backups, compliance exports, retention.
+  # It serves only /api/health/live, /api/health/ready and /metrics, and is
+  # never behind the web proxy. Run it with the API on OCI_ROLE=web:
+  #   OCI_API_ROLE=web docker compose --profile worker up -d
+  # Scale with `--scale worker=2`; job locks keep each job on one at a time.
+  worker:
+    image: ${OCI_API_IMAGE:-oci-api:local}
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    profiles: ['worker']
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      OCI_ROLE: worker
+      API_PORT: 3000
+      # Links in emails it sends (scheduled reports) point here.
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
+      REDIS_URL: redis://redis:6379
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      # Imports read uploads from, and backups copy, the same storage.
+      STORAGE_LOCAL_PATH: /data/storage
+      # The api service migrates; the worker starts once it is healthy.
+      RUN_MIGRATIONS: 'false'
+      # On SIGTERM a worker finishes the job batch in hand within this limit.
+      SHUTDOWN_DRAIN_TIMEOUT_MS:
+    stop_grace_period: 30s
+    volumes:
+      - storage_data:/data/storage
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      api:
         condition: service_healthy
 
   # One-shot schema migration for deployments that scale the API. Run it

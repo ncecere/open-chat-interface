@@ -10,6 +10,7 @@ import {
   Notice,
   SettingsSection,
 } from '~/components/admin/admin-ui';
+import { Replicas } from '~/components/admin/operations/replicas';
 import { BackgroundWorkSection, UpgradesSection } from '~/components/admin/upgrades';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
@@ -393,6 +394,8 @@ export function AdminHealthPage() {
         >
           <HealthChecks />
         </SettingsSection>
+
+        <Replicas />
 
         <SettingsSection
           editable={false}

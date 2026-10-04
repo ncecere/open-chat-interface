@@ -10,6 +10,7 @@ import {
   sharedRedis,
   touchChatRunHeartbeat,
 } from '../chat-streams.js';
+import { jobMayContinue } from '../jobs/runner.js';
 import { lockUsageOwner, settleLockedEvent } from '../quota/settlement.js';
 import { isRunActiveHere } from './active-runs.js';
 
@@ -289,7 +290,9 @@ export async function recoverInterruptedReplies(now: Date = new Date()): Promise
     )
     .limit(SWEEP_BATCH);
   let recovered = 0;
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
+    // A failover may have taken the job's lock, or this replica is stopping.
+    if (index > 0 && !(await jobMayContinue())) break;
     try {
       if (await recoverInterruptedRun(candidate)) recovered++;
     } catch (error) {

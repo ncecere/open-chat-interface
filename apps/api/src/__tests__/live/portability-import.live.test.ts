@@ -708,6 +708,74 @@ describe.skipIf(!available)('live Postgres: ChatGPT and Claude import', () => {
     expect(await threadsFor(userId)).toHaveLength(1);
   });
 
+  it('requeues an import cut short by a lost database connection, and resumes it (v0.11)', async () => {
+    // The second conversation's insert meets a failover: SQLSTATE 57P01, as
+    // the server sends when a primary shuts down.
+    await live.db.execute(
+      sql.raw(`
+      create function failover_on_second_thread() returns trigger language plpgsql as $$
+      begin
+        if exists (select 1 from thread where user_id = new.user_id) then
+          raise exception 'terminating connection due to administrator command'
+            using errcode = 'admin_shutdown';
+        end if;
+        return new;
+      end $$;
+      create trigger failover_on_second_thread before insert on thread
+        for each row execute function failover_on_second_thread();
+    `),
+    );
+    try {
+      expect((await upload(userId, chatgptZip())).status).toBe(202);
+      await processPendingImports();
+      // Back in the queue, not failed, and its attempt not used up.
+      const [requeued] = await live.db.execute<{ status: string; attempts: number }>(
+        sql`select status, attempts from conversation_import where user_id = ${userId}`,
+      );
+      expect(requeued).toEqual({ status: 'pending', attempts: 0 });
+      expect(await threadsFor(userId)).toHaveLength(1);
+    } finally {
+      await live.db.execute(
+        sql.raw(`drop trigger failover_on_second_thread on thread;
+          drop function failover_on_second_thread();`),
+      );
+    }
+    expect(await processPendingImports()).toBe(1);
+    const [record] = await importsFor(userId);
+    // The first conversation is recognised and skipped; the second imported.
+    expect(record).toMatchObject({
+      status: 'completed',
+      importedCount: 1,
+      skippedCount: 1,
+      failedCount: 0,
+    });
+    expect(await threadsFor(userId)).toHaveLength(2);
+  });
+
+  it('stops a long import at its next checkpoint when the worker shuts down, and resumes it (v0.11)', async () => {
+    const { beginDrain, resetDrainForTests } = await import('../../lib/drain.js');
+    const many = Array.from({ length: 30 }, (_, index) => ({
+      ...claudeV1,
+      uuid: `claude-many-${index}`,
+    }));
+    expect((await upload(userId, JSON.stringify(many), 'conversations.json')).status).toBe(202);
+    beginDrain('SIGTERM');
+    try {
+      await processPendingImports();
+    } finally {
+      resetDrainForTests();
+    }
+    // The 25 conversations before the checkpoint are stored; the rest wait.
+    const [paused] = await live.db.execute<{ status: string; attempts: number }>(
+      sql`select status, attempts from conversation_import where user_id = ${userId}`,
+    );
+    expect(paused).toEqual({ status: 'pending', attempts: 0 });
+    expect(await threadsFor(userId)).toHaveLength(25);
+    expect(await processPendingImports()).toBe(1);
+    const [record] = await importsFor(userId);
+    expect(record).toMatchObject({ status: 'completed', importedCount: 5, skippedCount: 25 });
+  });
+
   it('gives up on an import that keeps crashing', async () => {
     const id = crypto.randomUUID();
     await live.db.execute(sql`

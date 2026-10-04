@@ -148,6 +148,18 @@ const envSchema = z.object({
     .default(30_000),
   /** Test only: test background migrations to enable, comma-separated (packages/db). */
   OCI_TEST_BACKGROUND_MIGRATIONS: z.string().optional(),
+  /**
+   * Process role (v0.11 design, item 14; docs/OPERATIONS.md, "Process roles").
+   *
+   * - `all` (default): serves the API and runs background jobs, as before.
+   * - `web`: serves the API only. Background work (imports, embeddings,
+   *   summaries, webhooks, backups, compliance exports, retention, the
+   *   interrupted-reply sweep) is queued for a worker, so a `web`-only
+   *   deployment needs at least one `worker` or `all` replica.
+   * - `worker`: runs background jobs and serves only /api/health/live,
+   *   /api/health/ready and /metrics on API_PORT.
+   */
+  OCI_ROLE: z.enum(['web', 'worker', 'all']).default('all'),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -28,6 +28,7 @@ import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
 import { isManagedLogoKey } from '../branding-assets.js';
+import { manualRunConflict, requestManualRun } from '../jobs/requests.js';
 import { runExclusively } from '../jobs/runner.js';
 import { backupDuration, backupRuns } from '../observability/metrics.js';
 import { withSpan } from '../observability/tracing.js';
@@ -842,6 +843,10 @@ export async function startManualBackup(actor: Actor): Promise<'started' | 'runn
     .where(eq(schema.backupRun.status, 'running'))
     .limit(1);
   if (running) return 'running';
+  // On a `web` replica (v0.11) a worker runs it.
+  const placed = await requestManualRun({ job: BACKUP_JOB, actor: actor ?? undefined });
+  if (placed === 'no-worker') throw manualRunConflict();
+  if (placed === 'queued') return 'started';
   void runManualBackup(actor).catch((error: unknown) =>
     logger.error(
       { err: error instanceof Error ? error.message : String(error) },

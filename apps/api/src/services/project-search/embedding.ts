@@ -10,6 +10,7 @@ import {
   vectorType,
 } from '../embeddings/storage.js';
 import { recordEmbeddingUsage } from '../embeddings/usage.js';
+import { jobMayContinue } from '../jobs/runner.js';
 
 /**
  * Embedding project-file passages for meaning-based search.
@@ -219,7 +220,10 @@ export async function embedPendingProjectPassages(limit = EMBED_PASSAGES_PER_RUN
   await ensureEmbeddingTable(embedder.settings.dimensions);
   let stored = 0;
   let consecutiveFailures = 0;
+  let files = 0;
   for (const file of groupByFile(await pendingPassages(embedder.key, limit))) {
+    // A failover may have taken the job's lock, or this replica is stopping.
+    if (files++ > 0 && !(await jobMayContinue())) break;
     const result = await embedFilePassages(embedder, storage.schema, file);
     stored += result.stored;
     if (result.error) {

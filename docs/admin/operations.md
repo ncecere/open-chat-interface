@@ -25,8 +25,11 @@ reported. The checks refresh every 30 seconds while the page is open; the old
 | Connectors | An enabled [connector](connectors.md)'s latest exchange failed | — |
 | Backups | On, but no [backup](backups.md) completed in over a day, or objects were missing from the last one | The latest backup failed |
 | Webhooks | An enabled [webhook](observability.md#webhooks) endpoint's latest delivery failed, or deliveries are over 15 minutes overdue | — |
+| Background workers | — | No replica that runs background jobs (`OCI_ROLE=worker` or `all`) has checked in for a minute; see [process roles](../OPERATIONS.md#process-roles) |
 
-Below the checks, **Observability** reports whether [metrics and
+Below the checks, **Replicas** lists the API replicas heard from in the last
+minute and whether each serves requests, runs background jobs, or both (shown
+when Redis is configured). **Observability** reports whether [metrics and
 traces](observability.md) are on. Both are set with environment variables, so
 the page only shows them.
 

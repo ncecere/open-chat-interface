@@ -2,9 +2,11 @@ import { and, count, desc, eq, gte, isNull, lt, schema, sql } from '@oci/db';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { sharedRedis } from '../../services/chat-streams.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
+import { liveReplicas, workersHealthCheck } from '../../services/jobs/workers.js';
 import {
   backupHealthCheck,
   complianceHealthCheck,
@@ -273,7 +275,10 @@ healthRoutes.get('/', async (c) => {
     guarded('backups', 'Backups', backupHealthCheck),
     guarded('webhooks', 'Webhooks', webhookHealthCheck),
     guarded('compliance', 'Compliance export', complianceHealthCheck),
+    // v0.11: a deployment of OCI_ROLE=web replicas only runs no background jobs.
+    guarded('workers', 'Background workers', workersHealthCheck),
   ]);
+  const replicas = await liveReplicas().catch(() => null);
 
   const recentJobs = await db
     .select({
@@ -302,6 +307,8 @@ healthRoutes.get('/', async (c) => {
     checks,
     // Configured by environment only; shown read-only.
     observability: observabilityStatus(),
+    // Replicas heard from in the last minute (null without Redis), v0.11.
+    replicas: { role: processRole(), live: replicas },
     recentJobs: recentJobs.map((job) => ({
       ...job,
       startedAt: job.startedAt.toISOString(),

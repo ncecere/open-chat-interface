@@ -758,7 +758,9 @@ replies. On the first `SIGTERM` (or `SIGINT`) it:
    other request is answered as usual, with `Connection: close`, so a proxy's
    pooled connections stop carrying new requests to the replica.
 3. Stops its background jobs: no new runs start on it (another replica's tick
-   picks the work up); one already running gets up to five seconds.
+   picks the work up), and a job already running stops after the batch in
+   hand. On an `all` replica it gets up to five seconds (replies come first);
+   a worker (`OCI_ROLE=worker`) gives it the whole `SHUTDOWN_DRAIN_TIMEOUT_MS`.
 4. Lets replies in progress finish, for up to `SHUTDOWN_DRAIN_TIMEOUT_MS`.
 5. Past that limit, stops each remaining reply and saves it with what it has,
    marked **interrupted** (stored as `cancelled` with an `error_message`
@@ -801,8 +803,11 @@ connection failed to another replica, whatever its method. Its pooled
 connections are kept for 30 s, below the API's 65-second keep-alive, so it
 never sends a request on a connection the API is closing.
 
-The API answers `503` only when a replica cannot serve (it is shutting down,
-or its database is unreachable). Keep it that way: an instance-wide `503`
+The API answers `503` only when a replica cannot serve: it is shutting down,
+or (readiness only) its database has been unreachable for more than 30 s. A
+request that fails because the database connection dropped answers `500`
+marked retryable instead (see [Database failover](#database-failover)).
+Keep it that way: an instance-wide `503`
 from every replica would mark them all down for 10 s.
 
 ### Kubernetes
@@ -857,6 +862,156 @@ node drain stops one replica at a time.
   itself, so a proxy need not.
 - **Streaming**: disable response buffering for `/api` (NGINX
   `proxy_buffering off`), as before.
+
+## Process roles
+
+From v0.11 one API image runs in one of three roles, set with `OCI_ROLE`:
+
+| `OCI_ROLE` | Serves | Runs background jobs |
+| --- | --- | --- |
+| `all` (default) | The API | Yes, as before v0.11 |
+| `web` | The API | No: work its requests start is handed to a worker |
+| `worker` | Only `/api/health/live`, `/api/health/ready` and `/metrics` on `API_PORT` | Yes |
+
+Background jobs are everything on a schedule or queued: imports, embedding
+project files, conversation summaries (compaction), webhook deliveries,
+scheduled and manual backups, compliance exports, retention and trash purges,
+storage cleanup, usage reports, and the sweep that saves replies whose
+replica died as interrupted. A `web` replica still does everything a request
+needs on the spot: it stores and streams replies, indexes an uploaded project
+file so it is searchable at once, renders a document someone downloads, and
+recovers an interrupted reply when somebody opens or writes in its
+conversation. Embedding that file, an import, a summary or a webhook delivery
+it queues instead, and asks a worker to start it straight away with a
+PostgreSQL notification (`LISTEN`/`NOTIFY` on `oci_job_requests`). If no
+worker hears it, nothing is lost: the job's next tick (one to five minutes)
+finds the queued work.
+
+**A deployment of `web` replicas only runs no background work.** Run at least
+one `worker` (or `all`) replica. Every replica writes a heartbeat to Redis
+every 15 s; **System health → Background workers** turns red, and each `web`
+replica logs a warning (then every ten minutes), when no `worker` or `all`
+replica has written one for a minute. System health also lists the replicas
+it has heard from and their roles. Without Redis, the worker check falls back
+to the interrupted-reply sweep's recorded runs (every 15 s on whichever
+replica runs jobs). **Run now**, **Back up now** and **Export now** on a `web`
+replica are handed to a worker, and refused with `409` while none is running.
+
+Jobs hold a PostgreSQL advisory lock while they run, so any number of `worker`
+and `all` replicas can run side by side; each job runs on one at a time.
+Workers need the same database, Redis, storage (`STORAGE_LOCAL_PATH` volume,
+or the S3 settings) and `ENCRYPTION_KEY` as the API, and `APP_URL` for links in
+the emails they send. Start them with `RUN_MIGRATIONS=false` after the
+migration job.
+
+**Sizing.** One worker is enough for most deployments; jobs run one batch at a
+time and mostly wait on the database or a provider. Add a second for
+availability (a node drain, an upgrade) rather than throughput. Give it the
+memory of an API replica (imports and backups stream, but document rendering
+and `pg_dump` need headroom) and less CPU. `web` replicas scale with traffic
+and no longer lose CPU to embeddings, imports or backups.
+
+**Readiness.** A worker reports ready (`/api/health/ready`, `200`, with
+`"role": "worker"`) when it can reach the database, and `503` once it is
+shutting down. It serves no traffic, so nothing routes on it; use it as the
+probe that restarts a stuck worker together with liveness. On `SIGTERM` a
+worker starts no new job, lets each running job finish the batch in hand, for
+up to `SHUTDOWN_DRAIN_TIMEOUT_MS`, and exits; a job cut off later is picked up
+by the next tick elsewhere.
+
+### A worker with Docker Compose
+
+The bundled file has an optional `worker` service (profile `worker`). To move
+background work off the API container:
+
+```bash
+OCI_API_ROLE=web docker compose --profile worker up -d
+docker compose --profile worker up -d --scale worker=2   # more than one
+```
+
+Without the profile, `api` runs as `all`, as before. Never put a worker behind
+the web proxy (it answers `404` to everything but health and metrics).
+
+### Workers on Kubernetes
+
+Run two Deployments from the same image: `oci-web` (`OCI_ROLE=web`, behind the
+Service and ingress, scaled on traffic) and `oci-worker` (`OCI_ROLE=worker`, no
+Service except for metrics scraping, two replicas for availability). Give the
+worker the same `terminationGracePeriodSeconds` and `SHUTDOWN_DRAIN_TIMEOUT_MS`
+as the API; it needs no `preStop` sleep (nothing routes to it).
+
+```yaml
+# oci-worker
+spec:
+  replicas: 2
+  template:
+    spec:
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: worker
+          image: ghcr.io/ncecere/open-chat-interface/api:<version>
+          env:
+            - name: OCI_ROLE
+              value: worker
+            - name: RUN_MIGRATIONS
+              value: "false"
+            - name: SHUTDOWN_DRAIN_TIMEOUT_MS
+              value: "30000"
+          readinessProbe:
+            httpGet: { path: /api/health/ready, port: 3000 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/health/live, port: 3000 }
+            periodSeconds: 10
+            failureThreshold: 3
+```
+
+The `oci-web` Deployment is the API one under
+[Shutting down and draining → Kubernetes](#kubernetes), with
+`OCI_ROLE=web`. During an upgrade, replace workers like any other replica;
+jobs that stop mid-batch are safe to run again.
+
+## Database failover
+
+From v0.11 OCI rides out a change of PostgreSQL primary (Patroni, a managed
+service's failover, a restart behind a virtual IP). Tested on every pull
+request by terminating every connection in the middle of a migration, a job,
+a reply's final save and requests, and weekly against a real three-node
+Patroni cluster under load; the design and the results are in
+[docs/dev/failover.md](dev/failover.md). What to expect:
+
+- **Reads** caught by the failover are run again within the request, once,
+  and answered normally (a little slower).
+- **Writes** caught by it are not repeated: they answer **`500`** with
+  `"retryable": true` in the error body and the header `X-OCI-Retryable:
+  database-connection`. The change may or may not have been saved; send it
+  again if that is safe, or check first. `503` is never used for this (it
+  means a replica is draining, and proxies take `503` replicas out of
+  rotation).
+- **Replies** being written keep streaming (they go through Redis); their final
+  save waits out the failover for up to 30 s. A new message whose saving meets
+  the failover is retried for up to 10 s.
+- **Background jobs** stop after the batch in hand when their lock goes with
+  the old primary, and the next tick continues on the new one. Imports resume
+  where they stopped.
+- **Readiness** stays `200` (`"status": "degraded"`) for the first 30 s the
+  database is unreachable, so a failover does not take every replica out of
+  rotation at once; after that it answers `503`.
+- **Migrations** are one transaction; a failover rolls the attempt back and
+  rerunning the migrate job starts cleanly.
+
+In front of the cluster, use something that closes connections to a node that
+stops being primary: HAProxy checking Patroni's REST API (`option httpchk`,
+`http-check send meth GET uri /primary`, `default-server ... init-state down
+on-marked-down shutdown-sessions`; `tools/failover-drill/haproxy.cfg` is a
+working example), a pooler in session mode, or the provider's endpoint. A
+connection that silently vanishes is otherwise noticed only by TCP keepalive,
+after minutes. Connections are session-mode or direct (jobs and migrations
+hold advisory locks; the worker uses `LISTEN`).
+
+With asynchronous replication the last moments of committed work can be lost
+in an unplanned failover. OCI's jobs and the final save are safe to repeat, but
+a reply or setting saved in those moments may need saving again.
 
 ## Usage accounting after an interrupted run
 

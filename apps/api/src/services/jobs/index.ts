@@ -1,7 +1,12 @@
-import { BACKUP_JOB, runScheduledBackup } from '../backups/run.js';
+import { runsBackgroundJobs } from '../../lib/role.js';
+import { BACKUP_JOB, runScheduledBackup, startManualBackup } from '../backups/run.js';
 import { processCompactionQueue } from '../chat/compaction-queue.js';
 import { recoverInterruptedReplies } from '../chat/run-recovery.js';
-import { COMPLIANCE_JOB, runScheduledComplianceExport } from '../compliance/export.js';
+import {
+  COMPLIANCE_JOB,
+  runScheduledComplianceExport,
+  startManualComplianceExport,
+} from '../compliance/export.js';
 import {
   applyThreadRetention,
   pruneAuditLog,
@@ -23,7 +28,19 @@ import { drainDeletedObjects, pruneDrainedObjects } from '../storage/reaper.js';
 import { purgeExpiredTemporaryThreads, purgeUnusedThreads } from '../threads.js';
 import { foldUsageRollups, USAGE_ROLLUP_FOLD_JOB } from '../usage-report/rollup-fold.js';
 import { processWebhookDeliveries } from '../webhooks/delivery.js';
-import { type JobDefinition, runExclusively, startJobs } from './runner.js';
+import {
+  type JobRequest,
+  listenForJobRequests,
+  manualRunConflict,
+  requestManualRun,
+} from './requests.js';
+import {
+  type JobDefinition,
+  runExclusively,
+  startJobs,
+  stopJobs as stopJobTimers,
+} from './runner.js';
+import { SWEEP_JOB } from './workers.js';
 
 const MINUTE = 60 * 1000;
 export const COMPACTION_JOB = 'chat.compact-conversations';
@@ -86,8 +103,9 @@ export function lifecycleJobs(): JobDefinition[] {
       // conversation takes new messages again (v0.11). A reader resuming the
       // reply, or a new message in its conversation, does the same at once.
       // Every 15 s: a reply whose resuming client is on an older replica
-      // (during an upgrade) has only this to end it.
-      name: 'chat.recover-interrupted-replies',
+      // (during an upgrade) has only this to end it. Its recorded runs also
+      // show System health that some replica runs jobs (jobs/workers.ts).
+      name: SWEEP_JOB,
       intervalMs: 15 * 1000,
       run: () => recoverInterruptedReplies(),
     },
@@ -197,8 +215,35 @@ export function lifecycleJobs(): JobDefinition[] {
   ];
 }
 
-export function startLifecycleJobs(): void {
+let stopListening: (() => Promise<void>) | null = null;
+
+/**
+ * What a `web` replica asked for (jobs/requests.ts): a manual backup or
+ * compliance export with the administrator who started it, or a job to run
+ * now. Unknown names are ignored.
+ */
+export async function handleJobRequest(request: JobRequest): Promise<unknown> {
+  if (request.actor && request.job === BACKUP_JOB) return startManualBackup(request.actor);
+  if (request.actor && request.job === COMPLIANCE_JOB)
+    return startManualComplianceExport(request.actor);
+  return runJobNow(request.job);
+}
+
+/**
+ * Starts every job's timer, and listens for work requested by `web`
+ * replicas. Only on a replica that runs jobs (OCI_ROLE=worker or all).
+ */
+export async function startLifecycleJobs(): Promise<void> {
   startJobs(lifecycleJobs());
+  stopListening = await listenForJobRequests(handleJobRequest);
+}
+
+/** Stops the timers and the listener; jobs already running finish their batch. */
+export function stopJobs(): void {
+  stopJobTimers();
+  const stop = stopListening;
+  stopListening = null;
+  void stop?.();
 }
 
 /** Runs one job immediately, for admin-triggered maintenance. */
@@ -208,4 +253,17 @@ export async function runJobNow(name: string): Promise<number | null> {
   return runExclusively(job);
 }
 
-export { recentJobRuns, runningJobCount, stopJobs } from './runner.js';
+/**
+ * "Run now" from System health: here when this replica runs jobs, else asked
+ * of a worker (`queued`, its result not known yet). 409 when no replica runs
+ * jobs; null for an unknown job or one already running elsewhere.
+ */
+export async function runOrQueueJobNow(name: string): Promise<number | 'queued' | null> {
+  if (runsBackgroundJobs()) return runJobNow(name);
+  if (!lifecycleJobs().some((candidate) => candidate.name === name)) return null;
+  const placed = await requestManualRun({ job: name });
+  if (placed === 'no-worker') throw manualRunConflict();
+  return 'queued';
+}
+
+export { recentJobRuns, runningJobCount } from './runner.js';

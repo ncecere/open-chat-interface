@@ -15,7 +15,7 @@ import {
  * makes indexing idempotent under concurrency, the bounded and restart-safe
  * background job, and the cascades that remove chunks with their file.
  */
-const state = vi.hoisted(() => ({ db: null as unknown }));
+const state = vi.hoisted(() => ({ db: null as unknown, role: 'all', kickJob: vi.fn() }));
 vi.mock('../../db/index.js', () => ({
   get db() {
     return state.db;
@@ -24,6 +24,11 @@ vi.mock('../../db/index.js', () => ({
 vi.mock('../../lib/logger.js', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
+vi.mock('../../lib/role.js', () => ({
+  processRole: () => state.role,
+  runsBackgroundJobs: () => state.role !== 'web',
+}));
+vi.mock('../../services/jobs/requests.js', () => ({ kickJob: state.kickJob }));
 
 const available = await livePostgresAvailable();
 
@@ -280,5 +285,32 @@ describe.skipIf(!available)('live: project file search index', () => {
     expect((await chunks(theirFile!.id)).length).toBeGreaterThan(0);
     await pool.db.delete(schema.user).where(eq(schema.user.id, leaving));
     expect(await chunks(theirFile!.id)).toEqual([]);
+  });
+
+  it('stops between files once this replica starts shutting down (v0.11)', async () => {
+    const { beginDrain, resetDrainForTests } = await import('../../lib/drain.js');
+    const target = await project();
+    for (let index = 0; index < 3; index += 1) await file(target.id, `Drain ${index} text.`);
+    beginDrain('SIGTERM');
+    try {
+      // The file in hand is finished; the rest wait for another replica's tick.
+      expect(await indexPendingProjectFiles(5)).toBe(1);
+    } finally {
+      resetDrainForTests();
+    }
+    expect(await indexPendingProjectFiles(5)).toBe(2);
+  });
+
+  it('indexes an upload in the request but asks a worker to embed it on a web replica (v0.11)', async () => {
+    const target = await project();
+    const added = await file(target.id, paragraphs(3, 'Upload'));
+    state.role = 'web';
+    try {
+      await indexUploadedProjectFile(added.id);
+    } finally {
+      state.role = 'all';
+    }
+    expect((await indexRow(added.id))?.chunkCount).toBeGreaterThan(0);
+    expect(state.kickJob).toHaveBeenCalledWith('projects.embed-passages');
   });
 });
