@@ -10,14 +10,15 @@ const fmt = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(
 
 export function analyse({ events, replies, run, bounds }) {
   // Windows in which an API replica was stopping or had just been killed:
-  // SIGTERM until gapTailMs after it exited (the proxy re-resolves `api` every
-  // 10 s and retries a dead address for up to 5 s).
-  const windows = (run.replacements ?? [])
-    .filter((r) => r.service.startsWith('api'))
-    .map((r) => [r.stopRequestedAt, r.stoppedAt + bounds.gapTailMs]);
+  // SIGTERM until gapTailMs after it exited. Reported rather than failed for a
+  // replica on a release that cannot drain (before v0.11.0: it keeps taking
+  // work until SIGKILL), or for every replica with --allow-shutdown-gaps.
+  const apiStops = (run.replacements ?? []).filter((r) => r.service.startsWith('api'));
+  const exempt = apiStops.filter((r) => r.drains === false || bounds.allowShutdownGaps);
+  const windows = exempt.map((r) => [r.stopRequestedAt, r.stoppedAt + bounds.gapTailMs]);
   const inGap = (at) => windows.some(([from, to]) => at >= from && at <= to);
-  const gapEvents = bounds.allowShutdownGaps ? events.filter((e) => inGap(e.at)) : [];
-  const requests = bounds.allowShutdownGaps ? events.filter((e) => !inGap(e.at)) : events;
+  const gapEvents = events.filter((e) => inGap(e.at));
+  const requests = events.filter((e) => !inGap(e.at));
   const gapFailures = gapEvents.filter((e) => e.outcome === 'fail');
   const gapLatency = latencyStats(gapEvents.map((e) => e.ttfb));
   const failures = requests.filter((e) => e.outcome === 'fail');
@@ -63,12 +64,21 @@ export function analyse({ events, replies, run, bounds }) {
 
   const replyCounts = { total: replies.length, complete: 0, resumed: 0, cut: 0, error: 0 };
   for (const r of replies) replyCounts[r.outcome] = (replyCounts[r.outcome] ?? 0) + 1;
+  const overlaps = (r, rep) =>
+    r.startedAt < rep.stoppedAt && (r.streamEndedAt ?? r.endedAt) > rep.stopRequestedAt;
+  // A reply cut by a replica that cannot drain is that release's behaviour;
+  // any other cut is a failure of draining.
+  const cut = replies.filter((r) => r.outcome === 'cut');
+  const legacyStops = apiStops.filter((r) => r.drains === false);
+  const legacyCut = cut.filter((r) => legacyStops.some((rep) => overlaps(r, rep)));
+  const drainCut = cut.filter((r) => !legacyCut.includes(r));
+  // Every cut reply must reach a final state, and a client resuming it must
+  // get an end (not a stream left open until it gives up): gap 2.
+  const unrecovered = cut.filter((r) => r.storedStatus === 'streaming' || r.resumed === 'hung');
 
   // Replies in flight while each replica was stopping.
   const replacements = (run.replacements ?? []).map((rep) => {
-    const overlapping = replies.filter(
-      (r) => r.startedAt < rep.stoppedAt && (r.streamEndedAt ?? r.endedAt) > rep.stopRequestedAt,
-    );
+    const overlapping = replies.filter((r) => overlaps(r, rep));
     const outcomes = {};
     for (const r of overlapping) outcomes[r.outcome] = (outcomes[r.outcome] ?? 0) + 1;
     const requestsDuring = events.filter(
@@ -86,7 +96,11 @@ export function analyse({ events, replies, run, bounds }) {
     run.migration?.exitCode === 0,
     run.migration ? `exit ${run.migration.exitCode} in ${fmt(run.migration.ms)}` : 'not run',
   );
-  const scope = bounds.allowShutdownGaps ? ' outside replica-shutdown windows' : '';
+  const scope = windows.length
+    ? bounds.allowShutdownGaps
+      ? ' outside replica-shutdown windows'
+      : ' outside the windows of replicas that cannot drain'
+    : '';
   add(
     `no server errors (5xx)${scope}`,
     serverErrors.length === 0,
@@ -126,29 +140,81 @@ export function analyse({ events, replies, run, bounds }) {
     run.smokeNew ? `${run.smokeNew.total - run.smokeNew.failed}/${run.smokeNew.total}` : 'not run',
   );
   const strictReplyErrors = replies.filter(
-    (r) => r.outcome === 'error' && !(bounds.allowShutdownGaps && inGap(r.endedAt)),
+    (r) => r.outcome === 'error' && !inGap(r.endedAt),
   ).length;
   add(
     'no replies ended in an error',
     strictReplyErrors === 0,
     `${strictReplyErrors} of ${replyCounts.total}`,
   );
-  if (bounds.allowShutdownGaps) {
+  if (windows.length) {
     add(
-      'while an API replica was stopping (known gap, design item 13: reported, allowed)',
+      bounds.allowShutdownGaps
+        ? 'while an API replica was stopping (--allow-shutdown-gaps: reported)'
+        : `while a replica that cannot drain (${run.from?.version}) was stopping: reported`,
       true,
       `${gapEvents.length} requests, ${gapFailures.length} failed (${summarise(gapFailures)}), p99 ${fmt(gapLatency.p99)}, max ${fmt(gapLatency.max)}`,
       { informational: true },
     );
   }
+  if (legacyCut.length) {
+    add(
+      `replies cut off by a replica that cannot drain (${run.from?.version}): reported`,
+      true,
+      `${legacyCut.length} cut`,
+      { informational: true },
+    );
+  }
   add(
     bounds.allowCutReplies
-      ? 'replies cut off by a replica stopping (known gap, design item 13: allowed)'
-      : 'no replies cut off by a replica stopping',
-    bounds.allowCutReplies || replyCounts.cut === 0,
-    `${replyCounts.cut} cut, ${replyCounts.resumed} resumed, ${replyCounts.complete} complete`,
+      ? 'replies cut off by a draining replica (--allow-cut-replies: reported)'
+      : 'no replies cut off by a draining replica',
+    bounds.allowCutReplies || drainCut.length === 0,
+    `${drainCut.length} cut; overall ${replyCounts.cut} cut, ${replyCounts.resumed} resumed, ${replyCounts.complete} complete`,
     { informational: bounds.allowCutReplies },
   );
+  add(
+    'every cut reply was saved in a final state and its resume ended',
+    unrecovered.length === 0,
+    cut.length
+      ? `${cut.length - unrecovered.length} of ${cut.length} (stored: ${summariseBy(cut, 'storedStatus')}; resume: ${summariseBy(cut, 'resumed')}; slowest resume ${fmt(Math.max(0, ...cut.map((r) => r.resumeMs ?? 0)))})`
+      : 'no reply was cut',
+  );
+  const draining = apiStops.filter((r) => r.drains);
+  if (draining.length) {
+    const clean = draining.filter(
+      (r) => r.exitCode === 0 && r.stoppedAt - r.stopRequestedAt < (bounds.stopTimeoutMs ?? 30_000),
+    );
+    add(
+      'draining replicas exited 0 before their grace period ended',
+      clean.length === draining.length,
+      draining
+        .map(
+          (r) =>
+            `${r.kind ?? 'replace'} ${r.service}: exit ${r.exitCode} in ${fmt(r.stoppedAt - r.stopRequestedAt)}`,
+        )
+        .join('; '),
+    );
+    const finished = draining.filter(
+      (r) =>
+        r.caughtReply &&
+        replies.some((x) => overlaps(x, r) && x.outcome === 'complete') &&
+        replies.filter((x) => overlaps(x, r)).every((x) => x.outcome === 'complete'),
+    );
+    add(
+      'a reply streaming on each draining replica when it was stopped finished',
+      finished.length === draining.length,
+      draining
+        .map(
+          (r) =>
+            `${r.kind ?? 'replace'} ${r.service}: ${summariseBy(
+              replies.filter((x) => overlaps(x, r)),
+              'outcome',
+            )}`,
+        )
+        .join('; '),
+    );
+  }
   add(
     'load was running in every phase',
     byPhase.every((p) => p.requests > 0),
@@ -182,7 +248,7 @@ export function analyse({ events, replies, run, bounds }) {
         ttfb,
       })),
     failureCount: failures.length,
-    shutdownGap: bounds.allowShutdownGaps
+    shutdownGap: windows.length
       ? {
           windows: windows.map(([a, b]) => [new Date(a).toISOString(), new Date(b).toISOString()]),
           requests: gapEvents.length,
@@ -217,10 +283,22 @@ export function analyse({ events, replies, run, bounds }) {
         startedAt: new Date(r.startedAt).toISOString(),
         streamError: r.streamError,
         resumed: r.resumed,
+        resumeMs: r.resumeMs,
         storedStatus: r.storedStatus,
+        storedError: r.storedError,
       })),
     replacements,
   };
+}
+
+function summariseBy(list, field) {
+  const counts = {};
+  for (const e of list) counts[e[field] ?? 'none'] = (counts[e[field] ?? 'none'] ?? 0) + 1;
+  return (
+    Object.entries(counts)
+      .map(([k, v]) => `${v} ${k}`)
+      .join(', ') || 'none'
+  );
 }
 
 function summarise(list) {
@@ -296,12 +374,12 @@ function markdown(report) {
   lines.push('## Replica replacement');
   lines.push('');
   lines.push(
-    '| Replica | Stopped mid-reply | Stop (SIGTERM) took | Exit code | Ready after | Replies in flight | Their outcomes |',
+    '| Phase | Replica | Drains | Stopped mid-reply | Stop (SIGTERM) took | Exit code | Ready after | Replies in flight | Their outcomes |',
   );
-  lines.push('| --- | --- | ---: | ---: | ---: | ---: | --- |');
+  lines.push('| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |');
   for (const r of verdict.replacements) {
     lines.push(
-      `| ${r.service} | ${r.caughtReply === null || r.caughtReply === undefined ? 'n/a' : r.caughtReply ? 'yes' : 'no'} | ${fmt(r.stoppedAt - r.stopRequestedAt)} | ${r.exitCode} | ${fmt(r.readyAt - r.stoppedAt)} | ${r.repliesInFlight} | ${JSON.stringify(r.outcomes)} |`,
+      `| ${r.kind ?? 'replace'} | ${r.service} | ${r.drains === null || r.drains === undefined ? 'n/a' : r.drains ? 'yes' : 'no'} | ${r.caughtReply === null || r.caughtReply === undefined ? 'n/a' : r.caughtReply ? 'yes' : 'no'} | ${fmt(r.stoppedAt - r.stopRequestedAt)} | ${r.exitCode} | ${fmt(r.readyAt - r.stoppedAt)} | ${r.repliesInFlight} | ${JSON.stringify(r.outcomes)} |`,
     );
   }
   lines.push('');
@@ -333,7 +411,7 @@ function markdown(report) {
   }
   if (verdict.shutdownGap?.failed) {
     lines.push(
-      `## Failures while an API replica was stopping (${verdict.shutdownGap.failed}; known gap, design item 13)`,
+      `## Failures while an API replica was stopping (${verdict.shutdownGap.failed}; reported, not failed)`,
     );
     lines.push('');
     lines.push('| Time | Phase | Request | Status | Error | Time to headers |');

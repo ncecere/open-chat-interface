@@ -1,13 +1,29 @@
+import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { migrationsApplied, runMigrationsWithLock, seedDatabase } from '@oci/db';
 import { createApp } from './app.js';
 import { ensureInitialAdmin } from './bootstrap.js';
 import { loadEnv } from './config/env.js';
-import { db } from './db/index.js';
+import { db, sql } from './db/index.js';
+import {
+  chatTurnsBeingAdmitted,
+  closeConnectionsWhileDraining,
+  createShutdown,
+  withDrain,
+} from './lib/drain.js';
 import { logger } from './lib/logger.js';
-import { startLifecycleJobs, stopJobs } from './services/jobs/index.js';
+import { activeRunCount, interruptActiveRuns } from './services/chat/active-runs.js';
+import { closeChatStreams, endChatReplays } from './services/chat-streams.js';
+import { runningJobCount, startLifecycleJobs, stopJobs } from './services/jobs/index.js';
 import { initTracing, shutdownTracing } from './services/observability/tracing.js';
 import { purgeExpiredTemporaryThreads } from './services/threads.js';
+
+/**
+ * How long a shutdown waits for a background job already running. Jobs are
+ * safe to re-run, so one still going after this (a backup, say) is left to
+ * the next tick on another replica rather than holding the drain open.
+ */
+const JOB_DRAIN_MS = 5_000;
 
 async function main() {
   const env = loadEnv();
@@ -32,7 +48,7 @@ async function main() {
    */
   if (env.RUN_MIGRATIONS) {
     logger.info('Applying database migrations');
-    await runMigrationsWithLock(env.DATABASE_URL);
+    await runMigrationsWithLock(env.DATABASE_URL, { logger });
     await seedDatabase(db);
   } else if (!(await migrationsApplied(db))) {
     throw new Error(
@@ -54,20 +70,40 @@ async function main() {
 
   const app = createApp();
 
-  const server = serve({ fetch: app.fetch, port: env.API_PORT }, (info) => {
+  const server = serve({ fetch: withDrain(app.fetch), port: env.API_PORT }, (info) => {
     logger.info(`API listening on http://localhost:${info.port}`);
+  }) as Server;
+  // Keep idle connections open longer than a proxy keeps them in its pool
+  // (the bundled Caddy: 30 s; most load balancers: 60 s). Otherwise the API
+  // can close one just as the proxy sends a request on it, which the proxy
+  // answers with 502 for anything but GET.
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+  closeConnectionsWhileDraining(server);
+
+  const jobsUntil = { at: Number.POSITIVE_INFINITY };
+  const shutdown = createShutdown({
+    server,
+    drainTimeoutMs: env.SHUTDOWN_DRAIN_TIMEOUT_MS,
+    stopIntake: () => {
+      stopJobs();
+      jobsUntil.at = Date.now() + JOB_DRAIN_MS;
+    },
+    workInProgress: () =>
+      activeRunCount() +
+      chatTurnsBeingAdmitted() +
+      (Date.now() < jobsUntil.at ? runningJobCount() : 0),
+    interruptWork: interruptActiveRuns,
+    endStreams: endChatReplays,
+    closeResources: async () => {
+      await Promise.allSettled([closeChatStreams(), sql.end({ timeout: 5 }), shutdownTracing()]);
+    },
+    exit: (code) => process.exit(code),
+    log: logger,
   });
 
-  const shutdown = (signal: string) => {
-    logger.info({ signal }, 'Shutting down');
-    stopJobs();
-    server.close(() => {
-      void shutdownTracing().finally(() => process.exit(0));
-    });
-  };
-
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
 main().catch((error) => {

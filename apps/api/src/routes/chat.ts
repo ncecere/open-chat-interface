@@ -62,7 +62,10 @@ chatRoutes.get('/:threadId/stream', async (c) => {
   const resumed = await resumeActiveChatRun(thread.id, user.id, c.req.raw.signal, {
     readState: readOwnedRunState,
   }).catch(() => {
-    throw new AppError('INTERNAL_ERROR', 'Could not check the saved response. Try again.', 503);
+    // 500, not 503: the bundled proxy takes a replica that answers 503 out of
+    // rotation (reserved for draining), and a Redis or database blip here
+    // would answer 503 on every replica at once.
+    throw new AppError('INTERNAL_ERROR', 'Could not check the saved response. Try again.', 500);
   });
   if (!resumed) return c.body(null, 204);
 

@@ -124,8 +124,18 @@ export class Client {
    * One logical request. Returns `{ ok, status, json, text, outcome }` where
    * outcome is `ok`, `retried` (succeeded on the single allowed retry), or
    * `fail`. Streams are returned unread when `stream` is set.
+   *
+   * With `retryDrain`, a `503` carrying `Retry-After` (an API replica that is
+   * shutting down refuses a new chat turn that way, before storing anything)
+   * is sent again after the advertised delay, up to twice, as the web app
+   * does (apps/web/src/lib/chat-retry.ts).
    */
-  async request(name, method, path, { body, expect = [200], stream = false, timeoutMs } = {}) {
+  async request(
+    name,
+    method,
+    path,
+    { body, expect = [200], stream = false, timeoutMs, retryDrain = false } = {},
+  ) {
     const at = Date.now();
     const limit = timeoutMs ?? this.timeoutMs;
     let first = await this.attempt(method, path, body, limit);
@@ -136,6 +146,19 @@ export class Client {
       retried = first.error ? errorCode(first.error) : `HTTP ${first.response.status}`;
       if (first.response) await first.response.body?.cancel().catch(() => {});
       await sleep(250);
+      first = await this.attempt(method, path, body, limit);
+    }
+    const drainDelay = (a) => {
+      const header = a.response?.status === 503 ? a.response.headers.get('retry-after') : null;
+      return header === null || !Number.isFinite(Number(header))
+        ? null
+        : Math.min(5000, Number(header) * 1000);
+    };
+    for (let n = 0; retryDrain && n < 2 && drainDelay(first) !== null; n++) {
+      retried = `HTTP 503 draining${n ? ` x${n + 1}` : ''}`;
+      const delay = drainDelay(first);
+      await first.response.body?.cancel().catch(() => {});
+      await sleep(delay);
       first = await this.attempt(method, path, body, limit);
     }
     const event = {

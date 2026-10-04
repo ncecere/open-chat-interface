@@ -27,6 +27,7 @@ import { openApprovals } from './pending-approvals.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { failRunSetup, type RunResources, releaseRunHandles } from './run-cleanup.js';
 import type { AcquiredRun } from './run-lifecycle.js';
+import { startRunHeartbeat } from './run-recovery.js';
 import { lockChatThread } from './thread-claim.js';
 import { maxToolSteps } from './tool-loop.js';
 import type { TurnContext } from './turn-context.js';
@@ -207,6 +208,7 @@ export async function setupApprovalContinuation(
       return { before: current, answered };
     });
     resources.assistantMessage = { id: reply.id };
+    resources.stopHeartbeat = startRunHeartbeat(runIdentity);
     const persistence = await beginChatRun(runIdentity, { admission: 'durable' });
     resources.persistence = persistence === 'available' ? 'available' : 'unavailable';
     resources.reservation = await reserveQuotaForRun({

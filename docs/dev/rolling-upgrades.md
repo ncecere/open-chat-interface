@@ -70,6 +70,11 @@ remove a column over two releases.
    - `replace-web-1`, `replace-web-2`: take the proxy out of the load's
      rotation (as a load balancer drains a node), stop it, start TO, put it
      back;
+   - `restart-api-1`, `restart-api-2`: the same stop and start, TO replacing
+     TO, now that every proxy and replica runs the new release (`--no-restart-api`
+     skips them). This is the next upgrade's replacement step, and where
+     draining on shutdown (design item 13) is measured: FROM may be a release
+     that cannot drain;
    - `smoke-new`: the smoke suite against TO, where every endpoint must exist;
    - `cooldown` (10 s).
 6. **Report**: `report.json` and `report.md` in `--out` (default
@@ -103,13 +108,18 @@ client never calls it.
 | No application query waits on a lock longer than | 3 s (`--lock-wait-ms`), sampled every second; the migration's own session is excluded |
 | The FROM smoke suite passes on the new schema; the TO smoke suite passes | |
 | No reply ends in an `error` event | |
-| Replies cut off by a stopping replica | **Reported, allowed** (`--allow-cut-replies`, on until design item 13 ships) |
-| Requests while an API replica is stopping | From SIGTERM until 15 s after it exits (`--gap-tail-ms`), failures and latency are **reported, not failed** (`--allow-shutdown-gaps`, on until item 13 ships). Outside those windows, every check above applies in full. |
+| No reply cut off by a draining replica | Failed (`--allow-cut-replies` reports them instead). A replica on a release before v0.11.0 cannot drain: the replies it cuts are reported, not failed. |
+| Every cut reply is saved in a final state and its resume ends | Always checked: stored status not `streaming`, and `GET /api/chat/:id/stream` ended rather than staying open until the load's 120 s limit. |
+| Draining replicas exit 0 within the grace period, and the reply streaming on each when it was stopped finishes | Every stop of a release that drains (TO always; FROM from v0.11.0). |
+| Requests while an API replica is stopping | Checked in full (`--allow-shutdown-gaps` reports them instead). For a replica on a release before v0.11.0, from SIGTERM until 15 s after it exits (`--gap-tail-ms`), failures and latency are **reported, not failed**: that release keeps taking work until it is killed. |
 | Load ran in every phase; a reply was in flight at each API stop | |
 
 A cut reply is one whose stream ended without `finish`. The load then does
 what the web app does, `GET /api/chat/:id/stream`, and records whether the
-reply resumed, and the stored status afterwards.
+reply resumed, how long the resume took to end, and the stored status
+afterwards. Like the web app, the load sends a chat turn again when a
+replica that is shutting down refuses it (`503` with `Retry-After`, up to
+twice); such retries are counted, not failed.
 
 Exit code 0 is a pass, 1 a failed verdict, 2 a test that could not run.
 `--expect-fail` inverts 0 and 1, for negative controls.
@@ -200,9 +210,30 @@ reached 1.5-2.9 s in some phases of some runs regardless of version (the same
 phases took 100-200 ms in the other runs). The bounds held, but with less room
 than on a quiet machine; CI runners are dedicated.
 
+### With draining on shutdown (design item 13)
+
+Same machine and dataset, 4 October 2026, TO = this source with item 13, the
+allow flags off (the defaults), and the `restart-api` phases. FROM releases
+predate draining, so their stops are reported, and their cut replies must be
+recovered by TO:
+
+| FROM | Outside the windows of replicas that cannot drain | FROM stops (reported) | TO restarts (strict) | Replies | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| v0.10.2 | 1,702 requests, 0 failed, p99 119 ms, max 1.11 s | exit 137 after 30.2 s; 638 requests, 2 failed (`POST /api/threads` 502, `POST /api/chat` 502), max 5.04 s | exit 0 in 1.0 s and 1.4 s; 4 + 4 replies in flight, all complete; 1 turn refused and sent again | 163: 162 complete; 1 cut by v0.10.2, saved `cancelled` (interrupted), resume ended after 20.5 s | **Pass** |
+| v0.10.2 (again) | 1,749 requests, 0 failed, p99 123 ms, max 1.11 s | exit 137; 862 requests, 2 failed (`POST /api/chat` 502), max 5.04 s | exit 0 in 3.9 s and 0.6 s; 6 + 3 complete | 182: 181 complete; 1 cut by v0.10.2, recovered, resume ended after 31.0 s | **Pass** |
+| v0.9.2 | 1,725 requests, 0 failed, p99 121 ms, max 139 ms | exit 137; 654 requests, 0 failed, max 5.04 s | exit 0 in 3.9 s and 1.1 s; 7 + 6 complete | 168: 167 complete; 1 cut by v0.9.2, recovered, resume ended after 20.6 s | **Pass** |
+| v0.10.2, TO = the commit before item 13 (control) | 2,044 requests, 1 failed (5xx), p99 2.51 s, max 5.55 s | exit 137 | exit 137 after 30.2 s, 1 reply cut | 199: 196 complete, 3 cut, all left `streaming`, resumes hung (up to 50.6 s) | **Fail**, as it should |
+
+The longest request during a TO restart, 1.1 s, is one request per proxy
+dialling the replica's address just after it exited (`dial_timeout 1s`), then
+retried on the other replica; passive health keeps the rest away.
+
 ## Known gaps found
 
 These are product behaviour, reported by the test rather than fixed by it.
+Gaps 1-3 are fixed by design item 13 (v0.11) for replicas on v0.11 or later;
+see [Operations](../OPERATIONS.md#shutting-down-and-draining). A release before
+it still behaves as described when it is the one being stopped.
 
 1. **A stopping API replica is SIGKILLed with work in flight** (design item
    13). On SIGTERM the API closes its HTTP server, which waits for every open
@@ -225,6 +256,19 @@ These are product behaviour, reported by the test rather than fixed by it.
    ... refresh 10s`) and retries it for `lb_try_duration 5s`. Passive health
    checking (`fail_duration`), a shorter dial timeout, or the replica going
    not-ready before it stops (item 13) would remove most of it.
+
+   **Fixed (item 13).** Root causes, as built: (1) Node keeps serving new
+   requests on keep-alive connections after `server.close()`, and nothing
+   told the proxy the replica was going; now the replica answers
+   `Connection: close`, refuses new turns with `503` + `Retry-After` before
+   reading them, reports not-ready, and exits when its replies are done.
+   (2) Nothing could tell a dead producer from a slow one; now producers
+   heartbeat (Redis every 5 s, PostgreSQL every 10 s) and a reader, a new
+   message or a 15-second sweep ends a silent run as interrupted.
+   (3) Caddy runs no active health checks for `dynamic` upstreams, so
+   `health_uri` never ran; the bundled Caddyfile now uses passive health
+   (`unhealthy_status 503`, `fail_duration 10s`), `dial_timeout 1s` and a 2 s
+   DNS refresh.
 4. **Migrations block the application for as long as a step holds a lock.**
    Everything runs in one transaction with no `lock_timeout` or
    `statement_timeout` (the negative controls above show the effect). The

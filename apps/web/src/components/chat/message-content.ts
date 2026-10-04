@@ -5,15 +5,30 @@ export function metadataOf(message: UIMessage): {
   modelSlug: string | null;
   effort: string | null;
   status: string | null;
+  errorMessage: string | null;
 } {
   const metadata = message.metadata as
-    | { modelSlug?: unknown; effort?: unknown; status?: unknown }
+    | { modelSlug?: unknown; effort?: unknown; status?: unknown; errorMessage?: unknown }
     | undefined;
   return {
     modelSlug: typeof metadata?.modelSlug === 'string' ? metadata.modelSlug : null,
     effort: typeof metadata?.effort === 'string' ? metadata.effort : null,
     status: typeof metadata?.status === 'string' ? metadata.status : null,
+    errorMessage:
+      typeof metadata?.errorMessage === 'string' && metadata.errorMessage
+        ? metadata.errorMessage
+        : null,
   };
+}
+
+/**
+ * Why a saved reply stopped early without the person stopping it (v0.11): the
+ * server writing it shut down or crashed. The server stores such a reply as
+ * cancelled with a reason; one the person stopped has none.
+ */
+export function interruptionOf(message: UIMessage): string | null {
+  const { status, errorMessage } = metadataOf(message);
+  return message.role === 'assistant' && status === 'cancelled' ? errorMessage : null;
 }
 
 export function contextLimitedOf(message: UIMessage): boolean {

@@ -12,6 +12,7 @@ import { useChatRecovery } from '~/hooks/use-chat-recovery';
 import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
+import { fetchRetryingDrain } from '~/lib/chat-retry';
 import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
@@ -74,7 +75,12 @@ export function useChatSession(options: {
         scope.reconnectAbort = abort;
         signal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
       }
-      const response = await fetch(input, { ...init, signal });
+      // A server shutting down refuses a new turn before storing it; send it
+      // again (to a replica that is ready) before showing an error.
+      const response = await fetchRetryingDrain((url, options) => fetch(url, options), input, {
+        ...init,
+        signal,
+      });
       // The SDK cannot abort a reconnect before its headers arrive. Do not let
       // that late response create another browser reader after navigation.
       if (!scope.active || signal?.aborted) {

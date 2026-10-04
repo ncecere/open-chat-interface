@@ -18,11 +18,13 @@ import {
 import { observeChatReply } from '../observability/events.js';
 import { touchThread } from '../threads.js';
 import { buildSdkTools, toolApprovalPolicy } from '../tools/registry.js';
+import { stoppedByShutdown, trackRun } from './active-runs.js';
 import { isContextOverflowError } from './compaction-plan.js';
 import { scheduleCompactionAfterReply } from './compaction-queue.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { failRunSetup, releaseRunHandles } from './run-cleanup.js';
 import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
+import { INTERRUPTED_REPLY_MESSAGE } from './run-recovery.js';
 import { createToolLoop, stepsTaken, toolStreamErrorText } from './tool-loop.js';
 
 type RunOutcome = { status: Exclude<ChatRunStatus, 'active'>; error?: string };
@@ -88,6 +90,8 @@ async function persistAssistant(
   responseMessage: UIMessage,
   status: RunOutcome['status'],
   getUsage: () => Promise<ReplyUsage>,
+  /** Stopped by this replica shutting down, not by the person. */
+  interrupted = false,
 ) {
   const usage = await getUsage();
   const tokensIn = usage?.inputTokens ?? null;
@@ -100,7 +104,12 @@ async function persistAssistant(
       .set({
         parts: responseMessage.parts as unknown as Record<string, unknown>[],
         status,
-        errorMessage: status === 'error' ? 'The model failed to generate a response' : null,
+        errorMessage:
+          status === 'error'
+            ? 'The model failed to generate a response'
+            : interrupted
+              ? INTERRUPTED_REPLY_MESSAGE
+              : null,
         ...(continuation
           ? {
               ...(tokensIn != null && { tokensIn: added(schema.message.tokensIn, tokensIn) }),
@@ -159,6 +168,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
   let modelStarted = false;
   let setupFailed = false;
   let completion: Promise<void> | undefined;
+  let capture: Promise<void> | undefined;
+  let untrack: (() => void) | undefined;
   let captureStarted = false;
   let outcome: RunOutcome = { status: 'complete' };
   try {
@@ -253,6 +264,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
     };
     const first = await prepareAttempt(uiMessages, system);
     registerLocalChatRun(runIdentity, abortController);
+    // A shutdown waits for this reply, and past its limit stops it here.
+    untrack = trackRun(runIdentity.runId, abortController);
     let current = launch(first);
 
     modelStarted = true;
@@ -301,16 +314,23 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
       },
       onEnd: ({ responseMessage, isAborted }) => {
         if (setupFailed) return;
-        completion ??= (async () => {
+        if (completion) return completion;
+        completion = (async () => {
           const status = isAborted ? 'cancelled' : current.failed ? 'error' : 'complete';
+          const interrupted = isAborted && stoppedByShutdown(abortController.signal);
           outcome = {
             status,
             ...(status === 'error' ? { error: 'The model stream failed' } : {}),
           };
 
           try {
-            await persistAssistant(turn, run, responseMessage, status, () =>
-              runUsage(current.result, current.loop, status),
+            await persistAssistant(
+              turn,
+              run,
+              responseMessage,
+              status,
+              () => runUsage(current.result, current.loop, status),
+              interrupted,
             );
           } catch (error) {
             outcome = { status: 'error', error: 'Assistant message persistence failed' };
@@ -335,6 +355,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
               reply: responseMessage,
             });
         })();
+        // Done once saved, settled and (when resumable) finalized in Redis.
+        void Promise.allSettled([completion, capture]).then(() => untrack?.());
         return completion;
       },
     });
@@ -353,7 +375,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
               // Once started it exclusively owns Redis finalization, even if
               // response construction subsequently throws.
               captureStarted = true;
-              return captureChatRun(runIdentity, stream, () => outcome);
+              capture = captureChatRun(runIdentity, stream, () => outcome);
+              return capture;
             },
           }
         : {}),
@@ -365,6 +388,7 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
     // If SDK completion already began, let its measured usage settle first.
     await completion;
     await failRunSetup(run, { modelStarted, abandon: !captureStarted });
+    untrack?.();
     throw error;
   }
 }

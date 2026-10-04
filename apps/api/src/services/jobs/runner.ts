@@ -1,5 +1,6 @@
 import { eq, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
+import { isDraining } from '../../lib/drain.js';
 import { logger } from '../../lib/logger.js';
 import { observeJob } from '../observability/events.js';
 import { withSpan } from '../observability/tracing.js';
@@ -12,9 +13,24 @@ export interface JobDefinition {
   run: () => Promise<number>;
 }
 
-/** Returns null when another local tick or database session owns this job. */
+const running = new Set<Promise<unknown>>();
+
+/**
+ * Returns null when another local tick or database session owns this job, or
+ * when this replica is shutting down: it starts no new work then (a kick from
+ * a request, a manual run), and another replica's tick picks the work up.
+ */
 export function runExclusively(job: JobDefinition): Promise<number | null> {
-  return withJobLock(job.name, () => runRecordedJob(job));
+  if (isDraining()) return Promise.resolve(null);
+  const run = withJobLock(job.name, () => runRecordedJob(job));
+  running.add(run);
+  void run.catch(() => undefined).finally(() => running.delete(run));
+  return run;
+}
+
+/** Jobs this process is running; a shutdown waits for them within its limit. */
+export function runningJobCount(): number {
+  return running.size;
 }
 
 /** Lock cleanup surrounds the entire callback, including this initial insert. */

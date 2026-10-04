@@ -15,7 +15,7 @@ async function main() {
   const env = loadEnv();
 
   logger.info('Applying database migrations');
-  await runMigrationsWithLock(env.DATABASE_URL);
+  await runMigrationsWithLock(env.DATABASE_URL, { logger });
 
   logger.info('Seeding default instance settings');
   await seedDatabase(db);

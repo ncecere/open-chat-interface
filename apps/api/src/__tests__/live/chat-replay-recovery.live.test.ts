@@ -235,13 +235,14 @@ describe.skipIf(!available)('live replay route reconciles exact durable ownershi
       await consumed;
     }
   }, 6000);
-  it('reports initial database validation failure as unavailable, not absent', async () => {
+  it('reports initial database validation failure as an error, not absent, without taking the replica out', async () => {
     const { identity } = await fixture();
     vi.spyOn(pool.db, 'transaction').mockRejectedValueOnce(
       new Error('Injected private SQL detail'),
     );
     const response = await resume(identity.threadId);
-    expect(response.status).toBe(503);
+    // Not 503, which the bundled proxy treats as "this replica is draining".
+    expect(response.status).toBe(500);
     expect(await response.text()).not.toContain('Injected private SQL detail');
   });
   it.each(['foreign', 'deleted', 'expired'] as const)(

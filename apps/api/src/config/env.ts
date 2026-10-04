@@ -29,6 +29,14 @@ const envSchema = z.object({
   MIGRATION_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).max(86_400_000).default(900_000),
   REDIS_URL: z.string().optional(),
   CHAT_STREAM_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  /**
+   * Draining on shutdown (v0.11). After SIGTERM a replica reports not-ready,
+   * refuses new chat turns and lets replies in progress finish for up to this
+   * long; past it, each remaining reply is saved as interrupted. Set it below
+   * the orchestrator's grace period (Kubernetes terminationGracePeriodSeconds,
+   * Compose stop_grace_period), leaving a few seconds for the final saves.
+   */
+  SHUTDOWN_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(0).max(3_600_000).default(25_000),
 
   AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters'),
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 characters'),

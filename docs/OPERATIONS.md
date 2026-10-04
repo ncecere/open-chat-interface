@@ -167,6 +167,10 @@ objects, so attachment storage still needs versioning or snapshots as above.
    With `RUN_MIGRATIONS=false`, startup refuses to serve unless the latest bundled
    migration's timestamp is recorded. That marker is not a schema-integrity check
    or evidence that reverting an image after newer migrations is safe.
+   Replace API replicas one at a time. From v0.11 each one drains when it is
+   stopped (see [Shutting down and draining](#shutting-down-and-draining));
+   a replica on an older release still cuts the replies it is writing, which
+   v0.11 replicas then save as interrupted.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
 
@@ -199,8 +203,12 @@ migration again. Other errors, including a statement timeout, fail at once.
 Raise `MIGRATION_STATEMENT_TIMEOUT_MS` (or set it to `0`) only for a migration
 known to scale with data, such as building a large index; the changelog says
 when one does. Set both variables on whatever runs migrations: the `migrate`
-job, or the API when `RUN_MIGRATIONS=true`. The bundled Compose file does not
-pass them through; add them to the service's `environment` to change them.
+job, or the API when `RUN_MIGRATIONS=true`. The bundled Compose file passes
+both through to the `api` and `migrate` services from your shell or
+`docker/.env`; left unset, the defaults apply. `pnpm db:migrate` (development
+and CI) uses the same migrator and honours them too. Retry warnings appear in
+the API's JSON log (`Database migration attempt n/10 timed out ...`, with the
+relation, lock mode and blocking pids as fields).
 
 ### Upgrading to v0.7 (migrations 0022–0025)
 
@@ -587,6 +595,122 @@ Also in v0.10 without a migration: Settings → Sharing, and the **Delete own
 account** role switch, which is off for every role after the upgrade (see
 [Self-service account deletion](admin/governance.md#self-service-account-deletion)).
 
+## Shutting down and draining
+
+From v0.11 an API replica drains when it is stopped, so replacing replicas
+one at a time (an upgrade, a rolling restart, a node drain) does not cut off
+replies. On the first `SIGTERM` (or `SIGINT`) it:
+
+1. Reports not-ready at once: `/api/health/ready` answers `503` with
+   `{"status":"draining","reason":"Shutting down (SIGTERM); ..."}`.
+   `/api/health/live` stays `200`, so nothing restarts it mid-drain.
+2. Refuses new chat turns (`POST /api/chat`, and continuing after tool
+   approvals) with `503`, `Retry-After: 1` and `Connection: close`, before
+   reading them, so nothing is stored. The web app sends the turn again, up to
+   twice, and the person sees nothing unless every attempt is refused. Every
+   other request is answered as usual, with `Connection: close`, so a proxy's
+   pooled connections stop carrying new requests to the replica.
+3. Stops its background jobs: no new runs start on it (another replica's tick
+   picks the work up); one already running gets up to five seconds.
+4. Lets replies in progress finish, for up to `SHUTDOWN_DRAIN_TIMEOUT_MS`.
+5. Past that limit, stops each remaining reply and saves it with what it has,
+   marked **interrupted** (stored as `cancelled` with an `error_message`
+   saying the server stopped). Its usage is settled from what the model
+   reported, its Redis stream is ended so a client resuming it gets the end
+   instead of waiting, and the conversation takes new messages at once. The
+   web app shows the reason under the reply, with **Retry**.
+6. Closes the HTTP server, Redis and the database pool, and exits `0`.
+
+A second signal exits at once (code `1`).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SHUTDOWN_DRAIN_TIMEOUT_MS` | `25000` | How long replies in progress may keep running after the signal (0–3600000). |
+
+Set it **below the orchestrator's grace period** (the time between `SIGTERM`
+and `SIGKILL`), leaving about five seconds for the final saves and, in
+Kubernetes, the `preStop` delay as well. A reply longer than the limit is
+saved as interrupted rather than lost; raise the limit (and the grace period)
+if your replies are routinely longer.
+
+A replica that is killed instead (`SIGKILL`, out of memory, a crashed node)
+cannot drain. Its replies are recovered automatically; see
+[Recovering an interrupted chat run](#recovering-an-interrupted-chat-run).
+
+### Docker Compose and the bundled proxy
+
+The bundled Compose file sets `stop_grace_period: 30s` on `api` (Compose's
+default is 10 s), above the 25-second drain. `docker compose stop`, `up -d`
+with a new image and `down` all drain.
+
+The web container's Caddy finds API replicas by re-resolving the `api` name
+every 2 s. Caddy runs no active health checks for upstreams found that way,
+so the bundled `docker/Caddyfile` takes a replica out of rotation through
+passive checks on real requests: a `503` from it, or a connection that is
+refused or takes longer than 1 s, marks it down for 10 s
+(`fail_duration 10s`, `max_fails 1`, `unhealthy_status 503`,
+`dial_timeout 1s`), and `lb_try_duration 5s` sends a request whose
+connection failed to another replica, whatever its method. Its pooled
+connections are kept for 30 s, below the API's 65-second keep-alive, so it
+never sends a request on a connection the API is closing.
+
+The API answers `503` only when a replica cannot serve (it is shutting down,
+or its database is unreachable). Keep it that way: an instance-wide `503`
+from every replica would mark them all down for 10 s.
+
+### Kubernetes
+
+Removing a pod from a Service's endpoints and sending it `SIGTERM` happen at
+the same time, so for a moment ingress controllers and kube-proxy still route
+to a pod that is shutting down. A short `preStop` sleep lets them catch up
+before the drain starts; the readiness probe then keeps the pod out.
+
+```yaml
+spec:
+  # preStop (5) + SHUTDOWN_DRAIN_TIMEOUT_MS (25) + margin for the final saves.
+  terminationGracePeriodSeconds: 40
+  containers:
+    - name: api
+      env:
+        - name: SHUTDOWN_DRAIN_TIMEOUT_MS
+          value: "25000"
+      lifecycle:
+        preStop:
+          sleep:
+            seconds: 5 # Kubernetes 1.30+; older: exec ["sleep", "5"] (the image has sleep)
+      readinessProbe:
+        httpGet: { path: /api/health/ready, port: 3000 }
+        periodSeconds: 2
+        failureThreshold: 1
+      livenessProbe:
+        httpGet: { path: /api/health/live, port: 3000 }
+        periodSeconds: 10
+        failureThreshold: 3
+```
+
+The grace period counts from the start of `preStop`, so it must cover the
+sleep and the drain. Use a rolling update with `maxUnavailable: 0` so a
+replacement is ready before a pod is stopped, and a PodDisruptionBudget so a
+node drain stops one replica at a time.
+
+### Other proxies and load balancers
+
+- **Health checks**: point active checks at `/api/health/ready` with a short
+  interval (2–5 s) and one failure to mark a target down. HAProxy:
+  `option httpchk GET /api/health/ready` with `default-server inter 2s fall 1
+  rise 2`. AWS ALB: the same path, and a deregistration delay at least
+  `SHUTDOWN_DRAIN_TIMEOUT_MS` so replies in progress are not cut by the
+  balancer.
+- **Keep-alive**: keep the proxy's idle timeout for upstream connections
+  below 65 s (NGINX `keepalive_timeout` in the `upstream` block, HAProxy
+  `timeout http-keep-alive`).
+- **Retries**: retrying a failed *connection* on another replica is safe for
+  every method. A drain refusal (`503` with `X-OCI-Draining: 1`) is also safe
+  to retry, since the API refuses it before reading it; the web app does so
+  itself, so a proxy need not.
+- **Streaming**: disable response buffering for `/api` (NGINX
+  `proxy_buffering off`), as before.
+
 ## Usage accounting after an interrupted run
 
 Migration `0021_usage_settlement` marks new incomplete reports with
@@ -674,11 +798,16 @@ alone is not proof of producer liveness or completion.
 Before opening replay, the API checks the exact cached assistant/run against its
 owned, live PostgreSQL thread. Missing or terminal runs return no replay (204),
 so the client can load saved history. A failed durable validation returns a safe
-503 instead of pretending the run is absent. Already-idle readers recheck every
+500 instead of pretending the run is absent (not 503, which the bundled proxy
+reserves for a replica that is draining). Already-idle readers recheck every
 two seconds. Missing ownership or validation failure ends only that reader with
 the friendly replay error. For an owned terminal run, the reader refreshes a
 bounded cache-tail snapshot: it closes cleanly only after forwarding a real SDK
-finish frame, otherwise it reports unavailable replay. This covers completion
+finish frame, or when the cache itself records the run as cancelled (stopped
+or interrupted, which have no finish frame); otherwise it reports unavailable
+replay. An idle reader also checks whether the run's producer is still alive
+and, if it is gone, ends the run as interrupted
+([Recovering an interrupted chat run](#recovering-an-interrupted-chat-run)). This covers completion
 that arrives during the status check or before delayed cache finalization,
 without following an indefinitely growing cache or fabricating completion.
 Each validation has a two-second reader deadline, a one-second SQL statement
@@ -699,12 +828,37 @@ The drained rollout below also avoids mixed replay protocol versions.
 
 Chat admission is coordinated in PostgreSQL, even when Redis is unavailable.
 A streaming assistant row claims its thread until completion is persisted.
-Admission does not assume a run is dead just because it is over 15 minutes old.
 
-**Before rolling out this admission change, drain and stop old API producers.**
-Mixed old/new versions do not share the same admission protocol. Normal client
-disconnection is not proof that a model stopped; do not clear a claim merely
-because Redis is empty or its TTL elapsed.
+From v0.11 recovery is automatic. While a reply is being written, its
+producer refreshes a short-lived heartbeat key in Redis
+(`oci:chat-stream:run:RUN_ID:alive`) every 5 seconds and the claim's
+`updated_at` every 10. A run is treated as interrupted only when **both**
+have been silent for 20 seconds and Redis has captured no event from it in that time (a producer on a
+release before v0.11 has no heartbeat, but its events show it is alive during
+a rolling upgrade). Requiring both means a database failover or a producer
+that lost Redis does not look like a crash; a run on the replica doing the
+check is never touched. Without Redis, PostgreSQL decides alone.
+
+Three things notice an interrupted run: a client resuming it (checked when
+the reader is idle, then every 5 s), a new message in its conversation
+(checked before refusing it with 409), and the background job
+`chat.recover-interrupted-replies` (every 15 seconds, runs started in the last
+six hours). Recovery ends the run's Redis stream, so every reader finishes with
+what was captured; saves the reply as `cancelled` with the interrupted
+message, rebuilt from the captured stream so it keeps what the person saw;
+settles the usage reservation as unknown (keeping its estimate, as the quota
+sweep does); and frees the person's concurrency slot. A producer that was
+only paused and saves later replaces the interrupted copy with its real
+reply, and its usage report amends the settlement.
+
+A crash therefore leaves a reply hanging for about 20 to 30 seconds to a
+person resuming it or sending again, and at most about 40 seconds otherwise.
+
+The manual procedure below remains for a claim that is not recovered: one
+older than six hours that nobody opens, or an instance whose replicas run a
+release before v0.11. Normal client disconnection is not proof that a model
+stopped; do not clear a claim merely because Redis is empty or its TTL
+elapsed.
 
 If a crashed producer leaves a thread blocked:
 
@@ -739,7 +893,8 @@ If a crashed producer leaves a thread blocked:
    recovery remains separate; do not delete usage records to unblock a thread.
 5. Restart producers, then retry the affected conversation.
 
-This is fail-closed recovery, not a lease or automatic fencing mechanism.
+Neither the automatic nor the manual recovery is fencing: a producer that
+comes back after its run was recovered can still save its final reply.
 
 ## Getting back in when sign-on fails
 

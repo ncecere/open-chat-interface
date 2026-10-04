@@ -12,7 +12,9 @@
  * 4. Under load: TO's pre-deploy migrations (the compose `migrate` job), the
  *    smoke suite against FROM on the new schema, then each API replica and web
  *    proxy replaced with TO one at a time (SIGTERM, start TO, wait healthy),
- *    then the smoke suite against TO.
+ *    then each API replica restarted on TO (a rolling restart of the new
+ *    release, which is where draining on shutdown is measured), then the
+ *    smoke suite against TO.
  * 5. Verdict and report (report.json, report.md) in --out.
  *
  * `--inject <case>` adds a deliberately unsafe migration to TO (inject.mjs) as
@@ -45,6 +47,8 @@ import { runSmoke } from './smoke.mjs';
 
 const REGISTRY = 'ghcr.io/ncecere/open-chat-interface';
 const STABLE = /^v(\d+)\.(\d+)\.(\d+)$/;
+/** The first release whose API drains on shutdown (design item 13). */
+const FIRST_DRAINING = 'v0.11.0';
 /** The migrator's advisory lock key (packages/db/src/migrator.ts), split as pg_locks shows it. */
 const MIGRATION_LOCK = 8374920115573001n;
 
@@ -73,15 +77,23 @@ const spec = {
   'max-ms': { type: 'number', default: 5000 },
   'lock-wait-ms': { type: 'number', default: 3000 },
   'request-timeout-ms': { type: 'number', default: 30_000 },
-  'allow-cut-replies': { type: 'boolean', default: true },
   /**
-   * Until design item 13 (draining on shutdown) ships: failures and latency
-   * from SIGTERM of an API replica until --gap-tail-ms after it exited are
-   * reported as a known gap instead of failing the run.
+   * Report replies cut off by a stopping replica instead of failing. Off since
+   * design item 13 (draining on shutdown). A replica running a release from
+   * before it (FROM older than v0.11.0) cannot drain, so the replies it cuts
+   * are always reported, and checked for recovery, rather than failed.
    */
-  'allow-shutdown-gaps': { type: 'boolean', default: true },
+  'allow-cut-replies': { type: 'boolean', default: false },
+  /**
+   * Report failures and latency from SIGTERM of an API replica until
+   * --gap-tail-ms after it exited instead of failing. Off since item 13; the
+   * windows of replicas on a release from before it are always reported.
+   */
+  'allow-shutdown-gaps': { type: 'boolean', default: false },
   'gap-tail-ms': { type: 'number', default: 15_000 },
   'replace-web': { type: 'boolean', default: true },
+  /** After the upgrade, restart each API replica on TO, as the next upgrade will. */
+  'restart-api': { type: 'boolean', default: true },
   'expect-fail': { type: 'boolean', default: false },
   /** Pull FROM (and --to-*) images even when a local copy exists. */
   pull: { type: 'boolean', default: false },
@@ -309,7 +321,12 @@ async function main() {
     api: `${REGISTRY}/api:${fromTag}`,
     web: `${REGISTRY}/web:${fromTag}`,
   };
-  log(`FROM ${fromTag}; source version ${sourceVersion}`);
+  // TO is this source, which drains; a published FROM drains from v0.11.0.
+  const fromDrains = STABLE.test(fromTag) && compareVersions(fromTag, FIRST_DRAINING) >= 0;
+  R.from.drains = fromDrains;
+  log(
+    `FROM ${fromTag}${fromDrains ? '' : ' (does not drain on shutdown)'}; source version ${sourceVersion}`,
+  );
   await ensureImage(R.from.api);
   await ensureImage(R.from.web);
 
@@ -327,6 +344,7 @@ async function main() {
   const toJournal = await readJournal(toApiEffective);
 
   R.bounds = {
+    stopTimeoutMs: options['stop-timeout'] * 1000,
     p99Ms: options['p99-ms'],
     maxMs: options['max-ms'],
     lockWaitMs: options['lock-wait-ms'],
@@ -492,18 +510,26 @@ async function main() {
 
     // --- Replace replicas one at a time -------------------------------------
     R.replacements = [];
+    // [service, image variable, image, phase, whether the stopped replica drains]
     const targets = [
-      ['api-1', 'OCI_API1_IMAGE', toApiEffective],
-      ['api-2', 'OCI_API2_IMAGE', toApiEffective],
+      ['api-1', 'OCI_API1_IMAGE', toApiEffective, 'replace', fromDrains],
+      ['api-2', 'OCI_API2_IMAGE', toApiEffective, 'replace', fromDrains],
       ...(options['replace-web']
         ? [
-            ['web-1', 'OCI_WEB1_IMAGE', toWeb],
-            ['web-2', 'OCI_WEB2_IMAGE', toWeb],
+            ['web-1', 'OCI_WEB1_IMAGE', toWeb, 'replace', null],
+            ['web-2', 'OCI_WEB2_IMAGE', toWeb, 'replace', null],
+          ]
+        : []),
+      // The new release replacing itself: every proxy and replica now runs TO.
+      ...(options['restart-api']
+        ? [
+            ['api-1', 'OCI_API1_IMAGE', toApiEffective, 'restart', true],
+            ['api-2', 'OCI_API2_IMAGE', toApiEffective, 'restart', true],
           ]
         : []),
     ];
-    for (const [service, variable, image] of targets) {
-      setPhase(`replace-${service}`);
+    for (const [service, variable, image, kind, drains] of targets) {
+      setPhase(`${kind}-${service}`);
       const isWeb = service.startsWith('web');
       const webBase = service === 'web-1' ? bases[0] : bases[1];
       if (isWeb) {
@@ -530,6 +556,8 @@ async function main() {
       if (isWeb) load.send({ type: 'undrain', base: webBase });
       R.replacements.push({
         service,
+        kind,
+        drains,
         image,
         stopRequestedAt,
         stoppedAt,
@@ -538,7 +566,7 @@ async function main() {
         caughtReply,
       });
       log(
-        `${service}: SIGTERM -> exited (code ${exitCode}) in ${((stoppedAt - stopRequestedAt) / 1000).toFixed(1)} s; new replica ready ${((readyAt - stoppedAt) / 1000).toFixed(1)} s later`,
+        `${kind} ${service}: SIGTERM -> exited (code ${exitCode}) in ${((stoppedAt - stopRequestedAt) / 1000).toFixed(1)} s; new replica ready ${((readyAt - stoppedAt) / 1000).toFixed(1)} s later`,
       );
       // Let the proxy re-resolve `api` and route to the new replica before the next stop.
       await sleep(options['settle-seconds'] * 1000);

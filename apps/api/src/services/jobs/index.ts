@@ -1,5 +1,6 @@
 import { BACKUP_JOB, runScheduledBackup } from '../backups/run.js';
 import { processCompactionQueue } from '../chat/compaction-queue.js';
+import { recoverInterruptedReplies } from '../chat/run-recovery.js';
 import { COMPLIANCE_JOB, runScheduledComplianceExport } from '../compliance/export.js';
 import {
   applyThreadRetention,
@@ -76,6 +77,17 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'projects.embed-passages',
       intervalMs: 5 * MINUTE,
       run: () => embedPendingProjectPassages(),
+    },
+    {
+      // Replies whose producer stopped heartbeating (killed, crashed, cut off
+      // by a shutdown past its grace) are saved as interrupted, so their
+      // conversation takes new messages again (v0.11). A reader resuming the
+      // reply, or a new message in its conversation, does the same at once.
+      // Every 15 s: a reply whose resuming client is on an older replica
+      // (during an upgrade) has only this to end it.
+      name: 'chat.recover-interrupted-replies',
+      intervalMs: 15 * 1000,
+      run: () => recoverInterruptedReplies(),
     },
     {
       name: 'quota.sweep-reservations',
@@ -185,4 +197,4 @@ export async function runJobNow(name: string): Promise<number | null> {
   return runExclusively(job);
 }
 
-export { recentJobRuns, stopJobs } from './runner.js';
+export { recentJobRuns, runningJobCount, stopJobs } from './runner.js';

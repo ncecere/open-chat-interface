@@ -43,6 +43,15 @@ services:
       # Leave true for a single instance. Set false when the migrate job below
       # owns schema changes, which is the usual pattern once replicas > 1.
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      # Lock and statement timeouts for migrations run at startup
+      # (docs/OPERATIONS.md, "Migration timeouts"); unset uses the defaults.
+      MIGRATION_LOCK_TIMEOUT_MS:
+      MIGRATION_STATEMENT_TIMEOUT_MS:
+      # How long a stopping replica lets replies finish (default 25000). Keep
+      # it below stop_grace_period, which must leave time for the final saves.
+      SHUTDOWN_DRAIN_TIMEOUT_MS:
+    # SIGTERM, then SIGKILL after this: longer than the drain above.
+    stop_grace_period: 30s
     volumes:
       - storage_data:/data/storage
     healthcheck:
@@ -76,6 +85,8 @@ services:
       DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      MIGRATION_LOCK_TIMEOUT_MS:
+      MIGRATION_STATEMENT_TIMEOUT_MS:
     command: ['node', 'dist/migrate.js']
     depends_on:
       postgres:

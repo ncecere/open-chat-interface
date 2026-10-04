@@ -4,7 +4,7 @@ import { logger } from '../lib/logger.js';
 import type { OwnedRunState } from './chat/run-state.js';
 import { type ReplayValidator, validateReplayRun } from './chat-replay-validation.js';
 import { createChatReplay } from './chat-stream-replay.js';
-import { ReplaySnapshot } from './chat-stream-snapshot.js';
+import { parseStoredSnapshot, ReplaySnapshot } from './chat-stream-snapshot.js';
 
 const KEY_PREFIX = 'oci:chat-stream';
 /** Stream events kept per reply (approximately: Redis trims in whole nodes, never below it). */
@@ -46,6 +46,11 @@ function eventsKey(runId: string) {
 
 function snapshotKey(runId: string) {
   return `${KEY_PREFIX}:run:${runId}:snapshot`;
+}
+
+/** The producer's heartbeat (v0.11): present while the process writing the reply is alive. */
+function aliveKey(runId: string) {
+  return `${KEY_PREFIX}:run:${runId}:alive`;
 }
 
 interface StoreOptions {
@@ -273,11 +278,13 @@ export class ChatStreamStore {
       if ARGV[5] ~= '' then redis.call('HSET', KEYS[1], 'error', ARGV[5]) end
       if ARGV[6] == '1' then redis.call('HSET', KEYS[1], 'replayUnavailable', '1') end
       if redis.call('GET', KEYS[2]) == ARGV[3] then redis.call('DEL', KEYS[2]) end
+      redis.call('DEL', KEYS[3])
       return 1
     `,
-      2,
+      3,
       metadataKey(identity.runId),
       activeKey(identity.threadId),
+      aliveKey(identity.runId),
       identity.threadId,
       identity.userId,
       identity.runId,
@@ -285,6 +292,73 @@ export class ChatStreamStore {
       outcome.error?.slice(0, 500) ?? '',
       outcome.replayUnavailable ? '1' : '0',
     );
+  }
+
+  /** Refreshes the producer heartbeat; it lapses `ttlMs` after the last refresh. */
+  async touchAlive(runId: string, ttlMs: number): Promise<void> {
+    await this.redis.set(aliveKey(runId), '1', 'PX', Math.max(1, Math.floor(ttlMs)));
+  }
+
+  /**
+   * Whether the run's producer showed a sign of life within `windowMs`: its
+   * heartbeat, or an event captured that recently. Releases before v0.11 have
+   * no heartbeat, so during a rolling upgrade their events are the only sign.
+   * Both are measured on Redis's clock, never a replica's.
+   */
+  async producerActive(runId: string, windowMs: number): Promise<boolean> {
+    const active = await this.redis.eval(
+      `
+      if redis.call('EXISTS', KEYS[1]) == 1 then return 1 end
+      local last = redis.call('XREVRANGE', KEYS[2], '+', '-', 'COUNT', 1)
+      if #last == 0 then return 0 end
+      local at = tonumber(string.match(last[1][1], '^(%d+)'))
+      local now = redis.call('TIME')
+      local nowMs = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+      if at and nowMs - at < tonumber(ARGV[1]) then return 1 end
+      return 0
+    `,
+      2,
+      aliveKey(runId),
+      eventsKey(runId),
+      Math.max(1, Math.floor(windowMs)),
+    );
+    return active === 1;
+  }
+
+  /**
+   * Every frame captured for a run so far, in order (starting from the saved
+   * snapshot when the oldest events were trimmed), or null when any is missing.
+   */
+  async capturedFrames(runId: string): Promise<string[] | null> {
+    const metadata = await this.redis.hgetall(metadataKey(runId));
+    const total = Number(metadata.lastSequence);
+    if (metadata.runId !== runId || !Number.isSafeInteger(total) || total < 0) return null;
+    const entries = await this.redis.xrange(eventsKey(runId), '-', '+');
+    const events = entries.map(([, fields]) => {
+      const values: Record<string, string> = {};
+      for (let i = 0; i + 1 < fields.length; i += 2) values[fields[i]!] = fields[i + 1]!;
+      return { seq: Number(values.seq), data: values.data };
+    });
+    let frames: string[] = [];
+    let next = 1;
+    const first = events[0]?.seq;
+    if (first !== undefined && first > 1) {
+      const snapshot = parseStoredSnapshot(await this.redis.get(snapshotKey(runId)));
+      if (!snapshot || snapshot.sequence + 1 < first) return null;
+      frames = [...snapshot.frames];
+      next = snapshot.sequence + 1;
+    }
+    for (const { seq, data } of events) {
+      if (seq < next) continue;
+      if (seq !== next || data === undefined) return null;
+      frames.push(data);
+      next++;
+    }
+    return next - 1 === total ? frames : null;
+  }
+
+  async activeRunId(threadId: string): Promise<string | null> {
+    return this.redis.get(activeKey(threadId));
   }
 
   async activeRun(threadId: string, userId: string): Promise<ChatRunIdentity | null> {
@@ -308,7 +382,11 @@ export class ChatStreamStore {
   createReplayStream(
     identity: ChatRunIdentity,
     signal?: AbortSignal,
-    options?: { readState: ReplayValidator<OwnedRunState> },
+    options?: {
+      readState?: ReplayValidator<OwnedRunState>;
+      checkProducer?: () => Promise<boolean>;
+      onEnd?: () => void;
+    },
   ): ReadableStream<Uint8Array> {
     return createChatReplay({
       redis: this.redis,
@@ -318,6 +396,8 @@ export class ChatStreamStore {
       snapshotKey: snapshotKey(identity.runId),
       signal,
       readState: options?.readState,
+      checkProducer: options?.checkProducer,
+      onEnd: options?.onEnd,
     });
   }
 }
@@ -421,6 +501,57 @@ export function unregisterLocalChatRun(runId: string): void {
   localRuns.delete(runId);
 }
 
+/** The producer heartbeat (v0.11); best effort, like every cache write. */
+export async function touchChatRunHeartbeat(runId: string, ttlMs: number): Promise<void> {
+  await withStore((store) => store.touchAlive(runId, ttlMs));
+}
+
+/** Null when Redis is unavailable, so the caller decides from PostgreSQL alone. */
+export async function chatRunProducerActive(
+  runId: string,
+  windowMs: number,
+): Promise<boolean | null> {
+  return withStore((store) => store.producerActive(runId, windowMs));
+}
+
+export async function capturedChatRunFrames(runId: string): Promise<string[] | null> {
+  return withStore((store) => store.capturedFrames(runId));
+}
+
+export async function activeChatRunId(threadId: string): Promise<string | null> {
+  return withStore((store) => store.activeRunId(threadId));
+}
+
+/**
+ * Ends a run's cached stream as cancelled for a producer that is gone, so
+ * every replay reader finishes with what was captured instead of waiting.
+ */
+export async function finalizeInterruptedChatRun(
+  identity: ChatRunIdentity,
+  error: string,
+): Promise<void> {
+  await withStore((store) => store.finalize(identity, { status: 'cancelled', error }));
+}
+
+const replayReaders = new Set<AbortController>();
+
+/** Ends this process's replay readers cleanly (shutdown); their clients resume elsewhere. */
+export function endChatReplays(): number {
+  const count = replayReaders.size;
+  for (const reader of replayReaders) reader.abort();
+  replayReaders.clear();
+  return count;
+}
+
+/** Closes the shared Redis connection for good (shutdown). */
+export async function closeChatStreams(): Promise<void> {
+  const client = redisClient;
+  runtimeStore = null;
+  redisClient = null;
+  redisUnavailableUntil = Number.POSITIVE_INFINITY;
+  if (client) await client.quit().catch(() => client.disconnect());
+}
+
 export async function isChatRunCancellationRequested(runId: string): Promise<boolean> {
   return (await withStore((store) => store.cancellationRequested(runId))) ?? false;
 }
@@ -467,8 +598,22 @@ export async function resumeActiveChatRun(
   // Durable validation failures are not cache absence: let the route report a
   // safe retryable failure rather than silently returning 204 or opening SSE.
   if (readState && (await validateReplayRun(readState, signal)) !== 'streaming') return null;
+  const ending = new AbortController();
+  replayReaders.add(ending);
+  const scoped = signal ? AbortSignal.any([signal, ending.signal]) : ending.signal;
   return {
-    stream: store.createReplayStream(owned, signal, readState ? { readState } : undefined),
+    stream: store.createReplayStream(owned, scoped, {
+      readState,
+      // A reader is also how a reply whose producer died gets noticed: it
+      // ends the run as interrupted, then finishes with what was captured.
+      ...(readState && {
+        checkProducer: async () => {
+          const { recoverInterruptedRun } = await import('./chat/run-recovery.js');
+          return recoverInterruptedRun(owned);
+        },
+      }),
+      onEnd: () => replayReaders.delete(ending),
+    }),
     persistence: 'redis',
     runId: owned.runId,
   };

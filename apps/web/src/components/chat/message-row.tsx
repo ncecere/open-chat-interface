@@ -9,6 +9,7 @@ import { MessageActions } from '~/components/chat/message-actions';
 import { MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
+  interruptionOf,
   metadataOf,
   replyLayoutOf,
   textOf,
@@ -99,6 +100,7 @@ export const MessageRow = memo(function MessageRow({
 
   const grounding = searchGroundingOf(message);
   const metadata = metadataOf(message);
+  const interruption = interruptionOf(message);
 
   return (
     <article
@@ -122,6 +124,11 @@ export const MessageRow = memo(function MessageRow({
         onAnswerApproval={onAnswerApproval}
       />
       {grounding && <SearchGroundingDetails grounding={grounding} />}
+      {interruption && (
+        <p role="note" className="mb-1 text-xs text-[var(--text-muted)]">
+          {interruption}
+        </p>
+      )}
       {(replySwitch || !streaming) && (
         <div className="flex flex-wrap items-center gap-1">
           {replySwitch && <ReplySwitcher {...replySwitch} />}

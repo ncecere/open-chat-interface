@@ -61,6 +61,9 @@ async function sendMessage(client, vu) {
       ],
     },
     stream: true,
+    // A replica shutting down refuses the turn before storing it; the web app
+    // sends it again, and so does the load.
+    retryDrain: true,
   });
   if (!sent.ok) return;
   const reply = { vu, threadId, startedAt, ttfb: sent.event.ttfb };
@@ -74,19 +77,26 @@ async function sendMessage(client, vu) {
   // short of `finish` is the stream being cut.
   let outcome = read.complete ? 'complete' : read.errorText && !read.readError ? 'error' : 'cut';
   let resumed = null;
+  let resumeMs = null;
   if (outcome === 'cut') {
     // What the web app does after a dropped stream: ask for the rest.
     await sleep(500);
+    const resumeAt = Date.now();
     const resume = await client.request('chat.resume', 'GET', `/api/chat/${threadId}/stream`, {
       expect: [200, 204],
       stream: true,
+      // A resumed reply may stream as long as a reply; the request timeout
+      // would otherwise cut the body after 30 s.
+      timeoutMs: config.replyTimeoutMs,
     });
     if (resume.ok && resume.status === 200) {
       const rest = await readUiStream(resume.response, { timeoutMs: config.replyTimeoutMs });
       resume.event.total = Date.now() - resume.event.at;
       record(resume.event);
-      resumed = rest.complete ? 'finished' : 'cut-again';
+      // `hung`: the resumed stream was still open when the load gave up on it.
+      resumed = rest.complete ? 'finished' : rest.readError ? 'hung' : 'ended';
       if (rest.complete) outcome = 'resumed';
+      resumeMs = Date.now() - resumeAt;
     } else if (resume.ok) {
       resume.event.total = resume.event.ttfb;
       record(resume.event);
@@ -110,7 +120,9 @@ async function sendMessage(client, vu) {
     streamError: read.errorText ?? read.readError,
     deltas: read.deltas,
     resumed,
+    resumeMs,
     storedStatus: last?.role === 'assistant' ? last.metadata?.status : (last?.role ?? null),
+    storedError: last?.role === 'assistant' ? (last.metadata?.errorMessage ?? null) : null,
   });
 }
 

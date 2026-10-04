@@ -24,11 +24,12 @@
 		reverse_proxy {$API_UPSTREAM:api:3000} {
 			# Compose assigns one DNS name to every API replica. Re-resolving it
 			# lets Caddy discover replicas as they scale; without this it pins to
-			# whichever address it saw first.
+			# whichever address it saw first. Every 2 s, so a replica that has
+			# exited (and left DNS) is forgotten quickly; Docker's resolver is local.
 			dynamic a {
 				name {$API_UPSTREAM_HOST:api}
 				port {$API_UPSTREAM_PORT:3000}
-				refresh 10s
+				refresh 2s
 			}
 
 			# The API trusts exactly one client address: the one worked out above.
@@ -47,8 +48,28 @@
 			# no affinity is required; a failed replica is simply retried.
 			lb_policy least_conn
 			lb_try_duration 5s
-			health_uri /api/health/ready
-			health_interval 10s
+			lb_try_interval 100ms
+
+			# Caddy runs no active health checks for dynamic upstreams, so a
+			# replica leaves rotation through passive checks on real requests.
+			# A replica shutting down refuses new chat turns with 503 (and reports
+			# 503 on /api/health/ready); one that has exited refuses or times out
+			# connections. Either takes it out for 10 s, so the client's retry
+			# and every request after it go to another replica. The API answers
+			# 503 only when a replica cannot serve: shutting down, or its database
+			# unreachable. See docs/OPERATIONS.md, "Shutting down and draining".
+			fail_duration 10s
+			max_fails 1
+			unhealthy_status 503
+
+			transport http {
+				# Replicas are on the same network: a connection that takes more
+				# than a second is going to a replica that has gone.
+				dial_timeout 1s
+				# Below the API's 65 s keep-alive, so Caddy never sends a request on
+				# a connection the API is closing (a 502 for anything but GET).
+				keepalive 30s
+			}
 		}
 	}
 

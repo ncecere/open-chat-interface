@@ -8,6 +8,8 @@ export const REPLAY_UNAVAILABLE_MESSAGE =
 const POLL_MS = 100;
 const BATCH_SIZE = 200;
 const VALIDATION_INTERVAL_MS = 2000;
+/** How often an idle reader asks whether the reply's producer is still alive. */
+const PRODUCER_CHECK_MS = 5000;
 
 function sequence(value: string | undefined): number | null {
   if (!value || !/^(0|[1-9]\d*)$/.test(value)) return null;
@@ -37,8 +39,26 @@ export function createChatReplay(options: {
   snapshotKey?: string;
   signal?: AbortSignal;
   readState?: ReplayValidator<OwnedRunState>;
+  /**
+   * Ends the run as interrupted when its producer is gone, returning true if it
+   * did (services/chat/run-recovery.ts). The reader then finishes cleanly with
+   * what was captured instead of waiting for a producer that no longer exists.
+   */
+  checkProducer?: () => Promise<boolean>;
+  /** Called once when this reader closes or is cancelled. */
+  onEnd?: () => void;
 }): ReadableStream<Uint8Array> {
-  const { redis, identity, metadataKey, eventsKey, snapshotKey, readState } = options;
+  const { redis, identity, metadataKey, eventsKey, snapshotKey, readState, checkProducer } =
+    options;
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    options.onEnd?.();
+  };
+  // The first idle moment checks at once: a reader often arrives after the crash.
+  let nextProducerCheck = 0;
+  let lastStatus: string | undefined;
   const cancellation = new AbortController();
   const signal = options.signal
     ? AbortSignal.any([options.signal, cancellation.signal])
@@ -65,8 +85,12 @@ export function createChatReplay(options: {
       try {
         while (!cancelled && !signal?.aborted) {
           if (terminalLimit !== null && lastSequence >= terminalLimit) {
-            if (!finishDelivered) throw new Error('Terminal replay has no captured finish');
+            // A cancelled run (stopped, or interrupted by a shutdown or crash)
+            // has no finish frame: everything captured has been forwarded.
+            if (!finishDelivered && lastStatus !== 'cancelled')
+              throw new Error('Terminal replay has no captured finish');
             controller.close();
+            end();
             return;
           }
           if (seedFrames.length) {
@@ -115,6 +139,7 @@ export function createChatReplay(options: {
             return;
           }
           const metadata = await redis.hgetall(metadataKey);
+          lastStatus = metadata.status;
           const total = sequence(metadata.lastSequence);
           if (
             metadata.runId !== identity.runId ||
@@ -142,6 +167,7 @@ export function createChatReplay(options: {
           if (metadata.status !== 'active') {
             if (!lastSequence) throw new Error('Replay never captured a prefix');
             if (!cancelled) controller.close();
+            end();
             return;
           }
           if (readState && performance.now() >= nextValidation) {
@@ -155,10 +181,22 @@ export function createChatReplay(options: {
             }
             nextValidation = performance.now() + VALIDATION_INTERVAL_MS;
           }
+          if (checkProducer && performance.now() >= nextProducerCheck) {
+            nextProducerCheck = performance.now() + PRODUCER_CHECK_MS;
+            let recovered = false;
+            try {
+              recovered = await checkProducer();
+            } catch {
+              // A failed check is not evidence either way; look again later.
+            }
+            if (recovered) continue;
+          }
           await new Promise((resolve) => setTimeout(resolve, POLL_MS));
         }
         if (!cancelled) controller.close();
+        end();
       } catch {
+        end();
         if (cancelled) return;
         if (!signal?.aborted) {
           // This is an SDK protocol error, not a raw HTTP stream failure or a
@@ -175,6 +213,7 @@ export function createChatReplay(options: {
     cancel() {
       cancelled = true;
       cancellation.abort();
+      end();
     },
   });
 }

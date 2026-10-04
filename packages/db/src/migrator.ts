@@ -60,17 +60,44 @@ export interface MigrationOptions {
   retryDelayMs?: number;
   /** Backoff ceiling (default 30s). Ten attempts span roughly three minutes. */
   maxRetryDelayMs?: number;
-  /** Called before each retry. Defaults to one warning line on stderr. */
+  /**
+   * Called before each retry. Defaults to one warning through `logger`, or a
+   * line on stderr without one.
+   */
   onRetry?: (event: MigrationRetryEvent) => void;
+  /** A structured logger (pino's shape) for retry warnings, instead of stderr. */
+  logger?: MigrationLogger;
 }
 
-function warnRetry(event: MigrationRetryEvent): void {
+/** The part of a pino-style logger the migrator uses. */
+export interface MigrationLogger {
+  warn: (details: Record<string, unknown>, message: string) => void;
+}
+
+function retryMessage(event: MigrationRetryEvent): string {
   const blockers = event.blockers.map((blocker) => blocker.pid).join(', ') || 'unknown';
-  console.warn(
+  return (
     `Database migration attempt ${event.attempt}/${event.maxAttempts} timed out waiting for ` +
-      `${event.mode ?? 'a lock'} on ${event.relation ?? 'an unidentified object'} ` +
-      `(blocking pid ${blockers}); rolled back, retrying in ${event.delayMs}ms.`,
+    `${event.mode ?? 'a lock'} on ${event.relation ?? 'an unidentified object'} ` +
+    `(blocking pid ${blockers}); rolled back, retrying in ${event.delayMs}ms.`
   );
+}
+
+function retryReporter(logger?: MigrationLogger): (event: MigrationRetryEvent) => void {
+  if (!logger) return (event) => console.warn(retryMessage(event));
+  return (event) =>
+    logger.warn(
+      {
+        attempt: event.attempt,
+        maxAttempts: event.maxAttempts,
+        delayMs: event.delayMs,
+        relation: event.relation,
+        mode: event.mode,
+        blockingPids: event.blockers.map((blocker) => blocker.pid),
+        statement: event.statement,
+      },
+      retryMessage(event),
+    );
 }
 
 /**
@@ -101,7 +128,7 @@ export async function runMigrationsWithLock(
   const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MIGRATION_MAX_ATTEMPTS);
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_MIGRATION_RETRY_DELAY_MS;
   const maxRetryDelayMs = options.maxRetryDelayMs ?? DEFAULT_MIGRATION_MAX_RETRY_DELAY_MS;
-  const onRetry = options.onRetry ?? warnRetry;
+  const onRetry = options.onRetry ?? retryReporter(options.logger);
   // Sample often enough to see every lock wait before lock_timeout ends it.
   const monitorIntervalMs = Math.min(1_000, Math.max(25, Math.floor(timeouts.lockTimeoutMs / 3)));
 
