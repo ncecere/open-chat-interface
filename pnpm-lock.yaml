@@ -23,6 +23,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.7
         version: 2.5.7
+      libpg-query:
+        specifier: 18.1.5
+        version: 18.1.5
       turbo:
         specifier: 2.10.8
         version: 2.10.8
@@ -1307,6 +1310,9 @@ packages:
 
   '@oxc-project/types@0.143.0':
     resolution: {integrity: sha512-u6JZdLBTLotrNC9Vd6vPssINdzcCzleKAH6EJKImQb7GtYvX5keN2dxkoK44stCc4tffE6QQRtZTXVSzsLUlWA==}
+
+  '@pgsql/types@18.0.0':
+    resolution: {integrity: sha512-jtAY4JU7jdVYZ/Vv3zlZqVP+FRWZokyCLKPPCnAApiaJAElpyyiMC3HRiquBu29kSrVs+rkqZD50SUIb/zyEGw==}
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -3140,6 +3146,9 @@ packages:
   lazystream@1.0.1:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
     engines: {node: '>= 0.6.3'}
+
+  libpg-query@18.1.5:
+    resolution: {integrity: sha512-xsksgH106LyVUylIp2bJz1MPFmVVIGKbB8belGWmh+J8/i38w8eM1twDIBnd97tzeNQFctH9MWKMthl22+fWcQ==}
 
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
@@ -5091,6 +5100,8 @@ snapshots:
 
   '@oxc-project/types@0.143.0': {}
 
+  '@pgsql/types@18.0.0': {}
+
   '@pinojs/redact@0.4.0': {}
 
   '@playwright/test@1.62.1':
@@ -6944,6 +6955,10 @@ snapshots:
   lazystream@1.0.1:
     dependencies:
       readable-stream: 2.3.8
+
+  libpg-query@18.1.5:
+    dependencies:
+      '@pgsql/types': 18.0.0
 
   lie@3.3.0:
     dependencies:

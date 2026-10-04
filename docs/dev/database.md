@@ -48,7 +48,8 @@ That last step matters. `packages/db` is consumed as a built artefact, so
 
 ### Reviewing what was generated
 
-Read the SQL before committing. Two things to check:
+Read the SQL before committing, then run `pnpm lint:migrations` (CI runs it
+too; see [Migration linter](#migration-linter)). Two things to check:
 
 - **Is it destructive?** Dropping a column is not reversible by rolling back the
   code. Say so in the merge request.
@@ -57,10 +58,12 @@ Read the SQL before committing. Two things to check:
 
 ### Writing one by hand
 
-Sometimes clearer than the generated diff — a data migration, or something
-needing `IF EXISTS`. Add the file, then add its entry to
+Sometimes clearer than the generated diff, for something needing `IF EXISTS`
+for instance. Add the file, then add its entry to
 `drizzle/meta/_journal.json`. The index must be sequential and the tag must
-match the filename, or the runner will not find it.
+match the filename, or the runner will not find it (the linter checks both).
+Changing existing rows does not belong in a schema migration; see
+[Migration linter](#migration-linter).
 
 ## Indexes
 
@@ -98,6 +101,99 @@ disabled (the repository Dockerfile already does). This is a history check, not
 physical-schema validation or proof that unknown newer migrations are compatible
 with an older binary. See
 [Operations](../OPERATIONS.md#upgrade).
+
+### Lock and statement timeouts
+
+Every statement of the migration transaction runs with `lock_timeout`
+(`MIGRATION_LOCK_TIMEOUT_MS`, default 3 seconds) and `statement_timeout`
+(`MIGRATION_STATEMENT_TIMEOUT_MS`, default 15 minutes, `0` for none), set with
+`set_config(..., true)` (that is, `SET LOCAL`) right after `BEGIN`; the session
+also gets a 10-second `idle_in_transaction_session_timeout`. Code is in
+`packages/db/src/migrator.ts` and `migration-safety.ts`. This covers the API's
+startup migration and the `migrate` job (`apps/api/src/migrate.ts`); the
+development command `pnpm db:migrate` (`packages/db/src/migrate.ts`) still runs
+Drizzle's plain migrator, without the advisory lock or these timeouts.
+
+The lock timeout is what keeps an upgrade from stopping the application. A
+statement waiting for a lock queues every later request for that table behind
+it, so an `ALTER TABLE` stuck behind one long transaction blocks all reads.
+When the lock timeout fires (SQLSTATE `55P03`) the whole attempt rolls back,
+releasing the advisory lock, and is retried with exponential backoff (1 s
+doubling to 30 s, with jitter; ten attempts, about three minutes). While an
+attempt runs, a second short-lived connection samples `pg_locks`,
+`pg_blocking_pids()` and `pg_stat_activity` for what the migration waits on,
+so each retry is logged, and the final error names the relation, the lock mode
+and each blocking session's pid, state, application and query. Any other error
+(a statement timeout, a failed statement, a lost connection) fails at once, as
+before. The statement timeout is per statement (one Drizzle breakpoint chunk),
+not per migration; it is generous because pre-deploy migrations still run in
+one transaction. `apps/api/src/__tests__/live/migration-lock-timeout.live.test.ts`
+holds a lock in another session and checks a reader is held up for at most
+about one lock timeout, that the migration retries and succeeds once the lock
+is free, and that it fails clearly when it never is. Operators' view:
+[Operations](../OPERATIONS.md#migration-timeouts).
+
+## Migration linter
+
+`pnpm lint:migrations` (`scripts/lint-migrations.mjs`) splits each migration on
+`--> statement-breakpoint`, parses it with PostgreSQL's own parser
+([libpg-query](https://github.com/constructive-io/libpg-query-node), MIT,
+WebAssembly, no native build), including the statements inside `DO` blocks,
+and replays the migrations in journal order to know which tables exist. A
+table created earlier in the same file is new and empty, so anything goes; a
+table created by an earlier migration, or by no migration at all (such as the
+runtime-created `project_file_embedding`), is existing. CI runs the linter
+first in Application checks. Its tests are `scripts/lint-migrations.test.mjs`,
+with one fixture per rule in `scripts/lint-migrations/fixtures/rules/`.
+
+| Rule | Fails on (existing tables only, unless noted) | Instead |
+| --- | --- | --- |
+| `index-not-concurrent` | `CREATE INDEX` or `REINDEX` without `CONCURRENTLY` | `CREATE INDEX CONCURRENTLY` in a post-deploy step |
+| `concurrent-in-transaction` | any `CONCURRENTLY` index build (any table): the migrator is one transaction | a post-deploy step (v0.11); a plain index on a new table is fine |
+| `alter-column-type` | `ALTER COLUMN ... TYPE` | new column, background backfill, switch, drop later |
+| `volatile-default` | `ADD COLUMN` with a volatile default (`gen_random_uuid()`, `random()`, `clock_timestamp()`, `nextval()`, ...), serial, identity or stored generated column; also `now()`/`CURRENT_TIMESTAMP` | add without the default, backfill in the background |
+| `set-not-null` | `SET NOT NULL` without an earlier validated `CHECK (col IS NOT NULL)` | add the check `NOT VALID`, validate it, then `SET NOT NULL` |
+| `constraint-not-valid` | `ADD CONSTRAINT` `FOREIGN KEY`/`CHECK` without `NOT VALID`, or a column added with inline `REFERENCES`/`CHECK` | `NOT VALID` now, `VALIDATE CONSTRAINT` post-deploy |
+| `unique-constraint` | `UNIQUE`, `PRIMARY KEY` or `EXCLUDE` added by `ALTER TABLE` (builds an index) | unique index concurrently, then `ADD CONSTRAINT ... USING INDEX` |
+| `data-change` | `UPDATE`, `DELETE`, `TRUNCATE`, `MERGE`, `INSERT ... SELECT` | a background migration; `INSERT ... VALUES` seed rows are fine |
+| `drop-column`, `drop-table` | any drop in a pre-deploy migration | stop using it first, drop it a release later ([below](#removing-a-column)) |
+| `lock-table` | `LOCK TABLE` (any table) | nothing; statements take the locks they need |
+| `refresh-not-concurrent` | `REFRESH MATERIALIZED VIEW` without `CONCURRENTLY` | `CONCURRENTLY` |
+| `vacuum-full`, `cluster` | `VACUUM FULL`, `CLUSTER` (any table) | autovacuum, or `pg_repack` outside migrations |
+| `dynamic-sql` | `EXECUTE` inside a `DO` block, which cannot be checked | write the statements out |
+
+`now()` and `CURRENT_TIMESTAMP` are `STABLE`, not volatile: PostgreSQL 11 and
+later evaluates them once and does not rewrite the table, but every existing
+row gets the migration's timestamp. They are flagged so that is a decision.
+
+**Data changes** to existing rows go into background migrations (batched,
+resumable, run by the job runner while OCI serves) once they exist in v0.11,
+and index builds and constraint validation into post-deploy steps. Until then,
+a data change that is truly bounded (a handful of rows) can be allowed.
+
+**Allowing an exception.** Put a comment directly above the statement (no
+blank line between; above a `DO` block it covers the statements inside):
+
+```sql
+-- oci:lint-allow index-not-concurrent: one row per organisation, never large
+CREATE INDEX "organization_slug_idx" ON "organization" ("slug");
+```
+
+The reason is required, and reviewers see it in the diff. An allow without a
+reason, naming an unknown rule, or matching no violation is an error.
+
+**Baseline.** Migrations 0000–0038 were written before the linter and have 38
+violations by design, listed in `scripts/lint-migrations/baseline.json` by file,
+rule and PostgreSQL fingerprint of the statement; only violations not in it
+fail. Among them: v0.7's message search index (`0023`, `index-not-concurrent`
+on `message`), v0.9's audit numbering (`0034`: `UPDATE` of `audit_log` and
+`SET NOT NULL` on `audit_log.seq`), `0021`'s `ALTER COLUMN TYPE` on
+`usage_record`, the role-quota conversion in `0004` (`INSERT ... SELECT`), and
+the drops in `0005`, `0010`, `0016` and `0031`. Editing a grandfathered
+migration leaves a stale entry, which also fails. `node
+scripts/lint-migrations.mjs --update-baseline` rewrites the file and refuses to
+run when `CI` is set; never use it to admit a new migration (use an allow
+comment, which carries a reason).
 
 ## Removing a column
 

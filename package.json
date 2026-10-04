@@ -2,7 +2,7 @@
   "name": "open-chat-interface",
   "version": "0.10.2",
   "private": true,
-  "description": "Open Chat Interface (OCI) \u2014 self-hostable multi-model chat application",
+  "description": "Open Chat Interface (OCI) — self-hostable multi-model chat application",
   "license": "MIT",
   "homepage": "https://github.com/ncecere/open-chat-interface",
   "repository": {
@@ -21,6 +21,7 @@
     "build": "turbo run build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
+    "lint:migrations": "node scripts/lint-migrations.mjs",
     "licenses:check": "node scripts/check-licenses.mjs",
     "release:check": "node scripts/prepare-release.mjs",
     "format": "biome format --write .",
@@ -44,6 +45,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
+    "libpg-query": "18.1.5",
     "turbo": "2.10.8",
     "typescript": "5.9.3"
   }

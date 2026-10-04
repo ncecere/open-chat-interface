@@ -17,6 +17,16 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  /**
+   * Lock-safe migrations (v0.11). Each migration statement may wait this long
+   * for a lock before the attempt rolls back and is retried, so a blocked
+   * migration never queues readers behind it for longer. The migrator reads
+   * these itself (packages/db/src/migration-safety.ts, same bounds); they are
+   * declared here so a bad value fails at startup.
+   */
+  MIGRATION_LOCK_TIMEOUT_MS: z.coerce.number().int().min(100).max(600_000).default(3_000),
+  /** Per-statement limit for migrations; 0 disables it. Default 15 minutes. */
+  MIGRATION_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).max(86_400_000).default(900_000),
   REDIS_URL: z.string().optional(),
   CHAT_STREAM_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
 

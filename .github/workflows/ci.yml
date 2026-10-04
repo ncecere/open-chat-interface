@@ -100,6 +100,11 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.18.0 --activate
           pnpm install --frozen-lockfile
+      - name: Migration lint
+        # Parses every migration with PostgreSQL's parser and fails on new
+        # statements that lock or rewrite existing tables (docs/dev/database.md).
+        # Read-only: CI never writes scripts/lint-migrations/baseline.json.
+        run: pnpm lint:migrations
       - name: Static, dependency and build checks
         run: |
           pnpm release:check

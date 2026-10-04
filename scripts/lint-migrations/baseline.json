@@ -1,0 +1,233 @@
+{
+  "description": "Violations in migrations that predate the linter (v0.11). Only these are tolerated; new ones fail. Regenerate with `node scripts/lint-migrations.mjs --update-baseline` (refused in CI). Matching uses file + rule + PostgreSQL fingerprint; statement is informational.",
+  "entries": [
+    {
+      "file": "0001_volatile_gamma_corps.sql",
+      "rule": "data-change",
+      "statement": 1,
+      "fingerprint": "6a2f4534fb3f27a2"
+    },
+    {
+      "file": "0001_volatile_gamma_corps.sql",
+      "rule": "index-not-concurrent",
+      "statement": 3,
+      "fingerprint": "fc5375489aa46d6c"
+    },
+    {
+      "file": "0002_light_texas_twister.sql",
+      "rule": "data-change",
+      "statement": 3,
+      "fingerprint": "0496f3f28db4d2c6"
+    },
+    {
+      "file": "0002_light_texas_twister.sql",
+      "rule": "index-not-concurrent",
+      "statement": 4,
+      "fingerprint": "1bcb6a0ab5492e97"
+    },
+    {
+      "file": "0002_light_texas_twister.sql",
+      "rule": "index-not-concurrent",
+      "statement": 5,
+      "fingerprint": "be91b7dee699aa42"
+    },
+    {
+      "file": "0003_careless_fantastic_four.sql",
+      "rule": "data-change",
+      "statement": 16,
+      "fingerprint": "97766e5c2878b083"
+    },
+    {
+      "file": "0003_careless_fantastic_four.sql",
+      "rule": "data-change",
+      "statement": 17,
+      "fingerprint": "4380dc0a8724bb75"
+    },
+    {
+      "file": "0003_careless_fantastic_four.sql",
+      "rule": "index-not-concurrent",
+      "statement": 18,
+      "fingerprint": "3de2b70cbfa28b64"
+    },
+    {
+      "file": "0004_migrate_role_quotas.sql",
+      "rule": "data-change",
+      "statement": 1,
+      "fingerprint": "30f7156e5f0428df"
+    },
+    {
+      "file": "0004_migrate_role_quotas.sql",
+      "rule": "data-change",
+      "statement": 2,
+      "fingerprint": "378aae9113c5c279"
+    },
+    {
+      "file": "0004_migrate_role_quotas.sql",
+      "rule": "data-change",
+      "statement": 3,
+      "fingerprint": "5bc71bae6e834a3c"
+    },
+    {
+      "file": "0004_migrate_role_quotas.sql",
+      "rule": "data-change",
+      "statement": 4,
+      "fingerprint": "31caffb7b5bedeac"
+    },
+    {
+      "file": "0005_gifted_maverick.sql",
+      "rule": "drop-table",
+      "statement": 1,
+      "fingerprint": "a81675b633166c98"
+    },
+    {
+      "file": "0010_blushing_slayback.sql",
+      "rule": "drop-column",
+      "statement": 2,
+      "fingerprint": "90bee0eb8021af57"
+    },
+    {
+      "file": "0010_blushing_slayback.sql",
+      "rule": "drop-table",
+      "statement": 4,
+      "fingerprint": "74b9dd5d5e3ea55b"
+    },
+    {
+      "file": "0011_policy_storage_lifecycle.sql",
+      "rule": "index-not-concurrent",
+      "statement": 23,
+      "fingerprint": "eb0e3fd3fe86b46a"
+    },
+    {
+      "file": "0011_policy_storage_lifecycle.sql",
+      "rule": "index-not-concurrent",
+      "statement": 24,
+      "fingerprint": "e13161468d51f92a"
+    },
+    {
+      "file": "0011_policy_storage_lifecycle.sql",
+      "rule": "index-not-concurrent",
+      "statement": 25,
+      "fingerprint": "05eeb11ec81955d9"
+    },
+    {
+      "file": "0011_policy_storage_lifecycle.sql",
+      "rule": "index-not-concurrent",
+      "statement": 26,
+      "fingerprint": "a7a5f52ac2ab8814"
+    },
+    {
+      "file": "0011_policy_storage_lifecycle.sql",
+      "rule": "constraint-not-valid",
+      "statement": 28,
+      "fingerprint": "f936eab75b8c1b90"
+    },
+    {
+      "file": "0016_drop_cost_tier.sql",
+      "rule": "drop-column",
+      "statement": 1,
+      "fingerprint": "79817e484ca30085"
+    },
+    {
+      "file": "0017_message_user_index.sql",
+      "rule": "index-not-concurrent",
+      "statement": 1,
+      "fingerprint": "fa76969cb55b57ae"
+    },
+    {
+      "file": "0020_atomic_upload_admission.sql",
+      "rule": "data-change",
+      "statement": 2,
+      "fingerprint": "1d8c6a8eb10da02a"
+    },
+    {
+      "file": "0021_usage_settlement.sql",
+      "rule": "alter-column-type",
+      "statement": 2,
+      "fingerprint": "ba7b0a233f764970"
+    },
+    {
+      "file": "0021_usage_settlement.sql",
+      "rule": "alter-column-type",
+      "statement": 3,
+      "fingerprint": "1312ac9b82a88220"
+    },
+    {
+      "file": "0022_conversation_imports.sql",
+      "rule": "index-not-concurrent",
+      "statement": 3,
+      "fingerprint": "7d4adfb02609e684"
+    },
+    {
+      "file": "0023_message_text_search.sql",
+      "rule": "index-not-concurrent",
+      "statement": 1,
+      "fingerprint": "ff5718d32cbd54cd"
+    },
+    {
+      "file": "0024_projects.sql",
+      "rule": "constraint-not-valid",
+      "statement": 6,
+      "fingerprint": "f936eab75b8c1b90"
+    },
+    {
+      "file": "0024_projects.sql",
+      "rule": "index-not-concurrent",
+      "statement": 7,
+      "fingerprint": "3eebbab176795622"
+    },
+    {
+      "file": "0024_projects.sql",
+      "rule": "constraint-not-valid",
+      "statement": 9,
+      "fingerprint": "f936eab75b8c1b90"
+    },
+    {
+      "file": "0024_projects.sql",
+      "rule": "constraint-not-valid",
+      "statement": 10,
+      "fingerprint": "f936eab75b8c1b90"
+    },
+    {
+      "file": "0024_projects.sql",
+      "rule": "index-not-concurrent",
+      "statement": 11,
+      "fingerprint": "52e8f7841aa78f29"
+    },
+    {
+      "file": "0025_reply_alternates.sql",
+      "rule": "data-change",
+      "statement": 2,
+      "fingerprint": "179dbcb6c4de91fa"
+    },
+    {
+      "file": "0031_drop_boring_mode.sql",
+      "rule": "drop-column",
+      "statement": 1,
+      "fingerprint": "8451b1c5b54c1feb"
+    },
+    {
+      "file": "0034_compliance.sql",
+      "rule": "data-change",
+      "statement": 3,
+      "fingerprint": "968fbec477a36a9c"
+    },
+    {
+      "file": "0034_compliance.sql",
+      "rule": "set-not-null",
+      "statement": 7,
+      "fingerprint": "deb561f7152d7023"
+    },
+    {
+      "file": "0034_compliance.sql",
+      "rule": "index-not-concurrent",
+      "statement": 8,
+      "fingerprint": "9d555a458b90c5bc"
+    },
+    {
+      "file": "0034_compliance.sql",
+      "rule": "index-not-concurrent",
+      "statement": 14,
+      "fingerprint": "d7875386a8379f13"
+    }
+  ]
+}

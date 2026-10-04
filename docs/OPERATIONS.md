@@ -170,6 +170,38 @@ objects, so attachment storage still needs versioning or snapshots as above.
 5. Wait for `/api/health/ready`, then verify authentication, chat, search, and
    attachment access.
 
+### Migration timeouts
+
+From v0.11 every migration statement runs with a lock timeout and a statement
+timeout, set for the migration transaction only:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `MIGRATION_LOCK_TIMEOUT_MS` | `3000` | How long a statement may wait for a lock (100–600000). |
+| `MIGRATION_STATEMENT_TIMEOUT_MS` | `900000` (15 minutes) | How long one statement may run; `0` means no limit. |
+
+The migration session also has a 10-second
+`idle_in_transaction_session_timeout`, so a stalled migrator cannot keep its
+locks.
+
+Without a lock timeout, a migration that needs a table another session is
+using (a long report, an open `psql` transaction, a `pg_dump`) waits as long as
+that session does, and every later query on the table queues behind the
+migration: one long transaction stops all reads and writes of the table. Now
+the attempt gives up after the lock timeout, rolls back completely, and is
+retried with backoff, up to ten attempts over about three minutes. Readers and
+writers are held up for at most about one lock timeout at a time. If the lock
+never frees, the migration fails with a message naming the table, the lock it
+needed and the blocking session (pid, state, application and query). Let that
+session finish or end it (`select pg_terminate_backend(<pid>)`), then run the
+migration again. Other errors, including a statement timeout, fail at once.
+
+Raise `MIGRATION_STATEMENT_TIMEOUT_MS` (or set it to `0`) only for a migration
+known to scale with data, such as building a large index; the changelog says
+when one does. Set both variables on whatever runs migrations: the `migrate`
+job, or the API when `RUN_MIGRATIONS=true`. The bundled Compose file does not
+pass them through; add them to the service's `environment` to change them.
+
 ### Upgrading to v0.7 (migrations 0022–0025)
 
 Migrations `0022_conversation_imports` and `0024_projects` create new tables
