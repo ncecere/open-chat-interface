@@ -281,6 +281,13 @@
       "when": 1790539200019,
       "tag": "0039_three_phase_migrations",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790539200020,
+      "tag": "0040_usage_rollups",
+      "breakpoints": true
     }
   ]
 }

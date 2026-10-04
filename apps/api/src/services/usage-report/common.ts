@@ -1,4 +1,5 @@
 import { getDisplayTimezone } from '../lifecycle/settings.js';
+import { type UsageSource, usageSource } from './source.js';
 
 /**
  * How far back per-event history reaches. Beyond this, events have been pruned
@@ -15,8 +16,23 @@ export interface UsageReportRange {
 }
 
 /** Raw SQL binds text, so the boundary is passed as an ISO string. */
-export function rangeStart(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+export function rangeStart(days: number, now: Date = new Date()): string {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * How a report is read. Both sources return the same figures; tests pin the
+ * source and the clock to compare them.
+ */
+export interface ReportOptions {
+  /** Default: rollups once their backfill has finished, else the events. */
+  source?: UsageSource;
+  /** The end of the range (default: now). */
+  now?: Date;
+}
+
+export async function reportSource(options: ReportOptions): Promise<UsageSource> {
+  return options.source ?? (await usageSource());
 }
 
 /** A bounded list plus what it left out, so a truncated view says so. */

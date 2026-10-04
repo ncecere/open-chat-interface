@@ -1,7 +1,8 @@
 import { sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { getDisplayTimezone } from '../lifecycle/settings.js';
-import { rangeStart } from './common.js';
+import { type ReportOptions, rangeStart, reportSource } from './common.js';
+import { rollupRows, straddlingHours } from './source.js';
 
 export interface ActivitySummary {
   threadsCreated: number;
@@ -80,19 +81,41 @@ export interface DailyActivity {
 }
 
 /** Daily message volume and distinct people, bucketed in the display zone. */
-export async function dailyActivity(days: number): Promise<DailyActivity[]> {
+export async function dailyActivity(
+  days: number,
+  options: ReportOptions = {},
+): Promise<DailyActivity[]> {
   const timezone = await getDisplayTimezone();
+  const start = rangeStart(days, options.now);
 
-  const rows = await db.execute<{ day: string; messages: string; active_users: string }>(sql`
-    select
-      to_char(date_trunc('day', occurred_at at time zone ${timezone}), 'YYYY-MM-DD') as day,
-      sum(message_count) as messages,
-      count(distinct user_id) as active_users
-    from usage_event
-    where occurred_at >= ${rangeStart(days)}::timestamptz and pending = false
-    group by 1
-    order by 1
-  `);
+  // From the rollups: per day and person first, so a person counts on a day
+  // when their settled events that day add up to at least one.
+  const rollups = (await reportSource(options)) === 'rollups';
+  const straddling = rollups ? await straddlingHours(new Date(start), timezone) : [];
+  const rows = rollups
+    ? await db.execute<{ day: string; messages: string; active_users: string }>(sql`
+          select d.day, sum(d.messages) as messages,
+            count(*) filter (where d.user_id is not null and d.settled > 0) as active_users
+          from (
+            select to_char(date_trunc('day', p.at at time zone ${timezone}), 'YYYY-MM-DD') as day,
+              p.user_id, sum(p.messages) as messages, sum(p.settled_events) as settled
+            from (${rollupRows({ start: new Date(start), level: 'person', straddling })}) p
+            group by 1, 2
+          ) d
+          group by d.day
+          having sum(d.settled) > 0
+          order by d.day
+        `)
+    : await db.execute<{ day: string; messages: string; active_users: string }>(sql`
+          select
+            to_char(date_trunc('day', occurred_at at time zone ${timezone}), 'YYYY-MM-DD') as day,
+            sum(message_count) as messages,
+            count(distinct user_id) as active_users
+          from usage_event
+          where occurred_at >= ${start}::timestamptz and pending = false
+          group by 1
+          order by 1
+        `);
 
   return rows.map((row) => ({
     day: row.day,

@@ -713,8 +713,34 @@ are replaced. After every replica runs v0.11, `migrate --post` (step 7 of
 partial `message_error_created_at_idx` (the usage page's failed replies).
 At 500,000 messages they took 0.4 s and 0.1 s and the first is about 11 MB;
 at 20 million messages expect a minute or two and about 450 MB. Until they
-exist those pages are as slow as in v0.10. v0.11 ships no background
-migration.
+exist those pages are as slow as in v0.10.
+
+#### Usage rollups (migration 0040, background migration 0.11.usage-rollups)
+
+Migration 0040 adds a nullable column `usage_event.in_rollup` (no default, so
+no rewrite), three tables (`usage_rollup_hour`, `usage_rollup_model_hour`,
+`usage_rollup_change`) and triggers on `usage_event` that record every change
+to usage in the writer's transaction, including writes by v0.10 replicas still
+running during the upgrade. Creating the triggers takes a brief lock on
+`usage_event` (the migration's lock timeout and retries apply). Each write to
+`usage_event` now also appends a row to `usage_rollup_change`; the job
+`usage.fold-rollups` (every 30 seconds, on every replica, one at a time)
+folds them into the hourly tables. If it fails (System health, jobs), reports
+stay exact but slow down as the change log grows.
+
+`migrate --post` schedules the background migration `0.11.usage-rollups`,
+which adds the usage recorded before the upgrade to the rollups, 2,000 events
+a batch; follow it on **System health → Background work**. Measured: 126,000
+events in 64 batches over 10 seconds. Until it finishes, the Usage pages,
+scheduled reports and budget checks read `usage_event` as v0.10 did, with the
+same results; afterwards they read the rollups. It rewrites each
+`usage_event` row once (the marker), so expect WAL and dead tuples
+proportional to the table; autovacuum handles them. A future release that
+drops the fallback will require it to be finished before upgrading.
+
+The rollups hold exactly the usage events that are kept: usage history
+retention prunes both together, and they keep no history of their own (the
+per-day `usage_record` table still does).
 
 ## Shutting down and draining
 

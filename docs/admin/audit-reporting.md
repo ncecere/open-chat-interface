@@ -75,6 +75,23 @@ A quota meter can include held allowance not yet present in daily totals.
 Historical losses from older non-transactional accounting are not repaired
 automatically by an upgrade.
 
+### How the figures are read
+
+From v0.11 this page, the scheduled reports and every usage budget read
+**hourly usage totals** kept alongside the individual usage records, so they
+stay fast however much history the instance holds. The figures are exact, not
+estimates: they always equal what adding up the individual records would give,
+including usage recorded a moment ago, days that start at midnight in the
+reporting time zone (half- and quarter-hour zones included), and the
+**Deleted accounts** row. They cover the same history as the usage records
+and are pruned with them by usage history retention.
+
+After an upgrade to v0.11 the totals for earlier usage are filled in by a
+background task (**System health → Background work**, *Adds usage recorded
+before 0.11 to the hourly usage rollups*). Until it finishes the page reads
+the individual records as before: the numbers are the same, only slower.
+About 125,000 usage records take ten seconds.
+
 ### Deleted accounts
 
 Deleting an account keeps its usage records (events, daily totals and limit

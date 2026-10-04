@@ -312,6 +312,12 @@ mostly a worse version of one or the other.
 - **Calendar** — resets on a boundary. Easier to explain, and produces a rush at
   the start of each period.
 
+Either way the count is exact to the moment, in the budget's own time zone,
+and includes what replies in progress have reserved. From v0.11 it is read
+from hourly usage totals, so checking a budget before each message costs the
+same for someone who sends thousands a month as for someone who sends a few
+(see [How the figures are read](audit-reporting.md#how-the-figures-are-read)).
+
 ### Which models
 
 A quota can apply to everything or to specific models. Scoping is what lets you

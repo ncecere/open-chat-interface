@@ -21,6 +21,7 @@ import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
 import { drainDeletedObjects, pruneDrainedObjects } from '../storage/reaper.js';
 import { purgeExpiredTemporaryThreads, purgeUnusedThreads } from '../threads.js';
+import { foldUsageRollups, USAGE_ROLLUP_FOLD_JOB } from '../usage-report/rollup-fold.js';
 import { processWebhookDeliveries } from '../webhooks/delivery.js';
 import { type JobDefinition, runExclusively, startJobs } from './runner.js';
 
@@ -89,6 +90,13 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'chat.recover-interrupted-replies',
       intervalMs: 15 * 1000,
       run: () => recoverInterruptedReplies(),
+    },
+    {
+      // Usage rollups (v0.11): folds the change log the usage_event triggers
+      // write. Readers add what is not folded yet, so this is for speed only.
+      name: USAGE_ROLLUP_FOLD_JOB,
+      intervalMs: 30 * 1000,
+      run: () => foldUsageRollups(),
     },
     {
       name: 'quota.sweep-reservations',

@@ -1,16 +1,43 @@
 import { and, eq, gte, inArray, ne, schema, sql } from '@oci/db';
 import type { db } from '../../db/index.js';
+import { rollupRows, type UsageSource, usageSource } from '../usage-report/source.js';
 import type { WindowTotals } from './policy.js';
 
-/** Shared by admission and the meter. Unreported spend is held, not forgiven by age. */
+/**
+ * Shared by admission and the meter. Unreported spend is held, not forgiven by age.
+ *
+ * Reads the hourly rollups once their backfill has finished (the window's
+ * whole hours, plus the change log not folded yet, plus the events of the
+ * partial first hour, in one statement), otherwise the events; both return
+ * the same totals. Admission calls it inside its transaction, after the
+ * person's advisory lock, so the statement sees every committed reservation.
+ */
 export async function windowTotalsIncludingPending(
-  executor: Pick<typeof db, 'select'>,
+  executor: Pick<typeof db, 'select' | 'execute'>,
   userId: string,
   start: Date,
   modelSlugs: string[],
   /** Leave out one event, e.g. the run asking whether it may take another step. */
   excludeEventId?: string,
+  source?: UsageSource,
 ): Promise<WindowTotals> {
+  if ((source ?? (await usageSource())) === 'rollups') {
+    const [totals] = await executor.execute<{
+      messages: string;
+      tokens: string;
+      cost_micros: string;
+    }>(sql`
+      select coalesce(sum(r.quota_messages), 0)::bigint as messages,
+        coalesce(sum(r.quota_tokens), 0)::bigint as tokens,
+        coalesce(sum(r.quota_cost_micros), 0)::bigint as cost_micros
+      from (${rollupRows({ start, level: 'person', userId, modelSlugs, excludeEventId })}) r
+    `);
+    return {
+      messages: Number(totals?.messages ?? 0),
+      tokens: Number(totals?.tokens ?? 0),
+      costMicros: Number(totals?.cost_micros ?? 0),
+    };
+  }
   const conditions = [
     eq(schema.usageEvent.userId, userId),
     gte(schema.usageEvent.occurredAt, start),

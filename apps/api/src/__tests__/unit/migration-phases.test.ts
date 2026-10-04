@@ -18,6 +18,7 @@ import {
   tablesCreated,
   tablesTouched,
   UnfinishedRequirementsError,
+  usageRollupBackfill,
 } from '@oci/db';
 import type { UpgradeReport } from '@oci/shared';
 import { updateBackgroundMigrationSchema } from '@oci/shared';
@@ -257,12 +258,12 @@ describe('post-deploy folder', () => {
 
 describe('background migrations', () => {
   it('registers test definitions only when the environment names them', () => {
-    expect(backgroundMigrations({})).toEqual([]);
+    expect(backgroundMigrations({})).toEqual([usageRollupBackfill]);
     expect(
       backgroundMigrations({
         OCI_TEST_BACKGROUND_MIGRATIONS: ` other, ${rewriteMessagesInPlace.name} `,
       }),
-    ).toEqual([rewriteMessagesInPlace]);
+    ).toEqual([usageRollupBackfill, rewriteMessagesInPlace]);
   });
 
   it('estimates progress from a UUID cursor, or rows against the estimate', () => {

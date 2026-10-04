@@ -26,6 +26,7 @@ export {
   backgroundMigrations,
   rewriteMessagesInPlace,
   TEST_BACKGROUND_MIGRATIONS_ENV,
+  usageRollupBackfill,
 } from './background/index.js';
 export * from './client.js';
 export {
@@ -95,3 +96,12 @@ export {
   tablesCreated,
   tablesTouched,
 } from './sql-analysis.js';
+export {
+  type FoldResult,
+  foldAllUsageRollupChanges,
+  foldUsageRollupChanges,
+  USAGE_ROLLUP_BACKFILL,
+  USAGE_ROLLUP_FOLD_BATCH,
+  USAGE_ROLLUP_FOLD_LOCK_KEY,
+  usageRollupBacklog,
+} from './usage-rollups.js';

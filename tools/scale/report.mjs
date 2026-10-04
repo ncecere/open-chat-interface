@@ -173,9 +173,18 @@ const NAMED_QUERIES = [
   ['Embedding backlog (passages without an embedding)', 'left join "project_file_embedding" e'],
   ['Sidebar conversation list', '^select .* from "thread" where .*order by "thread"."pinned" desc'],
   ['Conversation messages', '^select .* from "message" where .*"thread_id" = '],
-  ['Usage reports (usage_event aggregates)', 'from "?usage_event"? '],
+  // Usage reports read usage_event, or from v0.11 the hourly rollups (with
+  // the events of partial hours); budget checks and the fold job are apart.
+  [
+    'Usage reports (usage_event aggregates or rollups)',
+    '^(?!.*sum\\(r\\.quota_messages\\))(?!.*delete from usage_rollup_change).*(from "?usage_event"? |from usage_rollup_)',
+  ],
   ['Message counts by time (admin overview)', 'from "message" where .*"created_at" >='],
-  ['Quota admission (usage in the policy window)', 'reserved_cost_micros'],
+  [
+    'Quota admission (usage in the policy window)',
+    '(reserved_tokens"::bigint\\), |sum\\(r\\.quota_messages\\))',
+  ],
+  ['Usage rollup fold (job)', 'delete from usage_rollup_change'],
   ['Session lookup', 'from "session"'],
 ];
 

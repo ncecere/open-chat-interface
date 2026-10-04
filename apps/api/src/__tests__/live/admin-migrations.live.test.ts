@@ -278,8 +278,10 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
     const listed = await request(auditor, 'GET', '/migrations/background');
     expect(listed.status).toBe(200);
     const { migrations } = (await listed.json()) as { migrations: BackgroundMigrationSummary[] };
+    // Registered but not scheduled here (no `migrate --post` ran): listed too.
     expect(migrations.map((item) => [item.name, item.status])).toEqual([
       ['test.admin-probe', 'pending'],
+      ['0.11.usage-rollups', 'not_scheduled'],
     ]);
 
     expect(

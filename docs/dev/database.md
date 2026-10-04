@@ -180,7 +180,8 @@ retried with backoff (30 s doubling); after five in a row the migration is
 
 Statuses: `pending` (scheduled), `running`, `paused`, `finished`, `failed`.
 A replica only claims migrations its release defines, so one scheduled by a
-newer release waits for that release. Test-only definitions
+newer release waits for that release. The first real one is
+`0.11.usage-rollups` ([Usage rollups](#usage-rollups), below). Test-only definitions
 (`src/background/test-definitions.ts`) are inert unless named in
 `OCI_TEST_BACKGROUND_MIGRATIONS`; `oci-test.rewrite-messages-in-place`
 rewrites every message with its own values and is what the live tests and
@@ -225,6 +226,83 @@ answer for the life of the process and a false one for 30 seconds; a
 database that cannot answer reads as not ready. An index needs no flag when
 the query is the same with or without it: the planner uses it once it is
 valid.
+
+## Usage rollups
+
+The first real background migration, and the pattern for a derived table that
+must stay exact (v0.11, design item 18; migration `0040_usage_rollups`,
+`packages/db/src/usage-rollups.ts`, `src/background/usage-rollups.ts`,
+`apps/api/src/services/usage-report/source.ts`).
+
+**Tables.** Keyed by what reports and budgets group and filter by. Role,
+provider and project are not on events (a person's role is read when the
+report is, and a provider follows from the model), so they are not keys.
+
+| Table | Key | Read by |
+| --- | --- | --- |
+| `usage_rollup_hour` | UTC hour, person (null for deleted accounts; the key is `NULLS NOT DISTINCT`), model | budgets and the usage meter, top consumers, active people (per range and per day) |
+| `usage_rollup_model_hour` | UTC hour, model | totals, daily figures, the per-model table, idle models |
+| `usage_rollup_change` | append-only (`bigint` identity) | readers, until folded |
+
+Amounts: `events` (every event), `settled_events`, `messages`, `tokens_in`,
+`tokens_out`, `cost_micros` (what reports sum: settled events only) and, per
+person, `quota_messages`, `quota_tokens`, `quota_cost_micros` (what budgets
+sum: every event, with the estimate still held for unreported usage). Hourly
+rather than daily because report ranges start at any instant (`now - 30
+days`) and days are local to the display time zone or a budget's zone: a day
+rollup in UTC could answer neither. A daily table on top did not pay off: the
+hourly one per model is already a few thousand rows a month, and the per-person
+one is bounded by people active per hour.
+
+**Maintenance: a change log written by triggers, folded by a job.** Statement
+triggers on `usage_event` (`AFTER INSERT/UPDATE/DELETE ... REFERENCING`
+transition tables) write, in the writer's own transaction, one row per hour,
+person and model the statement changed: the new rows' amounts minus the old
+rows'. So every writer is covered, whatever its code: this release, the
+previous one during a rolling upgrade, retention, and the account-deletion
+foreign key (its `SET NULL` is an `UPDATE` that moves amounts from the person
+to the null key). Nothing on the write path updates a shared row: updating the
+hour's row in the settlement transaction would serialize every reply's
+settlement on one row per model and hour. The job `usage.fold-rollups` (every
+30 s; the backfill's batches help) moves the log into the two tables in one
+transaction under `pg_try_advisory_xact_lock`, upserts sorted by key, and
+deletes rows left at zero (a deleted person's id does not stay behind).
+
+**Reads are exact at any moment.** A reader takes, in one statement (one
+snapshot, so a fold committing meanwhile cannot count a change twice or not
+at all): the rollup rows of whole hours from the first whole UTC hour of the
+range, the change-log rows for the same hours, and the events of the partial
+first hour. Grouping by local day reads the hours a local midnight falls
+inside (zones with half- or quarter-hour offsets, such as India or Nepal) from
+the events too. Rows can cancel out (an event deleted after it was folded), so
+readers decide whether a group exists from `sum(events) > 0` or
+`sum(settled_events) > 0`, never from row counts. Budget checks of a running
+reply subtract its own event in the same statement. How far the fold lags only
+changes speed.
+
+**Backfill.** `usage_event.in_rollup` (nullable, no default) says an event's
+amounts are in the rollups. A `BEFORE INSERT OR UPDATE` row trigger sets it
+on every write, and the statement triggers count only rows that have it, so
+an event written before 0040 contributes nothing until it is first written
+again, and then in full rather than as a difference. `0.11.usage-rollups`
+marks events in key order (`update ... set in_rollup = true where in_rollup is
+not true`), so the triggers add them in the batch's transaction, and folds
+what is waiting. Idempotent: a marked event is skipped. Until it is
+`finished`, every reader uses the events (`usageSource()`), so an upgrade
+never shows partial totals; on a new database it finishes at once.
+
+**Retention.** The rollups mirror the events: retention's delete subtracts
+what it prunes, so they hold exactly the usage that is kept, for as long as it
+is kept (the usage-event retention setting, never less than the longest
+budget window), legal holds included. They hold nothing beyond an account id,
+which becomes null with the event's. Long-term per-day history remains
+`usage_record`.
+
+**For release 0.12.** Nothing requires the backfill yet. The release that
+removes the event-reading fallback (or reads `in_rollup` as `NOT NULL`) must
+list `0.11.usage-rollups` in its `requires` in `releases.json`, so an
+instance cannot reach it with the backfill unfinished. 0.12 has no first
+migration to attach it to yet, so it is not in the manifest.
 
 ## Adding a migration
 
