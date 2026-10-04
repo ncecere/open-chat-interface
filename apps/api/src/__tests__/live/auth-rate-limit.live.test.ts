@@ -81,7 +81,19 @@ const address = () =>
   `2001:db8:${randomInt(0xffff).toString(16)}::${randomInt(0xffff).toString(16)}`;
 const email = () => `${randomUUID()}@example.test`;
 
-describe.skipIf(!available)('live: authentication rate limit', () => {
+/**
+ * Counters live in fixed one-minute windows (`consumeRateLimit`), so a run of
+ * attempts that crosses a minute boundary starts again from zero and the
+ * attempt meant to be refused is allowed. Each run of attempts starts with at
+ * least this much of the current window left, waiting for the next one if not.
+ */
+const WINDOW_ROOM_MS = 10_000;
+async function freshWindow(): Promise<void> {
+  const left = 60_000 - (Date.now() % 60_000);
+  if (left < WINDOW_ROOM_MS) await new Promise((resolve) => setTimeout(resolve, left + 50));
+}
+
+describe.skipIf(!available)('live: authentication rate limit', { timeout: 30_000 }, () => {
   let live: LiveDatabase;
   let pool: ReturnType<typeof createDatabase>;
   let app: Hono<AppBindings>;
@@ -137,6 +149,8 @@ describe.skipIf(!available)('live: authentication rate limit', () => {
   it('refuses the attempt after the limit from one address with 429 and Retry-After', async () => {
     const ip = address();
     const target = email();
+    await freshWindow();
+
     for (let attempt = 0; attempt < LIMIT; attempt++)
       expect((await signIn(target, ip)).status).toBe(401);
 
@@ -171,6 +185,8 @@ describe.skipIf(!available)('live: authentication rate limit', () => {
 
   it('limits one account tried from many addresses', async () => {
     const target = email();
+    await freshWindow();
+
     for (let attempt = 0; attempt < LIMIT; attempt++)
       expect((await signIn(target.toUpperCase(), address())).status).toBe(401);
     const refused = await signIn(target, address());
@@ -181,6 +197,8 @@ describe.skipIf(!available)('live: authentication rate limit', () => {
 
   it('limits one address trying many accounts, keyed by the address the proxy wrote', async () => {
     const ip = address();
+    await freshWindow();
+
     for (let attempt = 0; attempt < LIMIT; attempt++)
       // Whatever the client puts further left in X-Forwarded-For is ignored.
       expect((await signIn(email(), `203.0.113.${attempt}, ${ip}`)).status).toBe(401);
@@ -209,6 +227,8 @@ describe.skipIf(!available)('live: authentication rate limit', () => {
     ];
     for (const [name, attempt] of cases) {
       ip = address();
+      await freshWindow();
+
       for (let count = 0; count < LIMIT; count++)
         expect((await attempt()).status, name).not.toBe(429);
       expect((await attempt()).status, name).toBe(429);
@@ -216,6 +236,8 @@ describe.skipIf(!available)('live: authentication rate limit', () => {
 
     // Reading the session is not an attempt.
     ip = address();
+    await freshWindow();
+
     for (let count = 0; count <= LIMIT + 1; count++) {
       const response = await app.request('/api/auth/get-session', {
         headers: { origin, 'x-forwarded-for': ip },
@@ -227,9 +249,13 @@ describe.skipIf(!available)('live: authentication rate limit', () => {
   it('without a client address, counts the account and never one shared bucket', async () => {
     // No proxy header and no socket: one shared "unknown" counter would let a
     // single client lock everyone out, so only the account is counted.
+    await freshWindow();
+
     for (let count = 0; count <= LIMIT + 1; count++)
       expect((await signIn(email(), null)).status).toBe(401);
     const target = email();
+    await freshWindow();
+
     for (let count = 0; count < LIMIT; count++)
       expect((await signIn(target, null)).status).toBe(401);
     expect((await signIn(target, null)).status).toBe(429);
