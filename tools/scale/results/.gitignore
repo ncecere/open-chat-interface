@@ -1,0 +1,5 @@
+# Run output stays local; only the committed baseline is tracked.
+*
+!.gitignore
+!baseline-*.md
+!baseline-*.json

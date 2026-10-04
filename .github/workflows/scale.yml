@@ -1,0 +1,85 @@
+name: Scale harness
+
+# Measures OCI against a generated dataset under load (docs/dev/scale-harness.md).
+# Weekly at `small` on a hosted runner; any profile on demand. `large` needs
+# about 125 GB of free disk and several hours, so it only runs on a self-hosted
+# runner: pass its label as `runner` (for example `self-hosted`), never on a
+# hosted one, and it is never the default.
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Dataset and load profile
+        type: choice
+        options: [tiny, small, medium, large]
+        default: small
+      replicas:
+        description: API replicas behind the web proxy
+        type: string
+        default: '1'
+      runner:
+        description: Runner label (use a self-hosted label for medium or large)
+        type: string
+        default: ubuntu-24.04
+      enforce:
+        description: Fail when a target or error threshold is missed
+        type: boolean
+        default: false
+  schedule:
+    # Mondays 05:17 UTC.
+    - cron: '17 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scale-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scale:
+    name: Scale (${{ inputs.profile || 'small' }})
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ (inputs.profile == 'large' && 720) || (inputs.profile == 'medium' && 150) || 60 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Refuse large on a hosted runner
+        if: ${{ inputs.profile == 'large' && startsWith(inputs.runner, 'ubuntu-') }}
+        run: |
+          echo "::error::The large profile needs a self-hosted runner with about 125 GB free; pass its label as 'runner'."
+          exit 1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Run the harness
+        env:
+          PROFILE: ${{ inputs.profile || 'small' }}
+          REPLICAS: ${{ inputs.replicas || '1' }}
+          ENFORCE: ${{ inputs.enforce && 'true' || '' }}
+        run: |
+          [[ "$REPLICAS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::replicas must be 1-99"; exit 1; }
+          args=(--profile "$PROFILE" --replicas "$REPLICAS")
+          if [[ -n "$ENFORCE" ]]; then args+=(--enforce); fi
+          tools/scale/run.sh "${args[@]}"
+
+      - name: Summary
+        if: always()
+        run: |
+          shopt -s nullglob
+          for report in tools/scale/results/*.md; do
+            [[ "$(basename "$report")" == baseline-* ]] && continue
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: scale-${{ inputs.profile || 'small' }}-${{ github.run_id }}
+          path: |
+            tools/scale/results/*
+            !tools/scale/results/baseline-*
+          if-no-files-found: warn
+          retention-days: 90

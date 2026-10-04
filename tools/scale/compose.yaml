@@ -1,0 +1,190 @@
+# Scale-test stack (docs/dev/scale-harness.md). Normally driven by run.sh:
+#   tools/scale/run.sh --profile small
+# Everything runs in its own project, `oci-scale`, with host ports bound to
+# 127.0.0.1 only. Secrets are generated per run by run.sh; nothing here is a
+# real credential.
+name: oci-scale
+
+x-api-environment: &api-environment
+  NODE_ENV: production
+  API_PORT: 3000
+  APP_URL: ${SCALE_APP_URL:-http://127.0.0.1:18080}
+  DATABASE_URL: postgres://oci:oci-scale@postgres:5432/oci
+  REDIS_URL: redis://redis:6379
+  AUTH_SECRET: ${SCALE_AUTH_SECRET:-scale-harness-auth-secret-not-for-production-use}
+  ENCRYPTION_KEY: ${SCALE_ENCRYPTION_KEY:-scale-harness-encryption-key-not-for-production}
+  STORAGE_LOCAL_PATH: /data/storage
+  RUN_MIGRATIONS: 'false'
+  LOG_LEVEL: ${SCALE_API_LOG_LEVEL:-warn}
+  METRICS_TOKEN: ${SCALE_METRICS_TOKEN:-scale-harness-metrics-token}
+  # Every virtual user comes from one address and signs in far more often than
+  # a person would; the load test measures OCI, not its abuse limits.
+  RATE_LIMIT_AUTH_PER_MINUTE: '1000000'
+  RATE_LIMIT_CHAT_PER_MINUTE: '100000'
+  RATE_LIMIT_MAX_CONCURRENT_STREAMS: '100'
+  RATE_LIMIT_UPLOAD_PER_MINUTE: '100000'
+  RETENTION_USAGE_EVENT_DAYS: ${SCALE_RETENTION_USAGE_DAYS:-90}
+  RETENTION_AUDIT_LOG_DAYS: ${SCALE_RETENTION_AUDIT_DAYS:-365}
+
+services:
+  postgres:
+    image: ${SCALE_POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - pg_stat_statements.max=10000
+      - -c
+      - track_io_timing=on
+      - -c
+      - max_connections=400
+      - -c
+      - shared_buffers=${SCALE_PG_SHARED_BUFFERS:-1GB}
+      - -c
+      - effective_cache_size=${SCALE_PG_EFFECTIVE_CACHE_SIZE:-3GB}
+      - -c
+      - work_mem=${SCALE_PG_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=${SCALE_PG_MAINTENANCE_WORK_MEM:-512MB}
+      - -c
+      - max_wal_size=${SCALE_PG_MAX_WAL_SIZE:-8GB}
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - wal_compression=on
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - max_parallel_maintenance_workers=2
+    environment:
+      POSTGRES_USER: oci
+      POSTGRES_PASSWORD: oci-scale
+      POSTGRES_DB: oci
+    shm_size: 1g
+    ports:
+      - '127.0.0.1:${SCALE_PG_PORT:-15432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oci -d oci']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no --loglevel warning
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # OpenAI-compatible streaming model with a fixed first-token delay and token
+  # rate, plus deterministic embeddings (tools/scale/stub/server.mjs).
+  stub:
+    image: ${SCALE_NODE_IMAGE:-node:22-alpine}
+    command: ['node', '/scale/stub/server.mjs']
+    environment:
+      STUB_PORT: 4181
+      STUB_FIRST_TOKEN_MS: ${STUB_FIRST_TOKEN_MS:-500}
+      STUB_TOKENS_PER_SECOND: ${STUB_TOKENS_PER_SECOND:-50}
+      STUB_REPLY_TOKENS: ${STUB_REPLY_TOKENS:-250}
+      STUB_EMBEDDING_DELAY_MS: ${STUB_EMBEDDING_DELAY_MS:-40}
+    volumes:
+      - ./:/scale:ro
+    ports:
+      - '127.0.0.1:${SCALE_STUB_PORT:-14181}:4181'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4181/health']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  migrate:
+    image: ${SCALE_API_IMAGE:-oci-scale-api:local}
+    profiles: ['tools']
+    restart: 'no'
+    environment: *api-environment
+    command: ['node', 'dist/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Node scripts (generator, report) run in the API image, which already has
+  # the `postgres` client; tools/scale is mounted, results are written back.
+  tools:
+    image: ${SCALE_API_IMAGE:-oci-scale-api:local}
+    profiles: ['tools']
+    restart: 'no'
+    user: '${SCALE_UID:-0}:${SCALE_GID:-0}'
+    entrypoint: ['node']
+    working_dir: /scale
+    environment:
+      DATABASE_URL: postgres://oci:oci-scale@postgres:5432/oci
+      SCALE_STUB_URL: http://stub:4181/v1
+      SCALE_METRICS_TOKEN: ${SCALE_METRICS_TOKEN:-scale-harness-metrics-token}
+    volumes:
+      - ./:/scale
+      - ${SCALE_RESULTS_DIR:-./results}:/results
+
+  api:
+    image: ${SCALE_API_IMAGE:-oci-scale-api:local}
+    environment: *api-environment
+    volumes:
+      - storage:/data/storage
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      stub:
+        condition: service_healthy
+
+  web:
+    image: ${SCALE_WEB_IMAGE:-oci-scale-web:local}
+    environment:
+      API_UPSTREAM: api:3000
+      # Trust the compose network, so the X-Forwarded-For each virtual user
+      # sends (one address per simulated person) reaches the API.
+      TRUSTED_PROXIES: ${SCALE_TRUSTED_PROXIES:-private_ranges}
+    ports:
+      - '127.0.0.1:${SCALE_WEB_PORT:-18080}:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # k6 is AGPL-licensed: it runs from Grafana's official image as a separate
+  # process and is never vendored or installed as a dependency.
+  k6:
+    image: ${SCALE_K6_IMAGE:-grafana/k6:1.3.0}
+    profiles: ['tools']
+    restart: 'no'
+    user: '${SCALE_UID:-0}:${SCALE_GID:-0}'
+    working_dir: /scale/k6
+    environment:
+      SCALE_BASE_URL: http://web:8080
+      SCALE_ORIGIN: ${SCALE_APP_URL:-http://127.0.0.1:18080}
+      SCALE_STUB_URL: http://stub:4181
+      SCALE_FIXTURES: /results/fixtures.json
+      K6_NO_USAGE_REPORT: 'true'
+    volumes:
+      - ./:/scale:ro
+      - ${SCALE_RESULTS_DIR:-./results}:/results
+
+volumes:
+  pgdata:
+  storage:
