@@ -153,10 +153,7 @@ export function ExportNotice({ state, className }: { state: DocumentExport; clas
       {state.error && (
         <p
           role="alert"
-          className={cn(
-            'flex items-start gap-2 text-xs text-[var(--danger-on-tint)]',
-            className,
-          )}
+          className={cn('flex items-start gap-2 text-xs text-[var(--danger-on-tint)]', className)}
         >
           <span className="min-w-0 flex-1">{state.error}</span>
           <button

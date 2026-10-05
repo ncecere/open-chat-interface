@@ -7,19 +7,19 @@
 // the OS. A test runs this file against the provider's rules.
 (() => {
   try {
-    var mode = (value) =>
+    const mode = (value) =>
       value === 'light' || value === 'dark' || value === 'system' ? value : null;
-    var theme =
+    let theme =
       mode(localStorage.getItem('oci.theme')) ||
       mode(localStorage.getItem('oci.instanceTheme')) ||
       'dark';
     if (theme === 'system') {
       theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    var root = document.documentElement;
+    const root = document.documentElement;
     root.classList.toggle('dark', theme === 'dark');
     root.classList.toggle('light', theme === 'light');
-    var color = localStorage.getItem('oci.colorTheme');
+    const color = localStorage.getItem('oci.colorTheme');
     root.dataset.colorTheme =
       color === 'blue' || color === 'violet' || color === 'emerald' ? color : 'neutral';
   } catch (_) {

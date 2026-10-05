@@ -1,3 +1,4 @@
+import { X509Certificate } from 'node:crypto';
 import { desc, eq, schema } from '@oci/db';
 import {
   claimMappingsSchema,
@@ -5,7 +6,6 @@ import {
   type SsoProviderSummary,
   USER_ROLES,
 } from '@oci/shared';
-import { X509Certificate } from 'node:crypto';
 import { APIError } from 'better-auth/api';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -66,9 +66,7 @@ async function registerWithPlugin(
  * IdP metadata carries.
  */
 function assertIdpCertificate(value: string): void {
-  const body = value
-    .replace(/-----(BEGIN|END) CERTIFICATE-----/g, '')
-    .replace(/\s+/g, '');
+  const body = value.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s+/g, '');
   const pem = `-----BEGIN CERTIFICATE-----\n${body.match(/.{1,64}/g)?.join('\n') ?? ''}\n-----END CERTIFICATE-----`;
   try {
     new X509Certificate(pem);
