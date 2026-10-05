@@ -12,13 +12,14 @@ import { ReadOnlyBanner } from '../../src/components/layout/read-only-banner';
 import { chatErrorText } from '../../src/lib/api-client';
 import { fetchRetryingDrain } from '../../src/lib/chat-retry';
 import {
+  formatReadOnlyTime,
   noteReadOnlyRefusal,
   readOnlyMessage,
   readOnlyStatus,
   setReadOnlyStatus,
 } from '../../src/lib/read-only';
 import { ThemeProvider } from '../../src/providers/theme-provider';
-import { button, cleanup, click, renderAdmin, settle } from './admin-test-utils';
+import { button, cleanup, click, renderAdmin, settle, typeInto } from './admin-test-utils';
 
 /**
  * Read-only maintenance mode in the web app (v0.11 design, section 9): the
@@ -343,6 +344,33 @@ describe('administration', () => {
         (box) => box.disabled,
       ),
     ).toBe(true);
+  });
+
+  it('says why a window cannot be scheduled yet, beside the button (#81)', async () => {
+    api.get.mockResolvedValue(view());
+    adminRoot = (await renderAdmin(<MaintenanceMode />)).root;
+    const schedule = button('Schedule window');
+    const reason = () =>
+      document.getElementById(schedule.getAttribute('aria-describedby') ?? '')?.textContent;
+    expect(schedule.disabled).toBe(true);
+    expect(reason()).toBe('Choose when the window starts and ends.');
+
+    // The window's own fields (the switch above has an Until field too).
+    const starts = document.querySelector<HTMLInputElement>('input[id$="-start"]');
+    const ends = document.querySelector<HTMLInputElement>('input[id$="-end"]');
+    const set = typeInto;
+    await set(starts!, '2027-01-10T10:00');
+    await set(ends!, '2027-01-10T09:00');
+    expect(reason()).toBe('The end must be after the start.');
+    await set(ends!, '2027-01-10T12:00');
+    expect(schedule.disabled).toBe(false);
+    expect(schedule.getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('names the year of a window in another year (#81)', () => {
+    const now = new Date('2026-10-05T12:00:00');
+    expect(formatReadOnlyTime('2027-01-10T10:00:00', now)).toContain('2027');
+    expect(formatReadOnlyTime('2026-10-11T10:00:00', now)).not.toContain('2026');
   });
 
   it('chooses the jobs that keep running', async () => {

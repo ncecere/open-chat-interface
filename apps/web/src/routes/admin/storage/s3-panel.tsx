@@ -145,13 +145,17 @@ export function S3Panel({ controller }: { controller: StorageSettingsController 
             under <code>.oci-health-check/</code>, verifies it, and deletes it.
           </p>
           {hasChanges && (
-            <p className="mt-2 text-xs text-[var(--warning)]">Save changes before testing them.</p>
+            <p id="s3-test-unsaved" className="mt-2 text-xs text-[var(--warning)]">
+              Save changes before testing them.
+            </p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
               disabled={hasChanges || health.isPending || save.isPending}
+              // The reason the tests are unavailable, for screen readers too (#81).
+              aria-describedby={hasChanges ? 's3-test-unsaved' : undefined}
               onClick={() => health.mutate('read')}
             >
               {health.isPending && health.variables === 'read' && <Spinner />}
@@ -162,6 +166,7 @@ export function S3Panel({ controller }: { controller: StorageSettingsController 
               size="sm"
               variant="outline"
               disabled={hasChanges || health.isPending || save.isPending}
+              aria-describedby={hasChanges ? 's3-test-unsaved' : undefined}
               onClick={() => health.mutate('write')}
             >
               {health.isPending && health.variables === 'write' && <Spinner />}

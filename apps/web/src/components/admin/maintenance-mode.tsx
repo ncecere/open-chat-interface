@@ -243,6 +243,13 @@ function ScheduledWindow({ settings, save }: { settings: MaintenanceSettings; sa
   const start = fromLocalInput(startsAt);
   const end = fromLocalInput(endsAt);
   const valid = Boolean(start && end && end > start);
+  // Why Schedule is unavailable, beside it rather than a silently disabled button (#81).
+  const problem =
+    !start || !end
+      ? 'Choose when the window starts and ends.'
+      : end <= start
+        ? 'The end must be after the start.'
+        : null;
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -299,7 +306,12 @@ function ScheduledWindow({ settings, save }: { settings: MaintenanceSettings; sa
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="secondary" disabled={!valid || save.isPending}>
+        <Button
+          type="submit"
+          variant="secondary"
+          disabled={!valid || save.isPending}
+          aria-describedby={problem ? `${id}-window-problem` : undefined}
+        >
           {settings.window ? 'Update window' : 'Schedule window'}
         </Button>
         {settings.window && (
@@ -311,6 +323,11 @@ function ScheduledWindow({ settings, save }: { settings: MaintenanceSettings; sa
           >
             Cancel window
           </Button>
+        )}
+        {problem && (
+          <p id={`${id}-window-problem`} className="text-[var(--text-muted)] text-xs">
+            {problem}
+          </p>
         )}
       </div>
     </form>
