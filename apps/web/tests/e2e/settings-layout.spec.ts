@@ -97,8 +97,15 @@ test('the header offers Light, Dark and System, and the wide avatar is 96px', as
   await page.goto('/settings/customization');
   await expect(page.getByRole('button', { name: 'Toggle theme' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Appearance settings' }).click();
-  await page.getByRole('menuitem', { name: 'Light' }).click();
+  // Radio items: the current theme is announced as checked (#92).
+  await page.getByRole('menuitemradio', { name: 'Light' }).click();
   await expect(page.locator('html')).toHaveClass(/\blight\b/);
+  await page.getByRole('button', { name: 'Appearance settings' }).click();
+  await expect(page.getByRole('menuitemradio', { name: 'Light' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await page.keyboard.press('Escape');
   // The Appearance row in Customization reflects the same choice.
   await expect(page.getByRole('radio', { name: 'Light' })).toBeChecked();
   await page.locator('[role="radiogroup"] label', { hasText: 'Dark' }).click();

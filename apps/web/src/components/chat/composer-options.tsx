@@ -4,6 +4,7 @@ import { type ChangeEvent, type ComponentPropsWithoutRef, forwardRef, useRef } f
 import { ModelPicker } from '~/components/chat/model-picker';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSub,
@@ -45,6 +46,8 @@ const Pill = forwardRef<
       ref={ref}
       type="button"
       aria-label={label}
+      // A toggle says whether it is on, not only with its border (#92).
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
       className={cn(
@@ -124,13 +127,16 @@ export function ComposerOptions({
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           )}
-          <DropdownMenuItem
+          {/* On or off, announced as checked: "Search disabled" read as if the
+              feature were unavailable (#92). */}
+          <DropdownMenuCheckboxItem
             disabled={!supportsSearch}
-            onSelect={() => onWebSearchChange(!webSearch)}
+            checked={webSearch}
+            onCheckedChange={(checked) => onWebSearchChange(checked === true)}
           >
             <Globe />
-            Search {webSearch ? 'enabled' : 'disabled'}
-          </DropdownMenuItem>
+            Search the web
+          </DropdownMenuCheckboxItem>
           <DropdownMenuItem
             disabled={!attachmentsAvailable || !onAttachFiles}
             onSelect={() => fileInputRef.current?.click()}

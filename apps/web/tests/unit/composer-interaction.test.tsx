@@ -210,6 +210,25 @@ describe('Composer interaction', () => {
     expect(container.textContent).not.toMatch(/instant/i);
   });
 
+  it('says whether Search is on, as a toggle and in the phone menu (#92)', async () => {
+    await render({ webSearch: true });
+    expect(button('Search').getAttribute('aria-pressed')).toBe('true');
+    await render({ webSearch: false });
+    expect(button('Search').getAttribute('aria-pressed')).toBe('false');
+    // The reasoning pill opens a menu; it is not a toggle.
+    expect(button('low').hasAttribute('aria-pressed')).toBe(false);
+
+    await act(async () => {
+      button('More composer options').dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: false }),
+      );
+    });
+    const item = document.querySelector('[role="menuitemcheckbox"]');
+    expect(item?.textContent).toBe('Search the web');
+    expect(item?.getAttribute('aria-checked')).toBe('false');
+    expect(document.body.textContent).not.toContain('Search disabled');
+  });
+
   it('focuses the message field on mount only when asked', async () => {
     await render();
     expect(document.activeElement).not.toBe(textarea());

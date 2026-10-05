@@ -6,9 +6,11 @@ look things up before answering.
 
 ## Turning it on
 
-The **Search** control sits beside the model name in the composer. It applies to
-the message you are about to send, not to the conversation as a whole, so you
-can use it for one question and not the next.
+The **Search** control sits beside the model name in the composer (on a phone,
+**Search the web** in the composer's **+** menu). Once on, it stays on for the
+messages you send in this conversation, and for **Retry**, until you
+turn it off; it is not saved with the conversation, so it starts off when you
+open one again. Turn it off after a question to use it for that question only.
 
 If the control is absent, web search is not available to you: an administrator
 has not turned it on, has turned it off for your role, or its search provider is
