@@ -284,13 +284,27 @@ describe.skipIf(!available)('live drain on shutdown', () => {
     return pool.db.select().from(schema.message).where(eq(schema.message.threadId, threadId));
   }
 
+  /** A histogram's sample count, from the exposition. */
+  async function histogramCount(name: string): Promise<number> {
+    const { renderMetrics } = await import('../../services/observability/metrics.js');
+    const counts = [
+      ...(await renderMetrics()).matchAll(new RegExp(`^${name}_count\\S* (\\d+)$`, 'gm')),
+    ];
+    return counts.reduce((sum, match) => sum + Number(match[1]), 0);
+  }
+
   it('reports not-ready, refuses new turns before storing them, and lets a reply finish', async () => {
     const busy = await thread();
     const other = await thread();
     model({ deltas: 8, everyMs: 100 });
+    const replyStarts = await histogramCount('oci_chat_reply_start_seconds');
+    const firstOutputs = await histogramCount('oci_provider_first_output_seconds');
     const reply = await send(busy);
     expect(reply.status).toBe(200);
     const reading = await readUntil(reply.body!, (text) => text.includes('piece 0'));
+    // Service objectives: the time OCI added, and the provider's part.
+    expect(await histogramCount('oci_chat_reply_start_seconds')).toBe(replyStarts + 1);
+    expect(await histogramCount('oci_provider_first_output_seconds')).toBe(firstOutputs + 1);
     const started = Date.now();
     const done = shutdown('SIGTERM');
 
@@ -344,6 +358,10 @@ describe.skipIf(!available)('live drain on shutdown', () => {
     const resumed = await fetch(`${base}/api/chat/${busy}/stream`);
     expect(resumed.status).toBe(200);
     const resumedText = resumed.text();
+    const metrics = await import('../../services/observability/metrics.js');
+    const interruptedHere = metrics.drainInterruptedReplies.get();
+    const interruptedKey = 'oci:metrics:drain-interrupted-replies';
+    const interruptedEverywhere = Number((await redis.get(interruptedKey)) ?? 0);
 
     const started = Date.now();
     await shutdown('SIGTERM');
@@ -364,6 +382,11 @@ describe.skipIf(!available)('live drain on shutdown', () => {
       errorMessage: expect.stringMatching(/interrupted/i),
     });
     expect(JSON.stringify(assistant!.parts)).toContain('piece 0');
+    // Counted here and, for the alert, in Redis (this process is about to exit).
+    expect(metrics.drainInterruptedReplies.get()).toBe(interruptedHere + 1);
+    expect(Number(await redis.get(interruptedKey))).toBeGreaterThanOrEqual(
+      interruptedEverywhere + 1,
+    );
     expect(await redis.hget(`oci:chat-stream:run:${runId}:metadata`, 'status')).toBe('cancelled');
     const [event] = await pool.db
       .select()

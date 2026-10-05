@@ -10,6 +10,7 @@ import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
 import { cancelActiveChatRun, resumeActiveChatRun } from '../services/chat-streams.js';
 import { chatRateLimit } from '../services/limits/rate-limit.js';
+import { requestStartedAt } from '../services/observability/request-timing.js';
 import { serializeThread } from '../services/thread-summary.js';
 import { getOwnedThread, listConversation } from '../services/threads.js';
 
@@ -32,7 +33,7 @@ chatRoutes.post('/', async (c) => {
 
   const input = await parseBody(c, sendMessageSchema);
   const { turn, run } = await setupTurn(user, input);
-  return streamResponse(turn, run);
+  return streamResponse(turn, run, { receivedAt: requestStartedAt(c.req.raw) });
 });
 
 /**
@@ -52,7 +53,7 @@ chatRoutes.post('/:threadId/approvals', async (c) => {
   }
   const input = await parseBody(c, answerToolApprovalsSchema);
   const { turn, run } = await setupApprovalContinuation(user, c.req.param('threadId'), input);
-  return streamResponse(turn, run);
+  return streamResponse(turn, run, { receivedAt: requestStartedAt(c.req.raw) });
 });
 
 /** Replays the active SSE stream after authenticating the thread owner. */

@@ -160,6 +160,22 @@ v0.9.1, which has no images). Releases already published for `linux/amd64` only
 version and SHA tags no longer match a two-platform release, so the workflow
 refuses rather than overwriting them.
 
+### Helm chart
+
+After both images are published, the `chart` job packages
+`deploy/helm/open-chat-interface` from the release commit and pushes it to
+GHCR as an OCI artifact, `oci://ghcr.io/ncecere/charts/open-chat-interface`,
+with the release as its version (`v0.11.0` publishes chart `0.11.0`, whose
+`appVersion` is `v0.11.0`; the job refuses a `Chart.yaml` that disagrees). It
+uses the same `GITHUB_TOKEN` with `packages:write`. Like the image version
+tags, a published chart version is never overwritten: a rerun finds it and
+keeps it. Tags from before v0.11 have no chart and publish none.
+
+The first publication creates the `charts/open-chat-interface` package;
+GitHub makes it private. Make it public once (package settings → Change
+visibility) and check it is linked to this repository, as for the image
+packages. `latest` has no chart equivalent: install a version.
+
 ## Verify
 
 - Confirm **Publish containers** and its validation jobs are green; inspect
@@ -175,6 +191,14 @@ refuses rather than overwriting them.
     node -p 'process.arch + " " + process.env.OCI_VERSION'   # arm64 vX.Y.Z
   docker run --rm --platform linux/amd64 ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
     node -p 'process.arch + " " + process.env.OCI_VERSION'   # x64 vX.Y.Z
+  ```
+- Confirm the chart was published and renders the release's images:
+
+  ```bash
+  helm show chart oci://ghcr.io/ncecere/charts/open-chat-interface --version X.Y.Z
+  # version: X.Y.Z, appVersion: vX.Y.Z
+  helm template oci oci://ghcr.io/ncecere/charts/open-chat-interface --version X.Y.Z \
+    --set secrets.existingSecret=x --set config.appUrl=https://chat.example.com | grep image:
   ```
 - For the newest stable tag on `main`, confirm `latest` points to that release
   for both images. An older release must leave `latest` unchanged.

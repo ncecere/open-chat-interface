@@ -1,8 +1,13 @@
 import {
   chatReplies,
   chatReplyDuration,
+  chatReplyStart,
+  drainInterruptedReplies,
   jobDuration,
+  jobLastSuccess,
   jobRuns,
+  providerFirstOutput,
+  readinessTransitions,
   toolCallDuration,
   toolCalls,
   webSearchDuration,
@@ -52,6 +57,39 @@ export function observeToolCall(toolId: string, outcome: string, durationMs: num
 export function observeJob(name: string, outcome: 'success' | 'error', durationMs: number): void {
   jobRuns.inc({ job: name, outcome });
   jobDuration.observe({ job: name }, durationMs / 1000);
+  if (outcome === 'success') jobLastSuccess.set({ job: name }, Math.floor(Date.now() / 1000));
+}
+
+/**
+ * The time OCI added before a reply's first model request (docs/dev/slo.md):
+ * since the request arrived, less the wait for provider capacity.
+ */
+export function observeReplyStart(addedMs: number): void {
+  chatReplyStart.observe({}, Math.max(0, addedMs) / 1000);
+}
+
+/** From a reply's first model request to its first output, retries included. */
+export function observeProviderFirstOutput(provider: string, model: string, ms: number): void {
+  providerFirstOutput.observe({ provider, model }, Math.max(0, ms) / 1000);
+}
+
+/** A reply saved as interrupted because the drain limit ran out (v0.11 design, item 13). */
+export function observeDrainInterruptedReply(): void {
+  drainInterruptedReplies.inc();
+}
+
+let lastReadiness: boolean | null = null;
+
+/** The readiness probe's answer; only changes are counted. */
+export function observeReadiness(ready: boolean): void {
+  if (lastReadiness !== null && lastReadiness !== ready)
+    readinessTransitions.inc({ to: ready ? 'ready' : 'not_ready' });
+  lastReadiness = ready;
+}
+
+/** Test seam. */
+export function resetReadinessForTests(): void {
+  lastReadiness = null;
 }
 
 /**

@@ -177,9 +177,17 @@ for reuse (named after the project: `OCI_UPGRADE_PROJECT` runs a second test
 beside a running one, with `--port` set apart, and its own images); injected
 ones are `oci-upgrade-api:inject-<case>`.
 
-Released images are `linux/amd64` only. On an arm64 machine FROM runs
-emulated, which is slower but was well within the bounds on an Apple silicon
-laptop; TO is built natively.
+Images run natively wherever they can. TO is built for the Docker host's
+architecture (`--platform linux/<host>`, whatever `DOCKER_DEFAULT_PLATFORM`
+says), and a published image is pulled for it when the registry has it:
+releases from v0.11 are `linux/amd64` and `linux/arm64`. Releases before
+v0.11 are `linux/amd64` only, so on an arm64 machine FROM runs emulated until
+it is replaced (a local copy of another architecture is replaced by a native
+pull when one exists). The report's *Platforms* line says which. The TO images
+build (API and web at once) while FROM's stack starts and is seeded, and are
+awaited before the load begins, so building adds little to a run. CI runs on
+amd64 and passes prebuilt images with `--to-api`/`--to-web`, so nothing
+changes there.
 
 The smoke suite also runs on its own against any stack built this way:
 `node tools/upgrade-test/smoke.mjs --base http://127.0.0.1:18480`.

@@ -34,13 +34,18 @@ kubectl -n oci create secret generic oci-runtime \
   --from-literal=METRICS_TOKEN="$(openssl rand -hex 24)" \
   --from-literal=INITIAL_ADMIN_EMAIL=admin@example.com
 
-helm install oci deploy/helm/open-chat-interface -n oci \
+helm install oci oci://ghcr.io/ncecere/charts/open-chat-interface --version 0.11.0 -n oci \
   --set secrets.existingSecret=oci-runtime \
   --set config.appUrl=https://chat.example.com \
   --set web.trustedProxies='10.244.0.0/16' \
   --set ingress.enabled=true --set ingress.className=nginx \
   --set 'ingress.hosts[0].host=chat.example.com'
 ```
+
+The chart is published to GHCR as an OCI artifact with every release from
+v0.11 (chart `X.Y.Z` deploys images `vX.Y.Z`; `helm show values
+oci://ghcr.io/ncecere/charts/open-chat-interface --version X.Y.Z`). From a
+checkout, use the path `deploy/helm/open-chat-interface` instead.
 
 Keep `AUTH_SECRET` and `ENCRYPTION_KEY` in your secret manager: losing
 `ENCRYPTION_KEY` makes stored provider and connector credentials unreadable.
@@ -55,7 +60,8 @@ kubectl -n oci run oci-upgrade-check --rm -i --restart=Never \
   --image=ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
   --overrides='{"spec":{"containers":[{"name":"oci-upgrade-check","image":"ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z","command":["node","dist/scripts/upgrade-check.js"],"envFrom":[{"secretRef":{"name":"oci-runtime"}}]}]}}'
 # 2. Upgrade: migrate -> rolling update -> migrate --post.
-helm upgrade oci deploy/helm/open-chat-interface -n oci --reuse-values --timeout 30m
+helm upgrade oci oci://ghcr.io/ncecere/charts/open-chat-interface --version X.Y.Z \
+  -n oci --reuse-values --timeout 30m
 ```
 
 `helm upgrade` runs the pre-upgrade hook `node dist/migrate.js` (fast,
@@ -111,10 +117,11 @@ read-only root filesystems, `seccompProfile: RuntimeDefault`, no privilege
 escalation and all capabilities dropped; the chart passes the Pod Security
 `restricted` profile (tested on kind). Writable paths are emptyDir volumes:
 `/tmp` and the attachment directory for the API image, `/data`, `/config` and
-`/tmp` for Caddy. The caddy binary carries the `cap_net_bind_service` file
-capability, so the web container keeps `NET_BIND_SERVICE` in its bounding set
-(the only capability `restricted` allows adding); it is not granted, since
-Caddy runs unprivileged on port 8080. No pod mounts a service account token;
+`/tmp` for Caddy. Caddy listens on 8080, and from v0.11 the web image removes
+the binary's `cap_net_bind_service` file capability, so the web container
+drops every capability with nothing added. Web images before v0.11 still
+carry it, and executing one fails (`operation not permitted`) unless
+`containerSecurityContext.web.capabilities.add` is `[NET_BIND_SERVICE]`. No pod mounts a service account token;
 the post-upgrade hook projects one into its `wait-for-rollout` init container
 only, bound to a Role that can read the two Deployments and list Pods and
 that exists only while the hook runs.
@@ -238,6 +245,7 @@ Every key is documented in [values.yaml](values.yaml) and checked by
 | `networkPolicy.egress.enabled`, `.extraEgress` | off | DNS plus your database, Redis, S3 and providers. |
 | `metrics.serviceMonitor.enabled` | `false` | Prometheus Operator; needs `METRICS_TOKEN` in the Secret. |
 | `metrics.serviceMonitor.tokenSecretKey`, `.interval`, `.scrapeTimeout`, `.labels` | `METRICS_TOKEN`, `30s`, `10s`, `{}` | |
+| `metrics.prometheusRule.enabled`, `.labels` | `false`, `{}` | A `PrometheusRule` with the service objectives' recording rules, burn-rate and operational alerts (`files/prometheus-rules.yaml`, a copy of `deploy/monitoring/prometheus-rules.yaml`; docs/dev/slo.md). `labels` must match your Prometheus's rule selector. |
 | `tests.enabled` | `true` | `helm test`: `/api/health/ready` through the web Service. |
 | `clusterDomain` | `cluster.local` | For the API's DNS name. |
 

@@ -190,6 +190,59 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node automation/scripts/ghcr-release.mjs
 
+  chart:
+    # The Helm chart as an OCI artifact, once both images of the release are
+    # published: oci://ghcr.io/<owner>/charts/open-chat-interface:<version>,
+    # version = the release without the "v". Like the image version tags it
+    # is never overwritten: an existing version is kept.
+    name: Publish the Helm chart
+    needs: [prepare, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.0
+      - name: Package, then push unless the version exists
+        env:
+          IMAGE_ROOT: ${{ needs.prepare.outputs.image_root }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          chart=source/deploy/helm/open-chat-interface
+          if [ ! -f "$chart/Chart.yaml" ]; then
+            echo "No chart in $RELEASE_TAG (the chart ships from v0.11); nothing to publish."
+            exit 0
+          fi
+          version=${RELEASE_TAG#v}
+          # release:check ties these to the packages; refuse a mismatch anyway.
+          grep -qx "version: $version" "$chart/Chart.yaml"
+          grep -qx "appVersion: \"$RELEASE_TAG\"" "$chart/Chart.yaml"
+          repo="oci://${IMAGE_ROOT%/*}/charts"
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GHCR_USERNAME" --password-stdin
+          if helm show chart "$repo/open-chat-interface" --version "$version" > /dev/null 2>&1; then
+            echo "$repo/open-chat-interface:$version already exists; kept as published."
+            result=retained
+          else
+            helm lint --strict "$chart" --set secrets.existingSecret=oci-runtime --set config.appUrl=https://chat.example.com
+            helm package "$chart" --destination "$RUNNER_TEMP/chart"
+            helm push "$RUNNER_TEMP/chart/open-chat-interface-$version.tgz" "$repo"
+            result=published
+          fi
+          helm show chart "$repo/open-chat-interface" --version "$version" | grep -qx "appVersion: $RELEASE_TAG"
+          printf '## Helm chart\n\n- %s/open-chat-interface:%s (%s)\n\n```\nhelm install oci %s/open-chat-interface --version %s\n```\n' \
+            "$repo" "$version" "$result" "$repo" "$version" >> "$GITHUB_STEP_SUMMARY"
+
   latest:
     name: Promote latest after both images are available
     needs: [prepare, publish]

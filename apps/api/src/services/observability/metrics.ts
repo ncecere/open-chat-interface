@@ -135,17 +135,44 @@ export class Histogram extends LabelledMetric<{ buckets: number[]; sum: number; 
   }
 }
 
-/** A gauge whose samples are read when scraped; a failing reader contributes no samples. */
+/** A gauge set by the process, such as the time of a job's last success. */
+export class Gauge extends LabelledMetric<{ value: number }> {
+  set(labels: Labels, value: number): void {
+    if (!Number.isFinite(value)) return;
+    this.entry(labels, () => ({ value: 0 })).value = value;
+  }
+
+  /** Current value for a label set, for tests; undefined when never set. */
+  get(labels: Labels = {}): number | undefined {
+    const key = this.labelNames.map((name) => String(labels[name] ?? '')).join('\u0000');
+    return this.series.get(key)?.state.value;
+  }
+
+  render(): string {
+    const lines = [`# HELP ${this.name} ${this.help}`, `# TYPE ${this.name} gauge`];
+    for (const { values, state } of this.series.values())
+      lines.push(
+        `${this.name}${formatLabels(this.labelNames, values)} ${formatNumber(state.value)}`,
+      );
+    return lines.join('\n');
+  }
+}
+
+/**
+ * Samples read when scraped; a failing reader contributes no samples. A gauge
+ * by default; `counter` for a total kept elsewhere (such as in Redis).
+ */
 export class CollectedGauge implements Metric {
   constructor(
     readonly name: string,
     readonly help: string,
     readonly labelNames: readonly string[],
     private readonly collect: () => Promise<Array<{ labels?: Labels; value: number }>>,
+    readonly type: 'gauge' | 'counter' = 'gauge',
   ) {}
 
   async render(): Promise<string> {
-    const lines = [`# HELP ${this.name} ${this.help}`, `# TYPE ${this.name} gauge`];
+    const lines = [`# HELP ${this.name} ${this.help}`, `# TYPE ${this.name} ${this.type}`];
     try {
       for (const sample of await this.collect()) {
         const values = this.labelNames.map((name) => String(sample.labels?.[name] ?? ''));
@@ -172,6 +199,14 @@ const DURATION_BUCKETS = [
   0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300,
 ];
 const LONG_BUCKETS = [1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600, 7200];
+/**
+ * Request durations: the duration buckets plus 0.3 s, the sidebar and
+ * conversation-opening objective's threshold (docs/dev/slo.md), so its share
+ * of fast requests is exact rather than interpolated.
+ */
+const HTTP_BUCKETS = [
+  0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.3, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300,
+];
 
 export const httpRequests = register(
   new Counter('oci_http_requests_total', 'HTTP requests by method, route template and status.', [
@@ -185,7 +220,7 @@ export const httpRequestDuration = register(
     'oci_http_request_duration_seconds',
     'HTTP request duration until the response starts, by method and route template.',
     ['method', 'route'],
-    DURATION_BUCKETS,
+    HTTP_BUCKETS,
   ),
 );
 export const chatReplies = register(
@@ -286,6 +321,52 @@ export const errors = register(
   new Counter('oci_errors_total', 'Unexpected server errors by source.', ['source']),
 );
 
+/**
+ * Service objectives (v0.11 design, item 24; docs/dev/slo.md). Reply start
+ * added by OCI: from a turn's request arriving to its first model request
+ * being sent, less any wait for provider capacity (exported separately as
+ * `oci_provider_queue_wait_seconds`). The provider's own latency is
+ * `oci_provider_first_output_seconds`.
+ */
+const REPLY_START_BUCKETS = [0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2.5, 5, 10, 30];
+export const chatReplyStart = register(
+  new Histogram(
+    'oci_chat_reply_start_seconds',
+    'Time OCI adds before a reply: from the request arriving to the first model request, less any wait for provider capacity.',
+    [],
+    REPLY_START_BUCKETS,
+  ),
+);
+export const providerFirstOutput = register(
+  new Histogram(
+    'oci_provider_first_output_seconds',
+    'From the first model request of a reply to its first output (text, reasoning or a tool call), provider retries included.',
+    ['provider', 'model'],
+    REPLY_START_BUCKETS,
+  ),
+);
+export const drainInterruptedReplies = register(
+  new Counter(
+    'oci_drain_interrupted_replies_total',
+    'Replies this process saved as interrupted because they were still running when its drain limit (SHUTDOWN_DRAIN_TIMEOUT_MS) ran out.',
+    [],
+  ),
+);
+export const readinessTransitions = register(
+  new Counter(
+    'oci_readiness_transitions_total',
+    'Changes of /api/health/ready between ready and not ready (draining excluded), by the state changed to.',
+    ['to'],
+  ),
+);
+export const jobLastSuccess = register(
+  new Gauge(
+    'oci_job_last_success_timestamp_seconds',
+    'When each background job last finished successfully on this process (Unix seconds).',
+    ['job'],
+  ),
+);
+
 register(
   new CollectedGauge('oci_build_info', 'OCI version of this process.', ['version'], async () => [
     { labels: { version: APP_VERSION }, value: 1 },
@@ -319,9 +400,10 @@ export function registerCollectedGauge(
   help: string,
   labelNames: readonly string[],
   collect: () => Promise<Array<{ labels?: Labels; value: number }>>,
+  type: 'gauge' | 'counter' = 'gauge',
 ): void {
   if (registry.some((metric) => metric.name === name)) return;
-  register(new CollectedGauge(name, help, labelNames, collect));
+  register(new CollectedGauge(name, help, labelNames, collect, type));
 }
 
 /** The whole registry in Prometheus text format. */

@@ -75,10 +75,13 @@ Sentinel) or managed services. The chart README lists every value.
    so `METRICS_TOKEN`, `INITIAL_ADMIN_EMAIL`, SMTP and the v0.11
    `CONTROL_DATABASE_URL`, `READ_DATABASE_URL` and Redis Sentinel or Cluster
    settings go there too. Never put secrets in values.
-2. Install:
+2. Install the chart published with the release (from v0.11, an OCI
+   artifact on GHCR whose version is the release without the `v`; from a
+   checkout, use `deploy/helm/open-chat-interface` instead):
 
    ```bash
-   helm install oci deploy/helm/open-chat-interface -n oci \
+   helm install oci oci://ghcr.io/ncecere/charts/open-chat-interface \
+     --version X.Y.Z -n oci \
      --set secrets.existingSecret=oci-runtime \
      --set config.appUrl=https://chat.example.com \
      --set web.trustedProxies='10.244.0.0/16' \
@@ -95,8 +98,9 @@ For production values: at least two API and two web replicas (the defaults),
 one or two workers, `web.trustedProxies` set to your ingress controller's pod
 range (see [Behind another proxy or an ingress](#behind-another-proxy-or-an-ingress)),
 streaming-friendly ingress settings (response buffering off, read timeout of
-an hour), `metrics.serviceMonitor.enabled` with `METRICS_TOKEN`, and an
-image digest pin. `DATABASE_URL` must be direct or a session-mode pooler, as
+an hour), `metrics.serviceMonitor.enabled` with `METRICS_TOKEN` and
+`metrics.prometheusRule.enabled` for the [service objectives and
+alerts](#service-objectives-and-alerts), and an image digest pin. `DATABASE_URL` must be direct or a session-mode pooler, as
 above.
 
 ### Upgrading with Helm
@@ -106,7 +110,8 @@ above.
 kubectl -n oci run oci-upgrade-check --rm -i --restart=Never \
   --image=ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
   --overrides='{"spec":{"containers":[{"name":"oci-upgrade-check","image":"ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z","command":["node","dist/scripts/upgrade-check.js"],"envFrom":[{"secretRef":{"name":"oci-runtime"}}]}]}}'
-helm upgrade oci deploy/helm/open-chat-interface -n oci --reuse-values --timeout 30m
+helm upgrade oci oci://ghcr.io/ncecere/charts/open-chat-interface --version X.Y.Z \
+  -n oci --reuse-values --timeout 30m
 ```
 
 `helm upgrade` is the three-phase upgrade below:
@@ -148,8 +153,14 @@ and no `preStop` (nothing routes to them).
 All pods run as non-root with read-only root filesystems, the `RuntimeDefault`
 seccomp profile and no privilege escalation, and pass the Pod Security
 `restricted` profile; only `/tmp`, the attachment directory and Caddy's
-`/data` and `/config` are writable (emptyDir or the storage volume). No pod
-mounts a service account token. A NetworkPolicy (on by default) lets only the
+`/data` and `/config` are writable (emptyDir or the storage volume). Every
+container drops all capabilities and adds none: Caddy listens on 8080, and
+from v0.11 the web image no longer gives its binary the
+`cap_net_bind_service` file capability, which made `exec` fail with every
+capability dropped (earlier charts kept `NET_BIND_SERVICE` in the web
+container's bounding set for it). To run a web image older than v0.11 with
+this chart, set `containerSecurityContext.web.capabilities.add:
+[NET_BIND_SERVICE]`. No pod mounts a service account token. A NetworkPolicy (on by default) lets only the
 web pods and metrics scrapers reach the API, which is what keeps the client
 address trustworthy; egress rules are optional (`networkPolicy.egress`).
 
@@ -1100,6 +1111,21 @@ migrations](#background-migrations)). Re-embedding is charged as usage to
 each file's owner, as embedding an upload is; the tab shows the estimated
 cost before a model change is saved.
 
+#### Metrics, objectives and the web image (no migration)
+
+- New metrics for the [service objectives and
+  alerts](#service-objectives-and-alerts), all with fixed label
+  vocabularies. `oci_http_request_duration_seconds` gains a `0.3` bucket, and
+  `route` now names the handler that answered: `GET /api/threads/search` was
+  counted as `/api/threads/:id` before, as were requests to other fixed
+  routes registered before a `/:id` route. Dashboards filtering on
+  `/api/threads/:id` see search leave it.
+- The web image removes the caddy binary's `cap_net_bind_service` file
+  capability; Caddy keeps listening on 8080 and the published port is
+  unchanged. Docker Compose needs nothing; a container may now also run with
+  `cap_drop: [ALL]`. Kubernetes manifests that added `NET_BIND_SERVICE` for
+  Caddy can drop it (the chart does).
+
 ## Shutting down and draining
 
 From v0.11 an API replica drains when it is stopped, so replacing replicas
@@ -1328,6 +1354,35 @@ The `oci-web` Deployment is the API one under
 [Shutting down and draining → Kubernetes](#kubernetes), with
 `OCI_ROLE=web`. During an upgrade, replace workers like any other replica;
 jobs that stop mid-batch are safe to run again.
+
+## Service objectives and alerts
+
+From v0.11 OCI publishes service objectives, measured from its own metrics
+over 30 days ([full definitions](dev/slo.md)):
+
+| Objective | Target | Metric |
+| --- | --- | --- |
+| Availability: API requests not answered with a 5xx (health probes and draining refusals excluded) | 99.9 % | `oci_http_requests_total` |
+| Reply start added by OCI, request arrival to the first model request, capacity waits excluded | p95 under 1 s | `oci_chat_reply_start_seconds` |
+| Sidebar requests and opening a conversation | p95 under 300 ms | `oci_http_request_duration_seconds` |
+| Conversation search | p95 under 1 s | `oci_http_request_duration_seconds` |
+
+The model provider's own latency and errors are outside them and exported
+separately (`oci_provider_first_output_seconds`, `oci_provider_throttled_total`,
+`oci_chat_replies_total`).
+
+[`deploy/monitoring/prometheus-rules.yaml`](../deploy/monitoring/prometheus-rules.yaml)
+has recording rules for each objective, fast and slow burn-rate alerts
+(1 h / 5 min and 6 h / 30 min) and operational alerts: database pool
+saturation and replication lag, no background worker, stalled jobs, queue
+backlogs, failed or stalled background migrations, the usage-rollup fold,
+provider errors, throttling, latency and capacity waits, Redis, readiness
+flapping, and replies interrupted by a drain. Load it with `rule_files`, or set
+`metrics.prometheusRule.enabled` in the Helm chart, which renders the same
+rules. [`deploy/monitoring/grafana-dashboard.json`](../deploy/monitoring/grafana-dashboard.json)
+imports into Grafana with any Prometheus data source. Every API and worker
+replica must be scraped (`METRICS_TOKEN`, [Observability](admin/observability.md#metrics)).
+[docs/dev/slo.md](dev/slo.md) explains each alert and its first steps.
 
 ## Provider capacity
 

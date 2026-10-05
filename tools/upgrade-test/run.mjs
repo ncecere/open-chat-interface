@@ -194,14 +194,45 @@ async function resolveFrom(sourceVersion) {
   return older.at(-1);
 }
 
+/** The Docker server's architecture (`amd64`, `arm64`): images of it run natively. */
+let hostArchPromise;
+function hostArch() {
+  hostArchPromise ??= run('docker', ['version', '--format', '{{.Server.Arch}}']).then(
+    (r) => r.stdout.trim() || 'amd64',
+  );
+  return hostArchPromise;
+}
+
+async function localArch(image) {
+  const r = await run('docker', ['image', 'inspect', '--format', '{{.Architecture}}', image]);
+  return r.code === 0 ? r.stdout.trim() : null;
+}
+
+/**
+ * Makes `image` available, natively when the registry has the host's
+ * architecture. Releases from v0.11 are multi-arch (linux/amd64 and
+ * linux/arm64); earlier ones are linux/amd64 only and run emulated on other
+ * hosts. A local copy of another architecture is replaced when a native one
+ * can be pulled (an older run may have pulled it emulated). Returns the
+ * architecture used.
+ */
 async function ensureImage(image) {
-  if (!options.pull && (await run('docker', ['image', 'inspect', image])).code === 0) return;
-  log(`pulling ${image}`);
-  let result = await run('docker', ['pull', '-q', image]);
-  // Releases are published for linux/amd64 only; elsewhere, run them emulated.
-  if (result.code !== 0)
+  const host = await hostArch();
+  const local = await localArch(image);
+  if (local === host && !options.pull) return { image, arch: local, emulated: false };
+  log(`pulling ${image} for linux/${host}`);
+  let result = await run('docker', ['pull', '-q', '--platform', `linux/${host}`, image]);
+  if (result.code === 0) return { image, arch: host, emulated: false };
+  if (local && !options.pull) {
+    log(`${image} has no linux/${host} image; using the local linux/${local} one (emulated)`);
+    return { image, arch: local, emulated: true };
+  }
+  if (host !== 'amd64') {
+    log(`${image} has no linux/${host} image; pulling linux/amd64 to run emulated`);
     result = await run('docker', ['pull', '-q', '--platform', 'linux/amd64', image]);
-  if (result.code !== 0) throw new Error(`docker pull ${image} failed: ${result.stderr}`);
+    if (result.code === 0) return { image, arch: 'amd64', emulated: true };
+  }
+  throw new Error(`docker pull ${image} failed: ${result.stderr}`);
 }
 
 async function buildFromSource(app, version) {
@@ -214,6 +245,10 @@ async function buildFromSource(app, version) {
     run('docker', [
       'build',
       '-q',
+      // Natively, whatever DOCKER_DEFAULT_PLATFORM says: both Dockerfiles
+      // build on amd64 and arm64.
+      '--platform',
+      `linux/${await hostArch()}`,
       '-f',
       `docker/${app}.Dockerfile`,
       '--build-arg',
@@ -529,21 +564,35 @@ async function main() {
   log(
     `FROM ${fromTag}${fromDrains ? '' : ' (does not drain on shutdown)'}; source version ${sourceVersion}`,
   );
-  await ensureImage(R.from.api);
-  await ensureImage(R.from.web);
+  // TO is prepared (built from source, or pulled) while FROM's stack starts
+  // and is seeded, and awaited before the load begins, so building no longer
+  // adds to the run; the API and web images build at the same time.
+  const preparingTo = (async () => {
+    const [toApi, toWeb] = await Promise.all(
+      ['api', 'web'].map(async (app) => {
+        const given = options[`to-${app}`];
+        if (!given) return buildFromSource(app, sourceVersion);
+        await ensureImage(given);
+        return given;
+      }),
+    );
+    let effective = toApi;
+    let inject;
+    if (options.inject) {
+      inject = await buildInjectedImage(options.inject, toApi, outDir, log);
+      effective = inject.image;
+    }
+    return { toApi, toWeb, effective, inject, journal: await readJournal(effective) };
+  })();
+  // Rejections surface where it is awaited; this only keeps Node from
+  // reporting one as unhandled while FROM starts.
+  preparingTo.catch(() => undefined);
 
-  const toApi = options['to-api'] || (await buildFromSource('api', sourceVersion));
-  const toWeb = options['to-web'] || (await buildFromSource('web', sourceVersion));
-  if (options['to-api']) await ensureImage(toApi);
-  if (options['to-web']) await ensureImage(toWeb);
-  R.to = { version: sourceVersion, api: toApi, web: toWeb };
-  let toApiEffective = toApi;
-  if (options.inject) {
-    const injected = await buildInjectedImage(options.inject, toApi, outDir, log);
-    R.inject = { case: options.inject, ...injected };
-    toApiEffective = injected.image;
-  }
-  const toJournal = await readJournal(toApiEffective);
+  const host = await hostArch();
+  const fromImages = await Promise.all([ensureImage(R.from.api), ensureImage(R.from.web)]);
+  R.platform = { host: `linux/${host}`, from: fromImages.map((i) => `linux/${i.arch}`) };
+  if (fromImages.some((i) => i.emulated))
+    log(`FROM ${fromTag} runs emulated (linux/amd64 on linux/${host}); TO runs natively`);
 
   R.bounds = {
     stopTimeoutMs: options['stop-timeout'] * 1000,
@@ -624,6 +673,20 @@ async function main() {
   const smokePerson = people.at(-1);
   const threadMap = await seededThreadsFor(loadPeople, env);
   const before = await appliedMigrationTimes();
+
+  // TO must be ready before the load starts: building it beside the load
+  // would distort the latencies measured.
+  const waitedForTo = Date.now();
+  const prepared = await preparingTo;
+  if (Date.now() - waitedForTo > 1_000)
+    log(`waited ${Math.round((Date.now() - waitedForTo) / 1000)} s for the TO images`);
+  const { toApi, toWeb, journal: toJournal } = prepared;
+  const toApiEffective = prepared.effective;
+  R.to = { version: sourceVersion, api: toApi, web: toWeb };
+  if (prepared.inject) R.inject = { case: options.inject, ...prepared.inject };
+  R.platform.to = await Promise.all([toApi, toWeb].map((i) => localArch(i))).then((archs) =>
+    archs.map((a) => `linux/${a}`),
+  );
 
   // --- Load ----------------------------------------------------------------
   const eventsFile = join(outDir, 'events.ndjson');

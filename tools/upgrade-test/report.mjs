@@ -375,6 +375,10 @@ function markdown(report) {
   lines.push(
     `- To: \`${run.to.api}\`${run.inject ? ` **with injected negative control \`${run.inject.case}\`**: ${run.inject.summary}` : ''}`,
   );
+  if (run.platform)
+    lines.push(
+      `- Platforms: host ${run.platform.host}; FROM ${[...new Set(run.platform.from)].join(', ')}; TO ${[...new Set(run.platform.to ?? [])].join(', ')} (other than the host's runs emulated)`,
+    );
   lines.push(`- Started ${run.startedAt}, took ${fmt(run.durationMs)}`);
   lines.push(
     `- Dataset: ${run.seed?.people} people, ${run.seed?.threads} conversations, ${run.seed?.messages} messages (message table ${run.seed?.messageTableSize}); seeded in ${fmt(run.seed?.totalMs ?? 0)}`,

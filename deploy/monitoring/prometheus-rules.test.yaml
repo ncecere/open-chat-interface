@@ -1,0 +1,196 @@
+# Unit tests for prometheus-rules.yaml:
+#   docker run --rm -v "$PWD/deploy/monitoring:/rules:ro" --entrypoint promtool \
+#     prom/prometheus:v3.15.0 test rules /rules/prometheus-rules.test.yaml
+rule_files:
+  - prometheus-rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # Availability: 10 of every 100 requests fail. Health probes failing do
+  # not count, so a replica that is not ready spends no budget.
+  - interval: 1m
+    input_series:
+      - series: 'oci_http_requests_total{job="oci-api", instance="api-1", method="GET", route="/api/threads/:id", status="200"}'
+        values: '0+90x90'
+      - series: 'oci_http_requests_total{job="oci-api", instance="api-1", method="POST", route="/api/chat", status="500"}'
+        values: '0+10x90'
+      - series: 'oci_http_requests_total{job="oci-api", instance="api-1", method="GET", route="/api/health/ready", status="503"}'
+        values: '0+1000x90'
+    promql_expr_test:
+      # Rounded: Prometheus 2 and 3 differ in the last binary digit.
+      - expr: round(oci_slo:availability_errors:ratio_rate1h, 0.0001)
+        eval_time: 70m
+        exp_samples:
+          - labels: '{job="oci-api"}'
+            value: 0.1
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: OciAvailabilityBudgetFastBurn
+        exp_alerts:
+          - exp_labels:
+              job: oci-api
+              severity: critical
+              slo: availability
+            exp_annotations:
+              summary: OCI is answering API requests with server errors
+              description: '10% of API requests in the last hour failed with a 5xx (objective: 99.9 % succeed). At this rate a month''s error budget lasts about two days.'
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#availability
+      # Not yet: the slow burn needs the condition for 15 minutes past its windows.
+      - eval_time: 10m
+        alertname: OciAvailabilityBudgetSlowBurn
+        exp_alerts: []
+
+  # No errors at all: the ratio is 0, not missing, and nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'oci_http_requests_total{job="oci-api", instance="api-1", method="GET", route="/api/me", status="200"}'
+        values: '0+50x90'
+    promql_expr_test:
+      - expr: oci_slo:availability_errors:ratio_rate5m
+        eval_time: 30m
+        exp_samples:
+          - labels: 'oci_slo:availability_errors:ratio_rate5m{job="oci-api"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: OciAvailabilityBudgetFastBurn
+        exp_alerts: []
+
+  # Search: every search slower than 1 s, with enough traffic, pages;
+  # Prometheus 3's normalised `le="1.0"` is matched too.
+  - interval: 1m
+    input_series:
+      - series: 'oci_http_request_duration_seconds_bucket{job="oci-api", instance="api-1", method="GET", route="/api/threads/search", le="1.0"}'
+        values: '0+1x90'
+      - series: 'oci_http_request_duration_seconds_count{job="oci-api", instance="api-1", method="GET", route="/api/threads/search"}'
+        values: '0+10x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: OciSearchBudgetFastBurn
+        exp_alerts:
+          - exp_labels:
+              job: oci-api
+              severity: critical
+              slo: search
+            exp_annotations:
+              summary: Conversation search is slow
+              description: '90% of searches in the last hour took over 1 s (objective: 95 % within 1 s).'
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#search
+
+  # Reply start: slow, but only three replies an hour: too little traffic to page.
+  - interval: 5m
+    input_series:
+      - series: 'oci_chat_reply_start_seconds_bucket{job="oci-api", instance="api-1", le="1"}'
+        values: '0x30'
+      - series: 'oci_chat_reply_start_seconds_count{job="oci-api", instance="api-1"}'
+        values: '0+0.25x30'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: OciReplyStartBudgetFastBurn
+        exp_alerts: []
+
+  # Background work, Redis and draining.
+  - interval: 1m
+    input_series:
+      - series: 'oci_background_workers_alive{job="oci-api", instance="web-1"}'
+        values: '1x5 0x20'
+      - series: 'oci_background_workers_alive{job="oci-api", instance="web-2"}'
+        values: '1x5 0x20'
+      - series: 'oci_redis_up{job="oci-api", instance="web-1"}'
+        values: '1x5 0x20'
+      - series: 'oci_redis_up{job="oci-api", instance="web-2"}'
+        values: '1x20'
+      - series: 'oci_cluster_drain_interrupted_replies_total{job="oci-api", instance="web-1"}'
+        values: '3x10 4x15'
+      - series: 'oci_cluster_drain_interrupted_replies_total{job="oci-api", instance="web-2"}'
+        values: '3x10 4x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: OciNoBackgroundWorker
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: No replica runs background jobs
+              description: 'No worker or all replica has checked in for 5 minutes: imports, embeddings, summaries, webhooks, backups, retention and usage rollups have stopped. Start a replica with OCI_ROLE=worker (or all).'
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#background-work
+      # One replica cannot reach Redis, the other can: a warning, not a page.
+      - eval_time: 15m
+        alertname: OciRedisUnavailable
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: OciRedisUnavailableOnReplica
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: oci-api
+              instance: web-1
+            exp_annotations:
+              summary: 'web-1 cannot reach Redis'
+              description: Other replicas can; check this replica's network path and REDIS_* settings.
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#redis-readiness-and-draining
+      - eval_time: 20m
+        alertname: OciRepliesInterruptedByDrain
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Replies were cut short by a replica shutting down
+              description: 'Replies saved as interrupted in the last hour: about 1. They were still running when their replica''s drain limit ran out. Raise SHUTDOWN_DRAIN_TIMEOUT_MS and the termination grace period together.'
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#redis-readiness-and-draining
+
+  # Database pool, rollup fold and a stalled background migration. OCI's job
+  # name arrives as `exported_job`.
+  - interval: 1m
+    input_series:
+      - series: 'oci_database_connections{job="oci-api", instance="api-1", state="active"}'
+        values: '9x20'
+      - series: 'oci_database_connections{job="oci-api", instance="api-1", state="idle in transaction"}'
+        values: '1x20'
+      - series: 'oci_database_connections{job="oci-api", instance="api-1", state="idle"}'
+        values: '0x20'
+      - series: 'oci_database_pool_max{job="oci-api", instance="api-1"}'
+        values: '10x20'
+      - series: 'oci_job_last_success_timestamp_seconds{job="oci-worker", instance="worker-1", exported_job="usage.fold-rollups"}'
+        values: '0x40'
+      - series: 'oci_background_migration_status{job="oci-api", instance="api-1", migration="0.12.example", status="running"}'
+        values: '1x100'
+      - series: 'oci_background_migration_rows_processed{job="oci-api", instance="api-1", migration="0.12.example"}'
+        values: '0+1000x10 10000x90'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: OciDatabasePoolSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: oci-api
+              instance: api-1
+            exp_annotations:
+              summary: A replica is using nearly all of its database connections
+              description: 'api-1 has 100% of DATABASE_POOL_MAX busy. Requests queue for a connection: add replicas, raise DATABASE_POOL_MAX (within the server''s max_connections) or find the slow queries.'
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#database
+      - eval_time: 25m
+        alertname: OciUsageRollupFoldStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: The usage rollup fold has not succeeded for 15 minutes
+              description: usage.fold-rollups runs every 30 seconds on workers. Its last success was 25m 0s ago.
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#usage-and-quota
+      # Progressing for its first 10 minutes, then nothing: stalled once a
+      # whole hour without progress has held for 15 minutes.
+      - eval_time: 60m
+        alertname: OciBackgroundMigrationStalled
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: OciBackgroundMigrationStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              migration: 0.12.example
+            exp_annotations:
+              summary: 'Background migration 0.12.example has made no progress for an hour'
+              description: 'It is running but processed no row. It may be throttled (replication lag, a long transaction; System health shows why) or no worker runs it.'
+              runbook_url: https://github.com/ncecere/open-chat-interface/blob/main/docs/dev/slo.md#background-work

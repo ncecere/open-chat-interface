@@ -116,6 +116,10 @@ run_pod ready-check "wget -qO- http://$name-web:8080/api/health/ready"
 wait_pod ready-check | tee /dev/stderr | grep >/dev/null '"status":"ok"'
 helm test "$release" -n "$ns" --timeout 2m
 
+echo "== Caddy runs with every capability dropped (none added, an empty bounding set)"
+test -z "$(k get deployment "$name-web" -o jsonpath='{.spec.template.spec.containers[0].securityContext.capabilities.add}')"
+k exec "deployment/$name-web" -- grep CapBnd /proc/1/status | tee /dev/stderr | grep >/dev/null 'CapBnd:[[:space:]]*0000000000000000$'
+
 echo "== Network policy: only the web pods reach the API"
 run_pod np-check "wget -T 5 -qO- http://$name-api:3000/api/health/ready && echo REACHED || echo BLOCKED"
 wait_pod np-check | tee /dev/stderr | grep >/dev/null BLOCKED

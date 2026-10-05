@@ -3,16 +3,20 @@ name: Helm chart
 # The chart (deploy/helm/open-chat-interface): lint, render against its
 # schema, validate the manifests, then install and upgrade it on kind with
 # images built from this commit (docs/OPERATIONS.md, "Kubernetes with Helm").
+# Also the Prometheus rules (deploy/monitoring; docs/dev/slo.md) the chart
+# renders as a PrometheusRule.
 on:
   pull_request:
     paths:
       - deploy/helm/**
+      - deploy/monitoring/**
       - docker/**
       - .github/workflows/helm.yml
   push:
     branches: [main]
     paths:
       - deploy/helm/**
+      - deploy/monitoring/**
       - docker/**
       - .github/workflows/helm.yml
   workflow_dispatch:
@@ -31,6 +35,41 @@ env:
   KIND_VERSION: v0.33.0
 
 jobs:
+  rules:
+    name: Prometheus rules (Prometheus ${{ matrix.prometheus }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        prometheus: [v2.55.1, v3.15.0]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The chart's copy is the published file
+        run: cmp deploy/monitoring/prometheus-rules.yaml deploy/helm/open-chat-interface/files/prometheus-rules.yaml
+      - name: promtool check rules and test rules
+        env:
+          PROMETHEUS: ${{ matrix.prometheus }}
+        run: |
+          set -euo pipefail
+          promtool() {
+            docker run --rm -v "$PWD/deploy/monitoring:/rules:ro" --entrypoint promtool \
+              "prom/prometheus:$PROMETHEUS" "$@"
+          }
+          promtool check rules /rules/prometheus-rules.yaml
+          promtool test rules /rules/prometheus-rules.test.yaml
+      - name: The Grafana dashboard is valid JSON with no fixed data source
+        run: |
+          python3 - <<'PY'
+          import json, re
+          text = open('deploy/monitoring/grafana-dashboard.json').read()
+          json.loads(text)
+          uids = set(re.findall(r'"uid": "([^"]+)"', text)) - {'open-chat-interface'}
+          assert uids == {'${datasource}'}, uids
+          PY
+
   lint:
     name: Lint and validate (Helm ${{ matrix.helm }})
     runs-on: ubuntu-24.04

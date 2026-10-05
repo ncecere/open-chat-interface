@@ -47,6 +47,10 @@ export interface RetryHooks {
   /** Before every provider request but the run's first (later tool steps, retries). */
   onExtraRequest?: () => void;
   onThrottle?: (throttle: Throttle) => void;
+  /** Just before the run's first provider request is sent (service objectives). */
+  onFirstRequest?: () => void;
+  /** The run's first request (retries included) reached its first output, after `ms`. */
+  onFirstOutput?: (ms: number) => void;
   policy?: Partial<RetryPolicy>;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
@@ -185,19 +189,25 @@ export function withProviderRetries(model: LanguageModel, hooks: RetryHooks = {}
   const policy = { ...DEFAULT_RETRY_POLICY, ...hooks.policy };
   const sleep = hooks.sleep ?? defaultSleep;
   let requests = 0;
+  let outputSeen = false;
   const original = model.doStream.bind(model) as (params: unknown) => Promise<StreamResult>;
   const wrapStream = async (params: unknown): Promise<StreamResult> => {
     const doStream = () => original(params);
     const started = Date.now();
     for (let retries = 0; ; retries++) {
       if (requests++ > 0) hooks.onExtraRequest?.();
+      else hooks.onFirstRequest?.();
       let error: unknown;
       let result: StreamResult | undefined;
       try {
         result = await doStream();
         const peeked = await peek(result.stream);
         result = { ...result, stream: peeked.stream };
-        if (!('error' in peeked)) return result;
+        if (!('error' in peeked)) {
+          if (!outputSeen) hooks.onFirstOutput?.(Date.now() - started);
+          outputSeen = true;
+          return result;
+        }
         error = peeked.error;
       } catch (thrown) {
         error = thrown;

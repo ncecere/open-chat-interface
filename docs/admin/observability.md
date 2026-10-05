@@ -40,14 +40,17 @@ scrape_configs:
 
 | Metric | Type | Labels |
 | --- | --- | --- |
-| `oci_http_requests_total` | counter | `method`, `route` (the route template, such as `/api/threads/:id`; `unmatched` when no route matched), `status` |
+| `oci_http_requests_total` | counter | `method`, `route` (the template of the route that answered, such as `/api/threads/:id` or `/api/threads/search`; `unmatched` when no route matched), `status` |
 | `oci_http_request_duration_seconds` | histogram | `method`, `route` (time until the response starts; a streamed reply is timed separately) |
+| `oci_chat_reply_start_seconds` | histogram | Time OCI adds before a reply: from the request arriving to the first model request, less any wait for provider capacity |
+| `oci_provider_first_output_seconds` | histogram | `provider`, `model`: from a reply's first model request to its first output, retries included |
 | `oci_chat_replies_total` | counter | `status`: `complete`, `error`, `cancelled` |
 | `oci_chat_reply_duration_seconds` | histogram | `status` |
 | `oci_tool_calls_total` | counter | `tool` (the tool id, such as `web_search` or `mcp__docs__search`), `outcome`: `ok`, `error`, `denied`, `refused` |
 | `oci_tool_call_duration_seconds` | histogram | `tool` |
 | `oci_job_runs_total` | counter | `job`, `outcome`: `success`, `error` |
 | `oci_job_duration_seconds` | histogram | `job` |
+| `oci_job_last_success_timestamp_seconds` | gauge | `job`: when it last succeeded on this process |
 | `oci_web_searches_total` | counter | `provider` (such as `searxng`, `brave`), `slot`: `primary`, `fallback`; `outcome`: `answered`, `failed`. Searches from conversations only, never the query |
 | `oci_web_search_duration_seconds` | histogram | `provider`, `slot` (retry included) |
 | `oci_webhook_deliveries_total` | counter | `outcome`: `succeeded`, `retrying`, `failed` |
@@ -62,6 +65,19 @@ scrape_configs:
 | `oci_provider_throttled_total` | counter | `provider`, `model`, `status`: the provider's `429`, `408`, `409`, `5xx`, or `529` for an overload reported in the stream |
 | `oci_provider_retries_total` | counter | `provider`, `model`: requests sent again before the reply's first output |
 | `oci_errors_total` | counter | `source`: unexpected server errors |
+| `oci_readiness_transitions_total` | counter | `to`: `ready`, `not_ready`. Changes of `/api/health/ready`, draining excluded |
+| `oci_drain_interrupted_replies_total` | counter | Replies this process saved as interrupted when its drain limit ran out |
+| `oci_cluster_drain_interrupted_replies_total` | counter | The same for every replica, kept in Redis (each replica reports the total: use `max`); absent without Redis |
+| `oci_draining` | gauge | 1 while this process drains |
+| `oci_process_role` | gauge | `role`: `web`, `worker`, `all` |
+| `oci_database_connections` | gauge | `state`: this replica's connections to the primary, from `pg_stat_activity` |
+| `oci_database_pool_max` | gauge | `DATABASE_POOL_MAX` |
+| `oci_database_probe_seconds` | gauge | How long `select 1` through the pool took at scrape time |
+| `oci_database_replication_lag_seconds` | gauge | Largest standby lag; absent without standbys or the `pg_monitor` role |
+| `oci_queue_depth` | gauge | `queue`: `conversation_imports`, `compaction`, `usage_rollup_changes` (counted up to 100,000) |
+| `oci_redis_up` | gauge | 1 or 0; absent when Redis is not configured |
+| `oci_background_workers_alive` | gauge | 1 when some replica runs background jobs |
+| `oci_replicas` | gauge | `role`: replicas heard from in Redis in the last minute |
 | `oci_build_info` | gauge | `version` |
 | `process_resident_memory_bytes`, `nodejs_heap_used_bytes`, `process_uptime_seconds` | gauge | |
 
@@ -70,11 +86,18 @@ stays bounded. The gauges read from the database at scrape time; if the
 database does not answer, they are left out of that scrape rather than failing
 it.
 
-Useful alerts:
+Prometheus stores the `job` label of `oci_job_*` metrics as `exported_job`,
+because `job` is its own target label (unless `honor_labels: true`).
+
+[Service objectives and alerts](../dev/slo.md) defines OCI's objectives on
+these metrics and ships a complete rule file and Grafana dashboard
+(`deploy/monitoring/`). A few alerts on their own:
 
 ```yaml
 - alert: OciBackupStale
   expr: time() - max(oci_backup_last_success_timestamp_seconds) > 26 * 3600
+- alert: OciNoBackgroundWorker
+  expr: max(oci_background_workers_alive) == 0
 - alert: OciReplyErrors
   expr: sum(rate(oci_chat_replies_total{status="error"}[15m])) / sum(rate(oci_chat_replies_total[15m])) > 0.05
 - alert: OciWebhookBacklog

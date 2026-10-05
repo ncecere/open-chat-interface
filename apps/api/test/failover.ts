@@ -34,7 +34,9 @@ export async function terminateEveryBackend(control: ControlSql): Promise<number
 export async function waitForLockWaiter(
   control: ControlSql,
   pattern: string,
-  timeoutMs = 10_000,
+  // Generous: under the parallel coverage run on a loaded host the turn can
+  // take several seconds to reach its lock (seen once at 10 s).
+  timeoutMs = 20_000,
 ): Promise<number> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -60,7 +62,9 @@ export async function waitForLockWaiter(
 export async function waitForStatement(
   control: ControlSql,
   pattern: string,
-  timeoutMs = 10_000,
+  // Generous: under the parallel coverage run on a loaded host the turn can
+  // take several seconds to reach its lock (seen once at 10 s).
+  timeoutMs = 20_000,
 ): Promise<number> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {

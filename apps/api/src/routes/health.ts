@@ -4,6 +4,7 @@ import { drainState } from '../lib/drain.js';
 import { logger } from '../lib/logger.js';
 import { processRole } from '../lib/role.js';
 import type { AppBindings } from '../middleware/context.js';
+import { observeReadiness } from '../services/observability/events.js';
 
 export const healthRoutes = new Hono<AppBindings>();
 
@@ -55,6 +56,7 @@ healthRoutes.get('/ready', async (c) => {
   else databaseDownSince ??= Date.now();
   const ready =
     databaseDownSince === null || Date.now() - databaseDownSince < readiness.databaseGraceMs;
+  observeReadiness(ready);
   return c.json(
     {
       status: database === 'ok' ? 'ok' : 'degraded',

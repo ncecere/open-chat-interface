@@ -44,4 +44,6 @@ networkPolicy:
     extraEgress:
       - to: [{ ipBlock: { cidr: 0.0.0.0/0 } }]
         ports: [{ protocol: TCP, port: 443 }, { protocol: TCP, port: 5432 }, { protocol: TCP, port: 6379 }]
-metrics: { serviceMonitor: { enabled: true, labels: { release: kube-prometheus-stack } } }
+metrics:
+  serviceMonitor: { enabled: true, labels: { release: kube-prometheus-stack } }
+  prometheusRule: { enabled: true, labels: { release: kube-prometheus-stack } }

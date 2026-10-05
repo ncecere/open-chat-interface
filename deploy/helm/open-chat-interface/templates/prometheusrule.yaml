@@ -1,0 +1,22 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+{{- $rules := .Files.Get "files/prometheus-rules.yaml" | fromYaml }}
+{{- if not $rules.groups }}
+{{- fail "files/prometheus-rules.yaml has no rule groups" }}
+{{- end }}
+# Prometheus Operator: the service objectives' recording rules, burn-rate
+# alerts and operational alerts of deploy/monitoring/prometheus-rules.yaml
+# (docs/dev/slo.md), copied verbatim into files/. They group by namespace and
+# job, so they need the ServiceMonitor's scrapes (metrics.serviceMonitor).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "oci.fullname" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "monitoring") | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    {{- toYaml $rules.groups | nindent 4 }}
+{{- end }}

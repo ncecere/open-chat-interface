@@ -160,6 +160,31 @@ describe('provider retries', () => {
     expect(result.errors.length).toBeGreaterThan(0);
   });
 
+  it('reports the first request and its first output once, retries included (service objectives)', async () => {
+    const sleep = vi.fn(async () => {});
+    const first = vi.fn();
+    const output = vi.fn();
+    const model = withProviderRetries(scripted([refusal(503), text('one'), text('two')]), {
+      sleep,
+      onFirstRequest: first,
+      onFirstOutput: output,
+    });
+    expect(await run(model)).toEqual({ output: 'one', errors: [] });
+    // A later request of the same reply (a tool step) reports nothing.
+    expect(await run(model)).toEqual({ output: 'two', errors: [] });
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(output).toHaveBeenCalledTimes(1);
+    expect(output.mock.calls[0]![0]).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reports no first output when the provider never produced one', async () => {
+    const output = vi.fn();
+    const model = withProviderRetries(scripted([refusal(400)]), { onFirstOutput: output });
+    const result = await run(model);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(output).not.toHaveBeenCalled();
+  });
+
   it('reads Retry-After in every form, and classifies refusals', () => {
     const now = Date.parse('2026-10-04T12:00:00Z');
     expect(retryAfterMs(refusal(429, { 'retry-after-ms': '1500' }), now)).toBe(1_500);

@@ -32,6 +32,12 @@ LABEL org.opencontainers.image.title="Open Chat Interface Web" \
       org.opencontainers.image.vendor="Open Chat Interface contributors" \
       org.opencontainers.image.created=$OCI_CREATED \
       org.opencontainers.image.licenses="MIT"
+# Caddy listens on 8080 and needs no capability. The base image gives the
+# binary the cap_net_bind_service file capability (for ports below 1024),
+# which makes exec fail where the bounding set is empty (`--cap-drop ALL`,
+# Kubernetes `capabilities: { drop: [ALL] }`) under no_new_privs. Removed, so
+# the container runs with every capability dropped.
+RUN setcap -r /usr/bin/caddy
 COPY --from=build /app/apps/web/dist /srv
 COPY docker/Caddyfile /etc/caddy/Caddyfile
 COPY LICENSE /licenses/LICENSE

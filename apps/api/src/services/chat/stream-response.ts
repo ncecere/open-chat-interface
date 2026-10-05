@@ -14,7 +14,12 @@ import {
 } from '../chat-streams.js';
 import { recordHandoff, reportThrottle } from '../limits/capacity/index.js';
 import type { CapacityLease, CapacityRequest, WaitOutcome } from '../limits/capacity/queue.js';
-import { observeChatReply } from '../observability/events.js';
+import {
+  observeChatReply,
+  observeProviderFirstOutput,
+  observeReplyStart,
+} from '../observability/events.js';
+import { recordDrainInterruptedReply } from '../observability/interrupted.js';
 import { withProviderRetries } from '../providers/retry.js';
 import { buildSdkTools, toolApprovalPolicy } from '../tools/registry.js';
 import { stoppedByShutdown, trackRun } from './active-runs.js';
@@ -74,8 +79,16 @@ async function runUsage(
   return loop ? loop.settlement(total, status === 'complete') : (total ?? null);
 }
 
-/** Start the provider and compose its persisted, resumable SDK response. */
-export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
+/**
+ * Start the provider and compose its persisted, resumable SDK response.
+ * `receivedAt` (performance.now()) is when the request arrived, for the
+ * reply-start objective (docs/dev/slo.md).
+ */
+export async function streamResponse(
+  turn: PreparedTurn,
+  run: AcquiredRun,
+  timing: { receivedAt?: number } = {},
+) {
   const { input, thread, resolved, uiMessages, system, sourceParts, searchGroundingPart } = turn;
   const { runIdentity, assistantMessage, persistence } = run;
   const abortController = new AbortController();
@@ -142,6 +155,20 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
       signal: abortController.signal,
       onExtraRequest: () => lease?.chargeRequest(),
       onThrottle: (throttle) => void reportThrottle(resolved, throttle),
+      // Service objectives: what OCI added before the model was asked (less
+      // the capacity wait, exported on its own), and the provider's part.
+      onFirstRequest: () => {
+        if (timing.receivedAt !== undefined)
+          observeReplyStart(
+            performance.now() - timing.receivedAt - (lease?.queued ? lease.waitedMs : 0),
+          );
+      },
+      onFirstOutput: (ms) =>
+        observeProviderFirstOutput(
+          resolved.providerLabel ?? resolved.providerId ?? '',
+          resolved.slug,
+          ms,
+        ),
     });
     let lastCancellationCheck = 0;
     const launch = ({
@@ -322,6 +349,7 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
             await lease?.release();
             await releaseRunHandles(run);
             observeChatReply(outcome.status, run.startedAt);
+            if (interrupted) await recordDrainInterruptedReply();
           }
           // After the claim is released: a reply that took the history past
           // the soft threshold queues a background summary for later turns.
