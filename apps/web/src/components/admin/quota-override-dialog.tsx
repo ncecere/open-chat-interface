@@ -24,6 +24,16 @@ function toDisplay(value: number, metric: QuotaMetric): string {
   return metric === 'cost' ? (value / MICROS_PER_DOLLAR).toFixed(2) : String(value);
 }
 
+/** For reading, not the input: "1,000,000 messages", "$12.50", as elsewhere (#80). */
+function toReadable(value: number, metric: QuotaMetric): string {
+  return metric === 'cost'
+    ? (value / MICROS_PER_DOLLAR).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : value.toLocaleString('en-US');
+}
+
 function fromDisplay(value: string, metric: QuotaMetric): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return Number.NaN;
@@ -117,7 +127,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="font-medium text-sm">{entry.policyName}</h3>
                 <p className="text-[var(--text-muted)] text-xs">
-                  Role default: {toDisplay(entry.roleLimitValue, entry.metric)}{' '}
+                  Role default: {toReadable(entry.roleLimitValue, entry.metric)}{' '}
                   {unitLabel(entry.metric)}
                   {overridden && !entry.active ? ' \u00b7 override expired' : ''}
                 </p>
