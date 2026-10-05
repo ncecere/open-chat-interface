@@ -46,6 +46,7 @@ import {
   validateProjectSearch,
 } from '~/lib/chat-search-params';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
+import { usePageTitle } from '~/lib/document-title';
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -129,6 +130,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (temporary) setTemporary(false);
   }, [temporary, setTemporary]);
+  // The project by name in the tab, rather than the app name alone (#110).
+  usePageTitle(project.data?.name ?? 'Project');
 
   if (me && !me.features.projects) {
     return (

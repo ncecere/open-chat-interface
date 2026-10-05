@@ -141,7 +141,12 @@ describe('tab title', () => {
     expect(documentTitle(pageTitleFor('/auth/reset-password'), 'Acme')).toBe(
       'Reset password · Acme',
     );
-    expect(documentTitle(pageTitleFor('/settings/memory/'), 'Acme')).toBe('Settings · Acme');
+    // Each settings section by name (#110).
+    expect(documentTitle(pageTitleFor('/settings/memory/'), 'Acme')).toBe(
+      'Memory · Settings · Acme',
+    );
+    expect(documentTitle(pageTitleFor('/settings'), 'Acme')).toBe('Account · Settings · Acme');
+    expect(documentTitle(pageTitleFor('/settings/unknown'), 'Acme')).toBe('Settings · Acme');
     expect(documentTitle(pageTitleFor('/admin/branding'), 'Acme')).toBe('Branding · Admin · Acme');
     expect(documentTitle(pageTitleFor('/admin/users/u-1'), 'Acme')).toBe('Users · Admin · Acme');
     expect(documentTitle(pageTitleFor('/admin'), 'Acme')).toBe('Overview · Admin · Acme');

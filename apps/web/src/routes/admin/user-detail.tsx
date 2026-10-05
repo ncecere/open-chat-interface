@@ -288,7 +288,10 @@ export function AdminUserDetailPage() {
                       {formatTimeUntil(session.expiresAt)}
                     </td>
                     <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
-                    <td className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs">
+                    <td
+                      className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs"
+                      title={session.userAgent ?? undefined}
+                    >
                       {session.userAgent ?? '—'}
                     </td>
                   </tr>
@@ -311,7 +314,9 @@ export function AdminUserDetailPage() {
                 {/* Titles only. An administrator managing an account has no
                     reason to read its contents, and this page should not be
                     the thing that makes that easy. */}
-                <span className="truncate text-sm">{thread.title || 'Untitled'}</span>
+                <span className="truncate text-sm" title={thread.title || undefined}>
+                  {thread.title || 'Untitled'}
+                </span>
                 <span className="shrink-0 text-[var(--text-muted)] text-xs">
                   {formatRelativeTime(thread.updatedAt)}
                 </span>

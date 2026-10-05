@@ -71,6 +71,8 @@ vi.mock('../../src/providers/temporary-chat-provider', () => ({
   },
 }));
 vi.mock('../../src/hooks/use-chat-session', () => ({ useChatSession: mocks.useChatSession }));
+// The page names itself from the sidebar's lists, which this suite does not load.
+vi.mock('../../src/hooks/use-open-conversation', () => ({ useOpenConversation: () => undefined }));
 vi.mock('../../src/hooks/use-threads', () => ({
   useBranchMessage: () => ({ mutateAsync: mocks.branch }),
   useForkMessage: () => ({ mutateAsync: mocks.fork }),

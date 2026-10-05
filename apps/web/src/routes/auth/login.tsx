@@ -1,3 +1,4 @@
+import { instanceName } from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
@@ -126,6 +127,8 @@ export function LoginPage() {
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
+          {/* The page's heading; the wordmark beside it is an image of the name (#110). */}
+          <h1 className="sr-only">Sign in to {instanceName(appName)}</h1>
           <Wordmark
             name={appName}
             shortName={status?.branding.shortName}

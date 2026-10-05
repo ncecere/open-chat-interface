@@ -14,10 +14,12 @@ import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useCompaction } from '~/hooks/use-compaction';
 import { useHistoryPages } from '~/hooks/use-history-pages';
+import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getInitialHistory, type HistoryIsland } from '~/lib/chat-history';
+import { usePageTitle } from '~/lib/document-title';
 import { conversationChoice } from '~/lib/starting-model';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -291,6 +293,10 @@ function ThreadConversation({
     wasStreaming.current = session.streaming;
   }, [refetchCompaction, session.streaming]);
 
+  const conversationTitle = useOpenConversation(threadId)?.thread.title;
+  const pageName = temporary ? 'Temporary chat' : conversationTitle || 'Conversation';
+  usePageTitle(pageName);
+
   if (session.recovery.unavailable)
     return (
       <ConversationLoadError
@@ -316,6 +322,8 @@ function ThreadConversation({
       streaming={session.streaming}
       canEdit={session.features?.artifacts ?? false}
     >
+      {/* The conversation's name, for the tab and as the page's heading (#110). */}
+      <h1 className="sr-only">{pageName}</h1>
       <div className="flex h-full flex-col">
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div

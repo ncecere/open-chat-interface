@@ -292,8 +292,12 @@ function PeopleList({
           className="flex items-center justify-between gap-4 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
         >
           <div className="min-w-0">
-            <p className="truncate font-medium text-sm">{entry.name}</p>
-            <p className="truncate text-[var(--text-muted)] text-xs">{entry.email}</p>
+            <p className="truncate font-medium text-sm" title={entry.name}>
+              {entry.name}
+            </p>
+            <p className="truncate text-[var(--text-muted)] text-xs" title={entry.email}>
+              {entry.email}
+            </p>
           </div>
           <div className="shrink-0 text-right">
             <p className="text-sm">{entry.primary}</p>
@@ -447,7 +451,9 @@ function SpendTab({ days }: { days: number }) {
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-2">
                         <LabLogo labId={model.labId} />
-                        <span className="truncate">{model.displayName ?? model.modelSlug}</span>
+                        <span className="truncate" title={model.displayName ?? model.modelSlug}>
+                          {model.displayName ?? model.modelSlug}
+                        </span>
                         {model.enabled === false && <Badge variant="outline">disabled</Badge>}
                         {model.enabled === null && <Badge variant="outline">not in catalog</Badge>}
                       </span>
@@ -569,7 +575,9 @@ function LimitsTab({ days }: { days: number }) {
               className="flex items-center justify-between gap-4 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
             >
               <div className="min-w-0">
-                <p className="truncate font-medium text-sm">{denial.policyName}</p>
+                <p className="truncate font-medium text-sm" title={denial.policyName}>
+                  {denial.policyName}
+                </p>
                 <p className="text-[var(--text-muted)] text-xs">
                   {denial.usersAffected} {denial.usersAffected === 1 ? 'person' : 'people'} affected
                 </p>
