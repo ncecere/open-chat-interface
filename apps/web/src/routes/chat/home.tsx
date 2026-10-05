@@ -158,7 +158,8 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   return (
     <div className="flex h-full flex-col justify-center md:justify-normal">
       {/* Desktop uses the upper-middle region; mobile centers the compact prompt. */}
-      <div className="flex-none px-4 md:flex-1 md:overflow-y-auto md:pt-[18vh]">
+      {/* On phones, room between the greeting and the centred composer (#102). */}
+      <div className="flex-none px-4 pb-8 md:flex-1 md:overflow-y-auto md:pt-[18vh] md:pb-0">
         <div className="mx-auto w-full max-w-[41.75rem]">
           <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-left md:text-[1.875rem]">
             {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}

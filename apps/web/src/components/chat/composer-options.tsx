@@ -106,7 +106,10 @@ export function ComposerOptions({
             <Plus className="size-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top" className="min-w-56 md:hidden">
+        {/* Below the composer where there is room (a new chat, where above is
+            the greeting it would cover, #102); Radix flips it above when there
+            is not, as in a conversation. */}
+        <DropdownMenuContent align="start" side="bottom" className="min-w-56 md:hidden">
           {/* Only for a model that offers reasoning levels, as the user guide
               says; a greyed "Instant" on every other model explained nothing (#95). */}
           {supportsEffort && (
