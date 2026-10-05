@@ -165,15 +165,13 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
             {temporary ? (
               'Temporary chat'
             ) : (
-              <>
-                How can I help you{firstName ? ',' : '?'}
-                {firstName && (
-                  <>
-                    <span className="block md:hidden">{firstName}?</span>
-                    <span className="hidden md:inline"> {firstName}?</span>
-                  </>
-                )}
-              </>
+              // One text item, so the flex gap (for the icon) never lands after
+              // the comma, and the name is in the DOM once, not once per
+              // breakpoint (#94). On phones the name wraps to its own line.
+              <span>
+                How can I help you{firstName ? ', ' : '?'}
+                {firstName && <span className="block md:inline">{firstName}?</span>}
+              </span>
             )}
           </h1>
           {temporary && (
