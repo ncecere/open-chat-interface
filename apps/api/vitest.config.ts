@@ -11,7 +11,9 @@ const s3Floors = {
   // Functions: CI measures 83-85% from run to run: two log-only callbacks (a background
   // manual backup failing, a failed copy sweep) run only if those paths happen to fire
   // before the suite ends. The floor guards against erosion, not that noise.
-  'src/services/backups/run.ts': { statements: 88, branches: 70, functions: 82 },
+  // CI measures this file between 87.8% and 89.9% statements and 83-87% functions
+  // from run to run (which timing-dependent retry paths run), with no code change.
+  'src/services/backups/run.ts': { statements: 87, branches: 70, functions: 82 },
   'src/services/backups/settings.ts': { statements: 93, branches: 88, functions: 90 },
   'src/services/backups/files.ts': { statements: 90, branches: 85, functions: 100 },
   'src/services/backups/restore-files.ts': { statements: 90, branches: 80, functions: 100 },
