@@ -67,6 +67,21 @@ async function buildUsageReport(windowDays: number, appName: string): Promise<st
 }
 
 /**
+ * When a report is next sent (#85): null while paused; otherwise a cadence
+ * after its last send, or `now` when it has never been sent or is already
+ * due, which the hourly check picks up within the hour.
+ */
+export function nextReportRunAt(
+  report: { enabled: boolean; cadence: keyof typeof CADENCE_MS; lastRunAt: Date | null },
+  now = new Date(),
+): Date | null {
+  if (!report.enabled) return null;
+  if (!report.lastRunAt) return now;
+  const next = report.lastRunAt.getTime() + CADENCE_MS[report.cadence];
+  return new Date(Math.max(next, now.getTime()));
+}
+
+/**
  * Sends every scheduled report that is due.
  *
  * Due-ness is decided from `lastRunAt` rather than a cron expression, so a

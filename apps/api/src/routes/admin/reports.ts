@@ -9,7 +9,7 @@ import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
-import { runDueReports } from '../../services/reports.js';
+import { nextReportRunAt, runDueReports } from '../../services/reports.js';
 
 export const reportRoutes = new Hono<AppBindings>();
 
@@ -27,10 +27,12 @@ reportRoutes.get('/', async (c) => {
     .from(schema.scheduledReport)
     .orderBy(desc(schema.scheduledReport.createdAt));
 
+  const now = new Date();
   return c.json({
     reports: rows.map((row) => ({
       ...row,
       lastRunAt: row.lastRunAt?.toISOString() ?? null,
+      nextRunAt: nextReportRunAt(row, now)?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     })),

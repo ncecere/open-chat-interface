@@ -21,6 +21,8 @@ interface ScheduledReport {
   recipients: string[];
   enabled: boolean;
   lastRunAt: string | null;
+  /** Null while paused; now or earlier when due at the next hourly check. */
+  nextRunAt: string | null;
   lastStatus: 'success' | 'error' | null;
   lastError: string | null;
 }
@@ -48,6 +50,14 @@ function EmailRequiredNotice() {
   );
 }
 
+/** "Next: in 3 days", "Next: within the hour" when due, or "Paused" (#85). */
+export function nextRunText(report: Pick<ScheduledReport, 'nextRunAt'>, now = Date.now()): string {
+  if (!report.nextRunAt) return 'Paused';
+  const at = Date.parse(report.nextRunAt);
+  if (at <= now + 60 * 60 * 1000) return 'Next: within the hour';
+  return `Next: ${formatRelativeTime(report.nextRunAt)}`;
+}
+
 const CADENCES = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
@@ -61,6 +71,26 @@ export function AdminReportsPage() {
   const [windowDays, setWindowDays] = useState(30);
   const [recipients, setRecipients] = useState('');
   const [deleteFor, setDeleteFor] = useState<ScheduledReport | null>(null);
+  // The form adds a report, or saves changes to this one (#85).
+  const [editing, setEditing] = useState<ScheduledReport | null>(null);
+
+  function resetForm() {
+    setEditing(null);
+    setName('');
+    setCadence('monthly');
+    setWindowDays(30);
+    setRecipients('');
+  }
+
+  function edit(report: ScheduledReport) {
+    create.reset();
+    setEditing(report);
+    setName(report.name);
+    setCadence(report.cadence);
+    setWindowDays(report.windowDays);
+    setRecipients(report.recipients.join(', '));
+    document.getElementById('report-name')?.focus();
+  }
 
   const reports = useQuery({
     queryKey: ['admin', 'reports'],
@@ -71,10 +101,10 @@ export function AdminReportsPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
 
   const create = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api.post('/admin/reports', body),
+    mutationFn: (body: Record<string, unknown>) =>
+      editing ? api.patch(`/admin/reports/${editing.id}`, body) : api.post('/admin/reports', body),
     onSuccess: () => {
-      setName('');
-      setRecipients('');
+      resetForm();
       invalidate();
     },
   });
@@ -92,6 +122,7 @@ export function AdminReportsPage() {
 
   async function deleteReport(report: ScheduledReport) {
     await api.delete(`/admin/reports/${report.id}`);
+    if (editing?.id === report.id) resetForm();
     await invalidate();
   }
 
@@ -132,9 +163,14 @@ export function AdminReportsPage() {
 
       <EmailRequiredNotice />
 
-      {/* Creating a report is the only thing this form does. */}
+      {/* Adds a report, or edits the one chosen with Edit. */}
       <EditOnly>
-        <form onSubmit={submit} className="mb-8 grid gap-3 sm:grid-cols-2">
+        <form
+          onSubmit={submit}
+          className="mb-8 grid gap-3 sm:grid-cols-2"
+          aria-label={editing ? `Edit ${editing.name}` : 'Add report'}
+        >
+          {editing && <p className="text-sm font-medium sm:col-span-2">Editing {editing.name}</p>}
           <Field label="Name" htmlFor="report-name">
             <Input
               id="report-name"
@@ -176,11 +212,21 @@ export function AdminReportsPage() {
             />
           </Field>
           <div className="flex flex-col gap-2 sm:col-span-2">
-            <MutationError error={create.error} message="The report could not be added." />
-            <div>
+            <MutationError
+              error={create.error}
+              message={
+                editing ? 'The report could not be saved.' : 'The report could not be added.'
+              }
+            />
+            <div className="flex gap-2">
               <Button type="submit" variant="primary" disabled={create.isPending}>
-                Add report
+                {editing ? 'Save report' : 'Add report'}
               </Button>
+              {editing && (
+                <Button type="button" variant="ghost" onClick={resetForm}>
+                  Cancel
+                </Button>
+              )}
             </div>
           </div>
         </form>
@@ -231,6 +277,7 @@ export function AdminReportsPage() {
                   <p className="text-[var(--text-muted)] text-xs">
                     {report.cadence} · {report.windowDays} days · {report.recipients.join(', ')}
                   </p>
+                  <p className="mt-0.5 text-[var(--text-muted)] text-xs">{nextRunText(report)}</p>
                   {report.lastRunAt && (
                     <p className="mt-0.5 text-xs">
                       <span
@@ -249,6 +296,14 @@ export function AdminReportsPage() {
                 </div>
 
                 <EditOnly>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Edit ${report.name}`}
+                    onClick={() => edit(report)}
+                  >
+                    Edit
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
