@@ -1,6 +1,6 @@
 {
   "name": "open-chat-interface",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "private": true,
   "description": "Open Chat Interface (OCI) — self-hostable multi-model chat application",
   "license": "MIT",

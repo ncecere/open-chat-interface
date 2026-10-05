@@ -12,7 +12,7 @@ credentials in your secret manager; never commit them or put them in
 `.env.example`.
 
 ```bash
-export OCI_VERSION=v0.10.2
+export OCI_VERSION=v0.11.0
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
