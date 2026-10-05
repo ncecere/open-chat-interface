@@ -70,7 +70,7 @@ async function installServer(page: Page) {
   await page.route('**/api/models', (route) =>
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: [MODEL] }) }),
   );
-  await page.route(`**/api/chat/${THREAD_ID}/messages`, (route) =>
+  await page.route(`**/api/chat/${THREAD_ID}/messages**`, (route) =>
     route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

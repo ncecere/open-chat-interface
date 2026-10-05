@@ -1,7 +1,13 @@
 import type { UIMessage } from 'ai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '~/lib/api-client';
-import { getChatHistory, hasPendingReply, messageStatus } from '~/lib/chat-history';
+import {
+  getChatHistory,
+  hasPendingReply,
+  mergeLatest,
+  messageStatus,
+  refreshLimit,
+} from '~/lib/chat-history';
 
 interface RecoveryChat {
   status: string;
@@ -105,7 +111,11 @@ export function useChatRecovery(options: {
       const baseline = before.chat.messages;
       setRefreshing(true);
       try {
-        const snapshot = await getChatHistory(before.threadId, controller.signal);
+        // The latest page, reaching back past the first message on screen
+        // (older pages are kept apart from the live part; v0.11).
+        const snapshot = await getChatHistory(before.threadId, controller.signal, {
+          limit: refreshLimit(baseline.length),
+        });
         if (
           disposed ||
           attemptRef.current !== attempt ||
@@ -122,7 +132,7 @@ export function useChatRecovery(options: {
           if (current !== baseline || before.scope.request !== version) return current;
           applied = true;
           const previous = new Map(current.map((message) => [message.id, message]));
-          return snapshot.messages.map((message) => {
+          return mergeLatest(current, snapshot.messages).map((message) => {
             const local = previous.get(message.id);
             // A durable streaming claim usually has empty parts. Keep a prefix
             // already received by this reader until the terminal message is saved.

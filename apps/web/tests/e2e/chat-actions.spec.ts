@@ -112,7 +112,7 @@ test('sidebar exposes fork lineage and collapses pinned threads', async ({ page 
 test('assistant actions show attribution and create a true fork', async ({ page }) => {
   await signIn(page);
 
-  await page.route('**/api/chat/source-thread/messages', (route) =>
+  await page.route('**/api/chat/source-thread/messages**', (route) =>
     route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -121,7 +121,7 @@ test('assistant actions show attribution and create a true fork', async ({ page 
       }),
     }),
   );
-  await page.route('**/api/chat/child-thread/messages', (route) =>
+  await page.route('**/api/chat/child-thread/messages**', (route) =>
     route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

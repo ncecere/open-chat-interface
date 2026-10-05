@@ -89,7 +89,7 @@ test('HTML artifacts run in a sandbox that cannot reach OCI or the network', asy
   isMobile,
 }) => {
   await signIn(page);
-  await page.route(`**/api/chat/${THREAD_ID}/messages`, (route) =>
+  await page.route(`**/api/chat/${THREAD_ID}/messages**`, (route) =>
     route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

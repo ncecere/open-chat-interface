@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
 import { ArrowDown } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThreadArtifactsProvider } from '~/components/artifacts/artifacts-provider';
 import { CompactionFailureNotice } from '~/components/chat/compaction-failure-notice';
 import { Composer } from '~/components/chat/composer';
@@ -13,10 +13,11 @@ import { FullPageSpinner } from '~/components/ui/spinner';
 import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useCompaction } from '~/hooks/use-compaction';
+import { useHistoryPages } from '~/hooks/use-history-pages';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError, chatErrorText } from '~/lib/api-client';
-import { getChatHistory } from '~/lib/chat-history';
+import { getInitialHistory, type HistoryIsland } from '~/lib/chat-history';
 import { conversationChoice } from '~/lib/starting-model';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -98,6 +99,10 @@ function ThreadConversation({
   threadId,
   initialMessages,
   initialReplies,
+  initialBefore,
+  initialOlderCursor,
+  initialIsland,
+  loadedTarget,
   carriedAttachments,
   carriedModel,
   carriedEffort,
@@ -113,6 +118,14 @@ function ThreadConversation({
   initialMessages: UIMessage[];
   /** Every reply to the latest turn when it was retried; otherwise empty. */
   initialReplies: UIMessage[];
+  /** Older messages already loaded with the latest page, oldest first (v0.11). */
+  initialBefore: UIMessage[];
+  /** The page before the loaded messages; null at the conversation's start. */
+  initialOlderCursor: string | null;
+  /** A search result's window apart from the latest messages, if any. */
+  initialIsland: HistoryIsland | null;
+  /** The message the history was loaded around, if any. */
+  loadedTarget?: string;
   carriedAttachments: Attachment[];
   /** The model picked on the home page for this conversation. */
   carriedModel: string | null;
@@ -241,7 +254,32 @@ function ThreadConversation({
     [branchMessage, threadId, selectedModelSlug, navigate],
   );
 
-  const scroll = useChatScroll(session.messages, session.streaming, target);
+  // Earlier pages, kept apart from the chat session's live part (v0.11).
+  const history = useHistoryPages({
+    threadId,
+    initial: { before: initialBefore, olderCursor: initialOlderCursor, island: initialIsland },
+    live: session.messages,
+  });
+  const { older, openAt } = history;
+  const transcript = useMemo(
+    () => (older.length ? [...older, ...session.messages] : session.messages),
+    [older, session.messages],
+  );
+  const targetId = target?.messageId;
+  const targetLoaded = !targetId || transcript.some((message) => message.id === targetId);
+  // A search result on the open conversation that is not loaded: load around it, once.
+  const requestedTarget = useRef(
+    loadedTarget && target ? `${target.messageId} ${target.key}` : null,
+  );
+  useEffect(() => {
+    if (!target || targetLoaded) return;
+    const key = `${target.messageId} ${target.key}`;
+    if (requestedTarget.current === key) return;
+    requestedTarget.current = key;
+    openAt(target.messageId);
+  }, [target, targetLoaded, openAt]);
+
+  const scroll = useChatScroll(session.messages, session.streaming, target, targetLoaded);
 
   // A reply may have summarised earlier messages to fit the model; read the
   // summary in use again whenever one finishes.
@@ -265,7 +303,7 @@ function ThreadConversation({
   return (
     <ThreadArtifactsProvider
       threadId={threadId}
-      messages={session.messages}
+      messages={transcript}
       streaming={session.streaming}
       canEdit={session.features?.artifacts ?? false}
     >
@@ -281,8 +319,11 @@ function ThreadConversation({
           >
             <div ref={scroll.contentRef}>
               <MessageList
-                messages={session.messages}
+                messages={transcript}
                 threadId={threadId}
+                scrollRef={scroll.scrollRef}
+                history={history.controls}
+                anchorId={targetId}
                 streaming={session.streaming}
                 // With tool calling the model decides whether to search, and its
                 // search shows as a tool step instead.
@@ -392,6 +433,8 @@ export function ChatThreadPage({
 }
 
 function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScrollTarget }) {
+  // The message the conversation opens at; later search results load on demand.
+  const [initialTarget] = useState(() => target?.messageId);
   // Read once on mount so a re-render cannot lose the handover.
   const [carriedAttachments] = useState(() =>
     sessionStorage.getItem(PENDING_THREAD_KEY) === threadId ? peekPendingAttachments() : [],
@@ -416,7 +459,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
 
   const { data, isLoading, isError, error, isFetching, fetchStatus, refetch } = useQuery({
     queryKey: ['thread', threadId, 'messages'],
-    queryFn: ({ signal }) => getChatHistory(threadId, signal),
+    queryFn: ({ signal }) => getInitialHistory(threadId, signal, initialTarget),
     retry: (failures, failure) =>
       !(failure instanceof ApiError && failure.status >= 400 && failure.status < 500) &&
       failures < 2,
@@ -453,6 +496,10 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
       threadId={threadId}
       initialMessages={data.messages}
       initialReplies={data.replies}
+      initialBefore={data.before ?? []}
+      initialOlderCursor={data.olderCursor ?? null}
+      initialIsland={data.island ?? null}
+      loadedTarget={initialTarget}
       carriedAttachments={carriedAttachments}
       carriedModel={carriedModel}
       carriedEffort={carriedEffort}

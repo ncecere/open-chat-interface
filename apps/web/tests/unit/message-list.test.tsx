@@ -163,7 +163,11 @@ describe('memoized transcript correctness', () => {
     const onRetry = vi.fn();
     const empty: UIMessage = { id: 'live', role: 'assistant', parts: [] };
     await render({ messages: [empty], streaming: true, searching: true, onRetry });
-    expect(container.querySelector('[aria-label="Searching the web"]')).not.toBeNull();
+    expect(
+      [...container.querySelectorAll('[role="status"]')].some(
+        (status) => status.textContent === 'Searching the web…',
+      ),
+    ).toBe(true);
     const reasoning: UIMessage = { ...empty, parts: [{ type: 'reasoning', text: 'Let me think' }] };
     await render({ messages: [reasoning], streaming: true, onRetry });
     expect(container.querySelector('[role="status"]')).toBeNull();
@@ -219,8 +223,14 @@ describe('memoized transcript correctness', () => {
       onRetry,
     });
     expect(container.textContent).toContain('notes.txt');
-    expect(container.textContent).toContain('Searched the web');
-    expect(container.textContent).toContain('Search Grounding Details');
+    // The search is a step of the reply's one work block (v0.11), not a panel.
+    const header = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Searched the web',
+    );
+    expect(header?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.textContent).not.toContain('Search Grounding Details');
+    await act(() => header!.click());
+    expect(container.textContent).toContain('Searched the web · 1 source');
   });
 
   it('does not dismiss a newer editor when an earlier save finishes', async () => {

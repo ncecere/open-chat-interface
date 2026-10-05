@@ -154,7 +154,9 @@ it('recovers an accepted errored stream through canonical history without losing
   expect(session.error).toBeUndefined();
   expect(session.recovery.remotePending).toBe(false);
   expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
-  expect(fetch.mock.calls.filter(([url]) => url === '/api/chat/thread/messages')).toHaveLength(1);
+  expect(
+    fetch.mock.calls.filter(([url]) => String(url).startsWith('/api/chat/thread/messages')),
+  ).toHaveLength(1);
 });
 
 it('does not erase an unaccepted failed prompt with an automatic history refresh', async () => {
@@ -298,7 +300,7 @@ it('closes a connected browser replay even when the explicit server stop fails',
   const aborted = vi.fn();
   const fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'DELETE') throw new TypeError('Injected DELETE failure');
-    if (String(url).endsWith('/messages'))
+    if (new URL(String(url), 'http://local').pathname.endsWith('/messages'))
       return Response.json({
         thread: { id: 'thread', temporary: false, expiresAt: null },
         messages: pending,
@@ -330,7 +332,11 @@ it('closes a connected browser replay even when the explicit server stop fails',
   expect(session.recovery.remotePending).toBe(true); // A local abort is not proof the producer stopped.
   expect(session.streaming).toBe(true); // Stop remains available for another explicit attempt.
   expect(fetch.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1);
-  expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/messages'))).toHaveLength(1);
+  expect(
+    fetch.mock.calls.filter(([url]) =>
+      new URL(String(url), 'http://local').pathname.endsWith('/messages'),
+    ),
+  ).toHaveLength(1);
   expect(session.messages.at(-1)?.parts).toContainEqual(
     expect.objectContaining({ type: 'text', text: 'Answer' }),
   );

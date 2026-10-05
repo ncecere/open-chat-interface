@@ -45,6 +45,7 @@ Passwords, auth secrets, encryption keys, and database connection strings are no
 - One fixture administrator: `browser-fixture@example.test`.
 - Twelve `history-01` through `history-12` scenarios, each with 100 complete messages (50 user/assistant pairs), markdown tables and code, fixed positions/timestamps, and assistant-to-prompt lineage. IDs are random per run.
 - Four empty scenarios: `cold-load-baseline`, `cold-load-candidate`, `small-chat-baseline`, and `small-chat-candidate`.
+- `long-conversation` (v0.11): 2,000 messages, each reply with prose, a table and a highlighted code block; every 100th reply a Mermaid diagram and every 250th an HTML block, saved as artifacts. `LONG-FIXTURE-START` and `LONG-FIXTURE-END` mark its two ends. Measured by `apps/web/scripts/run-browser-long-conversation.mjs` (read-only; the e2e suite also sends to it).
 - One default `browser-fixture` model, visible to admins/users, 128k context and 16k maximum output; no tools, attachments, or reasoning capabilities advertised.
 - `POST /v1/chat/completions`: fixed approximately 20 KB markdown, role plus 100 text chunks, first text after 150 ms, then 40 ms between chunks (~4.11 seconds total). Finish reason, usage, and `[DONE]` follow. Disconnecting clears timers.
 - `stream: false` (or omitted) returns the same text as ordinary OpenAI-compatible JSON. Unknown models and invalid stream flags are rejected. Request bodies are limited to 2 MiB.

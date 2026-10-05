@@ -1,10 +1,17 @@
-import { answerToolApprovalsSchema, sendMessageSchema } from '@oci/shared';
+import {
+  answerToolApprovalsSchema,
+  CHAT_HISTORY_MAX_PAGE_SIZE,
+  CHAT_HISTORY_PAGE_SIZE,
+  sendMessageSchema,
+} from '@oci/shared';
 import { UI_MESSAGE_STREAM_HEADERS } from 'ai';
 import { Hono } from 'hono';
-import { AppError, rateLimited } from '../lib/errors.js';
+import { z } from 'zod';
+import { AppError, rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
-import { parseBody } from '../middleware/validate.js';
+import { parseBody, parseQuery } from '../middleware/validate.js';
 import { setupApprovalContinuation } from '../services/chat/approvals.js';
+import { type HistoryPageRequest, readConversationPage } from '../services/chat/history-page.js';
 import { readOwnedRunState } from '../services/chat/run-state.js';
 import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
@@ -105,6 +112,14 @@ function toUIMessage(message: StoredMessage) {
   };
 }
 
+const cursorSchema = z.string().min(1).max(200);
+const historyQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(CHAT_HISTORY_MAX_PAGE_SIZE).optional(),
+  before: cursorSchema.optional(),
+  after: cursorSchema.optional(),
+  around: cursorSchema.optional(),
+});
+
 /**
  * Returns stored messages in the AI SDK UI format for hydration: the active
  * conversation, plus `replies`, every reply to the latest turn (oldest first)
@@ -113,15 +128,44 @@ function toUIMessage(message: StoredMessage) {
  * `thread` is the full conversation summary (v0.9.1; before, only its id,
  * `temporary` and `expiresAt`), so the sidebar can list an open project
  * conversation under its project even when it is not among the newest.
+ *
+ * In pages (v0.11): with `limit` (default 100, at most 500), `before`, `after`
+ * or `around` (at most one of the last three), one page of the conversation
+ * and a `page` object with its cursors and the conversation's length; see
+ * `readConversationPage`. `replies` is filled only on a page that reaches the
+ * latest message. Without any of them the whole conversation is returned in
+ * the shape above, for clients before v0.11, share dialogs and anything that
+ * needs all of it.
  */
 chatRoutes.get('/:threadId/messages', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('threadId'), user.id);
-  const { messages, replies } = await listConversation(thread.id);
+  const query = parseQuery(c, historyQuerySchema);
+  const anchors = [query.before, query.after, query.around].filter(Boolean).length;
+  if (anchors > 1) throw validationFailed('Use one of before, after and around');
 
+  if (query.limit === undefined && anchors === 0) {
+    const { messages, replies } = await listConversation(thread.id);
+    return c.json({
+      thread: serializeThread(thread),
+      messages: messages.map(toUIMessage),
+      replies: replies.map(toUIMessage),
+    });
+  }
+
+  const limit = query.limit ?? CHAT_HISTORY_PAGE_SIZE;
+  const request: HistoryPageRequest = query.before
+    ? { kind: 'before', cursor: query.before, limit }
+    : query.after
+      ? { kind: 'after', cursor: query.after, limit }
+      : query.around
+        ? { kind: 'around', messageId: query.around, limit }
+        : { kind: 'latest', limit };
+  const { messages, replies, page } = await readConversationPage(thread.id, request);
   return c.json({
     thread: serializeThread(thread),
     messages: messages.map(toUIMessage),
     replies: replies.map(toUIMessage),
+    page,
   });
 });

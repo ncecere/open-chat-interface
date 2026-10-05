@@ -13,6 +13,7 @@ import {
   ReasoningPreview,
   ReasoningText,
 } from '~/components/chat/message-reasoning';
+import { SearchStep, SourcesStep } from '~/components/chat/search-grounding';
 import { isArtifactStep, type ToolPart, ToolStepRow } from '~/components/chat/tool-steps';
 import { type WorkStep, workActivity, workSummary } from '~/components/chat/work-summary';
 import { useMediaQuery } from '~/hooks/use-media-query';
@@ -107,7 +108,10 @@ const workStepOf = (step: ToolStepSummary, part: ToolPart): WorkStep => ({
  * Otherwise the header names the current activity while the model works
  * ("Thinking…", "Searching the web…", "Writing Sales chart…") and summarises
  * the work once the answer starts ("Thought · created an artifact"); expanded,
- * it is a timeline of the reasoning and tool calls in written order. Both are
+ * it is a timeline of the reasoning and tool calls in written order, with the
+ * search made before the reply first ("Searched the web · 5 sources") and the
+ * links tool calls returned last (v0.11: before, each was a disclosure of its
+ * own above the block, so a reply has at most one). Both are
  * the same element, so a reply that goes on from reasoning to a tool call
  * keeps the person's choice and focus.
  *
@@ -132,6 +136,20 @@ export function WorkBlock({
   const tools = work.flatMap((entry) =>
     entry.type === 'tool' ? [{ part: entry.part, step: summarizeToolPart(entry.part) }] : [],
   );
+  // What the summary counts: the search before the reply, then each tool call.
+  const steps: WorkStep[] = work.flatMap((entry): WorkStep[] => {
+    if (entry.type === 'search')
+      return [
+        {
+          toolId: 'web_search',
+          label: 'Web search',
+          state: entry.grounding.error ? 'error' : 'done',
+          presearch: true,
+        },
+      ];
+    if (entry.type === 'tool') return [workStepOf(summarizeToolPart(entry.part), entry.part)];
+    return [];
+  });
   const hasReasoning = work.some((entry) => entry.type === 'reasoning');
 
   // What the model is doing now; nothing once the answer has started or the reply ended.
@@ -153,15 +171,11 @@ export function WorkBlock({
     ? thinking
       ? 'Thinking…'
       : 'Reasoning'
-    : (activity?.label ??
-      workSummary({
-        reasoning: hasReasoning,
-        steps: tools.map(({ part, step }) => workStepOf(step, part)),
-      }));
+    : (activity?.label ?? workSummary({ reasoning: hasReasoning, steps }));
   const icon =
     hasReasoning || thinking
       ? Brain
-      : tools.every(({ step }) => step.toolId === 'web_search')
+      : steps.every((step) => step.toolId === 'web_search')
         ? Globe2
         : Wrench;
   const latest = work.at(-1);
@@ -245,6 +259,20 @@ function WorkTimeline({
               <TimelineDot />
               <span className="sr-only">Reasoning: </span>
               <ReasoningText text={entry.text} />
+            </li>
+          );
+        if (entry.type === 'search')
+          return (
+            <li key={entry.key} className="relative min-w-0" data-work-entry="search">
+              <TimelineDot />
+              <SearchStep grounding={entry.grounding} />
+            </li>
+          );
+        if (entry.type === 'sources')
+          return (
+            <li key={entry.key} className="relative min-w-0" data-work-entry="sources">
+              <TimelineDot />
+              <SourcesStep sources={entry.sources} />
             </li>
           );
         const step = summarizeToolPart(entry.part);

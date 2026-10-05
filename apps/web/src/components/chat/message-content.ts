@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import type { SearchGroundingView, SourceLink } from '~/components/chat/search-grounding';
 
 /** The responding model and effort, sent as stream metadata and persisted per message. */
 export function metadataOf(message: UIMessage): {
@@ -103,7 +104,11 @@ export type ToolPlace = 'work' | 'result' | 'both';
 
 export type WorkEntry<P> =
   | { type: 'reasoning'; key: string; text: string }
-  | { type: 'tool'; key: string; part: P };
+  | { type: 'tool'; key: string; part: P }
+  /** The search made before the reply (v0.11; before, a panel above the block). */
+  | { type: 'search'; key: string; grounding: SearchGroundingView }
+  /** Links the reply's tool calls returned (v0.11; before, the same panel). */
+  | { type: 'sources'; key: string; sources: SourceLink[] };
 
 /**
  * A reply laid out as the conversation shows it (v0.10.1):

@@ -14,16 +14,13 @@ import {
   metadataOf,
   replyLayoutOf,
   textOf,
+  type WorkEntry,
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
 import { ProjectSearchNote } from '~/components/chat/project-search-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
 import { WorkBlock } from '~/components/chat/reply-work';
-import {
-  SearchGroundingDetails,
-  SearchSourcesPanel,
-  searchGroundingOf,
-} from '~/components/chat/search-grounding';
+import { replySearchOf, searchGroundingOf } from '~/components/chat/search-grounding';
 import {
   type AnswerApproval,
   ReplyResults,
@@ -125,7 +122,6 @@ export const MessageRow = memo(function MessageRow({
         ) : (
           <CapacityNote wait={capacity} />
         ))}
-      {grounding && <SearchSourcesPanel grounding={grounding} />}
       {/* Keyed: switching replies starts each one's block collapsed. */}
       <ReplyBody
         key={message.id}
@@ -134,7 +130,6 @@ export const MessageRow = memo(function MessageRow({
         streaming={streaming}
         onAnswerApproval={onAnswerApproval}
       />
-      {grounding && <SearchGroundingDetails grounding={grounding} />}
       {interruption && (
         <p role="note" className="mb-1 text-xs text-[var(--text-muted)]">
           {interruption}
@@ -191,12 +186,20 @@ function ReplyBody({
     (part) => toolPlaceOf(part, showsArtifactCard(artifacts, message.id, part, streaming)),
     (part) => `tool-${part.toolCallId}`,
   );
+  // The search before the reply and the links tool calls returned are steps
+  // of the same block (v0.11), so a reply has at most one disclosure above it.
+  const { presearch, sources } = replySearchOf(message);
+  const work: WorkEntry<ToolPart>[] = [
+    ...(presearch ? [{ type: 'search' as const, key: 'presearch', grounding: presearch }] : []),
+    ...layout.work,
+    ...(sources.length ? [{ type: 'sources' as const, key: 'sources', sources }] : []),
+  ];
   return (
     <>
-      {layout.work.length > 0 && (
+      {work.length > 0 && (
         <WorkBlock
           messageId={message.id}
-          layout={layout}
+          layout={{ ...layout, work }}
           streaming={streaming}
           answeredHere={answeredHere}
         />

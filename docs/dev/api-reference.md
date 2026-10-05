@@ -7,7 +7,7 @@ Every route the API registers, grouped by the file that defines it.
 Administrative routes require the `admin` role; an `auditor` may call the
 read-only ones. See [identity and access](../admin/identity.md).
 
-Generated from 41 route files.
+Generated from 44 route files.
 
 ## `routes/admin/audit.ts`
 
@@ -66,8 +66,10 @@ Generated from 41 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/admin/embeddings` | The embeddings setting, pgvector's state and indexing progress; the provider key is never returned. |
+| GET | `/api/admin/embeddings` | The embeddings setting, pgvector's state, generations and progress; the provider key is never returned. |
 | PUT | `/api/admin/embeddings` | Saves the setting. |
+| POST | `/api/admin/embeddings/generations/:id/cancel` | "Cancel rebuild": the filling generation is abandoned; searches stay where they are. |
+| POST | `/api/admin/embeddings/generations/:id/switch` | "Switch now": searches move to the generation being filled, even before it covers every passage (`force`). |
 | POST | `/api/admin/embeddings/test` | Embeds a sample with the model on the page (or the saved one). |
 
 ## `routes/admin/health.ts`
@@ -101,6 +103,23 @@ Generated from 41 route files.
 | DELETE | `/api/admin/lifecycle/storage-policies/:role` | — |
 | POST | `/api/admin/lifecycle/storage-reconcile` | Compares storage against the database. |
 
+## `routes/admin/maintenance.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/maintenance` | — |
+| PUT | `/api/admin/maintenance` | — |
+
+## `routes/admin/migrations.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/migrations/background` | — |
+| PATCH | `/api/admin/migrations/background/:name` | — |
+| POST | `/api/admin/migrations/background/:name/pause` | — |
+| POST | `/api/admin/migrations/background/:name/resume` | — |
+| GET | `/api/admin/migrations/upgrade` | The upgrade preflight for this database and the running release. |
+
 ## `routes/admin/models.ts`
 
 | Method | Path | Purpose |
@@ -109,6 +128,7 @@ Generated from 41 route files.
 | POST | `/api/admin/models` | — |
 | PATCH | `/api/admin/models/:id` | — |
 | DELETE | `/api/admin/models/:id` | — |
+| PUT | `/api/admin/models/:id/capacity` | A model's own provider capacity limits (v0.11), within its provider's. |
 
 ## `routes/admin/overrides.ts`
 
@@ -140,7 +160,10 @@ Generated from 41 route files.
 | POST | `/api/admin/providers` | — |
 | PATCH | `/api/admin/providers/:id` | — |
 | DELETE | `/api/admin/providers/:id` | — |
+| PUT | `/api/admin/providers/:id/capacity` | — |
 | POST | `/api/admin/providers/:id/discover` | Lists models the credential can reach; none are exposed until curated. |
+| GET | `/api/admin/providers/capacity` | Provider capacity (v0.11): limits, queue settings, and each provider's queue now. |
+| PUT | `/api/admin/providers/capacity` | — |
 
 ## `routes/admin/quotas.ts`
 
@@ -302,8 +325,8 @@ Generated from 41 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/health/live` | — |
-| GET | `/api/health/ready` | — |
+| GET | `/api/health/live` | The process is up. |
+| GET | `/api/health/ready` | Whether to send this replica new traffic. |
 
 ## `routes/index.ts`
 
@@ -311,6 +334,12 @@ Generated from 41 route files.
 | --- | --- | --- |
 | GET/POST | `/api/auth/*` | Better Auth owns every other /api/auth/* path; sign-in, sign-up, password reset and verification are limited per client address and per account (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After). |
 | POST | `/api/auth/admin/remove-user` | Answers 404: accounts are deleted with DELETE /api/admin/users/:id, which checks legal holds and the last administrator and records a `user.delete` deletion event. |
+
+## `routes/maintenance.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/maintenance` | — |
 
 ## `routes/me.ts`
 
