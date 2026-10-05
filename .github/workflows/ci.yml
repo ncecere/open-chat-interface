@@ -168,7 +168,34 @@ jobs:
             if (!ready) throw new Error(`Service did not become ready: ${url}`);
           }
           JS
-          pnpm test:e2e
+          E2E_SEEDED=1 pnpm test:e2e
+      - name: Browser tests against the deterministic fixture
+        # Specs that need the browser-performance fixture (a 2,000-message
+        # conversation and a stub model): apps/web/playwright.config.ts,
+        # FIXTURE_SPECS.
+        run: |
+          OCI_BROWSER_FIXTURE=1 TEST_DATABASE_URL="$TEST_DATABASE_URL" \
+            pnpm --filter @oci/api exec tsx test/browser-performance/server.ts > /tmp/oci-fixture.log 2>&1 &
+          fixture_pid=$!
+          VITE_API_PROXY=http://127.0.0.1:4180 \
+            pnpm --filter @oci/web exec vite preview --host 127.0.0.1 --port 4178 --strictPort > /tmp/oci-fixture-web.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$fixture_pid" "$preview_pid" 2>/dev/null || true' EXIT
+          metadata=""
+          for i in $(seq 1 120); do
+            metadata=$(sed -n 's/^Browser performance fixture ready: //p' /tmp/oci-fixture.log | head -1)
+            if test -n "$metadata"; then break; fi
+            sleep 1
+          done
+          if test -z "$metadata"; then cat /tmp/oci-fixture.log; exit 1; fi
+          credentials="$(dirname "$metadata")/credentials.json"
+          export E2E_ADMIN_EMAIL="$(node -p "require('$credentials').email")"
+          export E2E_ADMIN_PASSWORD="$(node -p "require('$credentials').password")"
+          echo "::add-mask::$E2E_ADMIN_PASSWORD"
+          for url in http://127.0.0.1:4180/api/health/ready http://127.0.0.1:4178; do
+            for i in $(seq 1 60); do curl -fsS -o /dev/null "$url" && break; sleep 1; done
+          done
+          E2E_BASE_URL=http://127.0.0.1:4178 pnpm --filter @oci/web exec playwright test tests/e2e/long-conversation.spec.ts
       - name: Preserve failed test diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
