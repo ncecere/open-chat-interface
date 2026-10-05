@@ -219,6 +219,16 @@ export const ModelPicker = memo(function ModelPicker({
                 event.preventDefault();
                 onSelect(active);
                 setOpen(false);
+              } else if (
+                // Details for the highlighted model, from the keyboard: the
+                // row's Details button is for the pointer (#114).
+                event.key === 'ArrowRight' &&
+                active &&
+                canShowDetails &&
+                event.currentTarget.selectionStart === event.currentTarget.value.length
+              ) {
+                event.preventDefault();
+                showDetails(active.id);
               }
             }}
             className="h-9 w-full bg-transparent text-[0.9375rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"

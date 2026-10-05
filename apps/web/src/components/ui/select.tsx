@@ -1,6 +1,7 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import { useState } from 'react';
 import { cn } from '~/lib/utils';
 
 export const SelectRoot = SelectPrimitive.Root;
@@ -146,10 +147,18 @@ export function Select({
   /** A note about the field, such as why it is disabled. */
   'aria-describedby'?: string;
 }) {
+  // The popup's listbox is named like the field (#114): by its aria-label, or
+  // else by the <label> pointing at it, read when the popup opens.
+  const [labelText, setLabelText] = useState<string | undefined>(undefined);
   return (
     <SelectRoot
       value={toRadixValue(value)}
       onValueChange={(next) => onChange(fromRadixValue(next))}
+      onOpenChange={(open) => {
+        if (!open || ariaLabel || !id) return;
+        const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+        setLabelText(label?.textContent?.trim() || undefined);
+      }}
       disabled={disabled}
     >
       <SelectTrigger
@@ -160,7 +169,7 @@ export function Select({
       >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent aria-label={ariaLabel ?? labelText}>
         {options.map((option) => (
           <SelectItem
             key={option.value}
@@ -195,16 +204,24 @@ export function GroupedSelect({
   className?: string;
   'aria-label'?: string;
 }) {
+  // The popup's listbox is named like the field (#114): by its aria-label, or
+  // else by the <label> pointing at it, read when the popup opens.
+  const [labelText, setLabelText] = useState<string | undefined>(undefined);
   return (
     <SelectRoot
       value={toRadixValue(value)}
       onValueChange={(next) => onChange(fromRadixValue(next))}
+      onOpenChange={(open) => {
+        if (!open || ariaLabel || !id) return;
+        const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+        setLabelText(label?.textContent?.trim() || undefined);
+      }}
       disabled={disabled}
     >
       <SelectTrigger id={id} className={className} aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent aria-label={ariaLabel ?? labelText}>
         {groups.map((group) => (
           <SelectGroup key={group.label}>
             <SelectLabel>{group.label}</SelectLabel>

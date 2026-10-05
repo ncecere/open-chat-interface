@@ -4,7 +4,7 @@ import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
 import { ModelInfoCard } from '~/components/model/model-info-card';
 import { cn } from '~/lib/utils';
-import { modelDescription } from './model-picker-data';
+import { CAPABILITY_LABELS, modelDescription } from './model-picker-data';
 
 /** The DOM id of a model's option, for the search box's aria-activedescendant. */
 export const modelOptionId = (modelId: string) => `model-option-${modelId}`;
@@ -31,7 +31,11 @@ export function ModelPickerOption({
     // The info trigger is a sibling rather than a child: a button
     // inside a button is invalid markup, and browsers resolve it by
     // dropping the inner control.
+    // Only options belong in a listbox (#114): the row is presentation, the
+    // capabilities are read as part of the option, and the details button is
+    // for the pointer (from the keyboard, Right arrow in the search box).
     <div
+      role="none"
       className={cn(
         'relative flex w-full items-center rounded-lg transition-colors',
         'hover:bg-[var(--bg-control)]',
@@ -58,6 +62,11 @@ export function ModelPickerOption({
         <span className="w-full truncate pl-6 text-xs font-medium leading-4 text-[var(--text-muted)]">
           {modelDescription(model)}
         </span>
+        {model.capabilities.length > 0 && (
+          <span className="sr-only">
+            {`, ${model.capabilities.map((capability) => CAPABILITY_LABELS[capability]).join(', ')}`}
+          </span>
+        )}
       </button>
 
       {/*
@@ -65,7 +74,7 @@ export function ModelPickerOption({
        * column, so both line up down the list however long a model
        * name happens to be.
        */}
-      <span className="flex shrink-0 items-center gap-1 pr-2">
+      <span className="flex shrink-0 items-center gap-1 pr-2" aria-hidden="true">
         {model.capabilities.map((capability) => (
           <CapabilityIcon key={capability} capability={capability} />
         ))}
@@ -73,6 +82,7 @@ export function ModelPickerOption({
         {canShowDetails && (
           <button
             type="button"
+            tabIndex={-1}
             aria-label={`Details for ${model.displayName}`}
             aria-expanded={detailsOpen}
             onClick={() => onDetails(model.id)}

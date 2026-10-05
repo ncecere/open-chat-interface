@@ -8,7 +8,8 @@ import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
 import { api } from '~/lib/api-client';
@@ -76,20 +77,25 @@ function FilterMenu({ value, onChange }: FilterMenuProps) {
         align="start"
         className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-40"
       >
-        {FILTERS.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            className={cn(
-              'text-xs',
-              option.value === value && 'bg-[var(--bg-control)] text-[var(--text-primary)]',
-            )}
-            aria-checked={option.value === value}
-            onSelect={() => onChange(option.value)}
-          >
-            <option.icon />
-            {option.label}
-          </DropdownMenuItem>
-        ))}
+        {/* One choice of four: radio items, announced as checked (#114). */}
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => onChange(next as AttachmentFilter)}
+        >
+          {FILTERS.map((option) => (
+            <DropdownMenuRadioItem
+              key={option.value}
+              value={option.value}
+              className={cn(
+                'text-xs',
+                option.value === value && 'bg-[var(--bg-control)] text-[var(--text-primary)]',
+              )}
+            >
+              <option.icon />
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
