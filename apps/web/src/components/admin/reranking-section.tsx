@@ -9,6 +9,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { LoadError, MutationError, SaveRow, SettingsSection } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -63,6 +64,7 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
 
   const changes = rerankingChanges(status.settings, draft);
   const hasChanges = Object.keys(changes).length > 0;
+  useReportUnsaved(hasChanges);
   const invalidPrice = priceMicros(draft.price) === undefined;
   const endpoint = status.providers.find((provider) => provider.id === draft.providerId)?.endpoint;
 

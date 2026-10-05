@@ -49,6 +49,8 @@ function PolicyDialog({
   const [body, setBody] = useState(source?.body ?? '');
   const [publish, setPublish] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const edited =
+    title !== (source?.title ?? 'Acceptable use policy') || body !== (source?.body ?? '');
 
   const save = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
@@ -78,7 +80,7 @@ function PolicyDialog({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{draft ? `Edit draft v${draft.version}` : 'New policy version'}</DialogTitle>
         <DialogDescription>

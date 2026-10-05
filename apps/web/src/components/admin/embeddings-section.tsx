@@ -20,6 +20,7 @@ import {
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { RerankingSection } from '~/components/admin/reranking-section';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -364,6 +365,7 @@ function EmbeddingsForm({ status }: { status: EmbeddingsStatus }) {
 
   const changes = embeddingsChanges(status.settings, draft);
   const hasChanges = Object.keys(changes).length > 0;
+  useReportUnsaved(hasChanges);
   const invalidPrice = priceMicros(draft.price) === undefined;
 
   const save = useMutation({

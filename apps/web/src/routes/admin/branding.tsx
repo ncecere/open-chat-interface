@@ -13,6 +13,7 @@ import { Check, CheckCircle2, Monitor, Moon, RotateCcw, Sun } from 'lucide-react
 import { type FormEvent, useRef, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { TurnsMark } from '~/components/brand/turns-mark';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -248,6 +249,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
 
   const patch = changedBranding(saved, draft);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: (changes: BrandingPatch) =>

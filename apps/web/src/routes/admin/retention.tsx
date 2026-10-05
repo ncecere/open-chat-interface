@@ -10,6 +10,7 @@ import {
   type ConfigSources,
   useConfigSources,
 } from '~/components/admin/config-source';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -45,6 +46,7 @@ function RetentionForm({
 
   const patch = changedRetention(settings, draft);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: () => api.put<RetentionSettings>('/admin/lifecycle/retention', patch),

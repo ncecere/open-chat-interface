@@ -1,6 +1,7 @@
 import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { ApiError, api } from '~/lib/api-client';
 import {
   type CredentialAction,
@@ -33,6 +34,7 @@ export function useStorageSettings(initialSettings: StorageSettings) {
   const isValid = Object.keys(validation).length === 0;
   const patch = changedStorageSettings(saved, draft, credentialAction, secretAccessKey);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
   const driverChanged = saved.driver !== draft.driver;
 
   const save = useMutation({

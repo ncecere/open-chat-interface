@@ -124,6 +124,9 @@ export function QuotaPolicyDialog({
 }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(() => initialDraft(policy));
+  // Compared as JSON: the draft is plain data, and only a real edit counts.
+  const [initial] = useState(() => JSON.stringify(initialDraft(policy)));
+  const edited = JSON.stringify(draft) !== initial;
   const [error, setError] = useState<string | null>(null);
 
   const save = useMutation({
@@ -167,7 +170,7 @@ export function QuotaPolicyDialog({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{policy ? 'Edit policy' : 'New policy'}</DialogTitle>
         <DialogDescription>

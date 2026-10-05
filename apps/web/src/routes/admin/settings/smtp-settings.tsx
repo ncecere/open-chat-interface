@@ -2,6 +2,7 @@ import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -233,6 +234,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
     password,
   );
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: (smtp: SmtpPatch) => api.patch<{ ok: boolean }>('/admin/settings', { smtp }),

@@ -6,6 +6,7 @@ import {
   type AdminRole,
   READ_ONLY_MESSAGE,
 } from '~/components/admin/admin-access';
+import { UnsavedChangesGuard } from '~/components/admin/unsaved-changes';
 import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { SkipLink } from '~/components/layout/skip-link';
 import { Button } from '~/components/ui/button';
@@ -112,94 +113,96 @@ export function AdminLayout() {
 
   return (
     <AdminAccessProvider role={role}>
-      <div className="flex h-dvh flex-col overflow-hidden lg:flex-row">
-        <SkipLink />
+      <UnsavedChangesGuard>
+        <div className="flex h-dvh flex-col overflow-hidden lg:flex-row">
+          <SkipLink />
 
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] bg-[image:var(--sidebar-gradient)] lg:flex">
-          <div className="flex h-14 shrink-0 items-center px-3">
-            <BackToChat />
-          </div>
-          <div className="px-4 pb-3">
-            <p className="text-sm font-semibold">Administration</p>
-          </div>
-          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-            <AdminNavList pathname={pathname} />
-          </div>
-        </aside>
-
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-sidebar)] px-2 lg:hidden">
-          <Dialog open={navOpen} onOpenChange={setNavOpen}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Open admin navigation"
-              aria-expanded={navOpen}
-              onClick={() => setNavOpen(true)}
-            >
-              <Menu aria-hidden="true" />
-            </Button>
-            {navOpen && (
-              <DialogContent
-                className={cn(
-                  'left-0 top-0 flex h-dvh w-[min(20rem,85vw)] max-w-none translate-x-0 translate-y-0 flex-col',
-                  'rounded-none rounded-r-2xl border-y-0 border-l-0 p-0',
-                )}
-              >
-                <div className="flex h-14 shrink-0 items-center px-3 pr-12">
-                  <BackToChat />
-                </div>
-                <div className="px-4 pb-3">
-                  <DialogTitle className="text-sm font-semibold">Administration</DialogTitle>
-                  <DialogDescription className="sr-only">
-                    Choose an administration page.
-                  </DialogDescription>
-                </div>
-                <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-                  <AdminNavList pathname={pathname} onNavigate={() => setNavOpen(false)} />
-                </div>
-              </DialogContent>
-            )}
-          </Dialog>
-          <div className="min-w-0 leading-tight">
-            <p className="truncate text-[0.6875rem] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-              {current?.section?.label ?? 'Administration'}
-            </p>
-            <p className="truncate text-sm font-semibold">{current?.item.label ?? 'Overview'}</p>
-          </div>
-        </header>
-
-        <main className="min-h-0 min-w-0 flex-1">
-          {/* Positioned so absolutely placed descendants (such as Radix Select's hidden
-              native select) stay inside it instead of widening the page on phones. */}
-          <div
-            id="main-content"
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access per WCAG 2.1.1, and this doubles as the skip-link target
-            tabIndex={0}
-            className="scrollbar-thin relative h-full overflow-y-auto"
-          >
-            <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
-              {role === 'auditor' && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="mb-6 flex items-start gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/45 px-4 py-3 text-sm text-[var(--text-secondary)]"
-                >
-                  <Eye
-                    className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]"
-                    aria-hidden="true"
-                  />
-                  <p>{READ_ONLY_MESSAGE}</p>
-                </div>
-              )}
-              {/* Read-only maintenance mode (v0.11): why the forms are off; an
-                  administrator turns it off on System health. */}
-              <ReadOnlyBanner className="mb-6 rounded-xl border" />
-              <Outlet />
+          <aside className="hidden w-64 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] bg-[image:var(--sidebar-gradient)] lg:flex">
+            <div className="flex h-14 shrink-0 items-center px-3">
+              <BackToChat />
             </div>
-          </div>
-        </main>
-      </div>
+            <div className="px-4 pb-3">
+              <p className="text-sm font-semibold">Administration</p>
+            </div>
+            <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+              <AdminNavList pathname={pathname} />
+            </div>
+          </aside>
+
+          <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-sidebar)] px-2 lg:hidden">
+            <Dialog open={navOpen} onOpenChange={setNavOpen}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Open admin navigation"
+                aria-expanded={navOpen}
+                onClick={() => setNavOpen(true)}
+              >
+                <Menu aria-hidden="true" />
+              </Button>
+              {navOpen && (
+                <DialogContent
+                  className={cn(
+                    'left-0 top-0 flex h-dvh w-[min(20rem,85vw)] max-w-none translate-x-0 translate-y-0 flex-col',
+                    'rounded-none rounded-r-2xl border-y-0 border-l-0 p-0',
+                  )}
+                >
+                  <div className="flex h-14 shrink-0 items-center px-3 pr-12">
+                    <BackToChat />
+                  </div>
+                  <div className="px-4 pb-3">
+                    <DialogTitle className="text-sm font-semibold">Administration</DialogTitle>
+                    <DialogDescription className="sr-only">
+                      Choose an administration page.
+                    </DialogDescription>
+                  </div>
+                  <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+                    <AdminNavList pathname={pathname} onNavigate={() => setNavOpen(false)} />
+                  </div>
+                </DialogContent>
+              )}
+            </Dialog>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[0.6875rem] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                {current?.section?.label ?? 'Administration'}
+              </p>
+              <p className="truncate text-sm font-semibold">{current?.item.label ?? 'Overview'}</p>
+            </div>
+          </header>
+
+          <main className="min-h-0 min-w-0 flex-1">
+            {/* Positioned so absolutely placed descendants (such as Radix Select's hidden
+              native select) stay inside it instead of widening the page on phones. */}
+            <div
+              id="main-content"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access per WCAG 2.1.1, and this doubles as the skip-link target
+              tabIndex={0}
+              className="scrollbar-thin relative h-full overflow-y-auto"
+            >
+              <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+                {role === 'auditor' && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mb-6 flex items-start gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/45 px-4 py-3 text-sm text-[var(--text-secondary)]"
+                  >
+                    <Eye
+                      className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]"
+                      aria-hidden="true"
+                    />
+                    <p>{READ_ONLY_MESSAGE}</p>
+                  </div>
+                )}
+                {/* Read-only maintenance mode (v0.11): why the forms are off; an
+                  administrator turns it off on System health. */}
+                <ReadOnlyBanner className="mb-6 rounded-xl border" />
+                <Outlet />
+              </div>
+            </div>
+          </main>
+        </div>
+      </UnsavedChangesGuard>
     </AdminAccessProvider>
   );
 }

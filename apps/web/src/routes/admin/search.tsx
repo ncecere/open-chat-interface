@@ -10,6 +10,7 @@ import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -285,6 +286,7 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   const fallbackInfo = draft.fallbackProvider ? SEARCH_PROVIDERS[draft.fallbackProvider] : null;
   const fallbackTarget = fallbackTestTarget(draft, fallbackKey);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const test = useMutation({
     mutationFn: () =>

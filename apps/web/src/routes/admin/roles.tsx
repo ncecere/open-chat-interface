@@ -29,6 +29,7 @@ import {
 } from '~/components/admin/config-source';
 import { RoleFeaturesForm } from '~/components/admin/role-features-form';
 import { RoleToolsForm } from '~/components/admin/role-tools-form';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -185,6 +186,7 @@ function RateLimitForm({ access }: { access: RoleAccess }) {
     ({ key, max }) => !isWholeNumberIn(Number(draft[key]), max) || draft[key].trim() === '',
   );
   const hasChanges = Object.keys(changes).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: () => api.put('/admin/lifecycle/rate-limits', { roles: { [role]: changes } }),
@@ -546,6 +548,7 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
   if (Number(tokens) !== settings.reserve.tokens) reserve.tokens = Number(tokens);
   if (Object.keys(reserve).length > 0) patch.reserve = reserve;
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: () => api.put('/admin/lifecycle/rate-limits', patch),
