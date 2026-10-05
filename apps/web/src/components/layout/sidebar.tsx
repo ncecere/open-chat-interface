@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { PanelLeft, Search, UserRoundPlus } from 'lucide-react';
+import { PanelLeft, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
 import { SidebarProjects } from '~/components/layout/sidebar-projects';
@@ -126,9 +126,6 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
         <div className="min-w-0 flex-1">
           <UserMenu />
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label="New profile">
-          <UserRoundPlus />
-        </Button>
       </div>
 
       <div className="flex items-center justify-between px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:hidden">
