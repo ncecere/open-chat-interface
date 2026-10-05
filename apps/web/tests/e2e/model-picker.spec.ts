@@ -84,7 +84,7 @@ test('model picker keeps its size while filtering and is keyboard reachable', as
   await trigger.click();
 
   const popup = page.getByLabel('Choose a model');
-  const search = page.getByRole('textbox', { name: 'Search models' });
+  const search = page.getByRole('combobox', { name: 'Search models' });
   await expect(popup).toBeVisible();
   await expect(search).toBeFocused();
 

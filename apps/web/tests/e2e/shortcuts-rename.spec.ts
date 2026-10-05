@@ -71,7 +71,7 @@ test('the global shortcuts work from the composer', async ({ page }) => {
   await composer.click();
   await page.keyboard.press(`${mod}+/`);
   await expect(page.getByRole('dialog', { name: 'Choose a model' })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Search models' })).toBeFocused();
+  await expect(page.getByRole('combobox', { name: 'Search models' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Choose a model' })).toBeHidden();
 
