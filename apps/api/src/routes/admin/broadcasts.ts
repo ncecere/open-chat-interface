@@ -92,9 +92,16 @@ broadcastRoutes.delete('/:id', async (c) => {
   const removed = await db
     .delete(schema.broadcast)
     .where(and(eq(schema.broadcast.id, id), eq(schema.broadcast.organizationId, organizationId)))
-    .returning({ id: schema.broadcast.id });
+    .returning({
+      title: schema.broadcast.title,
+      body: schema.broadcast.body,
+      level: schema.broadcast.level,
+      audienceRoles: schema.broadcast.audienceRoles,
+      published: schema.broadcast.published,
+    });
 
-  if (removed.length === 0) throw notFound('Announcement not found');
+  const [announcement] = removed;
+  if (!announcement) throw notFound('Announcement not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -102,6 +109,7 @@ broadcastRoutes.delete('/:id', async (c) => {
     action: 'broadcast.delete',
     targetType: 'broadcast',
     targetId: id,
+    metadata: announcement,
   });
 
   return c.json({ ok: true });

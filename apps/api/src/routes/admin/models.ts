@@ -270,7 +270,16 @@ modelRoutes.delete('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
 
-  await db.delete(schema.model).where(eq(schema.model.id, id));
+  const [deleted] = await db.delete(schema.model).where(eq(schema.model.id, id)).returning({
+    slug: schema.model.slug,
+    displayName: schema.model.displayName,
+    upstreamModelId: schema.model.upstreamModelId,
+    providerId: schema.model.providerId,
+    isDefault: schema.model.isDefault,
+  });
+  // An unknown id used to answer ok and write a model.delete entry for a
+  // model that never existed.
+  if (!deleted) throw notFound('Model not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -278,6 +287,7 @@ modelRoutes.delete('/:id', async (c) => {
     action: 'model.delete',
     targetType: 'model',
     targetId: id,
+    metadata: deleted,
   });
 
   return c.json({ ok: true });

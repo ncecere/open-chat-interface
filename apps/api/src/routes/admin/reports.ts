@@ -93,9 +93,15 @@ reportRoutes.delete('/:id', async (c) => {
   const deleted = await db
     .delete(schema.scheduledReport)
     .where(eq(schema.scheduledReport.id, id))
-    .returning({ id: schema.scheduledReport.id });
+    .returning({
+      name: schema.scheduledReport.name,
+      kind: schema.scheduledReport.kind,
+      cadence: schema.scheduledReport.cadence,
+      recipients: schema.scheduledReport.recipients,
+    });
 
-  if (deleted.length === 0) throw notFound('Report not found');
+  const [report] = deleted;
+  if (!report) throw notFound('Report not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -103,6 +109,7 @@ reportRoutes.delete('/:id', async (c) => {
     action: 'report.delete',
     targetType: 'scheduled_report',
     targetId: id,
+    metadata: report,
     ipAddress: clientIp(c),
   });
 

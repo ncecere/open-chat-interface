@@ -216,7 +216,7 @@ providerRoutes.patch('/:id', async (c) => {
 providerRoutes.delete('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
-  await loadProviderOrThrow(id);
+  const provider = await loadProviderOrThrow(id);
 
   await db.delete(schema.provider).where(eq(schema.provider.id, id));
 
@@ -226,6 +226,8 @@ providerRoutes.delete('/:id', async (c) => {
     action: 'provider.delete',
     targetType: 'provider',
     targetId: id,
+    // The row is gone, so the entry says what it was (never the key).
+    metadata: { label: provider.label, kind: provider.kind, baseUrl: provider.baseUrl },
   });
 
   return c.json({ ok: true });

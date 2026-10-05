@@ -95,7 +95,12 @@ inviteRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [existing] = await db
-    .select({ id: schema.invitation.id })
+    .select({
+      email: schema.invitation.email,
+      role: schema.invitation.role,
+      expiresAt: schema.invitation.expiresAt,
+      redeemedAt: schema.invitation.redeemedAt,
+    })
     .from(schema.invitation)
     .where(eq(schema.invitation.id, id))
     .limit(1);
@@ -110,6 +115,12 @@ inviteRoutes.delete('/:id', async (c) => {
     action: 'invite.revoke',
     targetType: 'invite',
     targetId: id,
+    metadata: {
+      email: existing.email,
+      role: existing.role,
+      expiresAt: existing.expiresAt?.toISOString() ?? null,
+      redeemed: existing.redeemedAt !== null,
+    },
   });
 
   return c.json({ ok: true });
