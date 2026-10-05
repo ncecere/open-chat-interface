@@ -7,6 +7,7 @@ import {
   runScheduledComplianceExport,
   startManualComplianceExport,
 } from '../compliance/export.js';
+import { embeddingRebuildJobs } from '../embeddings/rebuild.js';
 import {
   applyThreadRetention,
   pruneAuditLog,
@@ -212,6 +213,8 @@ export function lifecycleJobs(): JobDefinition[] {
     },
     // Background migrations and, on a single instance, post-deploy steps (v0.11).
     ...migrationJobs(),
+    // Embedding generations (v0.11): fill after a model change, switch, drop.
+    ...embeddingRebuildJobs(),
   ];
 }
 

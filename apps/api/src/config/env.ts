@@ -215,6 +215,15 @@ const envSchema = z.object({
   REDIS_TLS_CA_FILE: z.string().optional(),
   /** Longest a single Redis command may take before it fails (and Redis is treated as away). */
   REDIS_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(2_000),
+
+  // --- Embedding generations (v0.11 design, section 7) ---------------------
+  /**
+   * How long a replaced embeddings generation is kept after searches move to
+   * the new one, before the `embeddings.rebuild` job drops its table.
+   */
+  EMBEDDING_GENERATION_GRACE_MINUTES: z.coerce.number().int().min(1).max(525_600).default(1_440),
+  /** Pause after every 64 passages a rebuild embeds, to spread the provider's load. */
+  EMBEDDING_REBUILD_PAUSE_MS: z.coerce.number().int().min(0).max(60_000).default(250),
 });
 
 export type Env = z.infer<typeof envSchema>;

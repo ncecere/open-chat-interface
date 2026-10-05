@@ -240,10 +240,40 @@ floors of their own) do the filtering. The value is fixed and deliberately
 low, so a passage that answers a question is never dropped for scoring
 slightly low.
 
-**Changing the model** (or its size) re-embeds everything in the background.
-Until a project's passages are embedded with the new model, its searches are
-keyword-only. Switching meaning-based search off keeps the stored embeddings, so
-switching it back on with the same model needs no re-embedding.
+**Changing the model** (or its size) re-embeds every passage in the
+background, without a gap (v0.11). The new model gets storage of its own, a
+*generation*, and the `embeddings.rebuild` job fills it on a worker (or `all`)
+replica while searches keep using the current model and its embeddings,
+questions included. Passages uploaded meanwhile are embedded with both models.
+When the new generation covers every passage, searches switch to it at once;
+the previous embeddings are kept for a grace period (a day by default) and
+then removed. Before you save a different model the tab shows what it will
+cost: the number of passages, their estimated tokens (about four characters
+to a token) and, if you entered a price, the cost at that price.
+
+While a rebuild runs the tab shows its progress: passages embedded with the
+new model, the rate per minute, the time left at that rate, and files that
+failed and are waiting to be retried (each is retried with a growing delay;
+the current model's failures are shown separately). Two actions go with it:
+
+- **Switch now** moves searches to the new model before it covers every
+  passage. The dialog says how many passages it does not cover yet: until the
+  rebuild reaches them, they are found by keyword only. Use it when a file
+  keeps failing with the new model, or the old model is no longer available.
+- **Cancel rebuild** abandons the new model: searches stay where they are and
+  what was embedded with it is removed. Choosing the current model again on
+  the form does the same.
+
+Choosing a model again within the grace period after leaving it reuses its
+embeddings, so only passages added since are embedded. The rebuild pauses
+while meaning-based search is switched off, and while the database is busy
+(the same checks as background migrations). During the upgrade to v0.11 the
+switch waits until the upgrade is complete (`migrate --post`; see
+[Upgrading to v0.11](../OPERATIONS.md#embedding-generations-migration-0041));
+the tab says so. Switching meaning-based search off keeps the stored
+embeddings, so switching it back on with the same model needs no
+re-embedding. A model that cannot embed the sample cannot replace the one in
+use, even while meaning-based search is off.
 
 **Cost.** Embedding calls are recorded as usage under `embedding:<model id>`:
 passages are charged to the file's owner, questions to the person asking. They
@@ -253,8 +283,12 @@ budgets that cover every model. A failed or slow embeddings call never fails a
 reply: the reply is searched by keyword instead, and the failure is logged.
 
 Changes here are audited as `embeddings.update` (with the previous and new
-setting) and tests as `embeddings.test`. Auditors can see the tab but not
-change it.
+setting, and for a model change the rebuild and its cost estimate) and tests
+as `embeddings.test`. A switch is audited as `embeddings.generation.switch`
+(by the administrator who forced it, or as automatic, with how many passages
+the new model covered), a cancelled rebuild as `embeddings.generation.cancel`,
+and removing a replaced generation as `embeddings.generation.drop`. Auditors
+can see the tab but not change it.
 
 ## Reranking
 

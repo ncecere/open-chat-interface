@@ -304,6 +304,99 @@ list `0.11.usage-rollups` in its `requires` in `releases.json`, so an
 instance cannot reach it with the backfill unfinished. 0.12 has no first
 migration to attach it to yet, so it is not in the manifest.
 
+## Embedding generations
+
+Vectors for meaning-based project search (v0.11, design sections 7 and 8;
+migration `0041_embedding_generations`, `apps/api/src/services/vector-store/`,
+`services/embeddings/generations.ts`, `rebuild.ts`).
+
+**One table per embeddings configuration.** A *generation* is a provider,
+model and size, recorded in `embedding_generation` (state `filling`,
+`current`, `retired`, `cancelled` or `dropped`; partial unique indexes allow
+one `current` and one `filling`). Its vectors live in their own table, created
+at runtime because the `vector(n)` column needs pgvector (which an operator
+enables) and the model's size:
+
+| Generation | Table |
+| --- | --- |
+| 1 | `project_file_embedding` (the name v0.9 and v0.10 created) |
+| n > 1 | `project_file_embedding_g<n>` |
+
+A check constraint ties `table_name` to the id, so a table name is never free
+text; the store also checks it before quoting it as an identifier. Every table
+has the same columns (`attachment_id`, `ordinal`, `model_key`, `embedding`,
+`embedded_at`), primary key `(attachment_id, ordinal)` and a foreign key to
+`project_file_chunk` with `ON DELETE CASCADE`. Creating or dropping one locks
+`project_file_chunk` briefly for the foreign key, so both run with a 2-second
+`lock_timeout` and are retried by the next job run.
+
+**Why generation 1 keeps its name.** An instance upgraded from v0.10 already
+has `project_file_embedding`, and v0.10 replicas still running during the
+rolling upgrade read and write it by that name, and re-create it (and embed
+every passage again) if it is missing or of another size. Renaming it to
+`_g1` would take an exclusive lock, and worse, make those replicas build a
+second, empty copy. So nothing is renamed or copied: the first time v0.11
+needs a generation, the saved `embeddings` setting becomes generation 1 and
+its existing table is used as it is. The setting keeps the shape v0.10 reads
+and always describes the **current** generation's model (the switch writes it
+in the same transaction), so a v0.10 replica keeps embedding into and
+searching generation 1 exactly as v0.11 does. A model chosen while a rebuild
+runs lives only in the filling generation's row.
+
+**Gated on the end of the upgrade.** Leaving generation 1 (a switch away from
+it) and dropping its table both wait until every v0.11 post-deploy step is
+recorded as finished (`migrate --post` runs after the last replica is
+replaced; a single instance runs it at startup). There is no record of which
+releases still run, so this is the operator's own statement that none of
+v0.10 does. Without it, a v0.10 replica would read the new model from the
+setting and drop and re-create generation 1's table or re-embed everything
+into it. Later generations have no such gate: no release before v0.11 knows
+their names.
+
+**Fill, switch, drop.** The job `embeddings.rebuild` (every 60 s on worker
+and `all` replicas, 45 s budget) embeds passages missing from the filling
+generation in passage-key order with a cursor, 512 a page, one request per
+file and up to 64 passages, pausing `EMBEDDING_REBUILD_PAUSE_MS` after every
+64 passages and stopping while the background migrations' pressure checks fire
+(replication lag, an old transaction). It is not a background migration: a
+batch there commits in the transaction that advances its cursor, and this
+batch waits on a provider call, which must not hold a transaction open.
+Resumable without a cursor table: each run starts again and the anti-join
+skips what is stored; a crash loses at most the request in flight (embedded,
+not stored, embedded again), never a stored passage, and the primary key
+makes a passage stored twice impossible. Once nothing is missing it switches:
+one transaction locks both rows, retires the current generation
+(`drop_after = now() + EMBEDDING_GENERATION_GRACE_MINUTES`), makes the
+filling one current and writes its model to the setting. Each search reads
+the current generation as it starts, so it uses one generation or the other,
+whole. A later run drops tables of generations retired past `drop_after`, and
+of cancelled ones at once, and marks them `dropped` (the row stays as
+history). Choosing a retired or cancelled configuration again before its
+table is dropped reuses it.
+
+**Writes and deletes.** Uploads embed the start of their file into the
+current and the filling generation. Deletes need no outbox: the passage
+foreign key removes a vector from every generation in the transaction that
+deletes the passage, and passages go with their file, project and owner by
+cascade, so trash purge, retention, legal hold release and account deletion
+(by either release) reach every generation with no extra code. The store's
+`deleteBy*` methods delete from every table not dropped, in one transaction
+(the caller's, when given); they are there for a store outside PostgreSQL,
+which would need the outbox the design describes.
+
+**Backoff.** `embedding_generation_failure` (generation, file) replaces
+`project_file_embedding_failure`, whose single row per file could not hold
+two generations. The old table stays because v0.10 replicas write it during
+the upgrade; a later release drops it in a post-deploy step.
+
+**Full-text indexes** for a future search feature follow the same pattern
+without a new mechanism: the new index is built `CONCURRENTLY` by a
+post-deploy step (or, for one that depends on data, a background migration
+fills a new column first), the feature checks `isPostStepDone` /
+`isBackgroundMigrationDone` and keeps the old query until then, and the old
+index is dropped by a post-deploy step of the next release. Searches never
+go without an index meanwhile.
+
 ## Adding a migration
 
 Change the schema, then:

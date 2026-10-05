@@ -115,9 +115,9 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'The export cleans up its own objects (failed runs, and pruning older exports when configured).',
   },
-  'services/project-search/embedding.ts projectFileEmbeddingFailure': {
+  'services/vector-store/pgvector.ts embeddingGenerationFailure': {
     hold: 'exempt',
-    how: 'A retry bookkeeping row for search indexing.',
+    how: 'A retry bookkeeping row for search indexing (per embeddings generation).',
   },
   // Sessions, verification tokens and invitations: credentials, not records.
   'auth/provisioning.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },

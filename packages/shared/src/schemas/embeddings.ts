@@ -56,6 +56,17 @@ export const embeddingsTestSchema = z
   })
   .strict();
 
+/**
+ * "Switch now" for the generation being filled. `force` switches before it
+ * covers every passage; the passages it misses are found by keyword only
+ * until the job embeds them.
+ */
+export const embeddingsSwitchSchema = z
+  .object({
+    force: z.boolean().optional(),
+  })
+  .strict();
+
 export interface EmbeddingsTestResult {
   ok: boolean;
   /** Length of the vector the model returned, when it worked. */
@@ -64,7 +75,69 @@ export interface EmbeddingsTestResult {
   message?: string;
 }
 
+/**
+ * Embedding generations (v0.11): each embeddings configuration (provider,
+ * model, dimensions) is a generation with its own storage. Changing the model
+ * fills a new generation in the background while searches keep using the
+ * current one, then switches to it.
+ *
+ * - `filling`: being embedded; new passages are written to it as well.
+ * - `current`: what searches use.
+ * - `retired`: searched no more; its storage is dropped after a grace period.
+ * - `cancelled`: a rebuild abandoned before its switch.
+ * - `dropped`: its storage is gone; kept as history.
+ */
+export const EMBEDDING_GENERATION_STATES = [
+  'filling',
+  'current',
+  'retired',
+  'cancelled',
+  'dropped',
+] as const;
+export type EmbeddingGenerationState = (typeof EMBEDDING_GENERATION_STATES)[number];
+
+/** Why a filling generation cannot be switched to yet, if anything stops it. */
+export type EmbeddingSwitchBlock =
+  /**
+   * The current generation is generation 1, whose table the previous release
+   * still reads; switching waits until this release's post-deploy steps
+   * (`migrate --post`) say every replica runs it.
+   */
+  'upgrade-in-progress';
+
+export interface EmbeddingGenerationStatus {
+  id: number;
+  state: EmbeddingGenerationState;
+  providerId: string;
+  modelId: string;
+  dimensions: number;
+  inputPriceMicros: number | null;
+  createdAt: string;
+  switchedAt: string | null;
+  /** For a retired generation: when its storage is dropped. */
+  dropAfter: string | null;
+  /** Whether its storage exists at the right size. */
+  storageReady: boolean;
+  /**
+   * Its storage: `ready`, `missing` (not created yet), `mismatch` (a table of
+   * another size: the model was changed on a replica of the previous release
+   * during an upgrade) or `unavailable` (pgvector not enabled).
+   */
+  storage: 'ready' | 'missing' | 'mismatch' | 'unavailable';
+  /** Passages of live project files, and how many have a vector in this generation. */
+  passages: { total: number; embedded: number };
+  /** Vectors written per minute recently (the last ten minutes). */
+  perMinute: number;
+  /** Estimated seconds until every passage is embedded at that rate; null when not moving. */
+  etaSeconds: number | null;
+  failures: { files: number; lastError: string | null };
+}
+
 export interface EmbeddingsStatus {
+  /**
+   * The configuration an administrator chose: while a rebuild runs, the new
+   * (filling) model, not the one searches still use.
+   */
   settings: z.infer<typeof embeddingsSettingsSchema>;
   pgvector: { state: PgvectorState; version: string | null };
   /** Enabled providers that can embed, for the provider picker. */
@@ -77,6 +150,29 @@ export interface EmbeddingsStatus {
   passages: { total: number; embedded: number };
   /** Files whose embedding failed for the current model and is waiting to be retried. */
   failures: { files: number; lastError: string | null };
+  /** The generation searches use, the one being filled, and retired ones not dropped yet. */
+  generations: {
+    current: EmbeddingGenerationStatus | null;
+    filling: EmbeddingGenerationStatus | null;
+    retired: EmbeddingGenerationStatus[];
+    /** Set while a generation is being filled but cannot be switched to, even when complete. */
+    switchBlocked: EmbeddingSwitchBlock | null;
+  };
+  /**
+   * For the cost of a model change before it is saved: passages a new model
+   * would embed, and their average length in tokens (estimated from
+   * characters, about four per token).
+   */
+  estimate: { passages: number; averageTokens: number };
+}
+
+/** Embedding cost in micro-dollars, or null when no price is known. */
+export function embeddingCostMicros(
+  estimate: { passages: number; averageTokens: number },
+  inputPriceMicros: number | null | undefined,
+): number | null {
+  if (inputPriceMicros === null || inputPriceMicros === undefined) return null;
+  return Math.ceil((estimate.passages * estimate.averageTokens * inputPriceMicros) / 1_000_000);
 }
 
 export type EmbeddingsSettings = z.infer<typeof embeddingsSettingsSchema>;

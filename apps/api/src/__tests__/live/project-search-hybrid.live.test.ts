@@ -48,22 +48,24 @@ vi.mock('../../services/embeddings/model.js', async (importOriginal) => {
 
 const available = await livePostgresAvailable();
 const { logger } = await import('../../lib/logger.js');
-const { updateSetting, invalidateSettingsCache } = await import('../../services/settings.js');
+const { invalidateSettingsCache } = await import('../../services/settings.js');
 const { contextBudget, emptyCost } = await import('../../services/chat/context-budget.js');
 const { inspectProjectFiles } = await import('../../services/chat/attachment-context.js');
 const { selectProjectFiles } = await import('../../services/chat/project-context.js');
 const { indexProjectFile, indexUploadedProjectFile } = await import(
   '../../services/project-search/indexing.js'
 );
-const { embedPendingProjectPassages, EMBED_BATCH } = await import(
+const { embedPendingProjectPassages, EMBED_BATCH, fillGeneration } = await import(
   '../../services/project-search/embedding.js'
 );
 const { semanticProjectChunks, vectorRankProjectChunks } = await import(
   '../../services/project-search/semantic.js'
 );
-const { embeddingStorage, ensureEmbeddingTable, pgvectorInfo } = await import(
-  '../../services/embeddings/storage.js'
+const { pgvectorInfo } = await import('../../services/embeddings/storage.js');
+const { applyModelChoice, resolveGenerations } = await import(
+  '../../services/embeddings/generations.js'
 );
+const { vectorStore } = await import('../../services/vector-store/index.js');
 const { resolveEmbeddingModel } = await import('../../services/embeddings/model.js');
 const { embeddingsStatus, embeddingsHealthCheck } = await import(
   '../../services/embeddings/status.js'
@@ -121,6 +123,7 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
     invalidateSettingsCache();
   }
 
+  /** As an administrator saving the Embeddings page (without the sample embedding). */
   async function configure(
     settings: Partial<{
       enabled: boolean;
@@ -130,14 +133,35 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       inputPriceMicros: number | null;
     }>,
   ) {
-    await updateSetting('embeddings', {
-      enabled: true,
-      providerId: 'fake-provider',
-      modelId: 'fake-embed',
-      dimensions: 16,
-      inputPriceMicros: null,
-      ...settings,
-    });
+    await applyModelChoice(
+      {
+        enabled: true,
+        providerId: 'fake-provider',
+        modelId: 'fake-embed',
+        dimensions: 16,
+        inputPriceMicros: null,
+        ...settings,
+      },
+      null,
+    );
+    invalidateSettingsCache();
+  }
+
+  /** Forgets every generation and its table, as on an instance never configured. */
+  async function resetGenerations() {
+    const tables = await pool.db.execute<{ name: string }>(
+      sql`select tablename as name from pg_tables where tablename like 'project_file_embedding%' and tablename <> 'project_file_embedding_failure'`,
+    );
+    for (const { name } of tables) await pool.db.execute(sql`drop table ${sql.identifier(name)}`);
+    await pool.db.execute(sql`delete from embedding_generation`);
+    await pool.db.execute(sql`delete from instance_setting where key = 'embeddings'`);
+    invalidateSettingsCache();
+  }
+
+  async function current() {
+    const { current: generation } = await resolveGenerations({ fresh: true });
+    if (!generation) throw new Error('No current generation');
+    return generation;
   }
 
   async function project(name: string, userId = owner) {
@@ -271,7 +295,11 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
 
     it('stays keyword-only, exactly as before, even with an embeddings model configured', async () => {
       expect(await pgvectorInfo()).toEqual({ state: 'available', version: null, schema: null });
-      expect(await embeddingStorage()).toBeNull();
+      expect(await vectorStore().health()).toEqual({
+        kind: 'pgvector',
+        state: 'available',
+        version: null,
+      });
       const { project: target } = await largeProject('Plain');
 
       await configure({ enabled: false });
@@ -298,7 +326,10 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       expect(table?.found).toBeNull();
       expect(await usageEvents(owner)).toEqual([]);
       expect(logger.warn).not.toHaveBeenCalled();
-      await expect(ensureEmbeddingTable(16)).rejects.toThrow('pgvector extension is not enabled');
+      await expect(vectorStore().ensureStorage(await current())).rejects.toThrow(
+        'pgvector extension is not enabled',
+      );
+      expect(await vectorStore().storageState(await current())).toBe('unavailable');
     });
 
     it('reports the extension as installed but not enabled', async () => {
@@ -329,23 +360,43 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       await pool.db.execute(sql`delete from project`);
       await pool.db.execute(sql`delete from usage_event`);
       await pool.db.execute(sql`delete from usage_record`);
+      await resetGenerations();
       await configure({});
     });
 
-    it('creates the embedding table once, safely under concurrency, and re-creates it for new dimensions', async () => {
+    it('creates the embedding table once, safely under concurrency, and re-creates it for new dimensions only when asked', async () => {
+      const store = vectorStore();
+      const generation = await current();
+      // Generation 1 keeps the name v0.10 uses.
+      expect(generation).toMatchObject({
+        id: 1,
+        tableName: 'project_file_embedding',
+        state: 'current',
+      });
       await pool.db.execute(sql`drop table if exists project_file_embedding`);
-      const results = await Promise.all(Array.from({ length: 6 }, () => ensureEmbeddingTable(16)));
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () => store.ensureStorage(generation)),
+      );
       expect(results.filter((result) => result === 'created')).toHaveLength(1);
       expect(results.filter((result) => result === 'ready')).toHaveLength(5);
-      expect(await embeddingStorage()).toEqual({ schema: 'public', dimensions: 16 });
-      expect(await ensureEmbeddingTable(16)).toBe('ready');
-      const changed = await Promise.all([ensureEmbeddingTable(8), ensureEmbeddingTable(8)]);
+      expect(await store.storageState(generation)).toBe('ready');
+      expect(await store.ensureStorage(generation)).toBe('ready');
+      // Storage of another size is left alone unless replacing it is asked for.
+      const smaller = { ...generation, dimensions: 8 };
+      expect(await store.ensureStorage(smaller)).toBe('mismatch');
+      expect(await store.storageState(smaller)).toBe('mismatch');
+      const changed = await Promise.all([
+        store.ensureStorage(smaller, { replaceMismatched: true }),
+        store.ensureStorage(smaller, { replaceMismatched: true }),
+      ]);
       expect(changed.sort()).toEqual(['ready', 'recreated']);
-      expect((await embeddingStorage())?.dimensions).toBe(8);
-      expect(await ensureEmbeddingTable(16)).toBe('recreated');
-      await expect(ensureEmbeddingTable(0)).rejects.toThrow(RangeError);
-      await expect(ensureEmbeddingTable(16001)).rejects.toThrow(RangeError);
-      await expect(ensureEmbeddingTable(1.5)).rejects.toThrow(RangeError);
+      expect(await store.storageState(generation)).toBe('mismatch');
+      expect(await store.ensureStorage(generation, { replaceMismatched: true })).toBe('recreated');
+      for (const dimensions of [0, 16001, 1.5]) {
+        await expect(store.ensureStorage({ ...generation, dimensions })).rejects.toThrow(
+          RangeError,
+        );
+      }
     });
 
     it('embeds passages in bounded, per-file batches and carries on after a restart', async () => {
@@ -492,12 +543,11 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       expect(unrelated.searchPart).toBeNull();
 
       const scope = { userId: owner, projectId: target.id, fileIds: [notes.id, stock.id] };
-      const key = 'fake-provider/fake-embed/16';
+      const generation = await current();
       const nearest = async (text: string) =>
         vectorRankProjectChunks(
           scope,
-          { schema: 'public' },
-          key,
+          generation,
           (await fake.doEmbed({ values: [text] })).embeddings[0]!,
           50,
         );
@@ -528,10 +578,10 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       expect(await embedPendingProjectPassages()).toBe(0);
       const [failure] = await pool.db
         .select()
-        .from(schema.projectFileEmbeddingFailure)
-        .where(eq(schema.projectFileEmbeddingFailure.attachmentId, extra.id));
+        .from(schema.embeddingGenerationFailure)
+        .where(eq(schema.embeddingGenerationFailure.attachmentId, extra.id));
       expect(failure).toMatchObject({
-        modelKey: 'fake-provider/fake-embed/16',
+        generationId: 1,
         failures: 1,
         lastError: 'provider down',
       });
@@ -543,11 +593,11 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
 
       // Due again: retried, and a second failure doubles the wait.
       await pool.db.execute(
-        sql`update project_file_embedding_failure set retry_at = now() - interval '1 second'`,
+        sql`update embedding_generation_failure set retry_at = now() - interval '1 second'`,
       );
       fake.failWith = new Error('still down');
       await embedPendingProjectPassages();
-      const [second] = await pool.db.select().from(schema.projectFileEmbeddingFailure);
+      const [second] = await pool.db.select().from(schema.embeddingGenerationFailure);
       expect(second).toMatchObject({ failures: 2, lastError: 'still down' });
       expect(second!.retryAt.getTime() - Date.now()).toBeGreaterThan(9 * 60_000);
 
@@ -561,10 +611,10 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       // Once working, the backed-off file is embedded when due and its record cleared.
       fake.failWith = null;
       await pool.db.execute(
-        sql`update project_file_embedding_failure set retry_at = now() - interval '1 second'`,
+        sql`update embedding_generation_failure set retry_at = now() - interval '1 second'`,
       );
       expect(await embedAll()).toBeGreaterThan(0);
-      expect(await pool.db.select().from(schema.projectFileEmbeddingFailure)).toEqual([]);
+      expect(await pool.db.select().from(schema.embeddingGenerationFailure)).toEqual([]);
       expect((await embeddingRows()).some((row) => row.attachment_id === notes.id)).toBe(true);
     });
 
@@ -576,12 +626,12 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       fake.failWith = new Error('outage');
       expect(await embedPendingProjectPassages()).toBe(0);
       expect(fake.doEmbedCalls).toHaveLength(3);
-      expect(await pool.db.select().from(schema.projectFileEmbeddingFailure)).toHaveLength(3);
+      expect(await pool.db.select().from(schema.embeddingGenerationFailure)).toHaveLength(3);
     });
 
     it('embeds an uploaded file straight away when storage is ready', async () => {
       const target = await project('Uploads');
-      await ensureEmbeddingTable(16);
+      await vectorStore().ensureStorage(await current());
       const file = await projectFile(target.id, 'fresh.txt', ledger('Fresh'), { index: false });
       await indexUploadedProjectFile(file.id);
       const rows = (await embeddingRows()).filter((row) => row.attachment_id === file.id);
@@ -594,52 +644,58 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
       expect((await embeddingRows()).filter((row) => row.attachment_id === off.id)).toEqual([]);
     });
 
-    it('re-embeds everything when the model changes, and uses keyword search meanwhile', async () => {
+    it('rebuilds in a new generation when the model changes, and keeps searching the current one meanwhile', async () => {
       const { project: target, notes, stock } = await largeProject('Changing');
       const total = (await chunkContents(notes.id)).length + (await chunkContents(stock.id)).length;
       await embedAll();
       expect((await select(target, QUESTION)).searchPart?.data.ranking).toBe('hybrid');
 
-      // Same dimensions, new model: old vectors are ignored until replaced in place.
+      // Same dimensions, new model: a second generation, filled in the background.
       await configure({ modelId: 'fake-embed-2' });
+      const { current: first, filling: second } = await resolveGenerations({ fresh: true });
+      expect(first).toMatchObject({ id: 1, modelKey: 'fake-provider/fake-embed/16' });
+      expect(second).toMatchObject({
+        id: 2,
+        tableName: 'project_file_embedding_g2',
+        state: 'filling',
+        modelKey: 'fake-provider/fake-embed-2/16',
+      });
+      // Searches keep using generation 1, and its vectors are untouched.
       const meanwhile = await select(target, QUESTION);
-      expect(meanwhile.searchPart).toBeNull();
-      expect(await embedAll()).toBe(total);
-      const rows = await embeddingRows();
-      expect(rows).toHaveLength(total);
-      expect(new Set(rows.map((row) => row.model_key))).toEqual(
-        new Set(['fake-provider/fake-embed-2/16']),
+      expect(meanwhile.searchPart?.data.ranking).toBe('hybrid');
+      expect(passageText(meanwhile)).toContain(TARGET);
+      expect(await embedAll()).toBe(0);
+      expect(await fillGeneration(second!, { deadline: Date.now() + 60_000, pauseMs: 0 })).toBe(
+        total,
       );
-      expect((await select(target, QUESTION)).searchPart?.data.ranking).toBe('hybrid');
-
-      // New dimensions: the table is re-created at the new size and filled again.
-      fake = fakeEmbeddingModel({ modelId: 'fake-embed-3', dimensions: 12 });
-      state.fake = fake;
-      await configure({ modelId: 'fake-embed-3', dimensions: 12 });
-      expect((await select(target, QUESTION)).searchPart).toBeNull();
-      expect(await embedAll()).toBe(total);
-      expect((await embeddingStorage())?.dimensions).toBe(12);
+      expect(await embeddingRows()).toHaveLength(total);
+      const [filled] = await pool.db.execute<{ rows: number; keys: string[] }>(
+        sql`select count(*)::int as rows, array_agg(distinct model_key) as keys from project_file_embedding_g2`,
+      );
+      expect(filled).toEqual({ rows: total, keys: ['fake-provider/fake-embed-2/16'] });
       const status = await embeddingsStatus();
       expect(status).toMatchObject({
         active: true,
-        storageDimensions: 12,
+        storageDimensions: 16,
+        settings: { modelId: 'fake-embed-2', dimensions: 16 },
         pgvector: { state: 'enabled', version: expect.any(String) },
-        passages: { embedded: total },
+        passages: { embedded: total, total },
+        generations: {
+          current: { id: 1, modelId: 'fake-embed', passages: { total, embedded: total } },
+          filling: { id: 2, modelId: 'fake-embed-2', passages: { total, embedded: total } },
+        },
       });
       expect(await embeddingsHealthCheck()).toMatchObject({
         status: 'ok',
-        detail: expect.stringContaining(`${total} of ${total} passages embedded with fake-embed-3`),
+        detail: expect.stringContaining(
+          `${total} of ${total} passages embedded with fake-embed; rebuilding for fake-embed-2: ${total} of ${total}`,
+        ),
       });
-      const hybrid = await select(target, QUESTION);
-      expect(passageText(hybrid)).toContain(TARGET);
 
       // A model returning the wrong size is refused, never stored.
-      fake = fakeEmbeddingModel({ modelId: 'fake-embed-3', dimensions: 5 });
+      fake = fakeEmbeddingModel({ modelId: 'fake-embed', dimensions: 5 });
       state.fake = fake;
       expect((await select(target, QUESTION)).searchPart).toBeNull();
-      await ensureEmbeddingTable(12);
-      await configure({ modelId: 'fake-embed-3', dimensions: 16 });
-      // Storage is the wrong size for the setting until the job re-creates it.
       expect(
         await semanticProjectChunks(
           { userId: owner, projectId: target.id, fileIds: [notes.id] },
@@ -679,20 +735,19 @@ describe.skipIf(!available)('live: meaning-based project search', () => {
         projectId: mine.project.id,
         fileIds: [siblingFile.id, foreign.id, mine.notes.id],
       };
-      const key = 'fake-provider/fake-embed/16';
+      const generation = await current();
       const nearest = await vectorRankProjectChunks(
         scope,
-        { schema: 'public' },
-        key,
+        generation,
         (await fake.doEmbed({ values: [QUESTION] })).embeddings[0]!,
         50,
       );
       expect(nearest.length).toBeGreaterThan(0);
       expect(new Set(nearest.map((chunk) => chunk.attachmentId))).toEqual(new Set([mine.notes.id]));
       expect(nearest[0]!.content).toContain(TARGET);
-      expect(
-        await vectorRankProjectChunks({ ...scope, fileIds: [] }, { schema: 'public' }, key, [1], 5),
-      ).toEqual([]);
+      expect(await vectorRankProjectChunks({ ...scope, fileIds: [] }, generation, [1], 5)).toEqual(
+        [],
+      );
       expect(await semanticProjectChunks({ ...scope, fileIds: [] }, QUESTION, 5)).toBeNull();
       expect(await semanticProjectChunks(scope, '   ', 5)).toBeNull();
     });

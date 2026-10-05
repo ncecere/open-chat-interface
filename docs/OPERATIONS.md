@@ -687,6 +687,8 @@ exactly as in v0.8. **System health** shows the state in its *Meaning-based
 search* row.
 
 Once both are in place, OCI creates a `project_file_embedding` table at runtime
+(from v0.11, generation 1; see
+[Embedding generations](#embedding-generations-migration-0041))
 (its `vector(n)` column depends on the model) under an advisory lock, and the
 `projects.embed-passages` job fills it in the background. The table is part of
 the database, so `pg_dump` backs it up; a restore needs pgvector on the target
@@ -1001,6 +1003,51 @@ drops the fallback will require it to be finished before upgrading.
 The rollups hold exactly the usage events that are kept: usage history
 retention prunes both together, and they keep no history of their own (the
 per-day `usage_record` table still does).
+
+#### Embedding generations (migration 0041)
+
+Migration 0041 adds two small tables, `embedding_generation` and
+`embedding_generation_failure`; v0.10 never reads them. From v0.11, changing
+the embeddings model on **Providers & Models → Embeddings** no longer empties
+meaning-based search while passages are embedded again: the new model is a
+new *generation* with its own table (`project_file_embedding_g2`, `_g3`, ...),
+filled in the background by the `embeddings.rebuild` job on worker (or `all`)
+replicas while searches keep using the current one, and searches switch to it
+once it covers every passage ([Embeddings](admin/models-providers.md#embeddings)).
+Details: [Database, embedding generations](dev/database.md#embedding-generations).
+
+**During the upgrade.** Nothing is renamed or copied: the existing
+`project_file_embedding` table becomes generation 1 under its current name, so
+v0.10 replicas keep using it. Two things wait until the upgrade is complete,
+that is until `migrate --post` has run after the last replica was replaced (a
+single instance with `RUN_MIGRATIONS=true` does this itself): switching
+searches away from generation 1, and dropping its table. A rebuild started
+during the upgrade fills meanwhile, and the Embeddings tab says the switch is
+waiting. Do not change the embeddings model on a v0.10 replica during the
+upgrade: v0.10 would re-create generation 1's table at the new size; v0.11
+then reports the mismatch (System health and the logs) and searches are
+keyword-only until the model is chosen again on a v0.11 replica.
+
+**Disk.** During a rebuild both generations exist. A generation takes about
+8.7 KiB per passage at 1,536 dimensions (measured: 493 MiB for 58,000
+passages at the `small` scale profile, 3.2 GiB for 390,000 at `medium`), so
+roughly 5.8 bytes per dimension per passage for vectors of more than about
+500 dimensions, which PostgreSQL stores out of line. Have free space for one
+more generation of the new model's size before changing the model, plus WAL
+for writing it. The replaced generation is dropped after the grace period;
+until then both count towards database size and backups.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `EMBEDDING_GENERATION_GRACE_MINUTES` | `1440` | How long a replaced generation's table is kept after searches switch away from it. |
+| `EMBEDDING_REBUILD_PAUSE_MS` | `250` | Pause after every 64 passages a rebuild sends to the provider, to spread its load. |
+
+The rebuild also waits while a standby lags or a transaction has been open
+longer than `BACKGROUND_MIGRATION_MAX_REPLICATION_LAG_MS` /
+`BACKGROUND_MIGRATION_MAX_TRANSACTION_AGE_MS` ([Background
+migrations](#background-migrations)). Re-embedding is charged as usage to
+each file's owner, as embedding an upload is; the tab shows the estimated
+cost before a model change is saved.
 
 ## Shutting down and draining
 

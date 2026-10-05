@@ -156,6 +156,11 @@ export default defineConfig({
         'src/services/embeddings/status.ts': { statements: 95, branches: 80, functions: 100 },
         'src/services/embeddings/storage.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/embeddings/usage.ts': { statements: 85, branches: 80, functions: 100 },
+        // Embedding generations and the vector store (v0.11).
+        'src/services/embeddings/generations.ts': { statements: 90, branches: 88, functions: 100 },
+        'src/services/embeddings/rebuild.ts': { statements: 95, branches: 85, functions: 100 },
+        'src/services/vector-store/pgvector.ts': { statements: 90, branches: 80, functions: 100 },
+        'src/services/vector-store/index.ts': { statements: 100, branches: 100, functions: 100 },
         'src/services/project-search/embedding.ts': {
           statements: 90,
           branches: 85,

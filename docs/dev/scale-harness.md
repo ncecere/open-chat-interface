@@ -190,9 +190,10 @@ migration (`apps/api/src/services/embeddings/storage.ts`). The generator:
    20000}`, so the stored vectors carry the model key the API computes
    (`<providerId>/scale-embed/<n>`).
 
-When the API starts, `ensureEmbeddingTable(n)` finds a table of matching
-dimensions and keeps it, meaning-based search is active at once, and the
-embedding job only works on the passages left unembedded. `--dimensions`
+When the API starts it records the saved model as embedding generation 1
+(v0.11), whose table keeps that name and is used as it is, so meaning-based
+search is active at once and the embedding job only works on the passages
+left unembedded. `--dimensions`
 changes the width (for example 768 or 3072).
 
 ## The stub model
@@ -588,6 +589,62 @@ admin overview is unchanged: its remaining cost is the 14-day messages-per-day
 count (an index-only scan of `message_created_at_idx` grouping 600,000 rows
 by day, 178 ms) and the unfiltered `count(*)` of `message` (69 ms), the next
 candidates if it matters.
+
+## Embedding generations (v0.11, section 7)
+
+What a model change costs while OCI serves: a second generation filled in the
+background, uploads written to both, and searches on the current generation
+until the switch ([database.md](database.md#embedding-generations)).
+`tools/scale/rebuild.sh` measures it on a stack kept by `run.sh --keep`: it
+gives the current generation an embedding backlog of 11,000 passages again
+(as at the start of a run), saves another model as the generated
+administrator, runs the main k6 phase during the fill, and
+`tools/scale/rebuild.mjs` samples the rebuild's progress every 5 s, times the
+vector store's search statement (`EXPLAIN ANALYZE`, five largest projects)
+and uploads 40-passage project files before, during and after, until searches
+switch. `small` profile (about 62,000 passages, 1,536 dimensions), one API
+replica in role `all` (so the fill shares its process with requests), same
+machine as the baseline with other agents' stacks running, stub embeddings at
+40 ms a request, `EMBEDDING_REBUILD_PAUSE_MS` 250.
+
+| | Before (one generation) | During the rebuild | After the switch |
+| --- | ---: | ---: | ---: |
+| Vector search statement, five largest projects, median (max) | 10.5 ms (12.2) | 9.7 ms (11.7; p90 10.4) | 9.3 ms (10.1) |
+| In-app vector retrieval, mean from `pg_stat_statements` | 9.2 ms | 9.6 ms | |
+| Reply start added by OCI, project chat, p95 | 280 ms | 227 ms | |
+| … large project (passages searched), p95 | 317 ms | 326 ms | |
+| Project-file upload of 40 passages (embedded in the request), median (p90) | 82 ms (90) | 136 ms (166) | 75 ms (81) |
+| `projects.embed-passages`, passages per busy second | 213 | 74 | |
+
+The rebuild filled 62,037 passages in 748 s, 4,975 a minute (83 a second)
+including the job's 15 s idle per minute, then switched by itself; searches
+stayed on generation n throughout, with no change in their cost (they read
+one table; the fill writes another). Writing to two generations costs uploads
+one more embeddings request (here 40 ms) and insert per generation: 54 ms at
+the median, gone after the switch. The current generation's own embedding job
+ran at a third of its rate while the fill ran beside it: both send requests to
+the same provider (the stub, one Node process serialising 1,536-float JSON)
+from the same API process, so on a real deployment the fill takes provider
+capacity from new uploads' embeddings in the same way; a worker replica and
+the pause bound it. Disk: the new generation's table took 536 MB for 62,037
+passages (8.6 KiB each), the replaced one 614 MB (bloated by the backlog
+re-embedded into it), both present until the grace period ends.
+
+A first run paused after every request instead of every 64 passages: with
+files of about 12 passages a request, the fill managed 1,650 passages a minute
+(37 minutes for `small`, which would be over 4 hours at `medium`), so the
+pause now applies per 64 passages. That run also measured project chat
+during the fill at p95 546 ms (large projects 848 ms) against 396 ms before,
+on a busier machine; the second run did not repeat it.
+
+**A deadlock found on the way, not in this work.** The first attempt wedged
+the API under the main k6 phase: `reserveQuota` holds a transaction (and a
+pool connection) while `usageSource()` asks `isBackgroundMigrationDone()`
+through the pool; with the `0.11.usage-rollups` backfill unfinished (the
+harness never runs `migrate --post`), that answer is fetched again every 30 s,
+and with as many concurrent reservations as pool connections every one waits
+for a connection none will release. The measurements above ran after
+`migrate --post` finished the backfill, which caches the answer for good.
 
 ## Limits
 

@@ -66,11 +66,28 @@ function database() {
   return postgres(url, { prepare: false, max: 2, onnotice: () => {} });
 }
 
+/**
+ * The vector table searches use: the current embedding generation's (v0.11),
+ * or `project_file_embedding` before generations or before the API recorded one.
+ */
+async function currentVectorTable(sql) {
+  const [{ found }] = await sql`select to_regclass('embedding_generation') is not null as found`;
+  if (found) {
+    const [row] = await sql`
+      select table_name, model_key from embedding_generation where state = 'current'`;
+    if (row) return { table: row.table_name, modelKey: row.model_key };
+  }
+  return { table: 'project_file_embedding', modelKey: null };
+}
+
 async function backlog(sql) {
+  const { table } = await currentVectorTable(sql);
+  const [{ present }] = await sql`select to_regclass(${table}) is not null as present`;
+  const embeddings = present ? sql`(select count(*) from ${sql(table)})::bigint` : sql`0::bigint`;
   const [row] = await sql`
     select
       (select count(*) from project_file_chunk)::bigint as passages,
-      (select count(*) from project_file_embedding)::bigint as embeddings,
+      ${embeddings} as embeddings,
       (select count(*) from attachment a where a.project_id is not null and a.deleted_at is null
          and not exists (select 1 from project_file_index i where i.attachment_id = a.id))::bigint as unindexed_files,
       (select count(*) from project_file_index)::bigint as indexed_files,
@@ -170,7 +187,10 @@ const NAMED_QUERIES = [
   ['Conversation search (message GIN index, filtered to one person)', 'with hits as materialized'],
   ['Project keyword retrieval (ts_rank_cd over one project)', 'ts_rank_cd'],
   ['Project vector retrieval (pgvector exact scan over one project)', '<=>'],
-  ['Embedding backlog (passages without an embedding)', 'left join "project_file_embedding" e'],
+  [
+    'Embedding backlog (passages without an embedding)',
+    'left join "project_file_embedding(_g\\d+)?" e',
+  ],
   ['Sidebar conversation list', '^select .* from "thread" where .*order by "thread"."pinned" desc'],
   ['Conversation messages', '^select .* from "message" where .*"thread_id" = '],
   // Usage reports read usage_event, or from v0.11 the hourly rollups (with
@@ -204,37 +224,37 @@ function median(values) {
  * embedding for comparison: what a search would cost without the project
  * filter, or with an approximate index's job done by brute force.
  */
-async function vectorProbe(sql) {
-  const [{ found }] = await sql`select to_regclass('project_file_embedding') is not null as found`;
+export async function vectorProbe(sql) {
+  const { table } = await currentVectorTable(sql);
+  const [{ found }] = await sql`select to_regclass(${table}) is not null as found`;
   if (!found) return null;
+  const vectors = sql(table);
   const projects = await sql`
     select a.project_id, a.user_id, count(*)::int as passages, array_agg(distinct a.id) as file_ids,
       min(e.model_key) as model_key
-    from project_file_embedding e join attachment a on a.id = e.attachment_id
+    from ${vectors} e join attachment a on a.id = e.attachment_id
     group by a.project_id, a.user_id order by count(*) desc limit 5
   `;
   const results = [];
   for (const project of projects) {
     const timings = [];
     for (let run = 0; run < 3; run++) {
+      // The vector store's statement (apps/api/src/services/vector-store/pgvector.ts, v0.11).
       const plan = await sql`
         explain (analyze, format json)
         with q as materialized (
-          select embedding from project_file_embedding
+          select embedding from ${vectors}
           where attachment_id = ${project.file_ids[run % project.file_ids.length]} limit 1
-        ),
-        scope as materialized (
-          select c.attachment_id, c.ordinal, c.start_offset, c.end_offset, c.content, c.search, a.filename
-          from project_file_chunk c join attachment a on a.id = c.attachment_id
-          where c.attachment_id = any(${project.file_ids}) and a.user_id = ${project.user_id}
-            and a.project_id = ${project.project_id} and a.upload_pending = false and a.deleted_at is null
         )
-        select s.attachment_id, s.filename, s.ordinal, s.content,
+        select e.attachment_id, e.ordinal,
           (e.embedding <=> (select embedding from q))::float8 as distance
-        from scope s
-        join project_file_embedding e on e.attachment_id = s.attachment_id and e.ordinal = s.ordinal
-        where e.model_key = ${project.model_key}
-        order by distance, s.attachment_id, s.ordinal
+        from ${vectors} e
+        join attachment a on a.id = e.attachment_id
+        where a.user_id = ${project.user_id} and a.project_id = ${project.project_id}
+          and a.upload_pending = false and a.deleted_at is null
+          and e.attachment_id = any(${project.file_ids})
+          and e.model_key = ${project.model_key}
+        order by distance, e.attachment_id, e.ordinal
         limit 160
       `;
       timings.push(executionMs(plan));
@@ -246,14 +266,14 @@ async function vectorProbe(sql) {
       maxMs: Math.max(...timings.filter((t) => t !== null)),
     });
   }
-  const [{ count }] = await sql`select count(*)::bigint as count from project_file_embedding`;
+  const [{ count }] = await sql`select count(*)::bigint as count from ${vectors}`;
   const globalTimings = [];
   for (let run = 0; run < 3; run++) {
     const plan = await sql`
       explain (analyze, format json)
       select attachment_id, ordinal
-      from project_file_embedding
-      order by embedding <=> (select embedding from project_file_embedding offset ${run * 7} limit 1)
+      from ${vectors}
+      order by embedding <=> (select embedding from ${vectors} offset ${run * 7} limit 1)
       limit 10
     `;
     globalTimings.push(executionMs(plan));
