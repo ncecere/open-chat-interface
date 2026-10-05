@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../src/providers/theme-provider';
-import { AdminUsagePage, fillDays } from '../../src/routes/admin/usage';
+import { AdminUsagePage, fillDays, money } from '../../src/routes/admin/usage';
 import { cleanup, renderAdmin } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));
@@ -97,4 +97,14 @@ it('labels a disabled model and one outside the chat catalog for what they are',
   // Embedding usage was labelled "removed".
   expect(rows.find((row) => row.includes('text-embedding-3-small'))).toContain('not in catalog');
   expect(rows.find((row) => row.includes('GPT-4.1 mini'))).not.toMatch(/disabled|catalog|removed/);
+});
+
+it('shows every spend figure in cents, and a sliver of a cent as <$0.01 (#88)', () => {
+  expect(money(0)).toBe('$0.00');
+  // $0.0008 on the card and $0.0000 for an embeddings row, before.
+  expect(money(800)).toBe('<$0.01');
+  expect(money(30)).toBe('<$0.01');
+  expect(money(4_999)).toBe('<$0.01');
+  expect(money(5_000)).toBe('$0.01');
+  expect(money(1_234_567_890)).toBe('$1,234.57');
 });

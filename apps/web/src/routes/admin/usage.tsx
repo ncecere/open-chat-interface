@@ -112,9 +112,15 @@ const RANGE_TABS: readonly PillTab<RangeTabId>[] = USAGE_RANGES.map((range) => (
   label: `${range} days`,
 }));
 
-function money(micros: number): string {
+/**
+ * One precision for every spend figure on the page, card and tables alike
+ * (#88): cents, with thousands separators, and "<$0.01" for a cost too small
+ * to show in cents rather than a run of zeros.
+ */
+export function money(micros: number): string {
   const dollars = micros / MICROS_PER_DOLLAR;
-  return `$${dollars.toFixed(micros > 0 && dollars < 0.01 ? 4 : 2)}`;
+  if (micros > 0 && dollars < 0.005) return '<$0.01';
+  return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function compact(value: number): string {
