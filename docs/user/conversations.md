@@ -235,8 +235,9 @@ under its project, not in the date groupings.
   a project, which show the project's name after their title.
 - **Rename** one with its pencil; see
   [Renaming a conversation](#renaming-a-conversation).
-- **Archive** one to remove it from the list without deleting it. Archived
-  conversations remain under [Settings → History](settings.md#history).
+- **Archive** one to remove it from the list without deleting it. A notice
+  confirms it, with **Undo**; archived conversations remain under
+  [Settings → History](settings.md#history).
 - **Search** finds conversations by title and by what was said in them,
   including those in projects. See
   [Finding a conversation](#finding-a-conversation).

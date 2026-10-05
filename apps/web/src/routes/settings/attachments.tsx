@@ -2,6 +2,7 @@ import type { StoredFile } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Files, FileText, ImageIcon, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { StorageMeter } from '~/components/settings/storage-meter';
 import { Button } from '~/components/ui/button';
 import {
@@ -108,6 +109,15 @@ export function SettingsAttachmentsPage() {
     select: (result) => result.attachments,
   });
 
+  const [confirming, setConfirming] = useState<string[] | null>(null);
+  const confirmName =
+    confirming?.length === 1
+      ? attachments.data?.find((file) => file.id === confirming[0])?.filename
+      : undefined;
+  const confirmTitle = confirmName
+    ? `Delete ${confirmName}?`
+    : `Delete ${confirming?.length ?? 0} files?`;
+
   const remove = useMutation({
     mutationFn: async (ids: string[]) => {
       const results = await Promise.allSettled(ids.map((id) => api.delete(`/attachments/${id}`)));
@@ -212,7 +222,7 @@ export function SettingsAttachmentsPage() {
             size="sm"
             className="sm:ml-auto"
             disabled={selected.size > 0 && [...selected].every((id) => deletingIds.has(id))}
-            onClick={() => remove.mutate([...selected])}
+            onClick={() => setConfirming([...selected])}
           >
             <Trash2 />
             Delete ({selected.size})
@@ -241,7 +251,20 @@ export function SettingsAttachmentsPage() {
         onSort={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
         onToggle={toggle}
         onToggleAll={toggleAllVisible}
-        onDelete={(ids) => remove.mutate(ids)}
+        onDelete={(ids) => setConfirming(ids)}
+      />
+
+      {/* Deleting is permanent, so it asks first (#101). Failures are reported
+          on the page, as before. */}
+      <ConfirmDialog
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={confirmTitle}
+        description="It is removed from the conversations it was attached to, and models can no longer read it there. This cannot be undone."
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        errorMessage="The files could not be deleted."
+        onConfirm={() => remove.mutateAsync(confirming ?? [])}
       />
     </div>
   );

@@ -176,8 +176,9 @@ much space it occupies. **Storage used** shows the total against any limit for
 your role, broken down into chat files, project files and artifacts.
 
 Delete chat files you no longer need: this is what frees space against a
-storage limit. Deleting a file removes it from its conversations, which stay,
-and models can no longer read it there. Project files show the project they
+storage limit. Deleting asks you to confirm, since it cannot be undone; a
+deleted file is removed from its conversations, which stay, and models can no
+longer read it there. Project files show the project they
 belong to; open the project to delete them.
 
 ## Keyboard shortcuts and help

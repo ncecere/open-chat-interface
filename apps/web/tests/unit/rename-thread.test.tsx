@@ -32,6 +32,8 @@ vi.mock('../../src/lib/api-client', async (importOriginal) => ({
   api,
 }));
 vi.mock('../../src/components/layout/theme-menu', () => ({ ThemeMenu: () => null }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+vi.mock('sonner', () => ({ toast }));
 vi.mock('../../src/providers/temporary-chat-provider', () => ({
   useTemporaryChat: () => ({ temporary: false, setTemporary: vi.fn() }),
 }));
@@ -221,6 +223,19 @@ describe('renaming from the sidebar', () => {
       ]),
     );
     expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('says a conversation was archived and offers Undo (#101)', async () => {
+    await render();
+    api.patch.mockResolvedValue({ thread: thread('t1', 'Trip plans', { archived: true }) });
+    await click(button('Archive thread: Trip plans'));
+    expect(api.patch).toHaveBeenCalledWith('/threads/t1', { archived: true });
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
+    const [message, options] = toast.success.mock.calls[0]!;
+    expect(message).toBe('Conversation archived');
+    expect(options.description).toBe('Trip plans');
+    await act(async () => options.action.onClick());
+    expect(api.patch).toHaveBeenLastCalledWith('/threads/t1', { archived: false });
   });
 
   it('cancels on Escape without saving', async () => {

@@ -2,6 +2,7 @@ import type { ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ChevronDown, Folder, GitFork, Pencil, Pin, PinOff } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
@@ -118,7 +119,23 @@ export function ThreadRow({
         <button
           type="button"
           aria-label={`Archive thread: ${thread.title}`}
-          onClick={() => update.mutate({ id: thread.id, archived: true })}
+          onClick={() =>
+            update.mutate(
+              { id: thread.id, archived: true },
+              {
+                // Said, with a way back, rather than the row just vanishing (#101).
+                onSuccess: () =>
+                  toast.success('Conversation archived', {
+                    id: `archived-${thread.id}`,
+                    description: thread.title,
+                    action: {
+                      label: 'Undo',
+                      onClick: () => update.mutate({ id: thread.id, archived: false }),
+                    },
+                  }),
+              },
+            )
+          }
           className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <Archive className="size-3.5" />

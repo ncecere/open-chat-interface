@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsAttachmentsPage } from '../../src/routes/settings/attachments';
-import { button, cleanup, click, renderAdmin } from './admin-test-utils';
+import { button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
 
 /**
  * Settings → Attachments (v0.9.1): project files are listed with their
@@ -105,6 +105,12 @@ describe('Settings → Attachments', () => {
     await render();
     await click(document.querySelector('[aria-label="Select all visible attachments"]')!);
     await click(button('Delete (1)'));
+    // Permanent, so it asks first (#101).
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(dialog()?.textContent).toContain('This cannot be undone.');
+    await click(
+      [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Delete')!,
+    );
     expect(api.delete).toHaveBeenCalledTimes(1);
     expect(api.delete).toHaveBeenCalledWith('/attachments/a1');
   });
