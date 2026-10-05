@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-05
+
 v0.11 "always on": upgrade from the previous minor release with no downtime,
 keep working through a database or Redis failover, and rebuild search
 without a gap, each tested in CI. Upgrade with `migrate`, then replace
@@ -1250,7 +1252,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.10.2...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.11.0...main
+[0.11.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.0
 [0.10.2]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.2
 [0.10.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.1
 [0.10.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.0
