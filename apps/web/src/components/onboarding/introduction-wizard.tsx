@@ -87,9 +87,12 @@ export function IntroductionWizard() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[var(--bg-app)] px-4 py-10">
+    // On phones the card starts at the top and keeps one height, so its edge
+    // and Back/Continue stay put from step to step (#107); centred on wider
+    // screens, where every step fits the same card.
+    <div className="flex min-h-dvh items-start justify-center bg-[var(--bg-app)] px-4 py-10 md:items-center">
       <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
-        <div className="grid min-h-[26rem] md:grid-cols-[1fr_1.15fr]">
+        <div className="grid min-h-[calc(100dvh-5rem)] grid-rows-[auto_1fr] md:min-h-[26rem] md:grid-cols-[1fr_1.15fr] md:grid-rows-none">
           {/* Context stays put while the question changes, so the wizard reads
               as one task rather than a series of unrelated screens. */}
           <div className="flex flex-col justify-between gap-8 border-[var(--border-subtle)] border-b p-8 md:border-r md:border-b-0 md:p-10">
@@ -122,7 +125,7 @@ export function IntroductionWizard() {
           </div>
 
           <div className="flex flex-col justify-between gap-8 p-8 md:p-10">
-            <div className="flex flex-1 flex-col justify-center gap-5">
+            <div className="flex flex-1 flex-col justify-start gap-5 md:justify-center">
               {current.id === 'name' && (
                 <>
                   <label className="flex flex-col gap-1.5 text-sm" htmlFor="wizard-name">
@@ -133,7 +136,8 @@ export function IntroductionWizard() {
                       autoFocus
                       value={draft.displayName}
                       maxLength={120}
-                      placeholder="Alex"
+                      // Not a name, which read as one already filled in (#107).
+                      placeholder="Your first name"
                       onChange={(event) =>
                         setDraft((value) => ({ ...value, displayName: event.target.value }))
                       }
