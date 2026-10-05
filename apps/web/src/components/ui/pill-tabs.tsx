@@ -62,8 +62,11 @@ export function PillTabs<T extends string>({
   }
 
   return (
+    // One row, scrolling sideways when it does not fit (a phone): wrapped, a
+    // tab sat on a second line inside the same pill (#89). A tab moved to
+    // with the keyboard scrolls itself into view.
     <div
-      className="inline-flex flex-wrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1"
+      className="inline-flex max-w-full gap-1 overflow-x-auto rounded-xl bg-[var(--bg-segment-track)] p-1 [scrollbar-width:none]"
       role="tablist"
       aria-label={label}
     >
@@ -81,7 +84,7 @@ export function PillTabs<T extends string>({
           onClick={() => onChange(tab.id)}
           onKeyDown={(event) => move(event, index)}
           className={cn(
-            'rounded-lg px-3 py-1.5 text-sm transition-colors',
+            'shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition-colors',
             active === tab.id
               ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',

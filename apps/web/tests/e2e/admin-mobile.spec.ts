@@ -31,6 +31,7 @@ test('admin pages do not scroll sideways on a phone', async ({ page }) => {
     (item) => item.to,
   );
   const overflowing: string[] = [];
+  const wrapped: string[] = [];
   for (const route of routes) {
     await page.goto(route);
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
@@ -38,6 +39,22 @@ test('admin pages do not scroll sideways on a phone', async ({ page }) => {
     await page.waitForLoadState('networkidle');
     const width = await page.evaluate(() => document.documentElement.scrollWidth);
     if (width > PHONE.width) overflowing.push(`${route} (${width}px)`);
+    // A tab strip is one row: it scrolls sideways rather than wrapping a tab
+    // onto a second line inside the same pill (#89).
+    const rows = await page
+      .getByRole('tablist')
+      .evaluateAll((lists) =>
+        lists.map(
+          (list) =>
+            new Set(
+              [...list.querySelectorAll('[role="tab"]')].map((tab) =>
+                Math.round(tab.getBoundingClientRect().top),
+              ),
+            ).size,
+        ),
+      );
+    if (rows.some((count) => count > 1)) wrapped.push(route);
   }
   expect(overflowing, `Pages wider than ${PHONE.width}px`).toEqual([]);
+  expect(wrapped, 'Pages with a tab strip on more than one row').toEqual([]);
 });
