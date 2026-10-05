@@ -11,6 +11,7 @@ import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { SkipLink } from '~/components/layout/skip-link';
 import { Button } from '~/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/dialog';
+import { RevealWhenLoaded } from '~/components/ui/reveal-when-loaded';
 import {
   ADMIN_OVERVIEW,
   type AdminNavItem,
@@ -197,7 +198,10 @@ export function AdminLayout() {
                 {/* Read-only maintenance mode (v0.11): why the forms are off; an
                   administrator turns it off on System health. */}
                 <ReadOnlyBanner className="mb-6 rounded-xl border" />
-                <Outlet />
+                {/* Shown once its first data is in, not section by section (#104). */}
+                <RevealWhenLoaded resetKey={pathname}>
+                  <Outlet />
+                </RevealWhenLoaded>
               </div>
             </div>
           </main>

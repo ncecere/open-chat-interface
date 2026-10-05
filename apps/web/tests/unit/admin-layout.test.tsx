@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -57,7 +58,13 @@ async function renderLayout(path: string, role: 'admin' | 'auditor' = 'admin') {
   await act(async () => {
     await router.load();
   });
-  await act(async () => root?.render(<RouterProvider router={router} />));
+  await act(async () =>
+    root?.render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+  );
   await settle();
   return { router, container };
 }

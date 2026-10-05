@@ -6,6 +6,7 @@ import { ThemeMenu } from '~/components/layout/theme-menu';
 import { UsageLimits } from '~/components/settings/usage-limits';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { LoadingOverlay, useFirstLoadSettled } from '~/components/ui/reveal-when-loaded';
 import { Select } from '~/components/ui/select';
 import {
   type CurrentFeatures,
@@ -217,6 +218,7 @@ function SectionNav({ pathname }: { pathname: string }) {
 
 export function SettingsLayout() {
   const { pathname } = useLocation();
+  const loaded = useFirstLoadSettled(pathname);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -258,12 +260,23 @@ export function SettingsLayout() {
             <SectionNav pathname={pathname} />
             {/* Read-only maintenance mode (v0.11): why changes are not saved. */}
             <ReadOnlyBanner className="mt-6 rounded-xl border" />
-            <div className="mt-8 lg:pb-16">
-              <Outlet />
+            {/* The page and the cards are shown once the page's first data is
+                in: on phones the cards follow the page, and were pushed down
+                in view as it filled in (#104). */}
+            <div className="relative mt-8 lg:pb-16" aria-busy={!loaded}>
+              {!loaded && <LoadingOverlay label="Loading settings" />}
+              <div className={loaded ? undefined : 'invisible'}>
+                <Outlet />
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-6 pb-16 lg:col-start-1 lg:row-start-2 lg:self-start">
+          <div
+            className={cn(
+              'flex flex-col gap-6 pb-16 lg:col-start-1 lg:row-start-2 lg:self-start',
+              !loaded && 'invisible',
+            )}
+          >
             <UsageLimits />
             <ShortcutsCard />
             <HelpCard />
