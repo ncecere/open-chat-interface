@@ -18,7 +18,8 @@ COPY apps/web ./apps/web
 RUN pnpm --filter @oci/web... build
 
 FROM caddy:2-alpine AS runtime
-ARG OCI_VERSION=dev
+# Empty unless the build passes it (the release workflows do).
+ARG OCI_VERSION=
 ARG OCI_REVISION=unknown
 ARG OCI_SOURCE=https://github.com/ncecere/open-chat-interface
 ARG OCI_CREATED=unknown
