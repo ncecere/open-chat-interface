@@ -454,3 +454,34 @@ describe('ChatThreadPage loading boundary', () => {
     expect(mocks.regenerate).not.toHaveBeenCalled();
   });
 });
+
+describe('a reply pending after a reload (#90)', () => {
+  function withRecovery(state: { status: string; resuming: boolean; remotePending: boolean }) {
+    const base = mocks.useChatSession.getMockImplementation()!;
+    mocks.useChatSession.mockImplementation((options: never) => {
+      const session = base(options);
+      return {
+        ...session,
+        status: state.status,
+        recovery: { ...session.recovery, ...state },
+      };
+    });
+  }
+  const notice = () => container.textContent?.includes('A reply is pending on the server') ?? false;
+
+  it('does not offer the fallback while the replay is connected', async () => {
+    setQuery('success', null, emptyThread());
+    withRecovery({ status: 'streaming', resuming: true, remotePending: true });
+    await render();
+    expect(notice()).toBe(false);
+    expect(container.textContent).not.toContain('Reload saved messages');
+  });
+
+  it('offers it once the replay has ended and the server still has the reply pending', async () => {
+    setQuery('success', null, emptyThread());
+    withRecovery({ status: 'ready', resuming: false, remotePending: true });
+    await render();
+    expect(notice()).toBe(true);
+    expect(container.textContent).toContain('Reload saved messages');
+  });
+});

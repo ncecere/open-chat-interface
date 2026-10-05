@@ -300,6 +300,15 @@ function ThreadConversation({
       />
     );
 
+  // The fallback for a reply this page cannot follow: only once replay has
+  // ended (or never started) and the server still has it pending. While the
+  // replay is connected, the reply itself is on screen (#90).
+  const waitingOnServer =
+    session.recovery.remotePending &&
+    !session.recovery.resuming &&
+    session.status !== 'streaming' &&
+    session.status !== 'submitted';
+
   return (
     <ThreadArtifactsProvider
       threadId={threadId}
@@ -340,10 +349,7 @@ function ThreadConversation({
               />
               <CompactionFailureNotice threadId={threadId} />
 
-              {(session.error ||
-                session.recovery.error ||
-                session.recovery.remotePending ||
-                replies.error) && (
+              {(session.error || session.recovery.error || waitingOnServer || replies.error) && (
                 <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
                   {(session.recovery.error || session.error || replies.error) && (
                     <p
@@ -356,7 +362,7 @@ function ThreadConversation({
                         'Something went wrong generating a response.'}
                     </p>
                   )}
-                  {session.recovery.remotePending && (
+                  {waitingOnServer && (
                     <p role="status" className="text-sm text-[var(--text-muted)]">
                       A reply is pending on the server. You can stop it or wait for saved messages.
                     </p>
