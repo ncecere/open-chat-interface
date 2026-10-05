@@ -5,9 +5,11 @@ import { logger } from '../../lib/logger.js';
 import { redisHealthCheck } from '../../lib/redis-requirement.js';
 import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
+import { cacheBusHealthCheck } from '../../services/cache-bus/index.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
 import { liveReplicas, workersHealthCheck } from '../../services/jobs/workers.js';
 import { capacityHealthCheck } from '../../services/limits/capacity/overview.js';
+import { readOnlyHealthCheck } from '../../services/maintenance/read-only.js';
 import {
   backupHealthCheck,
   complianceHealthCheck,
@@ -263,6 +265,9 @@ healthRoutes.get('/', async (c) => {
     guarded('workers', 'Background workers', workersHealthCheck),
     // v0.11: turns waiting for, and providers throttling, model capacity.
     guarded('capacity', 'Provider capacity', capacityHealthCheck),
+    // v0.11: read-only maintenance mode and cross-replica cache invalidation.
+    guarded('read-only', 'Read-only mode', readOnlyHealthCheck),
+    guarded('cache-invalidation', 'Cache invalidation', cacheBusHealthCheck),
   ]);
   const replicas = await liveReplicas().catch(() => null);
 

@@ -7,7 +7,7 @@ import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { recordAudit } from '../audit.js';
 import { getDefaultOrganizationId } from '../organization.js';
-import { invalidateSettingsCache, updateSetting } from '../settings.js';
+import { settingsChanged, updateSetting } from '../settings.js';
 import { vectorStore } from '../vector-store/index.js';
 import { configKey, LEGACY_EMBEDDING_TABLE } from '../vector-store/pgvector.js';
 import {
@@ -345,7 +345,8 @@ export async function switchGeneration(
     forced: !covered,
     alsoInTransaction: mirrorInTransaction(await getDefaultOrganizationId()),
   });
-  invalidateSettingsCache('embeddings');
+  // Written in the switch's transaction: now committed, tell every replica.
+  await settingsChanged('embeddings');
   await recordAudit({
     actorUserId: options.actor?.id ?? null,
     actorEmail: options.actor?.email ?? null,

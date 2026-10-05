@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
+import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
 function ModelAttribution({ slug, effort }: { slug: string | null; effort: string | null }) {
@@ -62,6 +63,9 @@ export function MessageActions({
   searched?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  // Read-only maintenance mode (v0.11): forking, editing and retrying write.
+  const readOnly = useReadOnlyStatus();
+  const lockedTitle = readOnly.active ? readOnlyShortReason(readOnly) : undefined;
 
   return (
     <div
@@ -89,18 +93,34 @@ export function MessageActions({
           variant="ghost"
           size="icon-sm"
           aria-label="Fork conversation here"
+          disabled={readOnly.active}
+          title={lockedTitle}
           onClick={() => void onFork()}
         >
           <GitFork />
         </Button>
       )}
       {onEdit && (
-        <Button variant="ghost" size="icon-sm" aria-label="Edit message" onClick={onEdit}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Edit message"
+          disabled={readOnly.active}
+          title={lockedTitle}
+          onClick={onEdit}
+        >
           <Pencil />
         </Button>
       )}
       {onRetry && (
-        <Button variant="ghost" size="icon-sm" aria-label="Retry" onClick={onRetry}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Retry"
+          disabled={readOnly.active}
+          title={lockedTitle}
+          onClick={onRetry}
+        >
           <RefreshCw />
         </Button>
       )}

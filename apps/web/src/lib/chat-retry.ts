@@ -6,6 +6,8 @@
  * is ready. Any other failure is returned as it came.
  */
 
+import { noteReadOnlyResponse } from '~/lib/read-only';
+
 /** Retries after the first refusal; then the refusal is shown as an error. */
 export const DRAIN_RETRIES = 2;
 const MAX_WAIT_MS = 5_000;
@@ -55,5 +57,7 @@ export async function fetchRetryingDrain(
     await wait(delay, init?.signal);
     response = await send(input, init);
   }
+  // Read-only maintenance mode (423, never retried): the page says so at once.
+  await noteReadOnlyResponse(response);
   return response;
 }

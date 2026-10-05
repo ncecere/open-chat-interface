@@ -224,6 +224,17 @@ const envSchema = z.object({
   EMBEDDING_GENERATION_GRACE_MINUTES: z.coerce.number().int().min(1).max(525_600).default(1_440),
   /** Pause after every 64 passages a rebuild embeds, to spread the provider's load. */
   EMBEDDING_REBUILD_PAUSE_MS: z.coerce.number().int().min(0).max(60_000).default(250),
+
+  // --- Read-only maintenance mode (v0.11 design, section 9) -----------------
+  // docs/admin/maintenance.md. For emergencies: on regardless of the
+  // administrator's setting, and it cannot be turned off from the UI. Set it
+  // on every replica (and worker) at once.
+  OCI_READ_ONLY: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  /** Shown to people while OCI_READ_ONLY is on. */
+  OCI_READ_ONLY_REASON: z.string().trim().max(500).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

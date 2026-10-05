@@ -17,6 +17,7 @@ export * from './schemas/compliance.js';
 export * from './schemas/connectors.js';
 export * from './schemas/embeddings.js';
 export * from './schemas/lifecycle.js';
+export * from './schemas/maintenance.js';
 export * from './schemas/memory.js';
 export * from './schemas/migrations.js';
 export * from './schemas/model.js';

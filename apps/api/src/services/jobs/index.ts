@@ -17,6 +17,7 @@ import {
   pruneUsageEvents,
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
+import { jobPausedByReadOnly } from '../maintenance/read-only.js';
 import { applyMemoryRetention } from '../memory/store.js';
 import { migrationJobs } from '../migrations/jobs.js';
 import { processPendingImports } from '../portability/imports.js';
@@ -38,10 +39,17 @@ import {
 import {
   type JobDefinition,
   runExclusively,
+  setJobPauseCheck,
   startJobs,
   stopJobs as stopJobTimers,
 } from './runner.js';
 import { SWEEP_JOB } from './workers.js';
+
+// Read-only maintenance mode (v0.11 design, section 9): jobs that write pause,
+// apart from those the administrator keeps running (backups, compliance
+// exports, webhook deliveries and reply recovery by default). Ticks, kicks and
+// "Run now" alike; a job running when it starts stops after its batch.
+setJobPauseCheck(jobPausedByReadOnly);
 
 const MINUTE = 60 * 1000;
 export const COMPACTION_JOB = 'chat.compact-conversations';

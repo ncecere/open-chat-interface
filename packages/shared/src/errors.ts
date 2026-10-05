@@ -8,6 +8,8 @@ export const ERROR_CODES = {
   QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
   PROVIDER_ERROR: 'PROVIDER_ERROR',
   REGISTRATION_DISABLED: 'REGISTRATION_DISABLED',
+  /** Read-only maintenance mode (v0.11): a write refused with 423 Locked. */
+  READ_ONLY: 'READ_ONLY',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 

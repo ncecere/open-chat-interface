@@ -356,12 +356,38 @@ cluster's slots). Until it is back:
 | Rate limits | Counted per replica, so each limit is multiplied by the replica count |
 | Replica heartbeats | Not written: System health lists no replicas, and the Background workers check falls back to recent job runs |
 | Worker requests | Unaffected (they use PostgreSQL `NOTIFY`) |
+| Settings and other cached configuration | A change applies at once on the replica that made it; the others see it when their copy expires (30 s for settings, 15 s for webhook endpoints, 10 s for the connector catalogue) instead of at once. See [below](#settings-changes-and-other-replicas). |
 
 A failover is followed within moments of the sentinels promoting a replica.
 In the drill (`node tools/failover-drill/run.mjs --redis`) and the live test
 (`redis-sentinel-failover.live.test.ts`) the Redis primary is killed mid-reply
 and mid-rate-limit; replies finish or resume with every frame, no request
 fails and no process exits ([docs/dev/failover.md](dev/failover.md#redis)).
+
+### Settings changes and other replicas
+
+Each replica keeps what it reads on nearly every request in memory: instance
+settings (features, roles and their features and tools, authentication policy,
+branding, rate limits, provider capacity limits, read-only mode, retention,
+storage, search and the rest), the connector catalogue and the webhook
+endpoints. The model catalogue and SSO providers are read from the database on
+each use and need nothing.
+
+From v0.11 a change made on one replica is published on Redis
+(`PUBLISH oci:cache-invalidate:<organization id>`), and every replica clears
+its copy at once: turning a feature off, changing a role or switching
+[read-only mode](admin/maintenance.md) applies everywhere within
+milliseconds. Each replica (and worker) holds one more Redis connection for
+this, in subscriber mode, made the same way as the others (one server,
+Sentinel or Cluster; with Cluster, classic pub/sub reaches every node).
+
+Without Redis, or while a replica's subscription is away, the copies expire
+as before (30 s for settings), so a change still reaches every replica, just
+not at once; a replica that subscribes again after being away clears
+everything it had cached, since what was published meanwhile is lost.
+**System health → Health checks → Cache invalidation** warns when the replica
+answering is not subscribed, and the `oci_cache_invalidation_listening` metric
+is 0 on such a replica.
 
 ## Back up
 
@@ -485,6 +511,31 @@ several replicas keep `RUN_POST_MIGRATIONS=false` (the default when
 `RUN_MIGRATIONS=false`) and run step 7 yourself: nothing in the database tells
 OCI that every replica runs the new release, and a post-deploy step may drop
 something the previous release still reads.
+
+### Upgrades that need a window
+
+When the preflight answers "needs a window" (exit code 2), or the change is
+outside OCI (a database move, a major PostgreSQL upgrade, a restore), put the
+instance in [read-only mode](admin/maintenance.md) instead of taking it down:
+people keep reading, searching, exporting and signing in, and every change is
+refused (`423 Locked`, error code `READ_ONLY`) on every replica at once.
+
+1. A day or so ahead, schedule the window on **System health → Maintenance**
+   with **Announce it now**: everybody sees when it will be and what will not
+   work. Or switch it on by hand when you start.
+2. Take a backup (backups keep running while read-only by default).
+3. At the start, writes stop and background jobs that write pause after the
+   batch in hand; replies already being written finish. Check **Health
+   checks → Read-only mode**, and that `oci_read_only` is 1 on every replica.
+4. Do the work: run the migrations, move or upgrade the database, replace
+   replicas. A replica started meanwhile reads the switch from the database,
+   so it is read-only too; set `OCI_READ_ONLY=true` on the new replicas if
+   the database itself is being replaced and the setting may not be there.
+5. Turn read-only off (or let the window end). Jobs resume on their next tick.
+
+If the administration pages are not reachable, `OCI_READ_ONLY=true` (and
+optionally `OCI_READ_ONLY_REASON`) on every replica and worker does the same;
+it cannot be undone from the UI, only by unsetting it and restarting.
 
 ### Upgrading on Kubernetes
 

@@ -10,6 +10,7 @@ import {
   Notice,
   SettingsSection,
 } from '~/components/admin/admin-ui';
+import { MaintenanceMode } from '~/components/admin/maintenance-mode';
 import { Replicas } from '~/components/admin/operations/replicas';
 import { BackgroundWorkSection, UpgradesSection } from '~/components/admin/upgrades';
 import { Button } from '~/components/ui/button';
@@ -383,7 +384,7 @@ export function AdminHealthPage() {
     <div>
       <AdminPageHeader
         title="System health"
-        description="Whether the parts this instance depends on are working, the background jobs that keep it tidy, upgrades and background migrations, and storage integrity."
+        description="Whether the parts this instance depends on are working, read-only maintenance mode, the background jobs that keep it tidy, upgrades and background migrations, and storage integrity."
       />
 
       <div className="flex flex-col gap-10 pb-10">
@@ -394,6 +395,8 @@ export function AdminHealthPage() {
         >
           <HealthChecks />
         </SettingsSection>
+
+        <MaintenanceMode />
 
         <Replicas />
 

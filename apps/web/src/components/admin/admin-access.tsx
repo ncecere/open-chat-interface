@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useContext, useMemo } from 'react';
+import { useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
 /** Shown on every admin page to a read-only viewer. */
@@ -9,16 +10,30 @@ export type AdminRole = 'admin' | 'auditor';
 
 export interface AdminAccess {
   role: AdminRole;
-  /** False for auditors: the API allows them to read but rejects every write. */
+  /**
+   * False for auditors (the API allows them to read but rejects every write)
+   * and, for everyone, while the instance is in read-only maintenance mode
+   * (v0.11), apart from the read-only switch itself on System health.
+   */
   canEdit: boolean;
+  /** Read-only maintenance mode is on: changes are paused for administrators too. */
+  maintenance: boolean;
 }
 
 // Outside the admin layout (unit tests, isolated renders) nothing is
 // restricted, matching the router guard that only lets admins and auditors in.
-const AdminAccessContext = createContext<AdminAccess>({ role: 'admin', canEdit: true });
+const AdminAccessContext = createContext<AdminAccess>({
+  role: 'admin',
+  canEdit: true,
+  maintenance: false,
+});
 
 export function AdminAccessProvider({ role, children }: { role: AdminRole; children: ReactNode }) {
-  const value = useMemo<AdminAccess>(() => ({ role, canEdit: role === 'admin' }), [role]);
+  const maintenance = useReadOnlyStatus().active;
+  const value = useMemo<AdminAccess>(
+    () => ({ role, canEdit: role === 'admin' && !maintenance, maintenance }),
+    [role, maintenance],
+  );
   return <AdminAccessContext.Provider value={value}>{children}</AdminAccessContext.Provider>;
 }
 

@@ -151,6 +151,14 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'Re-showing a broadcast clears who dismissed it.',
   },
+  'services/maintenance/read-only.ts broadcast': {
+    hold: 'exempt',
+    how: 'The announcement of a cancelled maintenance window: instance configuration.',
+  },
+  'services/maintenance/read-only.ts broadcastDismissal': {
+    hold: 'exempt',
+    how: 'A rescheduled maintenance window is shown again to people who had hidden it.',
+  },
   'routes/admin/lifecycle.ts storagePolicy': { hold: 'exempt', how: 'Instance configuration.' },
   'routes/admin/models.ts model': { hold: 'exempt', how: 'Instance configuration.' },
   'routes/admin/providers.ts provider': { hold: 'exempt', how: 'Instance configuration.' },

@@ -16,7 +16,19 @@ export interface JobDefinition {
 }
 
 const running = new Set<Promise<unknown>>();
-const leases = new AsyncLocalStorage<JobLease>();
+const leases = new AsyncLocalStorage<{ lease: JobLease; job: string }>();
+
+/**
+ * Whether a job should not run now (read-only maintenance mode, v0.11: jobs
+ * that write pause unless chosen to keep running). Set by jobs/index.ts; a
+ * paused job is not started, and one running stops at its next check between
+ * batches (`jobMayContinue`), as on a shutdown.
+ */
+let pausedNow: (job: string) => Promise<boolean> = async () => false;
+
+export function setJobPauseCheck(check: (job: string) => Promise<boolean>): void {
+  pausedNow = check;
+}
 
 /** Recorded on a run cut short because its lock went with its connection. */
 export const LOST_LOCK_MESSAGE =
@@ -31,18 +43,27 @@ export const LOST_LOCK_MESSAGE =
  */
 export async function jobMayContinue(): Promise<boolean> {
   if (isDraining()) return false;
-  const lease = leases.getStore();
-  return lease ? lease.stillHeld() : true;
+  const current = leases.getStore();
+  if (!current) return true;
+  if (await pausedNow(current.job)) return false;
+  return current.lease.stillHeld();
 }
 
 /**
- * Returns null when another local tick or database session owns this job, or
- * when this replica is shutting down: it starts no new work then (a kick from
- * a request, a manual run), and another replica's tick picks the work up.
+ * Returns null when another local tick or database session owns this job,
+ * when this replica is shutting down (it starts no new work then: a kick from
+ * a request, a manual run; another replica's tick picks the work up), or
+ * while the job is paused (read-only mode).
  */
 export function runExclusively(job: JobDefinition): Promise<number | null> {
   if (isDraining()) return Promise.resolve(null);
-  const run = withJobLock(job.name, (lease) => leases.run(lease, () => runRecordedJob(job, lease)));
+  const run = pausedNow(job.name).then((paused) =>
+    paused
+      ? null
+      : withJobLock(job.name, (lease) =>
+          leases.run({ lease, job: job.name }, () => runRecordedJob(job, lease)),
+        ),
+  );
   running.add(run);
   void run.catch(() => undefined).finally(() => running.delete(run));
   return run;

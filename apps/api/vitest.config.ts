@@ -203,6 +203,11 @@ export default defineConfig({
         'src/services/migrations/preflight.ts': { statements: 93, branches: 78, functions: 95 },
         'src/services/migrations/readiness.ts': { statements: 93, branches: 75, functions: 100 },
         'src/routes/admin/migrations.ts': { statements: 98, branches: 95, functions: 100 },
+        // v0.11 read-only maintenance mode (what is refused, and what pauses) and
+        // cross-replica cache invalidation.
+        'src/middleware/read-only.ts': { statements: 98, branches: 90, functions: 100 },
+        'src/services/maintenance/read-only.ts': { statements: 95, branches: 90, functions: 85 },
+        'src/services/cache-bus/index.ts': { statements: 95, branches: 80, functions: 90 },
       },
     },
   },

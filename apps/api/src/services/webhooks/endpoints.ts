@@ -8,6 +8,7 @@ import type {
 import { db } from '../../db/index.js';
 import { encryptSecret, generateToken } from '../../lib/crypto.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
+import { onCacheInvalidation, publishInvalidation } from '../cache-bus/index.js';
 import { assertAllowedUrl, ConnectorNetworkError } from '../connectors/network.js';
 import { getDefaultOrganizationId } from '../organization.js';
 
@@ -44,22 +45,34 @@ const CACHE_TTL_MS = 15_000;
 
 /**
  * Enabled endpoints, cached briefly: every audit event consults this, and
- * most instances have none. Changes here clear this process's cache at once;
- * other replicas pick them up within the TTL.
+ * most instances have none. Changes here clear this process's cache at once
+ * and the other replicas' over Redis (v0.11 item 20); without Redis, within
+ * the TTL.
  */
 export async function enabledEndpoints(): Promise<EndpointRow[]> {
   if (cache && Date.now() < cache.expiresAt) return cache.rows;
+  const readGeneration = cacheGeneration;
   const rows = await db
     .select()
     .from(schema.webhookEndpoint)
     .where(eq(schema.webhookEndpoint.enabled, true));
-  cache = { rows, expiresAt: Date.now() + CACHE_TTL_MS };
+  // A read that overlapped an invalidation may hold the old rows: not kept.
+  if (readGeneration === cacheGeneration) cache = { rows, expiresAt: Date.now() + CACHE_TTL_MS };
   return rows;
 }
 
-export function invalidateWebhookCache(): void {
+let cacheGeneration = 0;
+function clearCache(): void {
+  cacheGeneration++;
   cache = null;
 }
+
+export function invalidateWebhookCache(): void {
+  clearCache();
+  void publishInvalidation('webhooks');
+}
+
+onCacheInvalidation('webhooks', clearCache);
 
 const iso = (value: Date | null) => value?.toISOString() ?? null;
 

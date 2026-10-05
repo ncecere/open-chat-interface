@@ -67,6 +67,10 @@ services:
       # all (default): API and background jobs. web: API only, when the
       # worker below runs the jobs (docs/OPERATIONS.md, "Process roles").
       OCI_ROLE: ${OCI_API_ROLE:-all}
+      # Emergency read-only mode (docs/admin/maintenance.md): refuses every
+      # change until unset; it cannot be turned off from administration.
+      OCI_READ_ONLY:
+      OCI_READ_ONLY_REASON:
     # SIGTERM, then SIGKILL after this: longer than the drain above.
     stop_grace_period: 30s
     volumes:
@@ -126,6 +130,9 @@ services:
       RUN_MIGRATIONS: 'false'
       # On SIGTERM a worker finishes the job batch in hand within this limit.
       SHUTDOWN_DRAIN_TIMEOUT_MS:
+      # Read-only mode pauses the worker's writing jobs too (as for the api).
+      OCI_READ_ONLY:
+      OCI_READ_ONLY_REASON:
     stop_grace_period: 30s
     volumes:
       - storage_data:/data/storage

@@ -18,6 +18,7 @@ import { logger } from './lib/logger.js';
 import { watchRedisRequirement } from './lib/redis-requirement.js';
 import { processRole } from './lib/role.js';
 import { withReadRetry } from './middleware/read-retry.js';
+import { startCacheBus } from './services/cache-bus/index.js';
 import { activeRunCount, interruptActiveRuns } from './services/chat/active-runs.js';
 import { closeChatStreams, endChatReplays, redisConfigured } from './services/chat-streams.js';
 import { runningJobCount, startLifecycleJobs, stopJobs } from './services/jobs/index.js';
@@ -69,6 +70,12 @@ async function main() {
   }
 
   await ensureInitialAdmin();
+
+  // Settings and other per-replica caches are cleared on every replica when
+  // one changes them, over Redis (v0.11 item 20); on every role, since a
+  // worker reads the read-only switch to pause its jobs. Without Redis they
+  // expire on their own (30 s for settings).
+  const stopCacheBus = await startCacheBus();
 
   /**
    * Maintenance runs on interval timers guarded by per-job advisory locks.
@@ -137,6 +144,7 @@ async function main() {
     closeResources: async () => {
       await Promise.allSettled([
         closeChatStreams(),
+        stopCacheBus(),
         sql.end({ timeout: 5 }),
         closeReadReplica(),
         stopPresence(),
