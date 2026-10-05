@@ -229,8 +229,28 @@ export const auth = betterAuth({
     // each session as it is created.
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
-    cookieCache: { enabled: true, maxAge: 60 * 5 },
+    /**
+     * Off: every request reads the session and the person from the database,
+     * so a role change, a ban or an ended session applies on the next request
+     * on every replica. With the cache on (it was five minutes), the signed
+     * `session_data` cookie answered instead, and the API authorizes from what
+     * getSession returns (middleware/context.ts), so a demoted administrator
+     * kept administering for up to five minutes. Measured: about 0.2 ms more
+     * per request (session-revocation.live.test.ts).
+     */
+    cookieCache: { enabled: false },
   },
+
+  /**
+   * Better Auth's own limiter is off: OCI's (middleware/auth-rate-limit.ts)
+   * is the only one. Better Auth's counted three sign-ins per address per ten
+   * seconds in each replica's memory, in production only, so a campus behind
+   * one NAT address was refused on its first morning (v0.11 design, item 22),
+   * and with several replicas the limit was per replica. OCI's limits live in
+   * Redis, count failed attempts per account, give an address far more room,
+   * and budget single sign-on per identity provider.
+   */
+  rateLimit: { enabled: false },
 
   advanced: {
     cookiePrefix: 'oci',

@@ -10,6 +10,9 @@
  * - GET /marks/:id: when the request carrying `[scale:<id>]` in its text
  *   arrived and when its first and last tokens were sent, so the load test can
  *   split a reply's latency into OCI's part and the model's part.
+ * - /oidc/*: a minimal OpenID Connect identity provider for the SSO sign-in
+ *   storm (stub/oidc.mjs; issuer `STUB_OIDC_ISSUER`, default
+ *   http://stub:4181/oidc).
  * - GET /stats, GET /health.
  *
  * No prompt content is logged or stored, only the marker and timings.
@@ -19,6 +22,7 @@ import { createServer } from 'node:http';
 import { approximateTokens, embedText } from '../lib/embed.mjs';
 import { Rng } from '../lib/prng.mjs';
 import { assistantMarkdown } from '../lib/text.mjs';
+import { createOidcProvider } from './oidc.mjs';
 
 const config = {
   port: Number(process.env.STUB_PORT ?? 4181),
@@ -27,6 +31,10 @@ const config = {
   replyTokens: Number(process.env.STUB_REPLY_TOKENS ?? 250),
   embeddingDelayMs: Number(process.env.STUB_EMBEDDING_DELAY_MS ?? 40),
 };
+const oidc = createOidcProvider({
+  issuer: process.env.STUB_OIDC_ISSUER ?? `http://stub:${config.port}/oidc`,
+  delayMs: Number(process.env.STUB_OIDC_DELAY_MS ?? 0),
+});
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 const MAX_MARKS = 200_000;
 const MARKER = /\[scale:([A-Za-z0-9_-]{1,64})\]/g;
@@ -219,6 +227,7 @@ const server = createServer((request, response) => {
     if (request.method === 'GET' && url.pathname === '/health')
       return json(response, 200, { ok: true });
     if (request.method === 'GET' && url.pathname === '/stats') return json(response, 200, stats);
+    if (oidc.handle(request, response, url)) return;
     if (request.method === 'GET' && url.pathname.startsWith('/marks/')) {
       const mark = marks.get(decodeURIComponent(url.pathname.slice('/marks/'.length)));
       return mark ? json(response, 200, mark) : json(response, 404, { error: 'unknown mark' });

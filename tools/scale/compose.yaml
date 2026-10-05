@@ -9,6 +9,9 @@ x-api-environment: &api-environment
   NODE_ENV: production
   API_PORT: 3000
   APP_URL: ${SCALE_APP_URL:-http://127.0.0.1:18080}
+  # The stub OpenID Connect provider (stub/oidc.mjs) for the SSO storm; an
+  # internal identity provider must be a trusted origin.
+  AUTH_TRUSTED_ORIGINS: http://stub:4181
   DATABASE_URL: postgres://oci:oci-scale@postgres:5432/oci
   REDIS_URL: redis://redis:6379
   AUTH_SECRET: ${SCALE_AUTH_SECRET:-scale-harness-auth-secret-not-for-production-use}
@@ -180,6 +183,7 @@ services:
       SCALE_ORIGIN: ${SCALE_APP_URL:-http://127.0.0.1:18080}
       SCALE_STUB_URL: http://stub:4181
       SCALE_FIXTURES: /results/fixtures.json
+      SCALE_SIGNIN_ADDRESSES: ${SCALE_SIGNIN_ADDRESSES:-0}
       K6_NO_USAGE_REPORT: 'true'
     volumes:
       - ./:/scale:ro

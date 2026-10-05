@@ -646,6 +646,64 @@ and with as many concurrent reservations as pool connections every one waits
 for a connection none will release. The measurements above ran after
 `migrate --post` finished the backfill, which caches the answer for good.
 
+## Sign-in storms with shared addresses (v0.11, item 22)
+
+`tools/scale/run.sh --profile small --storm-only` (or `--storm` after the main
+run) runs `k6/storm.js`: every virtual user behind `SCALE_STORM_ADDRESSES` (4)
+client addresses, as a campus behind a few NAT addresses, first password
+sign-ins (fresh cookie jar each, everyone in turn) at the profile's sign-in
+rate (`small`: ramp 15 s, hold 45 s), then single sign-on at the same rate
+against the stub OpenID Connect provider (`stub/oidc.mjs`, mounted at
+`http://stub:4181/oidc`, registered by `run.sh` as `scale-idp` with its
+endpoints stored, so no discovery per sign-in). The SSO storm's first half
+signs in people OCI has never seen (just-in-time provisioning: user, account,
+session, role mapping); the second half signs them in again.
+`SCALE_STORM_RATE` overrides the rate. One API replica (`all`), M4 Pro,
+Docker with 12 CPUs, `small` dataset.
+
+| | Before (v0.11 branch), 20/s | New limits, 20/s | New limits, 60/s | New limits and the fixes below, 60/s |
+| --- | ---: | ---: | ---: | ---: |
+| Password sign-ins succeeded | 72 of 1,107 | 1,107 of 1,107 | 3,040 of 3,040 | 3,307 of 3,307 |
+| … refused (429) | 1,035, all by Better Auth's limiter | 0 | 0 | 0 |
+| Password sign-in p50 / p95 / p99 | 3 / 62 / 73 ms (mostly 429s) | 68 / 87 / 114 ms | 350 / 3,698 / 5,384 ms | 61 / 71 / 84 ms |
+| SSO sign-ins succeeded | 72 of 1,107 | 1,107 of 1,107 | 3,098 of 3,299 | 3,267 of 3,307 |
+| … refused (429) | 1,035 (Better Auth, at `/sign-in/sso`) | 0 | 201 (provider budget) | 40 (provider budget) |
+| SSO round trip p50 / p95 (start, IdP, callback) | 21 / 32 ms (the 72) | 16 / 28 ms | 17 / 1,298 ms | 14 / 25 ms |
+| OCI's callback p95, new / returning people | 22 / 19 ms | 22 / 17 ms | 53 / 1,573 ms | 18 / 21 ms |
+
+Before, with four addresses, exactly 72 of each storm got through: three per
+address per ten seconds over the minute, Better Auth's in-memory limit, the
+same for passwords and SSO. After, OCI's limits are the only ones and count
+failures, so nothing was refused at 20/s. At 60/s, 3,600 SSO callbacks a minute
+exceed the default identity-provider budget (3,000 a minute), so the excess is
+refused as designed.
+
+Hot spots, from `pg_stat_statements` (`db-storm.json`) and the latencies:
+
+- **The database is not the bottleneck.** A password sign-in costs about
+  0.5 ms of statements (the audit entry 0.15 to 0.3 ms, the session insert,
+  the policy's `role, email_verified` read, Better Auth's user read); an SSO
+  sign-in about 1 ms (verification insert and delete, user and account
+  inserts or account update, session, audit, provider reads). At 60/s the
+  audit insert was the largest total, 1.8 s over the whole run.
+- **Password hashing queued in libuv's thread pool.** Better Auth hashes with
+  `node:crypto` scrypt (N=16384, r=16, about 60 ms of CPU), which runs on
+  libuv's pool, four threads by default: at 60/s a replica needs about 3.6
+  threads of scrypt, so sign-ins queued (p95 3.7 s) and the backlog spilled
+  into the SSO storm that followed (its DNS checks of the provider's
+  endpoints share the pool). Fixed: the API sizes the pool to one thread per
+  CPU, 4 to 16 (`lib/threadpool.ts`, unless `UV_THREADPOOL_SIZE` is set):
+  p95 3,698 ms to 71 ms at 60/s, as at 20/s. Beyond that a storm needs CPUs
+  or replicas: each sign-in is 60 ms of one core.
+- **Just-in-time provisioning wrote the role on every SSO sign-in**, changed
+  or not: 3,098 row updates in the 60/s run. Now only when it changes: the
+  same statement wrote 0 rows (91 ms to 22 ms in total).
+- Settings reads per sign-in (`auth` for the policy and the session lifetime)
+  are served from the settings cache and do not appear.
+
+Raw results: `tools/scale/results/<run>/k6-storm.json` and `db-storm.json`
+(git-ignored).
+
 ## Limits
 
 - The baseline machine also ran PostgreSQL, k6 and other workloads; treat
@@ -653,7 +711,9 @@ for a connection none will release. The measurements above ran after
 - One stub model with fixed delays: provider latency, rate limits and failures
   (item 15) are out of scope.
 - No stored objects: attachment downloads, thumbnails and exports are not
-  exercised. No SSO: the storm uses local sign-in.
+  exercised. Single sign-on is measured against a stub OpenID Connect provider
+  that answers at once ([sign-in storms](#sign-in-storms-with-shared-addresses-v011-item-22));
+  a real provider's latency adds to each SSO sign-in, not to OCI's work.
 - k6 measures HTTP requests, not browsers; the browser-side cost of long
   conversations (item 21) is in `docs/dev/browser-performance.md`.
 - Migration duration, lock waits and upgrade duration (also in section 10)

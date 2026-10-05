@@ -3,6 +3,7 @@ import { loadEnv } from '../../config/env.js';
 import { controlDatabaseUrl } from '../../db/control.js';
 import { sql } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { registerSecretCodec } from '../encryption/rotation.js';
 import type { JobDefinition } from '../jobs/runner.js';
 import { runBackgroundMigrations, TICK_BUDGET_MS } from './background-runner.js';
 import { registerMigrationGauges } from './metrics.js';
@@ -46,6 +47,9 @@ export async function applyPostMigrationsIfDue(): Promise<number> {
 /** The job runner's entries for three-phase migrations (v0.11 design, section 1). */
 export function migrationJobs(): JobDefinition[] {
   registerMigrationGauges();
+  // The secret re-encryption migrations need ENCRYPTION_KEY, which only this
+  // process has (services/encryption/rotation.ts).
+  registerSecretCodec();
   const env = loadEnv();
   const jobs: JobDefinition[] = [];
   if (env.BACKGROUND_MIGRATIONS_ENABLED) {

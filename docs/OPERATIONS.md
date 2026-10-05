@@ -219,6 +219,67 @@ no trustworthy address to record. The Helm chart routes everything to the web
 Service and, with its default NetworkPolicy, lets only the web pods connect to
 the API.
 
+## Sign-in limits
+
+OCI limits how fast credentials and tokens can be tried (v0.11). Its limits
+are the only ones: Better Auth's built-in limiter, which allowed three
+sign-ins per address every ten seconds in each replica's memory, is turned
+off, because a campus behind one NAT address met it on the first morning of
+term. Counts live in Redis, so every replica shares them (without Redis each
+replica counts on its own; see [Redis](#redis)). A refused request gets
+`429` with `Retry-After`, and the first refusal per window is recorded in the
+audit log as `auth.rate_limited` with the scope that refused it.
+
+| Limit | Default | Counts | Setting |
+| --- | --- | --- | --- |
+| Per account | 10 a minute | **Failed** sign-ins for one email address, from anywhere; sign-up, password reset and verification requests naming it | `RATE_LIMIT_AUTH_PER_MINUTE`, or **Sign-in attempts per minute** on People → Roles & access |
+| Per session | the same | Password and email changes with one session | as above |
+| Per address | 300 a minute | **Failed** sign-ins and failed single sign-on callbacks from one client address; every sign-up, password reset and verification request from it | `RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE` |
+| Address ceiling | 10 × the address limit (3,000) | Every limited request from one address, successful or not | follows the address limit |
+| Per identity provider | 3,000 a minute | Every single sign-on callback for one provider, from all addresses | `RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE` |
+
+How they apply:
+
+- **A successful sign-in costs nothing** against the account or address
+  limits. Attempts are counted when they arrive (so a burst sent at once is
+  still bounded) and given back when they succeed. A sign-in still in flight
+  holds one unit, so the address limit must stay above the number of
+  sign-ins one address has in flight at once.
+- **People behind one address** (a campus NAT, a VPN, a corporate proxy)
+  share the address limit for their *failures* only, and the ceiling for
+  everything. 300 failed attempts a minute is about one typo a minute each
+  for 300 people signing in at once. Raise it if more people than that sign
+  in at the same moment from one address; the per-account limit still stops
+  guessing any one account's password.
+- **One person retrying a locked account** does not use up the failed
+  attempts of everyone else behind the address: once their account is
+  refused, their attempts stop counting against the address (they still
+  count against the ceiling).
+- **Single sign-on** is limited per identity provider, not per address:
+  successful sign-ins through a provider are never limited by address, only
+  by the ceiling. A provider whose callbacks fail or flood (misconfigured,
+  replayed, or under attack) uses up only its own budget. Size it for the
+  busiest sign-in rate you expect from one provider: 3,000 a minute is 50 a
+  second, enough for 30,000 people in ten minutes.
+- **Locking out an account** is possible for anyone who knows its address:
+  ten wrong passwords in a minute refuse that account for the rest of the
+  minute, wherever the attempts come from. That is the price of the
+  per-account limit; it lifts on its own.
+- Counts use fixed one-minute windows, so up to twice a limit can pass across
+  a window boundary. They stop runaway automation, not every guess.
+
+**Capacity.** Each password sign-in costs about 60 ms of one CPU (scrypt);
+the API runs it on libuv's thread pool, which it sizes to one thread per CPU
+between 4 and 16 (override with `UV_THREADPOOL_SIZE`). Measured on one
+replica: 60 sign-ins a second with a p95 of 71 ms
+([scale harness](dev/scale-harness.md#sign-in-storms-with-shared-addresses-v011-item-22)).
+Beyond what a replica's CPUs allow, add replicas: the limits are shared.
+
+The address is the one the web container's proxy decided (above). Behind a
+load balancer that is not in `TRUSTED_PROXIES`, every person appears to come
+from the load balancer and shares one address limit: fix `TRUSTED_PROXIES`
+first, then size the address limit for real NATs.
+
 ## Database connections for maintenance
 
 Background jobs, migrations and a worker's `LISTEN` need PostgreSQL sessions of
@@ -435,6 +496,69 @@ files there (**Copy attachment files**), incrementally and by content, and
 everything but the deployment secrets. With copying off (the default for
 instances that configured backups before v0.10), the manifest only lists the
 objects, so attachment storage still needs versioning or snapshots as above.
+
+## Rotating `ENCRYPTION_KEY`
+
+`ENCRYPTION_KEY` encrypts the secrets OCI stores: model provider API keys,
+connector shared credentials, OAuth client secrets and people's connector
+tokens, webhook signing secrets, and the credentials in instance settings
+(object storage, backup and compliance export destinations, web search
+providers, the SMTP password). From v0.11 it can be replaced without
+downtime and without re-entering any of them. Single sign-on client secrets
+are kept by Better Auth in `sso_provider` and are not encrypted with this key.
+
+Each value stored by v0.11 names the key that encrypted it
+(`oci:v1:<key id>:...`, where the key id is 12 hexadecimal characters derived
+from the key, not the key). Values written before v0.11 name none; they are
+tried with every configured key.
+
+**Before you start**: the upgrade to v0.11 must be complete, `migrate --post`
+included (System health, **Encryption keys**, no longer says re-encryption
+waits for it). Never rotate during an upgrade: v0.10 replicas know only one
+key.
+
+1. **Generate a new key** and keep the current one: both go in your secret
+   manager. `openssl rand -hex 32`.
+2. **Configure both on every replica, API and worker alike**:
+   `ENCRYPTION_KEY=<new>` and `ENCRYPTION_KEYS_PREVIOUS=<old>` (several
+   previous keys are separated by commas). Roll the replicas as for any
+   configuration change. A replica with the new key encrypts with it and
+   decrypts old values with the previous one; a replica still on the old
+   configuration cannot read values the new key wrote, so finish the rollout
+   promptly, and do not change secrets in the admin pages until it is done.
+3. **Wait for re-encryption.** Within a minute the `encryption.rotation` job
+   (on worker or `all` replicas) schedules one background migration per
+   table, `0.11.reencrypt-*`, which rewrites every value under the new key in
+   batches. Follow it on **System health → Background work**; pause, resume
+   or resize batches there as for any background migration.
+4. **Check** System health, **Encryption keys**: it says *Previous keys still
+   in use: N values*. When N is 0 it says so and that
+   `ENCRYPTION_KEYS_PREVIOUS` can be removed.
+5. **Retire the old key**: remove `ENCRYPTION_KEYS_PREVIOUS` and roll the
+   replicas again. Keep the old key in your secret manager until a backup
+   taken after this step exists: older database backups still need it (add it
+   back to `ENCRYPTION_KEYS_PREVIOUS` after restoring one).
+
+If a re-encryption migration fails, System health shows which table, column
+and row could not be decrypted (never the value) and the key id it names.
+Usually that value was written with a key that is not configured: add that
+key to `ENCRYPTION_KEYS_PREVIOUS`, or re-enter the credential in the admin
+pages, then resume the migration on Background work. The **Encryption keys**
+check is an error while any value needs a key that is not configured.
+
+Never:
+
+- rotate the key as part of a rollback, or during an upgrade;
+- replace `ENCRYPTION_KEY` without putting the old value in
+  `ENCRYPTION_KEYS_PREVIOUS`: every stored secret becomes unreadable;
+- remove a previous key while System health still counts values under it;
+- reuse a key as both current and previous (it is ignored as previous), or
+  use a key shorter than 32 characters (refused at start-up).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ENCRYPTION_KEY` | required | The key new values are encrypted with. |
+| `ENCRYPTION_KEYS_PREVIOUS` | unset | Earlier keys, comma-separated, used only to decrypt values not yet re-encrypted. |
 
 ## Upgrade
 
@@ -708,8 +832,8 @@ connector, enables its tools and allows them for a role
 ([Connectors](admin/connectors.md)).
 
 Connector credentials and people's OAuth tokens are encrypted with
-`ENCRYPTION_KEY`, like provider keys: rotating that key makes them unreadable,
-so re-enter shared credentials and ask people to connect again afterwards.
+`ENCRYPTION_KEY`, like provider keys. Before v0.11 replacing that key made them
+unreadable; from v0.11 follow [Rotating `ENCRYPTION_KEY`](#rotating-encryption_key).
 OAuth connectors send people back to `APP_URL/api/connectors/oauth/callback`;
 `APP_URL` must be the address people use. Connectors make outbound HTTPS
 requests from the API, so allow egress to their servers (and their
@@ -1065,6 +1189,36 @@ drops the fallback will require it to be finished before upgrading.
 The rollups hold exactly the usage events that are kept: usage history
 retention prunes both together, and they keep no history of their own (the
 per-day `usage_record` table still does).
+
+#### Sign-in limits (no migration)
+
+Better Auth's own sign-in limiter is off from v0.11; OCI's limits, shared in
+Redis, count failed attempts per account, give a client address far more
+room, and budget single sign-on per identity provider ([Sign-in
+limits](#sign-in-limits)). `RATE_LIMIT_AUTH_PER_MINUTE` now counts **failed**
+sign-ins per account; before, it counted every attempt per account and per
+address. The address has its own limit, `RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE`
+(300). During the rolling upgrade v0.10 replicas keep their own limits.
+
+Sessions are read from the database on every request from v0.11 (Better
+Auth's five-minute session cookie cache is off), so a role change, a ban or a
+revoked session applies on the next request on every replica, for about one
+indexed read per request. Before, a browser already signed in kept its old
+role, or its access after a ban, for up to five minutes.
+
+#### Encryption key rotation (background migrations 0.11.reencrypt-*)
+
+No schema change. v0.11 stores secrets in a versioned format that names the
+key ([Rotating `ENCRYPTION_KEY`](#rotating-encryption_key)), which v0.10
+cannot read, so during the rolling upgrade v0.11 replicas keep writing the
+old format with the same key. Once `migrate --post` has finished (the
+statement that no v0.10 replica is left; a single instance with
+`RUN_MIGRATIONS=true` does it itself), every replica switches to the new
+format within 30 seconds, and five background migrations rewrite the values
+already stored (`0.11.reencrypt-provider-keys`, `-connector-credentials`,
+`-connector-tokens`, `-webhook-secrets`, `-settings`; a few hundred rows each
+on most instances, seconds). Nothing needs doing, but do not change
+`ENCRYPTION_KEY` during the upgrade.
 
 #### Embedding generations (migration 0041)
 
@@ -1732,3 +1886,9 @@ images.
 
 Do not rotate `ENCRYPTION_KEY` as part of a routine rollback. A different key
 cannot decrypt credentials written with the original key.
+
+From v0.11, once `migrate --post` has run, stored secrets are rewritten in a
+format v0.10 cannot read (see [Encryption key
+rotation](#encryption-key-rotation-background-migrations-011reencrypt-)).
+Rolling the images back to v0.10 after that point needs the database backup
+taken before the upgrade, as rolling back past any post-deploy step does.

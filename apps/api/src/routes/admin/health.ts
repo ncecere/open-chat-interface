@@ -7,6 +7,7 @@ import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { cacheBusHealthCheck } from '../../services/cache-bus/index.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
+import { encryptionHealthCheck } from '../../services/encryption/rotation.js';
 import { liveReplicas, workersHealthCheck } from '../../services/jobs/workers.js';
 import { capacityHealthCheck } from '../../services/limits/capacity/overview.js';
 import { readOnlyHealthCheck } from '../../services/maintenance/read-only.js';
@@ -268,6 +269,8 @@ healthRoutes.get('/', async (c) => {
     // v0.11: read-only maintenance mode and cross-replica cache invalidation.
     guarded('read-only', 'Read-only mode', readOnlyHealthCheck),
     guarded('cache-invalidation', 'Cache invalidation', cacheBusHealthCheck),
+    // v0.11: values still needing a previous ENCRYPTION_KEY, before it can be retired.
+    guarded('encryption', 'Encryption keys', () => encryptionHealthCheck()),
   ]);
   const replicas = await liveReplicas().catch(() => null);
 

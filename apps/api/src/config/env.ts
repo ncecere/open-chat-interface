@@ -235,6 +235,49 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
   /** Shown to people while OCI_READ_ONLY is on. */
   OCI_READ_ONLY_REASON: z.string().trim().max(500).optional(),
+
+  // --- Sign-in storms (v0.11 design, item 22) -------------------------------
+  // docs/OPERATIONS.md, "Sign-in limits". Counted in Redis, shared by every
+  // replica. RATE_LIMIT_AUTH_PER_MINUTE (above) is the failed attempts one
+  // account may have per minute.
+  /**
+   * Failed sign-in attempts (and every sign-up, password reset and
+   * verification request) per client address per minute. Many people can
+   * share one address (a campus NAT), so this is far higher than the per
+   * account limit; every request from one address, successful or not, is
+   * also capped at ten times this.
+   */
+  RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE: z.coerce.number().int().min(1).max(1_000_000).default(300),
+  /**
+   * Single sign-on callbacks per identity provider per minute, from all
+   * addresses together, so one misbehaving provider cannot starve the others.
+   */
+  RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1_000_000)
+    .default(3_000),
+
+  // --- Encryption key rotation (v0.11 design, item 23) ----------------------
+  // docs/OPERATIONS.md, "Rotating ENCRYPTION_KEY".
+  /**
+   * Earlier values of ENCRYPTION_KEY, separated by commas: used only to
+   * decrypt values not yet re-encrypted under ENCRYPTION_KEY. Remove one
+   * once System health reports no value still uses it.
+   */
+  ENCRYPTION_KEYS_PREVIOUS: z
+    .string()
+    .optional()
+    .refine(
+      (value) =>
+        (value ?? '')
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .every((entry) => entry.length >= 32),
+      { message: 'Every key in ENCRYPTION_KEYS_PREVIOUS must be at least 32 characters' },
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;

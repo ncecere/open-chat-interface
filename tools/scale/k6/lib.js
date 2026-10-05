@@ -45,7 +45,12 @@ export const metrics = {
  * the benchmarking range), sent as X-Forwarded-For; the harness's web proxy
  * trusts the compose network, so the API sees one address per person as it
  * would in production, instead of every virtual user sharing k6's address.
+ *
+ * With `SCALE_SIGNIN_ADDRESSES=N` everyone shares N addresses instead, as a
+ * campus behind a few NAT addresses does (the storm phase, storm.js).
  */
+const SHARED_ADDRESSES = Number(__ENV.SCALE_SIGNIN_ADDRESSES || 0);
+
 export function addressFor(email) {
   let h = 0x811c9dc5;
   for (let i = 0; i < email.length; i++) {
@@ -53,6 +58,7 @@ export function addressFor(email) {
     h = Math.imul(h, 0x01000193);
   }
   h >>>= 0;
+  if (SHARED_ADDRESSES > 0) return `198.18.0.${(h % SHARED_ADDRESSES) + 1}`;
   return `198.${18 + (h >>> 31)}.${(h >>> 8) & 255}.${h & 255}`;
 }
 

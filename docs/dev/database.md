@@ -181,7 +181,10 @@ retried with backoff (30 s doubling); after five in a row the migration is
 Statuses: `pending` (scheduled), `running`, `paused`, `finished`, `failed`.
 A replica only claims migrations its release defines, so one scheduled by a
 newer release waits for that release. The first real one is
-`0.11.usage-rollups` ([Usage rollups](#usage-rollups), below). Test-only definitions
+`0.11.usage-rollups` ([Usage rollups](#usage-rollups), below); the secret
+re-encryption migrations `0.11.reencrypt-*` ([Encrypted
+secrets](#encrypted-secrets)) are the first to be scheduled again (after a key
+change). Test-only definitions
 (`src/background/test-definitions.ts`) are inert unless named in
 `OCI_TEST_BACKGROUND_MIGRATIONS`; `oci-test.rewrite-messages-in-place`
 rewrites every message with its own values and is what the live tests and
@@ -396,6 +399,49 @@ fills a new column first), the feature checks `isPostStepDone` /
 `isBackgroundMigrationDone` and keeps the old query until then, and the old
 index is dropped by a post-deploy step of the next release. Searches never
 go without an index meanwhile.
+
+## Encrypted secrets
+
+Values encrypted with `ENCRYPTION_KEY` (`apps/api/src/lib/crypto.ts`) live in
+text columns and inside instance settings (v0.11, design item 23; operators:
+[Rotating `ENCRYPTION_KEY`](../OPERATIONS.md#rotating-encryption_key)):
+
+| Table | Columns |
+| --- | --- |
+| `provider` | `encrypted_api_key` |
+| `connector` | `encrypted_shared_header_value`, `encrypted_oauth_client_secret` |
+| `connector_account` | `encrypted_tokens`, `encrypted_pending` |
+| `webhook_endpoint` | `encrypted_secret` |
+| `instance_setting` | `value`: every string field named `encrypted…` (storage, backups and compliance `s3.encryptedSecretAccessKey`, search `encryptedApiKey` / `encryptedFallbackApiKey`, smtp `encryptedPassword`) |
+
+`ENCRYPTED_LOCATIONS` in `packages/db/src/background/reencrypt-secrets.ts` is
+the list. **A new encrypted column must be added there** (and a JSON field
+must be named `encrypted…`), or key rotation will not rewrite it and System
+health will not count it; the rotation live test
+(`encryption-rotation.live.test.ts`) fills every listed location.
+
+Formats: before v0.11 `base64(iv | tag | ciphertext)` (AES-256-GCM, key
+SHA-256 of `ENCRYPTION_KEY`); from v0.11 `oci:v1:<key id>:` followed by the
+same, where the key id is the first 12 hexadecimal characters of
+HMAC-SHA256(key, `oci-encryption-key-id`). Base64 has no `:`, so a value
+without the prefix is the old format, tried with the current key and then
+each of `ENCRYPTION_KEYS_PREVIOUS`. v0.10 reads only the old format, so v0.11
+writes it until every post-deploy step of 0.11 is finished (the gate embedding
+generation 1 uses: `previousReleaseGone()`), checked at start-up and every
+30 seconds.
+
+Re-encryption is five background migrations, `0.11.reencrypt-*`, one per
+table. A batch locks its rows (`for update`), rewrites each value not already
+`oci:v1:<current key id>:` and leaves current ones alone, so it is idempotent;
+a value no configured key decrypts fails the batch with the table, column, row
+id and key id (never the value). `migrate --post` schedules them once, which
+moves values written before v0.11 to the new format; after a key change the
+`encryption.rotation` job (every minute, worker and `all` replicas) starts
+any finished one again from the beginning while its table holds values not
+under the current key, counting them in SQL by key id (`split_part(column,
+':', 3)`). Paused and failed ones are left to an administrator. The keys are
+only in the API's environment, so the API registers the codec the batches use
+(`setSecretCodec`); another process running a batch fails clearly.
 
 ## Adding a migration
 

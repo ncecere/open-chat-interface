@@ -286,6 +286,12 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
     expect(migrations.map((item) => [item.name, item.status])).toEqual([
       ['test.admin-probe', 'pending'],
       ['0.11.usage-rollups', 'not_scheduled'],
+      // v0.11 key rotation: re-encryption of stored secrets, one per table.
+      ['0.11.reencrypt-provider-keys', 'not_scheduled'],
+      ['0.11.reencrypt-connector-credentials', 'not_scheduled'],
+      ['0.11.reencrypt-connector-tokens', 'not_scheduled'],
+      ['0.11.reencrypt-webhook-secrets', 'not_scheduled'],
+      ['0.11.reencrypt-settings', 'not_scheduled'],
     ]);
 
     expect(

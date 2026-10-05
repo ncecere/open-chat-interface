@@ -1,3 +1,5 @@
+// First: sizes libuv's thread pool (password hashing) before anything uses it.
+import './lib/threadpool.js';
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { migrationsApplied, runMigrationsWithLock, seedDatabase } from '@oci/db';
@@ -21,6 +23,7 @@ import { withReadRetry } from './middleware/read-retry.js';
 import { startCacheBus } from './services/cache-bus/index.js';
 import { activeRunCount, interruptActiveRuns } from './services/chat/active-runs.js';
 import { closeChatStreams, endChatReplays, redisConfigured } from './services/chat-streams.js';
+import { startCiphertextFormatWatch } from './services/encryption/rotation.js';
 import { runningJobCount, startLifecycleJobs, stopJobs } from './services/jobs/index.js';
 import { startReplicaHeartbeat, watchForWorkers } from './services/jobs/workers.js';
 import { initTracing, shutdownTracing } from './services/observability/tracing.js';
@@ -70,6 +73,9 @@ async function main() {
   }
 
   await ensureInitialAdmin();
+  // Stored secrets: the versioned ciphertext format once no v0.10 replica
+  // can be running (v0.11 design, item 23; services/encryption/rotation.ts).
+  const stopCiphertextWatch = await startCiphertextFormatWatch();
 
   // Settings and other per-replica caches are cleared on every replica when
   // one changes them, over Redis (v0.11 item 20); on every role, since a
@@ -130,6 +136,7 @@ async function main() {
       stopJobs();
       stopWatchingWorkers();
       stopWatchingRedis();
+      stopCiphertextWatch();
       void stopHeartbeat();
       // Jobs stop at their next check between batches (jobMayContinue).
       jobsUntil.at =

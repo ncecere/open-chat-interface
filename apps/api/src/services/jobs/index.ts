@@ -8,6 +8,7 @@ import {
   startManualComplianceExport,
 } from '../compliance/export.js';
 import { embeddingRebuildJobs } from '../embeddings/rebuild.js';
+import { encryptionJobs } from '../encryption/rotation.js';
 import {
   applyThreadRetention,
   pruneAuditLog,
@@ -223,6 +224,8 @@ export function lifecycleJobs(): JobDefinition[] {
     ...migrationJobs(),
     // Embedding generations (v0.11): fill after a model change, switch, drop.
     ...embeddingRebuildJobs(),
+    // Encryption key rotation (v0.11): re-encrypt after ENCRYPTION_KEY changes.
+    ...encryptionJobs(),
   ];
 }
 

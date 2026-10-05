@@ -14,6 +14,7 @@ import {
   readReleaseManifest,
   releaseOf,
   rewriteMessagesInPlace,
+  secretReencryptionMigrations,
   statementCost,
   tablesCreated,
   tablesTouched,
@@ -262,12 +263,13 @@ describe('post-deploy folder', () => {
 
 describe('background migrations', () => {
   it('registers test definitions only when the environment names them', () => {
-    expect(backgroundMigrations({})).toEqual([usageRollupBackfill]);
+    const release = [usageRollupBackfill, ...secretReencryptionMigrations];
+    expect(backgroundMigrations({})).toEqual(release);
     expect(
       backgroundMigrations({
         OCI_TEST_BACKGROUND_MIGRATIONS: ` other, ${rewriteMessagesInPlace.name} `,
       }),
-    ).toEqual([usageRollupBackfill, rewriteMessagesInPlace]);
+    ).toEqual([...release, rewriteMessagesInPlace]);
   });
 
   it('estimates progress from a UUID cursor, or rows against the estimate', () => {

@@ -127,6 +127,21 @@ export function analyse({ events, replies, run, bounds }) {
             )}${run.background.timedOut ? ` (gave up after ${fmt(run.background.timeoutMs)})` : ''}`,
     );
   }
+  if (run.secretsMixed) {
+    const m = run.secretsMixed;
+    add(
+      'secrets written while the previous release serves stay readable by it',
+      m.saved === m.attempts && m.versioned === 0,
+      `provider key saved ${m.saved}/${m.attempts} times through both releases; ${m.legacy} stored in the previous format, ${m.versioned} in the versioned one`,
+    );
+  }
+  if (run.secretsAfter) {
+    add(
+      'secrets re-encrypted into the versioned format after migrate --post',
+      run.secretsAfter.legacy === 0 && run.secretsAfter.versioned > 0,
+      `${run.secretsAfter.versioned} versioned, ${run.secretsAfter.legacy} in the previous format`,
+    );
+  }
   if (run.usageRollups) {
     const { backfill, check } = run.usageRollups;
     add(

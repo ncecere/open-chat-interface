@@ -1,7 +1,19 @@
+import { secretReencryptionMigrations } from './reencrypt-secrets.js';
 import { TEST_BACKGROUND_MIGRATIONS } from './test-definitions.js';
 import type { BackgroundMigrationDefinition } from './types.js';
 import { usageRollupBackfill } from './usage-rollups.js';
 
+export {
+  ENCRYPTED_JSON_KEY,
+  ENCRYPTED_LOCATIONS,
+  type EncryptedLocation,
+  encryptedJsonValues,
+  reencryptJson,
+  type SecretCodec,
+  SecretReencryptionError,
+  secretReencryptionMigrations,
+  setSecretCodec,
+} from './reencrypt-secrets.js';
 export { rewriteMessagesInPlace } from './test-definitions.js';
 export type {
   BackgroundBatchInput,
@@ -21,6 +33,9 @@ export { usageRollupBackfill } from './usage-rollups.js';
 const RELEASE_BACKGROUND_MIGRATIONS: readonly BackgroundMigrationDefinition[] = [
   // 0.11: usage events written before migration 0040 into the usage rollups.
   usageRollupBackfill,
+  // 0.11: secrets encrypted with ENCRYPTION_KEY into the versioned format
+  // under the current key; rescheduled by the API after a key change.
+  ...secretReencryptionMigrations,
 ];
 
 /** Test-only definitions enabled by name, comma-separated. */

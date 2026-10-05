@@ -18,6 +18,11 @@ Usage: tools/scale/run.sh [options]
   --no-build         use existing images (SCALE_API_IMAGE / SCALE_WEB_IMAGE)
   --no-generate      reuse the data of a previous --keep run
   --skip-retention   skip the (destructive) retention phase
+  --storm            also run the sign-in storm phase (k6/storm.js): every virtual
+                     user behind SCALE_STORM_ADDRESSES (4) addresses, password
+                     sign-ins then single sign-on against the stub OIDC provider
+  --storm-only       run only the sign-in storm phase (no main or retention phase);
+                     SCALE_STORM_RATE overrides the profile's sign-ins per second
   --seed TEXT        dataset seed (default: oci-scale)
   --dimensions N     embedding dimensions (default: 1536)
   --results DIR      where results go (default: tools/scale/results)
@@ -36,6 +41,8 @@ KEEP=0
 BUILD=1
 GENERATE=1
 RETENTION=1
+STORM=0
+MAIN=1
 SEED=oci-scale
 DIMENSIONS=1536
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,6 +58,8 @@ while [[ $# -gt 0 ]]; do
     --no-build) BUILD=0; shift ;;
     --no-generate) GENERATE=0; shift ;;
     --skip-retention) RETENTION=0; shift ;;
+    --storm) STORM=1; shift ;;
+    --storm-only) STORM=1; MAIN=0; RETENTION=0; shift ;;
     --seed) SEED="$2"; shift 2 ;;
     --dimensions) DIMENSIONS="$2"; shift 2 ;;
     --results) RESULTS="$2"; shift 2 ;;
@@ -77,6 +86,7 @@ export SCALE_API_REPLICAS="$REPLICAS"
 export STUB_FIRST_TOKEN_MS="${STUB_FIRST_TOKEN_MS:-500}"
 export STUB_TOKENS_PER_SECOND="${STUB_TOKENS_PER_SECOND:-50}"
 export STUB_REPLY_TOKENS="${STUB_REPLY_TOKENS:-250}"
+STORM_ADDRESSES="${SCALE_STORM_ADDRESSES:-4}"
 # Per-run secrets for a disposable stack.
 random_hex() { od -An -tx1 -N"$1" /dev/urandom | tr -d ' \n'; }
 SCALE_AUTH_SECRET="$(random_hex 32)"
@@ -185,17 +195,59 @@ psql_scale -c 'select pg_stat_statements_reset()' >/dev/null
 compose --profile tools run --rm tools /scale/report.mjs snapshot --name before >/dev/null
 
 STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-log "Main run: sign-in storm, then mixed load"
-set +e
-run_k6 main main.js
-K6_STATUS=$?
-set -e
-case "$K6_STATUS" in
-  0) log "All thresholds met" ;;
-  99) log "Some thresholds were missed (reported; use --enforce to fail on them)" ;;
-  *) log "k6 failed with status $K6_STATUS"; exit "$K6_STATUS" ;;
-esac
-compose --profile tools run --rm tools /scale/report.mjs collect --phase main --since "$STARTED"
+K6_STATUS=0
+if [[ "$MAIN" == 1 ]]; then
+  log "Main run: sign-in storm, then mixed load"
+  set +e
+  run_k6 main main.js
+  K6_STATUS=$?
+  set -e
+  case "$K6_STATUS" in
+    0) log "All thresholds met" ;;
+    99) log "Some thresholds were missed (reported; use --enforce to fail on them)" ;;
+    *) log "k6 failed with status $K6_STATUS"; exit "$K6_STATUS" ;;
+  esac
+  compose --profile tools run --rm tools /scale/report.mjs collect --phase main --since "$STARTED"
+fi
+
+if [[ "$STORM" == 1 ]]; then
+  # The stub identity provider (stub/oidc.mjs) as an SSO provider, written the
+  # way the admin API's registration stores it, endpoints included, so no
+  # discovery happens per sign-in. Trusted for linking so the plugin accepts
+  # its callbacks; just-in-time provisioning on.
+  psql_scale >/dev/null <<'SQL'
+insert into sso_provider (id, issuer, domain, oidc_config, provider_id, organization_id, label, kind,
+  enabled, jit_provisioning, trusted_for_linking, domain_verified, allowed_domains, default_role)
+select 'scale-idp', 'http://stub:4181/oidc', 'scale.test',
+  json_build_object(
+    'issuer', 'http://stub:4181/oidc', 'clientId', 'scale-client', 'clientSecret', 'scale-client-secret',
+    'authorizationEndpoint', 'http://stub:4181/oidc/authorize', 'tokenEndpoint', 'http://stub:4181/oidc/token',
+    'tokenEndpointAuthentication', 'client_secret_basic', 'jwksEndpoint', 'http://stub:4181/oidc/jwks',
+    'userInfoEndpoint', 'http://stub:4181/oidc/userinfo',
+    'discoveryEndpoint', 'http://stub:4181/oidc/.well-known/openid-configuration',
+    'pkce', true, 'scopes', json_build_array('openid', 'email', 'profile'), 'overrideUserInfo', false
+  )::text,
+  'scale-idp', (select id from organization order by created_at limit 1), 'Scale IdP', 'oidc',
+  true, true, true, true, '[]'::jsonb, 'user'
+on conflict (id) do nothing;
+SQL
+  psql_scale -c 'select pg_stat_statements_reset()' >/dev/null
+  STORM_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  log "Sign-in storm phase: everyone behind $STORM_ADDRESSES address(es), passwords then SSO"
+  set +e
+  compose --profile tools run --rm -e SCALE_PROFILE="$PROFILE" -e SCALE_PHASE=storm \
+    -e SCALE_SIGNIN_ADDRESSES="$STORM_ADDRESSES" -e SCALE_STORM_RATE="${SCALE_STORM_RATE:-}" \
+    k6 run --quiet /scale/k6/storm.js
+  STORM_STATUS=$?
+  set -e
+  case "$STORM_STATUS" in
+    0 | 99) ;;
+    *) log "k6 failed with status $STORM_STATUS"; exit "$STORM_STATUS" ;;
+  esac
+  [[ "$STORM_STATUS" == 99 ]] && K6_STATUS=99
+  compose --profile tools run --rm tools /scale/report.mjs collect --phase storm --since "$STORM_STARTED" >/dev/null
+  log "Storm results: $RUN_DIR/k6-storm.json, $RUN_DIR/db-storm.json"
+fi
 
 if [[ "$RETENTION" == 1 ]]; then
   log "Retention phase (usage events older than ${SCALE_RETENTION_USAGE_DAYS} days, audit entries older than ${SCALE_RETENTION_AUDIT_DAYS} days)"
@@ -203,14 +255,16 @@ if [[ "$RETENTION" == 1 ]]; then
   compose --profile tools run --rm tools /scale/report.mjs collect --phase retention --since "$STARTED" >/dev/null
 fi
 
-compose --profile tools run --rm \
-  -e SCALE_COMMIT -e SCALE_DATE -e SCALE_HW_CPU -e SCALE_HW_MEMORY -e SCALE_HW_OS \
-  -e SCALE_DOCKER_CPUS -e SCALE_DOCKER_MEMORY -e SCALE_API_REPLICAS -e SCALE_PROFILE \
-  -e STUB_FIRST_TOKEN_MS -e STUB_TOKENS_PER_SECOND -e STUB_REPLY_TOKENS \
-  tools /scale/report.mjs render >/dev/null
-cp "$RUN_DIR/report.md" "$RESULTS/$RUN_NAME.md"
-cp "$RUN_DIR/report.json" "$RESULTS/$RUN_NAME.json"
-log "Report: $RESULTS/$RUN_NAME.md (raw files in $RUN_DIR)"
+if [[ "$MAIN" == 1 ]]; then
+  compose --profile tools run --rm \
+    -e SCALE_COMMIT -e SCALE_DATE -e SCALE_HW_CPU -e SCALE_HW_MEMORY -e SCALE_HW_OS \
+    -e SCALE_DOCKER_CPUS -e SCALE_DOCKER_MEMORY -e SCALE_API_REPLICAS -e SCALE_PROFILE \
+    -e STUB_FIRST_TOKEN_MS -e STUB_TOKENS_PER_SECOND -e STUB_REPLY_TOKENS \
+    tools /scale/report.mjs render >/dev/null
+  cp "$RUN_DIR/report.md" "$RESULTS/$RUN_NAME.md"
+  cp "$RUN_DIR/report.json" "$RESULTS/$RUN_NAME.json"
+  log "Report: $RESULTS/$RUN_NAME.md (raw files in $RUN_DIR)"
+fi
 
 if [[ "$ENFORCE" == 1 && "$K6_STATUS" == 99 ]]; then
   log "Failing because thresholds were missed (--enforce)"

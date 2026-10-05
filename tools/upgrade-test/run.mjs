@@ -30,6 +30,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { buildInjectedImage, CASES } from './inject.mjs';
 import {
+  ADMIN,
+  Client,
   compose,
   containerId,
   inspect,
@@ -40,6 +42,7 @@ import {
   psql,
   REPO_ROOT,
   run,
+  signIn,
   sleep,
   TOOL_DIR,
   waitHealthy,
@@ -59,6 +62,8 @@ const REGISTRY = 'ghcr.io/ncecere/open-chat-interface';
 const STABLE = /^v(\d+)\.(\d+)\.(\d+)$/;
 /** The first release whose API drains on shutdown (design item 13). */
 const FIRST_DRAINING = 'v0.11.0';
+/** The first release that reads versioned secrets (`oci:v1:<key id>:`). */
+const FIRST_VERSIONED_SECRETS = 'v0.11.0';
 /** The migrators' advisory lock keys (packages/db/src/migrator.ts, post-migrator.ts). */
 const MIGRATION_LOCK = 8374920115573001n;
 const POST_MIGRATION_LOCK = 8374920115573002n;
@@ -300,6 +305,58 @@ async function postSteps() {
         finished: finished === 't',
       };
     });
+}
+
+/**
+ * Stored secrets by format (v0.11 design, item 23): values encrypted with
+ * ENCRYPTION_KEY in the versioned format (`oci:v1:<key id>:`), which a v0.10
+ * replica cannot read, and in the format before it.
+ */
+async function secretFormats() {
+  const out = await psql(
+    `select count(*) filter (where v like 'oci:v1:%'), count(*) filter (where v not like 'oci:v1:%')
+       from (
+         select encrypted_api_key as v from provider where encrypted_api_key is not null
+         union all select encrypted_secret from webhook_endpoint
+         union all select encrypted_shared_header_value from connector
+           where encrypted_shared_header_value is not null
+         union all select encrypted_oauth_client_secret from connector
+           where encrypted_oauth_client_secret is not null
+         union all select encrypted_tokens from connector_account where encrypted_tokens is not null
+         union all select encrypted_pending from connector_account where encrypted_pending is not null
+       ) secrets;`,
+    env,
+  ).catch(() => '');
+  const [versioned, legacy] = out.trim().split('\t').map(Number);
+  return { versioned: versioned || 0, legacy: legacy || 0 };
+}
+
+/**
+ * While a previous-release replica still serves: an administrator re-enters
+ * the provider's key (through either web proxy, so through both releases),
+ * and the new release must keep storing it in the format the previous one
+ * reads, or the previous release's chats (the load) would fail to decrypt it.
+ */
+async function secretsDuringUpgrade() {
+  const admin = new Client({ bases, origin, label: 'secrets', timeoutMs: 30_000 });
+  const signedIn = await signIn(admin, ADMIN.email, ADMIN.password);
+  const [providerId] = (await psql('select id from provider order by created_at limit 1;', env))
+    .trim()
+    .split('\n');
+  let saved = 0;
+  for (let attempt = 0; signedIn.ok && attempt < 8; attempt++) {
+    const response = await admin.request(
+      'provider-key',
+      'PATCH',
+      `/api/admin/providers/${providerId}`,
+      {
+        body: { apiKey: 'stub-key' },
+        expect: [200],
+      },
+    );
+    if (response.ok) saved++;
+  }
+  return { saved, attempts: 8, ...(await secretFormats()) };
 }
 
 /** Background migrations and their progress. */
@@ -872,6 +929,15 @@ async function main() {
       );
       // Let the proxy re-resolve `api` and route to the new replica before the next stop.
       await sleep(options['settle-seconds'] * 1000);
+      // Releases before v0.11 read only the previous secret format.
+      const fromReadsVersioned =
+        STABLE.test(fromTag) && compareVersions(fromTag, FIRST_VERSIONED_SECRETS) >= 0;
+      if (kind === 'replace' && service === 'api-1' && !fromReadsVersioned) {
+        R.secretsMixed = await secretsDuringUpgrade();
+        log(
+          `secrets with both releases serving: provider key saved ${R.secretsMixed.saved}/${R.secretsMixed.attempts} times; stored ${R.secretsMixed.legacy} in the previous format, ${R.secretsMixed.versioned} versioned`,
+        );
+      }
     }
 
     if (!postDone) await postDeploy();
@@ -904,6 +970,12 @@ async function main() {
             )
             .join('; ') || 'none'
         } (waited ${(R.background.waitedMs / 1000).toFixed(1)} s after the restarts)`,
+      );
+
+      // Every stored secret re-encrypted into the versioned format.
+      R.secretsAfter = await secretFormats();
+      log(
+        `secrets after the background migrations: ${R.secretsAfter.versioned} versioned, ${R.secretsAfter.legacy} in the previous format`,
       );
 
       // The usage-rollup backfill: its batches and duration, then whether the
