@@ -1,8 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { Mail } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
-import { AdminPageHeader, LoadError, MutationError, Notice } from '~/components/admin/admin-ui';
+import {
+  AdminPageHeader,
+  EmptyState,
+  LoadError,
+  MutationError,
+  Notice,
+} from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -267,7 +274,12 @@ export function AdminReportsPage() {
         )}
 
         {data.reports.length === 0 ? (
-          <p className="mt-3 text-[var(--text-muted)] text-sm">No reports scheduled.</p>
+          // The same empty state as the other admin lists (#113).
+          <div className="mt-3">
+            <EmptyState icon={Mail} title="No reports scheduled.">
+              Add one above to email a usage summary daily, weekly or monthly.
+            </EmptyState>
+          </div>
         ) : (
           <ul className="mt-3 divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
             {data.reports.map((report) => (

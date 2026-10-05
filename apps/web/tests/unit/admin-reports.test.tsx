@@ -76,3 +76,15 @@ it('edits a report in place and shows its next run (#85)', async () => {
   expect(button('Add report')).toBeTruthy();
   expect(name.value).toBe('');
 });
+
+it('shows an empty list as the other admin lists do (#113)', async () => {
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/reports') return { reports: [] };
+    if (path === '/admin/setup-status') return { checks: [] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  const empty = document.querySelector('.border-dashed');
+  expect(empty?.textContent).toContain('No reports scheduled.');
+  expect(empty?.querySelector('svg')).not.toBeNull();
+});

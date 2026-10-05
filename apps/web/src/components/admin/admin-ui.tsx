@@ -124,7 +124,8 @@ export function EmptyState({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--border-subtle)] p-12 text-center">
+    // No wider than the page's description above it (#113).
+    <div className="flex max-w-3xl flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--border-subtle)] p-12 text-center">
       <Icon className="size-8 text-[var(--text-muted)]" />
       <p className="text-sm text-[var(--text-secondary)]">{title}</p>
       {children && <p className="max-w-md text-xs text-[var(--text-muted)]">{children}</p>}

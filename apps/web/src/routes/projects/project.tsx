@@ -29,6 +29,7 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
 import { Spinner } from '~/components/ui/spinner';
+import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import {
   useDeleteProject,
@@ -45,8 +46,8 @@ import {
   type ProjectTab,
   validateProjectSearch,
 } from '~/lib/chat-search-params';
-import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 import { usePageTitle } from '~/lib/document-title';
+import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -135,12 +136,16 @@ export function ProjectPage({ projectId }: { projectId: string }) {
 
   if (me && !me.features.projects) {
     return (
-      <PageFrame>
-        <h1 className="text-2xl font-bold">Projects</h1>
-        <p className="mt-3 text-sm text-[var(--text-muted)]">
-          Projects are not available for your role.
-        </p>
-      </PageFrame>
+      <UnavailableState
+        title="Projects unavailable"
+        actions={
+          <Button asChild>
+            <Link to="/">New chat</Link>
+          </Button>
+        }
+      >
+        Projects are not available for your role.
+      </UnavailableState>
     );
   }
 
@@ -157,17 +162,30 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   if (project.error || !project.data) {
     const missing = project.error instanceof ApiError && project.error.status === 404;
     return (
-      <PageFrame>
-        <h1 className="text-2xl font-bold">{missing ? 'Project not found' : 'Project'}</h1>
-        <p role="alert" className="mt-3 text-sm text-[var(--text-muted)]">
-          {missing
-            ? 'This project does not exist or was deleted.'
-            : apiErrorMessage(project.error, 'The project could not be loaded.')}
-        </p>
-        <Link to="/" className="mt-4 inline-block text-sm text-[var(--accent-bright)] underline">
-          Back to chat
-        </Link>
-      </PageFrame>
+      <UnavailableState
+        alert
+        title={missing ? 'Project not found' : 'Could not load project'}
+        actions={
+          missing ? (
+            <Button asChild>
+              <Link to="/">New chat</Link>
+            </Button>
+          ) : (
+            <>
+              <Button type="button" onClick={() => void project.refetch()}>
+                Retry
+              </Button>
+              <Link to="/" className="text-sm underline">
+                New chat
+              </Link>
+            </>
+          )
+        }
+      >
+        {missing
+          ? 'This project does not exist or was deleted.'
+          : apiErrorMessage(project.error, 'The project could not be loaded.')}
+      </UnavailableState>
     );
   }
 

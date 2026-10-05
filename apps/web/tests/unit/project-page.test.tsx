@@ -280,6 +280,10 @@ describe('project page', () => {
     await render();
     expect(document.body.textContent).toContain('Projects are not available for your role.');
     expect(api.get).not.toHaveBeenCalledWith('/projects/project-1');
+    // The same unavailable layout as a missing project or conversation, with
+    // a way on (#113).
+    expect(document.querySelector('h1')?.textContent).toBe('Projects unavailable');
+    expect([...document.querySelectorAll('a')].map((a) => a.textContent)).toContain('New chat');
   });
 
   it('reports a missing project', async () => {
@@ -289,6 +293,9 @@ describe('project page', () => {
     };
     await render();
     expect(document.querySelector('h1')?.textContent).toBe('Project not found');
+    // Announced, centred like "Conversation unavailable", with New chat (#113).
+    expect(document.querySelector('[role="alert"] h1')?.textContent).toBe('Project not found');
+    expect([...document.querySelectorAll('a')].map((a) => a.textContent)).toContain('New chat');
   });
 });
 
