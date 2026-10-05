@@ -22,7 +22,12 @@ import { processRole } from './lib/role.js';
 import { withReadRetry } from './middleware/read-retry.js';
 import { startCacheBus } from './services/cache-bus/index.js';
 import { activeRunCount, interruptActiveRuns } from './services/chat/active-runs.js';
-import { closeChatStreams, endChatReplays, redisConfigured } from './services/chat-streams.js';
+import {
+  chatReplayCount,
+  closeChatStreams,
+  endChatReplays,
+  redisConfigured,
+} from './services/chat-streams.js';
 import { startCiphertextFormatWatch } from './services/encryption/rotation.js';
 import { runningJobCount, startLifecycleJobs, stopJobs } from './services/jobs/index.js';
 import { startReplicaHeartbeat, watchForWorkers } from './services/jobs/workers.js';
@@ -147,6 +152,7 @@ async function main() {
       chatTurnsBeingAdmitted() +
       (Date.now() < jobsUntil.at ? runningJobCount() : 0),
     interruptWork: interruptActiveRuns,
+    openStreams: chatReplayCount,
     endStreams: endChatReplays,
     closeResources: async () => {
       await Promise.allSettled([

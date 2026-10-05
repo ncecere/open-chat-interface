@@ -856,6 +856,11 @@ export async function finalizeInterruptedChatRun(
 
 const replayReaders = new Set<AbortController>();
 
+/** Replay readers this process is still sending to (shutdown waits briefly for them). */
+export function chatReplayCount(): number {
+  return replayReaders.size;
+}
+
 /** Ends this process's replay readers cleanly (shutdown); their clients resume elsewhere. */
 export function endChatReplays(): number {
   const count = replayReaders.size;

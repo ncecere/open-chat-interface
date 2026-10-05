@@ -158,6 +158,16 @@ export interface ShutdownOptions {
   interruptWork: () => number;
   /** Ends long-lived readers (replay streams) before the server closes. */
   endStreams?: () => void;
+  /**
+   * Replay readers still sending. Once the replies are done they get
+   * `streamGraceMs` to finish on their own before `endStreams` cuts them: a
+   * reader a few frames behind a reply that has just finished would
+   * otherwise end without it, and with a single replica there is nowhere
+   * else to resume. A reader of a reply still running elsewhere is ended
+   * after the grace, as before.
+   */
+  openStreams?: () => number;
+  streamGraceMs?: number;
   /** Closes database, Redis and tracing. */
   closeResources: () => Promise<void>;
   exit: (code: number) => void;
@@ -223,6 +233,9 @@ export function createShutdown(options: ShutdownOptions): (signal: string) => Pr
             Date.now() + (options.interruptGraceMs ?? 3_000),
           );
           if (left > 0) log.warn({ left }, 'Work still running at exit');
+        }
+        if (options.openStreams) {
+          await waitUntil(options.openStreams, Date.now() + (options.streamGraceMs ?? 2_000));
         }
         options.endStreams?.();
         await closeServer(options.server, options.closeGraceMs ?? 2_000);
