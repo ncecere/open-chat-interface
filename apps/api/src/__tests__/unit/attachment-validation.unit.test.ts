@@ -39,6 +39,19 @@ describe('unit: attachment content validation', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 422 });
   });
 
+  it('names the refused type with the right article', async () => {
+    // A ZIP renamed to .png: "an application/zip", not "a application/zip".
+    const zip = Buffer.from('504b0304140000000000', 'hex');
+    await expect(
+      validate({ filename: 'disguised.png', declaredMimeType: 'image/png', bytes: zip }),
+    ).rejects.toMatchObject({
+      message: 'disguised.png is an application/zip file, which is not allowed here',
+    });
+    await expect(
+      validate({ filename: 'p.png', bytes: ONE_PIXEL_PNG, allowedMimeTypes: ['text/plain'] }),
+    ).rejects.toMatchObject({ message: 'p.png is an image/png file, which is not allowed here' });
+  });
+
   it('accepts printable UTF-8 as text but rejects binary/control-heavy content', async () => {
     await expect(
       validate({ declaredMimeType: 'application/octet-stream', bytes: Buffer.from('safe text') }),
