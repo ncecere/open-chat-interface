@@ -134,7 +134,11 @@ export interface ModelUsage {
   modelSlug: string;
   displayName: string | null;
   labId: string | null;
-  enabled: boolean;
+  /**
+   * Whether the catalog model is enabled; null when the slug is not in the
+   * chat catalog at all (an embedding model, or a model since removed).
+   */
+  enabled: boolean | null;
   messages: number;
   tokens: number;
   costMicros: number;
@@ -245,7 +249,7 @@ export async function modelUsage(
       modelSlug: row.model_slug,
       displayName: row.display_name,
       labId: row.lab_id,
-      enabled: row.enabled ?? false,
+      enabled: row.enabled,
       messages: Number(row.messages),
       tokens: Number(row.tokens),
       costMicros: Number(row.cost_micros),
