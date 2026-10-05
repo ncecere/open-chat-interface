@@ -6,7 +6,9 @@ from consuming a shared budget.
 ## What you will see
 
 Usage appears as **a percentage remaining**, under Settings and beside your
-name. Never a number of messages, tokens, or an amount of money.
+name. Never a number of messages, tokens, or an amount of money. Each limit is
+named by what it counts ("Message limit", "Token limit", or "Usage limit" for
+spending) and the period it covers, such as today or this month.
 
 That is deliberate. What a token costs is not something you can act on, and
 showing it invites either anxiety or gaming. A percentage answers the only

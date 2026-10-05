@@ -1,4 +1,5 @@
 import type { UsageAllowance, UsageSummary } from '@oci/shared';
+import { quotaLimitName, quotaWindowPhrase } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -48,9 +49,11 @@ export function UsageWarning() {
             : undefined,
       };
 
+      // Not the policy's name, which is the administrator's (#93).
+      const limit = `${quotaLimitName(allowance.metric)} for ${quotaWindowPhrase(allowance.windowKind, allowance.windowHours)}`;
       const message = exceeded
-        ? `You have reached your ${allowance.name} limit.`
-        : `You are approaching your ${allowance.name} limit.`;
+        ? `You have reached your ${limit}.`
+        : `You are approaching your ${limit}.`;
 
       if (exceeded || allowance.severity === 'critical') toast.error(message, options);
       else toast.warning(message, options);

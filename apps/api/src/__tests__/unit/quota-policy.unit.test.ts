@@ -160,13 +160,17 @@ describe('allowance reporting', () => {
 });
 
 describe('limit messages', () => {
-  it('names the policy and window a user can act on', () => {
-    const message = limitMessage(
-      policy({ name: 'Anthropic models', metric: 'cost', windowKind: 'monthly' }),
+  it('names what is counted and the window, never the administrator’s policy name (#93)', () => {
+    const name = 'Walk AP race policy (users, non-biting)';
+    expect(limitMessage(policy({ name, metric: 'cost', windowKind: 'monthly' }))).toBe(
+      'You have reached your usage limit for this month.',
     );
-
-    expect(message).toContain('Anthropic models');
-    expect(message).toContain('this month');
+    expect(limitMessage(policy({ name, metric: 'messages', windowKind: 'daily' }))).toBe(
+      'You have reached your message limit for today.',
+    );
+    expect(limitMessage(policy({ name, metric: 'tokens', windowKind: 'weekly' }))).not.toContain(
+      name,
+    );
   });
 
   it('never exposes the underlying spend figure to a user', () => {

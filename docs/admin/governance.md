@@ -292,7 +292,9 @@ labels.
 **Models → Usage budgets** (`/admin/quotas`). A budget — a quota policy —
 caps consumption, and is applied to one or more roles. A role can carry several
 at once and every one is enforced; each person gets the full amount on their
-own. Three things to decide.
+own. Its name is for administrators: people see what a budget counts and its
+period ("You have reached your message limit for today"), never its name.
+Three things to decide.
 
 ### What to measure
 
