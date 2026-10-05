@@ -213,9 +213,20 @@ export function AdminUserDetailPage() {
           <Ban className="mt-0.5 size-4 shrink-0 text-[var(--danger)]" aria-hidden="true" />
           <div className="min-w-0">
             <p className="font-medium text-[var(--text-primary)]">This account is banned</p>
-            <p className="mt-1 break-words text-[var(--text-muted)]">
-              {user.banReason ? `Reason: ${user.banReason}` : 'No reason was recorded.'} They cannot
-              sign in until the ban is lifted.
+            <p className="mt-1 text-[var(--text-muted)]">
+              They cannot sign in until the ban is lifted.
+            </p>
+            {/* The reason is the admin's own words, often without a full stop:
+                its own line, so it never runs into the sentence after it (#77). */}
+            <p className="mt-1 whitespace-pre-line break-words text-[var(--text-muted)]">
+              {user.banReason ? (
+                <>
+                  <span className="font-medium text-[var(--text-primary)]">Reason:</span>{' '}
+                  {user.banReason}
+                </>
+              ) : (
+                'No reason was recorded.'
+              )}
             </p>
           </div>
         </div>

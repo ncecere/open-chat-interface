@@ -212,6 +212,16 @@ describe('user detail actions', () => {
     });
   });
 
+  it('keeps a reason without a full stop apart from the sentence after it (#77)', async () => {
+    user = { ...baseUser, role: 'user', banned: true, banReason: 'Walk spam, long long' };
+    ({ root } = await renderDetail());
+
+    const lines = [...document.querySelectorAll('p')].map((p) => p.textContent);
+    expect(lines).toContain('Reason: Walk spam, long long');
+    expect(lines).toContain('They cannot sign in until the ban is lifted.');
+    expect(document.body.textContent).not.toContain('long long They');
+  });
+
   it('confirms before signing out everywhere', async () => {
     ({ root } = await renderDetail());
 
