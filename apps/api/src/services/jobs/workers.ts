@@ -168,6 +168,17 @@ export async function workersHealthCheck() {
   const id = 'workers';
   const label = 'Background workers';
   if (!status.alive) return { id, label, status: 'error' as const, detail: NO_WORKER_MESSAGE };
+  // Jobs ran recently but no worker is beating. Without Redis there are no
+  // heartbeats to see; with Redis, a worker has most likely just stopped,
+  // which this used to report as "no Redis" and ok.
+  if (status.evidence === 'job-runs' && status.replicas !== null) {
+    return {
+      id,
+      label,
+      status: 'warn' as const,
+      detail: `Background jobs ran in the last minute, but no worker has checked in: one may have just stopped.${seen}`,
+    };
+  }
   const detail =
     status.evidence === 'this-replica'
       ? `This replica (OCI_ROLE=${processRole()}) runs background jobs.${seen}`
