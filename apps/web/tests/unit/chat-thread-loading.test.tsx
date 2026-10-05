@@ -260,6 +260,10 @@ describe('ChatThreadPage loading boundary', () => {
       expect(container.textContent).toContain('Conversation unavailable');
       expect(container.textContent).not.toContain('Private API detail');
       expectNoSpinner();
+      // Retrying cannot bring back a conversation that is gone (#103).
+      expect(
+        [...container.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Retry'),
+      ).toBe(false);
       const navigation = control(/back|new chat/i);
       await act(() => navigation.click());
       const returnedHome = mocks.navigate.mock.calls.some(([options]) => options?.to === '/');

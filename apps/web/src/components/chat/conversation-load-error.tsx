@@ -21,14 +21,21 @@ export function ConversationLoadError({
             ? 'This conversation may have been deleted, expired, or is not available to your account.'
             : 'Check your connection and try again. No message has been sent from this loading screen.'}
         </p>
-        <div className="flex items-center justify-center gap-4">
-          <Button type="button" onClick={retry} disabled={retrying}>
-            Retry
+        {unavailable ? (
+          // Retrying cannot bring back a conversation that is gone (#103).
+          <Button asChild>
+            <Link to="/">New chat</Link>
           </Button>
-          <Link to="/" className="text-sm underline">
-            New chat
-          </Link>
-        </div>
+        ) : (
+          <div className="flex items-center justify-center gap-4">
+            <Button type="button" onClick={retry} disabled={retrying}>
+              Retry
+            </Button>
+            <Link to="/" className="text-sm underline">
+              New chat
+            </Link>
+          </div>
+        )}
       </section>
     </div>
   );

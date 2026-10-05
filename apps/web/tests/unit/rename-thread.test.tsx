@@ -326,6 +326,24 @@ describe('renaming from the top bar', () => {
     expect(findButton('Rename conversation')).toBeTruthy();
   });
 
+  it('offers no conversation actions for one that does not exist (#103)', async () => {
+    const { client } = await render('/chat/walk-does-not-exist');
+    const action = (label: string) => document.querySelector(`[aria-label="${label}"]`);
+    expect(action('Download this conversation')).not.toBeNull();
+    expect(action('Rename conversation')).not.toBeNull();
+    await act(async () => {
+      await client.prefetchQuery({
+        queryKey: chatHistoryKey('walk-does-not-exist'),
+        queryFn: () => Promise.reject(new ApiError(404, 'NOT_FOUND', 'Thread not found')),
+        retry: false,
+      });
+    });
+    for (const label of ['Rename conversation', 'Download this conversation', 'Move to project'])
+      expect(action(label), label).toBeNull();
+    // The page's own controls stay.
+    expect(action('Start temporary chat')).not.toBeNull();
+  });
+
   it('is not shown away from a conversation', async () => {
     await render('/');
     expect(findButton('Rename conversation')).toBeUndefined();
