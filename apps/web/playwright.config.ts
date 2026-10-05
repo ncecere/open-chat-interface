@@ -26,10 +26,10 @@ export default defineConfig({
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
     // The instance falls back to the dark theme, so the scans above never saw
     // light, where every AA contrast failure the QA walk found was (#72). The
-    // spec stores the light theme for projects whose name ends in -light.
+    // specs store the light theme for projects whose name ends in -light.
     {
       name: 'chromium-light',
-      testMatch: '**/accessibility.spec.ts',
+      testMatch: '**/accessibility-*.spec.ts',
       use: { ...devices['Desktop Chrome'], colorScheme: 'light' },
     },
   ],

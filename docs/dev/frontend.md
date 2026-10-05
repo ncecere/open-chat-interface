@@ -72,4 +72,5 @@ are wrong.
   as well as a hue.
 - A dialog traps focus and restores it on dismissal, which Radix handles.
 
-`tests/e2e/accessibility.spec.ts` scans for regressions. It is a net, not proof.
+`tests/e2e/accessibility-*.spec.ts` scan for regressions. They are a net, not
+proof.
