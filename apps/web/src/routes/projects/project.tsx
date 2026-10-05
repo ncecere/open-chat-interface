@@ -7,7 +7,15 @@ import {
 } from '@oci/shared';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { FileText, MessageSquarePlus, Trash2, Upload } from 'lucide-react';
-import { type ChangeEvent, type FormEvent, type ReactNode, useId, useRef, useState } from 'react';
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -37,6 +45,7 @@ import {
   type ProjectTab,
   validateProjectSearch,
 } from '~/lib/chat-search-params';
+import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -114,6 +123,12 @@ function Section({
 export function ProjectPage({ projectId }: { projectId: string }) {
   const { data: me } = useCurrentUser();
   const project = useProject(me?.features.projects ? projectId : undefined);
+  // Nothing started from a project is temporary; do not leave the top bar's
+  // temporary-chat control highlighted here.
+  const { temporary, setTemporary } = useTemporaryChat();
+  useEffect(() => {
+    if (temporary) setTemporary(false);
+  }, [temporary, setTemporary]);
 
   if (me && !me.features.projects) {
     return (

@@ -3,6 +3,7 @@ import type { ProjectFile, ProjectSummary, ThreadSummary } from '@oci/shared';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ProjectPage } from '../../src/routes/projects/project';
 import { alerts, button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
 
@@ -77,9 +78,14 @@ afterEach(async () => {
 });
 
 async function render(tab?: string) {
-  ({ root } = await renderAdmin(<ProjectPage projectId="project-1" />, {
-    path: tab ? `/projects/project-1?tab=${tab}` : '/projects/project-1',
-  }));
+  ({ root } = await renderAdmin(
+    <TemporaryChatProvider>
+      <ProjectPage projectId="project-1" />
+    </TemporaryChatProvider>,
+    {
+      path: tab ? `/projects/project-1?tab=${tab}` : '/projects/project-1',
+    },
+  ));
 }
 
 function tab(name: string): HTMLButtonElement {
@@ -284,4 +290,10 @@ describe('project page', () => {
     await render();
     expect(document.querySelector('h1')?.textContent).toBe('Project not found');
   });
+});
+
+it('switches temporary-chat mode off, since nothing in a project is temporary', async () => {
+  sessionStorage.setItem('oci.temporaryChat', 'true');
+  await render();
+  expect(sessionStorage.getItem('oci.temporaryChat')).toBeNull();
 });

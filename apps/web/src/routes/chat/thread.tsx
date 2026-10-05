@@ -2,7 +2,7 @@ import { type Attachment, REASONING_EFFORTS, type ReasoningEffort } from '@oci/s
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, Clock } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThreadArtifactsProvider } from '~/components/artifacts/artifacts-provider';
 import { CompactionFailureNotice } from '~/components/chat/compaction-failure-notice';
@@ -392,6 +392,15 @@ function ThreadConversation({
           )}
         </div>
 
+        {/* Kept on screen for the whole conversation: once the first message
+            was sent, the home page's "Temporary chat" heading was gone and
+            only the highlighted clock said so. */}
+        {temporary && (
+          <p className="flex items-center justify-center gap-1.5 px-4 pb-1.5 text-[var(--text-muted)] text-xs">
+            <Clock className="size-3.5 text-[var(--accent-bright)]" aria-hidden="true" />
+            Temporary chat: kept out of history and deleted 24 hours after it started.
+          </p>
+        )}
         <Composer
           autoFocus={carriedFocus}
           value={session.draft}

@@ -41,8 +41,13 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const { data: models = EMPTY_MODELS } = useModels();
   const navigate = useNavigate();
   const { mutateAsync: createThread } = useCreateThread();
-  const { temporary: temporaryMode } = useTemporaryChat();
+  const { temporary: temporaryMode, setTemporary } = useTemporaryChat();
   const temporary = temporaryMode && !projectId;
+  // A project chat is never temporary, so the mode is switched off here
+  // rather than left highlighted in the top bar over a chat that will be kept.
+  useEffect(() => {
+    if (projectId && temporaryMode) setTemporary(false);
+  }, [projectId, temporaryMode, setTemporary]);
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraftValue] = useState('');
