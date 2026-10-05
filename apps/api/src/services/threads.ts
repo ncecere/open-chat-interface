@@ -574,9 +574,20 @@ export async function touchThread(threadId: string) {
     .where(eq(schema.thread.id, threadId));
 }
 
-/** Derives a thread title from the first user message. */
+const TITLE_MAX = 60;
+
+/**
+ * Derives a thread title from the first user message: whole words, up to 60
+ * characters, and no "..." (#100). The title is stored and shows on share
+ * pages, in History and in export file names, so a cut word or an ellipsis
+ * stays with it; lists shorten it on screen anyway.
+ */
 export function deriveTitle(text: string): string {
   const cleaned = text.replace(/\s+/g, ' ').trim();
-  if (cleaned.length <= 48) return cleaned || 'New Chat';
-  return `${cleaned.slice(0, 48).trimEnd()}...`;
+  if (cleaned.length <= TITLE_MAX) return cleaned || 'New Chat';
+  const head = cleaned.slice(0, TITLE_MAX + 1);
+  const space = head.lastIndexOf(' ');
+  // One very long word (a URL, say) is cut where it must be.
+  const cut = space >= TITLE_MAX / 2 ? head.slice(0, space) : head.slice(0, TITLE_MAX);
+  return cut.replace(/[\s,;:–—-]+$/u, '');
 }
