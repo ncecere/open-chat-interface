@@ -203,6 +203,12 @@ export const MARKDOWN_PROSE = cn(
   // Shiki emits one span per line. Without the gutter they need to be blocks
   // again, or every line collapses onto one row.
   '[&_pre_code]:block [&_pre_code>span]:block',
+  // Squeezed to the reply's width, a table with many columns left a prose
+  // column one word wide (rows 200+ px tall in the QA walk). A table may be as
+  // wide as its content, never narrower than the reply, with long cells
+  // wrapping at a readable width; a wide one scrolls (a focusable region).
+  '[&_[data-streamdown=table]]:w-max [&_[data-streamdown=table]]:min-w-full',
+  '[&_[data-streamdown=table-cell]]:max-w-[22rem]',
   '[&_hr]:border-[var(--border-subtle)]',
   '[&_li::marker]:text-[var(--accent-bright)]',
 );
