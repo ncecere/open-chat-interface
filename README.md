@@ -165,8 +165,9 @@ Two constraints to know before scaling:
   replica, so a revoked session may remain usable on other replicas until that
   cache expires.
 
-Self-hosted OIDC/SAML identity providers on private networks must be listed in
-`AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
+Every OIDC identity provider's origin must be listed in `AUTH_TRUSTED_ORIGINS`,
+public ones (Google, Entra, Okta) included; OCI reads discovery documents only
+from trusted origins. See [Identity](docs/admin/identity.md#before-adding-an-oidc-provider).
 
 ## Accessibility
 

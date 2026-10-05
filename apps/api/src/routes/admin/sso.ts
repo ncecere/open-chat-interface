@@ -5,12 +5,13 @@ import {
   type SsoProviderSummary,
   USER_ROLES,
 } from '@oci/shared';
+import { APIError } from 'better-auth/api';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { auth } from '../../auth/index.js';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
-import { conflict, notFound } from '../../lib/errors.js';
+import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
@@ -19,6 +20,43 @@ import { getDefaultOrganizationId } from '../../services/organization.js';
 export const ssoRoutes = new Hono<AppBindings>();
 
 const env = loadEnv();
+
+/**
+ * Better Auth 1.6 fetches an OIDC discovery document only from a trusted
+ * origin (APP_URL plus AUTH_TRUSTED_ORIGINS), public or private: an SSRF
+ * guard. Checked here, with the same predicate the SSO plugin uses, so the
+ * admin is told which origin to add instead of getting a generic 500.
+ */
+async function assertDiscoveryTrusted(discoveryEndpoint: string): Promise<void> {
+  const context = await auth.$context;
+  if (context.isTrustedOrigin(discoveryEndpoint)) return;
+  const origin = new URL(discoveryEndpoint).origin;
+  throw validationFailed(
+    `OCI only contacts identity providers listed in AUTH_TRUSTED_ORIGINS. Add ${origin} to AUTH_TRUSTED_ORIGINS on every API replica, restart them, then add this provider again.`,
+    { path: ['issuer'], origin },
+  );
+}
+
+/**
+ * The SSO plugin reports a configuration it refuses (discovery that fails, an
+ * unreachable or private endpoint, an invalid certificate) as an APIError. OCI's
+ * error handler would turn that into a bare 500; pass the plugin's own reason
+ * back as a validation error instead. Server faults are left alone.
+ */
+async function registerWithPlugin(
+  body: NonNullable<Parameters<typeof auth.api.registerSSOProvider>[0]>['body'],
+  headers: Headers,
+): Promise<void> {
+  try {
+    await auth.api.registerSSOProvider({ body, headers });
+  } catch (error) {
+    if (error instanceof APIError && error.statusCode < 500) {
+      const detail = error.body as { code?: string; message?: string } | undefined;
+      throw validationFailed(detail?.message ?? error.message, { code: detail?.code });
+    }
+    throw error;
+  }
+}
 
 function callbackUrl(providerId: string, kind: 'oidc' | 'saml'): string {
   return kind === 'saml'
@@ -82,26 +120,27 @@ ssoRoutes.post('/providers', async (c) => {
   const domain = input.allowedDomains[0] ?? 'localhost';
 
   if (input.kind === 'oidc') {
-    await auth.api.registerSSOProvider({
-      body: {
+    const discoveryEndpoint =
+      input.discoveryUrl ?? `${input.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`;
+    await assertDiscoveryTrusted(discoveryEndpoint);
+    await registerWithPlugin(
+      {
         providerId: input.providerId,
         issuer: input.issuer,
         domain,
         oidcConfig: {
           clientId: input.clientId,
           clientSecret: input.clientSecret,
-          discoveryEndpoint:
-            input.discoveryUrl ??
-            `${input.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
+          discoveryEndpoint,
           scopes: input.scopes,
           pkce: input.pkce,
         },
       },
-      headers: c.req.raw.headers,
-    });
+      c.req.raw.headers,
+    );
   } else {
-    await auth.api.registerSSOProvider({
-      body: {
+    await registerWithPlugin(
+      {
         providerId: input.providerId,
         issuer: input.issuer,
         domain,
@@ -129,8 +168,8 @@ ssoRoutes.post('/providers', async (c) => {
           },
         },
       },
-      headers: c.req.raw.headers,
-    });
+      c.req.raw.headers,
+    );
   }
 
   // Apply OCI-specific policy columns the plugin does not manage.

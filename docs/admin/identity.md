@@ -100,6 +100,18 @@ the user list and sign them out together.
 OIDC and SAML are both supported. The form asks for what the protocol needs;
 what follows are the fields whose consequences are not obvious.
 
+### Before adding an OIDC provider
+
+OCI reads an OIDC provider's discovery document
+(`<issuer>/.well-known/openid-configuration`) only from an origin listed in
+`AUTH_TRUSTED_ORIGINS`, whether the provider is public (Google, Microsoft Entra,
+Okta) or on your own network. This guards against the server being pointed at
+an internal address. Add the issuer's origin, for example
+`AUTH_TRUSTED_ORIGINS=https://login.microsoftonline.com`, on every API replica
+and restart them before adding the provider; otherwise **Add provider** refuses
+and names the origin to add. SAML providers need no entry: their details are
+entered on the form, not discovered.
+
 ### Allowed email domains
 
 Blank accepts any domain the provider asserts. Set this when the provider serves
