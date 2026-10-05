@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- **Closing a dialog lost keyboard focus** (#41). Dialogs opened from app
+  state (Rename, Share, Move to project, Summarise, settings and most admin
+  dialogs) now return focus to the button that opened them, instead of to the
+  top of the page (WCAG 2.4.3).
+
 ## [0.11.0] - 2026-10-05
 
 v0.11 "always on": upgrade from the previous minor release with no downtime,
