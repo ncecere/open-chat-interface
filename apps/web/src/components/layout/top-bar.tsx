@@ -59,7 +59,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
       {!sidebarOpen && (
         <div
           data-floating-controls
-          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
         >
           <Button
             variant="ghost"
@@ -95,7 +95,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
 
       <div
         data-floating-controls
-        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
       >
         {threadId && <RenameConversationControl threadId={threadId} />}
         {threadId && (

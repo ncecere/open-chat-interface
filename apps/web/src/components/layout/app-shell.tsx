@@ -32,15 +32,19 @@ function GlobalShortcuts({ onToggleSidebar }: { onToggleSidebar: () => void }) {
  * Desktop shell: sidebar, a full-width top bar carrying the global controls,
  * and an inset rounded main panel below it.
  */
+const DOCKED_SIDEBAR = '(min-width: 1024px)';
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const [mobile, setMobile] = useState(() => !window.matchMedia('(min-width: 768px)').matches);
+  // A drawer below 1024px, as on phones: docked at 768 it left the chat 512px,
+  // wrapping the model name and squeezing Send (#109).
+  const [mobile, setMobile] = useState(() => !window.matchMedia(DOCKED_SIDEBAR).matches);
   const [sidebarOpen, setSidebarOpen] = useState(() => !mobile);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const previousPathname = useRef(pathname);
   const commandPalette = useCommandPalette();
 
   useEffect(() => {
-    const query = window.matchMedia('(min-width: 768px)');
+    const query = window.matchMedia(DOCKED_SIDEBAR);
     const onChange = (event: MediaQueryListEvent) => {
       setMobile(!event.matches);
       setSidebarOpen(event.matches);

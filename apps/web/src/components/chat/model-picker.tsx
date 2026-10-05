@@ -171,11 +171,13 @@ export const ModelPicker = memo(function ModelPicker({
         aria-haspopup="listbox"
         aria-label={`Select model. Current model: ${selected?.displayName ?? 'none'}`}
         aria-keyshortcuts={ariaKeyShortcuts('model-picker')}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]"
+        // One line: a narrow composer row cuts a long name short rather than
+        // wrapping it ("GPT-4.1 / mini", #109); the full name is in the label.
+        className="inline-flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]"
       >
-        {selected && <LabLogo labId={selected.labId} className="size-3.5" />}
-        {selected?.displayName ?? 'Select model'}
-        <ChevronDown className="size-4 text-[var(--text-muted)]" />
+        {selected && <LabLogo labId={selected.labId} className="size-3.5 shrink-0" />}
+        <span className="min-w-0 truncate">{selected?.displayName ?? 'Select model'}</span>
+        <ChevronDown className="size-4 shrink-0 text-[var(--text-muted)]" />
       </PopoverTrigger>
 
       <PopoverContent

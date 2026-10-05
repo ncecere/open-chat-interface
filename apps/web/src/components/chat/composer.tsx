@@ -154,7 +154,7 @@ export const Composer = memo(function Composer({
               type="button"
               onClick={onStop}
               aria-label="Stop generating"
-              className="ml-auto inline-flex size-[2.125rem] items-center justify-center rounded-lg border border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--accent-button-foreground)] transition-colors hover:bg-[var(--accent-send-hover)]"
+              className="ml-auto inline-flex size-[2.125rem] shrink-0 items-center justify-center rounded-lg border border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--accent-button-foreground)] transition-colors hover:bg-[var(--accent-send-hover)]"
             >
               <Square className="size-3.5 fill-current" />
             </button>
@@ -168,7 +168,7 @@ export const Composer = memo(function Composer({
               title={readOnly.active ? readOnlyShortReason(readOnly) : undefined}
               aria-keyshortcuts={sendKeyShortcuts(invertSend)}
               className={cn(
-                'ml-auto inline-flex size-[2.125rem] items-center justify-center rounded-lg border transition-colors',
+                'ml-auto inline-flex size-[2.125rem] shrink-0 items-center justify-center rounded-lg border transition-colors',
                 canSubmit
                   ? 'border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--accent-button-foreground)] hover:bg-[var(--accent-send-hover)]'
                   : 'border-[var(--border-strong)] bg-[var(--accent-soft)] text-[var(--text-faint)]',
