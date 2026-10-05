@@ -5,19 +5,8 @@ import { Button } from '~/components/ui/button';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
+import { SUGGESTED_TRAITS, withTrait } from '~/lib/traits';
 import { cn } from '~/lib/utils';
-
-/** Suggestions, so the trait step is a choice rather than a blank field. */
-const SUGGESTED_TRAITS = [
-  'concise',
-  'thorough',
-  'formal',
-  'casual',
-  'encouraging',
-  'direct',
-  'patient',
-  'technical',
-];
 
 interface Draft {
   displayName: string;
@@ -93,7 +82,7 @@ export function IntroductionWizard() {
       ...value,
       traits: value.traits.includes(trait)
         ? value.traits.filter((entry) => entry !== trait)
-        : [...value.traits, trait].slice(0, 20),
+        : withTrait(value.traits, trait),
     }));
   }
 

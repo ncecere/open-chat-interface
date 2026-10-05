@@ -6,18 +6,9 @@ import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
+import { SUGGESTED_TRAITS, withTrait } from '~/lib/traits';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
-
-const SUGGESTED_TRAITS = [
-  'friendly',
-  'witty',
-  'concise',
-  'curious',
-  'empathetic',
-  'creative',
-  'patient',
-];
 
 const LIMITS = { name: 50, occupation: 100, trait: 100, context: 3000 };
 
@@ -252,9 +243,9 @@ export function SettingsCustomizationPage() {
   });
 
   function addTrait(trait: string) {
-    const value = trait.trim();
-    if (!value || traits.includes(value) || traits.length >= 20) return;
-    setTraits((current) => [...current, value]);
+    if (!trait.trim()) return;
+    // The same suggestions as the introduction; an opposite is replaced (#96).
+    setTraits((current) => withTrait(current, trait));
     setTraitDraft('');
   }
 
