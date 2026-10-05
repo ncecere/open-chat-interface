@@ -174,6 +174,10 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'Lapsed configuration.',
   },
+  'services/onboarding.ts usagePolicy': {
+    hold: 'exempt',
+    how: 'Only an unpublished draft of the acceptable-use policy: instance configuration nobody has accepted. Published versions cannot be deleted (and an accepted one is protected by its acceptances).',
+  },
   'services/quota/policy-admin.ts quotaPolicy': { hold: 'exempt', how: 'Instance configuration.' },
   'services/quota/policy-assignments.ts quotaPolicyModel': {
     hold: 'exempt',
