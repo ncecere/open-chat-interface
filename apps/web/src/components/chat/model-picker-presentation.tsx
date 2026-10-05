@@ -6,9 +6,13 @@ import { ModelInfoCard } from '~/components/model/model-info-card';
 import { cn } from '~/lib/utils';
 import { modelDescription } from './model-picker-data';
 
+/** The DOM id of a model's option, for the search box's aria-activedescendant. */
+export const modelOptionId = (modelId: string) => `model-option-${modelId}`;
+
 export function ModelPickerOption({
   model,
   selected,
+  active = false,
   canShowDetails,
   detailsOpen,
   onSelect,
@@ -16,6 +20,8 @@ export function ModelPickerOption({
 }: {
   model: CatalogModel;
   selected: boolean;
+  /** The option the arrow keys are on (focus stays in the search box). */
+  active?: boolean;
   canShowDetails: boolean;
   detailsOpen: boolean;
   onSelect: (model: CatalogModel) => void;
@@ -30,11 +36,14 @@ export function ModelPickerOption({
         'relative flex w-full items-center rounded-lg transition-colors',
         'hover:bg-[var(--bg-control)]',
         selected && 'bg-[var(--accent-soft)]',
+        // Visible like a focus ring, since focus itself stays in the search box.
+        active && 'outline outline-2 outline-[var(--accent-bright)] -outline-offset-2',
       )}
     >
       <button
         type="button"
         role="option"
+        id={modelOptionId(model.id)}
         aria-selected={selected}
         onClick={() => onSelect(model)}
         className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]"

@@ -376,3 +376,37 @@ describe('ModelPicker interaction', () => {
     ]);
   });
 });
+
+describe('keyboard selection from the search box', () => {
+  async function press(key: string) {
+    await act(async () => {
+      searchInput().dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+    });
+  }
+
+  it('picks the only match with Enter after typing a search', async () => {
+    await render();
+    await open();
+    await search('beta');
+    // The match is the active option, announced through the search box.
+    expect(searchInput().getAttribute('aria-activedescendant')).toBe('model-option-beta');
+    await press('Enter');
+    expect(props.onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'beta' }));
+  });
+
+  it('moves through the matches with the arrow keys, wrapping at the ends', async () => {
+    await render();
+    await open();
+    // Starts on the current model.
+    expect(searchInput().getAttribute('aria-activedescendant')).toBe('model-option-alpha');
+    await press('ArrowDown');
+    expect(searchInput().getAttribute('aria-activedescendant')).toBe('model-option-beta');
+    await press('ArrowUp');
+    await press('ArrowUp');
+    expect(searchInput().getAttribute('aria-activedescendant')).toBe('model-option-gamma');
+    await press('Enter');
+    expect(props.onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'gamma' }));
+  });
+});
