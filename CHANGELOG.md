@@ -24,6 +24,9 @@ with `migrate` as usual; nothing else is needed to upgrade.
 - **Undo for archiving** a conversation, and confirmations before deleting an
   attachment or a memory (#101).
 - **Formatting in announcements**: bold and links (#86).
+- **HTML versions of the account emails** (invitation, verification, password
+  reset), and invitations that say who sent them, the role and when they
+  expire (#78).
 
 ### Changed
 
