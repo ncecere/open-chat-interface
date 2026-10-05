@@ -51,7 +51,6 @@ of a removed direct dependency may still exist in the lockfile.
 
 ## Long modules retained
 
-- `packages/shared/src/model-labs.ts`: mostly static catalogue data.
 - Quota reservation and chat-stream persistence modules: cohesive lifecycles.
 - Branding, usage, and general-settings pages: already separated into themed
   sections/components. Long JSX alone is not a reason to add indirection.
