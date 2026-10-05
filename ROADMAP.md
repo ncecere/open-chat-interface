@@ -2,7 +2,7 @@
 
 Where Open Chat Interface (OCI) stands, what comparable products offer, and
 what we intend to build next. Written against **v0.6.1** and updated for
-**v0.7.0**, **v0.8.0**, **v0.9.0** and **v0.10.0** in **October 2026**.
+**v0.7.0**, **v0.8.0**, **v0.9.0**, **v0.10.0** and **v0.11.0** in **October 2026**.
 
 This is a plan, not a promise. Priorities change as we learn, and an item moves
 into a release only when it has a design, tests and documentation. Review this
@@ -15,7 +15,7 @@ document at every minor release.
 - [Shipped — v0.8: tools and connected knowledge](#shipped--v08-tools-and-connected-knowledge)
 - [Shipped — v0.9: make and operate](#shipped--v09-make-and-operate)
 - [Shipped — v0.10: finish and harden](#shipped--v010-finish-and-harden)
-- [Now — v0.11: always on](#now--v011-always-on)
+- [Shipped — v0.11: always on](#shipped--v011-always-on)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -185,7 +185,7 @@ upgrade notes, and `docs/dev/v0.10-design.md` for the design.
 | **Branding applied everywhere** | The OCI logo as the default mark, titles, icons, share pages, emails, diagrams and exports. | Link previews for share pages (needs server-rendered HTML); a web app manifest. |
 | **S3 suites in CI, operations pages, sidebar sync** | S3, backup and compliance suites run in CI on VersityGW; shared operations components; expanded projects synced across tabs. | — |
 
-## Now — v0.11: always on
+## Shipped — v0.11: always on
 
 Large deployments (tens of thousands of people, tens of millions of messages,
 a highly available PostgreSQL cluster such as Patroni) cannot take hours of
@@ -223,13 +223,16 @@ and embedding already run as background jobs. What is missing is below.
 | **Fast usage reports and budgets** | Budgets and the Usage pages read raw usage events. | Hourly and daily rollups maintained in the background. |
 | **Background work visible** | Imports, indexing, re-embedding and background migrations run out of sight. | Queue depth, progress and failures on System health and in metrics. |
 
-**Progress on `v0.11/always-on`:** done — lock-safe migrations, the migration
-linter, rolling-upgrade tests, the scale harness, and draining replies on
-shutdown. The harness's first measurements reorder the rest: fast usage
-reports come before batched pruning (admin and usage pages are the slowest at
-size), and Qdrant isn't needed for now (an exact pgvector scan within a
-project takes about 20 ms). Next: two-phase migrations and the upgrade
-preflight, then the worker role and failover safety.
+**Shipped in v0.11.0.** Everything above except two items: **Backups at
+scale** moves to the next release, and **Optional Qdrant** is not needed for
+now: measured at 437,000 passages, an exact pgvector scan within one project
+takes about 20 ms, so v0.11 ships the vector store interface and generations
+and Qdrant waits for a deployment that needs it. **Background work visible**
+shipped as System health → Background work and Upgrades, with job health and
+queue metrics. The scale harness reordered the rest (usage rollups came
+early) and found fixes along the way: project search 773 to 180 ms, the admin
+overview 126 to 22 ms, usage pages 777 to 39 ms. What each item became is in
+the "As built" notes of `docs/dev/v0.11-design.md`.
 
 Further items (cross-replica cache invalidation, batched pruning, loading
 long conversations in parts, sign-in storms, encryption key rotation, service
