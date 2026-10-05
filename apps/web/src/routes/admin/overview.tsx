@@ -1,5 +1,6 @@
 import type { AdminOverview } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { AdminPageHeader, LoadError, SettingsSection } from '~/components/admin/admin-ui';
 import { SetupChecklist } from '~/components/admin/setup-checklist';
@@ -193,6 +194,7 @@ export function AdminOverviewPage() {
 
         <SettingsSection title="System">
           <div className="flex flex-col gap-3 text-sm">
+            <SystemHealthRow />
             <div className="flex items-center justify-between">
               <span className="text-[var(--text-muted)]">Version</span>
               <span>{data.system.version}</span>
@@ -212,6 +214,43 @@ export function AdminOverviewPage() {
           </div>
         </SettingsSection>
       </div>
+    </div>
+  );
+}
+
+const HEALTH_BADGE = { ok: 'success', warn: 'warning', error: 'danger' } as const;
+
+/**
+ * The overall result of System health, so Overview cannot show only green
+ * (database and Redis) while a backup or job check is warning.
+ */
+function SystemHealthRow() {
+  const health = useQuery({
+    queryKey: ['admin', 'health'],
+    queryFn: () =>
+      api.get<{ status: 'ok' | 'warn' | 'error'; checks: { status: string }[] }>('/admin/health'),
+  });
+  const status = health.data?.status;
+  const attention = health.data?.checks.filter((check) => check.status !== 'ok').length ?? 0;
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <Link to="/admin/health" className="text-[var(--text-muted)] hover:underline">
+        System health
+      </Link>
+      {status ? (
+        <span className="flex items-center gap-2">
+          {attention > 0 && (
+            <span className="text-[var(--text-muted)] text-xs">
+              {attention} {attention === 1 ? 'check needs' : 'checks need'} attention
+            </span>
+          )}
+          <Badge variant={HEALTH_BADGE[status]}>{status}</Badge>
+        </span>
+      ) : (
+        <span className="text-[var(--text-muted)] text-xs">
+          {health.isError ? 'unavailable' : 'checking…'}
+        </span>
+      )}
     </div>
   );
 }

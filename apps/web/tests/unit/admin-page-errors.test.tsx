@@ -159,6 +159,10 @@ describe('load failures', () => {
       if (path === '/admin/setup-status') {
         return { requiredComplete: 0, requiredTotal: 0, checks: [] };
       }
+      // The System panel's overall health row loads on its own too.
+      if (path === '/admin/health') {
+        return { status: 'warn', checks: [{ status: 'ok' }, { status: 'warn' }] };
+      }
       overviewCalls += 1;
       if (overviewCalls === 1) {
         throw new ApiError(500, 'INTERNAL_ERROR', 'Database unavailable.');
@@ -175,6 +179,8 @@ describe('load failures', () => {
     expect(overviewCalls).toBe(2);
     expect(alerts()).toEqual([]);
     expect(document.body.textContent).toContain('Models in catalog');
+    // Not only database and Redis: the overall result, with what needs a look.
+    expect(document.body.textContent).toContain('1 check needs attention');
   });
 
   it('shows role access load failures rather than spinning', async () => {
