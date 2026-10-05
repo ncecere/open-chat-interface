@@ -231,7 +231,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
           {startError && (
             <p
               role="alert"
-              className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+              className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
             >
               {startError}
             </p>

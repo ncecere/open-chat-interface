@@ -172,7 +172,7 @@ export function LoginPage() {
               </div>
 
               {error && (
-                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]">
+                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]">
                   {error}
                 </p>
               )}

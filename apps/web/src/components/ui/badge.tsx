@@ -13,7 +13,7 @@ const badgeVariants = cva(
         outline: 'border border-[var(--border-strong)] text-[var(--text-secondary)]',
         success: 'bg-[var(--success)]/15 text-[var(--success)]',
         warning: 'bg-[var(--warning)]/15 text-[var(--warning)]',
-        danger: 'bg-[var(--danger)]/20 text-[var(--danger-foreground)]',
+        danger: 'bg-[var(--danger)]/20 text-[var(--danger-on-tint)]',
       },
     },
     defaultVariants: { variant: 'neutral' },

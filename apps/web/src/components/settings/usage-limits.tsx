@@ -59,7 +59,7 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
         <span
           className={cn(
             'shrink-0 text-xs',
-            low ? 'text-[var(--danger-foreground)]' : 'text-[var(--text-muted)]',
+            low ? 'text-[var(--danger-on-tint)]' : 'text-[var(--text-muted)]',
           )}
         >
           {percentRemaining}% left

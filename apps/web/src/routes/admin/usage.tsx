@@ -445,7 +445,7 @@ function SpendTab({ days }: { days: number }) {
                     </td>
                     <td className="px-4 py-3">
                       {model.errors > 0 ? (
-                        <span className="text-[var(--danger-foreground)]">{model.errors}</span>
+                        <span className="text-[var(--danger-on-tint)]">{model.errors}</span>
                       ) : (
                         <span className="text-[var(--text-muted)]">0</span>
                       )}

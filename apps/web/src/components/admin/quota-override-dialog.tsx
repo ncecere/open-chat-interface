@@ -230,7 +230,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
       {error && (
         <p
           role="alert"
-          className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-foreground)] text-xs"
+          className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
         >
           {error}
         </p>

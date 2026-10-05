@@ -166,7 +166,7 @@ export function CapacityLimitsDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           >
             {error}
           </p>

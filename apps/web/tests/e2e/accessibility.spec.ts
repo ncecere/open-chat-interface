@@ -55,6 +55,14 @@ async function dismissIntroduction(page: Page) {
   }
 }
 
+// The light-theme project (playwright.config.ts) scans every page in light:
+// the theme is the person's stored choice, not the colour scheme alone.
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.project.name.endsWith('-light')) {
+    await page.addInitScript(() => window.localStorage.setItem('oci.theme', 'light'));
+  }
+});
+
 async function signIn(page: Page) {
   const email = process.env.E2E_ADMIN_EMAIL;
   const password = process.env.E2E_ADMIN_PASSWORD;

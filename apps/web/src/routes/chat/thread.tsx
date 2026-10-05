@@ -348,7 +348,7 @@ function ThreadConversation({
                   {(session.recovery.error || session.error || replies.error) && (
                     <p
                       role="alert"
-                      className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+                      className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
                     >
                       {session.recovery.error ||
                         (session.error && chatErrorText(session.error)) ||

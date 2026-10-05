@@ -38,7 +38,7 @@ export function ResendVerification({ email }: { email: string }) {
         </p>
       )}
       {state === 'error' && (
-        <p role="alert" className="text-xs text-[var(--danger-foreground)]">
+        <p role="alert" className="text-xs text-[var(--danger-on-tint)]">
           Could not request a verification email. Try again later or contact an administrator.
         </p>
       )}

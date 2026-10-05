@@ -65,7 +65,7 @@ export function CompactionFailureNotice({ threadId }: { threadId: string }) {
         </Button>
       </div>
       {error && (
-        <p role="alert" className="w-full text-[var(--danger-foreground)]">
+        <p role="alert" className="w-full text-[var(--danger-on-tint)]">
           {apiErrorMessage(error, 'That did not work. Try again in a moment.')}
         </p>
       )}

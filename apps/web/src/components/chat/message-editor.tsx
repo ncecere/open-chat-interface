@@ -58,7 +58,7 @@ export function MessageEditor({
         }}
         className="min-h-24 w-full resize-y bg-transparent px-1 text-[0.9375rem] leading-relaxed text-[var(--text-primary)] outline-none disabled:opacity-60"
       />
-      {error && <p className="px-1 pb-2 text-xs text-[var(--danger-foreground)]">{error}</p>}
+      {error && <p className="px-1 pb-2 text-xs text-[var(--danger-on-tint)]">{error}</p>}
       <div className="flex items-center justify-end gap-2">
         <Button variant="ghost" size="sm" disabled={saving} onClick={cancel}>
           <X />

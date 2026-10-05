@@ -223,7 +223,7 @@ export function SettingsAttachmentsPage() {
       {deleteError && (
         <div
           role="alert"
-          className="mt-3 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+          className="mt-3 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
           {deleteError}
         </div>

@@ -154,7 +154,7 @@ export function ExportNotice({ state, className }: { state: DocumentExport; clas
         <p
           role="alert"
           className={cn(
-            'flex items-start gap-2 text-xs text-[var(--danger-foreground)]',
+            'flex items-start gap-2 text-xs text-[var(--danger-on-tint)]',
             className,
           )}
         >

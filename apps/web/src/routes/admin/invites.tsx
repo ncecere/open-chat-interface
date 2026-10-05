@@ -223,7 +223,7 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
 
         {formError && (
           <p
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
             role="alert"
           >
             {formError}
@@ -272,7 +272,7 @@ function RevokeInviteDialog({
 
       {revoke.error && (
         <p
-          className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+          className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           role="alert"
         >
           {apiErrorMessage(revoke.error, 'Failed to revoke invitation.')}

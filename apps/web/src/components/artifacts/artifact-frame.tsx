@@ -69,7 +69,7 @@ export function ArtifactFrame({
 
   if (failed)
     return (
-      <p role="alert" className="p-4 text-sm text-[var(--danger-foreground)]">
+      <p role="alert" className="p-4 text-sm text-[var(--danger-on-tint)]">
         This artifact could not be prepared.
       </p>
     );

@@ -254,7 +254,7 @@ function SaveRow({
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {state.update.error && (
-        <p role="alert" className="mr-auto text-xs text-[var(--danger-foreground)]">
+        <p role="alert" className="mr-auto text-xs text-[var(--danger-on-tint)]">
           {apiErrorMessage(state.update.error, 'The project could not be saved.')}
         </p>
       )}
@@ -407,12 +407,12 @@ function ProjectFiles({
         </p>
       )}
       {upload.error && (
-        <p role="alert" className="mb-3 text-xs text-[var(--danger-foreground)]">
+        <p role="alert" className="mb-3 text-xs text-[var(--danger-on-tint)]">
           {apiErrorMessage(upload.error, 'A file could not be uploaded.')}
         </p>
       )}
       {remove.error && (
-        <p role="alert" className="mb-3 text-xs text-[var(--danger-foreground)]">
+        <p role="alert" className="mb-3 text-xs text-[var(--danger-on-tint)]">
           {apiErrorMessage(remove.error, 'The file could not be removed.')}
         </p>
       )}
@@ -472,7 +472,7 @@ function ProjectConversations({ projectId }: { projectId: string }) {
           <Spinner /> Loading conversations…
         </p>
       ) : threads.error ? (
-        <p role="alert" className="text-sm text-[var(--danger-foreground)]">
+        <p role="alert" className="text-sm text-[var(--danger-on-tint)]">
           {apiErrorMessage(threads.error, 'Conversations could not be loaded.')}
         </p>
       ) : (threads.data?.length ?? 0) === 0 ? (
@@ -536,7 +536,7 @@ function DeleteProjectSection({ project }: { project: ProjectSummary }) {
             </DialogDescription>
           </DialogHeader>
           {remove.error && (
-            <p role="alert" className="text-xs text-[var(--danger-foreground)]">
+            <p role="alert" className="text-xs text-[var(--danger-on-tint)]">
               {apiErrorMessage(remove.error, 'The project could not be deleted.')}
             </p>
           )}

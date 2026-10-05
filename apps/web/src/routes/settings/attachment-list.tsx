@@ -277,7 +277,7 @@ export function AttachmentList({
                     disabled={isDeleting}
                     aria-label={`Delete ${attachment.filename}`}
                     title={`Delete ${attachment.filename}`}
-                    className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-foreground)] hover:bg-[var(--danger)]/30"
+                    className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-on-tint)] hover:bg-[var(--danger)]/30"
                     onClick={() => onDelete([attachment.id])}
                   >
                     {isDeleting ? <Spinner className="size-3.5" /> : <Trash2 />}
