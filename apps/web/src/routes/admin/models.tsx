@@ -495,7 +495,13 @@ export function AdminModelsPage() {
         open={Boolean(removeFor)}
         onOpenChange={(open) => !open && setRemoveFor(null)}
         title={`Remove ${removeFor?.displayName ?? 'model'}?`}
-        description="It will disappear from the catalog and users will no longer be able to select it. The provider and its key are not affected. This action cannot be undone."
+        description={
+          removeFor?.isDefault
+            ? 'This is the default model, which new chats start on, so it cannot be removed. Make another model the default first.'
+            : 'It will disappear from the catalog and users will no longer be able to select it. The provider and its key are not affected. This action cannot be undone.'
+        }
+        // The API refuses too; this says why before anyone tries.
+        confirmDisabled={Boolean(removeFor?.isDefault)}
         confirmLabel="Remove model"
         pendingLabel="Removing…"
         errorMessage="The model could not be removed."

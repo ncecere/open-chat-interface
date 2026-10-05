@@ -202,7 +202,11 @@ export function ProviderFormDialog({
           <Field
             label="API key"
             htmlFor="provider-api-key"
-            hint="Leave blank for endpoints that need no key."
+            hint={
+              kind === 'openai-compatible'
+                ? 'Leave blank for endpoints that need no key.'
+                : 'Required while the provider is enabled.'
+            }
           >
             <Input
               id="provider-api-key"
@@ -211,6 +215,7 @@ export function ProviderFormDialog({
               onChange={(event) => setApiKey(event.target.value)}
               placeholder="sk-..."
               autoComplete="off"
+              required={kind !== 'openai-compatible' && enabled}
             />
           </Field>
         )}

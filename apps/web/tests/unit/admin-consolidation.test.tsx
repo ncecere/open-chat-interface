@@ -185,6 +185,16 @@ describe('Providers & Models', () => {
     );
   });
 
+  it('explains that the default model cannot be removed, and holds the button back', async () => {
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
+    await click(button('Remove Model m1'));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Make another model the default first',
+    );
+    expect(button('Remove model').disabled).toBe(true);
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
   it('offers only usable models as the default and saves the choice atomically', async () => {
     ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
     const select = document.getElementById('default-model') as HTMLSelectElement;

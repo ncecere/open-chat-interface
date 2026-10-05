@@ -112,6 +112,50 @@ describe.skipIf(!available)('live: delete and revoke audit entries say what was 
     expect(JSON.stringify(recorded)).not.toMatch(/key/i);
   });
 
+  it('refuses to delete the default model, or the provider that supplies it', async () => {
+    const [provider] = await live.db
+      .insert(schema.provider)
+      .values({
+        organizationId,
+        kind: 'openai-compatible',
+        label: 'Walk default gateway',
+        baseUrl: 'https://gw.example.test/v1',
+      })
+      .returning();
+    const [model] = await live.db
+      .insert(schema.model)
+      .values({
+        organizationId,
+        providerId: provider!.id,
+        slug: 'walk-default',
+        upstreamModelId: 'walk-default',
+        displayName: 'Walk default',
+        isDefault: true,
+      })
+      .returning();
+
+    const modelResponse = await app.request(`/models/${model!.id}`, { method: 'DELETE' });
+    expect(modelResponse.status).toBe(409);
+    expect(await modelResponse.text()).toContain('Make another model the default first');
+
+    const providerResponse = await app.request(`/providers/${provider!.id}`, { method: 'DELETE' });
+    expect(providerResponse.status).toBe(409);
+    expect(await providerResponse.text()).toContain('supplies the default model, Walk default');
+
+    const left = await live.db.select().from(schema.model).where(eq(schema.model.id, model!.id));
+    expect(left).toHaveLength(1);
+  });
+
+  it('refuses an OpenAI provider without an API key', async () => {
+    const response = await app.request('/providers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'openai', label: 'Walk empty form' }),
+    });
+    expect(response.status).toBe(422);
+    expect(await response.text()).toContain('An API key is required for this provider.');
+  });
+
   it('answers 404 for a model that does not exist, and records nothing', async () => {
     expect(await remove('/models/not-a-model')).toBe(404);
     expect(await entry('model.delete', 'not-a-model')).toBeUndefined();

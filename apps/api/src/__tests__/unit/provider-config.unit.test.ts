@@ -91,6 +91,29 @@ describe('provider configuration validation', () => {
     });
   });
 
+  it.each(['openai', 'anthropic', 'google'] as const)(
+    'requires an API key for an enabled %s provider',
+    (kind) => {
+      const issues = getProviderConfigurationIssues(
+        provider({ kind, encryptedApiKey: null, credentialHint: null }),
+      );
+      expect(issues).toContainEqual({
+        field: 'apiKey',
+        message: 'An API key is required for this provider.',
+      });
+    },
+  );
+
+  it('lets a provider without a key exist while disabled, or when it is OpenAI-compatible', () => {
+    const keyless = { encryptedApiKey: null, credentialHint: null };
+    expect(getProviderConfigurationIssues(provider({ ...keyless, enabled: false }))).toEqual([]);
+    expect(
+      getProviderConfigurationIssues(
+        provider({ ...keyless, kind: 'openai-compatible', baseUrl: 'http://llm.internal:8000/v1' }),
+      ),
+    ).toEqual([]);
+  });
+
   it('requires a non-empty label', () => {
     const issues = getProviderConfigurationIssues(provider({ label: '   ' }));
 
