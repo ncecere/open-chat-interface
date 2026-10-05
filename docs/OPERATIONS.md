@@ -1785,6 +1785,12 @@ sweep does); and frees the person's concurrency slot. A producer that was
 only paused and saves later replaces the interrupted copy with its real
 reply, and its usage report amends the settlement.
 
+Until a run is recovered, a new message in its conversation is refused with
+409. Once the claim has gone more than 12 seconds without a refresh (longer than a live
+producer ever leaves it) the refusal says the previous reply was interrupted
+and is being recovered, and gives the seconds left in `Retry-After`; before
+that it says a response is already being generated.
+
 A crash therefore leaves a reply hanging for about 20 to 30 seconds to a
 person resuming it or sending again, and at most about 40 seconds otherwise.
 
