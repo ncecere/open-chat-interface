@@ -350,7 +350,10 @@ account page. Set an expiry where the need is temporary.
 How much each person in a role may hold in attachments: total storage, number of
 stored files, and the largest single file. A blank total or file count means no
 limit; a blank per-file size falls back to the instance upload limit on
-[Storage](operations.md#storage). **Enforce allowance** switches the allowance off without losing the values; a
+[Storage](operations.md#storage). Any value you enter must be greater than 0
+(the file count a whole number), at most 1,024 GB in total and 1,024 MB per
+file; 0 is refused rather than read as "no limit". To stop a role storing files
+at all, turn off its attachments feature instead. **Enforce allowance** switches the allowance off without losing the values; a
 role with nothing saved is unlimited. Set on **People → Roles & access**.
 
 Artifact versions count towards total storage (not towards the file count)

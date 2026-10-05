@@ -4,6 +4,9 @@ import {
   type ReserveAmounts,
   type RoleAccess,
   type RolesAccess,
+  STORAGE_POLICY_MAX_FILE_BYTES,
+  STORAGE_POLICY_MAX_FILE_COUNT,
+  STORAGE_POLICY_MAX_TOTAL_BYTES,
   type StoragePolicy,
   type UserRole,
 } from '@oci/shared';
@@ -35,7 +38,7 @@ import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { DEFAULT_ROLE_TAB, type RoleTab, validateRolesSearch } from '~/lib/admin-search';
 import { api } from '~/lib/api-client';
-import { GB, MB, toNullableNumber } from '~/routes/admin/lifecycle-shared';
+import { GB, MB, type OptionalLimit, parseOptionalLimit } from '~/routes/admin/lifecycle-shared';
 
 export const ROLES_QUERY_KEY = ['admin', 'roles'] as const;
 
@@ -285,19 +288,39 @@ function StorageAllowanceForm({ access }: { access: RoleAccess }) {
 
   useEffect(() => setDraft(draftFromPolicy(storage)), [storage]);
 
+  // Blank means no limit; anything else has to be a real limit. A 0 or a
+  // negative used to be read as blank and saved as unlimited.
+  const limits = {
+    maxTotalBytes: parseOptionalLimit(draft.maxTotalGb, {
+      unit: 'GB',
+      scale: GB,
+      max: STORAGE_POLICY_MAX_TOTAL_BYTES,
+    }),
+    maxFileCount: parseOptionalLimit(draft.maxFileCount, {
+      unit: 'files',
+      max: STORAGE_POLICY_MAX_FILE_COUNT,
+      wholeNumber: true,
+    }),
+    maxFileBytes: parseOptionalLimit(draft.maxFileMb, {
+      unit: 'MB',
+      scale: MB,
+      max: STORAGE_POLICY_MAX_FILE_BYTES,
+    }),
+  };
+  const valid = limits.maxTotalBytes.ok && limits.maxFileCount.ok && limits.maxFileBytes.ok;
+  const limitError = (limit: OptionalLimit) => (limit.ok ? undefined : limit.error);
+  const limitValue = (limit: OptionalLimit) => (limit.ok ? limit.value : null);
+
   const save = useMutation({
-    mutationFn: () => {
-      const totalGb = toNullableNumber(draft.maxTotalGb);
-      const fileMb = toNullableNumber(draft.maxFileMb);
-      // The endpoint replaces the whole record, so every field is sent.
-      return api.put(`/admin/lifecycle/storage-policies/${role}`, {
+    // The endpoint replaces the whole record, so every field is sent.
+    mutationFn: () =>
+      api.put(`/admin/lifecycle/storage-policies/${role}`, {
         role,
-        maxTotalBytes: totalGb === null ? null : Math.round(totalGb * GB),
-        maxFileCount: toNullableNumber(draft.maxFileCount),
-        maxFileBytes: fileMb === null ? null : Math.round(fileMb * MB),
+        maxTotalBytes: limitValue(limits.maxTotalBytes),
+        maxFileCount: limitValue(limits.maxFileCount),
+        maxFileBytes: limitValue(limits.maxFileBytes),
         enabled: draft.enabled,
-      });
-    },
+      }),
     onSuccess: async () => {
       setSaved(true);
       await invalidateAccess(queryClient);
@@ -318,7 +341,7 @@ function StorageAllowanceForm({ access }: { access: RoleAccess }) {
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        save.mutate();
+        if (valid) save.mutate();
       }}
     >
       <div className="flex items-center justify-between gap-4">
@@ -348,8 +371,11 @@ function StorageAllowanceForm({ access }: { access: RoleAccess }) {
             step="0.1"
             placeholder="Unlimited"
             value={draft.maxTotalGb}
+            aria-invalid={!limits.maxTotalBytes.ok}
+            aria-describedby={limits.maxTotalBytes.ok ? undefined : `storage-${role}-total-error`}
             onChange={(event) => update({ maxTotalGb: event.target.value })}
           />
+          <FieldError id={`storage-${role}-total-error`} error={limitError(limits.maxTotalBytes)} />
         </Field>
         <Field label="Stored files" htmlFor={`storage-${role}-count`}>
           <Input
@@ -359,8 +385,11 @@ function StorageAllowanceForm({ access }: { access: RoleAccess }) {
             step="1"
             placeholder="Unlimited"
             value={draft.maxFileCount}
+            aria-invalid={!limits.maxFileCount.ok}
+            aria-describedby={limits.maxFileCount.ok ? undefined : `storage-${role}-count-error`}
             onChange={(event) => update({ maxFileCount: event.target.value })}
           />
+          <FieldError id={`storage-${role}-count-error`} error={limitError(limits.maxFileCount)} />
         </Field>
         <Field label="Per file (MB)" htmlFor={`storage-${role}-file`}>
           <Input
@@ -370,8 +399,11 @@ function StorageAllowanceForm({ access }: { access: RoleAccess }) {
             step="1"
             placeholder="Instance default"
             value={draft.maxFileMb}
+            aria-invalid={!limits.maxFileBytes.ok}
+            aria-describedby={limits.maxFileBytes.ok ? undefined : `storage-${role}-file-error`}
             onChange={(event) => update({ maxFileMb: event.target.value })}
           />
+          <FieldError id={`storage-${role}-file-error`} error={limitError(limits.maxFileBytes)} />
         </Field>
       </div>
 
@@ -383,13 +415,23 @@ function StorageAllowanceForm({ access }: { access: RoleAccess }) {
             className="mr-auto"
           />
           <SavedNote show={saved} />
-          <Button type="submit" variant="primary" disabled={save.isPending}>
+          <Button type="submit" variant="primary" disabled={!valid || save.isPending}>
             {save.isPending && <Spinner />}
             Save allowance
           </Button>
         </div>
       </EditOnly>
     </form>
+  );
+}
+
+/** A field's validation message, announced when it appears. */
+function FieldError({ id, error }: { id: string; error: string | undefined }) {
+  if (!error) return null;
+  return (
+    <p id={id} role="alert" className="text-[var(--danger)] text-xs">
+      {error}
+    </p>
   );
 }
 
