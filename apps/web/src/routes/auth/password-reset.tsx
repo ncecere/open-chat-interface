@@ -9,10 +9,15 @@ import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
 
-function AuthCard({ children }: { children: React.ReactNode }) {
+/**
+ * The auth pages' frame: the same distance from the top on every page (they
+ * were centred, so each sat at its own height), and a subtitle under the
+ * wordmark as on sign-in (#112).
+ */
+function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?: string }) {
   const { data: status } = useAuthStatus();
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-12">
+    <main className="flex min-h-dvh justify-center px-4 pt-[12vh] pb-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <Wordmark
@@ -21,6 +26,7 @@ function AuthCard({ children }: { children: React.ReactNode }) {
             logoUrl={status?.branding?.logoUrl}
             className="text-2xl"
           />
+          {subtitle && <p className="text-sm text-[var(--text-muted)]">{subtitle}</p>}
         </div>
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
           {children}
@@ -45,8 +51,9 @@ export function ForgotPasswordPage() {
     setSubmitting(false);
   }
 
+  const offered = !sent && Boolean(status?.localAuthEnabled && status.smtpConfigured);
   return (
-    <AuthCard>
+    <AuthCard subtitle={offered ? 'We will email you a secure reset link.' : undefined}>
       {sent ? (
         <div className="space-y-4 text-center">
           <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
@@ -72,9 +79,6 @@ export function ForgotPasswordPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="text-center">
             <h1 className="text-lg font-semibold">Reset your password</h1>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              We will email you a secure reset link.
-            </p>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="reset-email">Email</Label>
@@ -104,6 +108,11 @@ export function ForgotPasswordPage() {
 
 export function ResetPasswordPage() {
   const [token] = useState(() => new URLSearchParams(window.location.search).get('token') ?? '');
+  // The emailed link checks its token first and comes back with ?error= when
+  // it is invalid or expired; a token that fails on submit says the same (#112).
+  const [invalid, setInvalid] = useState(
+    () => new URLSearchParams(window.location.search).get('error') === 'INVALID_TOKEN',
+  );
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -115,6 +124,11 @@ export function ResetPasswordPage() {
     setSubmitting(true);
     const result = await authClient.resetPassword({ newPassword: password, token });
     if (result.error) {
+      if (result.error.code === 'INVALID_TOKEN') {
+        setInvalid(true);
+        setSubmitting(false);
+        return;
+      }
       setError(result.error.message ?? 'This reset link is invalid or expired.');
       setSubmitting(false);
       return;
@@ -133,13 +147,23 @@ export function ResetPasswordPage() {
             <Link to="/auth/login">Continue to sign in</Link>
           </Button>
         </div>
-      ) : !token ? (
+      ) : invalid || !token ? (
         <div className="space-y-4 text-center">
           <h1 className="text-lg font-semibold">Reset link unavailable</h1>
-          <p className="text-sm text-[var(--text-muted)]">This link is missing its reset token.</p>
+          <p className="text-sm text-[var(--text-muted)]">
+            {invalid
+              ? 'This reset link is invalid or has expired.'
+              : 'This link is missing its reset token.'}
+          </p>
           <Button asChild className="w-full">
             <Link to="/auth/forgot-password">Request a new link</Link>
           </Button>
+          <Link
+            to="/auth/login"
+            className="block text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          >
+            Return to sign in
+          </Link>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -168,6 +192,12 @@ export function ResetPasswordPage() {
           <Button type="submit" variant="primary" disabled={submitting} className="w-full">
             {submitting ? <Spinner /> : <KeyRound />} Update password
           </Button>
+          <Link
+            to="/auth/login"
+            className="text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          >
+            Return to sign in
+          </Link>
         </form>
       )}
     </AuthCard>

@@ -112,7 +112,7 @@ function PublicShareState({
 }) {
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
-      <section className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-6 text-center shadow-[var(--shadow-popover)] sm:p-8">
+      <section className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 text-center sm:p-8">
         <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
           <Link2Off className="size-5 text-[var(--text-secondary)]" aria-hidden="true" />
         </span>

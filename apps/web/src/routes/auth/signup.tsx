@@ -48,7 +48,7 @@ export function SignupPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-12">
+    <main className="flex min-h-dvh justify-center px-4 pt-[12vh] pb-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <Wordmark

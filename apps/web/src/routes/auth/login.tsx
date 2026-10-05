@@ -124,7 +124,7 @@ export function LoginPage() {
   const appName = status?.branding.appName;
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
+    <div className="flex min-h-dvh flex-col items-center px-4 pt-[12vh] pb-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           {/* The page's heading; the wordmark beside it is an image of the name (#110). */}
@@ -178,7 +178,6 @@ export function LoginPage() {
                   required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="••••••••••••"
                 />
               </div>
 
