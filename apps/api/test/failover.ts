@@ -27,15 +27,18 @@ export async function terminateEveryBackend(control: ControlSql): Promise<number
 }
 
 /**
- * Waits until another backend is blocked on a lock while running a statement
- * matching `pattern` (an SQL LIKE pattern), so a test can terminate it in the
- * middle of exactly that statement.
+ * Waits until another backend is blocked by a lock this connection (`control`,
+ * inside the transaction that holds it) holds, so a test can terminate it in
+ * the middle of the statement it is blocked on. `pattern` (an SQL LIKE
+ * pattern for that statement) only labels the failure.
+ *
+ * Matched with pg_blocking_pids(), not the query text: pg_stat_activity's
+ * fields are not read atomically, and a blocked backend was seen still
+ * showing its previous statement (`begin`) for the whole wait.
  */
 export async function waitForLockWaiter(
   control: ControlSql,
   pattern: string,
-  // Generous: under the parallel coverage run on a loaded host the turn can
-  // take several seconds to reach its lock (seen once at 10 s).
   timeoutMs = 20_000,
 ): Promise<number> {
   const deadline = Date.now() + timeoutMs;
@@ -43,7 +46,7 @@ export async function waitForLockWaiter(
     const [row] = await control<{ pid: number }[]>`
       select pid from pg_stat_activity
       where datname = current_database() and pid <> pg_backend_pid()
-        and wait_event_type = 'Lock' and query ilike ${pattern}
+        and pg_backend_pid() = any(pg_blocking_pids(pid))
       limit 1
     `;
     if (row) return row.pid;
