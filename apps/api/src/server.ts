@@ -4,7 +4,10 @@ import { migrationsApplied, runMigrationsWithLock, seedDatabase } from '@oci/db'
 import { createApp } from './app.js';
 import { ensureInitialAdmin } from './bootstrap.js';
 import { loadEnv } from './config/env.js';
+import { controlDatabaseUrl } from './db/control.js';
 import { db, sql } from './db/index.js';
+import { closeReadReplica } from './db/read.js';
+import { startDatabasePresence } from './db/replicas.js';
 import {
   chatTurnsBeingAdmitted,
   closeConnectionsWhileDraining,
@@ -12,10 +15,11 @@ import {
   withDrain,
 } from './lib/drain.js';
 import { logger } from './lib/logger.js';
+import { watchRedisRequirement } from './lib/redis-requirement.js';
 import { processRole } from './lib/role.js';
 import { withReadRetry } from './middleware/read-retry.js';
 import { activeRunCount, interruptActiveRuns } from './services/chat/active-runs.js';
-import { closeChatStreams, endChatReplays } from './services/chat-streams.js';
+import { closeChatStreams, endChatReplays, redisConfigured } from './services/chat-streams.js';
 import { runningJobCount, startLifecycleJobs, stopJobs } from './services/jobs/index.js';
 import { startReplicaHeartbeat, watchForWorkers } from './services/jobs/workers.js';
 import { initTracing, shutdownTracing } from './services/observability/tracing.js';
@@ -56,7 +60,7 @@ async function main() {
    */
   if (env.RUN_MIGRATIONS) {
     logger.info('Applying database migrations');
-    await runMigrationsWithLock(env.DATABASE_URL, { logger });
+    await runMigrationsWithLock(controlDatabaseUrl(), { logger });
     await seedDatabase(db);
   } else if (!(await migrationsApplied(db))) {
     throw new Error(
@@ -81,6 +85,15 @@ async function main() {
   }
   const stopHeartbeat = startReplicaHeartbeat(role);
   const stopWatchingWorkers = role === 'web' ? watchForWorkers() : () => {};
+  // Redis is required for more than one replica (v0.11 design, item 16).
+  // Without it, each replica keeps a named connection open so the others can
+  // count it, and warns when they are not alone.
+  if (!redisConfigured())
+    logger.warn(
+      'Redis is not configured: supported for a single replica only (rate limits, concurrency caps and resumable replies are per replica)',
+    );
+  const stopPresence = redisConfigured() ? async () => {} : startDatabasePresence();
+  const stopWatchingRedis = watchRedisRequirement();
 
   // A worker serves health and metrics only (worker-app.ts).
   const app = role === 'worker' ? createWorkerApp() : createApp();
@@ -109,6 +122,7 @@ async function main() {
     stopIntake: () => {
       stopJobs();
       stopWatchingWorkers();
+      stopWatchingRedis();
       void stopHeartbeat();
       // Jobs stop at their next check between batches (jobMayContinue).
       jobsUntil.at =
@@ -121,7 +135,13 @@ async function main() {
     interruptWork: interruptActiveRuns,
     endStreams: endChatReplays,
     closeResources: async () => {
-      await Promise.allSettled([closeChatStreams(), sql.end({ timeout: 5 }), shutdownTracing()]);
+      await Promise.allSettled([
+        closeChatStreams(),
+        sql.end({ timeout: 5 }),
+        closeReadReplica(),
+        stopPresence(),
+        shutdownTracing(),
+      ]);
     },
     exit: (code) => process.exit(code),
     log: logger,

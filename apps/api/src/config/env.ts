@@ -160,6 +160,61 @@ const envSchema = z.object({
    *   /api/health/ready and /metrics on API_PORT.
    */
   OCI_ROLE: z.enum(['web', 'worker', 'all']).default('all'),
+
+  // --- Connection pooling and read routing (v0.11 design, section 11) -------
+  // docs/OPERATIONS.md, "Connection pooling". DATABASE_URL is the
+  // application pool: it may point at a transaction-mode pooler (PgBouncer),
+  // because nothing on it keeps session state between transactions.
+  /** Connections in the application pool, per replica. */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(500).default(10),
+  /**
+   * The control connections: migrations, session advisory locks (background
+   * jobs, `migrate --post`), LISTEN (workers) and pg_dump. Must reach
+   * PostgreSQL directly or through a session-mode pooler. Defaults to
+   * DATABASE_URL, which is right whenever that is not a transaction-mode pooler.
+   */
+  CONTROL_DATABASE_URL: z.string().optional(),
+  /**
+   * A streaming replica for heavy administrative reads that tolerate a second
+   * of staleness (usage reports, the overview, audit log search and export).
+   * Used only while it has replayed what the primary had written
+   * READ_DATABASE_MAX_LAG_MS ago; otherwise, and when unset, reads go to the
+   * primary. Never used for a person's own data.
+   */
+  READ_DATABASE_URL: z.string().optional(),
+  READ_DATABASE_MAX_LAG_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
+  READ_DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(500).default(5),
+
+  // --- Redis high availability (v0.11 design, item 16) ----------------------
+  // docs/OPERATIONS.md, "Redis". One of REDIS_URL (one server),
+  // REDIS_SENTINELS (Sentinel) or REDIS_CLUSTER_NODES (Redis Cluster); when
+  // several are set, Cluster wins over Sentinel over REDIS_URL. Redis is
+  // required for more than one replica.
+  /** Sentinels, `host:port` separated by commas. */
+  REDIS_SENTINELS: z.string().optional(),
+  /** The Sentinel master group name. */
+  REDIS_SENTINEL_NAME: z.string().trim().min(1).default('mymaster'),
+  REDIS_SENTINEL_USERNAME: z.string().optional(),
+  REDIS_SENTINEL_PASSWORD: z.string().optional(),
+  /** TLS to the sentinels themselves (REDIS_TLS covers the data nodes). */
+  REDIS_SENTINEL_TLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  /** Cluster seed nodes, `host:port` separated by commas. */
+  REDIS_CLUSTER_NODES: z.string().optional(),
+  /** Credentials for Sentinel-managed or Cluster data nodes (REDIS_URL carries its own). */
+  REDIS_USERNAME: z.string().optional(),
+  REDIS_PASSWORD: z.string().optional(),
+  /** TLS to Sentinel-managed or Cluster data nodes (use rediss:// with REDIS_URL). */
+  REDIS_TLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  /** A PEM file of certificate authorities to trust for Redis TLS. */
+  REDIS_TLS_CA_FILE: z.string().optional(),
+  /** Longest a single Redis command may take before it fails (and Redis is treated as away). */
+  REDIS_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(2_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

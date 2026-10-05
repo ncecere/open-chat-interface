@@ -1,5 +1,6 @@
 import { backgroundMigrations, postStepStates, runPostMigrations } from '@oci/db';
 import { loadEnv } from '../../config/env.js';
+import { controlDatabaseUrl } from '../../db/control.js';
 import { sql } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import type { JobDefinition } from '../jobs/runner.js';
@@ -38,7 +39,7 @@ export async function postWorkPending(): Promise<boolean> {
 /** Applies pending post-deploy work, when this replica is configured to. */
 export async function applyPostMigrationsIfDue(): Promise<number> {
   if (!autoPostMigrations() || !(await postWorkPending())) return 0;
-  const result = await runPostMigrations(loadEnv().DATABASE_URL, { logger });
+  const result = await runPostMigrations(controlDatabaseUrl(), { logger });
   return result.steps.filter((step) => step.outcome === 'applied').length + result.scheduled.length;
 }
 

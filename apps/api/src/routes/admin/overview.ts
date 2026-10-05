@@ -2,6 +2,7 @@ import { and, count, eq, gte, lt, schema, sql } from '@oci/db';
 import type { AdminOverview } from '@oci/shared';
 import { Hono } from 'hono';
 import { db, sql as sqlClient } from '../../db/index.js';
+import { onReadReplica } from '../../db/read.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { chatStreamRedisStatus } from '../../services/chat-streams.js';
 import { APP_VERSION } from '../../version.js';
@@ -29,48 +30,68 @@ overviewRoutes.get('/', async (c) => {
     previousMessages,
     activityRows,
     storageTotals,
-  ] = await Promise.all([
-    db.select({ value: count() }).from(schema.user),
-    db.select({ value: count() }).from(schema.user).where(gte(schema.user.lastSeenAt, monthAgo)),
-    db.select({ value: count() }).from(schema.user).where(eq(schema.user.role, 'admin')),
-    db.select({ value: count() }).from(schema.thread),
-    db.select({ value: count() }).from(schema.thread).where(gte(schema.thread.createdAt, dayAgo)),
-    db.select({ value: count() }).from(schema.message),
-    db.select({ value: count() }).from(schema.message).where(gte(schema.message.createdAt, dayAgo)),
-    db.select({ value: count() }).from(schema.model),
-    db.select({ value: count() }).from(schema.model).where(eq(schema.model.enabled, true)),
-    db.select({ value: count() }).from(schema.provider),
-    db.select({ value: count() }).from(schema.provider).where(eq(schema.provider.enabled, true)),
-    db
-      .select({ value: count() })
-      .from(schema.thread)
-      .where(and(gte(schema.thread.createdAt, twoDaysAgo), lt(schema.thread.createdAt, dayAgo))),
-    db
-      .select({ value: count() })
-      .from(schema.message)
-      .where(and(gte(schema.message.createdAt, twoDaysAgo), lt(schema.message.createdAt, dayAgo))),
-    // Grouped in the database rather than fetched and bucketed here: the row
-    // count is fourteen either way, but the message table is not.
-    db
-      .select({
-        day: sql<string>`to_char(date_trunc('day', ${schema.message.createdAt}), 'YYYY-MM-DD')`,
-        messages: count(),
-      })
-      .from(schema.message)
-      .where(gte(schema.message.createdAt, new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)))
-      .groupBy(sql`date_trunc('day', ${schema.message.createdAt})`)
-      .orderBy(sql`date_trunc('day', ${schema.message.createdAt})`),
-    db
-      .select({
-        files: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is null)::int`,
-        bytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}) filter (where ${schema.attachment.deletedAt} is null), 0)`,
-        // Soft-deleted files still occupy disk, so an operator planning
-        // capacity needs to see them even though users no longer do.
-        pendingFiles: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is not null)::int`,
-        pendingBytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}) filter (where ${schema.attachment.deletedAt} is not null), 0)`,
-      })
-      .from(schema.attachment),
-  ]);
+  ] =
+    // Instance-wide counts: may come from the read replica (db/read.ts).
+    await onReadReplica(() =>
+      Promise.all([
+        db.select({ value: count() }).from(schema.user),
+        db
+          .select({ value: count() })
+          .from(schema.user)
+          .where(gte(schema.user.lastSeenAt, monthAgo)),
+        db.select({ value: count() }).from(schema.user).where(eq(schema.user.role, 'admin')),
+        db.select({ value: count() }).from(schema.thread),
+        db
+          .select({ value: count() })
+          .from(schema.thread)
+          .where(gte(schema.thread.createdAt, dayAgo)),
+        db.select({ value: count() }).from(schema.message),
+        db
+          .select({ value: count() })
+          .from(schema.message)
+          .where(gte(schema.message.createdAt, dayAgo)),
+        db.select({ value: count() }).from(schema.model),
+        db.select({ value: count() }).from(schema.model).where(eq(schema.model.enabled, true)),
+        db.select({ value: count() }).from(schema.provider),
+        db
+          .select({ value: count() })
+          .from(schema.provider)
+          .where(eq(schema.provider.enabled, true)),
+        db
+          .select({ value: count() })
+          .from(schema.thread)
+          .where(
+            and(gte(schema.thread.createdAt, twoDaysAgo), lt(schema.thread.createdAt, dayAgo)),
+          ),
+        db
+          .select({ value: count() })
+          .from(schema.message)
+          .where(
+            and(gte(schema.message.createdAt, twoDaysAgo), lt(schema.message.createdAt, dayAgo)),
+          ),
+        // Grouped in the database rather than fetched and bucketed here: the row
+        // count is fourteen either way, but the message table is not.
+        db
+          .select({
+            day: sql<string>`to_char(date_trunc('day', ${schema.message.createdAt}), 'YYYY-MM-DD')`,
+            messages: count(),
+          })
+          .from(schema.message)
+          .where(gte(schema.message.createdAt, new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)))
+          .groupBy(sql`date_trunc('day', ${schema.message.createdAt})`)
+          .orderBy(sql`date_trunc('day', ${schema.message.createdAt})`),
+        db
+          .select({
+            files: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is null)::int`,
+            bytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}) filter (where ${schema.attachment.deletedAt} is null), 0)`,
+            // Soft-deleted files still occupy disk, so an operator planning
+            // capacity needs to see them even though users no longer do.
+            pendingFiles: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is not null)::int`,
+            pendingBytes: sql<number>`coalesce(sum(${schema.attachment.sizeBytes}) filter (where ${schema.attachment.deletedAt} is not null), 0)`,
+          })
+          .from(schema.attachment),
+      ]),
+    );
 
   let database: 'ok' | 'error' = 'ok';
   try {

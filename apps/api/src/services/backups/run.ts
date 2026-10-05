@@ -22,7 +22,7 @@ import {
   type BackupRun,
   type BackupStatus,
 } from '@oci/shared';
-import { loadEnv } from '../../config/env.js';
+import { controlDatabaseUrl } from '../../db/control.js';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
@@ -480,7 +480,9 @@ export async function performBackup(options: {
       const dump = await dumpDatabase(
         target,
         dumpKey,
-        options.databaseUrl ?? loadEnv().DATABASE_URL,
+        // pg_dump sets session parameters: a control connection, never a
+        // transaction-mode pooler (v0.11 design, section 11).
+        options.databaseUrl ?? controlDatabaseUrl(),
       );
 
       const totals: ManifestTotals = {
@@ -675,7 +677,7 @@ export async function performBackup(options: {
 
 function passwordOf(url: string | undefined): string | null {
   try {
-    const parsed = new URL(url ?? loadEnv().DATABASE_URL);
+    const parsed = new URL(url ?? controlDatabaseUrl());
     return parsed.password ? decodeURIComponent(parsed.password) : null;
   } catch {
     return null;

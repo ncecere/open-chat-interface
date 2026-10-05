@@ -1,5 +1,6 @@
 import { runMigrationsWithLock, runPostMigrations, seedDatabase } from '@oci/db';
 import { loadEnv } from './config/env.js';
+import { controlDatabaseUrl } from './db/control.js';
 import { db } from './db/index.js';
 import { logger } from './lib/logger.js';
 
@@ -9,7 +10,9 @@ import { logger } from './lib/logger.js';
  * Running this as its own job lets every replica boot with
  * `RUN_MIGRATIONS=false`, so schema changes happen exactly once and in a known
  * order rather than racing at startup. The advisory lock still applies, so
- * running it concurrently with a booting API is safe.
+ * running it concurrently with a booting API is safe. Both phases use the
+ * control connection (CONTROL_DATABASE_URL, else DATABASE_URL): never a
+ * transaction-mode pooler.
  *
  * `node dist/migrate.js --post` is the post-deploy phase (v0.11 design,
  * section 1): run it once every replica runs the new release. It applies the
@@ -19,11 +22,12 @@ import { logger } from './lib/logger.js';
  * pre-deploy migration of the release is applied.
  */
 async function main() {
-  const env = loadEnv();
+  // Fails at once on a bad environment, before touching the database.
+  loadEnv();
 
   if (process.argv.includes('--post')) {
     logger.info('Applying post-deploy steps');
-    const result = await runPostMigrations(env.DATABASE_URL, { logger });
+    const result = await runPostMigrations(controlDatabaseUrl(), { logger });
     logger.info(
       {
         steps: result.steps.map((step) => ({
@@ -40,7 +44,7 @@ async function main() {
   }
 
   logger.info('Applying database migrations');
-  await runMigrationsWithLock(env.DATABASE_URL, { logger });
+  await runMigrationsWithLock(controlDatabaseUrl(), { logger });
 
   logger.info('Seeding default instance settings');
   await seedDatabase(db);

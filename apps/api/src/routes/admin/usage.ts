@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { onReadReplica } from '../../db/read.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { parseQuery } from '../../middleware/validate.js';
 import {
@@ -17,6 +18,12 @@ import {
 
 export const usageRoutes = new Hono<AppBindings>();
 
+/*
+ * Every report here is an aggregate over days that tolerates a second of
+ * staleness, so it may be answered by the read replica (READ_DATABASE_URL,
+ * db/read.ts; v0.11 design, section 11). Each handler only reads.
+ */
+
 /** Fixed choices rather than a free range, so a query cannot be unbounded. */
 const querySchema = z.object({
   days: z
@@ -29,12 +36,9 @@ const querySchema = z.object({
 usageRoutes.get('/overview', async (c) => {
   const { days } = parseQuery(c, querySchema);
 
-  const [range, totals, activity, daily] = await Promise.all([
-    usageRange(days),
-    usageTotals(days),
-    activitySummary(days),
-    dailyActivity(days),
-  ]);
+  const [range, totals, activity, daily] = await onReadReplica(() =>
+    Promise.all([usageRange(days), usageTotals(days), activitySummary(days), dailyActivity(days)]),
+  );
 
   return c.json({ range, totals, activity, daily });
 });
@@ -43,14 +47,16 @@ usageRoutes.get('/overview', async (c) => {
 usageRoutes.get('/spend', async (c) => {
   const { days } = parseQuery(c, querySchema);
 
-  const [range, totals, daily, models, consumers, idle] = await Promise.all([
-    usageRange(days),
-    usageTotals(days),
-    dailyUsage(days),
-    modelUsage(days),
-    topConsumers(days),
-    idleModels(days),
-  ]);
+  const [range, totals, daily, models, consumers, idle] = await onReadReplica(() =>
+    Promise.all([
+      usageRange(days),
+      usageTotals(days),
+      dailyUsage(days),
+      modelUsage(days),
+      topConsumers(days),
+      idleModels(days),
+    ]),
+  );
 
   return c.json({ range, totals, daily, models, consumers, idleModels: idle });
 });
@@ -58,11 +64,13 @@ usageRoutes.get('/spend', async (c) => {
 /** Where limits are biting, which is usually a configuration signal. */
 usageRoutes.get('/limits', async (c) => {
   const { days } = parseQuery(c, querySchema);
-  const [range, denials] = await Promise.all([usageRange(days), denialSummary(days)]);
+  const [range, denials] = await onReadReplica(() =>
+    Promise.all([usageRange(days), denialSummary(days)]),
+  );
   return c.json({ range, denials });
 });
 
 /** Object storage consumption. Not time-ranged: storage is a gauge. */
 usageRoutes.get('/storage', async (c) => {
-  return c.json(await storageSummary());
+  return c.json(await onReadReplica(() => storageSummary()));
 });

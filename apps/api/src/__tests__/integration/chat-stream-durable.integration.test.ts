@@ -12,6 +12,7 @@ import {
   beginChatRun,
   ChatStreamStore,
   captureChatRun,
+  captureRecovery,
   resumeActiveChatRun,
   sharedRedis,
 } from '../../services/chat-streams.js';
@@ -639,6 +640,10 @@ describe.skipIf(!available)('integration: durable authority over real Redis chat
       }
       return originalEval(...args);
     });
+    // The capture would otherwise wait (v0.11) for Redis to store the frames
+    // it kept; this test wants the run left as the failure leaves it.
+    const finalWaitMs = captureRecovery.finalWaitMs;
+    captureRecovery.finalWaitMs = 0;
     await captureChatRun(
       value,
       new ReadableStream<string>({
@@ -649,6 +654,7 @@ describe.skipIf(!available)('integration: durable authority over real Redis chat
       }),
       () => ({ status: 'complete' }),
     );
+    captureRecovery.finalWaitMs = finalWaitMs;
     spy.mockRestore();
     expect(injected).toBe(true);
     // withStore's cooldown skips finalize, leaving a real stale-active hash.

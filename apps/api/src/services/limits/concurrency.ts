@@ -1,6 +1,6 @@
 import type { UserRole } from '@oci/shared';
 import { logger } from '../../lib/logger.js';
-import { sharedRedis } from '../chat-streams.js';
+import { noteRedisFailure, sharedRedis } from '../chat-streams.js';
 import { getRateLimitSettings } from '../lifecycle/settings.js';
 
 const KEY_PREFIX = 'oci:concurrency';
@@ -96,6 +96,7 @@ export async function acquireStreamSlot(
       },
     };
   } catch (error) {
+    noteRedisFailure(error);
     // Availability beats strictness here: refusing every generation because
     // Redis blipped would be a worse failure than briefly not enforcing.
     logger.warn({ error, userId }, 'Concurrency cap unavailable; allowing the run');

@@ -10,9 +10,13 @@ const mocks = vi.hoisted(() => {
     warn: vi.fn(),
   };
 });
-vi.mock('@oci/db', () => ({ createDatabase: mocks.createDatabase }));
+vi.mock('@oci/db', () => ({ createControlClient: mocks.createDatabase }));
 vi.mock('../../config/env.js', () => ({
-  loadEnv: () => ({ DATABASE_URL: 'postgres://test-only' }),
+  // The lock's session is a control connection (v0.11, section 11): CONTROL_DATABASE_URL.
+  loadEnv: () => ({
+    DATABASE_URL: 'postgres://pooled-test-only',
+    CONTROL_DATABASE_URL: 'postgres://test-only',
+  }),
 }));
 vi.mock('../../lib/logger.js', () => ({ logger: { error: mocks.error, warn: mocks.warn } }));
 
@@ -32,7 +36,7 @@ const lockCalls = (fragment: string) =>
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.createDatabase.mockReturnValue({ sql: mocks.client });
+  mocks.createDatabase.mockReturnValue(mocks.client);
   mocks.client.reserve.mockResolvedValue(mocks.owner);
   mocks.client.end.mockResolvedValue(undefined);
   mocks.owner.mockImplementation(async (strings: TemplateStringsArray) =>
@@ -46,7 +50,10 @@ afterEach(() => {
 describe('job lock connection lifecycle', () => {
   it('uses the reserved owner for acquire/unlock and always disposes the private client', async () => {
     expect(await withJobLock('cleanup', async () => 7)).toBe(7);
-    expect(mocks.createDatabase).toHaveBeenCalledWith('postgres://test-only', { max: 1 });
+    expect(mocks.createDatabase).toHaveBeenCalledWith('postgres://test-only', {
+      max: 1,
+      applicationName: expect.stringMatching(/^oci:all:/),
+    });
     expect(mocks.client.reserve).toHaveBeenCalledOnce();
     expect(mocks.owner).toHaveBeenCalledTimes(2);
     for (const call of mocks.owner.mock.calls) expect(call[1]).toBe('oci:job:cleanup');

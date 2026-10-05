@@ -34,6 +34,20 @@ services:
       AUTH_TRUSTED_ORIGINS:
       DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
       REDIS_URL: redis://redis:6379
+      # Optional (docs/OPERATIONS.md, "Connection pooling" and "Redis"): taken
+      # from your shell or .env when set. CONTROL_DATABASE_URL must reach
+      # PostgreSQL directly when DATABASE_URL is a transaction-mode pooler;
+      # REDIS_SENTINELS or REDIS_CLUSTER_NODES take precedence over REDIS_URL.
+      CONTROL_DATABASE_URL:
+      READ_DATABASE_URL:
+      DATABASE_POOL_MAX:
+      REDIS_SENTINELS:
+      REDIS_SENTINEL_NAME:
+      REDIS_SENTINEL_PASSWORD:
+      REDIS_CLUSTER_NODES:
+      REDIS_USERNAME:
+      REDIS_PASSWORD:
+      REDIS_TLS:
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
       # Leave INITIAL_ADMIN_PASSWORD unset to get a one-time password in the logs.
@@ -94,6 +108,16 @@ services:
       APP_URL: ${APP_URL:-http://localhost:8080}
       DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
       REDIS_URL: redis://redis:6379
+      # As for the api service above.
+      CONTROL_DATABASE_URL:
+      DATABASE_POOL_MAX:
+      REDIS_SENTINELS:
+      REDIS_SENTINEL_NAME:
+      REDIS_SENTINEL_PASSWORD:
+      REDIS_CLUSTER_NODES:
+      REDIS_USERNAME:
+      REDIS_PASSWORD:
+      REDIS_TLS:
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
       # Imports read uploads from, and backups copy, the same storage.

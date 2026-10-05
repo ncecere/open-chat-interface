@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
   getRateLimitSettings: vi.fn(),
 }));
 
-vi.mock('../../services/chat-streams.js', () => ({ sharedRedis: mocks.sharedRedis }));
+vi.mock('../../services/chat-streams.js', () => ({
+  sharedRedis: mocks.sharedRedis,
+  noteRedisFailure: () => undefined,
+}));
 vi.mock('../../services/lifecycle/settings.js', () => ({
   getRateLimitSettings: mocks.getRateLimitSettings,
 }));

@@ -16,6 +16,14 @@
  *    failed); the import finished with every conversation; background jobs
  *    ran again after the failover and none was left running.
  *
+ * `--redis` (v0.11 design, item 16): Redis runs under Sentinel (a primary,
+ * a replica, three sentinels) and the drill kills the Redis primary
+ * (SIGKILL) instead of moving the PostgreSQL one, mid-load with replies
+ * streaming and every third reply read only partly, then resumed. Checks: no
+ * request failed at all; every reply finished or was resumed to its end and
+ * is stored complete; replies started after the API followed the new
+ * primary are resumable again; no OCI process exited.
+ *
  * Exit codes: 0 pass, 1 a check failed, 2 the drill itself could not run.
  */
 import { fork } from 'node:child_process';
@@ -23,6 +31,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ADMIN,
   latencyStats,
   MODEL_SLUG,
   PERSON_PASSWORD,
@@ -62,6 +71,11 @@ const spec = {
   /** How many times to move the primary, a minute apart (the first mid-job). */
   failovers: { type: 'number', default: 1 },
   'settle-seconds': { type: 'number', default: 240 },
+  /** Kill the Redis primary (under Sentinel) instead of moving the PostgreSQL one. */
+  redis: { type: 'boolean', default: false },
+  /** With --redis: every Nth reply is read for --cut-after-ms only, then resumed. */
+  'cut-every': { type: 'number', default: 3 },
+  'cut-after-ms': { type: 'number', default: 1200 },
   keep: { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
 };
@@ -80,6 +94,12 @@ const outDir = resolve(options.out);
 mkdirSync(outDir, { recursive: true });
 const base = `http://127.0.0.1:${options.port}`;
 const env = { OCI_DRILL_PORT: String(options.port) };
+const SENTINELS = ['sentinel-1', 'sentinel-2', 'sentinel-3'];
+if (options.redis)
+  Object.assign(env, {
+    OCI_DRILL_REDIS_URL: '',
+    OCI_DRILL_REDIS_SENTINELS: SENTINELS.map((name) => `${name}:26379`).join(','),
+  });
 const timeline = [];
 const startedAt = Date.now();
 function log(what) {
@@ -91,7 +111,8 @@ function log(what) {
 /* ------------------------------------------------------------------------ */
 
 function compose(args, options = {}) {
-  return run('docker', ['compose', '-p', PROJECT, '-f', COMPOSE_FILE, ...args], {
+  const profiles = options.redis === false ? [] : ['--profile', 'redis-ha'];
+  return run('docker', ['compose', '-p', PROJECT, '-f', COMPOSE_FILE, ...profiles, ...args], {
     env: { ...env, ...options.env },
     ...options,
   });
@@ -196,12 +217,12 @@ let sessions = 0;
  * A signed-in person for setup and checks (the load has its own client), from
  * an address of its own: Better Auth allows three sign-ins per address in 10 s.
  */
-async function session(email) {
+async function session(email, password = PERSON_PASSWORD) {
   const ip = `198.19.1.${++sessions}`;
   const response = await fetch(`${base}/api/auth/sign-in/email`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: base, 'x-forwarded-for': ip },
-    body: JSON.stringify({ email, password: PERSON_PASSWORD, rememberMe: true }),
+    body: JSON.stringify({ email, password, rememberMe: true }),
   });
   if (!response.ok) throw new Error(`Sign-in for ${email} failed: HTTP ${response.status}`);
   const cookie = (response.headers.getSetCookie?.() ?? [])
@@ -222,6 +243,92 @@ async function session(email) {
       json = text ? JSON.parse(text) : null;
     } catch {}
     return { status: reply.status, json, text };
+  };
+}
+
+/** The host name the sentinels give for the Redis primary (the Compose service name). */
+async function sentinelPrimary() {
+  for (const sentinel of SENTINELS) {
+    const result = await compose([
+      'exec',
+      '-T',
+      sentinel,
+      'redis-cli',
+      '-p',
+      '26379',
+      'SENTINEL',
+      'get-master-addr-by-name',
+      'oci',
+    ]);
+    const host = result.stdout.trim().split('\n')[0];
+    if (result.code === 0 && host) return host;
+  }
+  return null;
+}
+
+/** Whether `service` is a Redis replica in sync with its primary. */
+async function redisReplicaInSync(service) {
+  const result = await compose(['exec', '-T', service, 'redis-cli', 'INFO', 'replication']);
+  return result.stdout.includes('role:slave') && result.stdout.includes('master_link_status:up');
+}
+
+/** The Redis row of System health, as one API replica sees it. */
+async function redisHealth(admin) {
+  const health = await admin('GET', '/api/admin/health');
+  return health.json?.checks?.find((check) => check.id === 'redis') ?? null;
+}
+
+/**
+ * Kills the Redis primary (SIGKILL), waits for the sentinels to promote the
+ * replica and for the API to use Redis again, then starts the killed node,
+ * which the sentinels turn into a replica of the new primary (for the next
+ * failover).
+ */
+async function redisFailover(index, admin) {
+  const primary = await sentinelPrimary();
+  if (!primary) throw new Error('The sentinels name no Redis primary');
+  log(`Redis failover ${index + 1}: killing the primary ${primary}`);
+  const t0 = Date.now();
+  await must(compose(['kill', '-s', 'SIGKILL', primary]), 'killing the Redis primary');
+  let promotedTo = null;
+  const promoted = await waitFor(
+    'the sentinels to promote the replica',
+    async () => {
+      const now = await sentinelPrimary();
+      if (!now || now === primary) return null;
+      promotedTo = now;
+      return Date.now();
+    },
+    60_000,
+    100,
+  );
+  // Both web replicas: System health is answered by whichever the proxy picks.
+  let healthy = 0;
+  const followed = await waitFor(
+    'the API to use Redis again',
+    async () => {
+      healthy = (await redisHealth(admin))?.status === 'ok' ? healthy + 1 : 0;
+      return healthy >= 4 ? Date.now() : null;
+    },
+    60_000,
+    100,
+  );
+  await must(compose(['start', primary]), 'starting the old Redis primary again');
+  await waitFor(
+    'the old primary to rejoin as a replica',
+    () => redisReplicaInSync(primary),
+    60_000,
+    500,
+  );
+  log(
+    `Redis failover ${index + 1}: ${promotedTo} promoted after ${promoted - t0} ms; the API used Redis again after ${followed - t0} ms; ${primary} rejoined as a replica`,
+  );
+  return {
+    from: primary,
+    to: promotedTo,
+    startedAt: t0,
+    commandMs: promoted - t0,
+    routedMs: followed - t0,
   };
 }
 
@@ -285,6 +392,45 @@ async function main() {
     compose(['up', '-d', 'haproxy', 'redis', 'stub']),
     'starting haproxy, redis and the stub',
   );
+  if (options.redis) {
+    log('starting Redis under Sentinel: a primary, a replica and three sentinels');
+    await must(
+      compose([
+        'up',
+        '-d',
+        '--wait',
+        '--wait-timeout',
+        '120',
+        'redis-primary',
+        'redis-replica',
+        ...SENTINELS,
+      ]),
+      'starting Redis under Sentinel',
+    );
+    await waitFor('the replica to sync', () => redisReplicaInSync('redis-replica'), 60_000, 500);
+    await waitFor(
+      'every sentinel to know the replica and the other sentinels',
+      async () => {
+        for (const sentinel of SENTINELS) {
+          const info = await compose([
+            'exec',
+            '-T',
+            sentinel,
+            'redis-cli',
+            '-p',
+            '26379',
+            'INFO',
+            'sentinel',
+          ]);
+          if (!/master0:name=oci,status=ok,address=[^,]+,slaves=1,sentinels=3/.test(info.stdout))
+            return false;
+        }
+        return true;
+      },
+      60_000,
+      500,
+    );
+  }
   await waitFor(
     'HAProxy to reach the primary',
     async () => (await psql('select not pg_is_in_recovery()', { database: 'postgres' })) === 't',
@@ -360,6 +506,8 @@ async function main() {
       sendEvery: options['send-every'],
       requestTimeoutMs: 30_000,
       replyTimeoutMs: 120_000,
+      cutEvery: options.redis ? options['cut-every'] : 0,
+      cutAfterMs: options['cut-after-ms'],
       password: PERSON_PASSWORD,
       modelSlug: MODEL_SLUG,
       words: WORDS,
@@ -403,6 +551,13 @@ async function main() {
   );
 
   // --- Failover ------------------------------------------------------------
+  const admin = options.redis ? await session(ADMIN.email, ADMIN.password) : null;
+  if (admin) {
+    const health = await redisHealth(admin);
+    if (health?.status !== 'ok')
+      throw new Error(`Redis is not healthy before the failover: ${JSON.stringify(health)}`);
+    log(`System health before the Redis failover: ${health.detail}`);
+  }
   for (let index = 0; index < options.failovers; index++) {
     if (index > 0) await sleep(60_000);
     await waitFor(
@@ -423,6 +578,10 @@ async function main() {
       30_000,
       200,
     );
+    if (options.redis) {
+      R.failovers.push(await redisFailover(index, admin));
+      continue;
+    }
     const before = await cluster();
     const leader = before.find((m) => m.Role === 'Leader');
     const candidate = before.find((m) => m.Role !== 'Leader' && m.State === 'streaming');
@@ -600,16 +759,75 @@ async function main() {
   };
 
   const check = (name, pass, detail) => R.checks.push({ name, pass, detail });
-  check(
-    'requests',
-    unexpected.length === 0,
-    `${requests.length} requests, ${failures.length} failed: ${retryable.length} retryable (500 + X-OCI-Retryable) within ${options['window-seconds']} s of a failover, ${unexpected.length} otherwise`,
-  );
-  check(
-    'replies',
-    streamingLeft === 'none' && !stored.error && !stored.streaming,
-    `${replies.length} replies; stored ${JSON.stringify(stored)}; none left streaming: ${streamingLeft === 'none'}`,
-  );
+  if (options.redis) {
+    // A Redis failover may cost resumability for a moment, never a request.
+    const cut = replies.filter((r) => r.cut);
+    // A resume answered 204 is right for a reply that had already finished
+    // (or that started while Redis was away, so was never resumable): the
+    // web app then shows the saved reply, checked below to be complete.
+    const notResumed = cut.filter(
+      (r) => r.outcome !== 'resumed' && r.resumed !== 'nothing-to-resume',
+    );
+    const nothingToResume = cut.filter((r) => r.resumed === 'nothing-to-resume');
+    const lastFollowed = Math.max(...R.failovers.map((f) => f.startedAt + f.routedMs));
+    const after = replies.filter((r) => r.startedAt > lastFollowed + 2_000);
+    const notResumable = after.filter((r) => r.persistence !== 'redis');
+    const exited = [];
+    for (const service of ['api-1', 'api-2', 'worker', 'web']) {
+      const state = await compose(['ps', '-a', '--format', '{{.State}}', service]);
+      if (state.stdout.trim() !== 'running') exited.push(`${service}: ${state.stdout.trim()}`);
+    }
+    const health = await redisHealth(await session(ADMIN.email, ADMIN.password));
+    R.redis = {
+      cutReplies: cut.length,
+      nothingToResume: nothingToResume.length,
+      notResumed: notResumed.slice(0, 10),
+      repliesAfter: after.length,
+      notResumableAfter: notResumable.length,
+      exited,
+      health,
+    };
+    check(
+      'requests',
+      failures.length === 0,
+      `${requests.length} requests, ${failures.length} failed${failures.length ? `: ${JSON.stringify(failures.slice(0, 3))}` : ''}`,
+    );
+    check(
+      'replies',
+      streamingLeft === 'none' &&
+        Object.keys(stored).every((status) => status === 'complete') &&
+        replies.every(
+          (r) => ['complete', 'resumed'].includes(r.outcome) || r.resumed === 'nothing-to-resume',
+        ),
+      `${replies.length} replies: ${JSON.stringify(R.replies.byOutcome)}; stored ${JSON.stringify(stored)}; none left streaming: ${streamingLeft === 'none'}`,
+    );
+    check(
+      'resumes across the failover',
+      cut.length > 0 && notResumed.length === 0,
+      `${cut.length} replies read partly, then resumed: ${cut.length - nothingToResume.length - notResumed.length} to the end, ${nothingToResume.length} already finished or never resumable (204), ${notResumed.length} cut short`,
+    );
+    check(
+      'resumable again after the failover',
+      after.length > 0 && notResumable.length === 0,
+      `${after.length} replies started after the API followed the new primary; ${notResumable.length} without live replay`,
+    );
+    check(
+      'no process exited',
+      exited.length === 0 && health?.status === 'ok',
+      `${exited.length ? exited.join('; ') : 'api-1, api-2, worker and web running'}; System health Redis: ${health?.status} (${health?.detail})`,
+    );
+  } else {
+    check(
+      'requests',
+      unexpected.length === 0,
+      `${requests.length} requests, ${failures.length} failed: ${retryable.length} retryable (500 + X-OCI-Retryable) within ${options['window-seconds']} s of a failover, ${unexpected.length} otherwise`,
+    );
+    check(
+      'replies',
+      streamingLeft === 'none' && !stored.error && !stored.streaming,
+      `${replies.length} replies; stored ${JSON.stringify(stored)}; none left streaming: ${streamingLeft === 'none'}`,
+    );
+  }
   const expected = options['import-conversations'];
   check(
     'import (the job in progress)',
@@ -642,11 +860,12 @@ try {
   R.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(R, null, 2));
   const lines = [
-    `# Failover drill: ${exitCode === 0 ? 'PASS' : exitCode === 1 ? 'FAIL' : 'ERROR'}`,
+    `# Failover drill${options.redis ? ' (Redis)' : ''}: ${exitCode === 0 ? 'PASS' : exitCode === 1 ? 'FAIL' : 'ERROR'}`,
     '',
-    ...R.failovers.map(
-      (f, i) =>
-        `- Failover ${i + 1}: ${f.from} → ${f.to}; patronictl ${f.commandMs} ms; HAProxy routing to the new primary after ${f.routedMs} ms; import in flight: ${f.importInFlight ? `${f.importInFlight.status}, ${f.importInFlight.imported} imported` : 'n/a'}`,
+    ...R.failovers.map((f, i) =>
+      options.redis
+        ? `- Redis failover ${i + 1}: ${f.from} killed (SIGKILL); ${f.to} promoted by the sentinels after ${f.commandMs} ms; the API used Redis again after ${f.routedMs} ms`
+        : `- Failover ${i + 1}: ${f.from} → ${f.to}; patronictl ${f.commandMs} ms; HAProxy routing to the new primary after ${f.routedMs} ms; import in flight: ${f.importInFlight ? `${f.importInFlight.status}, ${f.importInFlight.imported} imported` : 'n/a'}`,
     ),
     '',
     '| Check | Result | Detail |',

@@ -8,6 +8,10 @@
 # OCI runs as two API replicas (OCI_ROLE=web) and one worker (OCI_ROLE=worker),
 # all connecting through HAProxy, behind the bundled web proxy.
 #
+# `run.mjs --redis` (profile `redis-ha`): Redis under Sentinel instead of one
+# server, a primary, a replica and three sentinels (v0.11 design, item 16),
+# and the drill kills the Redis primary instead of moving the PostgreSQL one.
+#
 # Images are pinned by digest. Licences: Spilo Apache-2.0 (Patroni MIT,
 # PostgreSQL licence), etcd Apache-2.0, HAProxy GPL-2.0-or-later (run as a
 # separate test container, never distributed with OCI), Redis 7.2 BSD-3-Clause
@@ -53,6 +57,38 @@ x-spilo: &spilo
     etcd:
       condition: service_started
 
+x-redis: &redis
+  image: ${OCI_DRILL_REDIS_IMAGE:-redis:7.2.10-alpine@sha256:395ccd7ee4db0867de0d0410f4712a9e0331cff9fdbd864f71ec0f7982d3ffe6}
+  restart: 'no'
+  profiles: ['redis-ha']
+  healthcheck:
+    test: ['CMD', 'redis-cli', 'ping']
+    interval: 2s
+    timeout: 5s
+    retries: 30
+
+# A sentinel; SENTINEL_NAME is the host name it announces. Quorum 2 of 3; a
+# primary silent for 2 s is down, as a drill wants (the default is 30 s).
+x-sentinel: &sentinel
+  <<: *redis
+  command:
+    - sh
+    - -c
+    - >-
+      printf '%s\n' 'port 26379'
+      'sentinel resolve-hostnames yes' 'sentinel announce-hostnames yes'
+      "sentinel announce-ip $$SENTINEL_NAME"
+      'sentinel monitor oci redis-primary 6379 2'
+      'sentinel down-after-milliseconds oci 2000'
+      'sentinel failover-timeout oci 10000'
+      'sentinel parallel-syncs oci 1' > /tmp/sentinel.conf
+      && exec redis-sentinel /tmp/sentinel.conf --loglevel warning
+  healthcheck:
+    test: ['CMD', 'redis-cli', '-p', '26379', 'ping']
+    interval: 2s
+    timeout: 5s
+    retries: 30
+
 x-api: &api
   image: ${OCI_DRILL_API_IMAGE:-oci-failover-api:drill}
   restart: 'no'
@@ -62,7 +98,10 @@ x-api: &api
     API_PORT: 3000
     APP_URL: http://127.0.0.1:${OCI_DRILL_PORT:-18580}
     DATABASE_URL: postgres://oci:failover-drill-only@haproxy:5432/oci
-    REDIS_URL: redis://redis:6379
+    # --redis: blank, with REDIS_SENTINELS set instead.
+    REDIS_URL: ${OCI_DRILL_REDIS_URL-redis://redis:6379}
+    REDIS_SENTINELS: ${OCI_DRILL_REDIS_SENTINELS:-}
+    REDIS_SENTINEL_NAME: oci
     AUTH_SECRET: failover-drill-auth-secret-not-for-production
     ENCRYPTION_KEY: failover-drill-encryption-key-not-for-production
     INITIAL_ADMIN_EMAIL: admin@upgrade.test
@@ -136,6 +175,33 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+
+  redis-primary:
+    <<: *redis
+    hostname: redis-primary
+    command: redis-server --save '' --appendonly no --loglevel warning --replica-announce-ip redis-primary
+  redis-replica:
+    <<: *redis
+    hostname: redis-replica
+    command: redis-server --save '' --appendonly no --loglevel warning --replica-announce-ip redis-replica --replicaof redis-primary 6379
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+  sentinel-1:
+    <<: *sentinel
+    hostname: sentinel-1
+    environment: { SENTINEL_NAME: sentinel-1 }
+    depends_on: { redis-replica: { condition: service_healthy } }
+  sentinel-2:
+    <<: *sentinel
+    hostname: sentinel-2
+    environment: { SENTINEL_NAME: sentinel-2 }
+    depends_on: { redis-replica: { condition: service_healthy } }
+  sentinel-3:
+    <<: *sentinel
+    hostname: sentinel-3
+    environment: { SENTINEL_NAME: sentinel-3 }
+    depends_on: { redis-replica: { condition: service_healthy } }
 
   # The rolling-upgrade test's stub OpenAI-compatible model: replies stream for
   # a known time, so some are always in flight when the primary changes.

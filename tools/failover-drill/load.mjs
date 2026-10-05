@@ -11,6 +11,10 @@
  * turn refused by a draining replica (503 with Retry-After). Reads are retried
  * by the API itself; a failed request here is a failure the person would see.
  *
+ * With `cutEvery` (the `--redis` drill), every Nth reply is read for
+ * `cutAfterMs` only, then resumed, as the web app does after a dropped
+ * connection, so resumes cross the Redis failover.
+ *
  * Every request is written to `events.ndjson`; replies as `reply` events.
  * Usage: node load.mjs <config.json>
  */
@@ -23,6 +27,7 @@ const out = createWriteStream(config.eventsFile, { flags: 'a' });
 let stopping = false;
 const counters = { requests: 0, failures: 0, replies: 0 };
 const activeReplies = new Set();
+let repliesStarted = 0;
 
 function record(event) {
   counters.requests++;
@@ -169,7 +174,11 @@ async function sendMessage(client, vu) {
   if (!sent.ok) return;
   const reply = { vu, threadId, startedAt };
   activeReplies.add(reply);
-  const read = await readUiStream(sent.response, { timeoutMs: config.replyTimeoutMs });
+  sent.event.persistence = sent.response.headers.get('x-oci-stream-persistence');
+  const cut = config.cutEvery > 0 && ++repliesStarted % config.cutEvery === 0;
+  const read = await readUiStream(sent.response, {
+    timeoutMs: cut ? config.cutAfterMs : config.replyTimeoutMs,
+  });
   sent.event.total = Date.now() - startedAt;
   record(sent.event);
   let outcome = read.complete ? 'complete' : read.errorText && !read.readError ? 'error' : 'cut';
@@ -201,6 +210,8 @@ async function sendMessage(client, vu) {
       startedAt,
       endedAt: Date.now(),
       outcome,
+      cut,
+      persistence: sent.event.persistence,
       streamError: read.errorText ?? read.readError,
       deltas: read.deltas,
       resumed,

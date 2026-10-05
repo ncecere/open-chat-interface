@@ -1,5 +1,6 @@
 import { sql } from '@oci/db';
-import { sql as client, db } from '../../db/index.js';
+import { openControlClient } from '../../db/control.js';
+import { db } from '../../db/index.js';
 import { isDraining } from '../../lib/drain.js';
 import { conflict } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -34,6 +35,11 @@ export interface JobRequest {
 const KICK_COALESCE_MS = 250;
 const pendingKicks = new Map<string, NodeJS.Timeout>();
 
+/**
+ * NOTIFY is delivered when its transaction commits, so it works through a
+ * transaction-mode pooler on the application pool; only LISTEN needs a
+ * session of its own (a control connection).
+ */
 async function notify(request: JobRequest): Promise<void> {
   await db.execute(sql`select pg_notify(${JOB_REQUEST_CHANNEL}, ${JSON.stringify(request)})`);
 }
@@ -124,6 +130,10 @@ export async function listenForJobRequests(
       running.delete(request.job);
     }
   };
+  // A control connection (CONTROL_DATABASE_URL, v0.11 design, section 11):
+  // behind a transaction-mode pooler a LISTEN would subscribe whichever
+  // server connection ran it, and the notifications would never arrive.
+  const client = openControlClient();
   try {
     // postgres.js keeps a dedicated connection for this, and listens again
     // after it reconnects (a failover included).
@@ -136,10 +146,11 @@ export async function listenForJobRequests(
     });
     return async () => {
       await listener.unlisten().catch(() => undefined);
+      await client.end({ timeout: 1 }).catch(() => undefined);
     };
   } catch (error) {
-    // Behind a transaction-mode pooler LISTEN does not work. Ticks still run
-    // everything; requested work just waits for them.
+    // Ticks still run everything; requested work just waits for them.
+    await client.end({ timeout: 1 }).catch(() => undefined);
     logger.warn(
       { err: String(error) },
       'Not listening for job requests from web replicas; their work waits for the next tick',

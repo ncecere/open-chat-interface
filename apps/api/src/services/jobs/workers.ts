@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { desc, eq, schema } from '@oci/db';
 import { db } from '../../db/index.js';
+import { instanceId } from '../../lib/instance.js';
 import { logger } from '../../lib/logger.js';
 import { type ProcessRole, processRole, runsBackgroundJobs } from '../../lib/role.js';
 import { APP_VERSION } from '../../version.js';
@@ -31,9 +31,10 @@ export const replicaHeartbeat = {
 /** The every-15-seconds job whose recorded runs show that some replica runs jobs. */
 export const SWEEP_JOB = 'chat.recover-interrupted-replies';
 
-const REPLICAS_KEY = 'oci:replicas';
-const replicaKey = (id: string) => `oci:replica:${id}`;
-const instanceId = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
+// One hash tag for the list and every entry: they are written in one MULTI
+// and read with one MGET, which Redis Cluster allows only within a slot.
+const REPLICAS_KEY = 'oci:{replicas}:list';
+const replicaKey = (id: string) => `oci:{replicas}:replica:${id}`;
 const startedAt = new Date().toISOString();
 
 export interface ReplicaInfo {

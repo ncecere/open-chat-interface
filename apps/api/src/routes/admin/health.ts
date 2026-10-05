@@ -2,9 +2,9 @@ import { and, count, desc, eq, gte, isNull, lt, schema, sql } from '@oci/db';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { redisHealthCheck } from '../../lib/redis-requirement.js';
 import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
-import { sharedRedis } from '../../services/chat-streams.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
 import { liveReplicas, workersHealthCheck } from '../../services/jobs/workers.js';
 import { capacityHealthCheck } from '../../services/limits/capacity/overview.js';
@@ -45,29 +45,12 @@ async function databaseCheck(): Promise<Check> {
 }
 
 /**
- * Redis is optional: without it rate limiting falls back to per-process
- * counters, which still work but do not hold across replicas. That is a
- * warning rather than a failure, since a single-replica deployment is a
- * supported configuration.
+ * Redis: optional for one replica, required for more (v0.11 design, item 16;
+ * lib/redis-requirement.ts). An error when several replicas share the
+ * database without it, or when it is configured but unreachable.
  */
-async function redisCheck(): Promise<Check> {
-  const redis = await sharedRedis();
-  if (!redis) {
-    return {
-      id: 'redis',
-      label: 'Redis',
-      status: 'warn',
-      detail: 'Not configured. Rate limits and streams are per-process.',
-    };
-  }
-
-  try {
-    await redis.ping();
-    return { id: 'redis', label: 'Redis', status: 'ok', detail: 'Responding' };
-  } catch (error) {
-    logger.error({ error }, 'Admin health: Redis check failed');
-    return { id: 'redis', label: 'Redis', status: 'error', detail: 'Configured but not reachable' };
-  }
+function redisCheck(): Promise<Check> {
+  return redisHealthCheck();
 }
 
 async function providerCheck(): Promise<Check> {

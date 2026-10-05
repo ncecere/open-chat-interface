@@ -210,14 +210,158 @@ the API.
 
 ## Database connections for maintenance
 
-Background jobs use session-level advisory locks. `DATABASE_URL` must point to
-PostgreSQL directly or through a **session-mode** pooler; transaction-mode
-pooling does not preserve lock ownership. Each concurrently attempted job opens
-one private lock connection per API replica in addition to the normal application
-pool (default ten connections). Include that headroom in database connection
-limits. See [background jobs](admin/operations.md#background-jobs) for scheduling
-and retry guarantees; jobs are listed, and can be run by hand, on **Admin → Data
-& storage → System health**.
+Background jobs, migrations and a worker's `LISTEN` need PostgreSQL sessions of
+their own. From v0.11 they use the **control** connection string,
+`CONTROL_DATABASE_URL` (default: `DATABASE_URL`), which must reach PostgreSQL
+directly or through a **session-mode** pooler; everything else may go through
+a transaction-mode pooler ([connection pooling](#connection-pooling)). Each
+concurrently attempted job opens one private lock connection per replica in
+addition to the application pool (default ten connections). Include that
+headroom in database connection limits. See
+[background jobs](admin/operations.md#background-jobs) for scheduling and retry
+guarantees; jobs are listed, and can be run by hand, on **Admin → Data &
+storage → System health**.
+
+## Connection pooling
+
+From v0.11 (design, section 11) OCI keeps two kinds of database connection,
+so a deployment with many replicas can put a transaction-mode pooler such as
+PgBouncer in front of PostgreSQL:
+
+| Variable | Used for | May point at |
+| --- | --- | --- |
+| `DATABASE_URL` | The **application pool**: every request and every job's work | PostgreSQL, a session-mode pooler, or a **transaction-mode** pooler |
+| `CONTROL_DATABASE_URL` (default: `DATABASE_URL`) | **Control connections**: migrations (`migrate`, `migrate --post`, and at startup), background jobs' advisory locks, a worker's `LISTEN`, `pg_dump` for backups | PostgreSQL directly, or a **session-mode** pooler; never transaction mode |
+| `READ_DATABASE_URL` (optional) | Heavy administrative reads ([below](#read-replica)) | A streaming replica, or a pooler in front of one |
+
+Nothing on the application pool keeps session state after a transaction:
+prepared statements are off, settings are `SET LOCAL`, advisory locks used
+there are transaction locks, and notifications are sent with `pg_notify`
+(delivered at commit). What does need a session moved to the control
+connections:
+
+| Session state | Where | Before v0.11, behind a transaction-mode pooler |
+| --- | --- | --- |
+| A job's session advisory lock, held for the whole run | One control connection per running job | A second replica took a job the first was running (the lock was re-entered on the same pooled server connection), the first's lease check landed on another connection and found its lock gone, and the lock stayed behind on a pooled connection |
+| A worker's `LISTEN oci_job_requests` | One control connection per worker or `all` replica | No request from a `web` replica was ever heard (work waited for the job's next tick) |
+| `migrate --post`: session lock and `statement_timeout = 4h`, `lock_timeout`, `idle_in_transaction_session_timeout` | One control connection (plus one lock monitor) while it runs | Those settings and the lock stayed on a pooled server connection that ordinary requests then used |
+| Pre-deploy migrations (one transaction) | One control connection (plus one lock monitor) | Worked (transaction-scoped), moved for clarity |
+| `pg_dump` (session settings, one long transaction) | One control connection while a backup runs | Its `SET`s could land on a different server connection from its transaction |
+
+Pool sizes per replica: `DATABASE_POOL_MAX` (default 10) application
+connections; control connections only while used: one per job running at that
+moment (a few), one for `LISTEN` on a worker or `all` replica, one or two
+during a migration or backup, and, without Redis, one to show the replica is
+running (below). `READ_DATABASE_POOL_MAX` (default 5) connections to the
+replica when one is set.
+
+### PgBouncer in transaction mode
+
+```ini
+; pgbouncer.ini
+[databases]
+oci = host=postgres port=5432 dbname=oci
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+; Server connections to PostgreSQL: size for (replicas x DATABASE_POOL_MAX)
+; client connections at the concurrency PostgreSQL handles well.
+default_pool_size = 40
+max_client_conn = 2000
+; OCI does not use protocol-level prepared statements; nothing to track.
+max_prepared_statements = 0
+server_reset_query =
+```
+
+```bash
+DATABASE_URL=postgres://oci:...@pgbouncer:6432/oci            # transaction mode
+CONTROL_DATABASE_URL=postgres://oci:...@postgres:5432/oci     # direct (or a session-mode pool)
+```
+
+Point `CONTROL_DATABASE_URL` at PostgreSQL itself, or at a second PgBouncer
+database entry with `pool_mode=session` (a few connections per replica is
+enough). A live test runs the API's requests, job locks, `LISTEN`, post-deploy
+steps and background migrations through PgBouncer 1.25 in transaction mode and
+checks that no pooled server connection is left with a lock, a setting or a
+`LISTEN` (`apps/api/src/__tests__/live/pgbouncer.live.test.ts`).
+
+### Read replica
+
+`READ_DATABASE_URL` sends heavy administrative reads that tolerate a second of
+staleness to a streaming replica: **Admin → Overview** (instance-wide counts and
+activity) and **Admin → Usage** (activity, spend, limits and storage reports;
+their rollups already trail by up to 30 s). Nothing a person reads about their
+own data uses it, nor anything that writes.
+
+OCI uses the replica only while it is within `READ_DATABASE_MAX_LAG_MS`
+(default 1000): while those pages are in use it samples the primary's WAL
+position every 250 ms and checks that the replica has replayed what the
+primary had written that long ago. When the replica is behind, unreachable or
+not yet checked, the reads go to the primary; a read that fails on the replica
+(a lost connection, a query cancelled by recovery) is run again on the
+primary. The gauge `oci_read_replica_in_use` shows which. Point it at one
+replica, or a pooler in front of one: with a load balancer over several, each
+check reaches one of them.
+
+## Redis
+
+Redis carries reply streams (so a reply can be resumed after a disconnect, or
+on another replica), the per-person concurrency caps, rate limits and the
+replicas' heartbeats. One replica works without it; **more than one requires
+it** (v0.11): without it each replica keeps its own counters, so every limit
+is multiplied by the replica count, and a reply can only be resumed on the
+replica writing it. Each replica logs a warning, and System health shows an
+error, when several replicas share the database without Redis (counted from
+the database's connections, which OCI names `oci:<role>:<id>@<host>`).
+
+Configure one of:
+
+| Variables | Redis |
+| --- | --- |
+| `REDIS_URL=redis://[user:password@]host:6379[/db]` (`rediss://` for TLS) | One server |
+| `REDIS_SENTINELS=s1:26379,s2:26379,s3:26379`, `REDIS_SENTINEL_NAME` (default `mymaster`) | Sentinel: OCI asks the sentinels for the primary and follows a failover |
+| `REDIS_CLUSTER_NODES=c1:6379,c2:6379,c3:6379` | Redis Cluster (primaries serve every command) |
+
+With Sentinel or Cluster, `REDIS_USERNAME`, `REDIS_PASSWORD` and `REDIS_TLS=true`
+apply to the data nodes; `REDIS_SENTINEL_USERNAME`, `REDIS_SENTINEL_PASSWORD`
+and `REDIS_SENTINEL_TLS=true` to the sentinels; `REDIS_TLS_CA_FILE` names a PEM
+file of certificate authorities. If more than one is set, Cluster wins over
+Sentinel over `REDIS_URL`. `REDIS_COMMAND_TIMEOUT_MS` (default 2000) bounds any
+single command.
+
+On Redis Cluster every multi-key operation stays in one hash slot: a reply's
+keys share its run's hash tag (`oci:chat-stream:run:{<run>}:…`), the
+thread's pointer has its own (`oci:chat-stream:thread:{<thread>}:active`), and
+the replica heartbeats share `{replicas}`. Key names on one server and under
+Sentinel are unchanged from earlier releases, so a rolling upgrade keeps every
+reply in flight. Moving an instance from one server to Cluster is a new Redis:
+replies streaming at that moment cannot be resumed (they are still saved), and
+counters start again.
+
+### When Redis is unavailable
+
+No request waits on Redis for longer than `REDIS_COMMAND_TIMEOUT_MS`: commands
+are refused at once while the connection is down, and the client reconnects in
+the background (asking the sentinels for the new primary, or refreshing the
+cluster's slots). Until it is back:
+
+| Feature | Without Redis |
+| --- | --- |
+| Replies | Keep streaming to the person and are saved as usual. A reply in progress keeps the frames Redis could not take (up to 30 s) and stores them once it is back, so following and resuming it continue; past that, its live replay is given up and the saved message is shown. New replies are not resumable until Redis is back. A request to resume waits up to 5 s for a reconnecting Redis. |
+| Concurrency caps | Counted per replica (each replica allows the configured number) |
+| Rate limits | Counted per replica, so each limit is multiplied by the replica count |
+| Replica heartbeats | Not written: System health lists no replicas, and the Background workers check falls back to recent job runs |
+| Worker requests | Unaffected (they use PostgreSQL `NOTIFY`) |
+
+A failover is followed within moments of the sentinels promoting a replica.
+In the drill (`node tools/failover-drill/run.mjs --redis`) and the live test
+(`redis-sentinel-failover.live.test.ts`) the Redis primary is killed mid-reply
+and mid-rate-limit; replies finish or resume with every frame, no request
+fails and no process exits ([docs/dev/failover.md](dev/failover.md#redis)).
 
 ## Back up
 
@@ -1177,10 +1321,11 @@ In front of the cluster, use something that closes connections to a node that
 stops being primary: HAProxy checking Patroni's REST API (`option httpchk`,
 `http-check send meth GET uri /primary`, `default-server ... init-state down
 on-marked-down shutdown-sessions`; `tools/failover-drill/haproxy.cfg` is a
-working example), a pooler in session mode, or the provider's endpoint. A
-connection that silently vanishes is otherwise noticed only by TCP keepalive,
-after minutes. Connections are session-mode or direct (jobs and migrations
-hold advisory locks; the worker uses `LISTEN`).
+working example), a pooler, or the provider's endpoint. A connection that
+silently vanishes is otherwise noticed only by TCP keepalive, after minutes.
+`CONTROL_DATABASE_URL` connections are session-mode or direct (jobs and
+migrations hold advisory locks; the worker uses `LISTEN`); `DATABASE_URL` may
+be a transaction-mode pooler ([connection pooling](#connection-pooling)).
 
 With asynchronous replication the last moments of committed work can be lost
 in an unplanned failover. OCI's jobs and the final save are safe to repeat, but

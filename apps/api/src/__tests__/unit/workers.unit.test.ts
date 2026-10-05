@@ -106,10 +106,13 @@ describe('replica heartbeats (v0.11 worker role)', () => {
     await vi.waitFor(async () => expect(await liveReplicas()).toHaveLength(1));
     // Another replica, and one whose details expired, and one unreadable.
     redis.scores.set('other', Date.now());
-    redis.values.set('oci:replica:other', JSON.stringify({ id: 'other', role: 'web', host: 'b' }));
+    redis.values.set(
+      'oci:{replicas}:replica:other',
+      JSON.stringify({ id: 'other', role: 'web', host: 'b' }),
+    );
     redis.scores.set('expired', Date.now());
     redis.scores.set('garbled', Date.now());
-    redis.values.set('oci:replica:garbled', '{');
+    redis.values.set('oci:{replicas}:replica:garbled', '{');
     const replicas = await liveReplicas();
     expect(replicas?.map((replica) => replica.role)).toEqual(['web', 'worker']);
     expect(replicas?.[1]).toMatchObject({ role: 'worker', version: expect.any(String) });
@@ -156,9 +159,15 @@ describe('whether any replica runs background jobs', () => {
     const redis = fakeRedis();
     mocks.redis = redis;
     redis.scores.set('w', Date.now());
-    redis.values.set('oci:replica:w', JSON.stringify({ id: 'w', role: 'worker', host: 'w' }));
+    redis.values.set(
+      'oci:{replicas}:replica:w',
+      JSON.stringify({ id: 'w', role: 'worker', host: 'w' }),
+    );
     redis.scores.set('v', Date.now());
-    redis.values.set('oci:replica:v', JSON.stringify({ id: 'v', role: 'web', host: 'v' }));
+    redis.values.set(
+      'oci:{replicas}:replica:v',
+      JSON.stringify({ id: 'v', role: 'web', host: 'v' }),
+    );
     expect(await workerStatus()).toMatchObject({ alive: true, evidence: 'heartbeat' });
     expect((await workersHealthCheck()).detail).toBe(
       'Background jobs run on another replica. Replicas seen in the last minute: 1 web, 1 worker, 0 all.',
@@ -175,7 +184,10 @@ describe('whether any replica runs background jobs', () => {
     const redis = fakeRedis();
     mocks.redis = redis;
     redis.scores.set('v', Date.now());
-    redis.values.set('oci:replica:v', JSON.stringify({ id: 'v', role: 'web', host: 'v' }));
+    redis.values.set(
+      'oci:{replicas}:replica:v',
+      JSON.stringify({ id: 'v', role: 'web', host: 'v' }),
+    );
     mocks.lastSweep = new Date(Date.now() - 10 * 60_000);
     expect(await workerStatus()).toMatchObject({ alive: false, evidence: 'none' });
     expect(await workersHealthCheck()).toEqual({

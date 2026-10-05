@@ -1,6 +1,6 @@
 import type { UserRole } from '@oci/shared';
 import { logger } from '../../lib/logger.js';
-import { sharedRedis } from '../chat-streams.js';
+import { noteRedisFailure, sharedRedis } from '../chat-streams.js';
 import { getRateLimitSettings } from '../lifecycle/settings.js';
 
 const KEY_PREFIX = 'oci:limit';
@@ -74,6 +74,7 @@ export async function consumeRateLimit(params: {
       const results = await redis.multi().incr(key).expire(key, windowSeconds).exec();
       count = Number(results?.[0]?.[1] ?? 1);
     } catch (error) {
+      noteRedisFailure(error);
       logger.warn({ error, bucket: params.bucket }, 'Rate limit fell back to local counting');
       count = localIncrement(key, windowSeconds * 1000);
     }

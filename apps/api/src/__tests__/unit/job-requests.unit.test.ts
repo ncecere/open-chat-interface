@@ -6,12 +6,16 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   listen: vi.fn(),
   unlisten: vi.fn(),
+  end: vi.fn(),
   workerStatus: vi.fn(),
   warn: vi.fn(),
 }));
 vi.mock('../../db/index.js', () => ({
   db: { execute: mocks.execute },
-  sql: { listen: mocks.listen },
+}));
+// LISTEN runs on a control connection of its own (v0.11, section 11).
+vi.mock('../../db/control.js', () => ({
+  openControlClient: () => ({ listen: mocks.listen, end: mocks.end }),
 }));
 vi.mock('../../lib/role.js', () => ({
   runsBackgroundJobs: () => mocks.role !== 'web',
@@ -46,6 +50,7 @@ beforeEach(() => {
   mocks.execute.mockReset().mockResolvedValue([]);
   mocks.listen.mockReset();
   mocks.unlisten.mockReset().mockResolvedValue(undefined);
+  mocks.end.mockReset().mockResolvedValue(undefined);
   mocks.workerStatus.mockReset();
   mocks.warn.mockReset();
 });
@@ -140,6 +145,8 @@ describe('a worker listening for requests', () => {
     ]);
     await stop();
     expect(mocks.unlisten).toHaveBeenCalledOnce();
+    // The control connection is closed with it.
+    expect(mocks.end).toHaveBeenCalledOnce();
   });
 
   it('ignores malformed requests, and everything once draining', async () => {
@@ -175,6 +182,7 @@ describe('a worker listening for requests', () => {
     mocks.listen.mockRejectedValueOnce(new Error('transaction pooler'));
     const stop = await listenForJobRequests(async () => undefined);
     expect(mocks.warn).toHaveBeenCalledOnce();
+    expect(mocks.end).toHaveBeenCalledOnce();
     await expect(stop()).resolves.toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import { isRedisUnavailableError, type RedisClient } from '../lib/redis.js';
 import type { OwnedRunState } from './chat/run-state.js';
 import { type ReplayValidator, validateReplayRun } from './chat-replay-validation.js';
 import { parseStoredSnapshot } from './chat-stream-snapshot.js';
@@ -10,6 +10,20 @@ const BATCH_SIZE = 200;
 const VALIDATION_INTERVAL_MS = 2000;
 /** How often an idle reader asks whether the reply's producer is still alive. */
 const PRODUCER_CHECK_MS = 5000;
+/**
+ * How long a reader waits for Redis to come back (a Sentinel or Cluster
+ * failover, v0.11 design, item 16) before it gives up on the replay. The
+ * producer keeps what it could not store meanwhile and stores it once Redis
+ * is back, so the reader continues where it was.
+ */
+export const replayOutage = { toleranceMs: 30_000, retryMs: 250 };
+/**
+ * After a Redis outage this reader saw, PostgreSQL may say the reply is
+ * finished while Redis still has it active: the producer is storing the frames
+ * it kept during the outage. The reader keeps following for up to this long
+ * after Redis came back, instead of stopping where Redis then was.
+ */
+const TERMINAL_SETTLE_MS = 5_000;
 
 function sequence(value: string | undefined): number | null {
   if (!value || !/^(0|[1-9]\d*)$/.test(value)) return null;
@@ -31,7 +45,7 @@ function isFinishFrame(value: string): boolean {
 
 /** Replay failure affects this reader only, never the producer or its admission claim. */
 export function createChatReplay(options: {
-  redis: Redis;
+  redis: RedisClient;
   identity: { runId: string; threadId: string; userId: string };
   metadataKey: string;
   eventsKey: string;
@@ -48,8 +62,27 @@ export function createChatReplay(options: {
   /** Called once when this reader closes or is cancelled. */
   onEnd?: () => void;
 }): ReadableStream<Uint8Array> {
-  const { redis, identity, metadataKey, eventsKey, snapshotKey, readState, checkProducer } =
-    options;
+  const { identity, metadataKey, eventsKey, snapshotKey, readState, checkProducer } = options;
+  let unavailableSince: number | null = null;
+  /** When Redis came back after an outage this reader saw. */
+  let recoveredAt: number | null = null;
+  /** One Redis read; while Redis is away, asks again until it is back or the tolerance runs out. */
+  const read = async <T>(operation: (client: RedisClient) => Promise<T>): Promise<T> => {
+    for (;;) {
+      try {
+        const value = await operation(options.redis);
+        // Back after an outage: give the producer time to store what it kept.
+        if (unavailableSince !== null) recoveredAt = performance.now();
+        unavailableSince = null;
+        return value;
+      } catch (error) {
+        if (!isRedisUnavailableError(error) || signal.aborted) throw error;
+        unavailableSince ??= performance.now();
+        if (performance.now() - unavailableSince > replayOutage.toleranceMs) throw error;
+        await new Promise((resolve) => setTimeout(resolve, replayOutage.retryMs));
+      }
+    }
+  };
   let ended = false;
   const end = () => {
     if (ended) return;
@@ -77,6 +110,8 @@ export function createChatReplay(options: {
   let seeded = false;
   let seedFrames: string[] = [];
   let skipThrough = 0;
+  /** When Redis was seen with fewer events than this reader sent (a failover). */
+  let rewoundSince: number | null = null;
 
   return new ReadableStream<Uint8Array>({
     // Pull, rather than an eager start loop, bounds queued replay data to a
@@ -108,8 +143,10 @@ export function createChatReplay(options: {
               if (key !== undefined && value !== undefined) values[key] = value;
             }
             const seq = sequence(values.seq);
-            // Already sent as part of the snapshot.
-            if (seq !== null && seq <= skipThrough) {
+            // Already sent: part of the snapshot, or (after a failover lost the
+            // newest events) sent before the producer stored them again, which
+            // this reader may not even have seen Redis without.
+            if (seq !== null && (seq <= skipThrough || seq <= lastSequence)) {
               lastId = id;
               continue;
             }
@@ -118,7 +155,7 @@ export function createChatReplay(options: {
               // the saved snapshot instead, once, then continue with events.
               if (lastSequence === 0 && !seeded && snapshotKey && seq !== null && seq > 1) {
                 seeded = true;
-                const snapshot = parseStoredSnapshot(await redis.get(snapshotKey));
+                const snapshot = parseStoredSnapshot(await read((redis) => redis.get(snapshotKey)));
                 if (!snapshot || snapshot.sequence + 1 < seq)
                   throw new Error('Replay sequence gap');
                 seedFrames = snapshot.frames;
@@ -138,9 +175,23 @@ export function createChatReplay(options: {
             finishDelivered ||= isFinishFrame(values.data);
             return;
           }
-          const metadata = await redis.hgetall(metadataKey);
+          const metadata = await read((redis) => redis.hgetall(metadataKey));
           lastStatus = metadata.status;
           const total = sequence(metadata.lastSequence);
+          if (
+            total !== null &&
+            total < lastSequence &&
+            metadata.runId === identity.runId &&
+            metadata.status === 'active'
+          ) {
+            // A Redis failover lost events this reader already sent; the
+            // producer stores them again. Wait for it, within the tolerance.
+            rewoundSince ??= performance.now();
+            if (performance.now() - rewoundSince <= replayOutage.toleranceMs) {
+              await new Promise((resolve) => setTimeout(resolve, replayOutage.retryMs));
+              continue;
+            }
+          }
           if (
             metadata.runId !== identity.runId ||
             metadata.threadId !== identity.threadId ||
@@ -156,10 +207,21 @@ export function createChatReplay(options: {
             throw new Error('Replay metadata unavailable');
           // Reconcile once after a terminal durable check: completion may have
           // arrived during that query. Freeze the tail boundary so a still-active
-          // cache cannot keep this reader following new events indefinitely.
-          if (durableTerminal) terminalLimit ??= total;
+          // cache cannot keep this reader following new events indefinitely;
+          // just after a Redis outage, follow a little longer (the producer
+          // storing what it kept).
+          if (
+            durableTerminal &&
+            terminalLimit === null &&
+            (metadata.status !== 'active' ||
+              recoveredAt === null ||
+              performance.now() - recoveredAt >= TERMINAL_SETTLE_MS)
+          )
+            terminalLimit = total;
           if (terminalLimit !== null && lastSequence >= terminalLimit) continue;
-          batch = await redis.xrange(eventsKey, `(${lastId}`, '+', 'COUNT', BATCH_SIZE);
+          batch = await read((redis) =>
+            redis.xrange(eventsKey, `(${lastId}`, '+', 'COUNT', BATCH_SIZE),
+          );
           index = 0;
           if (batch.length) continue;
           // A vanished suffix must not look like a successful/idle stream.
@@ -170,7 +232,7 @@ export function createChatReplay(options: {
             end();
             return;
           }
-          if (readState && performance.now() >= nextValidation) {
+          if (readState && !durableTerminal && performance.now() >= nextValidation) {
             const state = await validateReplayRun(readState, signal);
             if (state !== 'streaming') {
               // Missing/deleted/expired/foreign ownership is not completion and

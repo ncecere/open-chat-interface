@@ -1,8 +1,7 @@
-import { createDatabase } from '@oci/db';
-import { loadEnv } from '../../config/env.js';
+import { openControlClient } from '../../db/control.js';
 import { logger } from '../../lib/logger.js';
 
-type LockClient = ReturnType<typeof createDatabase>['sql'];
+type LockClient = ReturnType<typeof openControlClient>;
 type LockOwner = Awaited<ReturnType<LockClient['reserve']>>;
 const localRuns = new Set<string>();
 
@@ -122,8 +121,11 @@ function createLease(owner: LockOwner, key: string, job: string) {
  * pool when several jobs run together. It is always closed, never recycled
  * after a failed unlock. Local duplicate ticks do not open extra connections.
  *
- * Requires a direct PostgreSQL connection or session-mode pooler, not a
- * transaction-mode pooler. This is mutual exclusion, not exactly-once delivery:
+ * The lock's connection is a control connection (`CONTROL_DATABASE_URL`, v0.11
+ * design, section 11): a direct PostgreSQL connection or a session-mode
+ * pooler. Behind a transaction-mode pooler a session lock would be taken on
+ * whichever server connection ran that statement, which then goes back to
+ * the pool still holding it. This is mutual exclusion, not exactly-once delivery:
  * a job that loses its lock (its connection dropped) learns of it at its next
  * check, so another replica's run can overlap the batch in progress by at most
  * that batch. Job bodies are written to be safe to re-run.
@@ -135,7 +137,7 @@ export async function withJobLock<T>(
   if (localRuns.has(name)) return null;
   localRuns.add(name);
   try {
-    const client = createDatabase(loadEnv().DATABASE_URL, { max: 1 }).sql;
+    const client: LockClient = openControlClient();
     try {
       const owner = await client.reserve();
       try {
