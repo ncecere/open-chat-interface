@@ -273,7 +273,13 @@ function PeopleList({
   }
 
   return (
-    <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+    <section
+      // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+      tabIndex={0}
+      aria-label="Usage by person"
+      className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+    >
       {entries.map((entry) => (
         <div
           key={entry.userId}
@@ -289,7 +295,7 @@ function PeopleList({
           </div>
         </div>
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -409,7 +415,13 @@ function SpendTab({ days }: { days: number }) {
         {data.models.entries.length === 0 ? (
           <p className="text-[var(--text-muted)] text-sm">Nothing recorded in this range.</p>
         ) : (
-          <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+          <section
+            // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+            tabIndex={0}
+            aria-label="Usage by model"
+            className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+          >
             <table className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-[var(--border-subtle)] border-b text-left text-[var(--text-muted)] text-xs uppercase tracking-wider">
@@ -459,7 +471,7 @@ function SpendTab({ days }: { days: number }) {
               total={data.models.totalCount}
               noun="models used"
             />
-          </div>
+          </section>
         )}
       </SettingsSection>
 
@@ -538,7 +550,13 @@ function LimitsTab({ days }: { days: number }) {
           No one was stopped by a limit in this range.
         </p>
       ) : (
-        <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+        <section
+          // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+          tabIndex={0}
+          aria-label="Limit refusals"
+          className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+        >
           {data.denials.entries.map((denial) => (
             <div
               key={`${denial.policyId}-${denial.policyName}`}
@@ -555,7 +573,7 @@ function LimitsTab({ days }: { days: number }) {
               </Badge>
             </div>
           ))}
-        </div>
+        </section>
       )}
       <TruncationNote
         shown={data.denials.entries.length}

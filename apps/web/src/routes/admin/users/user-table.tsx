@@ -75,7 +75,13 @@ export function UserTable({
   // Selection only feeds bulk changes, so read-only viewers get no checkboxes.
   const { canEdit } = useAdminAccess();
   return (
-    <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+    <section
+      // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+      tabIndex={0}
+      aria-label="Accounts"
+      className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+    >
       <table className="w-full min-w-[40rem] text-sm">
         <thead>
           <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
@@ -177,6 +183,6 @@ export function UserTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }

@@ -463,7 +463,13 @@ function BudgetList({ access }: { access: RoleAccess }) {
           No usage budget applies to this role, so usage is limited only by the rate limits above.
         </p>
       ) : (
-        <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+        <section
+          // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+          tabIndex={0}
+          aria-label="Usage budgets for this role"
+          className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+        >
           <table className="w-full min-w-[32rem] text-sm">
             <thead className="bg-[var(--bg-control-alt)] text-left text-[var(--text-muted)] text-xs">
               <tr>
@@ -498,7 +504,7 @@ function BudgetList({ access }: { access: RoleAccess }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       )}
       <Link to="/admin/quotas" className="text-[var(--accent-bright)] text-sm hover:underline">
         Manage usage budgets

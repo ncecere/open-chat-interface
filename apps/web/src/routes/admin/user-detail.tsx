@@ -253,7 +253,13 @@ export function AdminUserDetailPage() {
         {sessions.length === 0 ? (
           <Empty>No active sessions.</Empty>
         ) : (
-          <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+          <section
+            // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+            tabIndex={0}
+            aria-label="Active sessions"
+            className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+          >
             <table className="w-full min-w-[32rem] text-sm">
               <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
                 <tr>
@@ -278,7 +284,7 @@ export function AdminUserDetailPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         )}
       </Section>
 

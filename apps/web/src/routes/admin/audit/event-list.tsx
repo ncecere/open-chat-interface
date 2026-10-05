@@ -23,7 +23,13 @@ export function DesktopEventTable({
     // The table needs 48rem; beside the admin navigation that only fits from
     // xl (1280px). Narrower, it clipped Details off the right edge, so the
     // card list is used up to there.
-    <div className="relative hidden overflow-x-auto xl:block">
+    <section
+      // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+      tabIndex={0}
+      aria-label="Audit events"
+      className="relative hidden overflow-x-auto xl:block"
+    >
       <table className="w-full min-w-[48rem] table-fixed text-left text-sm">
         <caption className="sr-only">Administrative and security audit events</caption>
         <thead>
@@ -110,7 +116,7 @@ export function DesktopEventTable({
           })}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }
 

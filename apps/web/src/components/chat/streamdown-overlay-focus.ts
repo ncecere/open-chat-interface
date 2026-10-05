@@ -87,3 +87,51 @@ export function uninstallStreamdownOverlayFocus(): void {
   observer?.disconnect();
   observer = null;
 }
+
+/**
+ * Streamdown's tables and code blocks scroll sideways inside their own
+ * containers, which Safari and Firefox keyboard users cannot reach unless the
+ * container can take focus (WCAG 2.1.1, axe scrollable-region-focusable).
+ * Each one is named and made focusable as it appears; scans are batched to one
+ * per frame so a streaming reply does not trigger one per token.
+ */
+const SCROLL_REGIONS: Array<[selector: string, label: string]> = [
+  ['[data-streamdown="table-wrapper"] > .overflow-x-auto:not([tabindex])', 'Table'],
+  ['[data-streamdown="code-block-body"]:not([tabindex])', 'Code block'],
+];
+let regionObserver: MutationObserver | null = null;
+
+export function markStreamdownScrollRegions(root: ParentNode = document): void {
+  for (const [selector, label] of SCROLL_REGIONS) {
+    for (const element of root.querySelectorAll<HTMLElement>(selector)) {
+      element.tabIndex = 0;
+      element.setAttribute('role', 'region');
+      element.setAttribute('aria-label', label);
+    }
+  }
+}
+
+export function installStreamdownScrollRegions(doc: Document = document): void {
+  if (regionObserver || typeof MutationObserver === 'undefined' || !doc.body) return;
+  let scheduled = false;
+  const schedule =
+    typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (run: () => void) => setTimeout(run, 0);
+  regionObserver = new MutationObserver(() => {
+    if (scheduled) return;
+    scheduled = true;
+    schedule(() => {
+      scheduled = false;
+      markStreamdownScrollRegions(doc);
+    });
+  });
+  regionObserver.observe(doc.body, { childList: true, subtree: true });
+  markStreamdownScrollRegions(doc);
+}
+
+/** For tests. */
+export function uninstallStreamdownScrollRegions(): void {
+  regionObserver?.disconnect();
+  regionObserver = null;
+}

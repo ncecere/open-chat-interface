@@ -211,7 +211,9 @@ const SHARED_PROSE = cn(
   '[&_a]:text-[var(--accent-bright)] [&_a]:underline-offset-2',
   '[&_strong]:text-[var(--text-primary)]',
   '[&_code]:rounded [&_code]:bg-[var(--bg-control)] [&_code]:px-1 [&_code]:py-0.5',
-  '[&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
+  // The code block's body scrolls (and is a keyboard-reachable region); a
+  // second, nested scroller on the pre could not be reached by keyboard.
+  '[&_pre]:max-w-full [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
   '[&_hr]:border-[var(--border-subtle)]',
   '[&_li::marker]:text-[var(--accent-bright)]',
 );
