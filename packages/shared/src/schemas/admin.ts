@@ -176,6 +176,9 @@ export const instanceSettingsSchema = z.object({
     port: z.number().int().positive().nullable(),
     secure: z.boolean(),
     fromAddress: z.string().nullable(),
+    /** Whether a username and a password are stored; never their values. */
+    hasUsername: z.boolean().optional(),
+    hasPassword: z.boolean().optional(),
   }),
 });
 

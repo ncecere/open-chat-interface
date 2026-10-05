@@ -87,6 +87,47 @@ export async function sendEmail(email: OutboundEmail): Promise<{ delivered: bool
   }
 }
 
+/**
+ * Sends one message to `to` with the saved settings and reports why it
+ * failed, for the Email delivery page's Send test email (#115). sendEmail
+ * deliberately says only whether it worked; an administrator testing needs
+ * the server's reason ("Invalid login: 535 …", "connect ECONNREFUSED …").
+ */
+export async function sendTestEmail(to: string): Promise<{ ok: boolean; message: string }> {
+  const smtp = await getSetting('smtp');
+  if (!smtp.host || !smtp.port || !smtp.fromAddress) {
+    return {
+      ok: false,
+      message: 'Email delivery is not set up: save a host, port and From address first.',
+    };
+  }
+  const appName = await currentAppName();
+  try {
+    const password = smtp.encryptedPassword ? decryptSecret(smtp.encryptedPassword) : null;
+    const transport = nodemailer.createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      connectionTimeout: 15_000,
+      greetingTimeout: 15_000,
+      socketTimeout: 20_000,
+      ...(smtp.username ? { auth: { user: smtp.username, pass: password ?? '' } } : {}),
+    });
+    await transport.sendMail({
+      from: fromHeader(smtp.fromAddress, appName),
+      to,
+      subject: `Test email from ${appName}`,
+      text: `This is a test message from ${appName}'s Email delivery settings. If you can read it, email delivery works.`,
+    });
+    logger.info({ to }, 'Test email delivered');
+    return { ok: true, message: `Sent to ${to}. Check that it arrived.` };
+  } catch (error) {
+    logger.warn({ error, to }, 'Test email failed');
+    const reason = error instanceof Error ? error.message.slice(0, 300) : 'Unknown error';
+    return { ok: false, message: `The mail server refused or could not be reached: ${reason}` };
+  }
+}
+
 // Each message names the instance (Branding > App name) in its subject and
 // body, so a person with accounts on several instances can tell them apart.
 

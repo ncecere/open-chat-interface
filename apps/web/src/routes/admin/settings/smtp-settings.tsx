@@ -1,13 +1,21 @@
 import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
+import {
+  MutationError,
+  Notice,
+  SaveRow,
+  SettingsSection,
+  ToggleSetting,
+} from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
+import { Spinner } from '~/components/ui/spinner';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { ApiError, api } from '~/lib/api-client';
+import { cn } from '~/lib/utils';
 
 type SmtpSettings = InstanceSettings['smtp'];
 type CredentialAction = 'keep' | 'replace' | 'clear';
@@ -107,6 +115,7 @@ function changedSmtpSettings(
 
 function CredentialEditor({
   kind,
+  stored,
   action,
   value,
   error,
@@ -115,6 +124,8 @@ function CredentialEditor({
   onValueChange,
 }: {
   kind: 'username' | 'password';
+  /** Whether one is stored, as the server reports (#115). */
+  stored?: boolean;
   action: CredentialAction;
   value: string;
   error?: string;
@@ -131,8 +142,11 @@ function CredentialEditor({
         <div>
           <p className="text-sm font-medium">{label}</p>
           <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-            The server does not report whether a stored {kind} exists. Keep leaves any stored value
-            unchanged.
+            {stored === undefined
+              ? `Keep leaves any stored ${kind} unchanged.`
+              : stored
+                ? `A ${kind} is stored. Keep leaves it unchanged.`
+                : `No ${kind} is stored.`}
           </p>
         </div>
         {action === 'keep' && (
@@ -235,6 +249,14 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
   );
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);
+  const test = useMutation({
+    mutationFn: () => api.post<{ ok: boolean; message: string }>('/admin/settings/smtp/test', {}),
+  });
+  const testBlocked = hasChanges
+    ? 'Save changes before testing them.'
+    : !saved.configured
+      ? 'Save a host, port and From address first.'
+      : null;
 
   const save = useMutation({
     mutationFn: (smtp: SmtpPatch) => api.patch<{ ok: boolean }>('/admin/settings', { smtp }),
@@ -244,6 +266,11 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
       const next: SmtpSettings = {
         ...nextVisible,
         configured: configuredFrom(nextVisible),
+        // A replaced credential is now stored, a cleared one is not.
+        hasUsername:
+          'username' in changes ? Boolean(changes.username) : (saved.hasUsername ?? undefined),
+        hasPassword:
+          'password' in changes ? Boolean(changes.password) : (saved.hasPassword ?? undefined),
       };
 
       setSaved(next);
@@ -404,6 +431,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
         <div className="flex flex-col gap-4">
           <CredentialEditor
             kind="username"
+            stored={saved.hasUsername}
             action={usernameAction}
             value={username}
             error={showValidation ? errors.username : undefined}
@@ -416,6 +444,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
           />
           <CredentialEditor
             kind="password"
+            stored={saved.hasPassword}
             action={passwordAction}
             value={password}
             error={showValidation ? errors.password : undefined}
@@ -435,6 +464,45 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
         errorMessage={errorMessage}
         successMessage={successMessage ? 'SMTP settings saved.' : null}
       />
+
+      {/* Configure, then test (#115): Authentication links here for both. */}
+      <SettingsSection
+        title="Test delivery"
+        description="Sends a short message to your own address with the saved settings, and shows the mail server's answer if it fails."
+      >
+        <div className="flex flex-col gap-2">
+          <div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={testBlocked !== null || test.isPending}
+              aria-describedby={testBlocked ? 'smtp-test-blocked' : undefined}
+              onClick={() => test.mutate()}
+            >
+              {test.isPending && <Spinner />}
+              Send test email
+            </Button>
+          </div>
+          {testBlocked && (
+            <p id="smtp-test-blocked" className="text-xs text-[var(--text-muted)]">
+              {testBlocked}
+            </p>
+          )}
+          {test.data && (
+            <p
+              role="status"
+              className={cn(
+                'text-sm',
+                test.data.ok ? 'text-[var(--text-secondary)]' : 'text-[var(--danger-on-tint)]',
+              )}
+            >
+              {test.data.message}
+            </p>
+          )}
+          <MutationError error={test.error} message="The test email could not be sent." />
+        </div>
+      </SettingsSection>
     </form>
   );
 }
