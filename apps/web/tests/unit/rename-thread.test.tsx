@@ -297,6 +297,20 @@ describe('renaming from the top bar', () => {
     expect(rowTitles()).toContain('Lisbon itinerary');
   });
 
+  it('offers Move to project for a saved conversation but not a temporary one (#91)', async () => {
+    const { client } = await render('/chat/tmp');
+    expect(findButton('Move to project')).toBeTruthy();
+    // A temporary chat the sidebar does not list: its history says what it is.
+    await act(async () => {
+      client.setQueryData<ChatHistory>(chatHistoryKey('tmp'), {
+        thread: { ...thread('tmp', 'Walk temporary'), temporary: true },
+        messages: [],
+      } as unknown as ChatHistory);
+    });
+    expect(findButton('Move to project')).toBeUndefined();
+    expect(findButton('Rename conversation')).toBeTruthy();
+  });
+
   it('is not shown away from a conversation', async () => {
     await render('/');
     expect(findButton('Rename conversation')).toBeUndefined();

@@ -166,7 +166,10 @@ function MoveToProjectControl({ threadId }: { threadId: string }) {
   const [open, setOpen] = useState(false);
   // From the sidebar's cached lists, or the conversation's own history when
   // the sidebar does not list it (an older project conversation).
-  const current = useOpenConversation(threadId)?.thread.projectId ?? null;
+  const conversation = useOpenConversation(threadId)?.thread;
+  const current = conversation?.projectId ?? null;
+  // Temporary chats cannot join a project; offering it only led to a refusal (#91).
+  if (conversation?.temporary) return null;
 
   return (
     <>
