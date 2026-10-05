@@ -151,8 +151,13 @@ When registration is invite-only or closed, an invitation is how somebody gets
 an account. Each carries a role, so you decide what they will be before they
 arrive.
 
-Links expire. An unused invitation can be revoked, which is worth doing when
-somebody's circumstances change between offer and acceptance.
+Links expire after 7 days unless you choose another number (1–365), or clear
+it for a link that never expires. An unused invitation can be revoked, which is
+worth doing when somebody's circumstances change between offer and acceptance.
+
+An address that already has an account cannot be invited (change the
+account's role instead), and an address can have only one pending invitation
+at a time: revoke it to send a new one, for example with a different role.
 
 Invitations need email to be configured. Without SMTP you can still create one,
 but you will have to deliver the link yourself.

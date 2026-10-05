@@ -1,10 +1,10 @@
-import { desc, eq, schema } from '@oci/db';
+import { and, desc, eq, gt, isNull, or, schema, sql } from '@oci/db';
 import { createInviteSchema, type Invite } from '@oci/shared';
 import { Hono } from 'hono';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { generateToken, hashToken } from '../../lib/crypto.js';
-import { notFound } from '../../lib/errors.js';
+import { conflict, notFound } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
@@ -46,6 +46,38 @@ inviteRoutes.post('/', async (c) => {
   const actor = currentUser(c);
   const input = await parseBody(c, createInviteSchema);
   const organizationId = await getDefaultOrganizationId();
+
+  // Checked here rather than when the link is used: accepting an invitation
+  // for an address that already has an account fails, and two pending ones
+  // with different roles left whichever was accepted first to decide.
+  if (input.email) {
+    const [account] = await db
+      .select({ id: schema.user.id })
+      .from(schema.user)
+      .where(sql`lower(${schema.user.email}) = ${input.email}`)
+      .limit(1);
+    if (account) {
+      throw conflict(
+        'An account with this email address already exists. Change its role on its account page instead.',
+      );
+    }
+    const [pending] = await db
+      .select({ id: schema.invitation.id })
+      .from(schema.invitation)
+      .where(
+        and(
+          sql`lower(${schema.invitation.email}) = ${input.email}`,
+          isNull(schema.invitation.redeemedAt),
+          or(isNull(schema.invitation.expiresAt), gt(schema.invitation.expiresAt, new Date())),
+        ),
+      )
+      .limit(1);
+    if (pending) {
+      throw conflict(
+        'This address already has a pending invitation. Revoke it first to send a new one.',
+      );
+    }
+  }
 
   const token = generateToken();
   const expiresAt = input.expiresInDays

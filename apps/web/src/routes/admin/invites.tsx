@@ -56,7 +56,8 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('user');
-  const [expiresInDays, setExpiresInDays] = useState('');
+  // Links expire unless the admin chooses otherwise (docs/admin/people.md).
+  const [expiresInDays, setExpiresInDays] = useState('7');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'copied' | 'failed' | null>(null);
 
@@ -203,9 +204,9 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
         </Field>
 
         <Field
-          label="Expires in days (optional)"
+          label="Expires in days"
           htmlFor="invite-expiry"
-          hint="Between 1 and 365 days. Leave blank for no expiration."
+          hint="Between 1 and 365 days. Clear it for a link that never expires."
         >
           <Input
             id="invite-expiry"
