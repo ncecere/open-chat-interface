@@ -183,7 +183,7 @@ async function pressEnter() {
 }
 
 function renameButtons(): HTMLButtonElement[] {
-  return [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Rename thread"]')];
+  return [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Rename thread: "]')];
 }
 
 describe('renaming from the sidebar', () => {
@@ -206,6 +206,21 @@ describe('renaming from the sidebar', () => {
     expect(dialog()).toBeNull();
     expect(rowTitles()).toContain('Lisbon itinerary');
     expect(rowTitles()).not.toContain('Trip plans');
+  });
+
+  it("names each row's controls for the row, not N copies of one name (#111)", async () => {
+    await render();
+    const labels = [...document.querySelectorAll('nav button[aria-label], button[aria-label]')]
+      .map((button) => button.getAttribute('aria-label') ?? '')
+      .filter((label) => / thread: /.test(label));
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        'Pin thread: Trip plans',
+        'Rename thread: Trip plans',
+        'Archive thread: Trip plans',
+      ]),
+    );
+    expect(new Set(labels).size).toBe(labels.length);
   });
 
   it('cancels on Escape without saving', async () => {
@@ -253,7 +268,7 @@ describe('renaming from the sidebar', () => {
     await render();
     const projectRow = document.querySelector('ul[aria-label="Conversations in Thesis"]');
     const rename = projectRow?.querySelector<HTMLButtonElement>(
-      'button[aria-label="Rename thread"]',
+      'button[aria-label^="Rename thread: "]',
     );
     expect(rename).toBeTruthy();
     await click(rename!);

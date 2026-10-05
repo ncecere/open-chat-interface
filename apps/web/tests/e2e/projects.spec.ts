@@ -403,7 +403,10 @@ test('project conversations live under their project in the sidebar', async ({
 
   // Unpinning moves a conversation from Pinned to the top of its project.
   const pinnedRow = page.getByRole('link', { name: /^Research pinned\s*, in project Research$/ });
-  await pinnedRow.locator('xpath=..').getByRole('button', { name: 'Unpin thread' }).focus();
+  await pinnedRow
+    .locator('xpath=..')
+    .getByRole('button', { name: /^Unpin thread: / })
+    .focus();
   await page.keyboard.press('Enter');
   await expect(tree.getByRole('link').first()).toHaveText('Research pinned');
   await expect(tree.getByRole('link')).toHaveCount(5);
