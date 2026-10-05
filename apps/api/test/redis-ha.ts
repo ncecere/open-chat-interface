@@ -171,15 +171,17 @@ export async function startRedisCluster(): Promise<RedisClusterSet> {
   const ports = await freePorts(3);
   const name = `oci-test-cluster-${randomUUID().slice(0, 8)}`;
   // Cluster bus ports are the data port + 10000; inside the container only.
-  const script = [
+  const script = `${[
     ...ports.map(
       (port) =>
         `redis-server --port ${port} --cluster-enabled yes --cluster-config-file /tmp/nodes-${port}.conf --cluster-node-timeout 2000 --cluster-announce-ip 127.0.0.1 --save '' --appendonly no --daemonize yes`,
     ),
-    'sleep 1',
-    `redis-cli --cluster create ${ports.map((port) => `127.0.0.1:${port}`).join(' ')} --cluster-replicas 0 --cluster-yes`,
-    'exec tail -f /dev/null',
-  ].join(' && ');
+    // Wait until every node answers before creating the cluster, and retry
+    // the create: on a busy runner a node not yet listening made it fail, and
+    // with `&&` the container then exited and the cluster never formed.
+    ...ports.map((port) => `until redis-cli -p ${port} ping >/dev/null 2>&1; do sleep 0.2; done`),
+    `for attempt in 1 2 3 4 5; do redis-cli --cluster create ${ports.map((port) => `127.0.0.1:${port}`).join(' ')} --cluster-replicas 0 --cluster-yes && break; sleep 1; done`,
+  ].join(' && ')}; exec tail -f /dev/null`;
   await startContainer(name, ports, script);
   const stop = async () => {
     await run('docker', ['rm', '-f', name]).catch(() => undefined);
