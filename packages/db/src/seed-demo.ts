@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, eq, notLike, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import * as schema from './schema/index.js';
 
@@ -10,11 +10,27 @@ import * as schema from './schema/index.js';
  * needs. This one invents people and conversations, so it must never run
  * against an instance anybody uses.
  *
- * Timestamps are derived from a pinned instant rather than `now()`. Screenshots
- * are committed, and a dataset that drifts every run would rewrite every image
- * with no change worth reviewing.
+ * Timestamps are derived from one instant: 14:30 UTC today, or DEMO_NOW
+ * (an ISO date) when set. The interface shows times relative to the clock
+ * ("3 days ago"), so an instant anchored to the day of capture keeps those
+ * stable between captures, and keeps seeded usage inside the Usage page's
+ * range; a fixed date (it was 2026-06-15) fell out of it within months (#116).
  */
-const DEMO_NOW = new Date('2026-06-15T14:30:00.000Z');
+export function demoNow(
+  env: Record<string, string | undefined> = process.env,
+  today = new Date(),
+): Date {
+  if (env.DEMO_NOW) {
+    const pinned = new Date(env.DEMO_NOW);
+    if (Number.isNaN(pinned.getTime())) throw new Error(`DEMO_NOW is not a date: ${env.DEMO_NOW}`);
+    return pinned;
+  }
+  return new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 14, 30),
+  );
+}
+
+const DEMO_NOW = demoNow();
 
 const ORGANIZATION_NAME = 'Northbrook University';
 
@@ -171,13 +187,29 @@ export async function seedDemoData(db: Database): Promise<void> {
  * their own name and preferences here, and those would be published in the
  * documentation.
  */
-async function seedAdminPreferences(db: Database): Promise<void> {
+/**
+ * The administrator screenshots are taken as: DEMO_ADMIN_EMAIL when set,
+ * otherwise the earliest-created administrator who is not a demo person,
+ * normally the one who installed the instance. It was whichever row the
+ * database returned first (#116).
+ */
+export async function demoAdmin(db: Database): Promise<{ id: string } | undefined> {
+  const email = process.env.DEMO_ADMIN_EMAIL?.trim().toLowerCase();
   const [admin] = await db
     .select({ id: schema.user.id })
     .from(schema.user)
-    .where(eq(schema.user.role, 'admin'))
+    .where(
+      email
+        ? and(eq(schema.user.role, 'admin'), eq(schema.user.email, email))
+        : and(eq(schema.user.role, 'admin'), notLike(schema.user.id, 'demo-user-%')),
+    )
+    .orderBy(asc(schema.user.createdAt), asc(schema.user.id))
     .limit(1);
+  return admin;
+}
 
+async function seedAdminPreferences(db: Database): Promise<void> {
+  const admin = await demoAdmin(db);
   if (!admin) return;
 
   await db
@@ -210,12 +242,7 @@ async function seedAdminPreferences(db: Database): Promise<void> {
  * thing the chat documentation cannot illustrate with.
  */
 async function seedAdminConversations(db: Database, modelSlug: string): Promise<void> {
-  const [admin] = await db
-    .select({ id: schema.user.id })
-    .from(schema.user)
-    .where(eq(schema.user.role, 'admin'))
-    .limit(1);
-
+  const admin = await demoAdmin(db);
   if (!admin) return;
 
   const titles = [
@@ -317,7 +344,9 @@ async function seedAuditHistory(
     { action: 'quota.policy.update', actor: 1, days: 3 },
     { action: 'broadcast.create', actor: 0, days: 4 },
     { action: 'sso.update', actor: 1, days: 6 },
-    { action: 'policy.publish', actor: 0, days: 9 },
+    // An action with no target to look up: a seeded policy.publish pointed at
+    // a policy that does not exist (#116).
+    { action: 'retention.settings.update', actor: 0, days: 9 },
     { action: 'provider.create', actor: 1, days: 14 },
   ];
 
