@@ -7,6 +7,134 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+v0.11 "always on": upgrade from the previous minor release with no downtime,
+keep working through a database or Redis failover, and rebuild search
+without a gap, each tested in CI. Upgrade with `migrate`, then replace
+replicas one at a time, then `migrate --post` (see Upgrading below).
+
+### Added
+
+- **Three-phase migrations.** Pre-deploy migrations stay transactional and
+  fast; post-deploy steps (`migrate --post`, after every replica runs the new
+  release) build indexes concurrently and rebuild any left invalid;
+  background migrations backfill in throttled batches under a lease, each
+  batch and its cursor in one transaction, with progress, pause and resume on
+  System health → Background work. A release can require earlier work to be
+  finished and the migrator refuses, naming it. Migration `0039`.
+- **Upgrade preflight.** `pnpm upgrade:check` (or
+  `node dist/scripts/upgrade-check.js` in the API image) and System health →
+  Upgrades list each pending step with the tables it touches, their sizes and
+  index estimates, and answer rolling, needs a window, or blocked.
+- **Lock-safe migrations.** Every migration attempt runs with a 3 s lock
+  timeout and retries with backoff, so a migration waiting behind a long
+  query no longer freezes requests queued behind it; the final error names
+  the blocking session. `MIGRATION_LOCK_TIMEOUT_MS`,
+  `MIGRATION_STATEMENT_TIMEOUT_MS`.
+- **Draining on shutdown.** A stopping replica reports not ready, refuses new
+  turns with `503` and `Retry-After` before storing anything (the web app
+  retries), lets replies in progress finish for up to
+  `SHUTDOWN_DRAIN_TIMEOUT_MS` (25 s) and saves anything left as interrupted.
+  A reply whose replica died is recovered within about 20 s instead of
+  staying "streaming". The bundled proxy takes a draining or dead replica out
+  at once.
+- **Worker role.** `OCI_ROLE=web|worker|all` (default `all`): background jobs
+  can run on separate worker replicas; System health warns when no worker is
+  running. An optional `worker` Compose profile.
+- **Failover safety.** Read requests are retried once after a dropped database
+  connection; writes answer `500` with `retryable: true`; saving a new
+  message and a reply's final save are retried; a job that loses its lock
+  stops after its batch. A weekly drill fails over a three-node Patroni
+  cluster under load.
+- **Connection pooling.** The application pool works behind PgBouncer in
+  transaction mode; locks, `LISTEN`, post-deploy steps and backups use
+  control connections (`CONTROL_DATABASE_URL`). `READ_DATABASE_URL` serves
+  the admin overview and usage reads from a replica within 1 s of the primary.
+- **Redis Sentinel and Cluster** (`REDIS_SENTINELS`, `REDIS_CLUSTER_NODES`),
+  with bounded timeouts and replies that survive a Redis failover.
+- **Provider capacity.** Requests per minute, tokens per minute and replies at
+  once per provider and per model, shared across replicas. A turn over
+  capacity waits in a fair queue ("you're number N", Stop) instead of
+  failing; provider 429 and 5xx answers are retried before the first output.
+- **Embedding generations.** Changing the embeddings model fills a new
+  generation in the background while search keeps answering from the current
+  one, then switches when it covers every passage; the old one is dropped
+  after a day. Progress, cost estimate, Switch now and Cancel on the
+  Embeddings page. Migration `0041`.
+- **Usage rollups.** Usage pages, reports and budget checks read hourly
+  totals, exactly equal to the events; the history is backfilled by a
+  background migration, with the events used until it finishes. Migration
+  `0040`.
+- **Read-only maintenance mode** from System health, on a schedule, or with
+  `OCI_READ_ONLY=true`: reading, search, export and sign-in keep working;
+  writes are refused with `423` and a banner explains why and until when.
+- **Settings changes reach every replica at once** over Redis (30 s at most
+  without it).
+- **Encryption key rotation.** `ENCRYPTION_KEYS_PREVIOUS` decrypts alongside a
+  new `ENCRYPTION_KEY`, background migrations re-encrypt every secret, and
+  System health counts values still needing an old key.
+- **Long conversations load in parts**: the latest messages first, earlier
+  ones as you scroll up, and only what is near the screen is drawn.
+- **Helm chart** (`deploy/helm/open-chat-interface`, also published to
+  `oci://ghcr.io/ncecere/charts`) with migration hooks, draining, disruption
+  budgets and Pod Security "restricted".
+- **Images for linux/arm64** alongside linux/amd64.
+- **Service objectives and alerts**: published objectives, 47 Prometheus rules
+  (burn-rate and operational) and a Grafana dashboard in `deploy/monitoring`.
+- **Test tools**: a scale harness (`tools/scale`), a rolling-upgrade test under
+  load (`tools/upgrade-test`), a failover drill (`tools/failover-drill`) and a
+  migration linter (`pnpm lint:migrations`), all in CI.
+
+### Changed
+
+- **Faster at size** (scale harness, 6,000 people and 4 million messages):
+  admin Usage spend 777 to 39 ms, the Usage overview 606 to 94 ms, the admin
+  overview 126 to 22 ms (at 500,000 messages), and the passage search for a
+  large project 773 to 180 ms (p95, 1,000 people).
+- **Sign-in limits are OCI's own and shared across replicas**: per account
+  (failed sign-ins), per address (generous, for a campus behind one NAT), per
+  identity provider, and a per-address ceiling. Better Auth's own
+  per-replica limit is off. `RATE_LIMIT_AUTH_PER_MINUTE` now counts failed
+  sign-ins per account; new `RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE` and
+  `RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE`.
+- **Role changes, bans and revoked sessions apply on the next request**
+  (Better Auth's session cookie cache is off).
+- **Web search and connector sources are steps in the reply's work block**,
+  so every reply has at most one disclosure above its answer.
+- **Redis is required for more than one replica**; System health shows an
+  error without it.
+- **The web container drops every capability** (file capabilities removed
+  from Caddy).
+- `503` from the API now means only "this replica is draining"; a failed
+  stream resume answers `500`.
+
+### Fixed
+
+- **A busy replica could stop admitting turns** while the usage rollup
+  backfill ran (introduced and fixed during v0.11 development).
+- **postgres.js crash on failover**: a terminated transaction no longer throws
+  an uncaught error or strands the pool (patch extended;
+  porsager/postgres#1154).
+- Conversation search (`/api/threads/search`) was labelled `/api/threads/:id`
+  in metrics.
+
+### Upgrading
+
+From v0.10.x, with no downtime:
+
+1. Back up the database. Run `pnpm upgrade:check` against it (or the API
+   image's `upgrade-check.js`) to see the work and the verdict.
+2. Run the v0.11 `migrate` job (migrations `0039` to `0041`, all fast).
+3. Replace API replicas one at a time (v0.10 replicas keep working on the new
+   schema), then the web containers.
+4. Run `migrate --post`: post-deploy steps `0001` to `0006` build indexes
+   concurrently and schedule the usage rollup backfill and secret
+   re-encryption.
+
+After step 4 secrets are written in a new format that v0.10 cannot read:
+rolling back to v0.10 from then on needs the pre-upgrade backup. A single
+instance that migrates itself at startup runs step 4 on its own. The Helm
+chart runs steps 2 and 4 as hooks. See docs/OPERATIONS.md, "Upgrade".
+
 ## [0.10.2] - 2026-10-03
 
 ### Fixed
