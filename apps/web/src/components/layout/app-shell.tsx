@@ -97,9 +97,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             onOpenCommandPalette={commandPalette.show}
           />
           {/* Above the panel rather than inside it, so an announcement is not
-              lost when the conversation scrolls. */}
-          <ReadOnlyBanner />
-          <BroadcastBanner />
+              lost when the conversation scrolls. Pushed below the top bar's
+              floating controls (absolute, top-6, about 4rem tall), which
+              otherwise covered the banner and its Dismiss button; with no
+              banner the wrapper is empty and takes no space. */}
+          <div data-banners className="pt-[4.25rem] empty:hidden">
+            <ReadOnlyBanner />
+            <BroadcastBanner />
+          </div>
           <main className="min-h-0 flex-1 rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
             {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
                 keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}
