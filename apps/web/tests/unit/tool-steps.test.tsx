@@ -99,6 +99,10 @@ describe('tool steps', () => {
     expect(container.textContent).toContain('Library hours');
     // A summary of the result, never the raw snippets.
     expect(container.textContent).not.toContain('RAW_SNIPPET');
+    // Each result says where it leads, as the search before a reply does.
+    const sources = container.querySelector('ul[aria-label="Sources"]');
+    expect(sources?.textContent).toContain('https://library.test/hours');
+    expect(sources?.querySelectorAll('li')).toHaveLength(2);
   });
 
   it('shows the note when a reply hit its step limit, outside the block', async () => {

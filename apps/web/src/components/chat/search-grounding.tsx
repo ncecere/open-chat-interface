@@ -171,7 +171,8 @@ export function SearchLoading() {
   );
 }
 
-function SourceList({ sources }: { sources: Array<SourceLink & { snippet?: string }> }) {
+/** Sources with their address and snippet, each opened through the external-link check. */
+export function SourceList({ sources }: { sources: Array<SourceLink & { snippet?: string }> }) {
   return (
     <ul aria-label="Sources" className="space-y-1">
       {sources.map((source) => (

@@ -33,10 +33,13 @@ The panel above the reply shows the query that was searched and the results
 the model was given.
 
 Either way the model is asked to link the sources it relies on, so claims that
-came from a page usually link to it, and the sources are listed above the
-reply. Open the steps or the panel when the answer matters: they let you judge
-whether the searches were good ones and the sources ones you would have
-chosen.
+came from a page usually link to it. The searches and their sources are steps
+in the collapsed block above the reply (see
+[Conversations](conversations.md)): open it, then a search, to see the query
+and each source with its title and address; a source opens through the usual
+check for links that leave OCI. Open them when the answer matters: they let you
+judge whether the searches were good ones and the sources ones you would have
+chosen. A shared copy of the conversation lists the sources above the reply.
 
 If your administrator has not allowed the web search tool for your role, tool
 calling models fall back to the single search before the reply.

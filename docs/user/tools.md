@@ -30,9 +30,9 @@ for example:
 > Searched the web for 'library opening hours' · 5 results
 
 Select the line to see what the model asked the tool for (its inputs) and a
-summary of what came back. Sources a tool found — web search results, or
-documents a connector linked to — appear above the answer, the same way as web
-search sources always have.
+summary of what came back. A web search lists the pages it found, each with
+its title and address; documents a connector linked to are a **Sources** step in
+the same block. Each opens through the check for links that leave OCI.
 
 A reply can use tools for a set number of steps (8 unless your administrator
 changed it). If it reaches that limit, the model answers with what it has found
