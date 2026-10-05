@@ -24,6 +24,8 @@ export interface ComposerOptionsProps {
   onWebSearchChange: (enabled: boolean) => void;
   webSearchAvailable?: boolean;
   attachmentsAvailable?: boolean;
+  /** Why attaching is paused for now (read-only maintenance): shown, disabled, with it. */
+  attachmentsPausedReason?: string;
   onAttachFiles?: (files: File[]) => void;
 }
 
@@ -76,6 +78,7 @@ export function ComposerOptions({
   onWebSearchChange,
   webSearchAvailable = true,
   attachmentsAvailable = true,
+  attachmentsPausedReason,
   onAttachFiles,
 }: ComposerOptionsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -137,13 +140,18 @@ export function ComposerOptions({
             <Globe />
             Search the web
           </DropdownMenuCheckboxItem>
-          <DropdownMenuItem
-            disabled={!attachmentsAvailable || !onAttachFiles}
-            onSelect={() => fileInputRef.current?.click()}
-          >
-            <Paperclip />
-            Attach
-          </DropdownMenuItem>
+          {/* Not offered where attachments are not allowed (for this role, or
+              while read-only), as the user guide says, rather than a disabled
+              control with no reason (#99). */}
+          {attachmentsAvailable && (
+            <DropdownMenuItem
+              disabled={!onAttachFiles || Boolean(attachmentsPausedReason)}
+              onSelect={() => fileInputRef.current?.click()}
+            >
+              <Paperclip />
+              Attach
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -190,13 +198,16 @@ export function ComposerOptions({
         aria-label="Attach a file"
         onChange={handleFileChange}
       />
-      <Pill
-        icon={Paperclip}
-        label="Attach"
-        disabled={!attachmentsAvailable || !onAttachFiles}
-        onClick={() => fileInputRef.current?.click()}
-        className="hidden md:inline-flex"
-      />
+      {attachmentsAvailable && (
+        <Pill
+          icon={Paperclip}
+          label="Attach"
+          disabled={!onAttachFiles || Boolean(attachmentsPausedReason)}
+          title={attachmentsPausedReason}
+          onClick={() => fileInputRef.current?.click()}
+          className="hidden md:inline-flex"
+        />
+      )}
     </>
   );
 }

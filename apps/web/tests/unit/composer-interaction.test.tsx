@@ -318,9 +318,9 @@ describe('Composer interaction', () => {
     expect(input.multiple).toBe(true);
     await act(() => button('Attach').click());
     expect(open).toHaveBeenCalledOnce();
+    // Not allowed for this role: not offered at all, as the user guide says (#99).
     await render({ attachmentsAvailable: false });
-    expect(button('Attach').disabled).toBe(true);
-    await act(() => button('Attach').click());
+    expect(container.querySelector('button[aria-label="Attach"]')).toBeNull();
     await render({ attachmentsAvailable: true, onAttachFiles: undefined });
     expect(button('Attach').disabled).toBe(true);
     await act(() => button('Attach').click());

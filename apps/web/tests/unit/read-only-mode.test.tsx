@@ -144,10 +144,10 @@ describe('composer', () => {
       textarea().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
     expect(props.onSubmit).not.toHaveBeenCalled();
-    // Uploading is off with it.
-    expect(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Attach"]')?.disabled,
-    ).toBe(true);
+    // Uploading is off with it, and says why.
+    const attach = container.querySelector<HTMLButtonElement>('button[aria-label="Attach"]');
+    expect(attach?.disabled).toBe(true);
+    expect(attach?.title).toMatch(/^Read-only for maintenance/);
 
     await act(async () => setReadOnlyStatus(OFF));
     expect(sendButton().disabled).toBe(false);

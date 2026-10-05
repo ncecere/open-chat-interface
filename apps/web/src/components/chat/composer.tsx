@@ -136,7 +136,8 @@ export const Composer = memo(function Composer({
             webSearch={webSearch}
             onWebSearchChange={onWebSearchChange}
             webSearchAvailable={webSearchAvailable}
-            attachmentsAvailable={readOnly.active ? false : attachmentsAvailable}
+            attachmentsAvailable={attachmentsAvailable}
+            attachmentsPausedReason={readOnly.active ? readOnlyShortReason(readOnly) : undefined}
             onAttachFiles={onAttachFiles}
           />
           {projectId && attachmentsAvailable !== false && onExcludedProjectFilesChange && (
