@@ -2,7 +2,8 @@
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminAuditPage } from '../../src/routes/admin/audit';
-import { cleanup, click, findButton, renderAdmin } from './admin-test-utils';
+import { AdminUsersPage } from '../../src/routes/admin/users';
+import { button, cleanup, click, findButton, renderAdmin, typeInto } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -30,6 +31,8 @@ beforeEach(() => {
   api.get.mockReset().mockImplementation(async (path: string) => {
     if (path === '/admin/audit/actions') return { actions: ['user.update'] };
     if (path.startsWith('/admin/audit?')) return listing;
+    if (path.startsWith('/admin/users?')) return { users: [], total: 0 };
+    if (path.startsWith('/admin/views')) return { views: [] };
     throw new Error(`Unexpected GET ${path}`);
   });
 });
@@ -66,4 +69,29 @@ it("narrows the log to one account's events from the account page's link", async
   if (clear) await click(clear);
   expect(listCalls().at(-1)?.get('userId')).toBeNull();
   expect(document.body.textContent).not.toContain('Events by or about');
+});
+
+it('says nothing matched, not that the log is empty, when filters exclude every event', async () => {
+  ({ root } = await renderAdmin(<AdminAuditPage />, { path: '/admin/audit' }));
+  listing = { entries: [], total: 0 };
+  const search = document.getElementById('audit-search') as HTMLInputElement;
+  await typeInto(search, 'walk');
+
+  expect(document.body.textContent).toContain('No events match your filters.');
+  expect(document.body.textContent).not.toContain('No audit events yet.');
+  await click(button('Clear filters'));
+  expect(search.value).toBe('');
+});
+
+it('still says the log is empty when there are no events and no filters', async () => {
+  listing = { entries: [], total: 0 };
+  ({ root } = await renderAdmin(<AdminAuditPage />, { path: '/admin/audit' }));
+  expect(document.body.textContent).toContain('No audit events yet.');
+});
+
+it('says no accounts match instead of showing bare table headers', async () => {
+  ({ root } = await renderAdmin(<AdminUsersPage />, { path: '/admin/users' }));
+  expect(document.querySelector('table')).toBeNull();
+  expect(document.body.textContent).toContain('No accounts match these filters.');
+  expect(findButton('Clear filters')).toBeTruthy();
 });

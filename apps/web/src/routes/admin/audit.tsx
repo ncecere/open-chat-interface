@@ -138,13 +138,14 @@ export function AdminAuditPage() {
             Try again
           </Button>
         </div>
-      ) : entries.length === 0 ? (
+      ) : entries.length === 0 && !hasFilters ? (
         <div className="mt-6">
           <EmptyState icon={ScrollText} title="No audit events yet.">
             Administrative activity will appear here when events are recorded.
           </EmptyState>
         </div>
       ) : filteredEntries.length === 0 ? (
+        // With filters set, an empty page means nothing matched, not an empty log.
         <div className="mt-6 flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--border-subtle)] p-12 text-center">
           <p className="text-sm font-medium text-[var(--text-primary)]">
             No events match your filters.
