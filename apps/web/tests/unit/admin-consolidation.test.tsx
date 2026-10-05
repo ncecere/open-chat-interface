@@ -359,6 +359,17 @@ describe('Web search', () => {
   });
 });
 
+describe('Branding logo', () => {
+  it('names the logo file input and keeps it out of the Tab order', async () => {
+    ({ root } = await renderAdmin(<AdminBrandingPage />));
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input?.getAttribute('aria-label')).toBe('Logo image file (PNG, JPEG or WebP)');
+    // The visible Upload logo button is the keyboard route to it.
+    expect(input?.tabIndex).toBe(-1);
+    expect(button('Upload logo')).toBeTruthy();
+  });
+});
+
 describe('Branding accent', () => {
   it('picks a color theme preset, previews it, and never sends the hex accent', async () => {
     ({ root } = await renderAdmin(<AdminBrandingPage />));

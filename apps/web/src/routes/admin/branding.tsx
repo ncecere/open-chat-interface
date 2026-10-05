@@ -590,10 +590,15 @@ function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }) {
             className="h-10 w-auto max-w-40 rounded border border-[var(--border-subtle)] bg-[var(--bg-control)] object-contain p-1"
           />
         )}
+        {/* Opened by the button below, which is what keyboard users reach;
+            named for assistive technology, and out of the Tab order so it is
+            not a second, unexplained stop beside the button. */}
         <input
           ref={inputRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          aria-label="Logo image file (PNG, JPEG or WebP)"
+          tabIndex={-1}
           className="sr-only"
           onChange={(event) => {
             const file = event.target.files?.[0];
