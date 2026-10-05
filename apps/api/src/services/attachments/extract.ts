@@ -3,7 +3,8 @@ import { isPdf, isText } from './validate.js';
 
 /**
  * Text kept from one file. Above what project search can split into passages
- * (MAX_CHUNKS_PER_FILE, about two million characters), so the indexer decides
+ * (MAX_CHUNKS_PER_FILE: 2,000 passages, between about 1.3 and 2 million
+ * characters depending on how the text breaks), so the indexer decides
  * how much of a large project file is searchable and records when it is not
  * all (`project_file_index.truncated`), which the Files tab shows. It was
  * 200,000, which silently cut large files to their start, with nothing saying
