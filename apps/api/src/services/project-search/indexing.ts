@@ -124,8 +124,11 @@ export async function indexPendingProjectFiles(limit = INDEX_FILES_PER_RUN): Pro
 }
 
 /** The index status shown for a project file. */
-export function projectFileIndexStatus(chunkCount: number | null | undefined): ProjectFileIndex {
+export function projectFileIndexStatus(
+  chunkCount: number | null | undefined,
+  truncated = false,
+): ProjectFileIndex {
   if (chunkCount === null || chunkCount === undefined) return { status: 'pending', passages: 0 };
   if (chunkCount === 0) return { status: 'no-text', passages: 0 };
-  return { status: 'indexed', passages: chunkCount };
+  return { status: 'indexed', passages: chunkCount, truncated };
 }

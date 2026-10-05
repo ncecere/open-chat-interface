@@ -64,7 +64,11 @@ const ROW = 'flex items-center gap-3 border-b border-[var(--border-subtle)] py-3
 function indexStatusLabel(index: ProjectFile['index'] | undefined): string {
   switch (index?.status) {
     case 'indexed':
-      return `Searchable · ${index.passages} ${index.passages === 1 ? 'passage' : 'passages'}`;
+      // Said in the row itself, not a tooltip: a long file whose end cannot be
+      // searched otherwise looks fully searchable and answers come up empty.
+      return index.truncated
+        ? `Partly searchable · first ${index.passages.toLocaleString()} passages; the rest of the file is too long to search`
+        : `Searchable · ${index.passages} ${index.passages === 1 ? 'passage' : 'passages'}`;
     case 'no-text':
       return 'No text to search';
     default:

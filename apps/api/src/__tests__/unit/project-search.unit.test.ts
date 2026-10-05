@@ -253,7 +253,12 @@ describe('project passage selection', () => {
     expect(projectFileIndexStatus(null)).toEqual({ status: 'pending', passages: 0 });
     expect(projectFileIndexStatus(undefined)).toEqual({ status: 'pending', passages: 0 });
     expect(projectFileIndexStatus(0)).toEqual({ status: 'no-text', passages: 0 });
-    expect(projectFileIndexStatus(7)).toEqual({ status: 'indexed', passages: 7 });
+    expect(projectFileIndexStatus(7)).toEqual({ status: 'indexed', passages: 7, truncated: false });
+    expect(projectFileIndexStatus(2000, true)).toEqual({
+      status: 'indexed',
+      passages: 2000,
+      truncated: true,
+    });
   });
 });
 

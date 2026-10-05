@@ -34,6 +34,10 @@ conversation inside the project. Below it, the page has four tabs:
   searched (see [Large projects](#large-projects)):
   - **Searchable · *n* passages**: its text was split into *n* passages that
     can be searched.
+  - **Partly searchable · first *n* passages**: the file is very long (more
+    than about two million characters, roughly 1,500 pages), so only its start
+    was split into passages; the rest cannot be found by search. Split it into
+    smaller files to make all of it searchable.
   - **No text to search**: nothing could be read from it, such as an image or
     a scanned PDF. It is always given to the model whole, as far as it fits.
   - **Waiting to be indexed**: the file was added before your institution

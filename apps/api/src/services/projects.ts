@@ -99,6 +99,8 @@ export function serializeProjectFile(row: {
   createdAt: Date | string;
   /** Null or absent until the file has been chunked for search. */
   chunkCount?: number | null;
+  /** Only the start of the file was split into passages. */
+  truncated?: boolean | null;
 }): ProjectFile {
   return {
     id: row.id,
@@ -108,7 +110,7 @@ export function serializeProjectFile(row: {
     url: `/api/attachments/${row.id}/content`,
     thumbnailUrl: null,
     createdAt: typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString(),
-    index: projectFileIndexStatus(row.chunkCount),
+    index: projectFileIndexStatus(row.chunkCount, row.truncated ?? false),
   };
 }
 
@@ -325,6 +327,7 @@ export async function listProjectFiles(projectId: string, userId: string) {
       sizeBytes: schema.attachment.sizeBytes,
       createdAt: schema.attachment.createdAt,
       chunkCount: schema.projectFileIndex.chunkCount,
+      truncated: schema.projectFileIndex.truncated,
     })
     .from(schema.attachment)
     .leftJoin(
@@ -357,7 +360,7 @@ export async function uploadProjectFile(params: {
   filename: string;
   declaredMimeType: string;
   bytes: Buffer;
-}): Promise<UploadResult & { chunkCount: number | null }> {
+}): Promise<UploadResult & { chunkCount: number | null; truncated: boolean }> {
   const uploaded = await uploadAttachment({
     userId: params.userId,
     role: params.role,
@@ -368,10 +371,17 @@ export async function uploadProjectFile(params: {
   });
   await indexUploadedProjectFile(uploaded.id);
   const [index] = await db
-    .select({ chunkCount: schema.projectFileIndex.chunkCount })
+    .select({
+      chunkCount: schema.projectFileIndex.chunkCount,
+      truncated: schema.projectFileIndex.truncated,
+    })
     .from(schema.projectFileIndex)
     .where(eq(schema.projectFileIndex.attachmentId, uploaded.id));
-  return { ...uploaded, chunkCount: index?.chunkCount ?? null };
+  return {
+    ...uploaded,
+    chunkCount: index?.chunkCount ?? null,
+    truncated: index?.truncated ?? false,
+  };
 }
 
 /**

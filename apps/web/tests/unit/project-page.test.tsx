@@ -165,6 +165,12 @@ describe('project page', () => {
       },
       { ...FILE, id: 'file-3', filename: 'photo.png', index: { status: 'no-text', passages: 0 } },
       { ...FILE, id: 'file-4', filename: 'old.pdf', index: { status: 'pending', passages: 0 } },
+      {
+        ...FILE,
+        id: 'file-5',
+        filename: 'handbook.md',
+        index: { status: 'indexed', passages: 2000, truncated: true },
+      },
     ];
     await render('files');
 
@@ -173,6 +179,9 @@ describe('project page', () => {
       rows.find((row) => row.textContent?.includes(name))?.querySelector('[data-index-status]')
         ?.textContent;
     expect(status('outline.md')).toBe('Searchable · 3 passages');
+    expect(status('handbook.md')).toBe(
+      'Partly searchable · first 2,000 passages; the rest of the file is too long to search',
+    );
     expect(status('one.txt')).toBe('Searchable · 1 passage');
     expect(status('photo.png')).toBe('No text to search');
     expect(status('old.pdf')).toBe('Waiting to be indexed');
