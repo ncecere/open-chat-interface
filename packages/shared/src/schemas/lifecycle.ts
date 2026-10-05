@@ -86,6 +86,16 @@ export const storageUsageSchema = z.object({
   maxFileBytes: z.number().int().positive().nullable(),
 });
 
+/** Whether the runtime knows this IANA zone (an unknown one was saved and silently read as UTC). */
+function isTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const retentionSettingsSchema = z.object({
   /** Grace period before soft-deleted content is destroyed. */
   trashRetentionDays: z.number().int().min(MIN_TRASH_RETENTION_DAYS).max(MAX_TRASH_RETENTION_DAYS),
@@ -102,7 +112,11 @@ export const retentionSettingsSchema = z.object({
    */
   memoryRetentionDays: z.number().int().min(1).max(3_650).nullable(),
   /** IANA zone for reporting only; limits reset on their own policy's zone. */
-  displayTimezone: z.string().min(1).max(64),
+  displayTimezone: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine(isTimeZone, 'Use an IANA time zone such as Europe/London or America/New_York.'),
 });
 
 export const updateRetentionSettingsSchema = retentionSettingsSchema.partial().strict();

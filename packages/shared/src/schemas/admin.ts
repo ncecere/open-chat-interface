@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HEX_COLOR_PATTERN } from '../branding.js';
+import { HEX_COLOR_PATTERN, isSafeImageUrl } from '../branding.js';
 import {
   COLOR_THEMES,
   QUOTA_METRICS,
@@ -179,10 +179,21 @@ export const instanceSettingsSchema = z.object({
   }),
 });
 
+/** `help@acme.test`, or `Help Desk <help@acme.test>` (apps/api/src/services/email.ts). */
+const FROM_ADDRESS = /^(?:[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+|[^<>]+<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>)$/;
+
 // Defaults belong to reads of older stored settings, never to a partial write.
 export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
   .omit({ smtp: true, search: true, storage: true, features: true })
   .extend({
+    // Shown on the public sign-in page, so only an image address is stored.
+    logoUrl: z
+      .string()
+      .trim()
+      .max(2_048)
+      .refine(isSafeImageUrl, 'Use an http(s) URL or a root-relative path beginning with /.')
+      .nullable()
+      .optional(),
     // API-only diagram accent override (not on the Branding page, which
     // offers colour themes); diagrams follow the colour theme while it is null.
     accentColor: z
@@ -215,11 +226,25 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
     smtp: instanceSettingsSchema.shape.smtp
       .partial()
       .extend({
+        port: z.number().int().min(1).max(65_535).nullable().optional(),
+        fromAddress: z
+          .string()
+          .trim()
+          .max(320)
+          .regex(
+            FROM_ADDRESS,
+            'Use an email address, optionally with a name: Help Desk <help@example.edu>.',
+          )
+          .nullable()
+          .optional(),
         username: z.string().max(200).nullable().optional(),
         password: z.string().max(500).nullable().optional(),
       })
       .optional(),
-  });
+  })
+  // An unknown key is a mistake (a typo, or a client newer than this API),
+  // not something to answer "ok" to while ignoring it.
+  .strict();
 
 /**
  * A named limit an admin can apply to any number of roles. `limitValue` is

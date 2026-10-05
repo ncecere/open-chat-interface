@@ -3,6 +3,7 @@ import {
   type ColorTheme,
   type InstanceSettings,
   instanceSettingsSchema,
+  isSafeImageUrl,
   THEME_MODES,
   type ThemeMode,
   updateInstanceSettingsSchema,
@@ -93,19 +94,6 @@ function changedBranding(saved: BrandingSettings, draft: BrandingSettings): Bran
   }
 
   return patch;
-}
-
-function isSafeImageUrl(value: string): boolean {
-  if (value.startsWith('/') && !value.startsWith('//')) return true;
-
-  try {
-    const url = new URL(value);
-    return (
-      (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password
-    );
-  } catch {
-    return false;
-  }
 }
 
 function validateBranding(settings: BrandingSettings): BrandingErrors {
