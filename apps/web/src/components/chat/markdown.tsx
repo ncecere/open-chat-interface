@@ -1,5 +1,6 @@
 import { type ComponentProps, lazy, memo, Suspense } from 'react';
 import { MARKDOWN_LINK_SAFETY } from '~/components/chat/external-link-warning';
+import { installStreamdownOverlayFocus } from '~/components/chat/streamdown-overlay-focus';
 import { cn } from '~/lib/utils';
 
 /**
@@ -23,6 +24,8 @@ const StreamdownMarkdown = lazy(() =>
       { createMathPlugin },
       { createEditorialMermaidPlugin },
     ]) => {
+      // Streamdown's table full-screen view does not manage focus itself.
+      installStreamdownOverlayFocus();
       const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
       // Single-dollar inline math is off by default, but models commonly emit it.
       // Mermaid itself loads only when a diagram is first rendered.

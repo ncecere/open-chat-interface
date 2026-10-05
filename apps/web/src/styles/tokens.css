@@ -357,4 +357,13 @@
   --color-danger: var(--danger);
   --color-danger-solid: var(--danger-solid);
   --color-danger-foreground: var(--danger-foreground);
+
+  /*
+   * Streamdown's built-in overlays and menus (table full screen, Mermaid full
+   * screen, the table copy and download menus, the link check) use shadcn's
+   * token names. Without these, `bg-background` generates nothing and those
+   * surfaces are transparent over the conversation.
+   */
+  --color-background: var(--bg-root);
+  --color-foreground: var(--text-primary);
 }
