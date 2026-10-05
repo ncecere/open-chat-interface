@@ -74,7 +74,8 @@ export interface ProtocolDraft {
 
 export const EMPTY_POLICY: PolicyDraft = {
   label: '',
-  enabled: true,
+  // Off until the admin has checked it, as the empty state advises.
+  enabled: false,
   jitProvisioning: true,
   trustedForLinking: false,
   allowedDomains: '',

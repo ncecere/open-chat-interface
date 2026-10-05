@@ -14,6 +14,20 @@ export const claimMappingsSchema = z.object({
   subject: z.string().trim().max(120).optional(),
 });
 
+/**
+ * An email domain such as northbrook.edu: letters, digits and hyphens in dot-
+ * separated labels. "@bad domain" was stored as "@bad" and "domain".
+ */
+const emailDomainSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(253)
+  .regex(
+    /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/,
+    'Use a domain such as northbrook.edu, without @ or spaces.',
+  );
+
 const baseProviderFields = {
   providerId: z
     .string()
@@ -26,7 +40,7 @@ const baseProviderFields = {
   jitProvisioning: z.boolean().default(true),
   /** Only enable for an IdP that genuinely verifies email ownership. */
   trustedForLinking: z.boolean().default(false),
-  allowedDomains: z.array(z.string().trim().toLowerCase().max(253)).default([]),
+  allowedDomains: z.array(emailDomainSchema).default([]),
   defaultRole: z.enum(USER_ROLES).default('user'),
   claimRoleMappings: z.array(claimRoleMappingSchema).default([]),
   /**

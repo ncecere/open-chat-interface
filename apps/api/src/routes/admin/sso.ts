@@ -5,6 +5,7 @@ import {
   type SsoProviderSummary,
   USER_ROLES,
 } from '@oci/shared';
+import { X509Certificate } from 'node:crypto';
 import { APIError } from 'better-auth/api';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -55,6 +56,27 @@ async function registerWithPlugin(
       throw validationFailed(detail?.message ?? error.message, { code: detail?.code });
     }
     throw error;
+  }
+}
+
+/**
+ * The IdP's signing certificate, which every SAML response is checked
+ * against. "this is not a certificate" used to be accepted, and the problem
+ * only surfaced as failed sign-ins. Accepts PEM, or the bare base64 body that
+ * IdP metadata carries.
+ */
+function assertIdpCertificate(value: string): void {
+  const body = value
+    .replace(/-----(BEGIN|END) CERTIFICATE-----/g, '')
+    .replace(/\s+/g, '');
+  const pem = `-----BEGIN CERTIFICATE-----\n${body.match(/.{1,64}/g)?.join('\n') ?? ''}\n-----END CERTIFICATE-----`;
+  try {
+    new X509Certificate(pem);
+  } catch {
+    throw validationFailed(
+      "The IdP certificate is not a valid X.509 certificate. Paste the signing certificate from the identity provider's metadata (PEM, or its base64 body).",
+      { path: ['idpCertificate'] },
+    );
   }
 }
 
@@ -139,6 +161,7 @@ ssoRoutes.post('/providers', async (c) => {
       c.req.raw.headers,
     );
   } else {
+    assertIdpCertificate(input.idpCertificate);
     await registerWithPlugin(
       {
         providerId: input.providerId,

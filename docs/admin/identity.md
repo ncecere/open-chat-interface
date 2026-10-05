@@ -115,7 +115,26 @@ entered on the form, not discovered.
 ### Allowed email domains
 
 Blank accepts any domain the provider asserts. Set this when the provider serves
-more people than should reach your instance.
+more people than should reach your instance. Enter domains only (`northbrook.edu`), separated by
+commas or spaces, without `@`.
+
+### Before enabling a provider
+
+A new provider starts **disabled**, so nobody can use it while you finish and
+check its settings; turn on **Provider enabled** when it is ready. A SAML
+provider's IdP certificate must be the identity provider's signing certificate
+(PEM, or the base64 body from its metadata); anything else is refused.
+
+Two limits of the current SSO library to know about:
+
+- **SAML metadata and signed assertions.** The SP metadata OCI publishes says
+  `WantAssertionsSigned="false"` even with **Require signed assertions** on;
+  the setting itself is applied when a response is checked. Tell the identity
+  provider's administrators to sign assertions rather than relying on the
+  metadata flag.
+- **Changing credentials.** A provider's protocol settings, client secret or
+  IdP certificate cannot be edited. To rotate one, add the provider again with
+  a new provider ID, then delete the old one.
 
 ### Trust for account linking
 

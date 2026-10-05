@@ -45,6 +45,20 @@ const { ssoRoutes } = await import('../../routes/admin/sso.js');
 const { requireAdmin } = await import('../../middleware/context.js');
 const { errorHandler } = await import('../../middleware/error-handler.js');
 
+/** A throwaway self-signed certificate (CN=walk-test-idp), only ever used here. */
+const TEST_IDP_CERTIFICATE_BODY =
+  'MIICrDCCAZQCCQDT/6PoRLJ+7TANBgkqhkiG9w0BAQsFADAYMRYwFAYDVQQDDA13YWxrLXRlc3QtaWRwMB4XDTI2MTAwNTE3NDQyN1oXDTM2MTAwMjE3NDQyN1owGDEWMBQGA1UEAwwNd2Fsay10ZXN0LWlkcDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAJTbNbGk/Wl4Ng0vz6w872wH0FwLqUdDO0AmzofMJCm7fqBK6VtCB6wDKVpXzlUt5ROuhWNkfdDPYvx5AJ6sJIl4cipLXgMxtB+pa9qitMDtjU/cijpgiuN2mD+ux78M7zRY7vhNS/vHRBOKMCA5QPsNClpmXWUu3F5SyhROzTH+g8FgdD37nAO2282SR71zLja79BFFWg4BLJNOmGTnNBtpmAmRSpMbVjGnPIJ3neyo/ymag9fzV9UJXFdpNgPB0q+ghQK+iUJr9AAKXzZlyYEJOUNM3s2AtYRy3U59R/JMwEt0jbUZ7RaBCbI+0IbGmmsjGgP+arDT+GBpuMQ0sekCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAgoo5077PLmTjMPaqhhdlNWPvSqUC1TPKeNo97szF4K+jN8bESmyTiRdhja0/HQ2z+9Lb5TBPoMl+TmSeZSeJoaBeuGAdgpNEJQ0MsOGbTgaVzhdH6U2BqA31xKcLP3L3TJnRKl30IgAGrhB1bqWhZYygxQ39+YZfzx1WDL4ndeCrV8JkbRgvLvuEiDH9rFAyfyt86dy29to0nMi1ZQERHaI75si1+/BzamWy/vMmtNbNLdtj1x0yI6qU4hFtmyiArQvyOASXZWiKCGHt/fOEinnjqlydhcVuV7EXkEc7IfDbpmxo6xQS8j2xCYN7RdYW21ebA2Db8+mKG2ZQCLPHKg==';
+
+const SAML = {
+  kind: 'saml',
+  providerId: 'walk-saml',
+  label: 'Walk SAML',
+  issuer: 'https://idp.trusted.example/saml',
+  entryPoint: 'https://idp.trusted.example/saml/sso',
+  idpCertificate: TEST_IDP_CERTIFICATE_BODY,
+  allowedDomains: ['northbrook.edu'],
+};
+
 const OIDC = {
   kind: 'oidc',
   providerId: 'walk-oidc',
@@ -130,5 +144,28 @@ describe.skipIf(!available)('live: adding an SSO provider explains refusals', ()
     };
     const { status } = await add({ ...OIDC, issuer: 'https://idp.trusted.example/realms/walk' });
     expect(status).toBe(500);
+  });
+
+  it('refuses a SAML certificate that is not one, before registering anything', async () => {
+    const { status, body } = await add({ ...SAML, idpCertificate: 'this is not a certificate' });
+    expect(status).toBe(422);
+    expect(body.error.message).toContain('not a valid X.509 certificate');
+    expect(state.registerCalls).toBe(0);
+  });
+
+  it('accepts a real certificate, as PEM or as its bare base64 body', async () => {
+    await add({ ...SAML, providerId: 'walk-saml-body' });
+    await add({
+      ...SAML,
+      providerId: 'walk-saml-pem',
+      idpCertificate: `-----BEGIN CERTIFICATE-----\n${TEST_IDP_CERTIFICATE_BODY}\n-----END CERTIFICATE-----`,
+    });
+    expect(state.registerCalls).toBe(2);
+  });
+
+  it('refuses an allowed domain that is not a domain', async () => {
+    const { status } = await add({ ...SAML, allowedDomains: ['northbrook.edu', '@bad'] });
+    expect(status).toBe(422);
+    expect(state.registerCalls).toBe(0);
   });
 });
