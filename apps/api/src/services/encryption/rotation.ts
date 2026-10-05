@@ -259,18 +259,22 @@ export async function encryptionHealthCheck(client: postgres.Sql = appSql): Prom
     };
   }
   const prefix = `Current key ${usage.currentKeyId}; ${usage.total} stored secret${usage.total === 1 ? '' : 's'}.`;
+  const values = (count: number) => `${count} value${count === 1 ? '' : 's'}`;
   if (!usage.versionedFormat) {
+    // Not a previous key: until the post-deploy phase has run, secrets (new
+    // ones too) are written in the format before v0.11. A fresh install has
+    // to run it once as well, which the old wording never said.
     return {
       ...base,
-      status: 'ok',
-      detail: `${prefix} Previous keys still in use: ${stillInUse + legacy} values. Re-encryption starts once every replica runs this release (after migrate --post).`,
+      status: 'warn',
+      detail: `${prefix} ${values(stillInUse + legacy)} stored in the format before v0.11, because the post-deploy phase has not run. Once every replica runs this release (on a new install, once now), run migrate --post (docker compose --profile tools run --rm migrate-post); the values are then re-encrypted in the background.`,
     };
   }
   if (stillInUse + legacy > 0) {
     return {
       ...base,
       status: usage.previousKeyIds.length > 0 ? 'warn' : 'ok',
-      detail: `${prefix} Previous keys still in use: ${stillInUse + legacy} values${legacy > 0 ? ` (${legacy} in the format before v0.11)` : ''}; re-encryption is under Background work. Keep ENCRYPTION_KEYS_PREVIOUS until this reaches 0.`,
+      detail: `${prefix} Previous keys still in use: ${values(stillInUse + legacy)}${legacy > 0 ? ` (${legacy} in the format before v0.11)` : ''}; re-encryption is under Background work. Keep ENCRYPTION_KEYS_PREVIOUS until this reaches 0.`,
     };
   }
   return {
@@ -278,7 +282,7 @@ export async function encryptionHealthCheck(client: postgres.Sql = appSql): Prom
     status: 'ok',
     detail:
       usage.previousKeyIds.length > 0
-        ? `${prefix} Previous keys still in use: 0 values. Every secret uses the current key: remove ENCRYPTION_KEYS_PREVIOUS (${usage.previousKeyIds.length} key${usage.previousKeyIds.length === 1 ? '' : 's'}).`
-        : `${prefix} Previous keys still in use: 0 values.`,
+        ? `${prefix} Previous keys still in use: none. Every secret uses the current key: remove ENCRYPTION_KEYS_PREVIOUS (${usage.previousKeyIds.length} key${usage.previousKeyIds.length === 1 ? '' : 's'}).`
+        : `${prefix} Previous keys still in use: none.`,
   };
 }

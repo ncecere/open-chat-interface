@@ -73,6 +73,9 @@ Locked out? `pnpm --filter @oci/api admin:promote you@example.com`.
 ```bash
 cd docker
 docker compose up -d --build
+# Once the API is up, run the post-deploy phase once (indexes, background
+# migrations, the current encryption format). Every upgrade runs it too.
+docker compose --profile tools run --rm migrate-post
 ```
 
 ### Deploy a released version
@@ -90,6 +93,7 @@ export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
 cd docker
 docker compose pull api web migrate
 docker compose up -d --no-build
+docker compose --profile tools run --rm migrate-post
 ```
 
 The images are public, so pulling them needs no registry login. From v0.11 they are published for `linux/amd64` and `linux/arm64` under the same tags (earlier releases: `linux/amd64` only). Unset `OCI_API_IMAGE` and
@@ -108,7 +112,10 @@ verification, and rollback constraints.
 
 The API applies migrations and seeds default settings on boot, so a fresh stack
 comes up without a separate migration step. Both operations are idempotent and
-an existing deployment passes straight through.
+an existing deployment passes straight through. The post-deploy phase
+(`migrate-post`) is separate because, on an upgrade, it must wait until every
+replica runs the new release; on a new install, run it once as shown above.
+Until it has run, **System health → Encryption keys** says so.
 
 Set `INITIAL_ADMIN_EMAIL` to create the first administrator. Leaving
 `INITIAL_ADMIN_PASSWORD` unset (or empty, as in `.env.example`) prints a
