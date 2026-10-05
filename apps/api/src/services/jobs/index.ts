@@ -1,3 +1,4 @@
+import { notFound } from '../../lib/errors.js';
 import { runsBackgroundJobs } from '../../lib/role.js';
 import { BACKUP_JOB, runScheduledBackup, startManualBackup } from '../backups/run.js';
 import { processCompactionQueue } from '../chat/compaction-queue.js';
@@ -263,6 +264,10 @@ export function stopJobs(): void {
 }
 
 /** Runs one job immediately, for admin-triggered maintenance. */
+export function isLifecycleJob(name: string): boolean {
+  return lifecycleJobs().some((candidate) => candidate.name === name);
+}
+
 export async function runJobNow(name: string): Promise<number | null> {
   const job = lifecycleJobs().find((candidate) => candidate.name === name);
   if (!job) return null;
@@ -271,12 +276,13 @@ export async function runJobNow(name: string): Promise<number | null> {
 
 /**
  * "Run now" from System health: here when this replica runs jobs, else asked
- * of a worker (`queued`, its result not known yet). 409 when no replica runs
- * jobs; null for an unknown job or one already running elsewhere.
+ * of a worker (`queued`, its result not known yet). 404 for an unknown job,
+ * 409 when no replica runs jobs; null for one already running elsewhere.
  */
 export async function runOrQueueJobNow(name: string): Promise<number | 'queued' | null> {
+  // An unknown name is a mistake, not a skip (#82).
+  if (!isLifecycleJob(name)) throw notFound(`There is no job called ${name}`);
   if (runsBackgroundJobs()) return runJobNow(name);
-  if (!lifecycleJobs().some((candidate) => candidate.name === name)) return null;
   const placed = await requestManualRun({ job: name });
   if (placed === 'no-worker') throw manualRunConflict();
   return 'queued';
