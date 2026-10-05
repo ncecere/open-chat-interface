@@ -7,12 +7,101 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+Fixes from the v0.11.0 QA walk (issues #35–#121). One migration, `0042`, runs
+with `migrate` as usual; nothing else is needed to upgrade.
+
+### Added
+
+- **Send test email** on Settings → Email delivery, which also says whether an
+  SMTP username and password are stored (#115). `POST
+  /api/admin/settings/smtp/test`; `smtp.hasUsername` and `smtp.hasPassword` in
+  the settings.
+- **Edit scheduled reports**, and see when each is next sent (#85).
+- **Unsaved-changes protection** in administration: leaving a page, closing
+  the tab or pressing Escape in a half-filled dialog asks first (#45).
+- **Acceptable-use drafts** can be read, reworded and deleted before they are
+  published (#40).
+- **Undo for archiving** a conversation, and confirmations before deleting an
+  attachment or a memory (#101).
+- **Formatting in announcements**: bold and links (#86).
+
+### Changed
+
+- **SSO sign-in with account linking off** now works: OCI enforces linking
+  itself instead of through domain verification, which refused every sign-in
+  (#36, migration `0042`).
+- **Large project files are searched in full**, with a warning above the
+  limit, instead of only their first 200,000 characters (#35); meaning-based
+  search keeps only passages close to the best match (#65).
+- **Limits are named by what they count** ("message limit for today"), not by
+  the administrator's budget name (#93).
+- **The sidebar is a drawer below 1024 px** (it docked from 768 px) (#109).
+- **A refused message keeps its text** in the composer (#62); a restarting
+  replica refuses a new turn with the error code `SERVER_RESTARTING` (#118).
+- **Invitations** refuse existing accounts and duplicates and expire after 7
+  days by default (#51); **settings are validated on the server** (#50).
+- **Upload size** on Storage is set in MB, as on Roles & access (#86).
+- **Automatic titles** end on a whole word, without "..." (#100).
+- **Settings → Devices** shows real last activity, to within five minutes
+  (#98).
+- **The demo seed** uses the instance's own administrator and dates its data
+  from the day it runs (`DEMO_NOW`, `DEMO_ADMIN_EMAIL`) (#116).
+
 ### Fixed
 
-- **Closing a dialog lost keyboard focus** (#41). Dialogs opened from app
-  state (Rename, Share, Move to project, Summarise, settings and most admin
-  dialogs) now return focus to the button that opened them, instead of to the
-  top of the page (WCAG 2.4.3).
+- **Security and access:** keyless OpenAI providers and removing the default
+  model are refused (#49); new models are not offered to auditors by default
+  (#48); bulk-granting administrator access asks first (#47); an OIDC
+  provider that cannot be added says why instead of failing with a 500 (#37);
+  SAML certificates and SSO domains are validated, and providers start
+  disabled (#53, partly; see the issue).
+- **Audit:** actions taken on an account appear in its trail (#39); delete
+  and revoke entries record what was removed (#52); filters that match
+  nothing say so (#56).
+- **Storage allowances** of 0 or less are refused instead of saved as
+  unlimited (#38).
+- **Accounts:** a new account loads fully after signing out and in again
+  (#43); the sidebar's non-working New profile button is gone (#67); you
+  cannot demote yourself, and the role control says why (#76).
+- **Chat:** keyboard focus returns to a dialog's opener (#41); full-screen
+  tables are opaque and keep focus (#42, #74); attachments over the limits
+  are refused as they are added, with the reason shown (#63, #64); a stopped
+  artifact is not summarised as created (#60); web search steps show their
+  sources (#61); temporary-chat mode shows only where it applies (#66) and
+  Move to project is not offered for it (#91); the reasoning control shows
+  only for models with levels (#95); "reply pending" no longer shows while
+  the reply is replaying (#90); an interrupted reply says it is being
+  recovered (#121); unavailable conversations offer no actions that would
+  fail (#103).
+- **Operations:** a draining single replica stays reachable through the
+  proxy and lets replay readers finish (#117); a stopped worker is reported
+  as such, not as "no Redis" (#119); webhooks queued while no worker ran go
+  out when one starts (#120); an unknown lifecycle job is a 404 (#82);
+  failed backups are reported while backups are off (#54); a new install is
+  told to run `migrate --post` (#75); the release version is reported
+  instead of "dev" (#55).
+- **Administration:** validation errors name the field (#46); the model
+  picker works by keyboard and fits phones (#70, #71); inline model rename
+  saves on Enter and Add model lists every problem (#79); the Limits dialog,
+  spend and window dates are formatted consistently (#80, #81, #88); webhook
+  actions that match nothing are flagged (#83); connectors show the contact
+  a test made (#84); auditors can read announcement messages (#87);
+  announcements stay clear of the top bar (#44); the audit log and usage
+  charts work on narrow screens and by keyboard (#57, #58).
+- **Accessibility and layout:** WCAG AA contrast in the light theme, scanned
+  in CI (#72); the stored theme applies before the first paint (#73); the
+  logo input, sidebar row controls, Search toggle, theme menu, model picker,
+  filter menus and Select popups have the names and roles they need (#59,
+  #92, #111, #114); pages have tab titles and an h1, and truncated text has
+  a tooltip (#110); settings and admin pages no longer shift while loading
+  (#104); auth pages share one layout and a bad reset link offers a way back
+  (#112); unavailable pages and empty lists share one layout (#113); phone
+  and tablet layouts for the greeting, introduction, tab strips and
+  shortcuts card (#89, #94, #102, #106, #107); Markdown tables keep their
+  prose columns readable (#69); 24 px targets for attachment links (#105).
+- **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
+  (#96), restricted-role pages (#99), and docs that had drifted from the
+  interface (#86).
 
 ## [0.11.0] - 2026-10-05
 
