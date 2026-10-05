@@ -94,6 +94,16 @@ it('offers resend when sign-in is refused for an unverified account', async () =
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
+it('words a wrong email or password as the user guide does (#97)', async () => {
+  mocks.signin.mockResolvedValue({
+    error: { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' },
+  });
+  await act(() => root.render(withClient(<LoginPage />)));
+  await submit();
+  expect(container.textContent).toContain('Unable to sign in. Check your email and password.');
+  expect(container.textContent).not.toContain('Invalid email or password');
+});
+
 it('drops what was cached while signed out before entering the app', async () => {
   // Signing out refetches /me while the app is still mounted, caching an
   // anonymous answer; the next account must not inherit it (or the previous

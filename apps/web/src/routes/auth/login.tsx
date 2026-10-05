@@ -11,6 +11,8 @@ import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
 
+const WRONG_CREDENTIALS = 'Unable to sign in. Check your email and password.';
+
 /**
  * Where the SSO plugin sends a refused sign-in (no matching role, a provider
  * not trusted to link to an existing account, a failed discovery). Without it
@@ -50,7 +52,13 @@ export function LoginPage() {
 
     if (result.error) {
       setNeedsVerification(result.error.code === 'EMAIL_NOT_VERIFIED');
-      setError(result.error.message ?? 'Unable to sign in. Check your email and password.');
+      // Wrong credentials get the wording the user guide quotes (#97); other
+      // refusals (unverified, banned, rate limited) keep the server's reason.
+      setError(
+        result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || !result.error.message
+          ? WRONG_CREDENTIALS
+          : result.error.message,
+      );
       setSubmitting(false);
       return;
     }
