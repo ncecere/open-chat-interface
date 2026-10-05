@@ -6,6 +6,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { ApiError, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
+import { describeValidationIssues } from '~/lib/validation-issues';
 
 /**
  * A titled block separated by a rule rather than a card. This matches the
@@ -223,13 +224,27 @@ export function MutationError({
   className?: string;
 }) {
   if (!error) return null;
-  const detail = error instanceof ApiError && error.message !== message ? error.message : null;
+  const issues = error instanceof ApiError ? describeValidationIssues(error.details) : [];
+  // With field-level reasons, "Request validation failed" adds nothing.
+  const detail =
+    error instanceof ApiError && error.message !== message && issues.length === 0
+      ? error.message
+      : null;
 
   return (
-    <p role="alert" className={cn('text-sm text-[var(--danger)]', className)}>
-      {message}
-      {detail && ` ${detail}`}
-    </p>
+    <div role="alert" className={cn('text-sm text-[var(--danger)]', className)}>
+      <p>
+        {message}
+        {detail && ` ${detail}`}
+      </p>
+      {issues.length > 0 && (
+        <ul className="mt-1 list-disc pl-5">
+          {issues.map((issue) => (
+            <li key={issue}>{issue}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

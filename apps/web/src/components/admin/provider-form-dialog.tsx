@@ -143,6 +143,8 @@ export function ProviderFormDialog({
           <Input
             id="provider-label"
             value={label}
+            // The API's limit (upsertProviderSchema), so it cannot be overrun.
+            maxLength={80}
             onChange={(event) => setLabel(event.target.value)}
             placeholder={PROVIDER_KIND_LABELS[kind]}
             required={Boolean(provider)}
