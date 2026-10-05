@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, ne, schema } from '@oci/db';
+import { and, desc, eq, gt, lt, ne, schema } from '@oci/db';
 import type { AccountSession } from '@oci/shared';
 import { db } from '../db/index.js';
 import { notFound, validationFailed } from '../lib/errors.js';
@@ -30,6 +30,31 @@ export function maskIpAddress(value: string | null): string | null {
     return groups.length > 0 ? `${groups.join(':')}:…` : null;
   }
   return null;
+}
+
+/**
+ * How stale a session's `updated_at` may get while it is in use. Better Auth
+ * moves it only when it renews the session, at most once a day, so Devices
+ * showed "Last active" as the sign-in time on a device in use (#98). The
+ * request middleware refreshes it at most this often instead: one small
+ * write per active session per five minutes. Better Auth decides renewal
+ * from `expires_at`, so this does not change when sessions renew or expire.
+ */
+export const SESSION_ACTIVITY_STEP_MS = 5 * 60 * 1000;
+
+/** Records that a session is in use, if its last record is old enough. */
+export async function noteSessionActivity(
+  sessionId: string,
+  updatedAt: Date,
+  now: Date = new Date(),
+): Promise<void> {
+  const before = new Date(now.getTime() - SESSION_ACTIVITY_STEP_MS);
+  if (updatedAt > before) return;
+  await db
+    .update(schema.session)
+    .set({ updatedAt: now })
+    // Conditional, so replicas serving the same session at once write once.
+    .where(and(eq(schema.session.id, sessionId), lt(schema.session.updatedAt, before)));
 }
 
 export async function listOwnSessions(

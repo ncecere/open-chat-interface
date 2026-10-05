@@ -287,6 +287,43 @@ describe.skipIf(!available)('live: Settings → Account', () => {
     return `oci.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
   }
 
+  describe('Devices: when a session was last active (#98)', () => {
+    it('moves while the session is used, not only at sign-in', async () => {
+      const { user, cookie } = await signedIn();
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      await pool.db
+        .update(schema.session)
+        .set({ createdAt: hourAgo, updatedAt: hourAgo })
+        .where(eq(schema.session.userId, user.id));
+
+      expect((await me('', cookie)).status).toBe(200);
+      await vi.waitFor(async () => {
+        const response = await me('/sessions', cookie);
+        const { sessions } = (await response.json()) as {
+          sessions: Array<{ createdAt: string; lastActiveAt: string }>;
+        };
+        expect(sessions[0]!.createdAt).toBe(hourAgo.toISOString());
+        expect(Date.now() - Date.parse(sessions[0]!.lastActiveAt)).toBeLessThan(60_000);
+      });
+    });
+
+    it('writes at most once per five minutes', async () => {
+      const { user, cookie } = await signedIn();
+      const minuteAgo = new Date(Date.now() - 60 * 1000);
+      await pool.db
+        .update(schema.session)
+        .set({ updatedAt: minuteAgo })
+        .where(eq(schema.session.userId, user.id));
+      expect((await me('', cookie)).status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const [row] = await pool.db
+        .select({ updatedAt: schema.session.updatedAt })
+        .from(schema.session)
+        .where(eq(schema.session.userId, user.id));
+      expect(row!.updatedAt.toISOString()).toBe(minuteAgo.toISOString());
+    });
+  });
+
   describe('changing a password', () => {
     it('changes it, signs other devices out when asked, and audits the person', async () => {
       const { user, email, cookie } = await signedIn();

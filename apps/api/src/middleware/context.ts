@@ -2,6 +2,8 @@ import { USER_ROLES, type UserRole } from '@oci/shared';
 import { createMiddleware } from 'hono/factory';
 import { auth } from '../auth/index.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
+import { logger } from '../lib/logger.js';
+import { noteSessionActivity } from '../services/account-sessions.js';
 
 export interface AuthenticatedUser {
   id: string;
@@ -48,6 +50,11 @@ export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) =
       organizationId: raw.organizationId ?? '',
     });
     c.set('sessionId', session.session.id);
+    // Settings → Devices shows when each session was last active. Not awaited:
+    // a failed write must never fail or slow the request it rides on.
+    void noteSessionActivity(session.session.id, new Date(session.session.updatedAt)).catch(
+      (error) => logger.debug({ error }, 'Could not record session activity'),
+    );
   } else {
     c.set('user', null);
     c.set('sessionId', null);

@@ -369,8 +369,12 @@ function SessionRow({
         </p>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">
           {session.ipAddress ? `${session.ipAddress} · ` : ''}Signed in{' '}
-          {formatRelativeTime(session.createdAt)} · Last active{' '}
-          {formatRelativeTime(session.lastActiveAt)}
+          {formatRelativeTime(session.createdAt)} ·{' '}
+          {/* The device you are reading this on is in use now; the server
+              records activity in five-minute steps (#98). */}
+          {session.current
+            ? 'Active now'
+            : `Last active ${formatRelativeTime(session.lastActiveAt)}`}
         </p>
       </div>
       {!session.current && (

@@ -30,7 +30,8 @@ Your name, email address, role, and how you sign in.
   cannot be changed.
 - **Devices.** **View Devices** lists where your account is signed in: the
   browser and system, a shortened network address, when each signed in, and
-  when it was last active. Your current device is marked **This device**.
+  when it was last active (to within five minutes). Your current device is
+  marked **This device** and **Active now**.
   **Sign out** ends one other session; **Sign out all other devices** ends
   every session but this one. A device you sign out can stay signed in for up
   to five minutes.
