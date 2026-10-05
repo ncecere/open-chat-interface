@@ -8,6 +8,41 @@ export interface OutboundEmail {
   to: string;
   subject: string;
   text: string;
+  /** An HTML alternative to `text`; mail clients show whichever they prefer. */
+  html?: string;
+}
+
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+
+/**
+ * A plain HTML alternative for the account emails (#78): the same words as
+ * the text part, with the link as a button. Inline styles only, which is all
+ * mail clients reliably honour; every value is escaped.
+ */
+export function actionEmailHtml(email: {
+  paragraphs: string[];
+  action: { label: string; url: string };
+  footer?: string;
+}): string {
+  const p = (text: string, style = 'margin:0 0 16px') =>
+    `<p style="${style}">${escapeHtml(text)}</p>`;
+  return [
+    '<!doctype html><html><body style="margin:0;padding:24px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a">',
+    '<div style="max-width:520px;margin:0 auto">',
+    ...email.paragraphs.map((text) => p(text)),
+    `<p style="margin:24px 0"><a href="${escapeHtml(email.action.url)}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#1a1a1a;color:#ffffff;text-decoration:none;font-weight:600">${escapeHtml(email.action.label)}</a></p>`,
+    p(
+      `Or open this link: ${email.action.url}`,
+      'margin:0 0 16px;font-size:13px;color:#555;word-break:break-all',
+    ),
+    ...(email.footer ? [p(email.footer, 'margin:24px 0 0;font-size:13px;color:#555')] : []),
+    '</div></body></html>',
+  ].join('');
 }
 
 /**
@@ -78,6 +113,7 @@ export async function sendEmail(email: OutboundEmail): Promise<{ delivered: bool
       to: email.to,
       subject: email.subject,
       text: email.text,
+      ...(email.html ? { html: email.html } : {}),
     });
     logger.info({ to: email.to, subject: email.subject }, 'Email delivered');
     return { delivered: true };
@@ -133,28 +169,87 @@ export async function sendTestEmail(to: string): Promise<{ ok: boolean; message:
 
 export async function sendVerificationEmail(params: { to: string; url: string }) {
   const appName = await currentAppName();
+  const intro = `Confirm your email address to finish setting up your ${appName} account:`;
+  const footer = 'If you did not create an account, you can ignore this email.';
   return sendEmail({
     to: params.to,
     subject: `Verify your email address for ${appName}`,
-    text: `Confirm your email address to finish setting up your ${appName} account:\n\n${params.url}\n\nIf you did not create an account, you can ignore this email.`,
+    text: `${intro}\n\n${params.url}\n\n${footer}`,
+    html: actionEmailHtml({
+      paragraphs: [intro],
+      action: { label: 'Verify email address', url: params.url },
+      footer,
+    }),
   });
 }
 
 export async function sendPasswordResetEmail(params: { to: string; url: string }) {
   const appName = await currentAppName();
+  const intro = `Use this link to choose a new password for your ${appName} account:`;
+  const footer = 'If you did not request this, you can ignore this email.';
   return sendEmail({
     to: params.to,
     subject: `Reset your ${appName} password`,
-    text: `Use this link to choose a new password for your ${appName} account:\n\n${params.url}\n\nIf you did not request this, you can ignore this email.`,
+    text: `${intro}\n\n${params.url}\n\n${footer}`,
+    html: actionEmailHtml({
+      paragraphs: [intro],
+      action: { label: 'Choose a new password', url: params.url },
+      footer,
+    }),
   });
 }
 
-/** `appName` is read from Branding when not given. */
-export async function sendInviteEmail(params: { to: string; url: string; appName?: string }) {
+const ROLE_NAMES: Record<string, string> = {
+  admin: 'an administrator',
+  auditor: 'an auditor',
+  user: 'a user',
+  restricted: 'a restricted user',
+};
+
+/**
+ * The invitation (#78): who sent it, the role it grants and when it expires,
+ * which the email left out. `appName` is read from Branding when not given.
+ */
+export async function sendInviteEmail(params: {
+  to: string;
+  url: string;
+  appName?: string;
+  inviter?: string;
+  role?: string;
+  expiresAt?: Date | null;
+}) {
   const appName = params.appName?.trim() || (await currentAppName());
+  const who = params.inviter?.trim()
+    ? `${params.inviter.trim()} has invited you`
+    : 'You have been invited';
+  const role = params.role && ROLE_NAMES[params.role] ? ` as ${ROLE_NAMES[params.role]}` : '';
+  const intro = `${who} to join ${appName}${role}.`;
+  const expiry =
+    params.expiresAt === undefined
+      ? null
+      : params.expiresAt === null
+        ? 'The invitation does not expire.'
+        : `The invitation expires on ${params.expiresAt.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            timeZone: 'UTC',
+          })} (UTC).`;
   return sendEmail({
     to: params.to,
     subject: `You have been invited to ${appName}`,
-    text: `You have been invited to join ${appName}.\n\nAccept the invitation:\n\n${params.url}`,
+    text: [
+      intro,
+      '',
+      'Accept the invitation:',
+      '',
+      params.url,
+      ...(expiry ? ['', expiry] : []),
+    ].join('\n'),
+    html: actionEmailHtml({
+      paragraphs: [intro],
+      action: { label: 'Accept the invitation', url: params.url },
+      ...(expiry ? { footer: expiry } : {}),
+    }),
   });
 }

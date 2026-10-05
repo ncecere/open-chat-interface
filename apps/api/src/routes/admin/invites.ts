@@ -105,6 +105,9 @@ inviteRoutes.post('/', async (c) => {
       to: input.email,
       url,
       appName: branding.appName,
+      inviter: actor.name || actor.email,
+      role: input.role,
+      expiresAt,
     });
     emailDelivered = result.delivered;
   }

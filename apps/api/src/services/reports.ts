@@ -25,6 +25,11 @@ function formatCost(micros: number): string {
  * Plain text rather than HTML: it is read in a mail client, often forwarded,
  * and a table of numbers survives that better than a layout.
  */
+/** "1 message", "1,204 messages" (#78: the report said "1 messages"). */
+export function messageCount(count: number): string {
+  return `${count.toLocaleString('en-US')} ${count === 1 ? 'message' : 'messages'}`;
+}
+
 async function buildUsageReport(windowDays: number, appName: string): Promise<string> {
   const [totals, daily, models, consumers] = await Promise.all([
     usageTotals(windowDays),
@@ -46,13 +51,13 @@ async function buildUsageReport(windowDays: number, appName: string): Promise<st
 
   const busiest = [...daily].sort((a, b) => b.messages - a.messages).slice(0, 5);
   for (const day of busiest) {
-    lines.push(`  ${day.day}  ${day.messages.toLocaleString()} messages`);
+    lines.push(`  ${day.day}  ${messageCount(day.messages)}`);
   }
 
   lines.push('', 'Models');
   for (const model of models.entries) {
     lines.push(
-      `  ${model.displayName ?? model.modelSlug}  ${model.messages.toLocaleString()} messages  ${formatCost(model.costMicros)}`,
+      `  ${model.displayName ?? model.modelSlug}  ${messageCount(model.messages)}  ${formatCost(model.costMicros)}`,
     );
   }
 
@@ -60,7 +65,7 @@ async function buildUsageReport(windowDays: number, appName: string): Promise<st
   for (const consumer of consumers.entries) {
     // Deleted accounts are one row, named by the label rather than an address.
     const who = consumer.deleted ? consumer.name : consumer.email;
-    lines.push(`  ${who}  ${consumer.messages.toLocaleString()} messages`);
+    lines.push(`  ${who}  ${messageCount(consumer.messages)}`);
   }
 
   return lines.join('\n');
