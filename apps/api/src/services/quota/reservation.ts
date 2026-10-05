@@ -4,6 +4,7 @@ import { db } from '../../db/index.js';
 import { notFound, quotaExceeded } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { getDefaultOrganizationId } from '../organization.js';
+import { usageSource } from '../usage-report/source.js';
 import {
   type EvaluablePolicy,
   limitMessage,
@@ -107,6 +108,11 @@ export async function reserveQuota(params: {
   reserve: ReserveAmounts;
 }): Promise<UsageReservation> {
   const organizationId = await getDefaultOrganizationId();
+  // Decided before the transaction: finding out may need another pool
+  // connection, and waiting for one while holding this transaction's
+  // deadlocked a busy replica (every connection held by a reservation waiting
+  // for another) until the usage backfill finished.
+  const source = params.policies.length > 0 ? await usageSource() : undefined;
   let now = new Date();
   const id = await db
     .transaction(async (tx) => {
@@ -122,6 +128,8 @@ export async function reserveQuota(params: {
           params.userId,
           start,
           policy.modelSlugs,
+          undefined,
+          source,
         );
         totalsByPolicy.set(policy.id, totals);
         if (usedForMetric(policy.metric, totals) >= policy.limitValue)
