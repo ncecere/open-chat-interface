@@ -135,3 +135,18 @@ describe('the current activity', () => {
     expect(workActivity({ type: 'between' }).label).toBe('Working…');
   });
 });
+
+describe('a step stopped part-way', () => {
+  it('is not summarised as having made an artifact', () => {
+    // Stopped while the model was still writing the artifact (#60).
+    expect(
+      workSummary({ reasoning: false, steps: [step('create_artifact', { state: 'stopped' })] }),
+    ).toBe('A step was stopped');
+    expect(
+      workSummary({
+        reasoning: true,
+        steps: [step('create_artifact', { state: 'stopped' })],
+      }),
+    ).toBe('Thought · a step was stopped');
+  });
+});

@@ -20,7 +20,8 @@ export interface WorkStep {
   toolId: string;
   /** The tool's label, for example "Service Desk lookup". */
   label: string;
-  state: 'running' | 'awaiting-approval' | 'approved' | 'done' | 'error' | 'denied';
+  /** `stopped`: still running when the reply ended, so it never finished. */
+  state: 'running' | 'awaiting-approval' | 'approved' | 'done' | 'error' | 'denied' | 'stopped';
   /** What the step acted on, when known (the artifact an update revised). */
   target?: string | null;
   /** The search made before the reply, not a tool call (v0.11). */
@@ -42,13 +43,15 @@ function activityPhrases(steps: readonly WorkStep[]): string[] {
           ? 'failed'
           : step.state === 'denied'
             ? 'denied'
-            : step.toolId === 'web_search' ||
-                step.toolId === 'create_artifact' ||
-                step.toolId === 'update_artifact' ||
-                step.toolId === 'remember' ||
-                step.toolId === 'forget'
-              ? step.toolId
-              : `tool:${step.label}`;
+            : step.state === 'stopped'
+              ? 'stopped'
+              : step.toolId === 'web_search' ||
+                  step.toolId === 'create_artifact' ||
+                  step.toolId === 'update_artifact' ||
+                  step.toolId === 'remember' ||
+                  step.toolId === 'forget'
+                ? step.toolId
+                : `tool:${step.label}`;
     kinds.set(kind, [...(kinds.get(kind) ?? []), step]);
   }
   return [...kinds].map(([kind, group]) => {
@@ -60,6 +63,9 @@ function activityPhrases(steps: readonly WorkStep[]): string[] {
         return count === 1 ? 'a step failed' : `${count} steps failed`;
       case 'denied':
         return count === 1 ? 'a step was not run' : `${count} steps were not run`;
+      case 'stopped':
+        // Not "created an artifact": a call stopped mid-way made nothing.
+        return count === 1 ? 'a step was stopped' : `${count} steps were stopped`;
       case 'web_search':
         return `searched the web${times(count)}`;
       case 'create_artifact':
