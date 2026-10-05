@@ -9,6 +9,12 @@ import { expect, type Page, test } from '@playwright/test';
  * the end.
  */
 
+// Each test signs in, opens a 2,000-message conversation and scrolls up
+// through hundreds of turns step by step (a pause and a measurement each),
+// which takes about 25 s on a 2-CPU CI runner before any streaming. The app's
+// own steps stay fast (opening: under 1 s); the budget is for the walk.
+test.describe.configure({ timeout: 90_000 });
+
 async function signIn(page: Page) {
   const email = process.env.E2E_ADMIN_EMAIL;
   const password = process.env.E2E_ADMIN_PASSWORD;
