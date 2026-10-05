@@ -192,6 +192,10 @@ incident.
   than fading after four seconds.
 - **Dismissal is per person.** One person hiding it does not hide it for
   everyone.
+- **Bold and links only.** In the message, `**bold**` and
+  `[a link](https://status.example.edu)` are formatted and line breaks are
+  kept; other Markdown (headings, lists) is shown as typed. Links must be
+  `https`, `http`, `mailto` or a path on this site.
 - **Editing does not re-show it.** Fixing a typo should not interrupt people who
   already read it. A separate **re-show** action clears dismissals when the
   change genuinely matters.

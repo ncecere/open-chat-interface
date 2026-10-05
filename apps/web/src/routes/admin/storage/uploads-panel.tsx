@@ -1,13 +1,16 @@
 import { SettingsSection } from '~/components/admin/admin-ui';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
+import { bytesFromMb } from './storage-draft';
 import type { StorageSettingsController } from './use-storage-settings';
 
+/** In the units Roles & access uses (1 MB = 1,024 KB), so the two pages agree. */
 function formatBytes(bytes: number) {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KiB`;
-  return `${bytes} B`;
+  const short = (value: number) => String(Number(value.toFixed(2)));
+  if (bytes >= 1024 * 1024 * 1024) return `${short(bytes / (1024 * 1024 * 1024))} GB`;
+  if (bytes >= 1024 * 1024) return `${short(bytes / (1024 * 1024))} MB`;
+  if (bytes >= 1024) return `${short(bytes / 1024)} KB`;
+  return `${bytes} bytes`;
 }
 
 export function UploadsPanel({
@@ -19,7 +22,7 @@ export function UploadsPanel({
   >;
 }) {
   const { draft, setDraft, showValidation, validation, save, beginEdit } = controller;
-  const maxFileBytes = Number(draft.maxFileBytes);
+  const maxFileBytes = bytesFromMb(draft.maxFileMb);
 
   return (
     <SettingsSection
@@ -29,28 +32,28 @@ export function UploadsPanel({
       <div className="flex flex-col gap-5">
         <div className="grid gap-5 sm:grid-cols-2">
           <Field
-            label="Maximum file size (bytes)"
+            label="Maximum file size (MB)"
             htmlFor="max-file-bytes"
             hint={
-              showValidation && validation.maxFileBytes
-                ? validation.maxFileBytes
-                : Number.isSafeInteger(maxFileBytes) && maxFileBytes > 0
+              showValidation && validation.maxFileMb
+                ? validation.maxFileMb
+                : Number.isSafeInteger(maxFileBytes)
                   ? `Currently ${formatBytes(maxFileBytes)} per file.`
-                  : 'Enter a positive whole number.'
+                  : 'Enter a positive number of MB.'
             }
           >
             <Input
               id="max-file-bytes"
               type="number"
-              inputMode="numeric"
-              min={1}
-              step={1}
-              value={draft.maxFileBytes}
+              inputMode="decimal"
+              min={0}
+              step="any"
+              value={draft.maxFileMb}
               disabled={save.isPending}
-              aria-invalid={showValidation && Boolean(validation.maxFileBytes)}
+              aria-invalid={showValidation && Boolean(validation.maxFileMb)}
               onChange={(event) => {
                 beginEdit();
-                setDraft((current) => ({ ...current, maxFileBytes: event.target.value }));
+                setDraft((current) => ({ ...current, maxFileMb: event.target.value }));
               }}
             />
           </Field>

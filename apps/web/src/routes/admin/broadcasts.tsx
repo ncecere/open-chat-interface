@@ -155,7 +155,11 @@ function BroadcastDialog({
           />
         </Field>
 
-        <Field label="Message" htmlFor="broadcast-body">
+        <Field
+          label="Message"
+          htmlFor="broadcast-body"
+          hint="**Bold** and [links](https://example.edu) are formatted; other Markdown is shown as typed."
+        >
           <Textarea
             id="broadcast-body"
             rows={4}

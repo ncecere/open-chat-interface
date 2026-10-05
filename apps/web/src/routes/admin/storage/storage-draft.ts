@@ -8,7 +8,8 @@ export type HealthMode = 'read' | 'write';
 
 export interface StorageDraft {
   driver: StorageDriver;
-  maxFileBytes: string;
+  /** In MB, as on Roles & access (#86); saved in bytes. */
+  maxFileMb: string;
   maxFilesPerMessage: string;
   allowedMimeTypes: string;
   bucket: string;
@@ -19,7 +20,7 @@ export interface StorageDraft {
 }
 
 export interface StorageValidation {
-  maxFileBytes?: string;
+  maxFileMb?: string;
   maxFilesPerMessage?: string;
   allowedMimeTypes?: string;
   bucket?: string;
@@ -29,10 +30,24 @@ export interface StorageValidation {
   secretAccessKey?: string;
 }
 
+const MB = 1024 * 1024;
+
+/** Bytes as MB for the form: up to three decimals, no trailing zeros. */
+export function mbFromBytes(bytes: number): string {
+  return String(Number((bytes / MB).toFixed(3)));
+}
+
+/** The form's MB as whole bytes, or NaN unless a positive number. */
+export function bytesFromMb(value: string): number {
+  const mb = Number(value.trim());
+  if (!value.trim() || !Number.isFinite(mb) || mb <= 0) return Number.NaN;
+  return Math.max(1, Math.round(mb * MB));
+}
+
 export function makeDraft(settings: StorageSettings): StorageDraft {
   return {
     driver: settings.driver,
-    maxFileBytes: String(settings.maxFileBytes),
+    maxFileMb: mbFromBytes(settings.maxFileBytes),
     maxFilesPerMessage: String(settings.maxFilesPerMessage),
     allowedMimeTypes: settings.allowedMimeTypes.join('\n'),
     bucket: settings.s3.bucket,
@@ -61,7 +76,7 @@ export function validateDraft(
   secretAccessKey: string,
 ): StorageValidation {
   const errors: StorageValidation = {};
-  const maxFileBytes = Number(draft.maxFileBytes);
+  const maxFileBytes = bytesFromMb(draft.maxFileMb);
   const maxFilesPerMessage = Number(draft.maxFilesPerMessage);
   const allowedMimeTypes = parseMimeTypes(draft.allowedMimeTypes);
   const willHaveCredential =
@@ -71,8 +86,8 @@ export function validateDraft(
         ? false
         : hasSavedCredential;
 
-  if (!Number.isSafeInteger(maxFileBytes) || maxFileBytes <= 0) {
-    errors.maxFileBytes = 'File size must be a positive whole number of bytes.';
+  if (!Number.isSafeInteger(maxFileBytes)) {
+    errors.maxFileMb = 'File size must be a positive number of MB.';
   }
   if (!Number.isSafeInteger(maxFilesPerMessage) || maxFilesPerMessage <= 0) {
     errors.maxFilesPerMessage = 'File count must be a positive whole number.';
@@ -125,12 +140,17 @@ export function changedStorageSettings(
   secretAccessKey: string,
 ): StoragePatch {
   const patch: StoragePatch = {};
-  const maxFileBytes = Number(draft.maxFileBytes);
+  const maxFileBytes = bytesFromMb(draft.maxFileMb);
   const maxFilesPerMessage = Number(draft.maxFilesPerMessage);
   const allowedMimeTypes = parseMimeTypes(draft.allowedMimeTypes);
 
   if (saved.driver !== draft.driver) patch.driver = draft.driver;
-  if (Number.isSafeInteger(maxFileBytes) && saved.maxFileBytes !== maxFileBytes) {
+  // Compared as the form shows it, so a saved size that is not a round number
+  // of MB is not a change until it is edited.
+  if (
+    Number.isSafeInteger(maxFileBytes) &&
+    draft.maxFileMb.trim() !== mbFromBytes(saved.maxFileBytes)
+  ) {
     patch.maxFileBytes = maxFileBytes;
   }
   if (Number.isSafeInteger(maxFilesPerMessage) && saved.maxFilesPerMessage !== maxFilesPerMessage) {

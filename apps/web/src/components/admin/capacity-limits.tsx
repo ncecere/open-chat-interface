@@ -224,7 +224,8 @@ const PRIORITY_LABELS: Record<QueuePriority, string> = {
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Administrators',
   auditor: 'Auditors',
-  user: 'Members',
+  // "User" everywhere else in administration (#86).
+  user: 'Users',
   restricted: 'Restricted',
 };
 
