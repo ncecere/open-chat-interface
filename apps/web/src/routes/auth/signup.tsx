@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
@@ -12,6 +13,7 @@ import { authClient } from '~/lib/auth-client';
 
 export function SignupPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: status, isLoading } = useAuthStatus();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -40,6 +42,8 @@ export function SignupPage() {
       setSubmitting(false);
       return;
     }
+    // As on sign-in: nothing cached while signed out may describe the new account.
+    queryClient.clear();
     await navigate({ to: '/' });
   }
 

@@ -97,7 +97,10 @@ export function useCurrentUser() {
         throw error;
       }
     },
-    staleTime: 30_000,
+    // A signed-in answer is reused for 30 s; an anonymous one never is. Signing
+    // out refetches /me while the app is still mounted, and a cached `null`
+    // that counted as fresh was handed to the next account to sign in.
+    staleTime: (query) => (query.state.data === null ? 0 : 30_000),
     retry: false,
   });
 }

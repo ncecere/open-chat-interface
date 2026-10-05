@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
@@ -12,6 +13,7 @@ import { authClient } from '~/lib/auth-client';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: status, isLoading } = useAuthStatus();
 
   const [email, setEmail] = useState('');
@@ -35,6 +37,10 @@ export function LoginPage() {
       return;
     }
 
+    // Drop anything cached while signed out (or for whoever signed out in
+    // this tab): an anonymous /me answer would otherwise be reused for the
+    // new account, hiding its menu, projects and features until a reload.
+    queryClient.clear();
     await navigate({ to: '/' });
   }
 

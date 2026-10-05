@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -36,10 +37,15 @@ vi.mock('../../src/lib/auth-client', () => ({
 }));
 let container: HTMLDivElement;
 let root: Root;
+let client: QueryClient;
+const withClient = (ui: ReactNode) => (
+  <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+);
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   container = document.createElement('div');
   root = createRoot(container);
+  client = new QueryClient();
   mocks.navigate.mockReset();
   mocks.signup.mockReset();
   mocks.signin.mockReset();
@@ -58,7 +64,7 @@ async function submit() {
 
 it('uses the signup response rather than stale disabled-verification bootstrap data', async () => {
   mocks.signup.mockResolvedValue({ data: { token: null }, error: null });
-  await act(() => root.render(<SignupPage />));
+  await act(() => root.render(withClient(<SignupPage />)));
   await submit();
   expect(container.textContent).toContain('Check your email');
   expect(container.textContent).toContain('Resend verification email');
@@ -68,7 +74,7 @@ it('uses the signup response rather than stale disabled-verification bootstrap d
 it('navigates after a real signup session even if cached bootstrap still requires verification', async () => {
   mocks.required = true;
   mocks.signup.mockResolvedValue({ data: { token: 'test-session' }, error: null });
-  await act(() => root.render(<SignupPage />));
+  await act(() => root.render(withClient(<SignupPage />)));
   await submit();
   expect(mocks.navigate).toHaveBeenCalledWith({ to: '/' });
 });
@@ -77,8 +83,23 @@ it('offers resend when sign-in is refused for an unverified account', async () =
   mocks.signin.mockResolvedValue({
     error: { code: 'EMAIL_NOT_VERIFIED', message: 'Verify your email address before signing in' },
   });
-  await act(() => root.render(<LoginPage />));
+  await act(() => root.render(withClient(<LoginPage />)));
   await submit();
   expect(container.textContent).toContain('Resend verification email');
   expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+it('drops what was cached while signed out before entering the app', async () => {
+  // Signing out refetches /me while the app is still mounted, caching an
+  // anonymous answer; the next account must not inherit it (or the previous
+  // account's projects).
+  client.setQueryData(['me'], null);
+  client.setQueryData(['projects', 'sidebar'], { projects: [{ id: 'old' }] });
+  mocks.signin.mockResolvedValue({ data: { user: { id: 'next' } }, error: null });
+  await act(() => root.render(withClient(<LoginPage />)));
+  await submit();
+
+  expect(mocks.navigate).toHaveBeenCalledWith({ to: '/' });
+  expect(client.getQueryData(['me'])).toBeUndefined();
+  expect(client.getQueryData(['projects', 'sidebar'])).toBeUndefined();
 });
