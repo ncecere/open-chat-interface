@@ -14,66 +14,41 @@
  * Writes a JSON report (rows, rows/s, database size) and the fixtures the load
  * test uses (people to sign in as, project conversations, search terms).
  */
-import { scrypt as scryptCallback } from 'node:crypto';
+
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { availableParallelism } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, promisify } from 'node:util';
+import { parseArgs } from 'node:util';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
 import {
-  ADMIN_EMAIL,
-  buildPlan,
-  conversationFlags,
-  FILE_STATE,
-  ids,
-  isLargeProject,
-  projectTopics,
-} from './lib/plan.mjs';
-import { entityId, hash01, hashString, Rng } from './lib/prng.mjs';
+  databaseSummary,
+  deriveTables,
+  fixtures,
+  formatRate,
+  verify,
+} from './lib/generate-finish.mjs';
+import {
+  dropSecondaryIndexes,
+  EMBEDDING_TABLE,
+  ensureEmbeddingTable,
+  INDEX_BACKUP_TABLE,
+  LOADED_TABLES,
+  log,
+  MODELS,
+  passwordHash,
+  preflight,
+  setUpCatalog,
+} from './lib/generate-setup.mjs';
+import { buildPlan } from './lib/plan.mjs';
+import { hashString } from './lib/prng.mjs';
 import { auditTask, conversationsTask, filesTask, peopleTask } from './lib/tasks.mjs';
-import { searchTerms } from './lib/text.mjs';
 import { profileNamed } from './profiles.mjs';
 
-const scrypt = promisify(scryptCallback);
+export { MODELS } from './lib/generate-setup.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
-const EMBEDDING_TABLE = 'project_file_embedding';
-const EMBEDDING_MODEL = 'scale-embed';
-const INDEX_BACKUP_TABLE = 'oci_scale_index_backup';
-
-/** Tables the generator loads; their secondary indexes are rebuilt after the load. */
-const LOADED_TABLES = [
-  'user',
-  'account',
-  'session',
-  'user_preference',
-  'project',
-  'thread',
-  'message',
-  'attachment',
-  'share_link',
-  'project_file_index',
-  'project_file_chunk',
-  'audit_log',
-  'usage_event',
-  'usage_record',
-];
-
-/** The catalog the dataset uses; every model is served by the stub provider. */
-export const MODELS = [
-  { slug: 'scale-stub', name: 'Scale stub', weight: 0.55, input: 2_500_000, output: 10_000_000 },
-  { slug: 'scale-mini', name: 'Scale mini', weight: 0.25, input: 150_000, output: 600_000 },
-  {
-    slug: 'scale-reasoning',
-    name: 'Scale reasoning',
-    weight: 0.15,
-    input: 3_000_000,
-    output: 15_000_000,
-    reasoning: true,
-  },
-  { slug: 'scale-large', name: 'Scale large', weight: 0.05, input: 10_000_000, output: 30_000_000 },
-];
 
 function loadPostgres() {
   const candidates = [
@@ -141,11 +116,6 @@ async function workerMain() {
 // Main side
 // ---------------------------------------------------------------------------
 
-function log(message) {
-  const stamp = new Date().toISOString().slice(11, 19);
-  console.log(`[${stamp}] ${message}`);
-}
-
 function parseOptions() {
   const { values } = parseArgs({
     options: {
@@ -206,163 +176,6 @@ function parseOptions() {
   };
 }
 
-/** Better Auth's scrypt format (`salt:key`, hex), with a salt fixed by the seed. */
-async function passwordHash(password, seedHash) {
-  const salt = new Rng(seedHash, hashString('password-salt')).hex(16);
-  const key = await scrypt(password.normalize('NFKC'), salt, 64, {
-    N: 16384,
-    r: 16,
-    p: 1,
-    maxmem: 128 * 16384 * 16 * 2,
-  });
-  return `${salt}:${key.toString('hex')}`;
-}
-
-async function restoreDroppedIndexes(sql) {
-  const [exists] = await sql`select to_regclass(${INDEX_BACKUP_TABLE}) is not null as found`;
-  if (!exists.found) return 0;
-  const saved = await sql.unsafe(`select name, definition from ${INDEX_BACKUP_TABLE}`);
-  for (const { definition } of saved) {
-    await sql.unsafe(
-      definition.replace(/^CREATE (UNIQUE )?INDEX /, 'CREATE $1INDEX IF NOT EXISTS '),
-    );
-  }
-  await sql.unsafe(`drop table ${INDEX_BACKUP_TABLE}`);
-  return saved.length;
-}
-
-async function preflight(sql, options) {
-  const [schema] = await sql`
-    select to_regclass('message') is not null as migrated,
-           (select rolsuper from pg_roles where rolname = current_user) as superuser,
-           exists (select 1 from pg_available_extensions where name = 'vector') as pgvector
-  `;
-  if (!schema.migrated)
-    throw new Error('The database is not migrated; run the API migration first');
-  if (!schema.superuser) {
-    throw new Error(
-      'The generator needs a superuser (it disables foreign-key triggers while loading)',
-    );
-  }
-  if (!schema.pgvector) throw new Error('pgvector is not installed on this PostgreSQL server');
-  const restored = await restoreDroppedIndexes(sql);
-  if (restored) log(`Restored ${restored} indexes left dropped by an interrupted run`);
-  const [{ people, messages }] = await sql`
-    select (select count(*) from "user")::int as people, (select count(*) from message)::int as messages
-  `;
-  if ((people > 0 || messages > 0) && !options.reset) {
-    throw new Error(
-      `The database already has ${people} people and ${messages} messages. Use --reset to replace them (this deletes all conversations and accounts).`,
-    );
-  }
-  if (options.reset) {
-    log('Deleting existing data (--reset)');
-    await sql.unsafe(`
-      truncate "user", project, thread, message, attachment, share_link, project_file_index,
-        project_file_chunk, project_file_embedding_failure, audit_log, usage_event, usage_record,
-        quota_denial, quota_policy, storage_usage, session, account, verification,
-        user_preference, provider, model, job_run, deleted_object cascade
-    `);
-    await sql`delete from instance_setting where key = 'embeddings'`;
-  }
-}
-
-async function setUpCatalog(sql, options, organizationId, seedHash) {
-  const providerId = entityId(seedHash, 'provider', 0);
-  await sql`
-    insert into provider (id, organization_id, kind, label, base_url, enabled)
-    values (${providerId}, ${organizationId}, 'openai-compatible', 'Scale stub (synthetic)', ${options.stubUrl}, true)
-  `;
-  for (const [index, model] of MODELS.entries()) {
-    await sql`
-      insert into model (organization_id, provider_id, slug, upstream_model_id, display_name,
-        description, capabilities, context_window, max_output_tokens, supported_efforts,
-        input_price_micros, output_price_micros, visible_to_roles, enabled, is_default, sort_order)
-      values (${organizationId}, ${providerId}, ${model.slug}, ${model.slug}, ${model.name},
-        'Synthetic model served by the scale-test stub.', '[]'::jsonb, 128000, 16000,
-        ${sql.json(model.reasoning ? ['instant', 'low', 'medium', 'high'] : [])},
-        ${model.input}, ${model.output}, ${sql.json(['admin', 'auditor', 'user', 'restricted'])},
-        true, ${index === 0}, ${index})
-    `;
-  }
-  const embeddings = {
-    enabled: true,
-    providerId,
-    modelId: EMBEDDING_MODEL,
-    dimensions: options.dimensions,
-    inputPriceMicros: 20_000,
-  };
-  await sql`
-    insert into instance_setting (organization_id, key, value)
-    values (${organizationId}, 'embeddings', ${sql.json(embeddings)})
-    on conflict (organization_id, key) do update set value = excluded.value, updated_at = now()
-  `;
-  // A budget that is evaluated on every message but never reached, so admission
-  // reads usage events as it would with a real policy in place.
-  const [policy] = await sql`
-    insert into quota_policy (organization_id, name, description, metric, limit_value, window_kind, timezone)
-    values (${organizationId}, 'Monthly budget', 'Scale-test policy; evaluated, never reached.',
-      'cost', 1000000000000, 'monthly', 'UTC')
-    returning id
-  `;
-  await sql`insert into quota_policy_role (policy_id, role) values (${policy.id}, 'user')`;
-  return {
-    providerId,
-    policyId: policy.id,
-    modelKey: `${providerId}/${EMBEDDING_MODEL}/${options.dimensions}`,
-  };
-}
-
-/** The same table the API creates at runtime (apps/api/src/services/embeddings/storage.ts). */
-async function ensureEmbeddingTable(sql, dimensions) {
-  await sql`create extension if not exists vector`;
-  const [current] = await sql`
-    select a.atttypmod as dimensions from pg_attribute a
-    where a.attrelid = to_regclass(${EMBEDDING_TABLE}) and a.attname = 'embedding' and not a.attisdropped
-  `;
-  if (current && Number(current.dimensions) === dimensions) {
-    await sql.unsafe(`truncate ${EMBEDDING_TABLE}`);
-    return;
-  }
-  if (current) await sql.unsafe(`drop table ${EMBEDDING_TABLE}`);
-  const [{ schema }] = await sql`
-    select n.nspname as schema from pg_extension e join pg_namespace n on n.oid = e.extnamespace
-    where e.extname = 'vector'
-  `;
-  await sql.unsafe(`
-    create table ${EMBEDDING_TABLE} (
-      attachment_id text not null,
-      ordinal integer not null,
-      model_key text not null,
-      embedding "${schema}".vector(${dimensions}) not null,
-      embedded_at timestamp with time zone not null default now(),
-      constraint project_file_embedding_pk primary key (attachment_id, ordinal),
-      constraint project_file_embedding_chunk_fk foreign key (attachment_id, ordinal)
-        references project_file_chunk (attachment_id, ordinal) on delete cascade
-    )
-  `);
-}
-
-async function dropSecondaryIndexes(sql) {
-  const indexes = await sql`
-    select i.indexrelid::regclass::text as name, pg_get_indexdef(i.indexrelid) as definition
-    from pg_index i
-    join pg_class c on c.oid = i.indrelid
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = current_schema()
-      and c.relname = any(${LOADED_TABLES})
-      and not exists (select 1 from pg_constraint k where k.conindid = i.indexrelid)
-  `;
-  await sql.unsafe(
-    `create table ${INDEX_BACKUP_TABLE} (name text primary key, definition text not null)`,
-  );
-  for (const index of indexes) {
-    await sql`insert into ${sql(INDEX_BACKUP_TABLE)} (name, definition) values (${index.name}, ${index.definition})`;
-  }
-  for (const index of indexes) await sql.unsafe(`drop index ${index.name}`);
-  return indexes;
-}
-
 async function inParallel(items, concurrency, run) {
   const queue = [...items];
   const runners = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
@@ -396,240 +209,6 @@ async function rebuildIndexes(options, indexes) {
   await sql.unsafe(`drop table ${INDEX_BACKUP_TABLE}`);
   await sql.end({ timeout: 5 });
   return timings.sort((a, b) => b.seconds - a.seconds);
-}
-
-/** Usage events, rollups, storage counters and denials, derived from the loaded rows. */
-async function deriveTables(sql, options, catalog, organizationId) {
-  const { usageEvents } = options.profile.dataset;
-  const steps = [];
-  const step = async (name, run) => {
-    const started = performance.now();
-    const result = await run();
-    steps.push({
-      name,
-      seconds: (performance.now() - started) / 1000,
-      rows: result?.count ?? null,
-    });
-  };
-  await sql.begin(async (tx) => {
-    await tx.unsafe('set local session_replication_role = replica');
-    await tx.unsafe("set local work_mem = '256MB'");
-    // One usage event per generated reply, for the newest replies only: what
-    // remains after usage-event retention has pruned the older ones.
-    await step('usage_event', () =>
-      tx.unsafe(
-        `insert into usage_event (id, organization_id, user_id, model_slug, occurred_at, message_count,
-           tokens_in, tokens_out, cost_micros, input_price_micros, output_price_micros)
-         select md5(m.id || ':usage')::uuid::text, $1, m.user_id, m.model_slug, m.created_at, 1,
-           coalesce(m.tokens_in, 0), coalesce(m.tokens_out, 0),
-           round((coalesce(m.tokens_in, 0)::numeric * mo.input_price_micros
-             + coalesce(m.tokens_out, 0)::numeric * mo.output_price_micros) / 1000000)::bigint,
-           mo.input_price_micros, mo.output_price_micros
-         from (select * from message where role = 'assistant' order by created_at desc limit $2) m
-         join model mo on mo.slug = m.model_slug`,
-        [organizationId, usageEvents],
-      ),
-    );
-    // Daily rollups are kept for the whole history (no retention prunes them).
-    await step('usage_record', () =>
-      tx.unsafe(
-        `insert into usage_record (id, organization_id, user_id, model_slug, day, message_count,
-           tokens_in, tokens_out, cost_micros, created_at, updated_at)
-         select md5(m.user_id || m.model_slug || d.day)::uuid::text, $1, m.user_id, m.model_slug, d.day,
-           count(*), sum(coalesce(m.tokens_in, 0)), sum(coalesce(m.tokens_out, 0)),
-           sum(round((coalesce(m.tokens_in, 0)::numeric * mo.input_price_micros
-             + coalesce(m.tokens_out, 0)::numeric * mo.output_price_micros) / 1000000))::bigint,
-           min(m.created_at), max(m.created_at)
-         from message m
-         join model mo on mo.slug = m.model_slug
-         cross join lateral (select to_char(m.created_at at time zone 'UTC', 'YYYY-MM-DD') as day) d
-         where m.role = 'assistant'
-         group by m.user_id, m.model_slug, d.day`,
-        [organizationId],
-      ),
-    );
-    await step('storage_usage', () =>
-      tx.unsafe(
-        `insert into storage_usage (id, organization_id, user_id, live_bytes, live_file_count,
-           pending_bytes, pending_file_count)
-         select md5(user_id || ':storage')::uuid::text, $1, user_id,
-           coalesce(sum(size_bytes) filter (where deleted_at is null), 0),
-           count(*) filter (where deleted_at is null),
-           coalesce(sum(size_bytes) filter (where deleted_at is not null), 0),
-           count(*) filter (where deleted_at is not null)
-         from attachment group by user_id`,
-        [organizationId],
-      ),
-    );
-    await step('quota_denial', () =>
-      tx.unsafe(
-        `insert into quota_denial (id, organization_id, user_id, policy_id, policy_name, model_slug,
-           day, denial_count)
-         select md5(u.id || d::text)::uuid::text, $1, u.id, $2, 'Monthly budget', 'scale-stub',
-           to_char(d, 'YYYY-MM-DD'), 1 + abs(hashtext(u.id || d::text)) % 20
-         from "user" u
-         cross join generate_series($3::timestamptz - interval '60 days', $3::timestamptz, interval '1 day') d
-         where abs(hashtext(u.id)) % 100 < 3 and abs(hashtext(u.id || d::text)) % 10 < 2`,
-        [organizationId, catalog.policyId, new Date(options.nowMs).toISOString()],
-      ),
-    );
-    await step('sequences', async () => {
-      await tx.unsafe(
-        "select setval('audit_log_seq_seq', greatest((select max(seq) from audit_log), 1))",
-      );
-      await tx.unsafe(
-        "select setval('message_change_seq', greatest((select max(change_seq) from message), 1))",
-      );
-    });
-  });
-  return steps;
-}
-
-const FOREIGN_KEYS = [
-  ['message', 'thread_id', 'thread', 'id'],
-  ['message', 'user_id', '"user"', 'id'],
-  ['thread', 'user_id', '"user"', 'id'],
-  ['thread', 'project_id', 'project', 'id'],
-  ['project', 'user_id', '"user"', 'id'],
-  ['attachment', 'message_id', 'message', 'id'],
-  ['attachment', 'project_id', 'project', 'id'],
-  ['attachment', 'user_id', '"user"', 'id'],
-  ['share_link', 'thread_id', 'thread', 'id'],
-  ['project_file_index', 'attachment_id', 'attachment', 'id'],
-  ['project_file_chunk', 'attachment_id', 'attachment', 'id'],
-  ['account', 'user_id', '"user"', 'id'],
-  ['session', 'user_id', '"user"', 'id'],
-  ['user_preference', 'user_id', '"user"', 'id'],
-  ['audit_log', 'actor_user_id', '"user"', 'id'],
-  ['usage_event', 'user_id', '"user"', 'id'],
-];
-
-async function verify(sql) {
-  const problems = [];
-  for (const [child, column, parent, key] of FOREIGN_KEYS) {
-    const [{ missing }] = await sql.unsafe(
-      `select count(*)::int as missing from ${child} c
-       where c.${column} is not null and not exists (select 1 from ${parent} p where p.${key} = c.${column})`,
-    );
-    if (missing > 0)
-      problems.push(`${child}.${column}: ${missing} rows reference a missing ${parent}`);
-  }
-  const [{ orphanEmbeddings }] = await sql.unsafe(
-    `select count(*)::int as "orphanEmbeddings" from ${EMBEDDING_TABLE} e
-     where not exists (select 1 from project_file_chunk c where c.attachment_id = e.attachment_id and c.ordinal = e.ordinal)`,
-  );
-  if (orphanEmbeddings > 0) problems.push(`${orphanEmbeddings} embeddings without a passage`);
-  const [{ short }] = await sql.unsafe(
-    `select count(*)::int as short from thread t
-     left join (select thread_id, count(*) as n from message group by thread_id) m on m.thread_id = t.id
-     where coalesce(m.n, 0) < 2`,
-  );
-  if (short > 0) problems.push(`${short} conversations with fewer than two messages`);
-  return problems;
-}
-
-async function databaseSummary(sql) {
-  const [{ bytes }] = await sql`select pg_database_size(current_database()) as bytes`;
-  const tables = await sql`
-    select c.relname as name, c.reltuples::bigint as rows,
-      pg_total_relation_size(c.oid) as total_bytes, pg_relation_size(c.oid) as table_bytes,
-      pg_indexes_size(c.oid) as index_bytes
-    from pg_class c join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = current_schema() and c.relkind = 'r'
-    order by pg_total_relation_size(c.oid) desc limit 15
-  `;
-  return {
-    bytes: Number(bytes),
-    tables: tables.map((t) => ({
-      name: t.name,
-      rows: Number(t.rows),
-      totalBytes: Number(t.total_bytes),
-      tableBytes: Number(t.table_bytes),
-      indexBytes: Number(t.index_bytes),
-    })),
-  };
-}
-
-/** People, project conversations and search terms the load test uses. */
-function fixtures(options, plan, seedHash, password) {
-  const id = ids(seedHash);
-  const { attributes, conversationsPerPerson } = plan;
-  const {
-    personConvStart,
-    convProject,
-    projectOwner,
-    projectFileStart,
-    fileState,
-    personProjectStart,
-  } = plan.shared;
-  const usable = (i) =>
-    i !== 0 &&
-    !attributes[i].banned &&
-    conversationsPerPerson[i] > 0 &&
-    attributes[i].role !== 'auditor';
-
-  // One conversation per project owner, in a project with embedded files:
-  // large projects first (their messages are answered by searching passages),
-  // then ordinary ones so small profiles still have enough distinct owners.
-  const projectThreads = [];
-  const projectOwners = new Set();
-  for (const large of [true, false]) {
-    for (let i = 1; i < attributes.length && projectThreads.length < 200; i++) {
-      if (!usable(i) || projectOwners.has(i) || personProjectStart[i + 1] === personProjectStart[i])
-        continue;
-      for (let c = personConvStart[i]; c < personConvStart[i + 1]; c++) {
-        const p = convProject[c];
-        if (p < 0 || isLargeProject(p) !== large) continue;
-        const flags = conversationFlags(seedHash, c);
-        if (flags.deleted || flags.temporary || flags.archived) continue;
-        let embedded = false;
-        for (let f = projectFileStart[p]; f < projectFileStart[p + 1]; f++) {
-          if (fileState[f] === FILE_STATE.embedded) embedded = true;
-        }
-        if (!embedded) continue;
-        projectThreads.push({
-          email: attributes[projectOwner[p]].email,
-          threadId: id.thread(c),
-          projectId: id.project(p),
-          large,
-          terms: projectTopics(seedHash, p),
-        });
-        projectOwners.add(i);
-        break;
-      }
-    }
-  }
-
-  // Everyone else who chats, sampled in proportion to activity (Efraimidis-Spirakis).
-  const keyed = [];
-  for (let i = 1; i < attributes.length; i++) {
-    if (!usable(i) || projectOwners.has(i)) continue;
-    const u = hash01(seedHash, 0x5001, i) || 1e-9;
-    keyed.push({ i, key: u ** (1 / conversationsPerPerson[i]) });
-  }
-  keyed.sort((a, b) => b.key - a.key);
-  const sample = keyed.slice(0, 800).map(({ i }) => ({
-    email: attributes[i].email,
-    conversations: conversationsPerPerson[i],
-    projects: attributes[i].role !== 'restricted',
-  }));
-  const half = Math.ceil(sample.length / 2);
-  return {
-    profile: options.profile.name,
-    seed: options.seed,
-    now: new Date(options.nowMs).toISOString(),
-    password,
-    admin: { email: ADMIN_EMAIL },
-    model: 'scale-stub',
-    browse: sample.slice(0, half),
-    chat: sample.slice(half),
-    projectThreads,
-    searchTerms: searchTerms(),
-  };
-}
-
-function formatRate(rows, seconds) {
-  return seconds > 0 ? Math.round(rows / seconds) : rows;
 }
 
 async function main() {
