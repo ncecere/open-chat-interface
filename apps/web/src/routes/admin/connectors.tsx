@@ -145,6 +145,8 @@ function ConnectorCard({
   const queryClient = useQueryClient();
   const test = useMutation({
     mutationFn: () => api.post<ConnectorTestResult>(`/admin/connectors/${connector.id}/test`),
+    // A test is a contact (or a failure): the row's "Last contact" follows (#84).
+    onSettled: () => queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY }),
   });
   const refresh = useMutation({
     mutationFn: () => api.post<ConnectorRefreshResult>(`/admin/connectors/${connector.id}/refresh`),

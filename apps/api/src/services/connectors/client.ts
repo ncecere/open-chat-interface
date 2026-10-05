@@ -129,11 +129,11 @@ export async function withMcpClient<T>(
       onUncaughtError: () => {},
     });
     const result = await use(client);
-    recordContact(target.id);
+    await recordContact(target.id);
     return result;
   } catch (error) {
     const failure = connectorFailure(target.name, error, signal, auth);
-    recordFailure(target.id, failure.message);
+    await recordFailure(target.id, failure.message);
     throw failure;
   } finally {
     if (client) await closeQuietly(client);
