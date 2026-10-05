@@ -1,4 +1,5 @@
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
+import { ERROR_CODES } from '@oci/shared';
 
 /**
  * Draining on shutdown (v0.11 design, item 13).
@@ -64,7 +65,8 @@ export function drainRefusal(): Response {
   return new Response(
     JSON.stringify({
       error: {
-        code: 'INTERNAL_ERROR',
+        // A planned restart, not a fault: clients and logs can tell them apart.
+        code: ERROR_CODES.SERVER_RESTARTING,
         message: 'This server is restarting. Send your message again in a moment.',
       },
     }),

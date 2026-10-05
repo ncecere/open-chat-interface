@@ -48,3 +48,18 @@ describe('shutdown and replay readers', () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(190);
   });
 });
+
+describe('the refusal of a new turn while draining', () => {
+  it('says the server is restarting, not that something failed', async () => {
+    const { drainRefusal } = await import('../../lib/drain.js');
+    const response = drainRefusal();
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('1');
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'SERVER_RESTARTING',
+        message: 'This server is restarting. Send your message again in a moment.',
+      },
+    });
+  });
+});
