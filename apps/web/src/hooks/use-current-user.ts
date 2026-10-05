@@ -61,6 +61,10 @@ interface CurrentChatDefaults {
   defaultModelSlug?: string | null;
   /** Saved defaults that no longer apply and are ignored (v0.10). */
   defaultProblems?: PersonalDefaultProblem[];
+  /** Files one message may carry (v0.11.1; absent from an older API). */
+  maxFilesPerMessage?: number;
+  /** Largest file the instance accepts, in bytes (v0.11.1; absent from an older API). */
+  maxFileBytes?: number;
 }
 
 /** What Settings needs to hide sections with nothing in them (v0.9.1). */
