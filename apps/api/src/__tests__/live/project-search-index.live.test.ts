@@ -245,6 +245,7 @@ describe.skipIf(!available)('live: project file search index', () => {
     expect(byId.get(indexed.id)).toEqual({
       status: 'indexed',
       passages: (await chunks(indexed.id)).length,
+      truncated: false,
     });
     expect(byId.get(image.id)).toEqual({ status: 'no-text', passages: 0 });
     expect(byId.get(waiting.id)).toEqual({ status: 'pending', passages: 0 });
