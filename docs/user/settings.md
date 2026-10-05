@@ -32,8 +32,8 @@ Your name, email address, role, and how you sign in.
   browser and system, a shortened network address, when each signed in, and
   when it was last active. Your current device is marked **This device**.
   **Sign out** ends one other session; **Sign out all other devices** ends
-  every session but this one. A device you sign out can stay signed in for up
-  to five minutes.
+  every session but this one. A device you sign out is signed out on its next
+  request.
 
 You cannot change your email address yourself.
 
