@@ -143,6 +143,11 @@ before a new user turn is saved. Shorten it, remove files, or choose a model wit
 more context. The application also has fixed safety ceilings, so choosing a
 larger model does not remove every limit.
 
+Whenever a message is refused like this, or because you are sending too quickly
+or have reached a usage limit, it is not sent: its text goes back into the
+message box and its files stay attached, so you can send it again once the
+reason is dealt with. The conversation is left as it was.
+
 ## Long conversations
 
 When a conversation grows long, OCI summarises its earlier messages in the
