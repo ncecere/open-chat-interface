@@ -155,6 +155,25 @@ describe('user detail actions', () => {
     expect(dialog()).toBeNull();
   });
 
+  it('explains beside the control that you cannot remove your own administrator role (#76)', async () => {
+    const fallback = api.get.getMockImplementation();
+    api.get.mockImplementation(async (path: string) =>
+      path === '/me' ? { user: { id: 'user-1' }, preferences: {}, features: {} } : fallback?.(path),
+    );
+    ({ root } = await renderDetail());
+
+    const select = button('Role for dana@example.test');
+    expect(select.disabled).toBe(true);
+    const note = document.getElementById(select.getAttribute('aria-describedby') ?? '');
+    expect(note?.textContent).toBe(
+      'You cannot remove your own administrator role. Ask another administrator.',
+    );
+    // No confirmation about yourself in the third person, and nothing sent.
+    await click(select);
+    expect(dialog()).toBeNull();
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
   it('changes a non-administrator role without a confirmation', async () => {
     user = { ...baseUser, role: 'user' };
     ({ root } = await renderDetail());

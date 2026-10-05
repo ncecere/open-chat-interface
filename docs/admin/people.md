@@ -19,8 +19,8 @@ The list can also be opened already filtered to one role: the people count on
 
 Each row has a role selector offering all four roles. A change applies as soon
 as you pick it, except one that grants or removes administrator access, which
-asks for confirmation first. You cannot remove your own administrator role; the
-server refuses and the reason is shown beside the control.
+asks for confirmation first. You cannot remove your own administrator role: on
+your own account the role control is disabled, with the reason beside it.
 
 ### Saved views
 

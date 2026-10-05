@@ -133,6 +133,7 @@ export function Select({
   placeholder,
   className,
   'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedBy,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -142,6 +143,8 @@ export function Select({
   placeholder?: string;
   className?: string;
   'aria-label'?: string;
+  /** A note about the field, such as why it is disabled. */
+  'aria-describedby'?: string;
 }) {
   return (
     <SelectRoot
@@ -149,7 +152,12 @@ export function Select({
       onValueChange={(next) => onChange(fromRadixValue(next))}
       disabled={disabled}
     >
-      <SelectTrigger id={id} className={className} aria-label={ariaLabel}>
+      <SelectTrigger
+        id={id}
+        className={className}
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+      >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
       <SelectContent>
