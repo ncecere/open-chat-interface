@@ -78,8 +78,7 @@ test('settings fit the window and offer every section without wrapping', async (
   await expect(page).toHaveURL(/\/settings\/models$/);
   expect(await sidewaysOverflow(page)).toBeLessThanOrEqual(0);
 
-  // Shortcuts and help are cards on every settings page.
-  await expect(page.getByRole('heading', { name: 'Keyboard Shortcuts' })).toBeVisible();
+  // Help is a card on every settings page; shortcuts too, given a mouse (below).
   await expect(page.getByRole('heading', { name: 'Need help?' })).toBeVisible();
 
   // The retired tabs' addresses land on Settings.
@@ -110,4 +109,17 @@ test('the header offers Light, Dark and System, and the wide avatar is 96px', as
   const box = await avatar.boundingBox();
   const wide = (page.viewportSize()?.width ?? 0) >= 1024;
   expect(box?.width).toBe(wide ? 96 : 48);
+});
+
+test('lists keyboard shortcuts only where there is a mouse or trackpad (#106)', async ({
+  page,
+}, testInfo) => {
+  await signIn(page);
+  await page.goto('/settings');
+  // The card beside it, shown everywhere: the side column has rendered.
+  await expect(page.getByRole('heading', { name: 'Need help?' })).toBeVisible();
+  const card = page.getByRole('heading', { name: 'Keyboard Shortcuts' });
+  // mobile-chromium emulates a Pixel 7: a touch screen and no fine pointer.
+  if (testInfo.project.use.hasTouch) await expect(card).toBeHidden();
+  else await expect(card).toBeVisible();
 });

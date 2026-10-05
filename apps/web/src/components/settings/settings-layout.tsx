@@ -123,7 +123,12 @@ function ShortcutsCard() {
     ...messageShortcuts(invertSend, apple),
   ];
   return (
-    <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
+    // Only where there is a mouse or trackpad, and so most likely a keyboard:
+    // ⌘ shortcuts on a phone are noise (#106). A tablet with a trackpad keeps it.
+    <div
+      data-testid="shortcuts-card"
+      className="hidden w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4 any-pointer-fine:block"
+    >
       <h2 className="mb-3 text-sm font-semibold">Keyboard Shortcuts</h2>
       <div className="flex flex-col gap-3">
         {shortcuts.map((shortcut) => (
