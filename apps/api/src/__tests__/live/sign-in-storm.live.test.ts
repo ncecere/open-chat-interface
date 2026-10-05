@@ -49,6 +49,11 @@ vi.mock('../../config/env.js', async (importOriginal) => {
     loadEnv: () => ({
       ...actual.loadEnv(),
       REDIS_URL: process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6389',
+      // The defaults these tests assert, whatever the environment says (CI
+      // raises RATE_LIMIT_AUTH_PER_MINUTE so browser tests are not throttled).
+      RATE_LIMIT_AUTH_PER_MINUTE: 10,
+      RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE: 300,
+      RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE: 3_000,
       ...state.env,
     }),
   };
