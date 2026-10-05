@@ -101,25 +101,29 @@ export function ComposerOptions({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="min-w-56 md:hidden">
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger disabled={!supportsEffort}>
-              <Brain />
-              <span className="flex-1 capitalize">Reasoning: {effort}</span>
-              <ChevronRight className="ml-auto" />
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {availableEfforts.map((option) => (
-                <DropdownMenuItem
-                  key={option}
-                  onSelect={() => onEffortChange(option)}
-                  className="capitalize"
-                >
-                  <span className="w-4">{option === effort && <Check />}</span>
-                  {option}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          {/* Only for a model that offers reasoning levels, as the user guide
+              says; a greyed "Instant" on every other model explained nothing (#95). */}
+          {supportsEffort && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Brain />
+                <span className="flex-1 capitalize">Reasoning: {effort}</span>
+                <ChevronRight className="ml-auto" />
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {availableEfforts.map((option) => (
+                  <DropdownMenuItem
+                    key={option}
+                    onSelect={() => onEffortChange(option)}
+                    className="capitalize"
+                  >
+                    <span className="w-4">{option === effort && <Check />}</span>
+                    {option}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
           <DropdownMenuItem
             disabled={!supportsSearch}
             onSelect={() => onWebSearchChange(!webSearch)}
@@ -139,27 +143,29 @@ export function ComposerOptions({
 
       <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
 
-      <div className="hidden md:block">
-        <DropdownMenu>
-          {/* Pill renders a real button, so the trigger's ARIA belongs on it
+      {supportsEffort && (
+        <div className="hidden md:block">
+          <DropdownMenu>
+            {/* Pill renders a real button, so the trigger's ARIA belongs on it
             directly; a wrapping span would receive button semantics it
             cannot legally carry. */}
-          <DropdownMenuTrigger asChild disabled={!supportsEffort}>
-            <Pill icon={Zap} label={effort} disabled={!supportsEffort} className="capitalize" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top">
-            {availableEfforts.map((option) => (
-              <DropdownMenuItem
-                key={option}
-                onSelect={() => onEffortChange(option)}
-                className="capitalize"
-              >
-                {option}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+            <DropdownMenuTrigger asChild>
+              <Pill icon={Zap} label={effort} className="capitalize" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top">
+              {availableEfforts.map((option) => (
+                <DropdownMenuItem
+                  key={option}
+                  onSelect={() => onEffortChange(option)}
+                  className="capitalize"
+                >
+                  {option}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
 
       <Pill
         icon={Globe}

@@ -193,6 +193,23 @@ describe('Composer interaction', () => {
     expect(button('Send message').className).not.toContain('text-[var(--text-primary)]');
   });
 
+  it('offers the reasoning level only for a model that has levels (#95)', async () => {
+    await render();
+    expect(container.querySelector('button[aria-label="low"]')).not.toBeNull();
+
+    const plain: CatalogModel = {
+      ...model,
+      id: 'plain',
+      slug: 'plain',
+      capabilities: [],
+      supportedEfforts: [],
+    };
+    await render({ models: [plain], selectedModel: plain, effort: 'instant' });
+    // Not a greyed-out "Instant": no control at all, as the user guide says.
+    expect(container.querySelector('button[aria-label="instant"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/instant/i);
+  });
+
   it('focuses the message field on mount only when asked', async () => {
     await render();
     expect(document.activeElement).not.toBe(textarea());
@@ -327,9 +344,10 @@ describe('Composer interaction', () => {
     await render();
     expect(button('low').disabled).toBe(false);
     expect(button('low').getAttribute('aria-haspopup')).toBe('menu');
+    // Without levels (or a model) the control goes rather than greying out (#95).
     await render({ selectedModel: { ...model, capabilities: [], supportedEfforts: [] } });
-    expect(button('low').disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="low"]')).toBeNull();
     await render({ selectedModel: null });
-    expect(button('low').disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="low"]')).toBeNull();
   });
 });
