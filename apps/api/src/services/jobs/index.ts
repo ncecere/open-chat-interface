@@ -203,6 +203,8 @@ export function lifecycleJobs(): JobDefinition[] {
       // fall due and anything queued while another replica held the lock.
       name: 'webhooks.deliver',
       intervalMs: MINUTE,
+      // Deliveries queued while no worker ran go out at start, not a minute later.
+      runOnStart: true,
       run: () => processWebhookDeliveries(),
     },
     {

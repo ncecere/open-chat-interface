@@ -11,6 +11,11 @@ import { type JobLease, withJobLock } from './lock.js';
 export interface JobDefinition {
   name: string;
   intervalMs: number;
+  /**
+   * Also run once shortly after the process starts, instead of waiting a whole
+   * interval: for work that may have queued up while no worker was running.
+   */
+  runOnStart?: boolean;
   /** Returns how many items it touched, for the run record. */
   run: () => Promise<number>;
 }
@@ -143,6 +148,7 @@ async function runRecordedJob(job: JobDefinition, lease: JobLease): Promise<numb
 }
 
 const timers: NodeJS.Timeout[] = [];
+const START_DELAY_MS = 1_000;
 
 /** Starts every job on its own interval. Safe to call once per process. */
 export function startJobs(jobs: JobDefinition[]): void {
@@ -156,10 +162,18 @@ export function startJobs(jobs: JobDefinition[]): void {
     const timer = setInterval(tick, job.intervalMs);
     timer.unref();
     timers.push(timer);
+    if (job.runOnStart) {
+      // A second in, once the process has settled; the lock still keeps two
+      // replicas from running it together.
+      const first = setTimeout(tick, START_DELAY_MS);
+      first.unref();
+      timers.push(first);
+    }
   }
 }
 
 export function stopJobs(): void {
+  // clearInterval also clears a timeout: both are timers in Node.
   for (const timer of timers) clearInterval(timer);
   timers.length = 0;
 }
