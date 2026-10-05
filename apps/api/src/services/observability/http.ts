@@ -1,20 +1,32 @@
 import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
-import { routePath } from 'hono/route';
+import { matchedRoutes } from 'hono/route';
 import { loadEnv } from '../../config/env.js';
 import { safeCompare } from '../../lib/crypto.js';
 import { registerCollectedGauges } from './collected.js';
 import { httpRequestDuration, httpRequests, renderMetrics } from './metrics.js';
+import { registerOperationalGauges } from './operational.js';
+import { markRequestStart } from './request-timing.js';
 import { extractTraceContext, tracingEnabled, withSpan } from './tracing.js';
 
 /**
  * The route template that handled a request (`/api/threads/:id`), never the
  * raw path, so ids cannot become metric labels or span names. Requests no
  * handler claimed are grouped as `unmatched`.
+ *
+ * The router returns every route that matches, in registration order, and
+ * only the first handler runs: `GET /api/threads/search` matches both
+ * `/search` and the later `/:id`. So this is the handler that ran (Hono
+ * records the index of the deepest one reached), or, when a middleware
+ * answered first (a 401 from `requireAuth`), the first handler after it,
+ * the one the request was for. Middleware (`use`) routes have method `ALL`.
  */
-function routeTemplate(c: Parameters<typeof routePath>[0]): string {
-  const path = routePath(c, -1);
+function routeTemplate(c: Parameters<typeof matchedRoutes>[0]): string {
+  const routes = matchedRoutes(c);
+  const from = Math.max(0, c.req.routeIndex ?? 0);
+  const handler = routes.slice(from).find((route) => route.method !== 'ALL');
+  const path = handler?.path;
   return path && path !== '/*' && path !== '*' ? path : 'unmatched';
 }
 
@@ -23,6 +35,7 @@ const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIO
 /** Counts and times every request, and opens a server span when tracing is on. */
 export const observeRequests = createMiddleware(async (c, next) => {
   const started = performance.now();
+  markRequestStart(c.req.raw, started);
   const method = METHODS.has(c.req.method) ? c.req.method : 'OTHER';
 
   const finish = (status: number) => {
@@ -68,6 +81,7 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
  */
 export const metricsRoutes = new Hono();
 registerCollectedGauges();
+registerOperationalGauges();
 
 metricsRoutes.get('/', async (c) => {
   const token = loadEnv().METRICS_TOKEN;

@@ -92,7 +92,7 @@ docker compose pull api web migrate
 docker compose up -d --no-build
 ```
 
-The images are public, so pulling them needs no registry login. Published images target `linux/amd64` only. Unset `OCI_API_IMAGE` and
+The images are public, so pulling them needs no registry login. From v0.11 they are published for `linux/amd64` and `linux/arm64` under the same tags (earlier releases: `linux/amd64` only). Unset `OCI_API_IMAGE` and
 `OCI_WEB_IMAGE` to retain Compose's local source-build defaults.
 
 Confirm publication succeeded for the selected version before pulling it.
@@ -138,6 +138,22 @@ refuses to start rather than failing later on an arbitrary query.
 Caddy re-resolves the API service name, so replicas are discovered as they
 scale. Sessions are cookie-signed and stream resume goes through Redis, so no
 sticky sessions are needed.
+
+### Kubernetes
+
+A Helm chart, [`deploy/helm/open-chat-interface`](deploy/helm/open-chat-interface/README.md),
+runs the API, a background worker and the web proxy with rolling, draining
+upgrades: `helm upgrade` migrates before replacing pods and runs the
+post-deploy phase once every pod runs the new release. PostgreSQL, Redis and
+S3-compatible storage are external (operators or managed services):
+
+```bash
+helm install oci deploy/helm/open-chat-interface -n oci \
+  --set secrets.existingSecret=oci-runtime \
+  --set config.appUrl=https://chat.example.com
+```
+
+See [Kubernetes with Helm](docs/OPERATIONS.md#kubernetes-with-helm).
 
 Two constraints to know before scaling:
 

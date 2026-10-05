@@ -2,6 +2,9 @@ import { and, asc, eq, isNotNull, isNull, schema } from '@oci/db';
 import type { ProjectFileIndex } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { runsBackgroundJobs } from '../../lib/role.js';
+import { kickJob } from '../jobs/requests.js';
+import { jobMayContinue } from '../jobs/runner.js';
 import { chunkText } from './chunking.js';
 import { embedUploadedProjectFile } from './embedding.js';
 
@@ -63,13 +66,19 @@ export async function indexProjectFile(attachmentId: string): Promise<boolean> {
  * Indexes a file just uploaded to a project. A failure is logged, not raised:
  * the upload has already succeeded, the file is used whole meanwhile, and the
  * background job retries it. With meaning-based search on, the start of the
- * file is then embedded too (v0.9), on the same terms.
+ * file is then embedded too (v0.9), on the same terms; on a `web` replica
+ * (v0.11) a worker is asked to embed it instead, since embedding calls the
+ * provider and belongs to the background work that role leaves to workers.
  */
 export async function indexUploadedProjectFile(attachmentId: string): Promise<void> {
   try {
     await indexProjectFile(attachmentId);
   } catch (error) {
     logger.warn({ error, attachmentId }, 'Project file indexing failed; the job will retry it');
+    return;
+  }
+  if (!runsBackgroundJobs()) {
+    kickJob('projects.embed-passages');
     return;
   }
   await embedUploadedProjectFile(attachmentId);
@@ -102,6 +111,8 @@ export async function indexPendingProjectFiles(limit = INDEX_FILES_PER_RUN): Pro
     .limit(Math.max(1, limit));
   let indexed = 0;
   for (const file of pending) {
+    // A failover may have taken the job's lock, or this replica is stopping.
+    if (indexed > 0 && !(await jobMayContinue())) break;
     try {
       if (await indexProjectFile(file.id)) indexed += 1;
     } catch (error) {

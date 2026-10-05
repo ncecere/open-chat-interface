@@ -1,0 +1,264 @@
+# Failover drill stack (tools/failover-drill/run.mjs; docs/dev/failover.md).
+# Every credential here is a throwaway test value. Ports bind to 127.0.0.1.
+#
+# A three-node Patroni cluster (Spilo: Patroni + PostgreSQL 17) coordinated by
+# etcd, behind HAProxy, which routes to whichever node Patroni's REST API
+# reports as primary and closes every client connection to a node the moment
+# it stops being primary, as a production HAProxy in front of Patroni does.
+# OCI runs as two API replicas (OCI_ROLE=web) and one worker (OCI_ROLE=worker),
+# all connecting through HAProxy, behind the bundled web proxy.
+#
+# `run.mjs --redis` (profile `redis-ha`): Redis under Sentinel instead of one
+# server, a primary, a replica and three sentinels (v0.11 design, item 16),
+# and the drill kills the Redis primary instead of moving the PostgreSQL one.
+#
+# Images are pinned by digest. Licences: Spilo Apache-2.0 (Patroni MIT,
+# PostgreSQL licence), etcd Apache-2.0, HAProxy GPL-2.0-or-later (run as a
+# separate test container, never distributed with OCI), Redis 7.2 BSD-3-Clause
+# (the last release before the licence change), Node.js MIT.
+name: oci-failover
+
+x-spilo: &spilo
+  image: ${OCI_DRILL_SPILO_IMAGE:-ghcr.io/zalando/spilo-17:4.0-p3@sha256:b7db9e8f62e809ebd9a0679fbdba147a811fdd240ab78380ea4720a46a017184}
+  restart: 'no'
+  environment:
+    SCOPE: oci-drill
+    PGVERSION: '17'
+    SPILO_PROVIDER: local
+    ETCD3_HOST: etcd:2379
+    PGPASSWORD_SUPERUSER: failover-drill-superuser
+    PGPASSWORD_STANDBY: failover-drill-standby
+    PGPASSWORD_ADMIN: failover-drill-admin
+    # OCI connects without TLS on the private test network.
+    ALLOW_NOSSL: 'true'
+    # Fast leader election for a drill (the defaults are ttl 30, loop_wait 10).
+    # Small buffers: three nodes share one Docker host.
+    SPILO_CONFIGURATION: |
+      bootstrap:
+        dcs:
+          ttl: 10
+          loop_wait: 2
+          retry_timeout: 5
+          maximum_lag_on_failover: 33554432
+          postgresql:
+            parameters:
+              max_connections: 200
+      postgresql:
+        parameters:
+          shared_buffers: 64MB
+          log_min_messages: warning
+  healthcheck:
+    test: ['CMD-SHELL', 'curl -sf http://127.0.0.1:8008/health']
+    interval: 2s
+    timeout: 5s
+    retries: 60
+    start_period: 20s
+  depends_on:
+    etcd:
+      condition: service_started
+
+x-redis: &redis
+  image: ${OCI_DRILL_REDIS_IMAGE:-redis:7.2.10-alpine@sha256:395ccd7ee4db0867de0d0410f4712a9e0331cff9fdbd864f71ec0f7982d3ffe6}
+  restart: 'no'
+  profiles: ['redis-ha']
+  healthcheck:
+    test: ['CMD', 'redis-cli', 'ping']
+    interval: 2s
+    timeout: 5s
+    retries: 30
+
+# A sentinel; SENTINEL_NAME is the host name it announces. Quorum 2 of 3; a
+# primary silent for 2 s is down, as a drill wants (the default is 30 s).
+x-sentinel: &sentinel
+  <<: *redis
+  command:
+    - sh
+    - -c
+    - >-
+      printf '%s\n' 'port 26379'
+      'sentinel resolve-hostnames yes' 'sentinel announce-hostnames yes'
+      "sentinel announce-ip $$SENTINEL_NAME"
+      'sentinel monitor oci redis-primary 6379 2'
+      'sentinel down-after-milliseconds oci 2000'
+      'sentinel failover-timeout oci 10000'
+      'sentinel parallel-syncs oci 1' > /tmp/sentinel.conf
+      && exec redis-sentinel /tmp/sentinel.conf --loglevel warning
+  healthcheck:
+    test: ['CMD', 'redis-cli', '-p', '26379', 'ping']
+    interval: 2s
+    timeout: 5s
+    retries: 30
+
+x-api: &api
+  image: ${OCI_DRILL_API_IMAGE:-oci-failover-api:drill}
+  restart: 'no'
+  stop_grace_period: 30s
+  environment: &api-env
+    NODE_ENV: production
+    API_PORT: 3000
+    APP_URL: http://127.0.0.1:${OCI_DRILL_PORT:-18580}
+    DATABASE_URL: postgres://oci:failover-drill-only@haproxy:5432/oci
+    # --redis: blank, with REDIS_SENTINELS set instead.
+    REDIS_URL: ${OCI_DRILL_REDIS_URL-redis://redis:6379}
+    REDIS_SENTINELS: ${OCI_DRILL_REDIS_SENTINELS:-}
+    REDIS_SENTINEL_NAME: oci
+    AUTH_SECRET: failover-drill-auth-secret-not-for-production
+    ENCRYPTION_KEY: failover-drill-encryption-key-not-for-production
+    INITIAL_ADMIN_EMAIL: admin@upgrade.test
+    INITIAL_ADMIN_PASSWORD: upgrade-test-admin-password
+    STORAGE_LOCAL_PATH: /data/storage
+    RUN_MIGRATIONS: 'false'
+    OCI_ROLE: web
+    LOG_LEVEL: ${OCI_DRILL_LOG_LEVEL:-warn}
+    RATE_LIMIT_AUTH_PER_MINUTE: '100000'
+    RATE_LIMIT_CHAT_PER_MINUTE: '100000'
+    RATE_LIMIT_MAX_CONCURRENT_STREAMS: '50'
+  volumes:
+    - storage_data:/data/storage
+  networks:
+    default:
+      aliases: [api]
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+    interval: 2s
+    timeout: 5s
+    retries: 60
+    start_period: 60s
+  depends_on:
+    haproxy:
+      condition: service_started
+    redis:
+      condition: service_healthy
+
+services:
+  etcd:
+    image: ${OCI_DRILL_ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.21@sha256:a3ccd299377af4b9968d8cbaaf9722fe354297f11908f74a846075e1e5f4ee89}
+    restart: 'no'
+    command:
+      - etcd
+      - --name=etcd1
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --initial-cluster=etcd1=http://etcd:2380
+      - --enable-v2=false
+
+  pg-1:
+    <<: *spilo
+    hostname: pg-1
+  pg-2:
+    <<: *spilo
+    hostname: pg-2
+  pg-3:
+    <<: *spilo
+    hostname: pg-3
+
+  haproxy:
+    image: ${OCI_DRILL_HAPROXY_IMAGE:-haproxy:3.2.7-alpine@sha256:3b80483d47e1c7d1fc7eb4b9104f33d9a51259769be299eb675524dca2bc8157}
+    restart: 'no'
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on: [pg-1, pg-2, pg-3]
+
+  redis:
+    image: ${OCI_DRILL_REDIS_IMAGE:-redis:7.2.10-alpine@sha256:395ccd7ee4db0867de0d0410f4712a9e0331cff9fdbd864f71ec0f7982d3ffe6}
+    restart: 'no'
+    command: redis-server --save '' --appendonly no --loglevel warning
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis-primary:
+    <<: *redis
+    hostname: redis-primary
+    command: redis-server --save '' --appendonly no --loglevel warning --replica-announce-ip redis-primary
+  redis-replica:
+    <<: *redis
+    hostname: redis-replica
+    command: redis-server --save '' --appendonly no --loglevel warning --replica-announce-ip redis-replica --replicaof redis-primary 6379
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+  sentinel-1:
+    <<: *sentinel
+    hostname: sentinel-1
+    environment: { SENTINEL_NAME: sentinel-1 }
+    depends_on: { redis-replica: { condition: service_healthy } }
+  sentinel-2:
+    <<: *sentinel
+    hostname: sentinel-2
+    environment: { SENTINEL_NAME: sentinel-2 }
+    depends_on: { redis-replica: { condition: service_healthy } }
+  sentinel-3:
+    <<: *sentinel
+    hostname: sentinel-3
+    environment: { SENTINEL_NAME: sentinel-3 }
+    depends_on: { redis-replica: { condition: service_healthy } }
+
+  # The rolling-upgrade test's stub OpenAI-compatible model: replies stream for
+  # a known time, so some are always in flight when the primary changes.
+  stub:
+    image: ${OCI_DRILL_NODE_IMAGE:-node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402}
+    restart: 'no'
+    environment:
+      STUB_PORT: '4181'
+      STUB_CHUNKS: ${OCI_DRILL_STUB_CHUNKS:-30}
+      STUB_CHUNK_MS: ${OCI_DRILL_STUB_CHUNK_MS:-100}
+    volumes:
+      - ../upgrade-test/stub-model.mjs:/stub/stub-model.mjs:ro
+    command: ['node', '/stub/stub-model.mjs']
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:4181/health']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Pre-deploy migrations: `docker compose --profile tools run --rm migrate`.
+  migrate:
+    image: ${OCI_DRILL_API_IMAGE:-oci-failover-api:drill}
+    profiles: ['tools']
+    restart: 'no'
+    environment:
+      <<: *api-env
+    command: ['node', 'dist/migrate.js']
+    depends_on:
+      haproxy:
+        condition: service_started
+
+  api-1:
+    <<: *api
+  api-2:
+    <<: *api
+
+  worker:
+    <<: *api
+    environment:
+      <<: *api-env
+      OCI_ROLE: worker
+    # Not behind the web proxy: it serves health and metrics only.
+    networks: [default]
+
+  web:
+    image: ${OCI_DRILL_WEB_IMAGE:-oci-failover-web:drill}
+    restart: 'no'
+    environment:
+      API_UPSTREAM: api:3000
+      TRUSTED_PROXIES: private_ranges
+    ports:
+      - '127.0.0.1:${OCI_DRILL_PORT:-18580}:8080'
+    depends_on:
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+
+volumes:
+  storage_data:

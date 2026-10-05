@@ -149,7 +149,9 @@ export async function rankProjectChunks(
   const stopWords = terms.filter((term) => term.stopWord).map((term) => term.operand);
   const rows = await db.execute<ChunkRow & { score: number }>(sql`
     with scope as materialized (${scopedChunks(scope)}),
-    total as (select count(*)::float8 as n from scope),
+    -- Materialized: inlined, the count was recalculated for every hit (scale
+    -- harness, medium profile: 1,491 ms for a large project, 46 ms with this).
+    total as materialized (select count(*)::float8 as n from scope),
     terms as (
       select operand, operand::tsquery as query,
              operand = any(${textArray(stopWords)}) as stop_word

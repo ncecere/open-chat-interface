@@ -528,7 +528,7 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
         <Field
           label="Sign-in attempts per minute"
           htmlFor="rate-auth"
-          hint="Counted per IP address and per account."
+          hint="Failed sign-ins per account. An address has its own, larger allowance."
         >
           <Input
             id="rate-auth"

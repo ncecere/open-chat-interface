@@ -1,6 +1,8 @@
 import {
+  type EmbeddingGenerationStatus,
   type EmbeddingsStatus,
   type EmbeddingsTestResult,
+  embeddingCostMicros,
   MICROS_PER_DOLLAR,
   PGVECTOR_ENABLE_COMMAND,
   type UpdateEmbeddingsInput,
@@ -16,6 +18,7 @@ import {
   SaveRow,
   SettingsSection,
 } from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { RerankingSection } from '~/components/admin/reranking-section';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -32,7 +35,7 @@ const EMBEDDINGS_QUERY_KEY = ['admin', 'embeddings'] as const;
 export const PGVECTOR_DOCS_URL =
   'https://github.com/ncecere/open-chat-interface/blob/main/docs/OPERATIONS.md#upgrading-to-v09';
 
-interface Draft {
+export interface Draft {
   enabled: boolean;
   providerId: string;
   modelId: string;
@@ -117,6 +120,210 @@ function PgvectorNotice({ pgvector }: { pgvector: EmbeddingsStatus['pgvector'] }
   );
 }
 
+/** "$0.42", or "less than $0.01". */
+export function formatDollars(micros: number): string {
+  if (micros > 0 && micros < MICROS_PER_DOLLAR / 100) return 'less than $0.01';
+  return `$${(micros / MICROS_PER_DOLLAR).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/** "about 3 minutes", "about 2 hours", "less than a minute". */
+export function formatEta(seconds: number): string {
+  if (seconds < 60) return 'less than a minute';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 90) return `about ${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `about ${hours} hours`;
+  return `about ${Math.round(hours / 24)} days`;
+}
+
+function percent(passages: { total: number; embedded: number }): number {
+  if (passages.total === 0) return 100;
+  return Math.min(100, Math.floor((passages.embedded / passages.total) * 100));
+}
+
+/**
+ * What saving a different model will do and cost, before it is saved:
+ * passages × average tokens × the price entered (design section 7).
+ */
+export function CostEstimate({ status, draft }: { status: EmbeddingsStatus; draft: Draft }) {
+  const providerId = draft.providerId || null;
+  const modelId = draft.modelId.trim() || null;
+  if (!providerId || !modelId) return null;
+  if (providerId === status.settings.providerId && modelId === status.settings.modelId) return null;
+  const { current, filling } = status.generations;
+  if (current && filling && providerId === current.providerId && modelId === current.modelId) {
+    return (
+      <div data-embeddings-estimate="cancel">
+        <Notice title="Saving cancels the rebuild">
+          Searches stay on {current.modelId}; what was embedded with {filling.modelId} is discarded.
+        </Notice>
+      </div>
+    );
+  }
+  const { passages, averageTokens } = status.estimate;
+  const tokens = passages * averageTokens;
+  const price = priceMicros(draft.price);
+  const cost = embeddingCostMicros(status.estimate, price ?? null);
+  const costText =
+    cost === null
+      ? 'Enter a price to estimate the cost.'
+      : `About ${formatDollars(cost)} at the price entered.`;
+  return (
+    <div data-embeddings-estimate="rebuild">
+      <Notice
+        title={
+          current ? 'Changing the model re-embeds every passage' : 'Every passage will be embedded'
+        }
+      >
+        <p>
+          {passages.toLocaleString()} passages, about {tokens.toLocaleString()} tokens, are embedded
+          with {modelId} in the background. {costText}
+        </p>
+        {current && (
+          <p className="mt-1">
+            Searches keep using {current.modelId} until the new model covers every passage, then
+            switch to it.
+          </p>
+        )}
+      </Notice>
+    </div>
+  );
+}
+
+/** The generation being filled after a model change, with Switch now and Cancel rebuild. */
+function RebuildPanel({ status }: { status: EmbeddingsStatus }) {
+  const queryClient = useQueryClient();
+  const [confirm, setConfirm] = useState<'switch' | 'cancel' | null>(null);
+  const { current, filling, switchBlocked } = status.generations;
+  if (!filling) return null;
+  const share = percent(filling.passages);
+  const missing = Math.max(0, filling.passages.total - filling.passages.embedded);
+  const settle = (next: EmbeddingsStatus) => queryClient.setQueryData(EMBEDDINGS_QUERY_KEY, next);
+  const pace = !status.settings.enabled
+    ? 'Paused while meaning-based search is off.'
+    : missing === 0
+      ? 'Every passage is embedded.'
+      : filling.perMinute > 0 && filling.etaSeconds !== null
+        ? `${filling.perMinute.toLocaleString()} passages a minute; ${formatEta(filling.etaSeconds)} left.`
+        : 'Waiting for the background job.';
+  return (
+    <section
+      className="flex flex-col gap-3 rounded-xl border border-[var(--border-subtle)] p-4"
+      aria-label="Rebuild"
+      data-embeddings-rebuild={filling.id}
+    >
+      <div>
+        <h3 className="text-sm font-medium">
+          Rebuilding for {filling.modelId} ({filling.dimensions} dimensions)
+        </h3>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">
+          Searches keep using {current?.modelId ?? 'the current model'} until the new model covers
+          every passage, then switch to it.
+        </p>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Passages embedded with the new model"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={share}
+        className="h-2 overflow-hidden rounded-full bg-[var(--bg-control)]"
+      >
+        <div className="h-full bg-[var(--accent-bright)]" style={{ width: `${share}%` }} />
+      </div>
+      <p className="text-sm text-[var(--text-secondary)]" data-embeddings-rebuild-progress>
+        {filling.passages.embedded.toLocaleString()} of {filling.passages.total.toLocaleString()}{' '}
+        passages embedded ({share}%). {pace}
+      </p>
+      {filling.failures.files > 0 && (
+        <Notice tone="warning" title="Some files could not be embedded with the new model">
+          {filling.failures.files} {filling.failures.files === 1 ? 'file is' : 'files are'} waiting
+          to be retried. Last error: {filling.failures.lastError ?? 'unknown'}
+        </Notice>
+      )}
+      {switchBlocked === 'upgrade-in-progress' && (
+        <Notice tone="warning" title="The switch waits for the upgrade to finish">
+          Replicas of the previous release may still use the current embeddings. Once every replica
+          runs this release and the post-deploy step (<code>migrate --post</code>) has run, searches
+          switch to the new model.
+        </Notice>
+      )}
+      <EditOnly>
+        <div className="flex flex-wrap gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={switchBlocked !== null || !filling.storageReady}
+            onClick={() => setConfirm('switch')}
+          >
+            Switch now
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setConfirm('cancel')}>
+            Cancel rebuild
+          </Button>
+        </div>
+      </EditOnly>
+      <ConfirmDialog
+        open={confirm === 'switch'}
+        onOpenChange={(open) => setConfirm(open ? 'switch' : null)}
+        title={`Switch searches to ${filling.modelId} now?`}
+        description={
+          missing > 0
+            ? `${missing.toLocaleString()} passages (${100 - share}%) are not embedded with ${filling.modelId} yet. Until the rebuild reaches them, they are found by keyword only. The current embeddings are kept for a while, then removed.`
+            : `Every passage is embedded with ${filling.modelId}. The current embeddings are kept for a while, then removed.`
+        }
+        confirmLabel="Switch now"
+        pendingLabel="Switching…"
+        errorMessage="The switch failed."
+        onConfirm={async () =>
+          settle(
+            await api.post<EmbeddingsStatus>(`/admin/embeddings/generations/${filling.id}/switch`, {
+              force: true,
+            }),
+          )
+        }
+      />
+      <ConfirmDialog
+        open={confirm === 'cancel'}
+        onOpenChange={(open) => setConfirm(open ? 'cancel' : null)}
+        title={`Cancel the rebuild for ${filling.modelId}?`}
+        description={`Searches stay on ${current?.modelId ?? 'the current model'}, and the embeddings setting goes back to it. The ${filling.passages.embedded.toLocaleString()} passages embedded with ${filling.modelId} so far are removed.`}
+        confirmLabel="Cancel rebuild"
+        pendingLabel="Cancelling…"
+        errorMessage="The rebuild could not be cancelled."
+        onConfirm={async () =>
+          settle(
+            await api.post<EmbeddingsStatus>(
+              `/admin/embeddings/generations/${filling.id}/cancel`,
+              {},
+            ),
+          )
+        }
+      />
+    </section>
+  );
+}
+
+/** Replaced embeddings kept for their grace period. */
+function RetiredGenerations({ retired }: { retired: EmbeddingGenerationStatus[] }) {
+  if (retired.length === 0) return null;
+  return (
+    <ul className="text-xs text-[var(--text-muted)]" data-embeddings-retired>
+      {retired.map((generation) => (
+        <li key={generation.id}>
+          Embeddings of {generation.modelId} are kept until{' '}
+          {generation.dropAfter ? new Date(generation.dropAfter).toLocaleString() : 'later'}, then
+          removed.
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Progress({ status }: { status: EmbeddingsStatus }) {
   if (!status.settings.enabled) return null;
   if (!status.active) {
@@ -133,7 +340,11 @@ function Progress({ status }: { status: EmbeddingsStatus }) {
       <p className="text-sm text-[var(--text-secondary)]" data-embeddings-progress="active">
         Meaning-based search is on: {status.passages.embedded.toLocaleString()} of{' '}
         {status.passages.total.toLocaleString()} passages embedded ({status.storageDimensions}{' '}
-        dimensions). The background job embeds the rest.
+        dimensions)
+        {status.generations.filling && status.generations.current
+          ? ` with ${status.generations.current.modelId}`
+          : ''}
+        . The background job embeds the rest.
       </p>
       {status.failures.files > 0 && (
         <Notice tone="warning" title="Some files could not be embedded">
@@ -275,6 +486,9 @@ function EmbeddingsForm({ status }: { status: EmbeddingsStatus }) {
       </div>
 
       <Progress status={status} />
+      <RebuildPanel status={status} />
+      <RetiredGenerations retired={status.generations.retired} />
+      <CostEstimate status={status} draft={draft} />
 
       <EditOnly>
         <div className="flex flex-wrap items-center gap-3" aria-live="polite">
@@ -336,6 +550,8 @@ function EmbeddingsSettings() {
   const status = useQuery({
     queryKey: EMBEDDINGS_QUERY_KEY,
     queryFn: () => api.get<EmbeddingsStatus>('/admin/embeddings'),
+    // A rebuild moves on its own: follow it.
+    refetchInterval: (query) => (query.state.data?.generations.filling ? 10_000 : false),
   });
 
   if (status.isLoading) {

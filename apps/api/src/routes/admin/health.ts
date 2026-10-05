@@ -2,9 +2,15 @@ import { and, count, desc, eq, gte, isNull, lt, schema, sql } from '@oci/db';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { redisHealthCheck } from '../../lib/redis-requirement.js';
+import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
-import { sharedRedis } from '../../services/chat-streams.js';
+import { cacheBusHealthCheck } from '../../services/cache-bus/index.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
+import { encryptionHealthCheck } from '../../services/encryption/rotation.js';
+import { liveReplicas, workersHealthCheck } from '../../services/jobs/workers.js';
+import { capacityHealthCheck } from '../../services/limits/capacity/overview.js';
+import { readOnlyHealthCheck } from '../../services/maintenance/read-only.js';
 import {
   backupHealthCheck,
   complianceHealthCheck,
@@ -42,29 +48,12 @@ async function databaseCheck(): Promise<Check> {
 }
 
 /**
- * Redis is optional: without it rate limiting falls back to per-process
- * counters, which still work but do not hold across replicas. That is a
- * warning rather than a failure, since a single-replica deployment is a
- * supported configuration.
+ * Redis: optional for one replica, required for more (v0.11 design, item 16;
+ * lib/redis-requirement.ts). An error when several replicas share the
+ * database without it, or when it is configured but unreachable.
  */
-async function redisCheck(): Promise<Check> {
-  const redis = await sharedRedis();
-  if (!redis) {
-    return {
-      id: 'redis',
-      label: 'Redis',
-      status: 'warn',
-      detail: 'Not configured. Rate limits and streams are per-process.',
-    };
-  }
-
-  try {
-    await redis.ping();
-    return { id: 'redis', label: 'Redis', status: 'ok', detail: 'Responding' };
-  } catch (error) {
-    logger.error({ error }, 'Admin health: Redis check failed');
-    return { id: 'redis', label: 'Redis', status: 'error', detail: 'Configured but not reachable' };
-  }
+function redisCheck(): Promise<Check> {
+  return redisHealthCheck();
 }
 
 async function providerCheck(): Promise<Check> {
@@ -273,7 +262,17 @@ healthRoutes.get('/', async (c) => {
     guarded('backups', 'Backups', backupHealthCheck),
     guarded('webhooks', 'Webhooks', webhookHealthCheck),
     guarded('compliance', 'Compliance export', complianceHealthCheck),
+    // v0.11: a deployment of OCI_ROLE=web replicas only runs no background jobs.
+    guarded('workers', 'Background workers', workersHealthCheck),
+    // v0.11: turns waiting for, and providers throttling, model capacity.
+    guarded('capacity', 'Provider capacity', capacityHealthCheck),
+    // v0.11: read-only maintenance mode and cross-replica cache invalidation.
+    guarded('read-only', 'Read-only mode', readOnlyHealthCheck),
+    guarded('cache-invalidation', 'Cache invalidation', cacheBusHealthCheck),
+    // v0.11: values still needing a previous ENCRYPTION_KEY, before it can be retired.
+    guarded('encryption', 'Encryption keys', () => encryptionHealthCheck()),
   ]);
+  const replicas = await liveReplicas().catch(() => null);
 
   const recentJobs = await db
     .select({
@@ -302,6 +301,8 @@ healthRoutes.get('/', async (c) => {
     checks,
     // Configured by environment only; shown read-only.
     observability: observabilityStatus(),
+    // Replicas heard from in the last minute (null without Redis), v0.11.
+    replicas: { role: processRole(), live: replicas },
     recentJobs: recentJobs.map((job) => ({
       ...job,
       startedAt: job.startedAt.toISOString(),

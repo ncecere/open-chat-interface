@@ -34,7 +34,7 @@ async function signIn(page: Page) {
 }
 
 async function routeConversation(page: Page) {
-  await page.route(`**/api/chat/${THREAD_ID}/messages`, (route) =>
+  await page.route(`**/api/chat/${THREAD_ID}/messages**`, (route) =>
     route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

@@ -1,0 +1,23 @@
+{{- range $component := list "api" "worker" "web" }}
+{{- $v := index $.Values $component }}
+{{- $enabled := or (ne $component "worker") $.Values.worker.enabled }}
+{{- if and $enabled $v.podDisruptionBudget.enabled }}
+---
+# A node drain stops at most this many pods at a time, each draining in turn.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "oci.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "oci.labels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  {{- if hasKey $v.podDisruptionBudget "minAvailable" }}
+  minAvailable: {{ $v.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ $v.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}

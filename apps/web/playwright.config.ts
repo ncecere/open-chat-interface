@@ -1,7 +1,17 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/**
+ * Specs that need the deterministic browser-performance fixture
+ * (apps/api/test/browser-performance): its 2,000-message conversation and
+ * stub model. CI's seeded run leaves them out (E2E_SEEDED=1) and runs them in
+ * a separate step against the fixture; locally, e2e against the fixture runs
+ * everything. Left out, never skipped.
+ */
+export const FIXTURE_SPECS = ['**/long-conversation.spec.ts'];
+
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : [],
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,

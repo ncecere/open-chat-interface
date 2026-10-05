@@ -1,29 +1,84 @@
-import { and, asc, eq, gt, inArray, ne, schema, sql } from '@oci/db';
+import { and, asc, eq, gt, inArray, isNull, ne, schema, sql } from '@oci/db';
 import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
+import { retryOnConnectionError } from '../../lib/db-connection.js';
 import { conflict, validationFailed } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import { deriveTitle } from '../threads.js';
 import {
   type HistoricalAttachmentReference,
   historicalAttachmentAvailable,
   type ModelAttachment,
 } from './attachment-context.js';
+import { CAPACITY_HANDOFF_MESSAGE } from './capacity-wait.js';
 import { textFromParts } from './message-parts.js';
 import { activeMessage, RETRY_LATEST_ONLY } from './reply-path.js';
 import type { AcquiredRun } from './run-lifecycle.js';
 import { lockChatThread } from './thread-claim.js';
 import type { TurnContext } from './turn-context.js';
 
-/** Commit prompt, attachment allocation, title and assistant lineage together. */
+/**
+ * How long a turn's opening transaction keeps trying through a database
+ * failover (v0.11 design, section 3). Short: the person is waiting for the
+ * reply to start.
+ */
+export const persistTurnRetry = { budgetMs: 10_000, initialDelayMs: 200 };
+
+/**
+ * Commit prompt, attachment allocation, title and assistant lineage together.
+ *
+ * Retried when the connection is lost: a transaction that failed before its
+ * commit left nothing behind, and one whose commit succeeded just as the
+ * connection dropped is recognised on the retry by the claim's lineage, which
+ * only this transaction sets.
+ */
 export async function persistTurn(
-  { user, input, thread, resolved }: TurnContext,
+  context: TurnContext,
   run: AcquiredRun,
   latest: UIMessage,
   attachments: ModelAttachment[],
   regenerationParent: string,
   historicalAttachments: HistoricalAttachmentReference[] = [],
 ) {
-  const result = await db.transaction(async (tx) => {
+  const result = await retryOnConnectionError(
+    (attempt) =>
+      persistTurnOnce(
+        attempt,
+        context,
+        run,
+        latest,
+        attachments,
+        regenerationParent,
+        historicalAttachments,
+      ),
+    {
+      ...persistTurnRetry,
+      onRetry: ({ attempt, delayMs, error }) =>
+        logger.warn(
+          {
+            runId: run.runIdentity.runId,
+            attempt,
+            delayMs,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          'Database connection lost while saving a message; retrying',
+        ),
+    },
+  );
+  run.turnPersisted = true;
+  return result;
+}
+
+async function persistTurnOnce(
+  attempt: number,
+  { user, input, thread, resolved }: TurnContext,
+  run: AcquiredRun,
+  latest: UIMessage,
+  attachments: ModelAttachment[],
+  regenerationParent: string,
+  historicalAttachments: HistoricalAttachmentReference[],
+) {
+  return db.transaction(async (tx) => {
     const currentThread = await lockChatThread(tx, thread.id, user.id);
     const [claim] = await tx
       .select()
@@ -37,6 +92,13 @@ export async function persistTurn(
           eq(schema.message.status, 'streaming'),
         ),
       );
+    if (claim && claim.parentMessageId !== null && attempt > 1) {
+      // An earlier attempt committed; only its reply was lost.
+      return {
+        promptMessageId: claim.parentMessageId,
+        submittedMessageId: input.trigger === 'submit-message' ? claim.parentMessageId : null,
+      };
+    }
     if (!claim || claim.parentMessageId !== null)
       throw conflict('Chat admission is no longer valid');
     const [last] = await tx
@@ -172,6 +234,22 @@ export async function persistTurn(
         )
         .limit(1);
       if (later) throw validationFailed(RETRY_LATEST_ONLY);
+      // A reply handed back by a draining replica before its model was called
+      // (v0.11): the browser sent the turn again, which replaces it rather than
+      // leaving an empty reply beside the new one.
+      await tx
+        .delete(schema.message)
+        .where(
+          and(
+            eq(schema.message.threadId, thread.id),
+            eq(schema.message.role, 'assistant'),
+            ne(schema.message.id, claim.id),
+            gt(schema.message.position, target.position),
+            eq(schema.message.status, 'cancelled'),
+            eq(schema.message.errorMessage, CAPACITY_HANDOFF_MESSAGE),
+            isNull(schema.message.tokensOut),
+          ),
+        );
       await tx
         .update(schema.message)
         .set({ supersededAt: new Date() })
@@ -191,6 +269,4 @@ export async function persistTurn(
       .where(eq(schema.message.id, claim.id));
     return { promptMessageId, submittedMessageId };
   });
-  run.turnPersisted = true;
-  return result;
 }

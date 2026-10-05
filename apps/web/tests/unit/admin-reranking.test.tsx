@@ -51,6 +51,8 @@ const embeddings: EmbeddingsStatus = {
   storageDimensions: null,
   passages: { total: 0, embedded: 0 },
   failures: { files: 0, lastError: null },
+  generations: { current: null, filling: null, retired: [], switchBlocked: null },
+  estimate: { passages: 0, averageTokens: 0 },
 };
 
 let root: Root | undefined;

@@ -36,10 +36,13 @@ neither local sign-in nor an enabled single sign-on provider is available, the
 page and the [setup checklist](first-run.md#4-offer-a-way-to-sign-in) say that
 nobody can sign in.
 
-Sign-in, sign-up, password reset and verification are limited to
-**Sign-in attempts per minute** per client address and per account (default
-10); past it the request is refused with `429` for the rest of the minute. See
-[sign-in attempts](governance.md#sign-in-attempts).
+Failed sign-ins are limited to **Sign-in attempts per minute** per account
+(default 10); past it the account's sign-ins are refused with `429` for the
+rest of the minute. Successful sign-ins are not counted, so many people
+behind one address (a campus network) can all sign in at once: an address has
+its own, much larger allowance for failures (300 a minute by default). See
+[sign-in attempts](governance.md#sign-in-attempts) and, for the address and
+identity provider limits, [Sign-in limits](../OPERATIONS.md#sign-in-limits).
 
 Turning local authentication off still admits a **verified administrator**,
 deliberately, so the setting cannot lock everybody out. That safety net depends
@@ -154,6 +157,18 @@ form from view.
 `/auth/login?local=1` always shows the form regardless. **Confirm that works
 before you enable this**, because it is the only route back in if the provider
 fails.
+
+### Sign-in limits for single sign-on
+
+Single sign-on is limited per identity provider, not per client address: each
+provider may complete 3,000 sign-ins a minute by default
+(`RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE`, set by your operator), shared by
+every replica, so a provider that misbehaves or floods OCI with callbacks uses
+up only its own allowance and the others keep working. Successful sign-ins
+are never limited by address; failed ones count towards the address's
+allowance like failed passwords. A refusal is audited as `auth.rate_limited`
+with the provider and the limit that refused. Details:
+[Sign-in limits](../OPERATIONS.md#sign-in-limits).
 
 ## How roles behave after the first sign-in
 

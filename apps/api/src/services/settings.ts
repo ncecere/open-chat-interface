@@ -1,13 +1,16 @@
 import { and, eq, schema } from '@oci/db';
 import {
+  type CapacityLimits,
   COLOR_THEMES,
   type ColorTheme,
+  type QueuePriority,
   type ReasoningEffort,
   type RoleFeatures,
   type SearchProviderKind,
   type UserRole,
 } from '@oci/shared';
 import { db } from '../db/index.js';
+import { onCacheInvalidation, publishInvalidation } from './cache-bus/index.js';
 import { getDefaultOrganizationId } from './organization.js';
 
 export type SettingKey =
@@ -25,7 +28,9 @@ export type SettingKey =
   | 'embeddings'
   | 'reranking'
   | 'backups'
-  | 'compliance';
+  | 'compliance'
+  | 'providerCapacity'
+  | 'maintenance';
 
 export interface BrandingSettings {
   appName: string;
@@ -297,6 +302,46 @@ export interface StoredComplianceSettings {
   keepDays?: number | null;
 }
 
+/**
+ * Provider capacity (v0.11): limits per provider and per model, keyed by their
+ * ids, and the queue's settings. Sparse: nothing saved means no limits.
+ * Normalised by services/limits/capacity/settings.ts.
+ */
+export interface StoredProviderCapacitySettings {
+  providers?: Record<string, Partial<CapacityLimits>>;
+  models?: Record<string, Partial<CapacityLimits>>;
+  queue?: {
+    maxWaitSeconds?: number;
+    rolePriority?: Partial<Record<UserRole, QueuePriority>>;
+  };
+}
+
+/**
+ * Read-only maintenance mode (v0.11 design, section 9). Sparse: nothing saved
+ * means off. Normalised by services/maintenance/read-only.ts; the environment
+ * (OCI_READ_ONLY) overrides it.
+ */
+export interface StoredMaintenanceSettings {
+  readOnly?: boolean;
+  /** Shown to people while read-only. */
+  reason?: string | null;
+  /** When an administrator expects to turn it off (ISO); null when unknown. */
+  until?: string | null;
+  /** Who switched it on or off last, and when (ISO). */
+  changedAt?: string | null;
+  changedBy?: string | null;
+  /** A scheduled window: read-only from `startsAt` until `endsAt` (ISO). */
+  window?: {
+    startsAt: string;
+    endsAt: string;
+    reason?: string | null;
+    /** The announcement made for it, updated or removed with the window. */
+    announcementId?: string | null;
+  } | null;
+  /** Background jobs that keep running while read-only; absent means the defaults. */
+  keepRunningJobs?: string[];
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -313,21 +358,32 @@ interface SettingsMap {
   reranking: StoredRerankingSettings;
   backups: StoredBackupSettings;
   compliance: StoredComplianceSettings;
+  providerCapacity: StoredProviderCapacitySettings;
+  maintenance: StoredMaintenanceSettings;
 }
 
 /**
  * Settings change rarely and are read on nearly every request, so they are
- * cached. The TTL exists for multi-replica deployments: `invalidateSettingsCache`
- * only clears the calling process, so without expiry an administrator's change
- * would never reach the other replicas.
+ * cached. A change clears this process's copy at once and every other
+ * replica's over Redis (`settingsChanged`, services/cache-bus; v0.11 item 20).
+ * The TTL stays as the fallback: without Redis, or while it is away, a change
+ * reaches the other replicas within it.
  */
 const CACHE_TTL_MS = 30_000;
 
 const cache = new Map<SettingKey, { value: unknown; expiresAt: number }>();
 
+/**
+ * Bumped by every invalidation. A read that started before one does not cache
+ * what it read: it may be the value from before the change, and caching it
+ * would keep it for the whole TTL after the invalidation was heard.
+ */
+let generation = 0;
+
 export async function getSetting<K extends SettingKey>(key: K): Promise<SettingsMap[K]> {
   const cached = cache.get(key);
   if (cached && Date.now() < cached.expiresAt) return cached.value as SettingsMap[K];
+  const readGeneration = generation;
 
   const organizationId = await getDefaultOrganizationId();
   const [row] = await db
@@ -353,7 +409,8 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<Settings
             ? normalizeAuthSettings(stored as AuthSettings)
             : stored
   ) as SettingsMap[K];
-  cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  if (readGeneration === generation)
+    cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
   return value;
 }
 
@@ -375,11 +432,27 @@ export async function updateSetting<K extends SettingKey>(
       set: { value: serialized },
     });
 
+  generation++;
   cache.set(key, { value: next, expiresAt: Date.now() + CACHE_TTL_MS });
+  await publishInvalidation('settings', key);
   return next;
 }
 
+/** Forgets this process's copy (all of it without a key). Other replicas keep theirs. */
 export function invalidateSettingsCache(key?: SettingKey): void {
+  generation++;
   if (key) cache.delete(key);
   else cache.clear();
 }
+
+/**
+ * After a setting was written other than through `updateSetting` (inside a
+ * transaction, say), once it is committed: forgets it here and on every other
+ * replica.
+ */
+export async function settingsChanged(key: SettingKey): Promise<void> {
+  invalidateSettingsCache(key);
+  await publishInvalidation('settings', key);
+}
+
+onCacheInvalidation('settings', (key) => invalidateSettingsCache(key as SettingKey | undefined));

@@ -1,0 +1,35 @@
+{
+  "description": "Post-deploy steps in the order `migrate --post` applies them. One statement per file; see docs/dev/database.md, \"Post-deploy steps\".",
+  "steps": [
+    {
+      "idx": 0,
+      "tag": "0001_message_created_at_index",
+      "release": "0.11.0"
+    },
+    {
+      "idx": 1,
+      "tag": "0002_message_error_created_at_index",
+      "release": "0.11.0"
+    },
+    {
+      "idx": 2,
+      "tag": "0003_message_sent_created_at_index",
+      "release": "0.11.0"
+    },
+    {
+      "idx": 3,
+      "tag": "0004_message_web_search_created_at_index",
+      "release": "0.11.0"
+    },
+    {
+      "idx": 4,
+      "tag": "0005_message_cancelled_created_at_index",
+      "release": "0.11.0"
+    },
+    {
+      "idx": 5,
+      "tag": "0006_thread_created_at_index",
+      "release": "0.11.0"
+    }
+  ]
+}

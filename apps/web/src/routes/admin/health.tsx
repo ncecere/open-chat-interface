@@ -10,6 +10,9 @@ import {
   Notice,
   SettingsSection,
 } from '~/components/admin/admin-ui';
+import { MaintenanceMode } from '~/components/admin/maintenance-mode';
+import { Replicas } from '~/components/admin/operations/replicas';
+import { BackgroundWorkSection, UpgradesSection } from '~/components/admin/upgrades';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -381,7 +384,7 @@ export function AdminHealthPage() {
     <div>
       <AdminPageHeader
         title="System health"
-        description="Whether the parts this instance depends on are working, the background jobs that keep it tidy, and storage integrity."
+        description="Whether the parts this instance depends on are working, read-only maintenance mode, the background jobs that keep it tidy, upgrades and background migrations, and storage integrity."
       />
 
       <div className="flex flex-col gap-10 pb-10">
@@ -392,6 +395,10 @@ export function AdminHealthPage() {
         >
           <HealthChecks />
         </SettingsSection>
+
+        <MaintenanceMode />
+
+        <Replicas />
 
         <SettingsSection
           editable={false}
@@ -407,6 +414,22 @@ export function AdminHealthPage() {
           description="The most recent run of each scheduled job. Jobs hold a lock while running, so each runs on one replica at a time."
         >
           <BackgroundJobs />
+        </SettingsSection>
+
+        <SettingsSection
+          editable={false}
+          title="Upgrades"
+          description="What upgrading this database involves: pending migrations, post-deploy steps and the indexes they build, and whether the upgrade can be rolling. Run `node dist/scripts/upgrade-check.js` from a new release's image for the same check before deploying it."
+        >
+          <UpgradesSection />
+        </SettingsSection>
+
+        <SettingsSection
+          editable={false}
+          title="Background work"
+          description="Background migrations rewrite existing rows in small batches while the instance serves, pausing when replication lags or a long transaction is open. Administrators can pause them or change their pace."
+        >
+          <BackgroundWorkSection />
         </SettingsSection>
 
         <SettingsSection

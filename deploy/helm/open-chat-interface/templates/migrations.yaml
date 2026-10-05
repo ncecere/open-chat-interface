@@ -1,0 +1,234 @@
+{{- if .Values.migrations.enabled }}
+{{- include "oci.validate" . }}
+{{- $m := .Values.migrations }}
+{{- /* A pre-existing ServiceAccount (create=false with a name) is used as is. */}}
+{{- $hookSA := or .Values.serviceAccount.create (not .Values.serviceAccount.name) }}
+{{- $saName := ternary (include "oci.migrate.name" .) .Values.serviceAccount.name $hookSA }}
+{{- $postWait := and $m.post.enabled $m.post.waitForRollout }}
+{{- if $hookSA }}
+# The release's own resources do not exist yet when the pre-install hook runs,
+# so the hooks bring their own ServiceAccount. It mounts no token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $saName }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade{{ if $m.post.enabled }},post-install,post-upgrade{{ end }}
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+automountServiceAccountToken: false
+---
+{{- end }}
+# Phase 1, pre-deploy (`migrate`): before any replica is replaced. Fast and
+# transactional; release N-1 keeps working on the new schema. A failure fails
+# the install or upgrade before anything changes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "oci.migrate.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: {{ $m.hookDeletePolicy }}
+spec:
+  backoffLimit: {{ $m.pre.backoffLimit }}
+  activeDeadlineSeconds: {{ $m.pre.activeDeadlineSeconds }}
+  {{- with $m.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "oci.labels" (dict "root" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $saName }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with (include "oci.pullSecrets" . | trim) }}{{ . | nindent 6 }}{{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext.api | nindent 8 }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "oci.image" (dict "root" . "image" .Values.image.api) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "dist/migrate.js"]
+          env:
+            {{- include "oci.env" (dict "root" . "role" "all" "component" "migrate") | nindent 12 }}
+          envFrom:
+            {{- include "oci.envFrom" . | nindent 12 }}
+          resources:
+            {{- toYaml $m.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext.api | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+{{- if $m.post.enabled }}
+{{- if $postWait }}
+---
+# Lets the post-deploy hook see whether the rollout has finished: read the
+# API and worker Deployments, list Pods. Exists only while the hook runs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "oci.migratePost.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames:
+      - {{ include "oci.api.name" . }}
+      {{- if .Values.worker.enabled }}
+      - {{ include "oci.worker.name" . }}
+      {{- end }}
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "oci.migratePost.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "oci.migratePost.name" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $saName }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+# Phase 2, post-deploy (`migrate --post`): once every replica runs release N.
+# Concurrent index builds, validations and drops, one step at a time outside
+# a transaction; then it schedules the release's background migrations. Safe
+# to rerun: finished steps are skipped and an interrupted one resumes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "oci.migratePost.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: {{ $m.hookDeletePolicy }}
+spec:
+  backoffLimit: {{ $m.post.backoffLimit }}
+  activeDeadlineSeconds: {{ $m.post.activeDeadlineSeconds }}
+  {{- with $m.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "oci.labels" (dict "root" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $saName }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with (include "oci.pullSecrets" . | trim) }}{{ . | nindent 6 }}{{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext.api | nindent 8 }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $postWait }}
+      initContainers:
+        - name: wait-for-rollout
+          image: {{ include "oci.image" (dict "root" . "image" .Values.image.api) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "--input-type=module", "-e", {{ .Files.Get "files/wait-for-rollout.mjs" | toJson }}]
+          env:
+            - name: OCI_ROLLOUT_DEPLOYMENTS
+              value: {{ include "oci.api.name" . }}{{ if .Values.worker.enabled }},{{ include "oci.worker.name" . }}{{ end }}
+            - name: OCI_ROLLOUT_TIMEOUT_SECONDS
+              value: {{ $m.post.activeDeadlineSeconds | toString | quote }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext.api | nindent 12 }}
+          volumeMounts:
+            - name: kube-api
+              mountPath: /var/run/secrets/oci-rollout
+              readOnly: true
+      {{- end }}
+      containers:
+        - name: migrate-post
+          image: {{ include "oci.image" (dict "root" . "image" .Values.image.api) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "dist/migrate.js", "--post"]
+          env:
+            {{- include "oci.env" (dict "root" . "role" "all" "component" "migrate") | nindent 12 }}
+          envFrom:
+            {{- include "oci.envFrom" . | nindent 12 }}
+          resources:
+            {{- toYaml $m.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext.api | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- if $postWait }}
+        - name: kube-api
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace
+        {{- end }}
+{{- end }}
+{{- end }}

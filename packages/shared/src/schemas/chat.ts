@@ -86,6 +86,30 @@ export const storedFileSchema = attachmentSchema.extend({
 export const THREAD_HISTORY_PAGE_SIZE = 50;
 export const THREAD_HISTORY_MAX_PAGE_SIZE = 200;
 
+/**
+ * GET /api/chat/:threadId/messages in pages (v0.11): the latest messages first,
+ * sized so a typical conversation is one page, then older (or newer) pages by
+ * cursor. Without any paging parameter the endpoint returns the whole
+ * conversation, as before v0.11.
+ */
+export const CHAT_HISTORY_PAGE_SIZE = 100;
+export const CHAT_HISTORY_MAX_PAGE_SIZE = 500;
+
+/**
+ * Where a page of a conversation sits. Cursors are opaque: pass `olderCursor`
+ * as `before` for the page before this one and `newerCursor` as `after` for
+ * the page after it; null when this page starts (or ends) the conversation.
+ * A cursor names a stored message, so it stays valid as new messages arrive.
+ */
+export interface ChatHistoryPage {
+  olderCursor: string | null;
+  newerCursor: string | null;
+  /** Messages in the conversation as it reads (one reply per turn). */
+  total: number;
+  /** `around` only: whether the message asked for is in this page. */
+  targetFound?: boolean;
+}
+
 export const messageSchema = z.object({
   id: z.string(),
   threadId: z.string(),

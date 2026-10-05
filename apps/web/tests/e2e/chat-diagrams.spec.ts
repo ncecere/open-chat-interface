@@ -29,7 +29,7 @@ async function signIn(page: Page) {
 
 test('Mermaid diagrams render with the editorial theme', async ({ page }) => {
   await signIn(page);
-  await page.route(`**/api/chat/${THREAD_ID}/messages`, (route) =>
+  await page.route(`**/api/chat/${THREAD_ID}/messages**`, (route) =>
     route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

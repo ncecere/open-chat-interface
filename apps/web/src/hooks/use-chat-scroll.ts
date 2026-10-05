@@ -39,6 +39,17 @@ export interface ChatScrollTarget {
   key: string;
 }
 
+/** The id of the `index`-th user message (zero-based), if there is one. */
+function userMessageId(messages: UIMessage[], index: number): string | null {
+  let count = 0;
+  for (const message of messages) {
+    if (message.role !== 'user') continue;
+    if (count === index) return message.id;
+    count += 1;
+  }
+  return null;
+}
+
 function userMessageCount(messages: UIMessage[]): number {
   let count = 0;
   for (const message of messages) if (message.role === 'user') count += 1;
@@ -68,11 +79,19 @@ function userMessageCount(messages: UIMessage[]): number {
  * message ids: a just-sent question is re-identified with its saved id when
  * the reply settles, and that must not count as another send. The pinned
  * question is likewise found by its position among user messages.
+ *
+ * `messages` is the live part of the conversation (v0.11): earlier pages are
+ * loaded apart from it, so they never count as a send. Rows may be windowed,
+ * so the pinned question is looked up by id; while it is not rendered (the
+ * reader scrolled far away) the spacer keeps its size. `targetLoaded` is
+ * false while a search result is still being loaded (it was not among the
+ * loaded messages); it is opened once it is there.
  */
 export function useChatScroll(
   messages: UIMessage[],
   streaming: boolean,
   target?: ChatScrollTarget,
+  targetLoaded = true,
 ) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -82,6 +101,8 @@ export function useChatScroll(
   const pinnedIndex = useRef<number | null>(null);
   const userCount = useRef<number | null>(null);
   const lastScrollTop = useRef(0);
+  const latestMessages = useRef(messages);
+  latestMessages.current = messages;
   const [detached, setDetached] = useState(false);
   /** The opened search match, held in the centre until this time. */
   const anchor = useRef<{ messageId: string; until: number } | null>(null);
@@ -93,10 +114,17 @@ export function useChatScroll(
     const content = contentRef.current;
     const spacer = spacerRef.current;
     if (!scroller || !content || !spacer) return;
-    const pinned =
+    const pinnedId =
       pinnedIndex.current === null
         ? null
-        : content.querySelectorAll<HTMLElement>('[data-message-role="user"]')[pinnedIndex.current];
+        : userMessageId(latestMessages.current, pinnedIndex.current);
+    let pinned: HTMLElement | null = null;
+    if (pinnedId) {
+      for (const row of content.querySelectorAll<HTMLElement>('[data-message-role="user"]'))
+        if (row.dataset.messageId === pinnedId) pinned = row;
+      // Not rendered now (a windowed transcript scrolled far up): keep the room as it is.
+      if (!pinned) return;
+    }
     let height = 0;
     if (pinned) {
       const fromPinned =
@@ -173,7 +201,7 @@ export function useChatScroll(
   const targetId = target?.messageId;
   const targetKey = target ? `${target.messageId} ${target.key}` : null;
   useLayoutEffect(() => {
-    if (!targetId || !targetKey || handledTarget.current === targetKey) return;
+    if (!targetId || !targetKey || !targetLoaded || handledTarget.current === targetKey) return;
     const scroller = scrollRef.current;
     const element = findMessage(targetId);
     // An unknown message (deleted, or another conversation's) keeps the default.
@@ -218,7 +246,7 @@ export function useChatScroll(
       // Lets a remount (or StrictMode's rehearsal) apply the same request again.
       handledTarget.current = null;
     };
-  }, [targetId, targetKey, findMessage, measure, centre]);
+  }, [targetId, targetKey, targetLoaded, findMessage, measure, centre]);
 
   // The reader taking over ends the hold on a search match at once.
   useEffect(() => {

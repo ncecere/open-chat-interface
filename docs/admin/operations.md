@@ -25,8 +25,13 @@ reported. The checks refresh every 30 seconds while the page is open; the old
 | Connectors | An enabled [connector](connectors.md)'s latest exchange failed | — |
 | Backups | On, but no [backup](backups.md) completed in over a day, or objects were missing from the last one | The latest backup failed |
 | Webhooks | An enabled [webhook](observability.md#webhooks) endpoint's latest delivery failed, or deliveries are over 15 minutes overdue | — |
+| Background workers | — | No replica that runs background jobs (`OCI_ROLE=worker` or `all`) has checked in for a minute; see [process roles](../OPERATIONS.md#process-roles) |
+| Read-only mode | [Read-only maintenance mode](maintenance.md) is on: says by whom (an administrator, a window or `OCI_READ_ONLY`), until when and why | — |
+| Cache invalidation | Redis is configured but the replica answering does not hear other replicas' changes, so they reach it within 30 seconds instead of at once ([details](../OPERATIONS.md#settings-changes-and-other-replicas)) | — |
 
-Below the checks, **Observability** reports whether [metrics and
+Below the checks, **Replicas** lists the API replicas heard from in the last
+minute and whether each serves requests, runs background jobs, or both (shown
+when Redis is configured). **Observability** reports whether [metrics and
 traces](observability.md) are on. Both are set with environment variables, so
 the page only shows them.
 
@@ -138,8 +143,17 @@ by provider, by primary or fallback, and by outcome.
 
 ## Maintenance
 
-Background jobs and storage reconciliation, both on
+Read-only maintenance mode, background jobs and storage reconciliation, all on
 [System health](#health). There is no separate Maintenance page any more.
+
+### Read-only mode
+
+**System health → Maintenance** puts the instance in read-only mode: reading,
+searching, exporting and signing in keep working, every change is refused, on
+every replica at once, and background jobs that write pause. Switch it on for
+a window, schedule a window with an announcement ahead of it, or set
+`OCI_READ_ONLY=true` in an emergency. See
+[Read-only maintenance mode](maintenance.md).
 
 ### Background jobs
 

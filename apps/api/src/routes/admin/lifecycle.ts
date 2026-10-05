@@ -10,7 +10,7 @@ import { notFound } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
-import { recentJobRuns, runJobNow } from '../../services/jobs/index.js';
+import { recentJobRuns, runOrQueueJobNow } from '../../services/jobs/index.js';
 import {
   getConfigSources,
   getRateLimitSettings,
@@ -169,11 +169,24 @@ lifecycleRoutes.get('/jobs', async (c) => {
 lifecycleRoutes.post('/jobs/:name/run', async (c) => {
   const actor = currentUser(c);
   const name = c.req.param('name');
-  const processed = await runJobNow(name);
+  const processed = await runOrQueueJobNow(name);
 
   if (processed === null) {
     // Null also means another replica holds the lock, which is not an error.
     return c.json({ ok: true, skipped: true, itemsProcessed: 0 });
+  }
+
+  if (processed === 'queued') {
+    // OCI_ROLE=web (v0.11): a worker runs it; its run appears in the list.
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'job.run',
+      targetType: 'job',
+      targetId: name,
+      metadata: { queued: true },
+    });
+    return c.json({ ok: true, skipped: false, queued: true, itemsProcessed: 0 });
   }
 
   await recordAudit({

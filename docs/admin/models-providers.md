@@ -110,6 +110,94 @@ the default. If the default stops being usable — disabled, its provider
 disabled, or hidden from the `user` role — the page and the
 [setup checklist](first-run.md#3-choose-a-default-model) say so.
 
+## Provider capacity
+
+From v0.11, OCI can keep below a provider's own rate limits instead of
+passing every message on and letting the provider refuse the excess. At
+scale the provider's limits (requests and tokens per minute, replies at
+once), not OCI, are what runs out first; without limits set here, messages
+over them fail with an error.
+
+Nothing changes until you set a limit: by default no message ever waits.
+
+### Limits per provider and per model
+
+The gauge button on a provider's row (Providers tab) or a model's row
+(Models tab) sets:
+
+| Limit | Counts |
+| --- | --- |
+| **Requests per minute** | Every request to the model. A reply that uses tools makes one per step, and a retry is another. |
+| **Tokens per minute** | Input and output. Before a request OCI estimates its input (about three bytes a token, from the same count that budgets the context) plus the output it reserves (**Max output**), as providers count it; when the reply ends the estimate is replaced by the usage the provider reported. |
+| **Replies at once** | Replies streaming at the same time, across every replica. |
+
+Empty means no limit. A provider's limits are shared by all of its models; a
+model's apply on top of its provider's, for that model only (useful when a
+provider limits each model separately, as OpenAI does). Set them a little
+below what the provider allows you, since other applications using the same
+key count too. Requests and tokens are metered as a bucket that refills
+continuously over a minute, as providers meter them, so a quiet minute
+allows a short burst up to the whole limit.
+
+The limits are stored in the instance settings (`providerCapacity`) and
+reach every replica within 30 seconds. Changes are audited as
+`provider.capacity` and `model.capacity`.
+
+### The queue
+
+A message that would go over a limit **waits** instead of failing. Its reply
+shows "Waiting for *model* — you're number *N*", an estimate when there is
+one (from how many messages started in the last minute), and **Stop**. The
+place is part of the reply's stream, so it survives a reload and shows on
+another device. Stop takes the message out of the queue; it never reached
+the provider and uses none of the person's allowance.
+
+- **Fair between people.** One queue per provider, ordered so that a person's
+  waiting messages are spaced ten seconds apart: somebody with many tabs
+  open takes every other place at most, and somebody with one message goes
+  next. A message blocked only by its own model's limit is passed over by
+  messages for the provider's other models; one blocked by the provider is
+  never overtaken.
+- **Priority by role** (Providers tab, **Capacity**): **High** starts a minute
+  ahead of **Normal**, **Low** a minute behind. A message never waits behind
+  a higher role for ever, only until it has waited a minute longer than the
+  newcomer. Everyone is Normal by default.
+- **Longest wait** (default 120 seconds, 5 to 1,800): a message that waits
+  longer fails with "*Model* is busy… try again in a few minutes", and the
+  reply says so.
+- **Tool steps never queue again.** Once a reply has started it keeps its
+  place for every step: re-queuing a reply half way through behind newcomers
+  would stall a reply people are already reading, after its earlier steps
+  were paid for. Its later requests still count against the per-minute
+  limits, so newcomers wait a little longer instead.
+- Continuing a reply after answering its tool approvals is a new request
+  and queues like a message.
+
+### When the provider still says "too many requests"
+
+A request the provider refuses for now (`429`, `408`, `409`, a `5xx`, or an
+"overloaded" error before any output) is sent again, **before the reply's
+first output only**, so nothing is ever shown twice: after the time the
+provider asks for (`Retry-After` or `retry-after-ms`), or else after 1, 2
+and 4 seconds (with jitter). At most three retries and one minute in all;
+a wait longer than what is left fails at once. An error after the reply has
+started is shown as it is.
+
+When the model or its provider has limits, a `429` also pauses new
+admissions to it for the time the provider asked (two seconds if it did not
+say, a minute at most), so waiting messages do not meet the same refusal
+and replies already admitted retry first.
+
+### Watching it
+
+The **Capacity** section of the Providers tab shows, per provider, its
+limits, the messages waiting now, replies streaming, messages that waited in
+the last hour (and the longest wait), and how often the provider throttled
+OCI. **System health** has a **Provider capacity** check, a warning while
+messages wait or a provider throttles. Prometheus metrics are listed in
+[Observability](observability.md); Redis keys and behaviour without Redis in
+[Operations](../OPERATIONS.md#provider-capacity).
+
 ## Embeddings
 
 The **Embeddings** tab (`/admin/models?tab=embeddings`) turns on meaning-based
@@ -152,10 +240,40 @@ floors of their own) do the filtering. The value is fixed and deliberately
 low, so a passage that answers a question is never dropped for scoring
 slightly low.
 
-**Changing the model** (or its size) re-embeds everything in the background.
-Until a project's passages are embedded with the new model, its searches are
-keyword-only. Switching meaning-based search off keeps the stored embeddings, so
-switching it back on with the same model needs no re-embedding.
+**Changing the model** (or its size) re-embeds every passage in the
+background, without a gap (v0.11). The new model gets storage of its own, a
+*generation*, and the `embeddings.rebuild` job fills it on a worker (or `all`)
+replica while searches keep using the current model and its embeddings,
+questions included. Passages uploaded meanwhile are embedded with both models.
+When the new generation covers every passage, searches switch to it at once;
+the previous embeddings are kept for a grace period (a day by default) and
+then removed. Before you save a different model the tab shows what it will
+cost: the number of passages, their estimated tokens (about four characters
+to a token) and, if you entered a price, the cost at that price.
+
+While a rebuild runs the tab shows its progress: passages embedded with the
+new model, the rate per minute, the time left at that rate, and files that
+failed and are waiting to be retried (each is retried with a growing delay;
+the current model's failures are shown separately). Two actions go with it:
+
+- **Switch now** moves searches to the new model before it covers every
+  passage. The dialog says how many passages it does not cover yet: until the
+  rebuild reaches them, they are found by keyword only. Use it when a file
+  keeps failing with the new model, or the old model is no longer available.
+- **Cancel rebuild** abandons the new model: searches stay where they are and
+  what was embedded with it is removed. Choosing the current model again on
+  the form does the same.
+
+Choosing a model again within the grace period after leaving it reuses its
+embeddings, so only passages added since are embedded. The rebuild pauses
+while meaning-based search is switched off, and while the database is busy
+(the same checks as background migrations). During the upgrade to v0.11 the
+switch waits until the upgrade is complete (`migrate --post`; see
+[Upgrading to v0.11](../OPERATIONS.md#embedding-generations-migration-0041));
+the tab says so. Switching meaning-based search off keeps the stored
+embeddings, so switching it back on with the same model needs no
+re-embedding. A model that cannot embed the sample cannot replace the one in
+use, even while meaning-based search is off.
 
 **Cost.** Embedding calls are recorded as usage under `embedding:<model id>`:
 passages are charged to the file's owner, questions to the person asking. They
@@ -165,8 +283,12 @@ budgets that cover every model. A failed or slow embeddings call never fails a
 reply: the reply is searched by keyword instead, and the failure is logged.
 
 Changes here are audited as `embeddings.update` (with the previous and new
-setting) and tests as `embeddings.test`. Auditors can see the tab but not
-change it.
+setting, and for a model change the rebuild and its cost estimate) and tests
+as `embeddings.test`. A switch is audited as `embeddings.generation.switch`
+(by the administrator who forced it, or as automatic, with how many passages
+the new model covered), a cancelled rebuild as `embeddings.generation.cancel`,
+and removing a replaced generation as `embeddings.generation.drop`. Auditors
+can see the tab but not change it.
 
 ## Reranking
 

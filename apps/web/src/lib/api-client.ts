@@ -1,4 +1,5 @@
-import type { ApiErrorBody } from '@oci/shared';
+import type { ApiErrorBody, ReadOnlyStatus } from '@oci/shared';
+import { noteReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
 
 export class ApiError extends Error {
   constructor(
@@ -24,6 +25,14 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
 export function chatErrorText(error: Error): string {
   try {
     const body = JSON.parse(error.message) as Partial<ApiErrorBody>;
+    // A send that raced read-only maintenance mode (v0.11): say why, in the
+    // person's own time zone, rather than show it as a failure.
+    if ((body.error?.code as string | undefined) === 'READ_ONLY') {
+      const status = (body.error?.details as { readOnly?: ReadOnlyStatus } | undefined)?.readOnly;
+      return readOnlyMessage(
+        status ?? { active: true, source: null, reason: null, until: null, window: null },
+      );
+    }
     if (typeof body.error?.message === 'string' && body.error.message) return body.error.message;
   } catch {
     // Not an API error body: the message is already text.
@@ -65,6 +74,12 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
       code = body.error?.code ?? code;
       message = body.error?.message ?? message;
       details = body.error?.details;
+      // A write refused for read-only maintenance (423, v0.11): the banner,
+      // composer and admin forms switch to read-only at once.
+      if (response.status === 423 && noteReadOnlyRefusal(body)) {
+        const status = (details as { readOnly?: ReadOnlyStatus } | undefined)?.readOnly;
+        if (status) message = readOnlyMessage(status);
+      }
     } catch {
       // Non-JSON error responses keep the status text.
     }

@@ -71,6 +71,10 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'Removes the empty, parentless reply placeholder of a turn that was never committed.',
   },
+  'services/chat/persist-turn.ts message': {
+    hold: 'exempt',
+    how: 'Replaces, when the turn is sent again, a reply handed back by a draining replica before its model was called: it holds no generated content (provider-capacity.live.test.ts).',
+  },
   'services/quota/settlement.ts usageEvent': {
     hold: 'exempt',
     how: 'Releases a reservation for a reply that never started: no usage happened.',
@@ -111,9 +115,9 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'The export cleans up its own objects (failed runs, and pruning older exports when configured).',
   },
-  'services/project-search/embedding.ts projectFileEmbeddingFailure': {
+  'services/vector-store/pgvector.ts embeddingGenerationFailure': {
     hold: 'exempt',
-    how: 'A retry bookkeeping row for search indexing.',
+    how: 'A retry bookkeeping row for search indexing (per embeddings generation).',
   },
   // Sessions, verification tokens and invitations: credentials, not records.
   'auth/provisioning.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },
@@ -146,6 +150,14 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   'routes/admin/broadcasts.ts broadcastDismissal': {
     hold: 'exempt',
     how: 'Re-showing a broadcast clears who dismissed it.',
+  },
+  'services/maintenance/read-only.ts broadcast': {
+    hold: 'exempt',
+    how: 'The announcement of a cancelled maintenance window: instance configuration.',
+  },
+  'services/maintenance/read-only.ts broadcastDismissal': {
+    hold: 'exempt',
+    how: 'A rescheduled maintenance window is shown again to people who had hidden it.',
   },
   'routes/admin/lifecycle.ts storagePolicy': { hold: 'exempt', how: 'Instance configuration.' },
   'routes/admin/models.ts model': { hold: 'exempt', how: 'Instance configuration.' },

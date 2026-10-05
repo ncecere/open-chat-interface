@@ -5,6 +5,7 @@ import { jsonSchema } from 'ai';
 import { db } from '../../db/index.js';
 import { providerError } from '../../lib/errors.js';
 import { clip } from '../../lib/text.js';
+import { onCacheInvalidation, publishInvalidation } from '../cache-bus/index.js';
 import type { ToolDefinition, ToolSource, ToolTurnInput } from '../tools/types.js';
 import { withMcpClient } from './client.js';
 import { CONNECTOR_LIMITS } from './limits.js';
@@ -13,8 +14,9 @@ import { type ConnectorRow, type ConnectorToolRow, connectedConnectorIds } from 
 
 /**
  * Connector tools as registry entries. The catalogue is read from the
- * database with a short cache; administrator changes clear it in this process,
- * and other replicas see them within `CATALOG_TTL_MS`. Execution always reads
+ * database with a short cache; administrator changes clear it in this process
+ * and, over Redis, on the other replicas (v0.11 item 20; without Redis they
+ * see them within `CATALOG_TTL_MS`). Execution always reads
  * the connector and tool afresh, so a tool switched off is never run.
  */
 
@@ -29,7 +31,12 @@ let cached: { value: Promise<ToolDefinition[]>; expiresAt: number } | null = nul
 /** Forgets the cached catalogue, after an administrator changes a connector or tool. */
 export function invalidateConnectorCatalog(): void {
   cached = null;
+  void publishInvalidation('connectors');
 }
+
+onCacheInvalidation('connectors', () => {
+  cached = null;
+});
 
 /** Every enabled tool of every enabled connector, as tool definitions. */
 export function connectorTools(): Promise<ToolDefinition[]> {

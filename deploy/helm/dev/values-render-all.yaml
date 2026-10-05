@@ -1,0 +1,49 @@
+# Every optional feature on, for `helm lint`, `helm template` and kubeconform
+# in .github/workflows/helm.yml. Not installable as is (no such Secret,
+# gateway, storage class or metrics adapter).
+secrets: { existingSecret: oci-runtime }
+config:
+  appUrl: https://chat.example.com
+  authTrustedOrigins: https://login.example.com
+  migrationLockTimeoutMs: 5000
+  otelExporterOtlpEndpoint: http://otel-collector.monitoring:4318
+  env: { CHAT_STREAM_TTL_SECONDS: 900, DISPLAY_TIMEZONE: Europe/Berlin }
+redis: { sentinels: "sentinel-0:26379,sentinel-1:26379,sentinel-2:26379" }
+extraEnvFrom: [{ secretRef: { name: oci-smtp } }]
+image:
+  api: { digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+  pullSecrets: [{ name: mirror-credentials }]
+api:
+  preStopSleepAction: true
+  autoscaling:
+    enabled: true
+    metrics:
+      - type: Pods
+        pods:
+          metric: { name: oci_http_requests_per_second }
+          target: { type: AverageValue, averageValue: "20" }
+web:
+  trustedProxies: "10.0.0.0/8 192.168.1.5"
+  autoscaling: { enabled: true }
+worker: { replicaCount: 2 }
+storage: { persistence: { enabled: true, storageClass: nfs } }
+ingress:
+  enabled: true
+  className: nginx
+  hosts: [{ host: chat.example.com }]
+  tls: [{ secretName: chat-example-com-tls, hosts: [chat.example.com] }]
+httpRoute:
+  enabled: true
+  parentRefs: [{ name: public, namespace: gateway-system }]
+  hostnames: [chat.example.com]
+  ruleExtras: { timeouts: { request: 0s, backendRequest: 0s } }
+networkPolicy:
+  webFrom: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress-nginx } } }]
+  egress:
+    enabled: true
+    extraEgress:
+      - to: [{ ipBlock: { cidr: 0.0.0.0/0 } }]
+        ports: [{ protocol: TCP, port: 443 }, { protocol: TCP, port: 5432 }, { protocol: TCP, port: 6379 }]
+metrics:
+  serviceMonitor: { enabled: true, labels: { release: kube-prometheus-stack } }
+  prometheusRule: { enabled: true, labels: { release: kube-prometheus-stack } }

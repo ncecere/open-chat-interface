@@ -5,6 +5,7 @@ import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
 import { ProjectFilesControl } from '~/components/chat/project-files-control';
 import type { PendingAttachment } from '~/hooks/use-attachments';
+import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { isSendKey, sendKeyShortcuts } from '~/lib/send-keys';
 import { cn } from '~/lib/utils';
 import { useInvertSend } from '~/providers/theme-provider';
@@ -80,9 +81,17 @@ export const Composer = memo(function Composer({
     node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
   }, [value]);
 
+  // Read-only maintenance mode (v0.11): nothing can be sent or uploaded; the
+  // banner above says why, and the field says so where the person types.
+  const readOnly = useReadOnlyStatus();
   const uploading = attachments.some((item) => item.status === 'uploading');
   const canSubmit =
-    value.trim().length > 0 && Boolean(selectedModel) && !streaming && !uploading && !submitting;
+    value.trim().length > 0 &&
+    Boolean(selectedModel) &&
+    !streaming &&
+    !uploading &&
+    !submitting &&
+    !readOnly.active;
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Enter that confirms an IME candidate never sends (see isSendKey). Any
@@ -107,7 +116,8 @@ export const Composer = memo(function Composer({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={readOnly.active ? `${readOnlyShortReason(readOnly)}.` : placeholder}
+          disabled={readOnly.active}
           aria-label="Message input"
           className={cn(
             'w-full resize-none bg-transparent text-[0.9375rem] leading-relaxed',
@@ -126,7 +136,7 @@ export const Composer = memo(function Composer({
             webSearch={webSearch}
             onWebSearchChange={onWebSearchChange}
             webSearchAvailable={webSearchAvailable}
-            attachmentsAvailable={attachmentsAvailable}
+            attachmentsAvailable={readOnly.active ? false : attachmentsAvailable}
             onAttachFiles={onAttachFiles}
           />
           {projectId && attachmentsAvailable !== false && onExcludedProjectFilesChange && (
@@ -154,6 +164,7 @@ export const Composer = memo(function Composer({
               aria-busy={submitting || undefined}
               onClick={onSubmit}
               aria-label="Send message"
+              title={readOnly.active ? readOnlyShortReason(readOnly) : undefined}
               aria-keyshortcuts={sendKeyShortcuts(invertSend)}
               className={cn(
                 'ml-auto inline-flex size-[2.125rem] items-center justify-center rounded-lg border transition-colors',

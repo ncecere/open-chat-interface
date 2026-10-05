@@ -22,12 +22,13 @@ import {
   type BackupRun,
   type BackupStatus,
 } from '@oci/shared';
-import { loadEnv } from '../../config/env.js';
+import { controlDatabaseUrl } from '../../db/control.js';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
 import { isManagedLogoKey } from '../branding-assets.js';
+import { manualRunConflict, requestManualRun } from '../jobs/requests.js';
 import { runExclusively } from '../jobs/runner.js';
 import { backupDuration, backupRuns } from '../observability/metrics.js';
 import { withSpan } from '../observability/tracing.js';
@@ -479,7 +480,9 @@ export async function performBackup(options: {
       const dump = await dumpDatabase(
         target,
         dumpKey,
-        options.databaseUrl ?? loadEnv().DATABASE_URL,
+        // pg_dump sets session parameters: a control connection, never a
+        // transaction-mode pooler (v0.11 design, section 11).
+        options.databaseUrl ?? controlDatabaseUrl(),
       );
 
       const totals: ManifestTotals = {
@@ -674,7 +677,7 @@ export async function performBackup(options: {
 
 function passwordOf(url: string | undefined): string | null {
   try {
-    const parsed = new URL(url ?? loadEnv().DATABASE_URL);
+    const parsed = new URL(url ?? controlDatabaseUrl());
     return parsed.password ? decodeURIComponent(parsed.password) : null;
   } catch {
     return null;
@@ -842,6 +845,10 @@ export async function startManualBackup(actor: Actor): Promise<'started' | 'runn
     .where(eq(schema.backupRun.status, 'running'))
     .limit(1);
   if (running) return 'running';
+  // On a `web` replica (v0.11) a worker runs it.
+  const placed = await requestManualRun({ job: BACKUP_JOB, actor: actor ?? undefined });
+  if (placed === 'no-worker') throw manualRunConflict();
+  if (placed === 'queued') return 'started';
   void runManualBackup(actor).catch((error: unknown) =>
     logger.error(
       { err: error instanceof Error ? error.message : String(error) },

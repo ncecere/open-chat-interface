@@ -68,6 +68,10 @@ export async function listAvailableModels(role: UserRole): Promise<CatalogModel[
 }
 
 interface ResolvedModel {
+  /** Catalog and provider ids, for provider capacity (v0.11). */
+  modelId?: string;
+  providerId?: string;
+  providerLabel?: string;
   contextWindow: number | null;
   languageModel: ReturnType<typeof createLanguageModel>;
   slug: string;
@@ -112,6 +116,9 @@ export async function resolveModelForRole(slug: string, role: UserRole): Promise
   }
 
   return {
+    modelId: row.model.id,
+    providerId: row.provider.id,
+    providerLabel: row.provider.label,
     contextWindow: row.model.contextWindow,
     languageModel: createLanguageModel(credentials, row.model.upstreamModelId),
     slug: row.model.slug,

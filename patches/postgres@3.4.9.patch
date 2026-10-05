@@ -1,8 +1,23 @@
 diff --git a/cjs/src/connection.js b/cjs/src/connection.js
-index 07f6716702ac888215c86ad6e0071aaf55ae519c..c64af3067bed2004d69ff00040d8f685e901f130 100644
+index 07f6716702ac888215c86ad6e0071aaf55ae519c..f0554516aa68114dd192cb0134738f19f0d90b00 100644
 --- a/cjs/src/connection.js
 +++ b/cjs/src/connection.js
-@@ -419,7 +419,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+@@ -157,6 +157,14 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     if (terminated)
+       return queryError(q, Errors.connection('CONNECTION_DESTROYED', options))
+ 
++    // A scope that outlived its closed connection (a transaction's ROLLBACK
++    // after the server dropped it) must not queue a write for a null socket,
++    // which throws outside any promise (porsager/postgres#1154). Reject it
++    // and answer true ("not full"), or the scope's handler moves the closed
++    // connection into the full queue, which nothing ever empties.
++    if (!socket)
++      return queryError(q, Errors.connection('CONNECTION_CLOSED', options)), true
++
+     if (stream)
+       return queryError(q, Errors.generic('COPY_IN_PROGRESS', 'You cannot execute queries during copy'))
+ 
+@@ -419,7 +427,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
      )
    }
  
@@ -11,7 +26,7 @@ index 07f6716702ac888215c86ad6e0071aaf55ae519c..c64af3067bed2004d69ff00040d8f685
      terminated = true
      if (stream || query || initial || sent.length)
        error(Errors.connection('CONNECTION_DESTROYED', options))
-@@ -428,7 +428,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+@@ -428,7 +436,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
      if (socket) {
        socket.removeListener('data', data)
        socket.removeListener('connect', connected)
@@ -22,11 +37,45 @@ index 07f6716702ac888215c86ad6e0071aaf55ae519c..c64af3067bed2004d69ff00040d8f685
      }
      ended && (ended(), ending = ended = null)
    }
+@@ -438,6 +448,11 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    // Forget the dead session's state, so the reconnected one starts clean:
++    // the cancelled write (else a reconnect never sends its startup message),
++    // and a FATAL error still waiting for a ReadyForQuery that will never
++    // come (else it fails the next session's first query).
++    nextWriteTimer = chunk = errorResponse = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+@@ -451,6 +466,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       return reconnect()
+ 
+     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    // The query in flight is rejected above; it must not be taken for the
++    // next session's.
++    query = null
+     closedTime = performance.now()
+     hadError && options.shared.retries++
+     delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
 diff --git a/cjs/src/index.js b/cjs/src/index.js
-index f09c61c7e998f411560b95c9a8e1ed6a97972c11..4d4f0e9789827b8ae16c9f9dcad949f62b0abe35 100644
+index f09c61c7e998f411560b95c9a8e1ed6a97972c11..e5690a2178906c7e949a34d350885d3fe0f92e66 100644
 --- a/cjs/src/index.js
 +++ b/cjs/src/index.js
-@@ -382,7 +382,7 @@ function Postgres(a, b) {
+@@ -219,7 +219,10 @@ function Postgres(a, b) {
+     const sql = Sql(handler)
+     sql.release = () => {
+       c.reserved = null
+-      onopen(c)
++      // A reserved connection that closed meanwhile is already in the closed
++      // (or, reconnecting, the connecting) queue: returning it to the open
++      // queue would hand a dead connection to every later query.
++      ;(c.queue === reserved || c.queue === full) && onopen(c)
+     }
+ 
+     return sql
+@@ -382,7 +385,7 @@ function Postgres(a, b) {
    }
  
    async function destroy(resolve) {
@@ -36,10 +85,25 @@ index f09c61c7e998f411560b95c9a8e1ed6a97972c11..4d4f0e9789827b8ae16c9f9dcad949f6
        queries.shift().reject(Errors.connection('CONNECTION_DESTROYED', options))
      resolve()
 diff --git a/src/connection.js b/src/connection.js
-index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..f1c22efc6605b8282027e4d14f384580b1e98731 100644
+index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..1523db7c52cd6c13f9d4b3a732f3160d600ba4f0 100644
 --- a/src/connection.js
 +++ b/src/connection.js
-@@ -419,7 +419,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+@@ -157,6 +157,14 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     if (terminated)
+       return queryError(q, Errors.connection('CONNECTION_DESTROYED', options))
+ 
++    // A scope that outlived its closed connection (a transaction's ROLLBACK
++    // after the server dropped it) must not queue a write for a null socket,
++    // which throws outside any promise (porsager/postgres#1154). Reject it
++    // and answer true ("not full"), or the scope's handler moves the closed
++    // connection into the full queue, which nothing ever empties.
++    if (!socket)
++      return queryError(q, Errors.connection('CONNECTION_CLOSED', options)), true
++
+     if (stream)
+       return queryError(q, Errors.generic('COPY_IN_PROGRESS', 'You cannot execute queries during copy'))
+ 
+@@ -419,7 +427,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
      )
    }
  
@@ -48,7 +112,7 @@ index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..f1c22efc6605b8282027e4d14f384580
      terminated = true
      if (stream || query || initial || sent.length)
        error(Errors.connection('CONNECTION_DESTROYED', options))
-@@ -428,7 +428,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+@@ -428,7 +436,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
      if (socket) {
        socket.removeListener('data', data)
        socket.removeListener('connect', connected)
@@ -59,11 +123,45 @@ index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..f1c22efc6605b8282027e4d14f384580
      }
      ended && (ended(), ending = ended = null)
    }
+@@ -438,6 +448,11 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    // Forget the dead session's state, so the reconnected one starts clean:
++    // the cancelled write (else a reconnect never sends its startup message),
++    // and a FATAL error still waiting for a ReadyForQuery that will never
++    // come (else it fails the next session's first query).
++    nextWriteTimer = chunk = errorResponse = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+@@ -451,6 +466,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       return reconnect()
+ 
+     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    // The query in flight is rejected above; it must not be taken for the
++    // next session's.
++    query = null
+     closedTime = performance.now()
+     hadError && options.shared.retries++
+     delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
 diff --git a/src/index.js b/src/index.js
-index c7fba3dace20173f4cb13f3f138bb6d213b43683..35c88530751a53b01ee1358f54b7f1e6876a5488 100644
+index c7fba3dace20173f4cb13f3f138bb6d213b43683..888281ded5f1c0e9eeba1be66687e22477b8a954 100644
 --- a/src/index.js
 +++ b/src/index.js
-@@ -382,7 +382,7 @@ function Postgres(a, b) {
+@@ -219,7 +219,10 @@ function Postgres(a, b) {
+     const sql = Sql(handler)
+     sql.release = () => {
+       c.reserved = null
+-      onopen(c)
++      // A reserved connection that closed meanwhile is already in the closed
++      // (or, reconnecting, the connecting) queue: returning it to the open
++      // queue would hand a dead connection to every later query.
++      ;(c.queue === reserved || c.queue === full) && onopen(c)
+     }
+ 
+     return sql
+@@ -382,7 +385,7 @@ function Postgres(a, b) {
    }
  
    async function destroy(resolve) {

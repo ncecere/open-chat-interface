@@ -33,6 +33,9 @@ vi.mock('../../config/env.js', async (importOriginal) => {
       ...actual.loadEnv(),
       REDIS_URL: process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6389',
       RATE_LIMIT_AUTH_PER_MINUTE: '3',
+      // v0.11: an address has its own allowance (far larger by default, for
+      // a campus NAT); the same here so one test covers both.
+      RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE: 3,
     }),
   };
 });
@@ -177,10 +180,12 @@ describe.skipIf(!available)('live: authentication rate limit', { timeout: 30_000
     expect(limited[0]).toMatchObject({ actor_email: target });
     expect(limited[0]!.metadata).toMatchObject({ path: '/sign-in/email', limit: LIMIT });
 
-    // Counted in Redis, so every replica shares it.
-    const keys = await redis.keys(`oci:limit:auth:ip:${ip}:*`);
+    // Counted in Redis, so every replica shares it: failed attempts per
+    // account (the refused ones included) and per address.
+    const keys = await redis.keys(`oci:limit:auth:account-failed:${target}:*`);
     expect(keys).toHaveLength(1);
     expect(Number(await redis.get(keys[0]!))).toBeGreaterThan(LIMIT);
+    expect(await redis.keys(`oci:limit:auth:ip-failed:${ip}:*`)).toHaveLength(1);
   });
 
   it('limits one account tried from many addresses', async () => {

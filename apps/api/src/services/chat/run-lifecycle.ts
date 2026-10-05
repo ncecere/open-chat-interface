@@ -3,6 +3,7 @@ import { beginChatRun } from '../chat-streams.js';
 import { acquireStreamSlot } from '../limits/concurrency.js';
 import { reserveQuotaForRun, settleReservation, type UsageReservation } from '../quota/index.js';
 import { failRunSetup, type RunResources } from './run-cleanup.js';
+import { startRunHeartbeat } from './run-recovery.js';
 import { claimThread } from './thread-claim.js';
 import type { TurnContext } from './turn-context.js';
 
@@ -36,6 +37,7 @@ export async function acquireRun(context: TurnContext): Promise<AcquiredRun> {
   try {
     const assistantMessage = await claimThread(context, runIdentity.runId);
     resources.assistantMessage = assistantMessage;
+    resources.stopHeartbeat = startRunHeartbeat(runIdentity);
     const persistence = await beginChatRun(runIdentity, { admission: 'durable' });
     // A cache collision cannot veto the durable claim. A racing publication or
     // unusable cache only makes this response non-resumable.

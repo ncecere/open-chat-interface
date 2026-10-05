@@ -1,0 +1,17 @@
+{
+  "description": "Violations in migrations that predate the linter (v0.11). Only these are tolerated; new ones fail. Regenerate with `node scripts/lint-migrations.mjs --update-baseline` (refused in CI). Matching uses file + rule + PostgreSQL fingerprint; statement is informational.",
+  "entries": [
+    {
+      "file": "0001_legacy_index.sql",
+      "rule": "index-not-concurrent",
+      "statement": 1,
+      "fingerprint": "9011214c6e7a4f81"
+    },
+    {
+      "file": "0001_legacy_index.sql",
+      "rule": "data-change",
+      "statement": 2,
+      "fingerprint": "702b62c4ce50b672"
+    }
+  ]
+}

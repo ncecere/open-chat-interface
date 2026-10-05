@@ -34,6 +34,7 @@ Run the checks relevant to your change before opening a pull request:
 
 ```bash
 pnpm lint
+pnpm lint:migrations
 pnpm typecheck
 pnpm test
 pnpm licenses:check
@@ -50,6 +51,29 @@ pnpm test:e2e
 Database schema changes must include generated Drizzle SQL and metadata. New or
 changed security boundaries require focused tests rather than relying only on a
 repository-wide coverage number.
+
+### Migration rules
+
+OCI upgrades without downtime, so a migration must not lock or rewrite a table
+that already holds data. `pnpm lint:migrations` (run early in CI) parses every
+migration with PostgreSQL's parser and fails on, among others: a plain
+`CREATE INDEX` or a validated `ADD CONSTRAINT` on an existing table, `ALTER
+COLUMN TYPE`, volatile defaults, `SET NOT NULL` without a validated check,
+`UPDATE`/`DELETE`/`INSERT ... SELECT` of existing rows, and `DROP COLUMN` or
+`DROP TABLE`. Data changes belong in background migrations (arriving in v0.11),
+not in the schema migration. When a statement is genuinely safe, say why
+directly above it:
+
+```sql
+-- oci:lint-allow index-not-concurrent: one row per organisation
+CREATE INDEX "organization_slug_idx" ON "organization" ("slug");
+```
+
+Never edit a released migration or add entries to
+`scripts/lint-migrations/baseline.json` for a new one; the baseline only
+grandfathers migrations written before the linter. See
+[docs/dev/database.md](docs/dev/database.md#migration-linter) for every rule
+and its fix.
 
 ## Pull requests
 

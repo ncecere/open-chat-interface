@@ -41,6 +41,63 @@ const results = ['load', 'render', 'stream'].map((stage) => ({
 `;
 }
 
+/** Messages in the long-conversation scenario (v0.11, item 21). */
+export const LONG_CONVERSATION_MESSAGES = 2_000;
+/** In the first user message and the last reply, so a runner can tell both ends apart. */
+export const LONG_START_MARKER = 'LONG-FIXTURE-START';
+export const LONG_END_MARKER = 'LONG-FIXTURE-END';
+/** Every DIAGRAM_EVERY-th reply has a Mermaid diagram, every HTML_EVERY-th an HTML artifact. */
+const DIAGRAM_EVERY = 100;
+const HTML_EVERY = 250;
+
+const longDiagram = (turn: number) => `flowchart LR
+  A[Question ${turn}] --> B[Search]
+  B --> C[Draft]
+  C --> D[Answer ${turn}]`;
+
+const longHtml = (turn: number) => `<!doctype html>
+<html>
+<head><title>Report ${turn}</title></head>
+<body>
+<h1>Report ${turn}</h1>
+<p>Synthetic artifact for the long conversation fixture.</p>
+<ul>
+<li>One</li>
+<li>Two</li>
+</ul>
+</body>
+</html>`;
+
+/**
+ * One reply of the long conversation: prose, a table, a highlighted code
+ * block, and now and then a diagram or an HTML artifact (both saved as
+ * artifacts below), roughly the mix of a long working session.
+ */
+export function longReply(turn: number, last: boolean): string {
+  const extra =
+    turn % HTML_EVERY === 0
+      ? `\n\n\`\`\`html\n${longHtml(turn)}\n\`\`\`\n`
+      : turn % DIAGRAM_EVERY === 0
+        ? `\n\n\`\`\`mermaid\n${longDiagram(turn)}\n\`\`\`\n`
+        : '';
+  return `### Long conversation reply ${turn}
+
+This is reply **${turn}** of a long, synthetic working session. It mixes prose, a small table and code, as long chats do.
+
+| Step | Value |
+| --- | ---: |
+| Turn | ${turn} |
+| Lines | ${turn * 3} |
+
+\`\`\`typescript
+export function step${turn}(input: number[]): number {
+  // Turn ${turn}: sum the even values, then scale them.
+  return input.filter((value) => value % 2 === 0).reduce((sum, value) => sum + value * ${turn}, 0);
+}
+\`\`\`${extra}${last ? `\n\n${LONG_END_MARKER}` : ''}
+`;
+}
+
 export async function seedBrowserData(db: Database, encryptedApiKey: string) {
   const [admin] = await db.select().from(schema.user).where(eq(schema.user.email, ADMIN_EMAIL));
   if (!admin?.organizationId) throw new Error('Fixture administrator is missing');
@@ -81,10 +138,12 @@ export async function seedBrowserData(db: Database, encryptedApiKey: string) {
       'cold-load-candidate',
       'small-chat-baseline',
       'small-chat-candidate',
+      'long-conversation',
     ];
     for (const [index, label] of labels.entries()) {
       const threadId = randomUUID();
-      const messageCount = index < 12 ? 100 : 0;
+      const long = label === 'long-conversation';
+      const messageCount = long ? LONG_CONVERSATION_MESSAGES : index < 12 ? 100 : 0;
       const createdAt = new Date(Date.UTC(2025, 0, index + 1));
       const updatedAt = new Date(createdAt.getTime() + Math.max(0, messageCount - 1) * 1_000);
       await tx.insert(schema.thread).values({
@@ -97,28 +156,36 @@ export async function seedBrowserData(db: Database, encryptedApiKey: string) {
         lastMessageAt: messageCount ? updatedAt : null,
       });
       const messages: (typeof schema.message.$inferInsert)[] = [];
+      const artifacts: Array<{ messageId: string; kind: 'mermaid' | 'html'; turn: number }> = [];
       for (let pair = 0; pair < messageCount / 2; pair++) {
         const promptId = randomUUID();
+        const turn = pair + 1;
         for (const role of ['user', 'assistant'] as const) {
           const position = pair * 2 + (role === 'assistant' ? 1 : 0);
           const timestamp = new Date(createdAt.getTime() + position * 1_000);
+          const id = role === 'user' ? promptId : randomUUID();
+          const text = long
+            ? role === 'user'
+              ? `${turn === 1 ? `${LONG_START_MARKER} ` : ''}Long conversation question ${turn}: continue the review.`
+              : longReply(turn, turn === messageCount / 2)
+            : role === 'user'
+              ? `Summarize local fixture ${index + 1}, turn ${pair + 1}, using a table and code.`
+              : historyMarkdown(index + 1, pair + 1);
+          if (long && role === 'assistant' && turn % DIAGRAM_EVERY === 0)
+            artifacts.push({
+              messageId: id,
+              kind: turn % HTML_EVERY === 0 ? 'html' : 'mermaid',
+              turn,
+            });
           messages.push({
-            id: role === 'user' ? promptId : randomUUID(),
+            id,
             threadId,
             userId: admin.id,
             role,
             position,
             // Match production lineage: assistant -> its user prompt; user -> null.
             parentMessageId: role === 'assistant' ? promptId : null,
-            parts: [
-              {
-                type: 'text',
-                text:
-                  role === 'user'
-                    ? `Summarize local fixture ${index + 1}, turn ${pair + 1}, using a table and code.`
-                    : historyMarkdown(index + 1, pair + 1),
-              },
-            ],
+            parts: [{ type: 'text', text }],
             modelSlug: FIXTURE_MODEL,
             status: 'complete',
             createdAt: timestamp,
@@ -126,7 +193,34 @@ export async function seedBrowserData(db: Database, encryptedApiKey: string) {
           });
         }
       }
-      if (messages.length) await tx.insert(schema.message).values(messages);
+      for (let start = 0; start < messages.length; start += 500)
+        await tx.insert(schema.message).values(messages.slice(start, start + 500));
+      // Saved as the reply's code-block artifacts would be: the second fence
+      // (after the TypeScript one) is `block:1`.
+      for (const artifact of artifacts) {
+        const content =
+          artifact.kind === 'html' ? longHtml(artifact.turn) : longDiagram(artifact.turn);
+        const [row] = await tx
+          .insert(schema.artifact)
+          .values({
+            userId: admin.id,
+            threadId,
+            messageId: artifact.messageId,
+            sourceKey: 'block:1',
+            title: artifact.kind === 'html' ? `Report ${artifact.turn}` : 'Flowchart',
+            kind: artifact.kind,
+          })
+          .returning({ id: schema.artifact.id });
+        if (!row) throw new Error('Fixture artifact was not stored');
+        await tx.insert(schema.artifactVersion).values({
+          artifactId: row.id,
+          version: 1,
+          content,
+          sizeBytes: Buffer.byteLength(content),
+          source: 'reply',
+          messageId: artifact.messageId,
+        });
+      }
       scenarios.push({
         label,
         kind: messageCount ? 'history' : 'empty',

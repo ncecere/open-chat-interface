@@ -8,6 +8,7 @@ import {
   index,
   integer,
   jsonb,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -138,9 +139,11 @@ export const quotaPolicyRole = pgTable(
 );
 
 /**
- * One row per admitted generation attempt. Policy evaluation reads these because a
- * daily rollup cannot answer a rolling or non-UTC calendar window correctly.
- * Prices are snapshotted so later catalog edits never rewrite past spend.
+ * One row per admitted generation attempt. Prices are snapshotted so later
+ * catalog edits never rewrite past spend. Reports and budget checks read the
+ * hourly rollups below once their backfill has finished (a UTC-day rollup
+ * cannot answer a rolling or non-UTC calendar window; an hourly one, with the
+ * events of partial hours, can), and these rows before that.
  *
  * `userId` is null once the account is deleted (migration 0038): the usage
  * stays in instance totals and reports as "Deleted accounts", with nothing
@@ -177,6 +180,12 @@ export const usageEvent = pgTable(
      */
     reservedCostMicros: bigint('reserved_cost_micros', { mode: 'number' }).notNull().default(0),
     reservedTokens: integer('reserved_tokens').notNull().default(0),
+    /**
+     * True once the event's amounts are in the usage rollups (migration 0040).
+     * Set by a trigger on every write, and on older events by the background
+     * migration `0.11.usage-rollups`; never written by the application.
+     */
+    inRollup: boolean('in_rollup'),
   },
   (t) => [
     keptAfterDeletion('usage_event', t.userId),
@@ -246,6 +255,84 @@ export const usageRecord = pgTable(
     // Concurrent streams previously raced this rollup into duplicate rows.
     uniqueIndex('usage_record_user_model_day_unique').on(t.userId, t.modelSlug, t.day),
   ],
+);
+
+/**
+ * Amounts summed by the usage rollups (migration 0040). `events` counts every
+ * event; `settled*`, `messages`, `tokens*` and `costMicros` are what reports
+ * sum (settled events only); `quota*` is what budgets sum (every event, with
+ * the estimates still held for unreported usage).
+ */
+function rollupAmounts() {
+  return {
+    events: bigint('events', { mode: 'number' }).notNull().default(0),
+    settledEvents: bigint('settled_events', { mode: 'number' }).notNull().default(0),
+    messages: bigint('messages', { mode: 'number' }).notNull().default(0),
+    tokensIn: bigint('tokens_in', { mode: 'number' }).notNull().default(0),
+    tokensOut: bigint('tokens_out', { mode: 'number' }).notNull().default(0),
+    costMicros: bigint('cost_micros', { mode: 'number' }).notNull().default(0),
+  };
+}
+
+function quotaAmounts() {
+  return {
+    quotaMessages: bigint('quota_messages', { mode: 'number' }).notNull().default(0),
+    quotaTokens: bigint('quota_tokens', { mode: 'number' }).notNull().default(0),
+    quotaCostMicros: bigint('quota_cost_micros', { mode: 'number' }).notNull().default(0),
+  };
+}
+
+/**
+ * Differences not yet folded into the rollups: written by statement triggers
+ * on `usage_event` in the writer's transaction, folded by the job
+ * `usage.fold-rollups`. Readers add it to the rollups in the same statement.
+ */
+export const usageRollupChange = pgTable(
+  'usage_rollup_change',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    hour: timestamp('hour', { withTimezone: true }).notNull(),
+    userId: text('user_id'),
+    modelSlug: text('model_slug').notNull(),
+    ...rollupAmounts(),
+    ...quotaAmounts(),
+  },
+  (t) => [
+    index('usage_rollup_change_hour_idx').on(t.hour),
+    index('usage_rollup_change_user_idx').on(t.userId, t.hour),
+  ],
+);
+
+/**
+ * Usage per UTC hour, person and model; `userId` is null for deleted
+ * accounts, which share one row (the key is NULLS NOT DISTINCT in 0040).
+ */
+export const usageRollupHour = pgTable(
+  'usage_rollup_hour',
+  {
+    hour: timestamp('hour', { withTimezone: true }).notNull(),
+    userId: text('user_id'),
+    modelSlug: text('model_slug').notNull(),
+    ...rollupAmounts(),
+    ...quotaAmounts(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('usage_rollup_hour_key').on(t.hour, t.userId, t.modelSlug),
+    index('usage_rollup_hour_user_idx').on(t.userId, t.hour),
+  ],
+);
+
+/** Usage per UTC hour and model, for instance-wide figures. */
+export const usageRollupModelHour = pgTable(
+  'usage_rollup_model_hour',
+  {
+    hour: timestamp('hour', { withTimezone: true }).notNull(),
+    modelSlug: text('model_slug').notNull(),
+    ...rollupAmounts(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: 'usage_rollup_model_hour_pkey', columns: [t.hour, t.modelSlug] })],
 );
 
 export const auditLog = pgTable(

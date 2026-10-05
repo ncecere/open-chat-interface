@@ -200,7 +200,8 @@ describe('canonical chat recovery with the real AI SDK', () => {
     expect(network).toHaveBeenCalledOnce();
     expect(network.mock.calls[0]?.[0]).toBe('/api/chat/thread/stream');
     expect(network.mock.calls[0]?.[1]?.method).toBe('GET');
-    expect(getHistory).toHaveBeenCalledExactlyOnceWith('/chat/thread/messages', {
+    // The latest page, sized to reach past the live messages (v0.11).
+    expect(getHistory).toHaveBeenCalledExactlyOnceWith('/chat/thread/messages?limit=100', {
       signal: expect.any(AbortSignal),
     });
     expect(session.messages).toEqual(saved.messages);

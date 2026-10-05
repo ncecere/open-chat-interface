@@ -7,19 +7,36 @@ const mocks = vi.hoisted(() => {
     client: { reserve: vi.fn(), end: vi.fn() },
     createDatabase: vi.fn(),
     error: vi.fn(),
+    warn: vi.fn(),
   };
 });
-vi.mock('@oci/db', () => ({ createDatabase: mocks.createDatabase }));
+vi.mock('@oci/db', () => ({ createControlClient: mocks.createDatabase }));
 vi.mock('../../config/env.js', () => ({
-  loadEnv: () => ({ DATABASE_URL: 'postgres://test-only' }),
+  // The lock's session is a control connection (v0.11, section 11): CONTROL_DATABASE_URL.
+  loadEnv: () => ({
+    DATABASE_URL: 'postgres://pooled-test-only',
+    CONTROL_DATABASE_URL: 'postgres://test-only',
+  }),
 }));
-vi.mock('../../lib/logger.js', () => ({ logger: { error: mocks.error } }));
+vi.mock('../../lib/logger.js', () => ({ logger: { error: mocks.error, warn: mocks.warn } }));
 
-import { withJobLock } from '../../services/jobs/lock.js';
+import { lockWatch, withJobLock } from '../../services/jobs/lock.js';
+
+/** Answers the lock queries; `held` decides what the lease check sees. */
+function answer(held: () => boolean | Promise<boolean> = () => true) {
+  mocks.owner.mockImplementation(async (strings: TemplateStringsArray) => {
+    const text = strings.join('');
+    if (text.includes('pg_try_advisory_lock')) return [{ locked: true }];
+    if (text.includes('pg_locks')) return [{ held: await held() }];
+    return [{ unlocked: true }];
+  });
+}
+const lockCalls = (fragment: string) =>
+  mocks.owner.mock.calls.filter((call) => (call[0] as string[]).join('').includes(fragment));
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.createDatabase.mockReturnValue({ sql: mocks.client });
+  mocks.createDatabase.mockReturnValue(mocks.client);
   mocks.client.reserve.mockResolvedValue(mocks.owner);
   mocks.client.end.mockResolvedValue(undefined);
   mocks.owner.mockImplementation(async (strings: TemplateStringsArray) =>
@@ -33,7 +50,10 @@ afterEach(() => {
 describe('job lock connection lifecycle', () => {
   it('uses the reserved owner for acquire/unlock and always disposes the private client', async () => {
     expect(await withJobLock('cleanup', async () => 7)).toBe(7);
-    expect(mocks.createDatabase).toHaveBeenCalledWith('postgres://test-only', { max: 1 });
+    expect(mocks.createDatabase).toHaveBeenCalledWith('postgres://test-only', {
+      max: 1,
+      applicationName: expect.stringMatching(/^oci:all:/),
+    });
     expect(mocks.client.reserve).toHaveBeenCalledOnce();
     expect(mocks.owner).toHaveBeenCalledTimes(2);
     for (const call of mocks.owner.mock.calls) expect(call[1]).toBe('oci:job:cleanup');
@@ -153,5 +173,94 @@ describe('job lock connection lifecycle', () => {
       await first;
     }
     expect(await withJobLock('cleanup', async () => 2)).toBe(2);
+  });
+});
+
+describe('job lock lease (v0.11 failover safety)', () => {
+  it('reports the lock held while its connection holds it, and releases it afterwards', async () => {
+    answer();
+    const result = await withJobLock('cleanup', async (lease) => {
+      expect(lease.lost).toBe(false);
+      expect(await lease.stillHeld()).toBe(true);
+      expect(lease.signal.aborted).toBe(false);
+      return 3;
+    });
+    expect(result).toBe(3);
+    expect(lockCalls('pg_locks')).toHaveLength(1);
+    expect(lockCalls('pg_advisory_unlock')).toHaveLength(1);
+    expect(mocks.warn).not.toHaveBeenCalled();
+  });
+
+  it('treats a dead lock connection as a lost lock, and releases nothing', async () => {
+    answer(() => {
+      throw Object.assign(new Error('terminating connection due to administrator command'), {
+        code: '57P01',
+      });
+    });
+    const result = await withJobLock('cleanup', async (lease) => {
+      expect(await lease.stillHeld()).toBe(false);
+      expect(lease.lost).toBe(true);
+      expect(lease.signal.aborted).toBe(true);
+      // Once lost, it stays lost without asking again.
+      expect(await lease.stillHeld()).toBe(false);
+      return 1;
+    });
+    expect(result).toBe(1);
+    expect(lockCalls('pg_locks')).toHaveLength(1);
+    expect(lockCalls('pg_advisory_unlock')).toHaveLength(0);
+    expect(mocks.warn).toHaveBeenCalledOnce();
+    expect(mocks.client.end).toHaveBeenCalledOnce();
+  });
+
+  it('treats a connection that no longer holds the lock as lost', async () => {
+    answer(() => false);
+    await withJobLock('cleanup', async (lease) => {
+      expect(await lease.stillHeld()).toBe(false);
+      return 0;
+    });
+    expect(mocks.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'The job lock is no longer held by its connection' }),
+      expect.any(String),
+    );
+    expect(lockCalls('pg_advisory_unlock')).toHaveLength(0);
+  });
+
+  it('runs one check at a time, and bounds a hung one', async () => {
+    vi.useFakeTimers();
+    answer(() => new Promise<boolean>(() => {}));
+    const result = withJobLock('cleanup', async (lease) => {
+      const first = lease.stillHeld();
+      const second = lease.stillHeld();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await first).toBe(false);
+      expect(await second).toBe(false);
+      return 2;
+    });
+    expect(await result).toBe(2);
+    expect(lockCalls('pg_locks')).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('checks in the background while the job runs, so a job that never asks still learns', async () => {
+    vi.useFakeTimers();
+    const saved = lockWatch.intervalMs;
+    lockWatch.intervalMs = 100;
+    let alive = true;
+    answer(() => alive);
+    try {
+      const result = withJobLock('cleanup', async (lease) => {
+        await vi.advanceTimersByTimeAsync(100);
+        expect(lease.lost).toBe(false);
+        alive = false;
+        await vi.advanceTimersByTimeAsync(100);
+        expect(lease.lost).toBe(true);
+        return 4;
+      });
+      expect(await result).toBe(4);
+    } finally {
+      lockWatch.intervalMs = saved;
+    }
+    expect(lockCalls('pg_locks').length).toBeGreaterThanOrEqual(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

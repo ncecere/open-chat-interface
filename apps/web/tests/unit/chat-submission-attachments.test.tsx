@@ -159,7 +159,7 @@ beforeEach(() => {
             });
           });
         }
-      } else if (url === '/api/chat/thread/messages' && canonical) {
+      } else if (url.startsWith('/api/chat/thread/messages') && canonical) {
         return Response.json({
           thread: { id: 'thread', temporary: false, expiresAt: null },
           messages: canonical,

@@ -3,7 +3,10 @@ import Redis from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ sharedRedis: vi.fn(), warn: vi.fn() }));
-vi.mock('../../services/chat-streams.js', () => ({ sharedRedis: mocks.sharedRedis }));
+vi.mock('../../services/chat-streams.js', () => ({
+  sharedRedis: mocks.sharedRedis,
+  noteRedisFailure: () => undefined,
+}));
 vi.mock('../../services/lifecycle/settings.js', () => ({
   getRateLimitSettings: async () => ({
     roles: {

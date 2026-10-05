@@ -34,6 +34,20 @@ services:
       AUTH_TRUSTED_ORIGINS:
       DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
       REDIS_URL: redis://redis:6379
+      # Optional (docs/OPERATIONS.md, "Connection pooling" and "Redis"): taken
+      # from your shell or .env when set. CONTROL_DATABASE_URL must reach
+      # PostgreSQL directly when DATABASE_URL is a transaction-mode pooler;
+      # REDIS_SENTINELS or REDIS_CLUSTER_NODES take precedence over REDIS_URL.
+      CONTROL_DATABASE_URL:
+      READ_DATABASE_URL:
+      DATABASE_POOL_MAX:
+      REDIS_SENTINELS:
+      REDIS_SENTINEL_NAME:
+      REDIS_SENTINEL_PASSWORD:
+      REDIS_CLUSTER_NODES:
+      REDIS_USERNAME:
+      REDIS_PASSWORD:
+      REDIS_TLS:
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
       # Leave INITIAL_ADMIN_PASSWORD unset to get a one-time password in the logs.
@@ -43,6 +57,22 @@ services:
       # Leave true for a single instance. Set false when the migrate job below
       # owns schema changes, which is the usual pattern once replicas > 1.
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      # Lock and statement timeouts for migrations run at startup
+      # (docs/OPERATIONS.md, "Migration timeouts"); unset uses the defaults.
+      MIGRATION_LOCK_TIMEOUT_MS:
+      MIGRATION_STATEMENT_TIMEOUT_MS:
+      # How long a stopping replica lets replies finish (default 25000). Keep
+      # it below stop_grace_period, which must leave time for the final saves.
+      SHUTDOWN_DRAIN_TIMEOUT_MS:
+      # all (default): API and background jobs. web: API only, when the
+      # worker below runs the jobs (docs/OPERATIONS.md, "Process roles").
+      OCI_ROLE: ${OCI_API_ROLE:-all}
+      # Emergency read-only mode (docs/admin/maintenance.md): refuses every
+      # change until unset; it cannot be turned off from administration.
+      OCI_READ_ONLY:
+      OCI_READ_ONLY_REASON:
+    # SIGTERM, then SIGKILL after this: longer than the drain above.
+    stop_grace_period: 30s
     volumes:
       - storage_data:/data/storage
     healthcheck:
@@ -61,6 +91,65 @@ services:
       redis:
         condition: service_healthy
 
+  # Background jobs in their own container (OCI_ROLE=worker): imports,
+  # embeddings, summaries, webhooks, backups, compliance exports, retention.
+  # It serves only /api/health/live, /api/health/ready and /metrics, and is
+  # never behind the web proxy. Run it with the API on OCI_ROLE=web:
+  #   OCI_API_ROLE=web docker compose --profile worker up -d
+  # Scale with `--scale worker=2`; job locks keep each job on one at a time.
+  worker:
+    image: ${OCI_API_IMAGE:-oci-api:local}
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    profiles: ['worker']
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      OCI_ROLE: worker
+      API_PORT: 3000
+      # Links in emails it sends (scheduled reports) point here.
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
+      REDIS_URL: redis://redis:6379
+      # As for the api service above.
+      CONTROL_DATABASE_URL:
+      DATABASE_POOL_MAX:
+      REDIS_SENTINELS:
+      REDIS_SENTINEL_NAME:
+      REDIS_SENTINEL_PASSWORD:
+      REDIS_CLUSTER_NODES:
+      REDIS_USERNAME:
+      REDIS_PASSWORD:
+      REDIS_TLS:
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      # Imports read uploads from, and backups copy, the same storage.
+      STORAGE_LOCAL_PATH: /data/storage
+      # The api service migrates; the worker starts once it is healthy.
+      RUN_MIGRATIONS: 'false'
+      # On SIGTERM a worker finishes the job batch in hand within this limit.
+      SHUTDOWN_DRAIN_TIMEOUT_MS:
+      # Read-only mode pauses the worker's writing jobs too (as for the api).
+      OCI_READ_ONLY:
+      OCI_READ_ONLY_REASON:
+    stop_grace_period: 30s
+    volumes:
+      - storage_data:/data/storage
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      api:
+        condition: service_healthy
+
   # One-shot schema migration for deployments that scale the API. Run it
   # before starting replicas that boot with RUN_MIGRATIONS=false:
   #   docker compose run --rm migrate
@@ -76,7 +165,31 @@ services:
       DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      MIGRATION_LOCK_TIMEOUT_MS:
+      MIGRATION_STATEMENT_TIMEOUT_MS:
     command: ['node', 'dist/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Post-deploy phase (v0.11): once every API replica runs the new release,
+  #   docker compose --profile tools run --rm migrate-post
+  # builds the release's indexes concurrently, applies its other post-deploy
+  # steps and schedules its background migrations (docs/OPERATIONS.md,
+  # "Upgrade"). Refuses to run before `migrate`. The preflight runs from the
+  # same image: docker compose --profile tools run --rm migrate node dist/scripts/upgrade-check.js
+  migrate-post:
+    image: ${OCI_API_IMAGE:-oci-api:local}
+    profiles: ['tools']
+    restart: 'no'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://oci:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/oci
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      MIGRATION_LOCK_TIMEOUT_MS:
+      POST_MIGRATION_STATEMENT_TIMEOUT_MS:
+    command: ['node', 'dist/migrate.js', '--post']
     depends_on:
       postgres:
         condition: service_healthy

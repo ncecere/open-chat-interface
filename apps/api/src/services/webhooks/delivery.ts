@@ -5,6 +5,7 @@ import { decryptSecret } from '../../lib/crypto.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { createGuardedFetch, findNetworkError } from '../connectors/network.js';
+import { kickJob } from '../jobs/requests.js';
 import { webhookDeliveries } from '../observability/metrics.js';
 import { withSpan } from '../observability/tracing.js';
 import { actionSelected, enabledEndpoints } from './endpoints.js';
@@ -85,16 +86,21 @@ export function webhookPayload(entry: AuditEntry): string {
 
 let kickTimer: NodeJS.Timeout | null = null;
 
-/** Sends soon rather than at the next tick; collapses bursts into one run. */
+/**
+ * Sends soon rather than at the next tick; collapses bursts into one run. On
+ * a `web` replica a worker is asked to send instead (jobs/requests.ts).
+ */
 function scheduleWebhookDelivery(): void {
   if (kickTimer) return;
   kickTimer = setTimeout(() => {
     kickTimer = null;
-    void import('../jobs/index.js')
-      .then(({ runJobNow }) => runJobNow('webhooks.deliver'))
-      .catch((error: unknown) => {
-        logger.warn({ err: String(error) }, 'Could not start webhook delivery immediately');
-      });
+    kickJob('webhooks.deliver', () =>
+      import('../jobs/index.js')
+        .then(({ runJobNow }) => runJobNow('webhooks.deliver'))
+        .catch((error: unknown) => {
+          logger.warn({ err: String(error) }, 'Could not start webhook delivery immediately');
+        }),
+    );
   }, 1_000);
   kickTimer.unref();
 }

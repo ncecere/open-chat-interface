@@ -1,7 +1,7 @@
 import type { SearchGroundingData } from '@oci/shared';
 import type { UIMessage } from 'ai';
-import { ChevronDown, ChevronRight, Globe2, TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, Globe2, Link2, TriangleAlert } from 'lucide-react';
+import { type ReactNode, useId, useState } from 'react';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { cn } from '~/lib/utils';
 
@@ -91,145 +91,205 @@ function SourceMark({ url }: { url: string }) {
   );
 }
 
+/**
+ * A reply's sources (v0.11): the search made before it (the pre-search, used
+ * when the Search toggle is on and the model is not offered the web search
+ * tool), and the links its tool calls returned. Both are shown as steps in
+ * the reply's work block rather than as panels of their own.
+ */
+export interface SourceLink {
+  url: string;
+  title: string;
+}
+export interface ReplySearch {
+  /** The search made before the reply; null when there was none. */
+  presearch: SearchGroundingView | null;
+  /** Links returned by the reply's tool calls (connectors, web search), without repeats. */
+  sources: SourceLink[];
+}
+
+export function replySearchOf(message: UIMessage): ReplySearch {
+  const leading: SourceLink[] = [];
+  const fromTools: SourceLink[] = [];
+  let toolSeen = false;
+  for (const part of message.parts) {
+    if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') toolSeen = true;
+    if (part.type !== 'source-url') continue;
+    const source = part as Partial<MessageSource>;
+    if (!source.sourceId || !source.url) continue;
+    // The pre-search's results are stored before any tool call.
+    (toolSeen ? fromTools : leading).push({ url: source.url, title: source.title ?? source.url });
+  }
+  const details = message.parts.some((part) => part.type === 'data-search-grounding')
+    ? searchGroundingOf(message)
+    : null;
+  const presearch =
+    details ??
+    (leading.length
+      ? {
+          query: null,
+          results: leading.map((source) => ({ ...source, snippet: '' })),
+        }
+      : null);
+  const known = new Set(presearch?.results.map((result) => result.url) ?? []);
+  // A web search step lists its own results when expanded.
+  for (const part of message.parts) {
+    if (part.type !== 'tool-web_search') continue;
+    const results = (part as { output?: { results?: unknown } }).output?.results;
+    if (!Array.isArray(results)) continue;
+    for (const result of results) {
+      const url = (result as { url?: unknown } | null)?.url;
+      if (typeof url === 'string') known.add(url);
+    }
+  }
+  const sources = fromTools.filter((source) => {
+    if (known.has(source.url)) return false;
+    known.add(source.url);
+    return true;
+  });
+  return { presearch, sources };
+}
+
+const count = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`;
+
+/** The pre-search's line in the work block: "Searched the web · 5 sources". */
+function presearchLabel(grounding: SearchGroundingView): string {
+  if (grounding.error) return 'Web search failed';
+  return `Searched the web · ${count(grounding.results.length, 'source', 'sources')}`;
+}
+
+/**
+ * While a reply waits for its pre-search: the work block's header as it will
+ * read, active. Not a disclosure; it becomes the block when the reply starts.
+ */
 export function SearchLoading() {
   return (
-    <div className="mb-6">
-      <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-[var(--text-primary)]">
-        <Globe2 className="size-4" aria-hidden="true" />
-        Searched the web
-      </div>
-      <div role="status" className="ml-0.5 mt-7 flex gap-2" aria-label="Searching the web">
-        {[0, 1, 2].map((dot) => (
-          <span
-            key={dot}
-            className="size-2 animate-pulse rounded-full bg-[var(--text-muted)]"
-            style={{ animationDelay: `${dot * 0.18}s` }}
-          />
-        ))}
-      </div>
+    <div className="mb-4 flex items-center gap-2 text-[0.8125rem] font-medium text-[var(--text-primary)]">
+      <Globe2 className="size-4 motion-safe:animate-pulse" aria-hidden="true" />
+      <span role="status">Searching the web…</span>
     </div>
   );
 }
 
-export function SearchSourcesPanel({ grounding }: { grounding: SearchGroundingView }) {
-  const [open, setOpen] = useState(false);
-
-  if (grounding.error) {
-    return (
-      <div role="note" className="mb-7 text-[0.8125rem]">
-        <p className="flex items-center gap-2 font-semibold text-[var(--text-primary)]">
-          <TriangleAlert className="size-4 text-[var(--warning)]" aria-hidden="true" />
-          Web search failed
-        </p>
-        <p className="mt-1 pl-6 text-[var(--text-muted)]">{grounding.error}</p>
-      </div>
-    );
-  }
-
+function SourceList({ sources }: { sources: Array<SourceLink & { snippet?: string }> }) {
   return (
-    <div className="mb-7">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-fit items-center gap-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
-      >
-        <Globe2 className="size-4" aria-hidden="true" />
-        <span>Searched the web</span>
-        <ChevronDown
-          className={cn(
-            'size-3.5 text-[var(--text-muted)] transition-transform',
-            open && 'rotate-180',
-          )}
-        />
-      </button>
-
-      {open && (
-        <div className="mt-2 space-y-1 pl-6">
-          {grounding.results.map((result) => (
-            <SafeExternalLink
-              key={result.url}
-              href={result.url}
-              className="group flex w-full min-w-0 items-start gap-2 rounded-md px-1 py-0.5 text-left hover:bg-[var(--bg-control)]"
-            >
-              <SourceMark url={result.url} />
-              <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate text-[0.8125rem] font-medium text-[var(--text-primary)]">
-                  {result.title}
-                </span>
-                <span className="mt-0.5 block truncate text-[0.6875rem] text-[var(--text-muted)]">
-                  {result.url}
-                </span>
+    <ul aria-label="Sources" className="space-y-1">
+      {sources.map((source) => (
+        <li key={source.url} className="min-w-0">
+          <SafeExternalLink
+            href={source.url}
+            className="group flex w-full min-w-0 items-start gap-2 rounded-md px-1 py-0.5 text-left hover:bg-[var(--bg-control)]"
+          >
+            <SourceMark url={source.url} />
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-[0.8125rem] font-medium text-[var(--text-primary)]">
+                {source.title}
               </span>
-            </SafeExternalLink>
-          ))}
-        </div>
-      )}
-    </div>
+              <span className="mt-0.5 block truncate text-[0.6875rem] text-[var(--text-muted)]">
+                {source.url}
+              </span>
+              {source.snippet && (
+                <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[var(--text-secondary)]">
+                  {source.snippet}
+                </span>
+              )}
+            </span>
+          </SafeExternalLink>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-export function SearchGroundingDetails({ grounding }: { grounding: SearchGroundingView }) {
+/** A step in the work block that expands to its details, like a tool step. */
+function StepDisclosure({
+  label,
+  icon: Icon,
+  muted = false,
+  children,
+}: {
+  label: string;
+  icon: typeof Globe2;
+  muted?: boolean;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
-
+  const detailsId = useId();
   return (
-    <div className="mt-8">
+    <div className="min-w-0">
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)] hover:text-[var(--text-secondary)]"
+        aria-controls={detailsId}
+        onClick={() => setOpen(!open)}
+        className="flex w-full min-w-0 items-center gap-2 text-left text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
       >
-        <ChevronRight
-          className={cn('size-3.5 transition-transform', open && 'rotate-90')}
+        <Icon
+          className={cn('size-4 shrink-0', muted && 'text-[var(--warning)]')}
           aria-hidden="true"
         />
-        Search Grounding Details
+        <span className="min-w-0 flex-1 break-words">{label}</span>
+        <ChevronDown
+          className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-180')}
+          aria-hidden="true"
+        />
       </button>
-
       {open && (
-        <div className="mt-5 space-y-5">
-          <section>
-            <h3 className="text-xs font-semibold text-[var(--text-primary)]">Search Queries:</h3>
-            <p className="mt-2 text-xs text-[var(--text-secondary)]">
-              {grounding.query ?? 'Query not retained for this older response'}
-            </p>
-          </section>
-
-          {grounding.provider && (
-            <section>
-              <h3 className="text-xs font-semibold text-[var(--text-primary)]">Search provider:</h3>
-              <p className="mt-2 text-xs text-[var(--text-secondary)]">
-                {grounding.fallback
-                  ? `${grounding.provider} (the fallback provider; the first one did not answer)`
-                  : grounding.provider}
-              </p>
-            </section>
-          )}
-
-          <section>
-            <h3 className="text-xs font-semibold text-[var(--text-primary)]">Search Results:</h3>
-            <div className="mt-2 space-y-2">
-              {grounding.results.map((result) => (
-                <SafeExternalLink
-                  key={result.url}
-                  href={result.url}
-                  className="block w-full rounded-lg bg-[var(--bg-control-alt)] px-3 py-3 text-left transition-colors hover:bg-[var(--bg-control-hover)]"
-                >
-                  <span className="block text-xs font-medium text-[var(--text-primary)]">
-                    {result.title}
-                  </span>
-                  {result.snippet && (
-                    <span className="mt-2 block line-clamp-2 text-xs leading-5 text-[var(--text-secondary)]">
-                      {result.snippet}
-                    </span>
-                  )}
-                </SafeExternalLink>
-              ))}
-            </div>
-          </section>
+        <div id={detailsId} className="mt-2 space-y-3 text-xs text-[var(--text-secondary)]">
+          {children}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The pre-search as a step of the work block: "Searched the web · 5 sources",
+ * expanding to the query, the provider that answered and the sources with
+ * their snippets ("Web search failed" and why, when it failed).
+ */
+export function SearchStep({ grounding }: { grounding: SearchGroundingView }) {
+  return (
+    <StepDisclosure
+      label={presearchLabel(grounding)}
+      icon={grounding.error ? TriangleAlert : Globe2}
+      muted={Boolean(grounding.error)}
+    >
+      <section>
+        <h3 className="font-medium text-[var(--text-primary)]">Search query</h3>
+        <p className="mt-1">{grounding.query ?? 'Query not retained for this older response'}</p>
+      </section>
+      {grounding.provider && (
+        <section>
+          <h3 className="font-medium text-[var(--text-primary)]">Search provider</h3>
+          <p className="mt-1">
+            {grounding.fallback
+              ? `${grounding.provider} (the fallback provider; the first one did not answer)`
+              : grounding.provider}
+          </p>
+        </section>
+      )}
+      {grounding.error ? (
+        <p role="note">{grounding.error}</p>
+      ) : (
+        <section>
+          <h3 className="mb-1 font-medium text-[var(--text-primary)]">Sources</h3>
+          {grounding.results.length ? (
+            <SourceList sources={grounding.results} />
+          ) : (
+            <p className="text-[var(--text-muted)]">No results.</p>
+          )}
+        </section>
+      )}
+    </StepDisclosure>
+  );
+}
+
+/** Links the reply's tool calls returned (connectors, web search), as one step. */
+export function SourcesStep({ sources }: { sources: SourceLink[] }) {
+  return (
+    <StepDisclosure label={`Sources · ${count(sources.length, 'link', 'links')}`} icon={Link2}>
+      <SourceList sources={sources} />
+    </StepDisclosure>
   );
 }

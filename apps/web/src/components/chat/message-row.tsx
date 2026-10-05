@@ -4,24 +4,23 @@ import { type Dispatch, memo, type SetStateAction, useRef } from 'react';
 import { showsArtifactCard } from '~/components/artifacts/artifact-tool-step';
 import { useArtifacts } from '~/components/artifacts/artifacts-context';
 import { ReplyMarkdown } from '~/components/artifacts/reply-content';
+import { CapacityNote, CapacityWait, capacityWaitOf } from '~/components/chat/capacity-wait';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
 import { MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
+  interruptionOf,
   metadataOf,
   replyLayoutOf,
   textOf,
+  type WorkEntry,
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
 import { ProjectSearchNote } from '~/components/chat/project-search-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
 import { WorkBlock } from '~/components/chat/reply-work';
-import {
-  SearchGroundingDetails,
-  SearchSourcesPanel,
-  searchGroundingOf,
-} from '~/components/chat/search-grounding';
+import { replySearchOf, searchGroundingOf } from '~/components/chat/search-grounding';
 import {
   type AnswerApproval,
   ReplyResults,
@@ -43,6 +42,8 @@ interface MessageRowProps {
   replySwitch?: ReplySwitch;
   /** Answers this reply's open approvals; only the latest reply can be answered. */
   onAnswerApproval?: AnswerApproval;
+  /** Stops the latest reply; offered while it waits for its model. */
+  onStop?: () => void;
 }
 
 /**
@@ -62,6 +63,7 @@ export const MessageRow = memo(function MessageRow({
   onFork,
   replySwitch,
   onAnswerApproval,
+  onStop,
 }: MessageRowProps) {
   const text = textOf(message);
 
@@ -99,6 +101,8 @@ export const MessageRow = memo(function MessageRow({
 
   const grounding = searchGroundingOf(message);
   const metadata = metadataOf(message);
+  const interruption = interruptionOf(message);
+  const capacity = capacityWaitOf(message);
 
   return (
     <article
@@ -112,7 +116,12 @@ export const MessageRow = memo(function MessageRow({
         </p>
       )}
       <ProjectSearchNote message={message} />
-      {grounding && <SearchSourcesPanel grounding={grounding} />}
+      {capacity &&
+        (streaming ? (
+          capacity.state === 'waiting' && <CapacityWait wait={capacity} onStop={onStop} />
+        ) : (
+          <CapacityNote wait={capacity} />
+        ))}
       {/* Keyed: switching replies starts each one's block collapsed. */}
       <ReplyBody
         key={message.id}
@@ -121,7 +130,11 @@ export const MessageRow = memo(function MessageRow({
         streaming={streaming}
         onAnswerApproval={onAnswerApproval}
       />
-      {grounding && <SearchGroundingDetails grounding={grounding} />}
+      {interruption && (
+        <p role="note" className="mb-1 text-xs text-[var(--text-muted)]">
+          {interruption}
+        </p>
+      )}
       {(replySwitch || !streaming) && (
         <div className="flex flex-wrap items-center gap-1">
           {replySwitch && <ReplySwitcher {...replySwitch} />}
@@ -173,12 +186,20 @@ function ReplyBody({
     (part) => toolPlaceOf(part, showsArtifactCard(artifacts, message.id, part, streaming)),
     (part) => `tool-${part.toolCallId}`,
   );
+  // The search before the reply and the links tool calls returned are steps
+  // of the same block (v0.11), so a reply has at most one disclosure above it.
+  const { presearch, sources } = replySearchOf(message);
+  const work: WorkEntry<ToolPart>[] = [
+    ...(presearch ? [{ type: 'search' as const, key: 'presearch', grounding: presearch }] : []),
+    ...layout.work,
+    ...(sources.length ? [{ type: 'sources' as const, key: 'sources', sources }] : []),
+  ];
   return (
     <>
-      {layout.work.length > 0 && (
+      {work.length > 0 && (
         <WorkBlock
           messageId={message.id}
-          layout={layout}
+          layout={{ ...layout, work }}
           streaming={streaming}
           answeredHere={answeredHere}
         />

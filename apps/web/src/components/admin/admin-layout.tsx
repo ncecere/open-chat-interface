@@ -6,6 +6,7 @@ import {
   type AdminRole,
   READ_ONLY_MESSAGE,
 } from '~/components/admin/admin-access';
+import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { SkipLink } from '~/components/layout/skip-link';
 import { Button } from '~/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/dialog';
@@ -191,6 +192,9 @@ export function AdminLayout() {
                   <p>{READ_ONLY_MESSAGE}</p>
                 </div>
               )}
+              {/* Read-only maintenance mode (v0.11): why the forms are off; an
+                  administrator turns it off on System health. */}
+              <ReadOnlyBanner className="mb-6 rounded-xl border" />
               <Outlet />
             </div>
           </div>

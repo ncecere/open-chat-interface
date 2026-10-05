@@ -19,6 +19,8 @@ export interface RunResources {
   reservation: UsageReservation | null;
   /** False until the prompt/lineage transaction has committed. */
   turnPersisted?: boolean;
+  /** Stops the claim's liveness heartbeat (run-recovery.ts), once it is claimed. */
+  stopHeartbeat?: () => void;
 }
 
 async function attempt(resources: RunResources, operation: string, cleanup: () => Promise<void>) {
@@ -37,6 +39,7 @@ async function attempt(resources: RunResources, operation: string, cleanup: () =
 /** Safe on repeat calls; release only handles owned by this run. */
 export async function releaseRunHandles(resources: RunResources, abandon = false): Promise<void> {
   unregisterLocalChatRun(resources.runIdentity.runId);
+  resources.stopHeartbeat?.();
   await Promise.all([
     attempt(resources, 'stream slot', () => resources.streamSlot.release()),
     ...(abandon && resources.persistence === 'available'

@@ -4,6 +4,7 @@ import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { EmptyState, LoadError, MutationError, Row, RowList } from '~/components/admin/admin-ui';
+import { CapacityLimitsButton, ProviderCapacitySection } from '~/components/admin/capacity-limits';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { DiscoverModelsDialog } from '~/components/admin/discover-models-dialog';
 import { PROVIDER_KIND_LABELS, ProviderFormDialog } from '~/components/admin/provider-form-dialog';
@@ -122,6 +123,10 @@ export function ProvidersSection() {
                     Discover models
                   </Button>
 
+                  <CapacityLimitsButton
+                    target={{ kind: 'provider', id: provider.id, name: provider.label }}
+                  />
+
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -150,6 +155,8 @@ export function ProvidersSection() {
           enabled in the catalog.
         </EmptyState>
       )}
+
+      {data && data.providers.length > 0 && <ProviderCapacitySection />}
 
       <Dialog open={Boolean(formFor)} onOpenChange={(open) => !open && setFormFor(null)}>
         {formFor && (

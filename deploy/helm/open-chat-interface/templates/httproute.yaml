@@ -1,0 +1,31 @@
+{{- if .Values.httpRoute.enabled }}
+# Gateway API route to the web Service (all paths, /api included).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "oci.fullname" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "web") | nindent 4 }}
+  {{- with .Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
+  {{- with .Values.httpRoute.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "oci.web.name" . }}
+          port: {{ .Values.web.service.port }}
+      {{- with .Values.httpRoute.ruleExtras }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}

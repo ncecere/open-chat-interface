@@ -10,6 +10,8 @@ import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { AppError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
+import { kickJob } from '../jobs/requests.js';
+import { jobMayContinue } from '../jobs/runner.js';
 import { resolveModelForRole } from '../models.js';
 import {
   autoCompactEnabled,
@@ -429,6 +431,8 @@ export async function processCompactionQueue(options: { limit?: number } = {}): 
   const limit = options.limit ?? BATCH;
   let handled = 0;
   while (handled < limit) {
+    // A failover may have taken the job's lock, or this replica is stopping.
+    if (handled > 0 && !(await jobMayContinue())) break;
     const claimed = await claimNext();
     if (!claimed) break;
     handled++;
@@ -445,11 +449,19 @@ export async function processCompactionQueue(options: { limit?: number } = {}): 
 let localPass: Promise<void> | null = null;
 let again = false;
 
+/** The job's name in services/jobs/index.ts, which imports this module. */
+const COMPACTION_JOB_NAME = 'chat.compact-conversations';
+
 /**
- * Starts a worker pass in this process now rather than at the next tick.
- * Requests arriving during a pass run in it or in one more pass afterwards.
+ * Starts a worker pass now rather than at the next tick: in this process, or
+ * on a worker when this replica does not run jobs (OCI_ROLE=web). Requests
+ * arriving during a local pass run in it or in one more pass afterwards.
  */
 export function kickCompactionQueue(): void {
+  kickJob(COMPACTION_JOB_NAME, kickLocalPass);
+}
+
+function kickLocalPass(): void {
   if (localPass) {
     again = true;
     return;

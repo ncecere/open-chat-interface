@@ -158,4 +158,36 @@ describe.skipIf(!available)('live: Prometheus metrics endpoint', () => {
     histogram.observe({}, 0.5);
     expect(histogram.render()).toContain('test_seconds_bucket{le="1"} 1');
   });
+
+  it('reads the alerting gauges (connections, queues, replication) from a real database', async () => {
+    const { databaseApplicationName } = await import('../../lib/instance.js');
+    const { processRole } = await import('../../lib/role.js');
+    // A pool named like this replica's, one connection held idle in a transaction.
+    const named = createDatabase(live.connectionString, {
+      max: 2,
+      applicationName: databaseApplicationName(processRole()),
+    });
+    const previous = state.db;
+    state.db = named.db;
+    try {
+      const body = await named.sql.begin(async (tx) => {
+        await tx`select 1`;
+        return (await scrape(TOKEN)).text();
+      });
+      expect(body).toContain('oci_database_connections{state="idle in transaction"} 1');
+      expect(body).toContain('oci_database_connections{state="active"} 0');
+      expect(body).toMatch(/^oci_database_pool_max \d+$/m);
+      expect(body).toMatch(/^oci_database_probe_seconds [0-9.e-]+$/m);
+      expect(body).toContain('oci_queue_depth{queue="conversation_imports"} 0');
+      expect(body).toContain('oci_queue_depth{queue="compaction"} 0');
+      expect(body).toContain('oci_queue_depth{queue="usage_rollup_changes"} 0');
+      // No standby streams from this server.
+      expect(body).not.toMatch(/^oci_database_replication_lag_seconds /m);
+      expect(body).toMatch(/^oci_process_role\{role="(all|web|worker)"\} 1$/m);
+      expect(body).toContain('oci_draining 0');
+    } finally {
+      state.db = previous;
+      await named.sql.end({ timeout: 1 });
+    }
+  });
 });

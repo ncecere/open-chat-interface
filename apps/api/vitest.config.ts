@@ -11,7 +11,9 @@ const s3Floors = {
   // Functions: CI measures 83-85% from run to run: two log-only callbacks (a background
   // manual backup failing, a failed copy sweep) run only if those paths happen to fire
   // before the suite ends. The floor guards against erosion, not that noise.
-  'src/services/backups/run.ts': { statements: 88, branches: 70, functions: 82 },
+  // CI measures this file between 87.8% and 89.9% statements and 83-87% functions
+  // from run to run (which timing-dependent retry paths run), with no code change.
+  'src/services/backups/run.ts': { statements: 87, branches: 70, functions: 82 },
   'src/services/backups/settings.ts': { statements: 93, branches: 88, functions: 90 },
   'src/services/backups/files.ts': { statements: 90, branches: 85, functions: 100 },
   'src/services/backups/restore-files.ts': { statements: 90, branches: 80, functions: 100 },
@@ -156,6 +158,11 @@ export default defineConfig({
         'src/services/embeddings/status.ts': { statements: 95, branches: 80, functions: 100 },
         'src/services/embeddings/storage.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/embeddings/usage.ts': { statements: 85, branches: 80, functions: 100 },
+        // Embedding generations and the vector store (v0.11).
+        'src/services/embeddings/generations.ts': { statements: 90, branches: 88, functions: 100 },
+        'src/services/embeddings/rebuild.ts': { statements: 95, branches: 85, functions: 100 },
+        'src/services/vector-store/pgvector.ts': { statements: 90, branches: 80, functions: 100 },
+        'src/services/vector-store/index.ts': { statements: 100, branches: 100, functions: 100 },
         'src/services/project-search/embedding.ts': {
           statements: 90,
           branches: 85,
@@ -183,6 +190,26 @@ export default defineConfig({
         'src/services/reranking/usage.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/project-search/rerank.ts': { statements: 95, branches: 95, functions: 100 },
         'src/routes/admin/reranking.ts': { statements: 95, branches: 95, functions: 100 },
+        // v0.11 three-phase migrations: the batch/cursor transaction and its lease,
+        // throttles, administrator controls and the upgrade preflight.
+        'src/services/migrations/background-runner.ts': {
+          statements: 93,
+          branches: 90,
+          functions: 90,
+        },
+        'src/services/migrations/background-admin.ts': {
+          statements: 95,
+          branches: 80,
+          functions: 90,
+        },
+        'src/services/migrations/preflight.ts': { statements: 93, branches: 78, functions: 95 },
+        'src/services/migrations/readiness.ts': { statements: 93, branches: 75, functions: 100 },
+        'src/routes/admin/migrations.ts': { statements: 98, branches: 95, functions: 100 },
+        // v0.11 read-only maintenance mode (what is refused, and what pauses) and
+        // cross-replica cache invalidation.
+        'src/middleware/read-only.ts': { statements: 98, branches: 90, functions: 100 },
+        'src/services/maintenance/read-only.ts': { statements: 95, branches: 90, functions: 85 },
+        'src/services/cache-bus/index.ts': { statements: 95, branches: 80, functions: 90 },
       },
     },
   },

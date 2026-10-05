@@ -10,7 +10,10 @@ The workflow does not create GitHub Releases.
 ## Prepare
 
 1. Create a release-preparation branch from current `main`.
-2. Set the same version in the root and all workspace `package.json` files.
+2. Set the same version in the root and all workspace `package.json` files,
+   and in the Helm chart (`deploy/helm/open-chat-interface/Chart.yaml`:
+   `version: X.Y.Z`, `appVersion: "vX.Y.Z"`; `pnpm release:check` fails when
+   they differ).
 3. Move completed entries from `Unreleased` into a dated `CHANGELOG.md` section
    named `## [X.Y.Z] - YYYY-MM-DD`.
 4. Run:
@@ -24,9 +27,34 @@ The workflow does not create GitHub Releases.
    pnpm licenses:check
    ```
 
-5. Merge the release-preparation pull request only after GitHub Actions CI
+5. Check the release's database work (v0.11 three-phase migrations,
+   [Database](dev/database.md#three-kinds-of-migration)):
+
+   - **A new minor release** adds an entry to `packages/db/releases.json`
+     naming its first pre-deploy migration (`firstMigration`), so the
+     migrator and the preflight know which release each migration belongs
+     to. A patch release adds no entry.
+   - **Required earlier work.** If the release relies on an earlier
+     release's background migration or post-deploy step being finished (a
+     `NOT NULL` on a backfilled column, dropping a fallback, a query that
+     needs an index), list it under `requires` in that entry. The migrator
+     then refuses the release's pre-deploy migrations until it is finished,
+     naming it. Name only work at least one release older: the previous
+     release must have shipped and scheduled it, or nobody can finish it
+     without skipping your release.
+   - **Changelog.** State the required work and what an operator does
+     ("finish background migration X on v0.N before upgrading"), every
+     post-deploy step and the index it builds, and any background migration
+     the release schedules. `node dist/scripts/upgrade-check.js` against a
+     copy of a previous-release database shows what an operator will see.
+   - **Keep** every background-migration definition and post-deploy step of
+     earlier releases: an instance that never ran `migrate --post` must still
+     be able to finish them.
+   - `pnpm lint:migrations` and the rolling-upgrade test (which runs
+     `migrate --post` and waits for background migrations) pass.
+6. Merge the release-preparation pull request only after GitHub Actions CI
    passes. Review audit findings and any skipped live tests.
-6. Configure branch protection or a ruleset requiring review and CI on `main`,
+7. Configure branch protection or a ruleset requiring review and CI on `main`,
    and restrict creation, updates, and deletion of `v*` tags to release
    maintainers where your GitHub plan supports it. These are recommendations,
    not confirmation that protection is configured; verify the settings before
@@ -73,10 +101,17 @@ unit/integration tests, coverage floors, live PostgreSQL/Redis/Mailpit/S3
 checks. In CI the S3 and backup suites fail rather than skip when their
 services are missing ([Testing](dev/testing.md#s3-in-ci)).
 
-Images are published for `linux/amd64` only to:
+Images are published for `linux/amd64` and `linux/arm64` (from v0.11; earlier
+releases are `linux/amd64` only) to:
 
 - `ghcr.io/ncecere/open-chat-interface/api`
 - `ghcr.io/ncecere/open-chat-interface/web`
+
+Each architecture is built natively, on `ubuntu-24.04` and `ubuntu-24.04-arm`
+runners, and pushed untagged by digest with its provenance and SBOM; the
+`publish` job then joins the two into one image index, also pushed by digest
+only. Tags point at that index, so `docker pull` and Kubernetes nodes pick
+their own architecture.
 
 Each image receives the version tag (for example, `v0.4.1`) and an eight-character
 commit SHA tag. The workflow uses `GITHUB_TOKEN` with `packages:write`; no saved
@@ -87,8 +122,10 @@ publication of a new package.
 `latest` is promoted only after both images succeed and the release tag is the
 newest stable tag on `main`. Publishing an older tag does not roll `latest`
 back. Each run first pushes a candidate by digest only, with provenance and an
-SBOM. Version/SHA aliases are assigned only after verifying platform and OCI
-labels. Existing matching aliases retain their original digest even if a rebuilt
+SBOM. Version/SHA aliases are assigned only after verifying that the index
+holds exactly one `linux/amd64` and one `linux/arm64` image (besides
+attestations) and that each image's configuration is for its platform and
+carries this release's OCI labels. Existing matching aliases retain their original digest even if a rebuilt
 candidate differs; conflicts fail rather than overwriting a release. Untagged
 candidate versions can remain after retries; any package cleanup must preserve
 release, SHA and `latest` tags.
@@ -116,18 +153,63 @@ or recreate the tag to add one. After these workflows are merged into `main`:
 The same manual dispatch can retry an existing stable release tag. Run it from
 `main`; the `tag` input selects the source to validate and publish.
 
+From v0.11 the workflow publishes every release for both `linux/amd64` and
+`linux/arm64`, also when it publishes an older tag for the first time (such as
+v0.9.1, which has no images). Releases already published for `linux/amd64` only
+(v0.5.0 to v0.10.2) are immutable and cannot be retried: their existing
+version and SHA tags no longer match a two-platform release, so the workflow
+refuses rather than overwriting them.
+
+### Helm chart
+
+After both images are published, the `chart` job packages
+`deploy/helm/open-chat-interface` from the release commit and pushes it to
+GHCR as an OCI artifact, `oci://ghcr.io/ncecere/charts/open-chat-interface`,
+with the release as its version (`v0.11.0` publishes chart `0.11.0`, whose
+`appVersion` is `v0.11.0`; the job refuses a `Chart.yaml` that disagrees). It
+uses the same `GITHUB_TOKEN` with `packages:write`. Like the image version
+tags, a published chart version is never overwritten: a rerun finds it and
+keeps it. Tags from before v0.11 have no chart and publish none.
+
+The first publication creates the `charts/open-chat-interface` package;
+GitHub makes it private. Make it public once (package settings → Change
+visibility) and check it is linked to this repository, as for the image
+packages. `latest` has no chart equivalent: install a version.
+
 ## Verify
 
 - Confirm **Publish containers** and its validation jobs are green; inspect
   skipped live tests.
 - Confirm both GHCR packages are public and contain `vX.Y.Z` and the
   eight-character SHA tag with the expected source revision label.
+- Confirm each tag is multi-platform, for both images:
+
+  ```bash
+  docker buildx imagetools inspect ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z
+  # Platforms: linux/amd64, linux/arm64 (plus unknown/unknown attestations)
+  docker run --rm --platform linux/arm64 ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
+    node -p 'process.arch + " " + process.env.OCI_VERSION'   # arm64 vX.Y.Z
+  docker run --rm --platform linux/amd64 ghcr.io/ncecere/open-chat-interface/api:vX.Y.Z \
+    node -p 'process.arch + " " + process.env.OCI_VERSION'   # x64 vX.Y.Z
+  ```
+- Confirm the chart was published and renders the release's images:
+
+  ```bash
+  helm show chart oci://ghcr.io/ncecere/charts/open-chat-interface --version X.Y.Z
+  # version: X.Y.Z, appVersion: vX.Y.Z
+  helm template oci oci://ghcr.io/ncecere/charts/open-chat-interface --version X.Y.Z \
+    --set secrets.existingSecret=x --set config.appUrl=https://chat.example.com | grep image:
+  ```
 - For the newest stable tag on `main`, confirm `latest` points to that release
   for both images. An older release must leave `latest` unchanged.
 - If a GitHub Release page is needed, create it separately with the matching
   changelog notes and image links; the workflow does not create one.
 - Deploy the versioned images to a staging instance and verify
   `/api/health/ready`, sign-in, one model response, and attachment persistence.
+  If you have arm64 nodes, run one replica there too. The **Helm chart**
+  workflow installs and upgrades the chart with images built from source on
+  both architectures; with the published images, `helm upgrade` a staging
+  release to the new chart and check both hook jobs completed.
 - Record any operational caveat in the release notes before announcing it.
 
 ## Failed releases

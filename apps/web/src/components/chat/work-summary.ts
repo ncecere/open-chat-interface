@@ -6,6 +6,8 @@
  * - Reasoning and one kind of tool use: "Thought · searched the web twice",
  *   "Thought · created an artifact", "Thought · used Service Desk lookup".
  * - Tool use alone, one kind: the activity itself, "Searched the web twice".
+ * - A search made before the reply (v0.11) comes first, as it happened first:
+ *   "Searched the web · thought", or "Searched the web" alone.
  * - More than one kind of tool use: "Worked · 3 steps" ("Worked for 12s · 3 steps").
  *
  * A kind is one activity: searching the web, creating artifacts, updating an
@@ -21,6 +23,8 @@ export interface WorkStep {
   state: 'running' | 'awaiting-approval' | 'approved' | 'done' | 'error' | 'denied';
   /** What the step acted on, when known (the artifact an update revised). */
   target?: string | null;
+  /** The search made before the reply, not a tool call (v0.11). */
+  presearch?: boolean;
 }
 
 const times = (count: number) => (count === 1 ? '' : count === 2 ? ' twice' : ` ${count} times`);
@@ -32,22 +36,26 @@ function activityPhrases(steps: readonly WorkStep[]): string[] {
   const kinds = new Map<string, WorkStep[]>();
   for (const step of steps) {
     const kind =
-      step.state === 'error'
-        ? 'failed'
-        : step.state === 'denied'
-          ? 'denied'
-          : step.toolId === 'web_search' ||
-              step.toolId === 'create_artifact' ||
-              step.toolId === 'update_artifact' ||
-              step.toolId === 'remember' ||
-              step.toolId === 'forget'
-            ? step.toolId
-            : `tool:${step.label}`;
+      step.presearch && step.state === 'error'
+        ? 'presearch_failed'
+        : step.state === 'error'
+          ? 'failed'
+          : step.state === 'denied'
+            ? 'denied'
+            : step.toolId === 'web_search' ||
+                step.toolId === 'create_artifact' ||
+                step.toolId === 'update_artifact' ||
+                step.toolId === 'remember' ||
+                step.toolId === 'forget'
+              ? step.toolId
+              : `tool:${step.label}`;
     kinds.set(kind, [...(kinds.get(kind) ?? []), step]);
   }
   return [...kinds].map(([kind, group]) => {
     const count = group.length;
     switch (kind) {
+      case 'presearch_failed':
+        return 'web search failed';
       case 'failed':
         return count === 1 ? 'a step failed' : `${count} steps failed`;
       case 'denied':
@@ -96,6 +104,9 @@ export function workSummary({
   if (phrases.length > 1)
     return `Worked${time} · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
   const [phrase = ''] = phrases;
+  // The search before the reply happened before any thinking.
+  if (reasoning && steps[0]?.presearch && steps.length === 1)
+    return `${capitalize(phrase)} · thought${time}`;
   return reasoning ? `Thought${time} · ${phrase}` : capitalize(phrase);
 }
 

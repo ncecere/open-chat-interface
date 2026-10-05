@@ -58,11 +58,81 @@ jobs:
     permissions:
       contents: read
 
+  build:
+    # Each architecture builds natively (no emulation) and pushes an untagged
+    # candidate by digest; `publish` joins them into one multi-platform index.
+    name: Build ${{ matrix.app }} (linux/${{ matrix.arch }})
+    needs: [prepare, verify]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            cache: ''
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            cache: -arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push a candidate by digest only
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: source
+          file: source/docker/${{ matrix.app }}.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image_root }}/${{ matrix.app }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            OCI_VERSION=${{ needs.prepare.outputs.tag }}
+            OCI_REVISION=${{ needs.prepare.outputs.sha }}
+            OCI_SOURCE=https://github.com/${{ github.repository }}
+            OCI_CREATED=${{ needs.prepare.outputs.created }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/${{ needs.prepare.outputs.sha }}/README.md
+          cache-from: type=gha,scope=${{ matrix.app }}${{ matrix.cache }}
+          cache-to: type=gha,scope=${{ matrix.app }}${{ matrix.cache }},mode=max
+      - name: Record the candidate digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          [[ $DIGEST =~ ^sha256:[a-f0-9]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/digests"
+          printf '%s' "$DIGEST" > "$RUNNER_TEMP/digests/$ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.app }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
     name: Publish ${{ matrix.app }}
-    needs: [prepare, verify]
+    needs: [prepare, build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -77,49 +147,101 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: automation
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-          path: source
-          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22.23.0'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-${{ matrix.app }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push a candidate by digest only
-        id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: source
-          file: source/docker/${{ matrix.app }}.Dockerfile
-          platforms: linux/amd64
-          outputs: type=image,name=${{ needs.prepare.outputs.image_root }}/${{ matrix.app }},push-by-digest=true,name-canonical=true,push=true
-          provenance: mode=max
-          sbom: true
-          build-args: |
-            OCI_VERSION=${{ needs.prepare.outputs.tag }}
-            OCI_REVISION=${{ needs.prepare.outputs.sha }}
-            OCI_SOURCE=https://github.com/${{ github.repository }}
-            OCI_CREATED=${{ needs.prepare.outputs.created }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/${{ needs.prepare.outputs.sha }}/README.md
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+      - name: Join both architectures into one candidate index, by digest only
+        id: index
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image_root }}/${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          sources=()
+          for arch in amd64 arm64; do
+            digest=$(cat "$RUNNER_TEMP/digests/$arch")
+            [[ $digest =~ ^sha256:[a-f0-9]{64}$ ]]
+            sources+=("$IMAGE@$digest")
+          done
+          # The dry run prints the exact index that would be pushed. Pushing it
+          # to its own digest leaves it untagged, like the per-architecture
+          # candidates; the registry refuses it if the digest does not match.
+          index=$(docker buildx imagetools create --dry-run "${sources[@]}")
+          digest="sha256:$(printf '%s' "$index" | sha256sum | cut -d' ' -f1)"
+          docker buildx imagetools create -t "$IMAGE@$digest" "${sources[@]}"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Publish or retain immutable version and SHA tags
         env:
           IMAGE: ${{ needs.prepare.outputs.image_root }}/${{ matrix.app }}
-          CANDIDATE_DIGEST: ${{ steps.build.outputs.digest }}
+          CANDIDATE_DIGEST: ${{ steps.index.outputs.digest }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node automation/scripts/ghcr-release.mjs
+
+  chart:
+    # The Helm chart as an OCI artifact, once both images of the release are
+    # published: oci://ghcr.io/<owner>/charts/open-chat-interface:<version>,
+    # version = the release without the "v". Like the image version tags it
+    # is never overwritten: an existing version is kept.
+    name: Publish the Helm chart
+    needs: [prepare, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.0
+      - name: Package, then push unless the version exists
+        env:
+          IMAGE_ROOT: ${{ needs.prepare.outputs.image_root }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          chart=source/deploy/helm/open-chat-interface
+          if [ ! -f "$chart/Chart.yaml" ]; then
+            echo "No chart in $RELEASE_TAG (the chart ships from v0.11); nothing to publish."
+            exit 0
+          fi
+          version=${RELEASE_TAG#v}
+          # release:check ties these to the packages; refuse a mismatch anyway.
+          grep -qx "version: $version" "$chart/Chart.yaml"
+          grep -qx "appVersion: \"$RELEASE_TAG\"" "$chart/Chart.yaml"
+          repo="oci://${IMAGE_ROOT%/*}/charts"
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GHCR_USERNAME" --password-stdin
+          if helm show chart "$repo/open-chat-interface" --version "$version" > /dev/null 2>&1; then
+            echo "$repo/open-chat-interface:$version already exists; kept as published."
+            result=retained
+          else
+            helm lint --strict "$chart" --set secrets.existingSecret=oci-runtime --set config.appUrl=https://chat.example.com
+            helm package "$chart" --destination "$RUNNER_TEMP/chart"
+            helm push "$RUNNER_TEMP/chart/open-chat-interface-$version.tgz" "$repo"
+            result=published
+          fi
+          helm show chart "$repo/open-chat-interface" --version "$version" | grep -qx "appVersion: $RELEASE_TAG"
+          printf '## Helm chart\n\n- %s/open-chat-interface:%s (%s)\n\n```\nhelm install oci %s/open-chat-interface --version %s\n```\n' \
+            "$repo" "$version" "$result" "$repo" "$version" >> "$GITHUB_STEP_SUMMARY"
 
   latest:
     name: Promote latest after both images are available
@@ -176,5 +298,5 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           PROMOTED: ${{ steps.latest.outputs.promote }}
         run: |
-          printf '## Container publication\n\n- %s/api:%s\n- %s/web:%s\n\nLatest promoted: %s\n' \
+          printf '## Container publication\n\n- %s/api:%s\n- %s/web:%s\n\nPlatforms: linux/amd64, linux/arm64\nLatest promoted: %s\n' \
             "$IMAGE_ROOT" "$RELEASE_TAG" "$IMAGE_ROOT" "$RELEASE_TAG" "$PROMOTED" >> "$GITHUB_STEP_SUMMARY"

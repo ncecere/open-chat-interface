@@ -1,6 +1,7 @@
 import { sql } from '@oci/db';
 import { db } from '../../db/index.js';
-import { type Bounded, rangeStart } from './common.js';
+import { type Bounded, type ReportOptions, rangeStart, reportSource } from './common.js';
+import { rollupRows } from './source.js';
 
 export interface DenialSummary {
   policyId: string | null;
@@ -61,28 +62,39 @@ export interface IdleModel {
  * Models enabled in the catalog but unused over the range. Directly actionable
  * for a curated catalog: an enabled model nobody picks is a choice to revisit.
  */
-export async function idleModels(days: number, limit = 30): Promise<Bounded<IdleModel>> {
-  const start = rangeStart(days);
+export async function idleModels(
+  days: number,
+  limit = 30,
+  options: ReportOptions = {},
+): Promise<Bounded<IdleModel>> {
+  const start = rangeStart(days, options.now);
+  // Any event counts as use, a reply still being written included.
+  const used =
+    (await reportSource(options)) === 'rollups'
+      ? sql`m.slug in (
+          select u.model_slug from (${rollupRows({ start: new Date(start), level: 'model' })}) u
+          group by u.model_slug
+          having sum(u.events) > 0
+        )`
+      : sql`exists (
+          select 1 from usage_event e
+          where e.model_slug = m.slug and e.occurred_at >= ${start}::timestamptz
+        )`;
 
-  const [counted] = await db.execute<{ total: string }>(sql`
-    select count(*) as total
-    from model m
-    where m.enabled = true
-      and not exists (
-        select 1 from usage_event e
-        where e.model_slug = m.slug and e.occurred_at >= ${start}::timestamptz
-      )
-  `);
-
-  const rows = await db.execute<{ slug: string; display_name: string; lab_id: string | null }>(sql`
-    select m.slug, m.display_name, m.lab_id
-    from model m
-    where m.enabled = true
-      and not exists (
-        select 1 from usage_event e
-        where e.model_slug = m.slug and e.occurred_at >= ${start}::timestamptz
-      )
-    order by m.display_name
+  const rows = await db.execute<{
+    slug: string;
+    display_name: string;
+    lab_id: string | null;
+    total: string;
+  }>(sql`
+    with idle as (
+      select m.slug, m.display_name, m.lab_id
+      from model m
+      where m.enabled = true and not (${used})
+    )
+    select slug, display_name, lab_id, (select count(*) from idle) as total
+    from idle
+    order by display_name, slug
     limit ${limit}
   `);
 
@@ -92,6 +104,6 @@ export async function idleModels(days: number, limit = 30): Promise<Bounded<Idle
       displayName: row.display_name,
       labId: row.lab_id,
     })),
-    totalCount: Number(counted?.total ?? 0),
+    totalCount: rows.length > 0 ? Number(rows[0]?.total ?? 0) : 0,
   };
 }

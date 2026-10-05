@@ -2,27 +2,38 @@ import { eq, schema } from '@oci/db';
 import {
   type EmbeddingsSettings,
   type EmbeddingsTestResult,
+  embeddingCostMicros,
+  embeddingsSwitchSchema,
   embeddingsTestSchema,
   providerCanEmbed,
   updateEmbeddingsSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
-import { validationFailed } from '../../lib/errors.js';
-import { logger } from '../../lib/logger.js';
+import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
-import { embeddingsSettings, isActive } from '../../services/embeddings/config.js';
+import { embeddingsSettings } from '../../services/embeddings/config.js';
 import { testEmbeddingModel } from '../../services/embeddings/embed.js';
-import { embeddingsStatus } from '../../services/embeddings/status.js';
-import { ensureEmbeddingTable, pgvectorInfo } from '../../services/embeddings/storage.js';
-import { updateSetting } from '../../services/settings.js';
+import {
+  applyModelChoice,
+  cancelRebuild,
+  desiredSettings,
+  EMBEDDINGS_REBUILD_JOB,
+  SwitchBlockedError,
+  switchGeneration,
+} from '../../services/embeddings/generations.js';
+import { embeddingsStatus, passageEstimate } from '../../services/embeddings/status.js';
+import { kickJob } from '../../services/jobs/requests.js';
+import { GenerationStateError } from '../../services/vector-store/index.js';
 
 /**
  * Meaning-based search for project files: the embeddings model (an existing
- * provider and a model id) and the state of pgvector. Reads are open to
- * auditors; every change is audited.
+ * provider and a model id), the state of pgvector, and embedding generations
+ * (v0.11): changing the model rebuilds in the background while searches keep
+ * using the current model, then switches. Reads are open to auditors; every
+ * change is audited.
  */
 export const embeddingsRoutes = new Hono<AppBindings>();
 
@@ -32,20 +43,30 @@ function failureMessage(error: unknown): string {
   return `The model could not embed a sample: ${detail}`.slice(0, 500);
 }
 
-/** The embeddings setting, pgvector's state and indexing progress; the provider key is never returned. */
+function auditedSettings(settings: EmbeddingsSettings) {
+  return {
+    enabled: settings.enabled,
+    providerId: settings.providerId,
+    modelId: settings.modelId,
+    dimensions: settings.dimensions,
+    inputPriceMicros: settings.inputPriceMicros,
+  };
+}
+
+/** The embeddings setting, pgvector's state, generations and progress; the provider key is never returned. */
 embeddingsRoutes.get('/', async (c) => c.json(await embeddingsStatus()));
 
 /**
  * Saves the setting. Choosing a model (or switching meaning-based search on
  * without known dimensions) embeds a sample first: its length is the vector
- * size. A model that cannot embed cannot be switched on. With pgvector
- * enabled, switching on creates the storage straight away; otherwise the
- * background job creates it once the extension is enabled.
+ * size. A model that cannot embed cannot be switched on, nor replace a model
+ * already in use. A new model starts a rebuild: a new generation filled in the
+ * background, which searches move to once it covers every passage.
  */
 embeddingsRoutes.put('/', async (c) => {
   const actor = currentUser(c);
   const input = await parseBody(c, updateEmbeddingsSchema);
-  const previous = await embeddingsSettings({ fresh: true });
+  const { settings: previous, current } = await desiredSettings();
   const next: EmbeddingsSettings = {
     ...previous,
     ...(input.enabled !== undefined && { enabled: input.enabled }),
@@ -68,6 +89,11 @@ embeddingsRoutes.put('/', async (c) => {
   if (next.enabled && (!next.providerId || !next.modelId)) {
     throw validationFailed('Choose a provider and a model before turning meaning-based search on.');
   }
+  if (current && (!next.providerId || !next.modelId)) {
+    throw validationFailed(
+      'Embeddings are stored for a model already. Turn meaning-based search off instead of removing the model.',
+    );
+  }
 
   const modelChanged = next.providerId !== previous.providerId || next.modelId !== previous.modelId;
   if (modelChanged) next.dimensions = null;
@@ -75,21 +101,16 @@ embeddingsRoutes.put('/', async (c) => {
     try {
       next.dimensions = (await testEmbeddingModel(next)).dimensions;
     } catch (error) {
-      if (next.enabled) throw validationFailed(failureMessage(error));
+      // Without its size a model cannot have storage, so it cannot replace one in use.
+      if (next.enabled || current) throw validationFailed(failureMessage(error));
       next.dimensions = null;
     }
   }
 
-  await updateSetting('embeddings', next);
-
-  let storage: string | null = null;
-  if (isActive(next) && (await pgvectorInfo()).state === 'enabled') {
-    try {
-      storage = await ensureEmbeddingTable(next.dimensions);
-    } catch (error) {
-      // The job retries; the setting itself is saved.
-      logger.warn({ error }, 'Creating embedding storage failed');
-    }
+  const estimate = modelChanged ? await passageEstimate() : null;
+  const choice = await applyModelChoice(next, actor.id);
+  if (choice.rebuild === 'started' || choice.rebuild === 'replaced') {
+    kickJob(EMBEDDINGS_REBUILD_JOB);
   }
 
   await recordAudit({
@@ -98,23 +119,64 @@ embeddingsRoutes.put('/', async (c) => {
     action: 'embeddings.update',
     targetType: 'instance',
     metadata: {
-      previous: {
-        enabled: previous.enabled,
-        providerId: previous.providerId,
-        modelId: previous.modelId,
-        dimensions: previous.dimensions,
-        inputPriceMicros: previous.inputPriceMicros,
-      },
-      next: {
-        enabled: next.enabled,
-        providerId: next.providerId,
-        modelId: next.modelId,
-        dimensions: next.dimensions,
-        inputPriceMicros: next.inputPriceMicros,
-      },
-      ...(storage && { storage }),
+      previous: auditedSettings(previous),
+      next: auditedSettings(next),
+      ...(choice.storage && { storage: choice.storage }),
+      ...(choice.rebuild && {
+        rebuild: choice.rebuild,
+        generation: choice.rebuild === 'cancelled' ? choice.current?.id : choice.filling?.id,
+      }),
+      ...(estimate &&
+        (choice.rebuild === 'started' || choice.rebuild === 'replaced') && {
+          estimate: {
+            ...estimate,
+            costMicros: embeddingCostMicros(estimate, next.inputPriceMicros),
+          },
+        }),
     },
   });
+  return c.json(await embeddingsStatus());
+});
+
+function generationId(raw: string): number {
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) throw notFound('No such embedding generation');
+  return id;
+}
+
+/**
+ * "Switch now": searches move to the generation being filled, even before it
+ * covers every passage (`force`). Passages it does not cover yet are found by
+ * keyword only until the job embeds them. 409 when it is not being filled, or
+ * while the upgrade from v0.10 is unfinished (generation 1's table).
+ */
+embeddingsRoutes.post('/generations/:id/switch', async (c) => {
+  const actor = currentUser(c);
+  const input = await parseBody(c, embeddingsSwitchSchema);
+  try {
+    await switchGeneration(generationId(c.req.param('id')), {
+      force: input.force === true,
+      actor: { id: actor.id, email: actor.email },
+    });
+  } catch (error) {
+    if (error instanceof GenerationStateError || error instanceof SwitchBlockedError) {
+      throw conflict(error.message);
+    }
+    throw error;
+  }
+  return c.json(await embeddingsStatus());
+});
+
+/** "Cancel rebuild": the filling generation is abandoned; searches stay where they are. */
+embeddingsRoutes.post('/generations/:id/cancel', async (c) => {
+  const actor = currentUser(c);
+  try {
+    await cancelRebuild(generationId(c.req.param('id')), { id: actor.id, email: actor.email });
+  } catch (error) {
+    if (error instanceof GenerationStateError) throw conflict(error.message);
+    throw error;
+  }
+  kickJob(EMBEDDINGS_REBUILD_JOB);
   return c.json(await embeddingsStatus());
 });
 

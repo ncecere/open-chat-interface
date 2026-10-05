@@ -1,0 +1,116 @@
+{{- include "oci.validate" . }}
+{{- $v := .Values.web }}
+{{- $domain := trimSuffix "." .Values.clusterDomain }}
+# Caddy from the web image (docker/Caddyfile): serves the app and proxies /api
+# to the API pods. It is the client-address trust boundary: it trusts
+# X-Forwarded-For only from web.trustedProxies and sends the API exactly one
+# address, dropping X-Real-IP, CF-Connecting-IP, True-Client-IP and Forwarded.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oci.web.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  {{- if not $v.autoscaling.enabled }}
+  replicas: {{ $v.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    {{- toYaml $v.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oci.labels" (dict "root" . "component" "web") | nindent 8 }}
+        {{- with $v.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $v.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "oci.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with (include "oci.pullSecrets" . | trim) }}{{ . | nindent 6 }}{{- end }}
+      terminationGracePeriodSeconds: {{ $v.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext.web | nindent 8 }}
+      {{- with (include "oci.scheduling" (dict "root" . "values" $v "component" "web") | trim) }}{{ . | nindent 6 }}{{- end }}
+      containers:
+        - name: web
+          image: {{ include "oci.image" (dict "root" . "image" .Values.image.web) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            # Fallback upstream, used only if the lookup below fails.
+            - name: API_UPSTREAM
+              value: {{ printf "%s.%s.svc.%s:%v" (include "oci.api.name" .) .Release.Namespace $domain .Values.api.service.port | quote }}
+            # The headless Service: one upstream per ready API pod. Absolute
+            # (trailing dot), so the 2-second lookups skip the search domains.
+            - name: API_UPSTREAM_HOST
+              value: {{ printf "%s.%s.svc.%s." (include "oci.apiHeadless.name" .) .Release.Namespace $domain | quote }}
+            - name: API_UPSTREAM_PORT
+              value: "3000"
+            - name: TRUSTED_PROXIES
+              value: {{ $v.trustedProxies | quote }}
+            {{- range $name, $value := $v.env }}
+            - name: {{ $name }}
+              value: {{ $value | toString | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            {{- toYaml $v.startupProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $v.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml $v.livenessProbe | nindent 12 }}
+          {{- with (include "oci.preStop" (dict "seconds" $v.preStopSleepSeconds "native" $v.preStopSleepAction) | trim) }}{{ . | nindent 10 }}{{- end }}
+          resources:
+            {{- toYaml $v.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext.web | nindent 12 }}
+          # Caddy writes its state to /data and /config (XDG directories).
+          volumeMounts:
+            - name: caddy-data
+              mountPath: /data
+            - name: caddy-config
+              mountPath: /config
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: caddy-data
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: caddy-config
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oci.web.name" . }}
+  labels:
+    {{- include "oci.labels" (dict "root" . "component" "web") | nindent 4 }}
+  {{- with $v.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $v.service.type }}
+  selector:
+    {{- include "oci.selectorLabels" (dict "root" . "component" "web") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $v.service.port }}
+      targetPort: http
+      protocol: TCP

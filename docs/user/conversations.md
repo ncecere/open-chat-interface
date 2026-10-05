@@ -57,6 +57,15 @@ the answer reads cleanly however many steps it took.
   a timeline of every piece of reasoning and every tool step in the order
   they happened; each tool step expands to its inputs and result.
 
+When you turn on **Search** and the model is not one that searches by itself,
+OCI searches the web before the model answers. That search is the block's
+first step, **Searched the web · 5 sources**, and the summary counts it
+(**Searched the web · thought**, or **Searched the web** alone). Expand the
+step to see the query, the search provider and every source with its
+snippet; each source opens through the usual check for links that leave OCI.
+Links a connector returned are a **Sources** step in the same block. A reply
+therefore has at most one collapsed block above its answer.
+
 What the work **made or needs from you** stays in sight below the block and
 above the answer: artifact cards, tool approvals waiting for an answer, and
 "Memory updated" notes. Nothing you need to act on is hidden in the
@@ -190,6 +199,24 @@ summary the model receives.
 Your administrator can turn automatic summaries off; then earlier messages are
 left out instead, as described above, and you can still ask for a summary
 yourself.
+
+### Very long conversations in the browser
+
+A conversation opens at its **latest 100 messages**. Earlier ones load in
+parts as you scroll up, without moving what you are reading; **Load earlier
+messages** at the top does the same from the keyboard, and a screen reader
+hears how many were loaded. Opening a conversation from search loads the
+messages around the match and the latest ones; **Load more messages** fills
+in between, and scrolling towards the gap fills it too.
+
+Once a conversation is long, only the messages near what you are looking at
+are drawn on the page, so even thousands of messages scroll smoothly and
+replies stream as before. **Your browser's Find (Ctrl+F or Cmd+F) only finds
+messages that are drawn**, which in a long conversation means those near the
+view. To find something anywhere in a conversation, use
+[conversation search](#finding-a-conversation) (the sidebar's search box, or
+`Cmd/Ctrl + K`), which searches every message and opens the conversation at
+the match. Exports and share links always contain the whole conversation.
 
 ## Organising the sidebar
 

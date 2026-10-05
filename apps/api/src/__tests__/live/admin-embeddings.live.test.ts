@@ -1,4 +1,6 @@
-import { createDatabase, eq, schema, sql } from '@oci/db';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createDatabase, DEFAULT_POST_FOLDER, eq, schema, sql } from '@oci/db';
 import type { EmbeddingsStatus, EmbeddingsTestResult } from '@oci/shared';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +54,7 @@ const { healthRoutes } = await import('../../routes/admin/health.js');
 const { requireAdmin } = await import('../../middleware/context.js');
 const { errorHandler } = await import('../../middleware/error-handler.js');
 const { invalidateSettingsCache } = await import('../../services/settings.js');
+const { resetPreviousReleaseCache } = await import('../../services/embeddings/generations.js');
 
 function appFor(actorId: string, role: 'admin' | 'auditor') {
   const app = new Hono<AppBindings>();
@@ -135,6 +138,21 @@ describe.skipIf(!available)('live: embeddings administration', () => {
     state.resolved = [];
     invalidateSettingsCache();
   });
+  /** Records this release's post-deploy steps as finished: every replica runs it. */
+  async function finishUpgrade() {
+    const journal = JSON.parse(readFileSync(join(DEFAULT_POST_FOLDER, 'journal.json'), 'utf8')) as {
+      steps: Array<{ tag: string; release: string }>;
+    };
+    for (const step of journal.steps) {
+      await pool.db.execute(sql`
+        insert into oci_post_migration (name, checksum, started_at, finished_at, attempts)
+        values (${step.tag}, 'test', now(), now(), 1)
+        on conflict (name) do update set finished_at = now()
+      `);
+    }
+    resetPreviousReleaseCache();
+  }
+
   afterAll(async () => {
     await pool?.sql.end({ timeout: 1 });
     await live?.destroy();
@@ -158,6 +176,8 @@ describe.skipIf(!available)('live: embeddings administration', () => {
         storageDimensions: null,
         passages: { total: 0, embedded: 0 },
         failures: { files: 0, lastError: null },
+        generations: { current: null, filling: null, retired: [], switchBlocked: null },
+        estimate: { passages: 0, averageTokens: 0 },
       });
     }
     const health = await ok<{ checks: Array<{ id: string; status: string; detail: string }> }>(
@@ -314,21 +334,133 @@ describe.skipIf(!available)('live: embeddings administration', () => {
       detail: expect.stringMatching(/^On \(pgvector .+ enabled\)\. 0 of 0 passages embedded/),
     });
 
-    // A model of other dimensions re-creates the storage at its size.
+    // A model of other dimensions is a new generation, filled in the
+    // background while searches keep using the current one.
     fake = fakeEmbeddingModel({ dimensions: 8 });
     state.fake = fake;
-    status = await ok<EmbeddingsStatus>(put({ modelId: 'tiny' }));
+    status = await ok<EmbeddingsStatus>(put({ modelId: 'tiny', inputPriceMicros: 20_000 }));
     expect(status).toMatchObject({
-      settings: { modelId: 'tiny', dimensions: 8 },
+      settings: { modelId: 'tiny', dimensions: 8, inputPriceMicros: 20_000 },
       active: true,
-      storageDimensions: 8,
+      storageDimensions: 24,
+      generations: {
+        current: { id: 1, modelId: 'text-embedding-3-small', dimensions: 24, state: 'current' },
+        filling: { id: 2, modelId: 'tiny', dimensions: 8, state: 'filling', storageReady: true },
+        retired: [],
+        // The test database records no post-deploy step: as during an upgrade.
+        switchBlocked: 'upgrade-in-progress',
+      },
     });
     expect((await audits('embeddings.update')).at(-1)?.metadata).toMatchObject({
-      storage: 'recreated',
+      storage: 'created',
+      rebuild: 'started',
+      generation: 2,
+      estimate: { passages: 0, averageTokens: 0, costMicros: 0 },
+    });
+    // The setting v0.10 replicas read still describes what searches use.
+    expect(await storedSetting()).toMatchObject({
+      modelId: 'text-embedding-3-small',
+      dimensions: 24,
+    });
+    const [tables] = await pool.db.execute<{ first: string | null; second: string | null }>(
+      sql`select to_regclass('project_file_embedding')::text as first,
+                 to_regclass('project_file_embedding_g2')::text as second`,
+    );
+    expect(tables).toEqual({
+      first: 'project_file_embedding',
+      second: 'project_file_embedding_g2',
     });
 
     // Switching off keeps the stored vectors for later.
     status = await ok<EmbeddingsStatus>(put({ enabled: false }));
-    expect(status).toMatchObject({ active: false, storageDimensions: 8 });
+    expect(status).toMatchObject({ active: false, storageDimensions: 24 });
+    await ok(put({ enabled: true }));
+  });
+
+  it('switches to the new generation only once the upgrade is over, and audits it', async () => {
+    // Auditors cannot switch or cancel.
+    for (const action of ['switch', 'cancel']) {
+      expect(
+        (await request(auditor, 'POST', `/embeddings/generations/2/${action}`, {})).status,
+      ).toBe(403);
+    }
+    // Generation 1's table is the one v0.10 replicas use: no switch until
+    // this release's post-deploy steps are recorded.
+    const response = await request(admin, 'POST', '/embeddings/generations/2/switch', {});
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: { message: string } }).error.message).toMatch(
+      /migrate --post/,
+    );
+    expect((await request(admin, 'POST', '/embeddings/generations/9/switch', {})).status).toBe(409);
+    expect((await request(admin, 'POST', '/embeddings/generations/x/switch', {})).status).toBe(404);
+    expect(
+      (await request(admin, 'POST', '/embeddings/generations/2/switch', { force: 'yes' })).status,
+    ).toBe(422);
+
+    await finishUpgrade();
+    const status = await ok<EmbeddingsStatus>(
+      request(admin, 'POST', '/embeddings/generations/2/switch', {}),
+    );
+    expect(status).toMatchObject({
+      settings: { modelId: 'tiny', dimensions: 8 },
+      active: true,
+      storageDimensions: 8,
+      generations: {
+        current: { id: 2, modelId: 'tiny', state: 'current' },
+        filling: null,
+        retired: [{ id: 1, state: 'retired', modelId: 'text-embedding-3-small' }],
+        switchBlocked: null,
+      },
+    });
+    const dropAfter = new Date(status.generations.retired[0]!.dropAfter!).getTime();
+    // The default grace period: a day.
+    expect(dropAfter - Date.now()).toBeGreaterThan(23 * 60 * 60_000);
+    expect(await storedSetting()).toMatchObject({ modelId: 'tiny', dimensions: 8, enabled: true });
+    expect((await audits('embeddings.generation.switch')).at(-1)?.metadata).toEqual({
+      generation: 2,
+      providerId: openai,
+      modelId: 'tiny',
+      dimensions: 8,
+      previous: 1,
+      passages: { total: 0, embedded: 0 },
+      forced: false,
+      automatic: false,
+    });
+  });
+
+  it('cancels a rebuild, and goes back to the current model when it is chosen again', async () => {
+    fake = fakeEmbeddingModel({ dimensions: 12 });
+    state.fake = fake;
+    let status = await ok<EmbeddingsStatus>(put({ modelId: 'medium' }));
+    expect(status.generations.filling).toMatchObject({ id: 3, modelId: 'medium' });
+    status = await ok<EmbeddingsStatus>(
+      request(admin, 'POST', '/embeddings/generations/3/cancel', {}),
+    );
+    expect(status).toMatchObject({
+      settings: { modelId: 'tiny', dimensions: 8 },
+      generations: { current: { id: 2 }, filling: null },
+    });
+    expect((await audits('embeddings.generation.cancel')).at(-1)?.metadata).toMatchObject({
+      generation: 3,
+      modelId: 'medium',
+    });
+    expect((await request(admin, 'POST', '/embeddings/generations/3/cancel', {})).status).toBe(409);
+
+    // Choosing the current model again while a rebuild runs cancels it too.
+    status = await ok<EmbeddingsStatus>(put({ modelId: 'medium' }));
+    expect(status.generations.filling).toMatchObject({ id: 3, modelId: 'medium' });
+    fake = fakeEmbeddingModel({ dimensions: 8 });
+    state.fake = fake;
+    status = await ok<EmbeddingsStatus>(put({ modelId: 'tiny' }));
+    expect(status.generations).toMatchObject({ current: { id: 2 }, filling: null });
+    expect((await audits('embeddings.update')).at(-1)?.metadata).toMatchObject({
+      rebuild: 'cancelled',
+      generation: 2,
+    });
+    // A model that cannot embed cannot replace the one in use, even while off.
+    fake.failWith = new Error('gone');
+    expect((await put({ enabled: false, modelId: 'broken' })).status).toBe(422);
+    // Nor can the model be removed while embeddings are stored for it.
+    expect((await put({ enabled: false, modelId: null })).status).toBe(422);
   });
 });

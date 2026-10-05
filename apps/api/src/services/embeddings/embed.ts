@@ -1,34 +1,14 @@
 import type { EmbeddingsSettings } from '@oci/shared';
 import { type EmbeddingModel, embedMany } from 'ai';
-import {
-  type ActiveEmbeddingsSettings,
-  embeddingModelKey,
-  embeddingsSettings,
-  isActive,
-} from './config.js';
+import type { ActiveEmbeddingsSettings } from './config.js';
 import { resolveEmbeddingModel } from './model.js';
 
-/** The configured embeddings model, ready to call. */
+/** An embeddings model, ready to call: one generation's (embeddings/generations.ts). */
 export interface Embedder {
   settings: ActiveEmbeddingsSettings;
   model: Exclude<EmbeddingModel, string>;
   /** Stored with each vector; see `embeddingModelKey`. */
   key: string;
-}
-
-/**
- * The embeddings model to use, or null when meaning-based search is off or
- * not fully configured. Throws when the configured provider cannot be used
- * (removed, disabled, no key); callers fall back to keyword search.
- */
-export async function activeEmbedder(options: { fresh?: boolean } = {}): Promise<Embedder | null> {
-  const settings = await embeddingsSettings(options);
-  if (!isActive(settings)) return null;
-  return {
-    settings,
-    model: await resolveEmbeddingModel(settings.providerId, settings.modelId),
-    key: embeddingModelKey(settings),
-  };
 }
 
 interface Embedded {

@@ -312,6 +312,12 @@ mostly a worse version of one or the other.
 - **Calendar** — resets on a boundary. Easier to explain, and produces a rush at
   the start of each period.
 
+Either way the count is exact to the moment, in the budget's own time zone,
+and includes what replies in progress have reserved. From v0.11 it is read
+from hourly usage totals, so checking a budget before each message costs the
+same for someone who sends thousands a month as for someone who sends a few
+(see [How the figures are read](audit-reporting.md#how-the-figures-are-read)).
+
 ### Which models
 
 A quota can apply to everything or to specific models. Scoping is what lets you
@@ -395,30 +401,33 @@ response** and **Tokens held per response** values under **Instance-wide**.
 ### Sign-in attempts
 
 **Sign-in attempts per minute** (`RATE_LIMIT_AUTH_PER_MINUTE`, default 10)
-limits how fast credentials and tokens can be tried. It counts every request
-to sign in with a password or single sign-on, sign up, request or complete a
-password reset, and send or follow a verification link, successful or not, in
-two counters with the same limit:
+limits how fast one account's credentials can be tried. It counts:
 
-- **per client address**, the address the web container's proxy reports
-  ([behind another proxy](../OPERATIONS.md#behind-another-proxy-or-an-ingress), set `TRUSTED_PROXIES`), so one machine cannot try many accounts;
-- **per account**, the email address in the request, so many machines cannot
-  try one account.
+- **failed sign-ins per account**, the email address in the request, from any
+  address, so many machines cannot try one account. A successful sign-in is
+  not counted;
+- every sign-up, password reset and verification request naming the account;
+- password and email changes per signed-in session.
 
-Past the limit the request is refused with `429 Too Many Requests` and a
+A client address has its own, much larger allowance, set by your operator:
+300 **failed** attempts a minute by default (`RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE`),
+and ten times that for every request. Many people behind one address, such
+as a campus network, can therefore all sign in at once. Single sign-on is
+budgeted per identity provider instead
+([Sign-in limits](../OPERATIONS.md#sign-in-limits)).
+
+Past a limit the request is refused with `429 Too Many Requests` and a
 `Retry-After` header until the minute ends; the sign-in page shows *Too many
 attempts. Wait a minute and try again.* The first refusal in each minute for
-an address or account is audited as `auth.rate_limited` (the address, the
-account tried, the endpoint and which counter refused), so a flood of refused
-requests does not flood the audit log too. Refused requests never reach the
-sign-in code, so they are not also recorded as failed sign-ins.
+an address, account or provider is audited as `auth.rate_limited` (the
+address, the account tried, the endpoint and which limit refused), so a flood
+of refused requests does not flood the audit log too. Refused requests never
+reach the sign-in code, so they are not also recorded as failed sign-ins.
 
 The counters live in Redis, so every API replica shares them; without Redis
-each replica counts on its own (as for the other limits). Many people behind
-one address, such as a campus network, share the per-address counter: raise
-the value if they meet it at the start of a class. Signing out, reading the
-session and changing a password while signed in are not counted. Better
-Auth's own built-in limiter still applies on top in production.
+each replica counts on its own (as for the other limits). Signing out and
+reading the session are not counted. Better Auth's own built-in limiter is
+off from v0.11; these are the only limits.
 
 ## Retention
 

@@ -1,6 +1,14 @@
-import { BACKUP_JOB, runScheduledBackup } from '../backups/run.js';
+import { runsBackgroundJobs } from '../../lib/role.js';
+import { BACKUP_JOB, runScheduledBackup, startManualBackup } from '../backups/run.js';
 import { processCompactionQueue } from '../chat/compaction-queue.js';
-import { COMPLIANCE_JOB, runScheduledComplianceExport } from '../compliance/export.js';
+import { recoverInterruptedReplies } from '../chat/run-recovery.js';
+import {
+  COMPLIANCE_JOB,
+  runScheduledComplianceExport,
+  startManualComplianceExport,
+} from '../compliance/export.js';
+import { embeddingRebuildJobs } from '../embeddings/rebuild.js';
+import { encryptionJobs } from '../encryption/rotation.js';
 import {
   applyThreadRetention,
   pruneAuditLog,
@@ -10,7 +18,9 @@ import {
   pruneUsageEvents,
 } from '../lifecycle/retention.js';
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
+import { jobPausedByReadOnly } from '../maintenance/read-only.js';
 import { applyMemoryRetention } from '../memory/store.js';
+import { migrationJobs } from '../migrations/jobs.js';
 import { processPendingImports } from '../portability/imports.js';
 import { embedPendingProjectPassages } from '../project-search/embedding.js';
 import { indexPendingProjectFiles } from '../project-search/indexing.js';
@@ -19,8 +29,28 @@ import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
 import { drainDeletedObjects, pruneDrainedObjects } from '../storage/reaper.js';
 import { purgeExpiredTemporaryThreads, purgeUnusedThreads } from '../threads.js';
+import { foldUsageRollups, USAGE_ROLLUP_FOLD_JOB } from '../usage-report/rollup-fold.js';
 import { processWebhookDeliveries } from '../webhooks/delivery.js';
-import { type JobDefinition, runExclusively, startJobs } from './runner.js';
+import {
+  type JobRequest,
+  listenForJobRequests,
+  manualRunConflict,
+  requestManualRun,
+} from './requests.js';
+import {
+  type JobDefinition,
+  runExclusively,
+  setJobPauseCheck,
+  startJobs,
+  stopJobs as stopJobTimers,
+} from './runner.js';
+import { SWEEP_JOB } from './workers.js';
+
+// Read-only maintenance mode (v0.11 design, section 9): jobs that write pause,
+// apart from those the administrator keeps running (backups, compliance
+// exports, webhook deliveries and reply recovery by default). Ticks, kicks and
+// "Run now" alike; a job running when it starts stops after its batch.
+setJobPauseCheck(jobPausedByReadOnly);
 
 const MINUTE = 60 * 1000;
 export const COMPACTION_JOB = 'chat.compact-conversations';
@@ -76,6 +106,25 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'projects.embed-passages',
       intervalMs: 5 * MINUTE,
       run: () => embedPendingProjectPassages(),
+    },
+    {
+      // Replies whose producer stopped heartbeating (killed, crashed, cut off
+      // by a shutdown past its grace) are saved as interrupted, so their
+      // conversation takes new messages again (v0.11). A reader resuming the
+      // reply, or a new message in its conversation, does the same at once.
+      // Every 15 s: a reply whose resuming client is on an older replica
+      // (during an upgrade) has only this to end it. Its recorded runs also
+      // show System health that some replica runs jobs (jobs/workers.ts).
+      name: SWEEP_JOB,
+      intervalMs: 15 * 1000,
+      run: () => recoverInterruptedReplies(),
+    },
+    {
+      // Usage rollups (v0.11): folds the change log the usage_event triggers
+      // write. Readers add what is not folded yet, so this is for speed only.
+      name: USAGE_ROLLUP_FOLD_JOB,
+      intervalMs: 30 * 1000,
+      run: () => foldUsageRollups(),
     },
     {
       name: 'quota.sweep-reservations',
@@ -171,11 +220,44 @@ export function lifecycleJobs(): JobDefinition[] {
       intervalMs: 5 * MINUTE,
       run: () => runScheduledComplianceExport(),
     },
+    // Background migrations and, on a single instance, post-deploy steps (v0.11).
+    ...migrationJobs(),
+    // Embedding generations (v0.11): fill after a model change, switch, drop.
+    ...embeddingRebuildJobs(),
+    // Encryption key rotation (v0.11): re-encrypt after ENCRYPTION_KEY changes.
+    ...encryptionJobs(),
   ];
 }
 
-export function startLifecycleJobs(): void {
+let stopListening: (() => Promise<void>) | null = null;
+
+/**
+ * What a `web` replica asked for (jobs/requests.ts): a manual backup or
+ * compliance export with the administrator who started it, or a job to run
+ * now. Unknown names are ignored.
+ */
+export async function handleJobRequest(request: JobRequest): Promise<unknown> {
+  if (request.actor && request.job === BACKUP_JOB) return startManualBackup(request.actor);
+  if (request.actor && request.job === COMPLIANCE_JOB)
+    return startManualComplianceExport(request.actor);
+  return runJobNow(request.job);
+}
+
+/**
+ * Starts every job's timer, and listens for work requested by `web`
+ * replicas. Only on a replica that runs jobs (OCI_ROLE=worker or all).
+ */
+export async function startLifecycleJobs(): Promise<void> {
   startJobs(lifecycleJobs());
+  stopListening = await listenForJobRequests(handleJobRequest);
+}
+
+/** Stops the timers and the listener; jobs already running finish their batch. */
+export function stopJobs(): void {
+  stopJobTimers();
+  const stop = stopListening;
+  stopListening = null;
+  void stop?.();
 }
 
 /** Runs one job immediately, for admin-triggered maintenance. */
@@ -185,4 +267,17 @@ export async function runJobNow(name: string): Promise<number | null> {
   return runExclusively(job);
 }
 
-export { recentJobRuns, stopJobs } from './runner.js';
+/**
+ * "Run now" from System health: here when this replica runs jobs, else asked
+ * of a worker (`queued`, its result not known yet). 409 when no replica runs
+ * jobs; null for an unknown job or one already running elsewhere.
+ */
+export async function runOrQueueJobNow(name: string): Promise<number | 'queued' | null> {
+  if (runsBackgroundJobs()) return runJobNow(name);
+  if (!lifecycleJobs().some((candidate) => candidate.name === name)) return null;
+  const placed = await requestManualRun({ job: name });
+  if (placed === 'no-worker') throw manualRunConflict();
+  return 'queued';
+}
+
+export { recentJobRuns, runningJobCount } from './runner.js';

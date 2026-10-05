@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
+import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { ThemeMenu } from '~/components/layout/theme-menu';
 import { UsageLimits } from '~/components/settings/usage-limits';
 import { Badge } from '~/components/ui/badge';
@@ -250,6 +251,8 @@ export function SettingsLayout() {
 
           <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <SectionNav pathname={pathname} />
+            {/* Read-only maintenance mode (v0.11): why changes are not saved. */}
+            <ReadOnlyBanner className="mt-6 rounded-xl border" />
             <div className="mt-8 lg:pb-16">
               <Outlet />
             </div>

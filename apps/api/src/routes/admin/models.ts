@@ -1,6 +1,7 @@
 import { and, asc, eq, ne, schema } from '@oci/db';
 import {
   type AdminModel,
+  capacityLimitsSchema,
   modelLimitsProblem,
   updateModelSchema,
   upsertModelSchema,
@@ -11,6 +12,7 @@ import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { saveModelLimits } from '../../services/limits/capacity/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
 
 export const modelRoutes = new Hono<AppBindings>();
@@ -239,6 +241,29 @@ modelRoutes.patch('/:id', async (c) => {
   });
 
   return c.json({ id: updated?.id });
+});
+
+/** A model's own provider capacity limits (v0.11), within its provider's. */
+modelRoutes.put('/:id/capacity', async (c) => {
+  const actor = currentUser(c);
+  const id = c.req.param('id');
+  const [row] = await db
+    .select({ id: schema.model.id })
+    .from(schema.model)
+    .where(eq(schema.model.id, id))
+    .limit(1);
+  if (!row) throw notFound('Model not found');
+  const limits = await parseBody(c, capacityLimitsSchema);
+  await saveModelLimits(id, limits);
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'model.capacity',
+    targetType: 'model',
+    targetId: id,
+    metadata: { ...limits },
+  });
+  return c.json({ limits });
 });
 
 modelRoutes.delete('/:id', async (c) => {

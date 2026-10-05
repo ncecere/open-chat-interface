@@ -6,7 +6,10 @@ const mocks = vi.hoisted(() => ({
   zrem: vi.fn(),
   warn: vi.fn(),
 }));
-vi.mock('../../services/chat-streams.js', () => ({ sharedRedis: mocks.sharedRedis }));
+vi.mock('../../services/chat-streams.js', () => ({
+  sharedRedis: mocks.sharedRedis,
+  noteRedisFailure: () => undefined,
+}));
 vi.mock('../../services/lifecycle/settings.js', () => ({
   getRateLimitSettings: async () => ({
     roles: { restricted: { maxConcurrentStreams: 1 } },

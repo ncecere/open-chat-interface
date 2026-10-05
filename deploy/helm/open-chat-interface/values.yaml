@@ -1,0 +1,482 @@
+# Open Chat Interface Helm chart.
+#
+# Production checklist (docs/OPERATIONS.md, "Kubernetes with Helm"):
+#   - secrets.existingSecret: a Secret with DATABASE_URL, AUTH_SECRET,
+#     ENCRYPTION_KEY and REDIS_URL (created by your secret manager, never in
+#     values);
+#   - config.appUrl: the address people use;
+#   - ingress or httpRoute pointing at the web Service, and web.trustedProxies
+#     set to your ingress controller's pod range;
+#   - S3-compatible attachment storage (Admin -> Data & storage -> Storage), or
+#     storage.persistence with a ReadWriteMany claim;
+#   - external PostgreSQL (session-mode pooling or direct) and Redis: the chart
+#     bundles neither.
+
+nameOverride: ""
+fullnameOverride: ""
+# Used to build the in-cluster DNS name of the API for the web proxy.
+clusterDomain: cluster.local
+
+image:
+  api:
+    repository: ghcr.io/ncecere/open-chat-interface/api
+    # Defaults to the chart's appVersion (the release it was published with).
+    # Keep the API and web images on the same release.
+    tag: ""
+    # Optional sha256:... digest; pins content independently of the tag.
+    digest: ""
+  web:
+    repository: ghcr.io/ncecere/open-chat-interface/web
+    tag: ""
+    digest: ""
+  pullPolicy: IfNotPresent
+  # The GHCR images are public; set this only for a private mirror.
+  pullSecrets: []
+  #  - name: my-registry-credentials
+
+# --- Secrets -----------------------------------------------------------------
+# Every key of the Secret becomes an environment variable of the API, worker
+# and migration pods (envFrom), so it can also carry SMTP, OIDC or S3 values.
+#
+# Required keys:  DATABASE_URL, AUTH_SECRET (32+ chars), ENCRYPTION_KEY (32+
+#                 chars; losing it makes stored provider credentials unreadable)
+# Recommended:    REDIS_URL (required with more than one replica)
+# Optional:       METRICS_TOKEN (16+ chars; /metrics and the ServiceMonitor),
+#                 INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_PASSWORD,
+#                 CONTROL_DATABASE_URL, READ_DATABASE_URL (v0.11 pooling and
+#                 read routing), REDIS_SENTINELS / REDIS_CLUSTER_NODES with
+#                 their passwords (v0.11 Redis high availability)
+#
+#   kubectl create secret generic oci-runtime \
+#     --from-literal=DATABASE_URL='postgres://oci:...@db:5432/oci' \
+#     --from-literal=REDIS_URL='redis://:...@redis:6379' \
+#     --from-literal=AUTH_SECRET="$(openssl rand -base64 48)" \
+#     --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 48)"
+secrets:
+  # Name of an existing Secret (recommended). Takes precedence over `values`.
+  existingSecret: ""
+  # For evaluation and CI only: the chart creates a Secret from these values
+  # (stored in the Helm release, so not for production). It is created as a
+  # pre-install/pre-upgrade hook so the migration job can read it, and is kept
+  # on uninstall. Nothing is generated: AUTH_SECRET and ENCRYPTION_KEY must be
+  # stable, which a template that runs under `helm template` cannot promise.
+  values: {}
+  #  DATABASE_URL: postgres://...
+  #  AUTH_SECRET: ...
+  #  ENCRYPTION_KEY: ...
+
+# --- Application configuration (plain environment variables) ---------------
+# Rendered into the API, worker and migration pods. See docs/OPERATIONS.md and
+# .env.example for every variable; anything not listed here goes in `env`.
+config:
+  # Public URL people use (required). Must match the ingress host and scheme.
+  appUrl: ""
+  # Comma-separated origins of trusted internal OIDC/SAML identity providers.
+  authTrustedOrigins: ""
+  logLevel: info
+  # Local attachment directory (used while the storage driver is "local").
+  storageLocalPath: /data/storage
+  # How long a stopping replica lets replies finish (ms). The pods'
+  # terminationGracePeriodSeconds must exceed this plus the preStop sleep; the
+  # chart refuses values that do not.
+  shutdownDrainTimeoutMs: 25000
+  # Migration lock and statement timeouts (ms); empty uses the defaults
+  # (3000, 900000 and 14400000).
+  migrationLockTimeoutMs: ""
+  migrationStatementTimeoutMs: ""
+  postMigrationStatementTimeoutMs: ""
+  # OpenTelemetry traces over OTLP/HTTP; empty loads no SDK.
+  otelExporterOtlpEndpoint: ""
+  otelServiceName: ""
+  # Extra plain variables, for example:
+  #   CHAT_STREAM_TTL_SECONDS: "900"
+  #   DISPLAY_TIMEZONE: Europe/Berlin
+  #   REDIS_SENTINELS: sentinel-0:26379,sentinel-1:26379,sentinel-2:26379
+  env: {}
+
+# Redis high availability (v0.11). Leave empty for a single REDIS_URL in the
+# Secret. These become REDIS_SENTINELS and REDIS_CLUSTER_NODES; put passwords
+# in the Secret. See docs/OPERATIONS.md for the variables your release reads.
+redis:
+  sentinels: ""
+  clusterNodes: ""
+
+# Full EnvVar objects and envFrom sources added to the API, worker and
+# migration pods (for example a separate Secret for SMTP or S3).
+extraEnv: []
+extraEnvFrom: []
+#  - secretRef:
+#      name: oci-smtp
+
+# --- Migrations (docs/OPERATIONS.md, "Upgrade") ------------------------------
+# `helm install` / `helm upgrade` runs:
+#   1. pre-install/pre-upgrade hook: `node dist/migrate.js` (pre-deploy),
+#   2. the rolling update of the API (RUN_MIGRATIONS=false on every pod),
+#   3. post-install/post-upgrade hook: `node dist/migrate.js --post`, which
+#      first waits until every API and worker pod runs the new release.
+# Helm waits for hooks for at most --timeout (default 5m): pass a longer one,
+# for example `helm upgrade --timeout 30m`, when the preflight
+# (`node dist/scripts/upgrade-check.js`) estimates long index builds.
+migrations:
+  # false: no hooks; the API migrates itself at startup (RUN_MIGRATIONS=true),
+  # which suits a single replica only.
+  enabled: true
+  # Hook Jobs are kept after they finish (for their logs) and replaced by the
+  # next upgrade; ttlSecondsAfterFinished removes them earlier. Add
+  # hook-succeeded to delete them as soon as they pass.
+  hookDeletePolicy: before-hook-creation
+  ttlSecondsAfterFinished: 86400
+  pre:
+    # Pre-deploy migrations are transactional, retried on lock timeouts for
+    # about three minutes, and rerun cleanly after a failure.
+    activeDeadlineSeconds: 1800
+    backoffLimit: 2
+  post:
+    enabled: true
+    # Post-deploy steps may build an index over the largest table; each step
+    # is limited by POST_MIGRATION_STATEMENT_TIMEOUT_MS (four hours). A rerun
+    # resumes, so keep backoffLimit above zero.
+    activeDeadlineSeconds: 21600
+    backoffLimit: 3
+    # Wait until the API and worker rollouts have finished and no pod of the
+    # previous release is still terminating before running post-deploy steps
+    # (they may drop what the previous release reads). Needs a namespaced Role
+    # to read Deployments and list Pods, created for the hook only. With
+    # false, always run `helm upgrade --wait`.
+    waitForRollout: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# --- API (OCI_ROLE=web when the worker is enabled, otherwise all) ----------
+api:
+  replicaCount: 2
+  # maxUnavailable must stay 0: a replacement is ready before a replica drains.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  # preStop (5) + drain (25) + time for the final saves.
+  terminationGracePeriodSeconds: 40
+  # Lets endpoints, kube-proxy and the web proxy's DNS refresh stop sending new
+  # requests before the drain starts.
+  preStopSleepSeconds: 5
+  # Use the native `sleep` lifecycle action (Kubernetes 1.30+) instead of
+  # exec'ing /bin/sleep in the container.
+  preStopSleepAction: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      # File exports run up to two worker threads with 512 MiB heaps each.
+      memory: 3Gi
+  startupProbe:
+    httpGet: { path: /api/health/live, port: http }
+    periodSeconds: 2
+    timeoutSeconds: 3
+    failureThreshold: 90
+  # Drops a draining replica (503) within about two seconds.
+  readinessProbe:
+    httpGet: { path: /api/health/ready, port: http }
+    periodSeconds: 2
+    timeoutSeconds: 2
+    failureThreshold: 1
+    successThreshold: 1
+  livenessProbe:
+    httpGet: { path: /api/health/live, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  # CPU by default. For OCI's own metrics, expose them through a custom
+  # metrics adapter (prometheus-adapter, KEDA) and add Pods/Object metrics to
+  # `metrics` (see the chart README).
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+    metrics: []
+    behavior: {}
+  # Spread replicas across nodes (and zones, when labelled) by default.
+  topologySpreadConstraints: []
+  defaultTopologySpread: true
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  podAnnotations: {}
+  podLabels: {}
+  extraVolumes: []
+  extraVolumeMounts: []
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations: {}
+
+# --- Background worker (OCI_ROLE=worker) -----------------------------------
+# Runs every background job (imports, embeddings, summaries, webhooks,
+# backups, compliance exports, retention, background migrations). Serves only
+# health and /metrics. With it disabled, the API runs as OCI_ROLE=all.
+worker:
+  enabled: true
+  # Two for availability during node drains; one is enough for throughput.
+  replicaCount: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  # A worker finishes the job batch in hand within shutdownDrainTimeoutMs.
+  # Nothing routes to it, so it needs no preStop sleep.
+  terminationGracePeriodSeconds: 40
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 3Gi
+  startupProbe:
+    httpGet: { path: /api/health/live, port: http }
+    periodSeconds: 2
+    timeoutSeconds: 3
+    failureThreshold: 90
+  readinessProbe:
+    httpGet: { path: /api/health/ready, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  livenessProbe:
+    httpGet: { path: /api/health/live, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  topologySpreadConstraints: []
+  defaultTopologySpread: true
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  podAnnotations: {}
+  podLabels: {}
+  extraVolumes: []
+  extraVolumeMounts: []
+
+# --- Web (Caddy: the single-page app and the same-origin /api proxy) --------
+# All traffic, /api included, goes through these pods. Caddy works out the
+# client address (trusting only web.trustedProxies) and passes exactly one to
+# the API; do not route /api to the API Service directly.
+web:
+  replicaCount: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  # Space-separated IPs or CIDR ranges of the proxies in front (your ingress
+  # controller's pod range, or the cluster pod CIDR; `private_ranges` for all
+  # private ranges). Empty trusts nothing: every person then appears to come
+  # from the ingress controller's address.
+  trustedProxies: ""
+  # Replies stream through these pods: give them as long as the API.
+  terminationGracePeriodSeconds: 40
+  preStopSleepSeconds: 5
+  preStopSleepAction: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  # Probes read the static app, so the web pods stay in rotation (and show
+  # the app) while the API is restarting.
+  startupProbe:
+    httpGet: { path: /index.html, port: http }
+    periodSeconds: 2
+    timeoutSeconds: 3
+    failureThreshold: 30
+  readinessProbe:
+    httpGet: { path: /index.html, port: http }
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 2
+  livenessProbe:
+    httpGet: { path: /index.html, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+    metrics: []
+    behavior: {}
+  topologySpreadConstraints: []
+  defaultTopologySpread: true
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  podAnnotations: {}
+  podLabels: {}
+  # Plain environment variables for Caddy.
+  env: {}
+  service:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+
+# --- Security ----------------------------------------------------------------
+# Compatible with the Pod Security "restricted" profile. The API image's user
+# is oci (100:101); the web image runs Caddy, run here as 65532. Root
+# filesystems are read-only: /tmp, /data/storage (API) and /data, /config
+# (Caddy) are emptyDir or the storage volume.
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+podSecurityContext:
+  api:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 101
+    fsGroup: 101
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile: { type: RuntimeDefault }
+  web:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile: { type: RuntimeDefault }
+containerSecurityContext:
+  api:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: { drop: [ALL] }
+  web:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    # Caddy listens on 8080, and the web image (from v0.11) removes the
+    # caddy binary's cap_net_bind_service file capability, so nothing is
+    # added back. Images before v0.11 still carry it: executing it with
+    # no_new_privs fails unless NET_BIND_SERVICE is in the bounding set, so
+    # running one of them needs `add: [NET_BIND_SERVICE]` here.
+    capabilities: { drop: [ALL] }
+# Size limits of the writable emptyDir volumes.
+tmpVolume:
+  sizeLimit: 1Gi
+
+# --- Attachment storage ------------------------------------------------------
+# With more than one replica use S3-compatible storage (Admin -> Data &
+# storage -> Storage) or a ReadWriteMany claim: the API and worker pods all
+# read and write attachments. Without either, attachments in local storage
+# live in an emptyDir and are lost when a pod is replaced.
+storage:
+  persistence:
+    enabled: false
+    existingClaim: ""
+    storageClass: ""
+    accessModes: [ReadWriteMany]
+    size: 20Gi
+    annotations: {}
+  # emptyDir size limit when persistence is off.
+  emptyDirSizeLimit: 2Gi
+
+# --- Exposure ------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # Long replies stream for minutes: raise proxy timeouts and disable response
+  # buffering, for example with ingress-nginx:
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  #   nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  #   nginx.ingress.kubernetes.io/proxy-body-size: 512m
+  hosts: []
+  #  - host: chat.example.com
+  #    paths:
+  #      - path: /
+  #        pathType: Prefix
+  tls: []
+  #  - secretName: chat-example-com-tls
+  #    hosts: [chat.example.com]
+
+# Gateway API HTTPRoute to the web Service (gateway.networking.k8s.io/v1).
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs: []
+  #  - name: public-gateway
+  #    namespace: gateway-system
+  hostnames: []
+  # Extra rule fields such as timeouts:
+  #   timeouts: { request: 0s, backendRequest: 0s }
+  ruleExtras: {}
+
+# --- Network policy ------------------------------------------------------------
+# Ingress rules (on by default): the API accepts connections only from the web
+# pods (and metrics scrapers), so nothing else in the cluster can reach it and
+# claim a client address; workers accept only metrics scrapers. Probes from
+# the kubelet are not affected.
+networkPolicy:
+  enabled: true
+  # Who may reach the web pods on 8080. Empty allows everyone (the ingress
+  # controller); restrict to its namespace, for example:
+  #  - namespaceSelector:
+  #      matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+  webFrom: []
+  # Who may scrape /metrics (port 3000) on API and worker pods.
+  metricsFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+  # Egress restrictions (off by default: the database, Redis, S3, model
+  # providers, connectors and webhooks are deployment-specific). When on, the
+  # web pods may reach only DNS and the API, and the API, worker and migration
+  # pods DNS plus `extraEgress`.
+  egress:
+    enabled: false
+    extraEgress: []
+    #  - to: [{ ipBlock: { cidr: 0.0.0.0/0 } }]
+    #    ports: [{ protocol: TCP, port: 443 }]
+
+# --- Metrics -------------------------------------------------------------------
+# /metrics is served on each API and worker pod only when METRICS_TOKEN is in
+# the Secret, and requires it as a Bearer token.
+metrics:
+  serviceMonitor:
+    enabled: false
+    # Key of the Secret holding METRICS_TOKEN (the ServiceMonitor reads it).
+    tokenSecretKey: METRICS_TOKEN
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+  # A PrometheusRule with the service objectives' recording rules and the
+  # burn-rate and operational alerts (deploy/monitoring/prometheus-rules.yaml;
+  # docs/dev/slo.md). Needs the Prometheus Operator CRDs and the ServiceMonitor
+  # (or another scrape of every API and worker pod). `labels` must match your
+  # Prometheus's ruleSelector, such as `release: kube-prometheus-stack`.
+  prometheusRule:
+    enabled: false
+    labels: {}
+
+# `helm test`: requests /api/health/ready through the web Service.
+tests:
+  enabled: true

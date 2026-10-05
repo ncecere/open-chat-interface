@@ -4,9 +4,12 @@ import { Readable } from 'node:stream';
 import { and, desc, eq, inArray, isNull, ne, schema, sql } from '@oci/db';
 import type { ConversationImportSummary, UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
+import { isConnectionError, retryOnConnectionError } from '../../lib/db-connection.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { recordAudit } from '../audit.js';
+import { kickJob } from '../jobs/requests.js';
+import { jobMayContinue } from '../jobs/runner.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { getStorageDriver, type StorageDriver } from '../storage/index.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
@@ -351,6 +354,9 @@ async function applyConversation(row: ImportRow, value: unknown, progress: Progr
     if (outcome === 'imported') progress.imported += 1;
     else progress.skipped += 1;
   } catch (error) {
+    // The database went away (a failover), not this conversation: stop the
+    // whole import, to be resumed, rather than count the rest as failed.
+    if (isConnectionError(error)) throw error;
     progress.failed += 1;
     logger.warn(
       { error, importId: row.id, sourceId: mapped.conversation.sourceId },
@@ -443,6 +449,13 @@ async function finishImport(
 }
 
 /** Processes one claimed import from its stored upload. Never throws. */
+/**
+ * Thrown at a checkpoint when the job must stop (its lock was lost with its
+ * connection, or this replica is shutting down): the import is requeued and
+ * resumed from where the stored conversations end.
+ */
+class ImportPaused extends Error {}
+
 async function processImport(
   row: ImportRow,
   limits: ReaderLimits = DEFAULT_READER_LIMITS,
@@ -497,7 +510,11 @@ async function processImport(
       async (value) => {
         await applyConversation(row, value, progress);
         const handled = progress.imported + progress.skipped + progress.failed;
-        if (handled % 25 === 0 || Date.now() - lastBeat > HEARTBEAT_MS) await heartbeat();
+        if (handled % 25 === 0 || Date.now() - lastBeat > HEARTBEAT_MS) {
+          // The check between batches (v0.11): a long import is many batches.
+          if (!(await jobMayContinue())) throw new ImportPaused();
+          await heartbeat();
+        }
       },
       limits,
     );
@@ -532,6 +549,34 @@ async function processImport(
       },
     });
   } catch (error) {
+    if (isConnectionError(error) || error instanceof ImportPaused) {
+      // A database failover or a stop (v0.11): put it back in the queue. The next run
+      // starts it again from the file, and the conversations already stored
+      // are recognised (thread_import_source_unique) and skipped. A failover
+      // does not use up one of its attempts. Saving that waits out the
+      // failover (bounded); if even that fails, the row's lease runs out
+      // (IMPORT_STALE_MS) and it is resumed then.
+      logger.warn(
+        { importId: row.id, paused: error instanceof ImportPaused },
+        'Import interrupted (lost database connection, lost job lock or shutdown); requeued',
+      );
+      await retryOnConnectionError(() =>
+        db
+          .update(schema.conversationImport)
+          .set({
+            status: 'pending',
+            attempts: sql`greatest(${schema.conversationImport.attempts} - 1, 0)`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(schema.conversationImport.id, row.id),
+              eq(schema.conversationImport.status, 'running'),
+            ),
+          ),
+      ).catch(() => undefined);
+      return;
+    }
     const rejected = error instanceof ImportRejected;
     if (!rejected) logger.error({ error, importId: row.id }, 'Import failed');
     await finishImport(row, {
@@ -557,6 +602,8 @@ export async function processPendingImports(options?: {
   let processed = 0;
   const maxImports = options?.maxImports ?? 10;
   while (processed < maxImports) {
+    // A failover may have taken the job's lock, or this replica is stopping.
+    if (processed > 0 && !(await jobMayContinue())) break;
     const row = await claimNextImport(options?.now);
     if (!row) break;
     await processImport(row, options?.limits);
@@ -565,11 +612,16 @@ export async function processPendingImports(options?: {
   return processed;
 }
 
-/** Starts processing now rather than at the next job tick. Fire and forget. */
+/**
+ * Starts processing now rather than at the next job tick, here or (on a
+ * `web` replica) on a worker. Fire and forget.
+ */
 export function scheduleImportProcessing(): void {
-  void import('../jobs/index.js')
-    .then(({ runJobNow }) => runJobNow('imports.process'))
-    .catch((error: unknown) => {
-      logger.warn({ error }, 'Could not start import processing immediately');
-    });
+  kickJob('imports.process', () =>
+    import('../jobs/index.js')
+      .then(({ runJobNow }) => runJobNow('imports.process'))
+      .catch((error: unknown) => {
+        logger.warn({ error }, 'Could not start import processing immediately');
+      }),
+  );
 }

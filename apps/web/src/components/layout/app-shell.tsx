@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
 import { BroadcastBanner } from '~/components/layout/broadcast-banner';
+import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
 import { TopBar } from '~/components/layout/top-bar';
@@ -97,6 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
           {/* Above the panel rather than inside it, so an announcement is not
               lost when the conversation scrolls. */}
+          <ReadOnlyBanner />
           <BroadcastBanner />
           <main className="min-h-0 flex-1 rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
             {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs

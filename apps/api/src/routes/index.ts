@@ -3,6 +3,7 @@ import { auth } from '../auth/index.js';
 import { loadEnv } from '../config/env.js';
 import { authRateLimitMiddleware } from '../middleware/auth-rate-limit.js';
 import type { AppBindings } from '../middleware/context.js';
+import { readOnlyGuard } from '../middleware/read-only.js';
 import { adminRoutes } from './admin/index.js';
 import { artifactRoutes } from './artifacts.js';
 import { attachmentRoutes } from './attachments.js';
@@ -11,6 +12,7 @@ import { brandingRoutes } from './branding.js';
 import { chatRoutes } from './chat.js';
 import { connectorRoutes } from './connectors.js';
 import { healthRoutes } from './health.js';
+import { maintenanceRoutes } from './maintenance.js';
 import { meRoutes } from './me.js';
 import { memoryRoutes } from './memory.js';
 import { modelCatalogRoutes } from './models.js';
@@ -24,7 +26,14 @@ export function createApiRoutes() {
 
   const api = new Hono<AppBindings>();
 
+  // Read-only maintenance mode (v0.11): first, so a write it refuses is
+  // refused before anything else is done with it, and a route added later is
+  // refused by default (middleware/read-only.ts has the allowlist).
+  api.use('*', readOnlyGuard);
+
   api.route('/health', healthRoutes);
+  // Unauthenticated: whether writes are refused now, for the banner.
+  api.route('/maintenance', maintenanceRoutes);
   api.route('/auth', authStatusRoutes);
   // Unauthenticated: the sign-in page renders the logo before anyone signs in.
   api.route('/branding', brandingRoutes);

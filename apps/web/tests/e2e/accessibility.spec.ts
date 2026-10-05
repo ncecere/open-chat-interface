@@ -458,7 +458,7 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
 
   test('the export menu on a reply has no violations while open', async ({ page }) => {
     const created = '2026-01-01T00:00:00.000Z';
-    await page.route('**/api/chat/a11y-export/messages', (route) =>
+    await page.route('**/api/chat/a11y-export/messages**', (route) =>
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -501,7 +501,7 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
       metadata: { status: 'complete', createdAt: created },
     });
     const replies = [reply('a11y-reply-1', 'First answer'), reply('a11y-reply-2', 'Second answer')];
-    await page.route('**/api/chat/a11y-replies/messages', (route) =>
+    await page.route('**/api/chat/a11y-replies/messages**', (route) =>
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -531,7 +531,7 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
 
   test('a tool step and an approval card have no violations', async ({ page }) => {
     const created = '2026-01-01T00:00:00.000Z';
-    await page.route('**/api/chat/a11y-tools/messages', (route) =>
+    await page.route('**/api/chat/a11y-tools/messages**', (route) =>
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -601,7 +601,7 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
       createdAt: created,
       updatedAt: created,
     };
-    await page.route('**/api/chat/a11y-artifacts/messages', (route) =>
+    await page.route('**/api/chat/a11y-artifacts/messages**', (route) =>
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({

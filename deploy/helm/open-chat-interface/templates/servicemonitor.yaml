@@ -1,0 +1,37 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- $sm := .Values.metrics.serviceMonitor }}
+{{- range $component := list "api" "worker" }}
+{{- if or (eq $component "api") $.Values.worker.enabled }}
+---
+# Prometheus Operator. /metrics needs METRICS_TOKEN as a Bearer token; it is
+# read from the same Secret as the application's.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "oci.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "oci.labels" (dict "root" $ "component" $component) | nindent 4 }}
+    {{- with $sm.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "oci.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+    matchExpressions:
+      # Not the API's headless Service, which would scrape every pod twice.
+      - key: open-chat-interface/headless
+        operator: DoesNotExist
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ $sm.interval }}
+      scrapeTimeout: {{ $sm.scrapeTimeout }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ include "oci.secretName" $ }}
+          key: {{ $sm.tokenSecretKey }}
+{{- end }}
+{{- end }}
+{{- end }}

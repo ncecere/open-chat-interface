@@ -89,6 +89,11 @@ export const thread = pgTable(
     index('thread_parent_idx').on(t.parentThreadId),
     index('thread_temporary_expiry_idx').on(t.temporary, t.expiresAt),
     index('thread_deleted_idx').on(t.deletedAt),
+    // Conversations created since a date (the usage page's Overview tab, the
+    // admin overview). Post-deploy step 0006 builds it with `INCLUDE
+    // (temporary, parent_thread_id)` so the Overview tab's counts are
+    // index-only; Drizzle cannot declare included columns.
+    index('thread_created_at_idx').on(t.createdAt),
   ],
 );
 
@@ -143,6 +148,19 @@ export const message = pgTable(
     // this the count scans the whole table once per row returned, which at two
     // million messages takes the page from milliseconds to minutes.
     index('message_user_idx').on(t.userId),
+    // The admin overview counts messages per day and the usage page counts
+    // failed replies since a date. Built CONCURRENTLY by post-deploy step
+    // 0001_message_created_at_index (`migrate --post`, v0.11), never by a
+    // pre-deploy migration: building it in one blocks writes to `message`.
+    index('message_created_at_idx').on(t.createdAt),
+    // Failed replies since a date, for the usage page (post-deploy step 0002).
+    index('message_error_created_at_idx').on(t.createdAt).where(sql`${t.status} = 'error'`),
+    // The usage page's Overview tab counts sent messages, replies that searched
+    // the web and cancelled replies since a date, each index-only from its own
+    // partial index (post-deploy steps 0003, 0004 and 0005).
+    index('message_sent_created_at_idx').on(t.createdAt).where(sql`${t.role} = 'user'`),
+    index('message_web_search_created_at_idx').on(t.createdAt).where(sql`${t.webSearchUsed}`),
+    index('message_cancelled_created_at_idx').on(t.createdAt).where(sql`${t.status} = 'cancelled'`),
     // Conversation search over `text` parts only (migration 0023). Queries
     // must use exactly this expression; see services/thread-search.ts.
     index('message_text_search_idx').using(

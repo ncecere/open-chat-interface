@@ -7,11 +7,13 @@ import {
   type UIMessage,
 } from 'ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { capacityWaitOf } from '~/components/chat/capacity-wait';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useChatRecovery } from '~/hooks/use-chat-recovery';
 import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
+import { fetchRetryingDrain } from '~/lib/chat-retry';
 import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
@@ -19,6 +21,8 @@ import { startingModel } from '~/lib/starting-model';
 import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
 const EMPTY_MODELS: CatalogModel[] = [];
+/** Times a turn handed back by a server shutting down is sent again in a row. */
+const HANDOFF_RETRIES = 2;
 
 /**
  * Owns composer state, model selection, and the streaming connection for one
@@ -50,6 +54,9 @@ export function useChatSession(options: {
   );
   const [runId, setRunId] = useState<string | null>(null);
   const requestRecovery = useRef<() => void>(() => {});
+  // Turns handed back by a server shutting down, sent again in a row (v0.11).
+  const handoffRetries = useRef(0);
+  const sendAgain = useRef<() => void>(() => {});
   const acceptSubmission = useRef<
     (
       submission: NonNullable<ReturnType<typeof readChatSubmission>>,
@@ -74,7 +81,12 @@ export function useChatSession(options: {
         scope.reconnectAbort = abort;
         signal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
       }
-      const response = await fetch(input, { ...init, signal });
+      // A server shutting down refuses a new turn before storing it; send it
+      // again (to a replica that is ready) before showing an error.
+      const response = await fetchRetryingDrain((url, options) => fetch(url, options), input, {
+        ...init,
+        signal,
+      });
       // The SDK cannot abort a reconnect before its headers arrive. Do not let
       // that late response create another browser reader after navigation.
       if (!scope.active || signal?.aborted) {
@@ -195,7 +207,15 @@ export function useChatSession(options: {
     resume: false,
     // Once every open approval on the latest reply is answered, send them.
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-    onFinish: ({ isAbort, isDisconnect, isError, finishReason }) => {
+    onFinish: ({ message, isAbort, isDisconnect, isError, finishReason }) => {
+      // The server began shutting down while this turn waited for its model,
+      // before its reply started (v0.11): send it again, which reaches a
+      // server that is running and replaces the empty reply. Twice at most.
+      const handedOff = !isAbort && capacityWaitOf(message)?.state === 'handoff';
+      if (scope.active && handedOff && handoffRetries.current < HANDOFF_RETRIES) {
+        handoffRetries.current++;
+        setTimeout(() => sendAgain.current(), 0);
+      } else if (!handedOff) handoffRetries.current = 0;
       // Do not reload an entire transcript after every healthy reply. An
       // accepted but interrupted/unfinished stream needs canonical recovery.
       if (scope.active && scope.runId) {
@@ -209,6 +229,9 @@ export function useChatSession(options: {
   });
 
   const { stop: stopChat, sendMessage, setMessages, addToolApprovalResponse } = chat;
+  sendAgain.current = () => {
+    if (scope.active) void chat.regenerate();
+  };
   acceptSubmission.current = (submission, promptId) => {
     consumeFiles(submission.attachmentIds);
     if (promptId && promptId !== submission.clientMessageId)

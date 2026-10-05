@@ -1,4 +1,3 @@
-import { and, eq, schema, sql } from '@oci/db';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -6,23 +5,36 @@ import {
   streamText,
   type UIMessage,
 } from 'ai';
-import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
-import { saveDetectedArtifacts } from '../artifacts/store.js';
 import {
   type ChatRunStatus,
   captureChatRun,
   isChatRunCancellationRequested,
   registerLocalChatRun,
 } from '../chat-streams.js';
-import { observeChatReply } from '../observability/events.js';
-import { touchThread } from '../threads.js';
+import { recordHandoff, reportThrottle } from '../limits/capacity/index.js';
+import type { CapacityLease, CapacityRequest, WaitOutcome } from '../limits/capacity/queue.js';
+import {
+  observeChatReply,
+  observeProviderFirstOutput,
+  observeReplyStart,
+} from '../observability/events.js';
+import { recordDrainInterruptedReply } from '../observability/interrupted.js';
+import { withProviderRetries } from '../providers/retry.js';
 import { buildSdkTools, toolApprovalPolicy } from '../tools/registry.js';
+import { stoppedByShutdown, trackRun } from './active-runs.js';
+import {
+  admitTurn,
+  CAPACITY_HANDOFF_MESSAGE,
+  capacityTimeoutMessage,
+  waitForCapacity,
+} from './capacity-wait.js';
 import { isContextOverflowError } from './compaction-plan.js';
 import { scheduleCompactionAfterReply } from './compaction-queue.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { failRunSetup, releaseRunHandles } from './run-cleanup.js';
-import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
+import type { AcquiredRun } from './run-lifecycle.js';
+import { persistAssistant, type ReplyUsage } from './run-save.js';
 import { createToolLoop, stepsTaken, toolStreamErrorText } from './tool-loop.js';
 
 type RunOutcome = { status: Exclude<ChatRunStatus, 'active'>; error?: string };
@@ -48,12 +60,6 @@ async function overflowedBeforeOutput(
   }
 }
 
-type ReplyUsage = {
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  partial?: boolean;
-} | null;
-
 /**
  * Usage of this run. With tools the SDK's total covers every finished step of
  * a completed reply, but is empty after a stop; the loop's per-step tally then
@@ -73,94 +79,32 @@ async function runUsage(
   return loop ? loop.settlement(total, status === 'complete') : (total ?? null);
 }
 
-/** A continued reply adds this run's figures to the ones it already has. */
-const added = (
-  column:
-    | typeof schema.message.tokensIn
-    | typeof schema.message.tokensOut
-    | typeof schema.message.durationMs,
-  value: number,
-) => sql<number>`coalesce(${column}, 0) + ${value}`;
-
-async function persistAssistant(
-  { thread, user, continuation }: PreparedTurn,
-  { assistantMessage, startedAt, reservation }: AcquiredRun,
-  responseMessage: UIMessage,
-  status: RunOutcome['status'],
-  getUsage: () => Promise<ReplyUsage>,
+/**
+ * Start the provider and compose its persisted, resumable SDK response.
+ * `receivedAt` (performance.now()) is when the request arrived, for the
+ * reply-start objective (docs/dev/slo.md).
+ */
+export async function streamResponse(
+  turn: PreparedTurn,
+  run: AcquiredRun,
+  timing: { receivedAt?: number } = {},
 ) {
-  const usage = await getUsage();
-  const tokensIn = usage?.inputTokens ?? null;
-  const tokensOut = usage?.outputTokens ?? null;
-  const durationMs = Date.now() - startedAt;
-  let persistenceFailure: { error: unknown } | undefined;
-  try {
-    await db
-      .update(schema.message)
-      .set({
-        parts: responseMessage.parts as unknown as Record<string, unknown>[],
-        status,
-        errorMessage: status === 'error' ? 'The model failed to generate a response' : null,
-        ...(continuation
-          ? {
-              ...(tokensIn != null && { tokensIn: added(schema.message.tokensIn, tokensIn) }),
-              ...(tokensOut != null && { tokensOut: added(schema.message.tokensOut, tokensOut) }),
-              durationMs: added(schema.message.durationMs, durationMs),
-            }
-          : { tokensIn, tokensOut, durationMs }),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(schema.message.id, assistantMessage.id),
-          eq(schema.message.threadId, thread.id),
-          eq(schema.message.userId, user.id),
-        ),
-      );
-
-    await touchThread(thread.id);
-  } catch (error) {
-    persistenceFailure = { error };
-  }
-  // A finished reply's HTML, SVG and Mermaid blocks become artifacts. Best
-  // effort and idempotent: a failure leaves them as ordinary code blocks.
-  if (!persistenceFailure && status === 'complete') {
-    try {
-      await saveDetectedArtifacts({
-        userId: user.id,
-        role: user.role,
-        threadId: thread.id,
-        messageId: assistantMessage.id,
-        parts: responseMessage.parts,
-      });
-    } catch (error) {
-      logger.warn({ error, threadId: thread.id }, 'Saving detected artifacts failed');
-    }
-  }
-  // Attempt both operations, but never replace the initiating persistence error
-  // with a secondary settlement error. Report the latter separately.
-  try {
-    await settleUsage(reservation, usage ?? null);
-  } catch (error) {
-    logger.error(
-      { error, threadId: thread.id, reservationId: reservation?.id },
-      'Failed to settle chat usage',
-    );
-    if (!persistenceFailure) throw error;
-  }
-  if (persistenceFailure) throw persistenceFailure.error;
-}
-
-/** Start the provider and compose its persisted, resumable SDK response. */
-export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
   const { input, thread, resolved, uiMessages, system, sourceParts, searchGroundingPart } = turn;
   const { runIdentity, assistantMessage, persistence } = run;
   const abortController = new AbortController();
   let modelStarted = false;
   let setupFailed = false;
   let completion: Promise<void> | undefined;
+  let capture: Promise<void> | undefined;
+  let untrack: (() => void) | undefined;
   let captureStarted = false;
   let outcome: RunOutcome = { status: 'complete' };
+  // Provider capacity (v0.11): admitted at once, or queued until the stream
+  // has begun so the reader sees its place. Ended without a reply when the
+  // wait was stopped, ran out, or this replica began draining.
+  let capacity: CapacityRequest | undefined;
+  let lease: CapacityLease | undefined;
+  let unadmitted: Exclude<WaitOutcome, { kind: 'admitted' }> | undefined;
   try {
     // A model without tool calling (or a turn with no tool switched on) runs
     // exactly as in v0.7: one step, no tools.
@@ -205,6 +149,27 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
         sdkTools ? { tools: sdkTools } : undefined,
       ),
     });
+    // Retries a provider's "not now" before the first output, tells the
+    // limiter, and counts each later request of this reply (tool steps).
+    const model = withProviderRetries(resolved.languageModel, {
+      signal: abortController.signal,
+      onExtraRequest: () => lease?.chargeRequest(),
+      onThrottle: (throttle) => void reportThrottle(resolved, throttle),
+      // Service objectives: what OCI added before the model was asked (less
+      // the capacity wait, exported on its own), and the provider's part.
+      onFirstRequest: () => {
+        if (timing.receivedAt !== undefined)
+          observeReplyStart(
+            performance.now() - timing.receivedAt - (lease?.queued ? lease.waitedMs : 0),
+          );
+      },
+      onFirstOutput: (ms) =>
+        observeProviderFirstOutput(
+          resolved.providerLabel ?? resolved.providerId ?? '',
+          resolved.slug,
+          ms,
+        ),
+    });
     let lastCancellationCheck = 0;
     const launch = ({
       loop,
@@ -213,7 +178,9 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
     }: Awaited<ReturnType<typeof prepareAttempt>>) => {
       let failed = false;
       const result = streamText({
-        model: resolved.languageModel,
+        model,
+        // withProviderRetries retries instead, before any output only.
+        maxRetries: 0,
         system: prepared.system,
         messages,
         abortSignal: abortController.signal,
@@ -252,10 +219,14 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
       };
     };
     const first = await prepareAttempt(uiMessages, system);
+    capacity = await admitTurn(turn, run);
+    if (capacity.kind === 'admitted') lease = capacity.lease;
     registerLocalChatRun(runIdentity, abortController);
-    let current = launch(first);
+    // A shutdown waits for this reply, and past its limit stops it here.
+    untrack = trackRun(runIdentity.runId, abortController);
+    let current = lease ? launch(first) : undefined;
 
-    modelStarted = true;
+    modelStarted = current !== undefined;
     const responseStream = createUIMessageStream({
       originalMessages: uiMessages,
       generateId: () => assistantMessage.id,
@@ -271,6 +242,31 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
         if (searchGroundingPart) writer.write(searchGroundingPart);
         if (turn.projectSearchPart) writer.write(turn.projectSearchPart);
         for (const source of sourceParts) writer.write(source);
+        if (!current && capacity?.kind === 'waiting') {
+          const waited = await waitForCapacity(capacity, {
+            writer,
+            signal: abortController.signal,
+            runId: runIdentity.runId,
+            model: resolved.displayName,
+          });
+          if (waited.kind !== 'admitted') {
+            unadmitted = waited;
+            if (waited.kind === 'timeout')
+              writer.write({
+                type: 'error',
+                errorText: capacityTimeoutMessage(resolved.displayName, waited.waitedMs),
+              });
+            else if (waited.kind === 'cancelled') writer.write({ type: 'abort' });
+            else {
+              void recordHandoff(resolved.providerId ?? '', turn.promptMessageId, waited.tag);
+              writer.write({ type: 'finish', finishReason: 'other' });
+            }
+            return;
+          }
+          lease = waited.lease;
+          current = launch(first);
+        }
+        if (!current) return;
         // The provider refused the input as too long before writing anything:
         // try once more with the oldest turns left out (no summary call; one
         // is queued for later turns). Never more than once.
@@ -301,16 +297,45 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
       },
       onEnd: ({ responseMessage, isAborted }) => {
         if (setupFailed) return;
-        completion ??= (async () => {
-          const status = isAborted ? 'cancelled' : current.failed ? 'error' : 'complete';
+        if (completion) return completion;
+        completion = (async () => {
+          const status = unadmitted
+            ? unadmitted.kind === 'timeout'
+              ? 'error'
+              : 'cancelled'
+            : isAborted
+              ? 'cancelled'
+              : !current || current.failed
+                ? 'error'
+                : 'complete';
+          const interrupted = isAborted && stoppedByShutdown(abortController.signal);
           outcome = {
             status,
             ...(status === 'error' ? { error: 'The model stream failed' } : {}),
           };
+          const capacityMessage =
+            unadmitted?.kind === 'timeout'
+              ? capacityTimeoutMessage(resolved.displayName, unadmitted.waitedMs)
+              : unadmitted?.kind === 'handoff'
+                ? CAPACITY_HANDOFF_MESSAGE
+                : undefined;
 
           try {
-            await persistAssistant(turn, run, responseMessage, status, () =>
-              runUsage(current.result, current.loop, status),
+            await persistAssistant(
+              turn,
+              run,
+              responseMessage,
+              status,
+              async () => {
+                const usage = current ? await runUsage(current.result, current.loop, status) : null;
+                // The tokens-per-minute estimate becomes what was used.
+                await lease?.settle(
+                  usage ? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) : null,
+                );
+                return usage;
+              },
+              interrupted,
+              unadmitted ? { errorMessage: capacityMessage } : undefined,
             );
           } catch (error) {
             outcome = { status: 'error', error: 'Assistant message persistence failed' };
@@ -321,8 +346,10 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
           } finally {
             // Release on generation end, not response close: clients may disconnect
             // and resume the same run while it continues generating.
+            await lease?.release();
             await releaseRunHandles(run);
             observeChatReply(outcome.status, run.startedAt);
+            if (interrupted) await recordDrainInterruptedReply();
           }
           // After the claim is released: a reply that took the history past
           // the soft threshold queues a background summary for later turns.
@@ -335,6 +362,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
               reply: responseMessage,
             });
         })();
+        // Done once saved, settled and (when resumable) finalized in Redis.
+        void Promise.allSettled([completion, capture]).then(() => untrack?.());
         return completion;
       },
     });
@@ -353,7 +382,8 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
               // Once started it exclusively owns Redis finalization, even if
               // response construction subsequently throws.
               captureStarted = true;
-              return captureChatRun(runIdentity, stream, () => outcome);
+              capture = captureChatRun(runIdentity, stream, () => outcome);
+              return capture;
             },
           }
         : {}),
@@ -362,9 +392,12 @@ export async function streamResponse(turn: PreparedTurn, run: AcquiredRun) {
     setupFailed = true;
     outcome = { status: 'error', error: 'Stream setup failed' };
     abortController.abort('setup-failed');
+    await lease?.release();
+    if (capacity?.kind === 'waiting') await capacity.cancel();
     // If SDK completion already began, let its measured usage settle first.
     await completion;
     await failRunSetup(run, { modelStarted, abandon: !captureStarted });
+    untrack?.();
     throw error;
   }
 }

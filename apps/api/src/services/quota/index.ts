@@ -132,9 +132,10 @@ async function loadOverrides(userId: string, policyIds: string[]): Promise<Map<s
 }
 
 /**
- * Sums a user's consumption from per-event rows. A daily rollup cannot answer
- * a rolling or non-UTC calendar window, so events are the source of truth.
- * In-flight reservations count so the meter reflects work already committed.
+ * Sums a user's consumption over a window: from the hourly usage rollups plus
+ * the events of the partial first hour, or from the events before the rollup
+ * backfill finishes (usage-totals.ts). In-flight reservations count so the
+ * meter reflects work already committed.
  */
 async function windowTotals(
   userId: string,

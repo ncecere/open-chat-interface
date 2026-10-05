@@ -1,4 +1,4 @@
-import { eq, schema } from '@oci/db';
+import { and, eq, ne, schema } from '@oci/db';
 import type { ClaimRoleMapping, UserRole } from '@oci/shared';
 import { USER_ROLES } from '@oci/shared';
 import { db } from '../db/index.js';
@@ -185,7 +185,12 @@ export async function applySsoProvisioning(params: {
 
   const role = matched ?? policy.defaultRole;
 
-  await db.update(schema.user).set({ role }).where(eq(schema.user.id, params.userId));
+  // Only when it changed: a role is recalculated on every sign-in, and in a
+  // sign-in storm most people's role is what it was (no row write, no WAL).
+  await db
+    .update(schema.user)
+    .set({ role })
+    .where(and(eq(schema.user.id, params.userId), ne(schema.user.role, role)));
 
   logger.info(
     { userId: params.userId, providerId: params.providerId, role },

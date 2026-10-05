@@ -22,6 +22,7 @@ import {
   Row,
   RowList,
 } from '~/components/admin/admin-ui';
+import { CapacityLimitsButton } from '~/components/admin/capacity-limits';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { EmbeddingsSection } from '~/components/admin/embeddings-section';
 import { ModelFormDialog } from '~/components/admin/model-form-dialog';
@@ -152,6 +153,8 @@ function ModelRow({
             </Badge>
           ))}
         </div>
+
+        <CapacityLimitsButton target={{ kind: 'model', id: model.id, name: model.displayName }} />
 
         <EditOnly>
           <Button

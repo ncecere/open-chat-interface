@@ -18,7 +18,99 @@ export {
   or,
   sql,
 } from 'drizzle-orm';
+export {
+  type BackgroundBatchInput,
+  type BackgroundBatchResult,
+  type BackgroundMigrationDefinition,
+  type BatchTransaction,
+  backgroundMigrations,
+  ENCRYPTED_JSON_KEY,
+  ENCRYPTED_LOCATIONS,
+  type EncryptedLocation,
+  encryptedJsonValues,
+  reencryptJson,
+  rewriteMessagesInPlace,
+  type SecretCodec,
+  SecretReencryptionError,
+  secretReencryptionMigrations,
+  setSecretCodec,
+  TEST_BACKGROUND_MIGRATIONS_ENV,
+  usageRollupBackfill,
+} from './background/index.js';
 export * from './client.js';
-export { migrationsApplied, runMigrations, runMigrationsWithLock } from './migrator.js';
+export {
+  DEFAULT_MIGRATION_LOCK_TIMEOUT_MS,
+  DEFAULT_MIGRATION_STATEMENT_TIMEOUT_MS,
+  DEFAULT_POST_MIGRATION_STATEMENT_TIMEOUT_MS,
+  type LockBlocker,
+  type LockWait,
+  MIGRATION_LOCK_TIMEOUT_LIMITS,
+  MIGRATION_STATEMENT_TIMEOUT_LIMITS,
+  MigrationLockTimeoutError,
+  type MigrationRetryEvent,
+  type MigrationTimeouts,
+  migrationRetryDelay,
+  migrationTimeoutsFromEnv,
+  postgresErrorCode,
+  postMigrationTimeoutsFromEnv,
+} from './migration-safety.js';
+export {
+  type MigrationOptions,
+  type MigrationResult,
+  migrationsApplied,
+  runMigrations,
+  runMigrationsWithLock,
+} from './migrator.js';
+export {
+  type PostMigrationOptions,
+  type PostMigrationResult,
+  type PostStep,
+  type PostStepResult,
+  type PostStepState,
+  postStepStates,
+  preDeployApplied,
+  readPostSteps,
+  runPostMigrations,
+  scheduleBackgroundMigrations,
+} from './post-migrator.js';
+export {
+  DEFAULT_MIGRATIONS_FOLDER,
+  DEFAULT_POST_FOLDER,
+  DEFAULT_RELEASE_MANIFEST,
+  describeRequirement,
+  type JournalEntry,
+  type MigrationHistory,
+  migrationHistory,
+  pendingMigrations,
+  type ReleaseEntry,
+  type ReleaseRequirements,
+  readJournal,
+  readReleaseManifest,
+  releaseOf,
+  type UnfinishedRequirement,
+  UnfinishedRequirementsError,
+  unfinishedRequirements,
+} from './release-manifest.js';
 export * as schema from './schema/index.js';
 export { seedDatabase } from './seed.js';
+export {
+  type IndexBuild,
+  indexBuild,
+  loadSqlParser,
+  mustRunOutsideTransaction,
+  type ParsedStatement,
+  parseStatements,
+  type StatementCost,
+  statementCost,
+  tablesCreated,
+  tablesTouched,
+} from './sql-analysis.js';
+export {
+  type FoldResult,
+  foldAllUsageRollupChanges,
+  foldUsageRollupChanges,
+  USAGE_ROLLUP_BACKFILL,
+  USAGE_ROLLUP_FOLD_BATCH,
+  USAGE_ROLLUP_FOLD_LOCK_KEY,
+  usageRollupBacklog,
+} from './usage-rollups.js';

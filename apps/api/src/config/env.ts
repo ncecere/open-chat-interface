@@ -17,8 +17,26 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  /**
+   * Lock-safe migrations (v0.11). Each migration statement may wait this long
+   * for a lock before the attempt rolls back and is retried, so a blocked
+   * migration never queues readers behind it for longer. The migrator reads
+   * these itself (packages/db/src/migration-safety.ts, same bounds); they are
+   * declared here so a bad value fails at startup.
+   */
+  MIGRATION_LOCK_TIMEOUT_MS: z.coerce.number().int().min(100).max(600_000).default(3_000),
+  /** Per-statement limit for migrations; 0 disables it. Default 15 minutes. */
+  MIGRATION_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).max(86_400_000).default(900_000),
   REDIS_URL: z.string().optional(),
   CHAT_STREAM_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  /**
+   * Draining on shutdown (v0.11). After SIGTERM a replica reports not-ready,
+   * refuses new chat turns and lets replies in progress finish for up to this
+   * long; past it, each remaining reply is saved as interrupted. Set it below
+   * the orchestrator's grace period (Kubernetes terminationGracePeriodSeconds,
+   * Compose stop_grace_period), leaving a few seconds for the final saves.
+   */
+  SHUTDOWN_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(0).max(3_600_000).default(25_000),
 
   AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters'),
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 characters'),
@@ -74,6 +92,192 @@ const envSchema = z.object({
   OTEL_SERVICE_NAME: z.string().trim().min(1).default('oci-api'),
   /** Directory holding pg_dump and pg_restore; found on PATH when unset. */
   BACKUP_PG_BIN_DIR: z.string().trim().min(1).optional(),
+
+  // --- Three-phase migrations (v0.11 design, section 1; docs/OPERATIONS.md) ---
+  /**
+   * Per-step limit for post-deploy steps (`migrate --post`), which run
+   * outside a transaction and may build an index over the largest table
+   * without blocking it. Read by packages/db itself; declared here so a bad
+   * value fails at startup. 0 disables it. Default four hours.
+   */
+  POST_MIGRATION_STATEMENT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(86_400_000)
+    .default(14_400_000),
+  /**
+   * Whether this process applies post-deploy steps and schedules background
+   * migrations itself, from a background job. Unset follows RUN_MIGRATIONS: a
+   * replica that migrates itself at startup is a single instance, so once it
+   * runs, every replica runs this release. With several replicas leave it
+   * false and run `migrate --post` after replacing them all.
+   */
+  RUN_POST_MIGRATIONS: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === 'true')),
+  /** Whether this process runs background migration batches (default true). */
+  BACKGROUND_MIGRATIONS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  /**
+   * Throttles: batches wait while a standby's replay lag (pg_stat_replication,
+   * needs pg_monitor) or the oldest open transaction is over these limits.
+   * 0 turns a check off.
+   */
+  BACKGROUND_MIGRATION_MAX_REPLICATION_LAG_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(3_600_000)
+    .default(10_000),
+  BACKGROUND_MIGRATION_MAX_TRANSACTION_AGE_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(86_400_000)
+    .default(300_000),
+  /** statement_timeout for one batch's transaction. */
+  BACKGROUND_MIGRATION_BATCH_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(3_600_000)
+    .default(30_000),
+  /** Test only: test background migrations to enable, comma-separated (packages/db). */
+  OCI_TEST_BACKGROUND_MIGRATIONS: z.string().optional(),
+  /**
+   * Process role (v0.11 design, item 14; docs/OPERATIONS.md, "Process roles").
+   *
+   * - `all` (default): serves the API and runs background jobs, as before.
+   * - `web`: serves the API only. Background work (imports, embeddings,
+   *   summaries, webhooks, backups, compliance exports, retention, the
+   *   interrupted-reply sweep) is queued for a worker, so a `web`-only
+   *   deployment needs at least one `worker` or `all` replica.
+   * - `worker`: runs background jobs and serves only /api/health/live,
+   *   /api/health/ready and /metrics on API_PORT.
+   */
+  OCI_ROLE: z.enum(['web', 'worker', 'all']).default('all'),
+
+  // --- Connection pooling and read routing (v0.11 design, section 11) -------
+  // docs/OPERATIONS.md, "Connection pooling". DATABASE_URL is the
+  // application pool: it may point at a transaction-mode pooler (PgBouncer),
+  // because nothing on it keeps session state between transactions.
+  /** Connections in the application pool, per replica. */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(500).default(10),
+  /**
+   * The control connections: migrations, session advisory locks (background
+   * jobs, `migrate --post`), LISTEN (workers) and pg_dump. Must reach
+   * PostgreSQL directly or through a session-mode pooler. Defaults to
+   * DATABASE_URL, which is right whenever that is not a transaction-mode pooler.
+   */
+  CONTROL_DATABASE_URL: z.string().optional(),
+  /**
+   * A streaming replica for heavy administrative reads that tolerate a second
+   * of staleness (usage reports, the overview, audit log search and export).
+   * Used only while it has replayed what the primary had written
+   * READ_DATABASE_MAX_LAG_MS ago; otherwise, and when unset, reads go to the
+   * primary. Never used for a person's own data.
+   */
+  READ_DATABASE_URL: z.string().optional(),
+  READ_DATABASE_MAX_LAG_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
+  READ_DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(500).default(5),
+
+  // --- Redis high availability (v0.11 design, item 16) ----------------------
+  // docs/OPERATIONS.md, "Redis". One of REDIS_URL (one server),
+  // REDIS_SENTINELS (Sentinel) or REDIS_CLUSTER_NODES (Redis Cluster); when
+  // several are set, Cluster wins over Sentinel over REDIS_URL. Redis is
+  // required for more than one replica.
+  /** Sentinels, `host:port` separated by commas. */
+  REDIS_SENTINELS: z.string().optional(),
+  /** The Sentinel master group name. */
+  REDIS_SENTINEL_NAME: z.string().trim().min(1).default('mymaster'),
+  REDIS_SENTINEL_USERNAME: z.string().optional(),
+  REDIS_SENTINEL_PASSWORD: z.string().optional(),
+  /** TLS to the sentinels themselves (REDIS_TLS covers the data nodes). */
+  REDIS_SENTINEL_TLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  /** Cluster seed nodes, `host:port` separated by commas. */
+  REDIS_CLUSTER_NODES: z.string().optional(),
+  /** Credentials for Sentinel-managed or Cluster data nodes (REDIS_URL carries its own). */
+  REDIS_USERNAME: z.string().optional(),
+  REDIS_PASSWORD: z.string().optional(),
+  /** TLS to Sentinel-managed or Cluster data nodes (use rediss:// with REDIS_URL). */
+  REDIS_TLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  /** A PEM file of certificate authorities to trust for Redis TLS. */
+  REDIS_TLS_CA_FILE: z.string().optional(),
+  /** Longest a single Redis command may take before it fails (and Redis is treated as away). */
+  REDIS_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(2_000),
+
+  // --- Embedding generations (v0.11 design, section 7) ---------------------
+  /**
+   * How long a replaced embeddings generation is kept after searches move to
+   * the new one, before the `embeddings.rebuild` job drops its table.
+   */
+  EMBEDDING_GENERATION_GRACE_MINUTES: z.coerce.number().int().min(1).max(525_600).default(1_440),
+  /** Pause after every 64 passages a rebuild embeds, to spread the provider's load. */
+  EMBEDDING_REBUILD_PAUSE_MS: z.coerce.number().int().min(0).max(60_000).default(250),
+
+  // --- Read-only maintenance mode (v0.11 design, section 9) -----------------
+  // docs/admin/maintenance.md. For emergencies: on regardless of the
+  // administrator's setting, and it cannot be turned off from the UI. Set it
+  // on every replica (and worker) at once.
+  OCI_READ_ONLY: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  /** Shown to people while OCI_READ_ONLY is on. */
+  OCI_READ_ONLY_REASON: z.string().trim().max(500).optional(),
+
+  // --- Sign-in storms (v0.11 design, item 22) -------------------------------
+  // docs/OPERATIONS.md, "Sign-in limits". Counted in Redis, shared by every
+  // replica. RATE_LIMIT_AUTH_PER_MINUTE (above) is the failed attempts one
+  // account may have per minute.
+  /**
+   * Failed sign-in attempts (and every sign-up, password reset and
+   * verification request) per client address per minute. Many people can
+   * share one address (a campus NAT), so this is far higher than the per
+   * account limit; every request from one address, successful or not, is
+   * also capped at ten times this.
+   */
+  RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE: z.coerce.number().int().min(1).max(1_000_000).default(300),
+  /**
+   * Single sign-on callbacks per identity provider per minute, from all
+   * addresses together, so one misbehaving provider cannot starve the others.
+   */
+  RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1_000_000)
+    .default(3_000),
+
+  // --- Encryption key rotation (v0.11 design, item 23) ----------------------
+  // docs/OPERATIONS.md, "Rotating ENCRYPTION_KEY".
+  /**
+   * Earlier values of ENCRYPTION_KEY, separated by commas: used only to
+   * decrypt values not yet re-encrypted under ENCRYPTION_KEY. Remove one
+   * once System health reports no value still uses it.
+   */
+  ENCRYPTION_KEYS_PREVIOUS: z
+    .string()
+    .optional()
+    .refine(
+      (value) =>
+        (value ?? '')
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .every((entry) => entry.length >= 32),
+      { message: 'Every key in ENCRYPTION_KEYS_PREVIOUS must be at least 32 characters' },
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;

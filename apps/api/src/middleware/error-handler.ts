@@ -9,6 +9,7 @@ import {
   isLegalHoldViolation,
 } from '../services/compliance/hold-errors.js';
 import { errors } from '../services/observability/metrics.js';
+import { lostConnectionDuring, RETRYABLE_HEADER, RETRYABLE_REASON } from './read-retry.js';
 
 export function errorHandler(error: Error, c: Context): Response {
   if (error instanceof AppError) {
@@ -46,6 +47,28 @@ export function errorHandler(error: Error, c: Context): Response {
       error: { code: ERROR_CODES.CONFLICT, message: HELD_ACCOUNT_DELETION_MESSAGE },
     };
     return c.json(body, 409);
+  }
+
+  // A database failover (v0.11): reads are run again by middleware/read-retry.ts;
+  // anything else tells the client it may send the request again.
+  if (lostConnectionDuring(c.req.raw, error)) {
+    logger.warn(
+      { err: error, path: c.req.path, method: c.req.method },
+      'Request failed: database connection lost',
+    );
+    errors.inc({ source: 'database-connection' });
+    return c.json(
+      {
+        error: {
+          code: ERROR_CODES.INTERNAL_ERROR,
+          message:
+            'The connection to the database was interrupted. Try again; if you were saving something, check whether it was saved first.',
+          retryable: true,
+        },
+      },
+      500,
+      { [RETRYABLE_HEADER]: RETRYABLE_REASON, 'retry-after': '1' },
+    );
   }
 
   logger.error({ err: error, path: c.req.path }, 'Unhandled error');
