@@ -10,7 +10,9 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   signup: vi.fn(),
   signin: vi.fn(),
+  sso: vi.fn(),
   required: false,
+  ssoProviders: [] as { providerId: string; label: string; autoRedirect: boolean }[],
 }));
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mocks.navigate,
@@ -23,7 +25,7 @@ vi.mock('../../src/hooks/use-auth-status', () => ({
       registrationMode: 'open',
       emailVerificationRequired: mocks.required,
       smtpConfigured: true,
-      ssoProviders: [],
+      ssoProviders: mocks.ssoProviders,
       branding: {},
     },
     isLoading: false,
@@ -32,7 +34,7 @@ vi.mock('../../src/hooks/use-auth-status', () => ({
 vi.mock('../../src/lib/auth-client', () => ({
   authClient: {
     signUp: { email: mocks.signup },
-    signIn: { email: mocks.signin },
+    signIn: { email: mocks.signin, sso: mocks.sso },
   },
 }));
 let container: HTMLDivElement;
@@ -50,6 +52,9 @@ beforeEach(() => {
   mocks.signup.mockReset();
   mocks.signin.mockReset();
   mocks.required = false;
+  mocks.sso.mockReset();
+  mocks.ssoProviders = [];
+  window.history.replaceState(null, '', '/auth/login');
 });
 afterEach(async () => {
   await act(() => root.unmount());
@@ -102,4 +107,27 @@ it('drops what was cached while signed out before entering the app', async () =>
   expect(mocks.navigate).toHaveBeenCalledWith({ to: '/' });
   expect(client.getQueryData(['me'])).toBeUndefined();
   expect(client.getQueryData(['projects', 'sidebar'])).toBeUndefined();
+});
+
+it('asks the SSO plugin to bring a refused sign-in back to this page', async () => {
+  mocks.ssoProviders = [{ providerId: 'campus', label: 'Campus SSO', autoRedirect: false }];
+  mocks.sso.mockResolvedValue({ data: { url: 'https://idp.example.test' }, error: null });
+  await act(() => root.render(withClient(<LoginPage />)));
+  const button = [...container.querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.includes('Continue with Campus SSO'),
+  );
+  await act(async () => button?.click());
+  // Without an error URL a refusal went to "/", whose guard redirected here
+  // and dropped the reason.
+  expect(mocks.sso).toHaveBeenCalledWith({
+    providerId: 'campus',
+    callbackURL: '/',
+    errorCallbackURL: '/auth/login',
+  });
+});
+
+it('explains a sign-in refused because the provider may not link to an existing account', async () => {
+  window.history.replaceState(null, '', '/auth/login?error=unable+to+link+account');
+  await act(() => root.render(withClient(<LoginPage />)));
+  expect(container.textContent).toContain('An account with this email address already exists');
 });

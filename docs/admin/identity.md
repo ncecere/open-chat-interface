@@ -119,8 +119,17 @@ more people than should reach your instance.
 
 ### Trust for account linking
 
-Off by default. When on, a sign-in attaches to an existing local account with
-the same address.
+Off by default. It decides only what happens when somebody signs in through
+this provider with the address of an account that already exists (one with a
+password, or another provider's sign-in):
+
+- **Off:** that sign-in is refused, and the sign-in page says an account with
+  that address already exists. People without an account are still signed in
+  (and provisioned, if just-in-time provisioning is on), and people who have
+  signed in through this provider before keep signing in.
+- **On:** the sign-in attaches to the existing account, provided the address
+  is in the provider's first allowed domain and the existing account's email
+  address has been verified.
 
 Only enable this for a provider that genuinely verifies email ownership. One
 that does not could be used to take over an account by asserting somebody else's

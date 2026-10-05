@@ -256,10 +256,12 @@ test-only and must never be reused.
 
 ### Account linking
 
-When two providers assert the same email, the second sign-in is refused unless
-that provider is marked **Trust for account linking**. The toggle is off by
-default and, once enabled, linking still requires the email domain to match the
-provider's allowed domains.
+A sign-in through a provider whose address matches an existing account (one
+with a password or another provider's sign-in) is refused unless that provider
+is marked **Trust for account linking**. The toggle is off by default and does
+not affect anybody else: new people are signed in either way. Once enabled,
+linking still requires the email domain to match the provider's allowed domains
+and the existing account's address to be verified.
 
 Enable it only for an identity provider that genuinely verifies email
 ownership. One that does not could assert an existing user's address and take

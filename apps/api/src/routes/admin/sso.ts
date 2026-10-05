@@ -182,8 +182,11 @@ ssoRoutes.post('/providers', async (c) => {
       enabled: input.enabled,
       jitProvisioning: input.jitProvisioning,
       trustedForLinking: input.trustedForLinking,
-      // The plugin reads domainVerified; trustedForLinking is the admin control.
-      domainVerified: input.trustedForLinking,
+      // The SSO plugin refuses every sign-in from a provider whose domain is
+      // not verified, so a configured provider is always verified. Linking to
+      // existing accounts is a separate decision, enforced by OCI from
+      // trustedForLinking (auth/sso-linking.ts).
+      domainVerified: true,
       allowedDomains: input.allowedDomains,
       defaultRole: input.defaultRole,
       claimRoleMappings: input.claimRoleMappings,
@@ -244,10 +247,7 @@ ssoRoutes.patch('/providers/:providerId', async (c) => {
 
   await db
     .update(schema.ssoProvider)
-    .set({
-      ...patch,
-      ...(patch.trustedForLinking !== undefined && { domainVerified: patch.trustedForLinking }),
-    })
+    .set(patch)
     .where(eq(schema.ssoProvider.providerId, providerId));
 
   await recordAudit({

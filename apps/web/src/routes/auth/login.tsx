@@ -11,6 +11,24 @@ import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
 
+/**
+ * Where the SSO plugin sends a refused sign-in (no matching role, a provider
+ * not trusted to link to an existing account, a failed discovery). Without it
+ * the refusal went to the callback URL, `/`, whose guard redirects a signed-out
+ * visitor here and drops the query, so the reason was never shown.
+ */
+const SSO_ERROR_URL = '/auth/login';
+
+const ACCOUNT_EXISTS =
+  'An account with this email address already exists. Sign in the way you usually do; this identity provider is not trusted to sign in to existing accounts. An administrator can change that under Single sign-on.';
+
+/** Better Auth's error codes for a refused SSO sign-in, which are not sentences. */
+const SSO_ERROR_TEXT: Record<string, string> = {
+  'account not linked': ACCOUNT_EXISTS,
+  'unable to link account': ACCOUNT_EXISTS,
+  ACCOUNT_NOT_LINKED: ACCOUNT_EXISTS,
+};
+
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -46,7 +64,7 @@ export function LoginPage() {
 
   async function handleSso(providerId: string) {
     setError(null);
-    await authClient.signIn.sso({ providerId, callbackURL: '/' });
+    await authClient.signIn.sso({ providerId, callbackURL: '/', errorCallbackURL: SSO_ERROR_URL });
   }
 
   /**
@@ -62,7 +80,11 @@ export function LoginPage() {
     const code = params.get('error');
     if (!description && !code) return;
 
-    setError(description || 'Your account is not authorised to use this application.');
+    setError(
+      (code && SSO_ERROR_TEXT[code]) ||
+        description ||
+        'Your account is not authorised to use this application.',
+    );
   }, []);
 
   /**
@@ -82,7 +104,12 @@ export function LoginPage() {
     const auto = status.ssoProviders.find((provider) => provider.autoRedirect);
     // Called directly rather than through handleSso, which is rebuilt on every
     // render and would re-run this effect each time.
-    if (auto) void authClient.signIn.sso({ providerId: auto.providerId, callbackURL: '/' });
+    if (auto)
+      void authClient.signIn.sso({
+        providerId: auto.providerId,
+        callbackURL: '/',
+        errorCallbackURL: SSO_ERROR_URL,
+      });
   }, [status, error]);
 
   const appName = status?.branding.appName;
