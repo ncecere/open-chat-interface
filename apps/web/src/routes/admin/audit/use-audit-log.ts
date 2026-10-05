@@ -20,6 +20,19 @@ export const RANGES = [
 
 export const PAGE_SIZE = 50;
 
+/** One account whose events, as actor or as target, the log is narrowed to. */
+export interface AuditSubject {
+  id: string;
+  /** Shown in the filter chip; the filter itself is by id. */
+  email: string | null;
+}
+
+function subjectFromUrl(): AuditSubject | null {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('user')?.trim();
+  return id ? { id, email: params.get('userEmail') } : null;
+}
+
 export function useAuditLog() {
   /**
    * Seeded from the query string so a link can arrive pre-filtered.
@@ -30,6 +43,7 @@ export function useAuditLog() {
   const [search, setSearch] = useState(
     () => new URLSearchParams(window.location.search).get('search') ?? '',
   );
+  const [subject, setSubject] = useState<AuditSubject | null>(subjectFromUrl);
   const [action, setAction] = useState('all');
   const [range, setRange] = useState<string>('all');
   const [page, setPage] = useState(0);
@@ -45,13 +59,14 @@ export function useAuditLog() {
       offset: String(page * PAGE_SIZE),
     });
     if (search.trim()) params.set('search', search.trim());
+    if (subject) params.set('userId', subject.id);
     if (action !== 'all') params.set('action', action);
 
     const days = RANGES.find((option) => option.value === range)?.days;
     if (days) params.set('from', new Date(Date.now() - days * 86_400_000).toISOString());
 
     return params;
-  }, [search, action, range, page]);
+  }, [search, subject, action, range, page]);
 
   const audit = useQuery({
     queryKey: ['admin', 'audit', queryParams.toString()],
@@ -89,11 +104,26 @@ export function useAuditLog() {
     });
   }
 
-  const hasFilters = search.trim() !== '' || action !== 'all' || range !== 'all';
+  const hasFilters =
+    search.trim() !== '' || subject !== null || action !== 'all' || range !== 'all';
+
+  function clearFilters() {
+    setSearch('');
+    setSubject(null);
+    setAction('all');
+    setRange('all');
+    setPage(0);
+  }
 
   return {
     search,
     setSearch,
+    subject,
+    clearSubject: () => {
+      setPage(0);
+      setSubject(null);
+    },
+    clearFilters,
     action,
     setAction,
     range,

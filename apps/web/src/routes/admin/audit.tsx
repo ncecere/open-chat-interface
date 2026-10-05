@@ -1,4 +1,4 @@
-import { Download, ScrollText, Search } from 'lucide-react';
+import { Download, ScrollText, Search, X } from 'lucide-react';
 import { AdminPageHeader, EmptyState } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -12,6 +12,9 @@ export function AdminAuditPage() {
   const {
     search,
     setSearch,
+    subject,
+    clearSubject,
+    clearFilters,
     action,
     setAction,
     range,
@@ -96,6 +99,25 @@ export function AdminAuditPage() {
         </Button>
       </div>
 
+      {subject && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-control)] py-1 pr-1 pl-3">
+            Events by or about{' '}
+            <span className="font-medium text-[var(--text-primary)]">
+              {subject.email ?? subject.id}
+            </span>
+            <button
+              type="button"
+              onClick={clearSubject}
+              aria-label={`Stop showing only events by or about ${subject.email ?? subject.id}`}
+              className="rounded-full p-1 text-[var(--text-muted)] hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)]"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        </div>
+      )}
+
       {audit.isLoading ? (
         <div
           className="flex min-h-56 items-center justify-center"
@@ -130,16 +152,7 @@ export function AdminAuditPage() {
           <p className="text-xs text-[var(--text-muted)]">
             Try another search or clear the filters.
           </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setSearch('');
-              setAction('all');
-              setRange('all');
-              setPage(0);
-            }}
-          >
+          <Button variant="secondary" size="sm" onClick={clearFilters}>
             Clear filters
           </Button>
         </div>

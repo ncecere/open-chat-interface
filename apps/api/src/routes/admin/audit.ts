@@ -18,6 +18,12 @@ export const auditRoutes = new Hono<AppBindings>();
  */
 const listQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
+  /**
+   * Every event by or about one account: it acted, or it was the target. The
+   * same rule as the Recent activity panel on the account's page, which links
+   * here with it.
+   */
+  userId: z.string().trim().min(1).max(200).optional(),
   action: z.string().trim().max(120).optional(),
   actorEmail: z.string().trim().max(320).optional(),
   from: z.string().datetime().optional(),
@@ -36,6 +42,15 @@ function buildWhere(filters: Omit<AuditFilters, 'limit' | 'offset'>) {
           ilike(schema.auditLog.action, containsPattern(filters.search)),
           ilike(schema.auditLog.targetId, containsPattern(filters.search)),
           ilike(schema.auditLog.ipAddress, containsPattern(filters.search)),
+          // Metadata holds what the other columns do not: the email of a
+          // deleted account, a role change's from and to, a provider's name.
+          ilike(sql`${schema.auditLog.metadata}::text`, containsPattern(filters.search)),
+        )
+      : undefined,
+    filters.userId
+      ? or(
+          eq(schema.auditLog.actorUserId, filters.userId),
+          eq(schema.auditLog.targetId, filters.userId),
         )
       : undefined,
     // Matches a family as well as an exact action, so "auth." finds every

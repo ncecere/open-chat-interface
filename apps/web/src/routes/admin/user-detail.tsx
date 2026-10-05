@@ -309,7 +309,9 @@ export function AdminUserDetailPage() {
         <p className="mb-3 text-xs">
           <Link
             to="/admin/audit"
-            search={{ search: user.email }}
+            // By id, as actor or target, so actions taken *on* this account
+            // are included (they carry the admin's email, not this one).
+            search={{ user: user.id, userEmail: user.email }}
             className="text-[var(--accent-bright)] hover:underline"
           >
             See every event for this account
