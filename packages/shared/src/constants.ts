@@ -4,6 +4,17 @@ export const APP_SHORT_NAME = 'OCI';
 export const USER_ROLES = ['admin', 'auditor', 'user', 'restricted'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+/**
+ * Who sees a newly added model unless the administrator chooses otherwise:
+ * everyone who chats. Auditors review the instance and see no models by
+ * default (docs/admin/models-providers.md).
+ */
+export const DEFAULT_MODEL_ROLES = [
+  'admin',
+  'user',
+  'restricted',
+] as const satisfies readonly UserRole[];
+
 export const REGISTRATION_MODES = ['open', 'invite_only', 'closed'] as const;
 export type RegistrationMode = (typeof REGISTRATION_MODES)[number];
 

@@ -1,5 +1,6 @@
 import {
   type AdminModel,
+  DEFAULT_MODEL_ROLES,
   DEFAULT_OUTPUT_TOKENS,
   FALLBACK_CONTEXT_WINDOW,
   MICROS_PER_DOLLAR,
@@ -121,7 +122,8 @@ function initialDraft(model: AdminModel | null, providers: Provider[]): ModelDra
         outputPrice: '',
         capabilities: [],
         supportedEfforts: [],
-        visibleToRoles: [...USER_ROLES],
+        // As the API and Discover models: not auditors, who review, not chat.
+        visibleToRoles: [...DEFAULT_MODEL_ROLES],
         enabled: true,
         isDefault: false,
       };

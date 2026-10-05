@@ -1,4 +1,9 @@
-import type { DiscoveredModel, ModelCapability, Provider } from '@oci/shared';
+import {
+  DEFAULT_MODEL_ROLES,
+  type DiscoveredModel,
+  type ModelCapability,
+  type Provider,
+} from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -77,7 +82,7 @@ export function DiscoverModelsDialog({
           capabilities: inferCapabilities(upstreamModelId),
           supportedEfforts: [],
           enabled: true,
-          visibleToRoles: ['admin', 'user', 'restricted'],
+          visibleToRoles: [...DEFAULT_MODEL_ROLES],
           sortOrder: index,
         });
       }
