@@ -26,6 +26,7 @@ import {
   nearBest,
   RERANK_MIN_SCORE,
   SEMANTIC_MIN_SIMILARITY,
+  SEMANTIC_RELATIVE_FLOOR,
   similarEnough,
 } from '../../services/project-search/relevance.js';
 import type { RetrievedChunk } from '../../services/project-search/retrieval.js';
@@ -288,11 +289,38 @@ describe('project search relevance floors', () => {
   it('keeps meaning-based matches at or above the similarity floor', () => {
     expect(SEMANTIC_MIN_SIMILARITY).toBe(0.2);
     const nearest = [0.1, 0.5, 0.8, 0.81, 1.2].map((distance, id) => ({ id, distance }));
-    // Cosine distance 0.8 is similarity 0.2: kept; 0.81 (similarity 0.19) is not.
-    expect(similarEnough(nearest).map((item) => item.id)).toEqual([0, 1, 2]);
-    expect(similarEnough(nearest, 0.5).map((item) => item.id)).toEqual([0, 1]);
+    // The absolute floor alone (the relative one, tested below, turned off):
+    // cosine distance 0.8 is similarity 0.2, kept; 0.81 (similarity 0.19) is not.
+    const absolute = (minSimilarity?: number) =>
+      similarEnough(nearest, minSimilarity, 0).map((item) => item.id);
+    expect(absolute()).toEqual([0, 1, 2]);
+    expect(absolute(0.5)).toEqual([0, 1]);
     expect(similarEnough([{ distance: Number.NaN }])).toEqual([]);
     expect(similarEnough([])).toEqual([]);
+  });
+
+  it('keeps only passages close in meaning to the best one, not the whole topic (#65)', () => {
+    expect(SEMANTIC_RELATIVE_FLOOR).toBe(0.7);
+    // Similarities measured in the QA walk's 2,000-passage library handbook
+    // (text-embedding-3-small) for the rare-books vault question: the answer,
+    // its neighbour, then library text that is on topic but no answer.
+    const similarities = [0.77, 0.661, 0.39, 0.378, 0.364, 0.36];
+    const nearest = similarities.map((similarity, id) => ({ id, distance: 1 - similarity }));
+    expect(similarEnough(nearest).map((item) => item.id)).toEqual([0, 1]);
+    // A second, weaker topic within 0.7 of the best stays.
+    const twoTopics = [0.648, 0.6, 0.479, 0.46, 0.44].map((similarity, id) => ({
+      id,
+      distance: 1 - similarity,
+    }));
+    expect(similarEnough(twoTopics).map((item) => item.id)).toEqual([0, 1, 2, 3]);
+    // Nothing stands out: nothing to tell apart, so all are kept.
+    const flat = [0.338, 0.335, 0.334, 0.31].map((similarity, id) => ({
+      id,
+      distance: 1 - similarity,
+    }));
+    expect(similarEnough(flat)).toHaveLength(4);
+    // The ratio can be turned off.
+    expect(similarEnough(nearest, 0.2, 0)).toHaveLength(6);
   });
 
   it('cuts reranked results at the first relevance score below the floor', () => {

@@ -54,6 +54,26 @@ export const KEYWORD_RELATIVE_FLOOR = 0.35;
 export const SEMANTIC_MIN_SIMILARITY = 0.2;
 
 /**
+ * Meaning-based search: a chunk is kept only if its similarity is at least
+ * this fraction of the best chunk's, as keyword search keeps only chunks near
+ * its best (#65). The absolute floor above removes unrelated text but not text
+ * on the same topic. Measured in the QA walk's 2,000-passage library handbook
+ * with text-embedding-3-small (passages kept at 0.7 / 0.75 / 0.8):
+ *
+ * - the rare-books vault question: the answer 0.77, its neighbour 0.66, every
+ *   other passage (all about the library) 0.36–0.39, and 58 were sent: 2 / 2 / 2;
+ * - an after-hours contact question with no answer but the vault's: 28 / 2 / 2;
+ * - the vault plus renewing a study carrel, a question about two topics, the
+ *   second only in filler at 0.48: 129 / 4 / 2, so above 0.7 the weaker topic
+ *   is dropped. Losing a passage that answers costs more than sending one that
+ *   does not, as for the floor above.
+ *
+ * A question no passage stands out for (all about equally similar) keeps them
+ * all; only reranking, when it is on, can tell those apart.
+ */
+export const SEMANTIC_RELATIVE_FLOOR = 0.7;
+
+/**
  * Reranking: candidates the reranking model scores below this are dropped,
  * with everything ranked after them. Cohere-compatible rerankers return a
  * relevance score from 0 to 1, where unrelated text scores close to 0 (Cohere,
@@ -77,13 +97,19 @@ export function nearBest<T extends { score: number }>(
   return ranked.filter((item) => item.score >= best * ratio);
 }
 
-/** Cosine distance (pgvector's `<=>`, 1 − similarity) of items similar enough to keep. */
+/**
+ * Cosine distance (pgvector's `<=>`, 1 − similarity) of items similar enough to
+ * keep: at least `minSimilarity`, and at least `ratio` of the most similar
+ * item's similarity.
+ */
 export function similarEnough<T extends { distance: number }>(
   nearest: readonly T[],
   minSimilarity = SEMANTIC_MIN_SIMILARITY,
+  ratio = SEMANTIC_RELATIVE_FLOOR,
 ): T[] {
-  const maxDistance = 1 - minSimilarity;
-  return nearest.filter((item) => item.distance <= maxDistance);
+  const kept = nearest.filter((item) => item.distance <= 1 - minSimilarity);
+  const best = Math.max(...kept.map((item) => 1 - item.distance));
+  return kept.filter((item) => 1 - item.distance >= best * ratio);
 }
 
 /**
