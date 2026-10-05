@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, schema, sql } from '@oci/db';
+import { and, desc, eq, isNotNull, isNull, schema, sql } from '@oci/db';
 import type { OnboardingState, UsagePolicy } from '@oci/shared';
 import { db } from '../db/index.js';
 import { validationFailed } from '../lib/errors.js';
@@ -192,6 +192,67 @@ export async function publishPolicy(policyId: string): Promise<boolean> {
     .returning({ id: schema.usagePolicy.id });
 
   return published.length > 0;
+}
+
+export type DraftChange =
+  | { outcome: 'changed'; version: number; title: string }
+  | { outcome: 'not-found' }
+  | { outcome: 'published' };
+
+async function findPolicy(policyId: string) {
+  const organizationId = await getDefaultOrganizationId();
+  const [policy] = await db
+    .select({
+      id: schema.usagePolicy.id,
+      version: schema.usagePolicy.version,
+      title: schema.usagePolicy.title,
+      publishedAt: schema.usagePolicy.publishedAt,
+    })
+    .from(schema.usagePolicy)
+    .where(
+      and(
+        eq(schema.usagePolicy.id, policyId),
+        eq(schema.usagePolicy.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+  return policy;
+}
+
+/**
+ * Rewords a draft. A published version is never changed (an acceptance records
+ * agreement to specific words); the `published_at is null` condition keeps a
+ * publish that lands between the read and the write from being edited.
+ */
+export async function updatePolicyDraft(
+  policyId: string,
+  params: { title: string; body: string },
+): Promise<DraftChange> {
+  const policy = await findPolicy(policyId);
+  if (!policy) return { outcome: 'not-found' };
+  if (policy.publishedAt) return { outcome: 'published' };
+
+  const updated = await db
+    .update(schema.usagePolicy)
+    .set({ title: params.title, body: params.body, updatedAt: new Date() })
+    .where(and(eq(schema.usagePolicy.id, policyId), isNull(schema.usagePolicy.publishedAt)))
+    .returning({ id: schema.usagePolicy.id });
+  if (updated.length === 0) return { outcome: 'published' };
+  return { outcome: 'changed', version: policy.version, title: params.title };
+}
+
+/** Deletes a draft. Published versions stay, as the record of what was agreed to. */
+export async function deletePolicyDraft(policyId: string): Promise<DraftChange> {
+  const policy = await findPolicy(policyId);
+  if (!policy) return { outcome: 'not-found' };
+  if (policy.publishedAt) return { outcome: 'published' };
+
+  const deleted = await db
+    .delete(schema.usagePolicy)
+    .where(and(eq(schema.usagePolicy.id, policyId), isNull(schema.usagePolicy.publishedAt)))
+    .returning({ id: schema.usagePolicy.id });
+  if (deleted.length === 0) return { outcome: 'published' };
+  return { outcome: 'changed', version: policy.version, title: policy.title };
 }
 
 /** Marks the introduction complete and stores what the person told us. */

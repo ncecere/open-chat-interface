@@ -487,6 +487,14 @@ Consequences:
 - **A version somebody accepted cannot be deleted.** The database refuses,
   because deleting it would destroy the record of what they agreed to.
 
+### Drafts
+
+Turn off **Publish immediately** to save a draft. Nobody is asked to accept a
+draft, so it can still be reworded (**Edit**) or discarded (**Delete**) until
+you **Publish** it, which asks for confirmation first. Once published, the
+wording is fixed. **View** shows the full text of any version, drafts and
+published ones alike, to administrators and auditors.
+
 ### What is recorded
 
 The version, the moment, and the address it came from. Enough to answer "what

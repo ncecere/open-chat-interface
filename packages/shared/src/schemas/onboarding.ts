@@ -24,6 +24,13 @@ export const upsertUsagePolicySchema = z
   })
   .strict();
 
+/**
+ * Rewords a draft. Only a version nobody has been asked to accept can change;
+ * a published one is fixed (see above), so the API refuses it.
+ */
+export const updatePolicyDraftSchema = upsertUsagePolicySchema.pick({ title: true, body: true });
+export type UpdatePolicyDraftInput = z.infer<typeof updatePolicyDraftSchema>;
+
 /** What a user is asked to accept. */
 export const pendingPolicySchema = z.object({
   id: z.string(),
