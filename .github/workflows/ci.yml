@@ -195,7 +195,9 @@ jobs:
           for url in http://127.0.0.1:4180/api/health/ready http://127.0.0.1:4178; do
             for i in $(seq 1 60); do curl -fsS -o /dev/null "$url" && break; sleep 1; done
           done
-          E2E_BASE_URL=http://127.0.0.1:4178 pnpm --filter @oci/web exec playwright test tests/e2e/long-conversation.spec.ts
+          # One worker, as locally: the specs share the fixture's one long
+          # conversation, and one of them sends a reply into it.
+          E2E_BASE_URL=http://127.0.0.1:4178 pnpm --filter @oci/web exec playwright test tests/e2e/long-conversation.spec.ts --workers=1
       - name: Preserve failed test diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
