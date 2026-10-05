@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import type { AdminModel } from '@oci/shared';
+import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTokenCount } from '../../src/components/admin/model-form-dialog';
@@ -160,5 +161,52 @@ describe('model limits', () => {
       /keep it below 32,256 tokens \(the assumed context window, less 512\), or set the context window/,
     );
     expect(api.patch).not.toHaveBeenCalled();
+  });
+});
+
+describe('the model form and inline rename (#79)', () => {
+  it('lists every problem with a new model at once', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(button('Add model'));
+    // Upstream ID, display name and slug left blank; a fraction for max output.
+    await typeInto(field('model-max-output'), '1.5');
+    // The dialog's own Add model button, not the page's.
+    const add = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (candidate) => candidate.textContent?.trim() === 'Add model',
+    );
+    await click(add!);
+    const [alert] = alerts(dialog() as HTMLElement);
+    expect(alert?.split('\n')).toEqual([
+      'Max output must be a whole number of tokens.',
+      'Upstream model ID is required.',
+      'Display name is required.',
+      'OCI slug is required.',
+    ]);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('renames on Enter, once, and puts the name back on Escape', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(
+      [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+        candidate.textContent?.endsWith('OpenAI · big-model'),
+      )!,
+    );
+    const name = field('name-m1');
+    const key = async (key: string) =>
+      act(async () => {
+        name.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      });
+
+    await typeInto(name, 'Walk renamed');
+    await key('Escape');
+    expect(name.value).toBe('Big model');
+    expect(api.patch).not.toHaveBeenCalled();
+
+    await typeInto(name, 'Walk renamed');
+    await key('Enter');
+    await act(async () => name.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledWith('/admin/models/m1', { displayName: 'Walk renamed' });
   });
 });
