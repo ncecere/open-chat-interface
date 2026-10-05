@@ -109,7 +109,8 @@ docker run -d --name oci-test-s3 -p 127.0.0.1:7070:7070 \
   --tmpfs /data --tmpfs /meta versity/versitygw:v1.8.0
 S3_TEST_ENDPOINT=http://127.0.0.1:7070 TEST_DATABASE_URL=... \
   pnpm --filter @oci/api exec vitest run src/__tests__/live/s3-storage.live.test.ts \
-  src/__tests__/live/backups.live.test.ts \
+  src/__tests__/live/backups-dump.live.test.ts src/__tests__/live/backups-admin.live.test.ts \
+  src/__tests__/live/backups-files.live.test.ts \
   src/__tests__/live/compliance-export.live.test.ts src/__tests__/live/compliance-holds.live.test.ts \
   src/__tests__/live/compliance-admin.live.test.ts src/__tests__/live/compliance-migration.live.test.ts
 ```
