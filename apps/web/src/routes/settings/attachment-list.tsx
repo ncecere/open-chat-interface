@@ -225,7 +225,8 @@ export function AttachmentList({
                       target="_blank"
                       rel="noreferrer"
                       title={attachment.filename}
-                      className="group flex min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--text-primary)] hover:underline"
+                      // 24px tall at least: the WCAG 2.2 target size (#105).
+                      className="group flex min-h-6 min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--text-primary)] hover:underline"
                     >
                       <span className="truncate">{attachment.filename}</span>
                       <ExternalLink className="size-3 shrink-0 text-[var(--text-secondary)]" />

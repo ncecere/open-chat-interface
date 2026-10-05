@@ -123,3 +123,30 @@ test('lists keyboard shortcuts only where there is a mouse or trackpad (#106)', 
   if (testInfo.project.use.hasTouch) await expect(card).toBeHidden();
   else await expect(card).toBeVisible();
 });
+
+test('attachment links are at least 24px tall, the WCAG 2.2 target size (#105)', async ({
+  page,
+}) => {
+  await signIn(page);
+  const upload = await page.request.post('/api/attachments', {
+    headers: { origin: new URL(page.url()).origin },
+    multipart: {
+      files: { name: 'walk-target-size.txt', mimeType: 'text/plain', buffer: Buffer.from('Walk') },
+    },
+  });
+  expect(upload.ok()).toBe(true);
+  const { attachments } = (await upload.json()) as { attachments: Array<{ id: string }> };
+  try {
+    await page.goto('/settings/attachments');
+    const link = page.getByRole('link', { name: 'walk-target-size.txt' }).first();
+    await expect(link).toBeVisible();
+    const box = await link.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(24);
+  } finally {
+    for (const { id } of attachments) {
+      await page.request.delete(`/api/attachments/${id}`, {
+        headers: { origin: new URL(page.url()).origin },
+      });
+    }
+  }
+});
