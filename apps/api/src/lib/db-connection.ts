@@ -17,6 +17,11 @@
  * 25006 (read-only transaction) is what a write gets from a node that was
  * just demoted to a replica, before the proxy notices.
  *
+ * The name-resolution and routing codes (ENOTFOUND, EAI_AGAIN, EHOSTUNREACH,
+ * ...) mean a new connection could not be opened at all, so nothing ran:
+ * the database host does not resolve while a Compose service is stopped, a
+ * Kubernetes pod is rescheduled or DNS fails over (#230).
+ *
  * CONNECTION_DESTROYED is left out on purpose: it is this process closing
  * its own pool on shutdown, which retrying would only prolong.
  */
@@ -34,6 +39,12 @@ export const CONNECTION_ERROR_CODES: ReadonlySet<string> = new Set([
   'ECONNREFUSED',
   'EPIPE',
   'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'EHOSTDOWN',
+  'ENETUNREACH',
+  'ENETDOWN',
   'CONNECTION_CLOSED',
   'CONNECTION_ENDED',
   'CONNECT_TIMEOUT',
@@ -58,6 +69,22 @@ export function isConnectionError(error: unknown): boolean {
     current = (current as { cause?: unknown }).cause;
   }
   return false;
+}
+
+/**
+ * An error's message for a log line, with Drizzle's wrapper (a
+ * DrizzleQueryError, whose message is the failed query and its parameters)
+ * replaced by the driver's error under it: "getaddrinfo ENOTFOUND postgres",
+ * not "Failed query: select exists ..." (#230).
+ */
+export function databaseErrorText(error: unknown): string {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5; depth++) {
+    const { query, cause } = (current ?? {}) as { query?: unknown; cause?: unknown };
+    if (typeof query !== 'string' || !(cause instanceof Error)) break;
+    current = cause;
+  }
+  return current instanceof Error ? current.message : String(current);
 }
 
 let closedConnections = 0;

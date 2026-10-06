@@ -68,6 +68,37 @@ describe.skipIf(!available)('live migration check with the database down', () =>
     }
   });
 
+  // A database host that does not resolve (a stopped Compose service, a
+  // rescheduled pod, a DNS failover) is unreachable too: the worker in #230
+  // crash-looped on the raw "Failed query: select exists ..." instead of
+  // waiting. `.invalid` never resolves (RFC 2606).
+  it('waits for a database host that does not resolve, then says it is unreachable', async () => {
+    const { logger } = await import('../../lib/logger.js');
+    vi.mocked(logger.warn).mockClear();
+    const url = new URL(live.connectionString);
+    url.hostname = 'oci-fix3-database.invalid';
+    const unresolved = createDatabase(url.toString(), { max: 1 });
+    try {
+      const started = Date.now();
+      const failure = requireMigrationsRecorded(unresolved.db, {
+        budgetMs: 600,
+        initialDelayMs: 50,
+      });
+      await expect(failure).rejects.toThrow(
+        /^Could not reach the database to check its migrations \(getaddrinfo (ENOTFOUND|EAI_AGAIN) oci-fix3-database\.invalid\)/,
+      );
+      await expect(failure).rejects.not.toThrow(/Failed query/);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(500);
+      // A clear line while it waits: the resolver's error, not the query.
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.stringMatching(/^getaddrinfo /) }),
+        'The database is unreachable; waiting for it before checking its migrations',
+      );
+    } finally {
+      await unresolved.sql.end({ timeout: 1 });
+    }
+  });
+
   it('waits for a database that comes back, then starts', async () => {
     const port = await freePort();
     const target = new URL(live.connectionString);

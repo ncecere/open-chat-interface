@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   connectionLossCount,
+  databaseErrorText,
   isConnectionError,
   noteConnectionClosed,
   retryOnConnectionError,
@@ -28,6 +29,11 @@ describe('connection-level database errors (v0.11 failover safety)', () => {
     'EPIPE',
     'CONNECTION_CLOSED',
     'CONNECTION_ENDED',
+    // The database host does not resolve or cannot be routed to (#230).
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
   ])('treats %s as a lost connection', (code) => {
     expect(isConnectionError(lost(code))).toBe(true);
   });
@@ -36,6 +42,22 @@ describe('connection-level database errors (v0.11 failover safety)', () => {
     const wrapped = Object.assign(new Error('Failed query: select 1'), { cause: lost('57P01') });
     expect(isConnectionError(wrapped)).toBe(true);
     expect(isConnectionError({ errno: 'CONNECTION_CLOSED' })).toBe(true);
+  });
+
+  it('names a lost connection by the driver’s message, not Drizzle’s failed query (#230)', () => {
+    const dns = lost('ENOTFOUND');
+    dns.message = 'getaddrinfo ENOTFOUND postgres';
+    // DrizzleQueryError's shape: the query, its parameters and the driver error.
+    const wrapped = Object.assign(new Error('Failed query: select exists (...)\nparams: '), {
+      query: 'select exists (...)',
+      params: [],
+      cause: dns,
+    });
+    expect(databaseErrorText(wrapped)).toBe('getaddrinfo ENOTFOUND postgres');
+    // Our own explanation keeps its message, though its cause is a lost connection.
+    const explained = new Error('Could not reach the database (x)', { cause: wrapped });
+    expect(databaseErrorText(explained)).toBe('Could not reach the database (x)');
+    expect(databaseErrorText(new Error('relation does not exist'))).toBe('relation does not exist');
   });
 
   it.each([

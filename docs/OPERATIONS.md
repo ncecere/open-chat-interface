@@ -610,9 +610,12 @@ replicas work through afterwards while OCI serves.
    With `RUN_MIGRATIONS=false`, startup refuses to serve unless the latest bundled
    migration's timestamp is recorded. That marker is not a schema-integrity check
    or evidence that reverting an image after newer migrations is safe. If the
-   database cannot be reached, startup waits up to 30 s for it, then exits with
-   "Could not reach the database to check its migrations", not a migration
-   error.
+   database cannot be reached (the connection is refused, or its host name does
+   not resolve), startup waits up to 30 s for it, logging "The database is
+   unreachable; waiting for it before checking its migrations" with the
+   driver's reason, then exits with "Could not reach the database to check its
+   migrations (reason)", not a migration error. A worker logs "Failed to start
+   the worker", the API "Failed to start API".
    `migrate` refuses, changing nothing, if the release requires an earlier
    release's background migration or post-deploy step that has not finished;
    the message names it. Finish it on the release you are running (step 7),

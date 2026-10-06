@@ -12,8 +12,11 @@ old primary's connections all drop at once. Open transactions roll back,
 session advisory locks are released, and every query in flight fails with a
 connection error: `57P01` (admin shutdown) or, from postgres.js,
 `CONNECTION_CLOSED`. For a few seconds new connections fail too
-(`ECONNREFUSED`, `ECONNRESET`, `57P03`), or reach a node that is no longer
-primary (`25006`, read-only transaction) until the proxy notices.
+(`ECONNREFUSED`, `ECONNRESET`, `57P03`; `ENOTFOUND` or `EAI_AGAIN` while
+the database's host name does not resolve, as for a stopped Compose service
+or a rescheduled pod), or reach a node that is no longer primary (`25006`,
+read-only transaction) until the proxy notices. All of these count as a lost
+connection (`lib/db-connection.ts`).
 
 ## What OCI does about it
 
