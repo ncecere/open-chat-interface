@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { UIMessage } from 'ai';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { preloadMarkdownRenderer } from '../../src/components/chat/markdown';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ChatThreadPage } from '../../src/routes/chat/thread';
 
@@ -111,6 +112,8 @@ const sse = (chunks: object[]) =>
     },
   );
 
+// A conversation with replies opens once the Markdown renderer is ready (#311).
+beforeAll(() => preloadMarkdownRenderer().then(() => undefined), 30_000);
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});

@@ -23,6 +23,11 @@ function tailwind() {
   });
 }
 
+/** The CSS Tailwind generates for these classes, as the app's build would (#311). */
+export async function compileClasses(classes: readonly string[]): Promise<string> {
+  return (await tailwind()).build([...classes]);
+}
+
 /** The pseudo-classes and attributes an element is in, for matching variants. */
 export type ElementState = ':focus' | ':focus-visible' | ':hover' | `[${string}]`;
 

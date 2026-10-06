@@ -2,7 +2,8 @@
 import type { UIMessage } from 'ai';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { preloadMarkdownRenderer } from '../../src/components/chat/markdown';
 import { ChatThreadPage } from '../../src/routes/chat/thread';
 
 /**
@@ -104,6 +105,8 @@ const conversation = (id: string, messages: UIMessage[]) => ({
 
 let container: HTMLDivElement;
 let root: Root;
+// A conversation with replies opens once the Markdown renderer is ready (#311).
+beforeAll(() => preloadMarkdownRenderer().then(() => undefined), 30_000);
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
