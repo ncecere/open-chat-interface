@@ -1,10 +1,9 @@
 import { useRouter } from '@tanstack/react-router';
-import { useEffect } from 'react';
 import { Button } from '~/components/ui/button';
+import { AUTO_RETRY_MS, useAutoRetry } from '~/hooks/use-auto-retry';
 
-/** How often the page tries again by itself, and for how long. */
-export const ROUTE_RETRY_MS = 5_000;
-const ROUTE_RETRY_ATTEMPTS = 24;
+/** How often the page tries again by itself (for two minutes). */
+export const ROUTE_RETRY_MS = AUTO_RETRY_MS;
 
 // Do not display exception details (including failed session responses) to users.
 // A document reload also obtains a fresh asset manifest after a deployment.
@@ -13,15 +12,7 @@ export function RouteLoadError() {
   // A few seconds of database or network trouble should not need a reload:
   // load the page again every few seconds for two minutes, and it replaces
   // this as soon as it loads (#164).
-  useEffect(() => {
-    let attempts = 0;
-    const timer = setInterval(() => {
-      attempts += 1;
-      if (attempts >= ROUTE_RETRY_ATTEMPTS) clearInterval(timer);
-      void router.invalidate();
-    }, ROUTE_RETRY_MS);
-    return () => clearInterval(timer);
-  }, [router]);
+  useAutoRetry(true, () => void router.invalidate());
   return (
     <main role="alert" className="flex min-h-64 flex-col items-center justify-center gap-4 p-6">
       <h1 className="text-lg font-semibold">Could not load this page</h1>

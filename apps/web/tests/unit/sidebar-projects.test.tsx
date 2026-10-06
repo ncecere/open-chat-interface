@@ -513,3 +513,40 @@ describe('sidebar refresh after conversation changes', () => {
     expect(titles(projectList('Empty'))).toEqual(['New Chat']);
   });
 });
+
+describe('sidebar projects during a database outage', () => {
+  // "Projects could not be loaded" stayed after a 40 s outage was over, until
+  // a reload (#233). The real query and QueryClient; the API answers 500 as
+  // it did while PostgreSQL was away.
+  it('loads the projects by itself once the outage is over', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    const { AUTO_RETRY_MS } = await import('../../src/hooks/use-auto-retry');
+    let down = true;
+    const normal = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) => {
+      if (down && path === '/projects/sidebar')
+        throw new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
+      return normal(path);
+    });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      await render();
+      expect(document.body.textContent).toContain('Projects could not be loaded.');
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_RETRY_MS);
+      });
+      await settle();
+      expect(document.body.textContent).toContain('Projects could not be loaded.');
+
+      down = false;
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_RETRY_MS);
+      });
+      await settle();
+      expect(document.body.textContent).not.toContain('Projects could not be loaded.');
+      expect(link('Thesis')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
