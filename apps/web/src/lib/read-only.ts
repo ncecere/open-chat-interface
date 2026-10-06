@@ -90,8 +90,11 @@ export async function noteReadOnlyResponse(response: Response): Promise<void> {
 }
 
 /**
- * "14:30" today, "Mon 5 Oct, 14:30" on another day this year, and with the
- * year in another year ("Sun 10 Jan 2027, 14:30", #81), in the person's own zone.
+ * "14:30 BST" today, "Mon 5 Oct, 14:30 BST" on another day this year, and with
+ * the year in another year ("Sun 10 Jan 2027, 14:30 GMT", #81), in the
+ * person's own zone, named: a scheduled window's announcement gives its times
+ * in the instance's zone, and an unnamed local time beside it read as a
+ * different time (#160).
  */
 export function formatReadOnlyTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
@@ -102,6 +105,7 @@ export function formatReadOnlyTime(iso: string, now = new Date()): string {
     ...(sameYear ? {} : { year: 'numeric' }),
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   });
 }
 

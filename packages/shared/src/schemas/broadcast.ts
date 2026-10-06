@@ -51,6 +51,12 @@ export const activeBroadcastSchema = z.object({
   body: z.string(),
   level: z.enum(BROADCAST_LEVELS),
   dismissable: z.boolean(),
+  /**
+   * When it stops being shown (ISO), so a page left open hides it then rather
+   * than at its next refresh: a scheduled window's announcement ends as the
+   * window starts (#160). Absent from servers before v0.11.1.
+   */
+  endsAt: z.string().nullable().optional(),
 });
 
 export type Broadcast = z.infer<typeof broadcastSchema>;

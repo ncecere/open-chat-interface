@@ -1,6 +1,7 @@
 import type { ActiveBroadcast } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Info, TriangleAlert, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
@@ -16,6 +17,31 @@ const LEVEL_ICONS: Record<ActiveBroadcast['level'], typeof Info> = {
   warning: TriangleAlert,
   critical: AlertTriangle,
 };
+
+/** setTimeout's longest delay; a later end is checked again after it. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * The announcements still within their end, re-rendering when the next one
+ * ends. The list is refreshed only every few minutes, so without this an
+ * open page kept a scheduled window's announcement beside the read-only
+ * banner after the window started (#160).
+ */
+function useUnexpired(broadcasts: ActiveBroadcast[]): ActiveBroadcast[] {
+  const [now, setNow] = useState(() => Date.now());
+  const ends = broadcasts
+    .map((broadcast) => (broadcast.endsAt ? Date.parse(broadcast.endsAt) : Number.NaN))
+    .filter((end) => Number.isFinite(end) && end > now);
+  const next = ends.length ? Math.min(...ends) : null;
+  useEffect(() => {
+    if (next === null) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.min(next - Date.now(), MAX_TIMER_MS));
+    return () => clearTimeout(timer);
+  }, [next]);
+  return broadcasts.filter(
+    (broadcast) => !broadcast.endsAt || !(Date.parse(broadcast.endsAt) <= now),
+  );
+}
 
 /**
  * Instance announcements, shown above the application.
@@ -59,7 +85,7 @@ export function BroadcastBanner() {
     },
   });
 
-  const broadcasts = data?.broadcasts ?? [];
+  const broadcasts = useUnexpired(data?.broadcasts ?? []);
   if (broadcasts.length === 0) return null;
 
   return (

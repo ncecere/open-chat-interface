@@ -48,7 +48,9 @@ for someone new (just-in-time provisioning).
   With **Announce it now**, everybody sees an announcement (an ordinary
   [announcement](instance-settings.md)) from now until the window starts,
   saying when and what will not work; the read-only banner takes over at the
-  start. Changing the window updates its announcement and shows it again to
+  start, on pages already open too. The announcement gives its times in the
+  instance's display time zone (Branding); the banner gives the end in each
+  person's own time zone. Both name their zone. Changing the window updates its announcement and shows it again to
   people who had hidden it; cancelling the window removes it.
 
 Every change is in the audit log as `maintenance.read_only.update`, with who

@@ -248,8 +248,14 @@ describe.skipIf(!available)('live read-only maintenance mode across replicas', (
     });
     expect(announcement?.body).toContain('read-only');
     expect(announcement?.body).toContain('Moving to the new cluster.');
+    // With its end, so an open page hides it as the window starts (#160).
     expect(await (await b.app.request('/api/me/broadcasts')).json()).toMatchObject({
-      broadcasts: [expect.objectContaining({ title: 'Scheduled maintenance' })],
+      broadcasts: [
+        expect.objectContaining({
+          title: 'Scheduled maintenance',
+          endsAt: startsAt.toISOString(),
+        }),
+      ],
     });
     // Not yet read-only.
     expect((await createProject(b)).status).toBe(201);
