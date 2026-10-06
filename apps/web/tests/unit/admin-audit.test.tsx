@@ -71,6 +71,27 @@ it("narrows the log to one account's events from the account page's link", async
   expect(document.body.textContent).not.toContain('Events by or about');
 });
 
+it('lets the keyboard reach the scrolling metadata block (#192)', async () => {
+  ({ root } = await renderAdmin(<AdminAuditPage />, { path: '/admin/audit' }));
+  // The desktop table's button; the phone list has its own.
+  const [details] = [...document.querySelectorAll<HTMLButtonElement>('button')].filter((b) =>
+    b.textContent?.trim().startsWith('Details'),
+  );
+  await click(details!);
+  const blocks = [...document.querySelectorAll('pre')].filter((pre) =>
+    pre.textContent?.includes('"banned": true'),
+  );
+  expect(blocks.length).toBeGreaterThan(0);
+  for (const pre of blocks) {
+    // The element that scrolls (axe: scrollable-region-focusable) is in the
+    // tab order and named, so a screen reader says what was reached.
+    const scroller = pre.closest('.overflow-auto') as HTMLElement;
+    expect(scroller).not.toBeNull();
+    expect(scroller.tabIndex).toBe(0);
+    expect(scroller.getAttribute('aria-label')).toBe('Metadata of user.update');
+  }
+});
+
 it('says nothing matched, not that the log is empty, when filters exclude every event', async () => {
   ({ root } = await renderAdmin(<AdminAuditPage />, { path: '/admin/audit' }));
   listing = { entries: [], total: 0 };
