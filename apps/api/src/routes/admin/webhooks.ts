@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { addUrlIssue } from '../../services/connectors/network.js';
 import { diffUpdate } from '../../services/settings-diff.js';
 import { sendTestDelivery } from '../../services/webhooks/delivery.js';
 import {
@@ -31,7 +32,14 @@ webhookRoutes.get('/:id', async (c) => c.json(await getWebhook(c.req.param('id')
 /** Registers an endpoint and returns its signing secret, this one time. */
 webhookRoutes.post('/', async (c) => {
   const actor = currentUser(c);
-  const input = await parseBody(c, createWebhookSchema);
+  // The URL's network rules are checked with the rest of the body, so every
+  // problem is reported at once, each at its field (#283).
+  const input = await parseBody(
+    c,
+    createWebhookSchema.superRefine((body, ctx) =>
+      addUrlIssue(ctx, body.url, { allowPrivateNetwork: body.allowPrivateNetwork }),
+    ),
+  );
   const { endpoint, secret } = await createWebhook(input);
   await recordAudit({
     actorUserId: actor.id,
@@ -54,7 +62,24 @@ webhookRoutes.post('/', async (c) => {
 webhookRoutes.patch('/:id', async (c) => {
   const actor = currentUser(c);
   const existing = await loadWebhookOrThrow(c.req.param('id'));
-  const input = await parseBody(c, updateWebhookSchema);
+  // Checked against what the endpoint becomes, with the rest of the body, so
+  // every problem is reported at once, each at its field (#283);
+  // updateWebhook checks again.
+  const input = await parseBody(
+    c,
+    updateWebhookSchema.superRefine((body, ctx) => {
+      addUrlIssue(ctx, body.url ?? existing.url, {
+        allowPrivateNetwork: body.allowPrivateNetwork ?? existing.allowPrivateNetwork,
+      });
+      const actions = body.actions ?? existing.actions;
+      if (!(body.allActions ?? existing.allActions) && actions.length === 0)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['actions'],
+          message: 'Choose at least one audit action, or all of them.',
+        });
+    }),
+  );
   const fields = await updateWebhook(existing, input);
   if (fields.length > 0) {
     const saved = await loadWebhookOrThrow(existing.id);

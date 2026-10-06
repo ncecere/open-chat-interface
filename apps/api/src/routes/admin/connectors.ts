@@ -18,6 +18,7 @@ import {
   updateConnector,
   updateConnectorTool,
 } from '../../services/connectors/admin.js';
+import { addUrlIssue } from '../../services/connectors/network.js';
 import { diffUpdate } from '../../services/settings-diff.js';
 
 export const connectorRoutes = new Hono<AppBindings>();
@@ -31,7 +32,14 @@ connectorRoutes.get('/:id', async (c) => c.json(await getAdminConnector(c.req.pa
 /** Registers an MCP server. Its tools are listed with "Refresh tools" and start disabled. */
 connectorRoutes.post('/', async (c) => {
   const actor = currentUser(c);
-  const input = await parseBody(c, createConnectorSchema);
+  // The URL's network rules are checked with the rest of the body, so every
+  // problem is reported at once (#283).
+  const input = await parseBody(
+    c,
+    createConnectorSchema.superRefine((body, ctx) =>
+      addUrlIssue(ctx, body.url, { allowPrivateNetwork: body.allowPrivateNetwork }),
+    ),
+  );
   const created = await createConnector(input);
   await recordAudit({
     actorUserId: actor.id,
@@ -70,7 +78,26 @@ const CONNECTOR_AUDITED_FIELDS = [
 connectorRoutes.patch('/:id', async (c) => {
   const actor = currentUser(c);
   const existing = await loadConnectorOrThrow(c.req.param('id'));
-  const input = await parseBody(c, updateConnectorSchema);
+  // Checked against what the connector becomes, with the rest of the body,
+  // so every problem is reported at once (#283); updateConnector checks again.
+  const input = await parseBody(
+    c,
+    updateConnectorSchema.superRefine((body, ctx) => {
+      addUrlIssue(ctx, body.url ?? existing.url, {
+        allowPrivateNetwork: body.allowPrivateNetwork ?? existing.allowPrivateNetwork,
+      });
+      const credential =
+        body.sharedHeaderValue === undefined
+          ? existing.encryptedSharedHeaderValue
+          : body.sharedHeaderValue;
+      if ((body.authMode ?? existing.authMode) === 'shared' && !credential)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sharedHeaderValue'],
+          message: 'Enter the credential OCI sends to this server.',
+        });
+    }),
+  );
   const result = await updateConnector(existing, input);
   await recordAudit({
     actorUserId: actor.id,

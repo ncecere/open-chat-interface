@@ -8,7 +8,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Pencil, RotateCcw, Trash2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
@@ -29,16 +29,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { cn, formatDateTime } from '~/lib/utils';
-import { validationText } from '~/lib/validation-issues';
+import { validationProblems } from '~/lib/validation-issues';
 
 const LEVEL_LABELS: Record<BroadcastLevel, string> = {
   info: 'Information',
@@ -61,6 +61,12 @@ const BROADCAST_LABELS = {
   startsAt: 'Starts',
   endsAt: 'Ends',
 };
+
+/**
+ * The fields that show their own errors (#283). Any other error, such as one
+ * about a choice the form offers only valid values for, is shown at the foot.
+ */
+const FIELDS_SHOWN = ['title', 'body', 'startsAt', 'endsAt'];
 
 interface Draft {
   title: string;
@@ -140,7 +146,12 @@ function BroadcastDialog({
 }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(() => initialDraft(broadcast));
-  const [error, setError] = useState<string | null>(null);
+  // Each error is shown under its field, marked invalid, all at once, and
+  // goes when that field is corrected (#217, #283).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems(draft, form);
+  const error = problemsElsewhere(problems, FIELDS_SHOWN);
+  const at = (field: keyof Draft) => problemsAt(problems, field);
 
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -155,14 +166,14 @@ function BroadcastDialog({
       onClose();
     },
     onError: (cause) =>
-      setError(apiErrorMessage(cause, 'The announcement could not be saved.', BROADCAST_LABELS)),
+      setProblems(
+        apiErrorProblems(cause, 'The announcement could not be saved.', BROADCAST_LABELS),
+      ),
   });
-  // The error is about the values sent; correcting them clears it (#217).
-  useClearOnEdit(draft, () => setError(null));
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    setProblems([]);
 
     const parsed = upsertBroadcastSchema.safeParse({
       title: draft.title,
@@ -176,8 +187,11 @@ function BroadcastDialog({
     });
 
     if (!parsed.success) {
-      setError(
-        validationText(parsed.error.issues, 'Check the announcement fields.', BROADCAST_LABELS),
+      const found = validationProblems(parsed.error.issues, BROADCAST_LABELS);
+      setProblems(
+        found.length > 0
+          ? found.map(({ field, text }) => ({ fields: field ? [field] : [], text }))
+          : [{ fields: [], text: 'Check the announcement fields.' }],
       );
       return;
     }
@@ -193,10 +207,11 @@ function BroadcastDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={submit} className="flex flex-col gap-5">
-        <Field label="Title" htmlFor="broadcast-title">
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-5">
+        <Field label="Title" htmlFor="broadcast-title" error={at('title')}>
           <Input
             id="broadcast-title"
+            {...invalidFieldProps('broadcast-title', at('title'))}
             value={draft.title}
             maxLength={120}
             required
@@ -208,10 +223,12 @@ function BroadcastDialog({
         <Field
           label="Message"
           htmlFor="broadcast-body"
+          error={at('body')}
           hint="**Bold** and [links](https://example.edu) are formatted; other Markdown is shown as typed."
         >
           <Textarea
             id="broadcast-body"
+            {...invalidFieldProps('broadcast-body', at('body'))}
             rows={4}
             value={draft.body}
             maxLength={2_000}
@@ -272,9 +289,15 @@ function BroadcastDialog({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Starts" htmlFor="broadcast-starts" hint="Blank starts immediately.">
+          <Field
+            label="Starts"
+            htmlFor="broadcast-starts"
+            hint="Blank starts immediately."
+            error={at('startsAt')}
+          >
             <Input
               id="broadcast-starts"
+              {...invalidFieldProps('broadcast-starts', at('startsAt'))}
               type="datetime-local"
               value={draft.startsAt}
               onChange={(event) =>
@@ -282,9 +305,15 @@ function BroadcastDialog({
               }
             />
           </Field>
-          <Field label="Ends" htmlFor="broadcast-ends" hint="Blank never expires.">
+          <Field
+            label="Ends"
+            htmlFor="broadcast-ends"
+            hint="Blank never expires."
+            error={at('endsAt')}
+          >
             <Input
               id="broadcast-ends"
+              {...invalidFieldProps('broadcast-ends', at('endsAt'))}
               type="datetime-local"
               value={draft.endsAt}
               onChange={(event) =>
@@ -332,7 +361,7 @@ function BroadcastDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
           >
             {error}
           </p>

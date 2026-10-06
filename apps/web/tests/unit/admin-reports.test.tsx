@@ -99,15 +99,28 @@ it('clears a refused report’s error once the recipients are corrected (#217)',
   await typeInto(document.getElementById('report-name') as HTMLInputElement, 'Walk3');
   const recipients = document.getElementById('report-recipients') as HTMLInputElement;
   await typeInto(recipients, 'ops@example.edu, not-an-email');
+  // Named by the form before anything is sent, rather than as "item 2" (#283).
+  await click(button('Add report'));
+  expect(api.post).not.toHaveBeenCalled();
+  expect(alerts().join(' ')).toContain('Recipients: not-an-email is not an email address.');
+  await typeInto(recipients, 'ops@example.edu');
+  expect(alerts()).toEqual([]);
+});
+
+it('clears an API refusal once its field is corrected (#217)', async () => {
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  await typeInto(document.getElementById('report-name') as HTMLInputElement, 'Walk3');
+  const recipients = document.getElementById('report-recipients') as HTMLInputElement;
+  await typeInto(recipients, 'ops@example.edu');
   api.post.mockRejectedValueOnce(
-    // As the API's Zod check reports it.
+    // As the API's Zod check reports an address its own rule refuses.
     new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', [
-      { code: 'invalid_format', format: 'email', path: ['recipients', 1], message: 'Invalid' },
+      { code: 'invalid_format', format: 'email', path: ['recipients', 0], message: 'Invalid' },
     ]),
   );
   await click(button('Add report'));
-  expect(alerts().join(' ')).toContain('Recipients (item 2) must be a valid email address.');
-  await typeInto(recipients, 'ops@example.edu');
+  expect(alerts().join(' ')).toContain('Recipients (item 1) must be a valid email address.');
+  await typeInto(recipients, 'dean@example.edu');
   expect(alerts()).toEqual([]);
 });
 
