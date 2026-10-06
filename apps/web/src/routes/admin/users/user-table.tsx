@@ -168,8 +168,12 @@ export function UserTable({
                   )}
                 </div>
               </td>
-              <td className="px-4 py-3 text-[var(--text-secondary)]">{user.threadCount}</td>
-              <td className="px-4 py-3 text-[var(--text-muted)]">
+              {/* Short figures and dates stay on one line; the Role column,
+                  mostly empty, is the one that gives way (#170). */}
+              <td className="whitespace-nowrap px-4 py-3 text-[var(--text-secondary)]">
+                {user.threadCount}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-[var(--text-muted)]">
                 {formatRelativeTime(user.createdAt)}
               </td>
               {canEdit && (

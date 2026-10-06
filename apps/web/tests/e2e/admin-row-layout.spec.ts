@@ -70,3 +70,24 @@ test('an acceptable-use version keeps its title and actions inside the card at 3
     expect(box.x + box.width).toBeLessThanOrEqual(390);
   }
 });
+
+test('the Users table keeps each Joined date on one line at 1440 px (#170)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page);
+  await page.goto('/admin/users');
+  const table = page.getByRole('region', { name: 'Accounts' }).locator('table');
+  await expect(table.locator('tbody tr').first()).toBeVisible();
+  const joined = await table.evaluate((element) => {
+    const headers = [...element.querySelectorAll('thead th')];
+    const column = headers.findIndex((header) => header.textContent?.includes('Joined'));
+    return [...element.querySelectorAll('tbody tr')].map((row) => {
+      const cell = row.children[column] as HTMLElement;
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      // One line of text has one distinct top across its boxes.
+      const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+      return { text: cell.textContent, lines: tops.size };
+    });
+  });
+  expect(joined.filter((cell) => cell.lines > 1)).toEqual([]);
+});
