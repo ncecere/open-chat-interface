@@ -7,7 +7,7 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
-import { cn } from '~/lib/utils';
+import { cn, formatDateTime } from '~/lib/utils';
 
 /**
  * Runs of an operations job (a backup, a compliance export): starting one
@@ -25,7 +25,7 @@ export interface OperationRun {
 }
 
 /** A local date and time, or a dash when there is none. */
-export const formatRunTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
+export const formatRunTime = (iso: string | null) => (iso ? formatDateTime(iso) : '—');
 
 export function RunStatusIcon({ status }: { status: OperationRun['status'] }) {
   const Icon =

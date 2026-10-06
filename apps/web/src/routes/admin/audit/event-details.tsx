@@ -2,19 +2,12 @@ import type { AuditLogEntry } from '@oci/shared';
 import { Link } from '@tanstack/react-router';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '~/components/ui/button';
-import { cn } from '~/lib/utils';
+import { cn, formatDateTime } from '~/lib/utils';
 
 const MAX_METADATA_CHARACTERS = 20_000;
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-
-export function formatTimestamp(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
-}
+/** The admin date format, shared with every other admin page (#177). */
+export const formatTimestamp = (value: string) => formatDateTime(value);
 
 function serializeMetadata(metadata: Record<string, unknown>): string {
   try {

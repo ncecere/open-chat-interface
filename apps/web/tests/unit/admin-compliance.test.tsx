@@ -2,6 +2,7 @@
 import type { ComplianceStatus, LegalHold } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { formatDateTime } from '../../src/lib/utils';
 import { AdminCompliancePage, complianceChanges } from '../../src/routes/admin/compliance';
 import { AdminUserDetailPage } from '../../src/routes/admin/user-detail';
 import { AdminUsersPage } from '../../src/routes/admin/users';
@@ -168,6 +169,9 @@ describe('Compliance admin page', () => {
     // Active holds are listed; lifted ones are kept as history.
     const holds = document.querySelectorAll('[data-testid="legal-hold"]');
     expect(holds).toHaveLength(1);
+    // The admin date format, not the browser default with seconds (#177).
+    expect(holds[0]?.textContent).toContain(`Placed ${formatDateTime(activeHold.placedAt)}`);
+    expect(holds[0]?.textContent).not.toContain(new Date(activeHold.placedAt).toLocaleString());
     expect(holds[0]!.textContent).toContain('Dana Held');
     expect(holds[0]!.textContent).toContain('Matter 2026-17');
     expect(text).toContain('1 lifted hold');

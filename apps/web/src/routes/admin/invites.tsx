@@ -19,6 +19,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { formatDateTime } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
 
 interface InvitesResponse {
@@ -44,13 +45,6 @@ function inviteStatus(invite: ListedInvite): InviteStatus {
   if (invite.redeemedAt) return 'redeemed';
   if (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now()) return 'expired';
   return 'active';
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
 }
 
 function CreateInviteDialog({ onClose }: { onClose: () => void }) {
@@ -325,18 +319,18 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
             <dt className="text-[var(--text-muted)]">Expires</dt>
             <dd
               className="mt-0.5 text-[var(--text-secondary)]"
-              title={invite.expiresAt ? formatDate(invite.expiresAt) : undefined}
+              title={invite.expiresAt ? formatDateTime(invite.expiresAt) : undefined}
             >
-              {invite.expiresAt ? formatDate(invite.expiresAt) : 'Never'}
+              {invite.expiresAt ? formatDateTime(invite.expiresAt) : 'Never'}
             </dd>
           </div>
           <div>
             <dt className="text-[var(--text-muted)]">Created</dt>
             <dd
               className="mt-0.5 text-[var(--text-secondary)]"
-              title={formatDate(invite.createdAt)}
+              title={formatDateTime(invite.createdAt)}
             >
-              {formatDate(invite.createdAt)}
+              {formatDateTime(invite.createdAt)}
             </dd>
           </div>
           {invite.redeemedAt && (
@@ -344,9 +338,9 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
               <dt className="text-[var(--text-muted)]">Redeemed</dt>
               <dd
                 className="mt-0.5 text-[var(--text-secondary)]"
-                title={formatDate(invite.redeemedAt)}
+                title={formatDateTime(invite.redeemedAt)}
               >
-                {formatDate(invite.redeemedAt)}
+                {formatDateTime(invite.redeemedAt)}
               </dd>
             </div>
           )}

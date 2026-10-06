@@ -29,6 +29,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { priceMicros } from '~/lib/price';
+import { formatDateTime } from '~/lib/utils';
 
 const EMBEDDINGS_QUERY_KEY = ['admin', 'embeddings'] as const;
 
@@ -317,8 +318,7 @@ function RetiredGenerations({ retired }: { retired: EmbeddingGenerationStatus[] 
       {retired.map((generation) => (
         <li key={generation.id}>
           Embeddings of {generation.modelId} are kept until{' '}
-          {generation.dropAfter ? new Date(generation.dropAfter).toLocaleString() : 'later'}, then
-          removed.
+          {generation.dropAfter ? formatDateTime(generation.dropAfter) : 'later'}, then removed.
         </li>
       ))}
     </ul>

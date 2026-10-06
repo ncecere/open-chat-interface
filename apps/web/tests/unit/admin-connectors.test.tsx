@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectorChanges } from '../../src/components/admin/connector-form-dialog';
 import { toolGroups } from '../../src/components/admin/role-tools-form';
+import { formatDateTime } from '../../src/lib/utils';
 import { AdminConnectorsPage } from '../../src/routes/admin/connectors';
 import {
   button,
@@ -178,6 +179,17 @@ describe('Connectors admin page', () => {
       enabled: true,
       allowPrivateNetwork: false,
     });
+  });
+
+  it('shows a failure time in the admin date format (#177)', async () => {
+    const failedAt = '2026-10-05T22:51:07.000Z';
+    connectors = [
+      connector({ lastErrorAt: failedAt, lastError: 'Connection refused', lastContactAt: null }),
+    ];
+    await render();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(`Last failure ${formatDateTime(failedAt)}: Connection refused`);
+    expect(text).not.toContain(new Date(failedAt).toLocaleString());
   });
 
   it('says which field the API refused and why (#127)', async () => {

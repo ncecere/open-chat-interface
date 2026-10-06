@@ -65,6 +65,28 @@ function formatAhead(date: Date, minutes: number): string {
   return `on ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
+const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+
+/**
+ * A moment as admin pages show it, "Oct 5, 2026, 6:27 PM" in the reader's
+ * locale. One format everywhere: connectors, webhooks and legal holds used
+ * the browser default ("10/5/2026, 6:51:07 PM") beside this one (#177).
+ */
+export function formatDateTime(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  return Number.isNaN(date.getTime()) ? String(value) : dateTimeFormat.format(date);
+}
+
+/** A day as admin pages show it, "Oct 5, 2026" (#177). */
+export function formatDate(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  return Number.isNaN(date.getTime()) ? String(value) : dateFormat.format(date);
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];

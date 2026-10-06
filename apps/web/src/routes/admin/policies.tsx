@@ -27,6 +27,7 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { formatDate } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
 
 /**
@@ -162,7 +163,7 @@ function ViewPolicyDialog({ policy, onClose }: { policy: UsagePolicy; onClose: (
         </DialogTitle>
         <DialogDescription>
           {policy.publishedAt
-            ? `Published ${new Date(policy.publishedAt).toLocaleDateString()} · accepted by ${policy.acceptanceCount}`
+            ? `Published ${formatDate(policy.publishedAt)} · accepted by ${policy.acceptanceCount}`
             : 'Draft: nobody has been asked to accept it yet.'}
         </DialogDescription>
       </DialogHeader>
@@ -248,7 +249,7 @@ export function AdminPoliciesPage() {
                   </div>
                   <p className="text-[var(--text-muted)] text-xs">
                     {policy.publishedAt
-                      ? `Published ${new Date(policy.publishedAt).toLocaleDateString()}`
+                      ? `Published ${formatDate(policy.publishedAt)}`
                       : 'Not published'}
                     {` · accepted by ${policy.acceptanceCount}`}
                   </p>

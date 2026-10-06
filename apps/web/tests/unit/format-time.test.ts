@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRelativeTime, formatTimeUntil } from '~/lib/utils';
+import { formatDate, formatDateTime, formatRelativeTime, formatTimeUntil } from '~/lib/utils';
 
 describe('formatTimeUntil', () => {
   it('describes a future moment as a distance ahead', () => {
@@ -48,5 +48,21 @@ describe('formatRelativeTime (#126)', () => {
   it('uses the real clock by default', () => {
     expect(formatRelativeTime(new Date(Date.now() + 2 * 3_600_000))).toBe('in 2h');
     expect(formatRelativeTime(new Date(Date.now() - 2 * 3_600_000))).toBe('2h ago');
+  });
+});
+
+describe('admin date format (#177)', () => {
+  // Built from the parts, so the check holds in any time zone.
+  const at = new Date(2026, 9, 5, 18, 27, 4);
+
+  it('is "Oct 5, 2026, 6:27 PM": medium date, short time, no seconds', () => {
+    expect(formatDateTime(at)).toBe('Oct 5, 2026, 6:27 PM');
+    expect(formatDateTime(at.toISOString())).toBe('Oct 5, 2026, 6:27 PM');
+    expect(formatDateTime(at)).not.toBe(at.toLocaleString());
+    expect(formatDate(at)).toBe('Oct 5, 2026');
+  });
+
+  it('returns an unreadable value as it is', () => {
+    expect(formatDateTime('not a date')).toBe('not a date');
   });
 });

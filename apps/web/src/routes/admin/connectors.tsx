@@ -34,6 +34,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api } from '~/lib/api-client';
 import { CONNECT_OUTCOMES, startConnecting } from '~/lib/connectors';
+import { formatDateTime } from '~/lib/utils';
 
 export const CONNECTORS_QUERY_KEY = ['admin', 'connectors'] as const;
 
@@ -42,7 +43,7 @@ const KIND_OPTIONS = [
   { value: 'write', label: 'Write — asks for approval' },
 ];
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : null);
+const when = (iso: string | null) => (iso ? formatDateTime(iso) : null);
 
 function ToolRow({ connector, tool }: { connector: AdminConnector; tool: ConnectorTool }) {
   const queryClient = useQueryClient();
