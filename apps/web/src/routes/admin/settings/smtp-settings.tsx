@@ -1,6 +1,6 @@
-import type { InstanceSettings } from '@oci/shared';
+import { FROM_ADDRESS, FROM_ADDRESS_MESSAGE, type InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   MutationError,
   Notice,
@@ -13,9 +13,9 @@ import { Button } from '~/components/ui/button';
 import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { api, apiErrorMessage } from '~/lib/api-client';
-import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 type SmtpSettings = InstanceSettings['smtp'];
@@ -39,6 +39,24 @@ interface SmtpErrors {
   username?: string;
   password?: string;
 }
+
+/** The fields that show their own errors, by the API's names; any other is at the foot (#317). */
+const SMTP_FIELDS: Array<keyof SmtpErrors> = [
+  'host',
+  'port',
+  'fromAddress',
+  'username',
+  'password',
+];
+
+/** The form's names for the fields, so a refusal names the one it is about (#127). */
+const SMTP_LABELS = {
+  host: 'SMTP host',
+  port: 'Port',
+  fromAddress: 'From address',
+  username: 'SMTP username',
+  password: 'SMTP password',
+};
 
 function makeDraft(settings: SmtpSettings): SmtpDraft {
   return {
@@ -70,6 +88,12 @@ function validateDraft(
     if (!host) errors.host = 'Enter an SMTP host, or clear every delivery field to disable SMTP.';
     if (port === null) errors.port = 'Enter an SMTP port.';
     if (!fromAddress) errors.fromAddress = 'Enter a from address.';
+  }
+
+  // The API's own rule, checked here too so a bad address is reported with
+  // the port in one save rather than after it (#317).
+  if (fromAddress && (fromAddress.length > 320 || !FROM_ADDRESS.test(fromAddress))) {
+    errors.fromAddress = FROM_ADDRESS_MESSAGE;
   }
 
   if (port !== null && (!Number.isInteger(port) || port < 1 || port > 65_535)) {
@@ -239,16 +263,24 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
   const [password, setPassword] = useState('');
   const [showValidation, setShowValidation] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // A read-only refusal goes once changes are accepted again (#308).
-  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
+  // A refused save's problems, each at the field the API names and gone once
+  // that field is edited; one about no field (a failed save) at the foot
+  // (#283, #317). A read-only refusal goes once changes are accepted (#308).
+  const form = useRef<HTMLFormElement>(null);
+  const [serverProblems, setServerProblems] = useFieldProblems(
+    { ...draft, usernameAction, username, passwordAction, password },
+    form,
+  );
+  const errorMessage = problemsElsewhere(serverProblems, SMTP_FIELDS);
 
   const errors = validateDraft(draft, usernameAction, username, passwordAction, password);
   const isValid = Object.keys(errors).length === 0;
 
   // Each problem is shown under its field, in error colour, which is marked
-  // invalid and described by it, not in place of the hint (#302).
-  const fieldError = (message?: string) => (showValidation && message) || null;
+  // invalid and described by it, not in place of the hint (#302): the form's
+  // own check, else the API's refusal.
+  const fieldError = (key: keyof SmtpErrors) =>
+    (showValidation && errors[key]) || problemsAt(serverProblems, key);
   const patch = changedSmtpSettings(
     saved,
     draft,
@@ -290,7 +322,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
       setPasswordAction('keep');
       setPassword('');
       setShowValidation(false);
-      setErrorMessage(null);
+      setServerProblems([]);
       setSuccessMessage(true);
       queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
         current ? { ...current, smtp: next } : current,
@@ -300,12 +332,11 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(apiErrorMessage(error, 'Unable to save SMTP settings.'));
+      setServerProblems(apiErrorProblems(error, 'Unable to save SMTP settings.', SMTP_LABELS));
     },
   });
 
   function beginEdit() {
-    setErrorMessage(null);
     setSuccessMessage(false);
   }
 
@@ -322,11 +353,13 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
 
   return (
     <form
+      ref={form}
       className="flex flex-col gap-8"
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
         setShowValidation(true);
+        setServerProblems([]);
         if (isValid && hasChanges) save.mutate(patch);
       }}
     >
@@ -356,7 +389,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
           <Field
             label="SMTP host"
             htmlFor="smtp-host"
-            error={fieldError(errors.host)}
+            error={fieldError('host')}
             hint={'For example, smtp.example.com.'}
           >
             <Input
@@ -364,7 +397,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
               value={draft.host}
               placeholder="smtp.example.com"
               disabled={save.isPending}
-              {...invalidFieldProps('smtp-host', fieldError(errors.host))}
+              {...invalidFieldProps('smtp-host', fieldError('host'))}
               onChange={(event) => {
                 beginEdit();
                 setDraft((current) => ({ ...current, host: event.target.value }));
@@ -376,7 +409,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
             <Field
               label="Port"
               htmlFor="smtp-port"
-              error={fieldError(errors.port)}
+              error={fieldError('port')}
               hint={'Commonly 465 or 587.'}
             >
               <Input
@@ -388,7 +421,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
                 step={1}
                 value={draft.port}
                 disabled={save.isPending}
-                {...invalidFieldProps('smtp-port', fieldError(errors.port))}
+                {...invalidFieldProps('smtp-port', fieldError('port'))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, port: event.target.value }));
@@ -399,7 +432,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
             <Field
               label="From address"
               htmlFor="smtp-from-address"
-              error={fieldError(errors.fromAddress)}
+              error={fieldError('fromAddress')}
               hint={'Mailbox value shown as the sender of system email.'}
             >
               <Input
@@ -408,7 +441,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
                 value={draft.fromAddress}
                 placeholder="noreply@example.com"
                 disabled={save.isPending}
-                {...invalidFieldProps('smtp-from-address', fieldError(errors.fromAddress))}
+                {...invalidFieldProps('smtp-from-address', fieldError('fromAddress'))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, fromAddress: event.target.value }));
@@ -443,7 +476,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
             stored={saved.hasUsername}
             action={usernameAction}
             value={username}
-            error={showValidation ? errors.username : undefined}
+            error={fieldError('username') ?? undefined}
             disabled={save.isPending}
             onActionChange={(action) => setCredentialAction('username', action)}
             onValueChange={(value) => {
@@ -456,7 +489,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
             stored={saved.hasPassword}
             action={passwordAction}
             value={password}
-            error={showValidation ? errors.password : undefined}
+            error={fieldError('password') ?? undefined}
             disabled={save.isPending}
             onActionChange={(action) => setCredentialAction('password', action)}
             onValueChange={(value) => {

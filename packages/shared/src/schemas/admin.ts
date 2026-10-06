@@ -186,7 +186,15 @@ export const instanceSettingsSchema = z.object({
 });
 
 /** `help@acme.test`, or `Help Desk <help@acme.test>` (apps/api/src/services/email.ts). */
-const FROM_ADDRESS = /^(?:[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+|[^<>]+<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>)$/;
+export const FROM_ADDRESS =
+  /^(?:[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+|[^<>]+<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>)$/;
+
+/**
+ * Why a From address is refused, as the API says it; the Email delivery form
+ * checks it too, so it is reported with the port in one save (#317).
+ */
+export const FROM_ADDRESS_MESSAGE =
+  'Use an email address, optionally with a name: Help Desk <help@example.edu>.';
 
 // Defaults belong to reads of older stored settings, never to a partial write.
 export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
@@ -245,10 +253,7 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
           .string()
           .trim()
           .max(320)
-          .regex(
-            FROM_ADDRESS,
-            'Use an email address, optionally with a name: Help Desk <help@example.edu>.',
-          )
+          .regex(FROM_ADDRESS, FROM_ADDRESS_MESSAGE)
           .nullable()
           .optional(),
         username: z.string().max(200).nullable().optional(),
