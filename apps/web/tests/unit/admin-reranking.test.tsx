@@ -83,7 +83,8 @@ describe('Providers & Models → Embeddings → Reranking', () => {
     );
     expect(heading).toBeDefined();
     expect(text()).toContain('Works with or without pgvector');
-    expect(input('reranking-endpoint').value).toBe('Choose a provider');
+    // Empty, with a placeholder, rather than a value that reads as the endpoint (#157).
+    expect(input('reranking-endpoint').value).toBe('');
     expect(document.getElementById('reranking-enabled')?.getAttribute('aria-checked')).toBe(
       'false',
     );
@@ -132,6 +133,28 @@ describe('Providers & Models → Embeddings → Reranking', () => {
     api.post.mockRejectedValue(new Error('offline'));
     await click(button('Test reranking'));
     expect(text()).toContain('The test could not be run.');
+  });
+
+  it('says why Test reranking is unavailable (#157)', async () => {
+    ({ root } = await renderAdmin(<RerankingSection />));
+    const testButton = button('Test reranking');
+    const reason = () =>
+      document.getElementById(testButton.getAttribute('aria-describedby') ?? '')?.textContent;
+    expect(testButton.disabled).toBe(true);
+    expect(reason()).toBe('Choose a provider to test reranking.');
+
+    await click(document.getElementById('reranking-provider') as HTMLElement);
+    await click(
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (option) => option.textContent === 'Local vLLM',
+      )!,
+    );
+    expect(input('reranking-endpoint').value).toBe(ENDPOINT);
+    expect(reason()).toBe('Enter a model id to test reranking.');
+
+    await typeInto(input('reranking-model'), 'bge-reranker-v2-m3');
+    expect(testButton.disabled).toBe(false);
+    expect(testButton.getAttribute('aria-describedby')).toBeNull();
   });
 
   it('saves only what changed', async () => {
