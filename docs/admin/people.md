@@ -67,6 +67,11 @@ until the hold is lifted.
   they were signed out, and signing in says the account has been suspended
   (not the reason). You cannot ban yourself. **Unban** lifts it; they can then
   sign in again.
+- **Removing the last administrator** is refused, whether by changing their
+  role, banning them or deleting them, singly or in bulk: at least one
+  administrator who can sign in always remains (a banned administrator does
+  not count). Two administrators acting on each other at the same moment
+  cannot both succeed; the second is refused.
 - **Sign out everywhere** ends every session, and appears only when there is
   one to end. This is the right response to a suspected compromise; changing the
   password alone leaves existing sessions working. They can sign in again
@@ -98,7 +103,8 @@ reserved allowance.
 The server refuses:
 
 - **your own account** — ask another administrator;
-- **the last administrator** — make somebody else an administrator first;
+- **the last administrator** who can sign in — make somebody else an
+  administrator first;
 - a person on [legal hold](compliance.md#legal-hold) — lift the hold first.
   The dialog explains this and cannot be confirmed.
 
