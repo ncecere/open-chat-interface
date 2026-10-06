@@ -63,7 +63,9 @@ them), an announcement (its window and audience too), a connector (its address
 among them), a webhook (the actions it forwards), a scheduled report and an
 acceptable-use draft (its title, and whether the text changed). Each
 lists its `changes`, every value as it was and as it became, a nested one by
-its path (`roles.user.chatRequestsPerMinute`); an announcement, webhook or
+its path (`roles.user.chatRequestsPerMinute`, and for the instance settings
+`storage.maxFilesPerMessage` or `smtp.port`, the one field with its own before, not the
+whole branch; a password or key only as set or unset); an announcement, webhook or
 acceptable-use save that changes nothing is not recorded. Every **Test** button
 that reaches an outside service is recorded with its outcome (`smtp.test`,
 `storage.test`, `search.test`, `embeddings.test`, `reranking.test`,

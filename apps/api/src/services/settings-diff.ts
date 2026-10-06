@@ -37,7 +37,12 @@ function comparable(value: unknown): string {
  * before", which is the question asked when something has broken.
  *
  * Only keys present in the patch are compared: a partial update should not
- * report every untouched field as unchanged noise.
+ * report every untouched field as unchanged noise. A branch that arrives as
+ * an object (`storage`, `smtp`, `search`) is compared field by field and each
+ * change is named by its path (`storage.maxFilesPerMessage`), with that
+ * field's stored value as `before` (#344). Recording the whole stored branch
+ * against only the fields sent made the reader find the one key inside a
+ * long "before" and work out that nothing else had changed.
  */
 export function diffSettings(
   before: Record<string, unknown>,
@@ -46,33 +51,65 @@ export function diffSettings(
   const changes: SettingChange[] = [];
 
   for (const [key, next] of Object.entries(patch)) {
-    if (next === undefined) continue;
-
-    const previous = before[key];
-    if (comparable(previous) === comparable(next)) continue;
-
-    if (isSecret(key)) {
-      // Presence is the useful fact: whether a secret was set, cleared, or
-      // replaced. The value itself has no business being here.
-      changes.push({
-        key,
-        before: redactedSecret(previous),
-        after: redactedSecret(next),
-      });
-      continue;
-    }
-
-    // Redacted on both sides. A branch such as `smtp` arrives as a whole
-    // object with a password inside it, so a key-level check alone lets the
-    // value through in the patch even when the stored copy was cleaned.
-    changes.push({
-      key,
-      before: previous === undefined ? null : redactSecrets(previous),
-      after: redactSecrets(next),
-    });
+    if (next !== undefined) collectChange(key, before[key], next, changes);
   }
 
   return changes;
+}
+
+/**
+ * A secret is sent under its own name (`password`, `apiKey`, `secretAccessKey`)
+ * and stored encrypted under `encrypted<Name>`: what it was before is whichever
+ * of the two the stored branch holds.
+ */
+function storedValue(container: unknown, key: string, secret: boolean): unknown {
+  if (typeof container !== 'object' || container === null) return undefined;
+  const stored = container as Record<string, unknown>;
+  if (key in stored || !secret) return stored[key];
+  return stored[`encrypted${key.charAt(0).toUpperCase()}${key.slice(1)}`];
+}
+
+function collectChange(path: string, previous: unknown, next: unknown, out: SettingChange[]) {
+  // The whole path is checked, so a field under a secret-named branch
+  // (`diffUpdate` hands over flattened paths) is redacted as well.
+  if (isSecret(path)) {
+    // Presence is the useful fact: whether a secret was set, cleared, or
+    // replaced. The value itself has no business being here.
+    if (comparable(previous) === comparable(next)) return;
+    const was = redactedSecret(previous);
+    const became = redactedSecret(next);
+    // Sending no secret to a field that had none changes nothing.
+    if (was === '[unset]' && became === '[unset]') return;
+    out.push({ key: path, before: was, after: became });
+    return;
+  }
+
+  // A branch sent as an object, over a stored branch that is one (or none
+  // yet): compared field by field, so each change names its own path and its
+  // own before. A secret inside it is read from its stored (encrypted) name.
+  if (
+    isPlainObject(next) &&
+    (previous === undefined || previous === null || isObjectLike(previous))
+  ) {
+    for (const [key, entry] of Object.entries(next)) {
+      if (entry === undefined) continue;
+      collectChange(`${path}.${key}`, storedValue(previous, key, isSecret(key)), entry, out);
+    }
+    return;
+  }
+
+  if (comparable(previous) === comparable(next)) return;
+  // Redacted on both sides, for a value holding secrets deeper than a key
+  // check reaches (an array of objects, say).
+  out.push({
+    key: path,
+    before: previous === undefined ? null : redactSecrets(previous),
+    after: redactSecrets(next),
+  });
+}
+
+function isObjectLike(value: unknown): boolean {
+  return typeof value === 'object' && !Array.isArray(value) && value !== null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

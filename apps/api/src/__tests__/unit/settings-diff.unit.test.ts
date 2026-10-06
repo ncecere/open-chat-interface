@@ -38,13 +38,74 @@ describe('diffSettings', () => {
     ]);
   });
 
-  it('compares nested objects whole', () => {
+  it('compares a nested object field by field, each change named by its path (#344)', () => {
     const changes = diffSettings(
-      { features: { branching: false } },
-      { features: { branching: true } },
+      { features: { branching: false, memory: true } },
+      { features: { branching: true, memory: true } },
     );
-    expect(changes).toHaveLength(1);
-    expect(changes[0]?.after).toEqual({ branching: true });
+    expect(changes).toEqual([{ key: 'features.branching', before: false, after: true }]);
+  });
+});
+
+describe('diffSettings: a nested branch sent in part (#344)', () => {
+  // What the Storage form sends against what is stored: before the fix `before`
+  // was the whole stored branch and `after` only the field sent.
+  const stored = {
+    storage: {
+      driver: 's3',
+      maxFileBytes: 26_214_400,
+      maxFilesPerMessage: 7,
+      allowedMimeTypes: ['image/png', 'application/pdf'],
+      s3: { bucket: 'oci', region: 'us-east-1', encryptedSecretAccessKey: '[set]' },
+    },
+    smtp: { host: 'mail.test', port: 1026, encryptedPassword: '[unset]' },
+  };
+
+  it('records the one field that changed with its own before, not the stored branch', () => {
+    expect(diffSettings(stored, { storage: { maxFilesPerMessage: 10 } })).toEqual([
+      { key: 'storage.maxFilesPerMessage', before: 7, after: 10 },
+    ]);
+    expect(diffSettings(stored, { smtp: { host: 'mail.test', port: 1025 } })).toEqual([
+      { key: 'smtp.port', before: 1026, after: 1025 },
+    ]);
+  });
+
+  it('reaches fields nested twice, and compares a list as a whole', () => {
+    expect(
+      diffSettings(stored, {
+        storage: { s3: { bucket: 'other', region: 'us-east-1' }, allowedMimeTypes: ['image/png'] },
+      }),
+    ).toEqual([
+      { key: 'storage.s3.bucket', before: 'oci', after: 'other' },
+      {
+        key: 'storage.allowedMimeTypes',
+        before: ['image/png', 'application/pdf'],
+        after: ['image/png'],
+      },
+    ]);
+  });
+
+  it('shows a field with nothing stored as changing from null', () => {
+    expect(diffSettings({}, { smtp: { fromAddress: 'oci@example.test' } })).toEqual([
+      { key: 'smtp.fromAddress', before: null, after: 'oci@example.test' },
+    ]);
+  });
+
+  it('compares a typed secret with the stored encrypted one, by presence only', () => {
+    const changes = diffSettings(stored, {
+      smtp: { password: 'SuperSecret123' },
+      storage: { s3: { secretAccessKey: 'AnotherSecret456' } },
+    });
+    expect(changes).toEqual([
+      { key: 'smtp.password', before: '[unset]', after: '[set]' },
+      { key: 'storage.s3.secretAccessKey', before: '[set]', after: '[set]' },
+    ]);
+    expect(JSON.stringify(changes)).not.toMatch(/SuperSecret123|AnotherSecret456/);
+    // Clearing a stored secret, and sending nothing to one that had none.
+    expect(diffSettings(stored, { storage: { s3: { secretAccessKey: '' } } })).toEqual([
+      { key: 'storage.s3.secretAccessKey', before: '[set]', after: '[unset]' },
+    ]);
+    expect(diffSettings(stored, { smtp: { password: '' } })).toEqual([]);
   });
 });
 
@@ -78,9 +139,11 @@ describe('diffSettings with nested secrets', () => {
 
     expect(JSON.stringify(changes)).not.toContain('SuperSecret123');
     expect(JSON.stringify(changes)).not.toContain('old-pass');
-    const after = changes[0]?.after as Record<string, unknown> | undefined;
-    expect(after?.host).toBe('new.example.com');
-    expect(after?.password).toBe('[set]');
+    // Field by field (#344): the host changed, and the password by presence.
+    expect(changes).toEqual([
+      { key: 'smtp.host', before: 'old.example.com', after: 'new.example.com' },
+      { key: 'smtp.password', before: '[set]', after: '[set]' },
+    ]);
   });
 
   it('redacts a nested secret on the previous value too', () => {
@@ -95,8 +158,11 @@ describe('diffSettings with nested secrets', () => {
     // The settings route redacts its snapshot, and the diff redacts again.
     const snapshot = redactSecrets({ provider: 'searxng', encryptedApiKey: null });
     expect(redactSecrets(snapshot)).toEqual({ provider: 'searxng', encryptedApiKey: '[unset]' });
-    const changes = diffSettings({ search: snapshot }, { search: { provider: 'serpapi' } });
-    expect(changes[0]?.before).toEqual({ provider: 'searxng', encryptedApiKey: '[unset]' });
+    const changes = diffSettings(
+      { search: snapshot },
+      { search: { provider: 'serpapi', apiKey: '' } },
+    );
+    expect(changes).toEqual([{ key: 'search.provider', before: 'searxng', after: 'serpapi' }]);
   });
 });
 
