@@ -1,8 +1,8 @@
 import { createHmac, randomUUID } from 'node:crypto';
+import { type AddressInfo, createServer } from 'node:net';
 import { createDatabase, eq, schema } from '@oci/db';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { outageProxy } from '../../../test/failover.js';
 
 // An address where nothing listens, whatever the environment provides: CI
 // runs this suite with DATABASE_URL pointing at a real PostgreSQL (before its
@@ -100,13 +100,19 @@ describe('log redaction of failed queries (#264)', () => {
     [
       'connection cut by a proxy',
       async () => {
-        const proxy = await outageProxy(process.env.DATABASE_URL!);
-        const pool = createDatabase(proxy.url, { max: 1 });
+        // A socket that accepts and then drops the connection, as a proxy or
+        // failover does mid-session; local, so it answers at once in any
+        // environment (CI's port 1 did not refuse in time behind a proxy).
+        const cutter = createServer((socket) => socket.destroy());
+        await new Promise<void>((resolve) => cutter.listen(0, '127.0.0.1', resolve));
+        const url = new URL(UNREACHABLE);
+        url.port = String((cutter.address() as AddressInfo).port);
+        const pool = createDatabase(url.toString(), { max: 1 });
         try {
           return await failure(() => saveReply(pool.db as unknown as typeof db));
         } finally {
-          await proxy.close();
           await pool.sql.end({ timeout: 1 });
+          await new Promise((resolve) => cutter.close(resolve));
         }
       },
     ],
