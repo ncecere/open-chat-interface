@@ -75,3 +75,38 @@ The workspace manifest and lockfile pin the patch. Docker build stages must copy
 transport and failover regressions without the patch; remove each part when
 upstream meets the same contract. Keep the live PostgreSQL job-lock tests as separate ownership
 and persistence checks.
+
+### A connection closed while it reads its types (#137)
+
+Every new connection reads the server's array types (`fetchArrayTypes()`)
+before the query or reservation that opened it is served. Postgres.js 3.4.9
+calls it from the synchronous `ReadyForQuery` handler and drops its promise,
+and for a reservation (`sql.reserve()`, which OCI's job locks use) it first
+forgets the reservation (`initial = null`). A server closing the connection
+during that read (a database stopping or failing over just after accepting
+it) therefore:
+
+5. **Ended the process.** The type query was rejected with
+   `CONNECTION_CLOSED`, the dropped promise rejected with nothing to handle
+   it, and Node exited on the unhandled rejection: the worker crash in #137
+   (`Error: write CONNECTION_CLOSED postgres:5432` from `closed()`). A job tick
+   opens a new lock connection every time, which is why the worker met it and
+   the API's long-lived pool did not.
+6. **Lost the reservation.** With `initial` already cleared, the close took the
+   error path, and the pool reconnected with the reservation taken out of its
+   queue, so the connection was never handed to it: the tick waited for ever,
+   and its job never ran again in that process.
+
+The patch catches the type read and keeps the reservation in `initial` until
+the types are read, so a close during the read reconnects for it as it does
+for a query; once read, `onopen()` hands the connection to the reservation
+from the pool's queue, as before. (A connection opened for a reservation with
+`fetch_types: false` now reaches `onopen()` too, rather than never being
+handed over.)
+
+`apps/api/src/__tests__/live/failover-type-fetch.live.test.ts` runs a real job
+tick through a TCP proxy that closes the lock connection, once, as the driver
+sends the type query: the tick must run on a new connection with no unhandled
+rejection. Against the previous patch it records the unhandled
+`CONNECTION_CLOSED` and the tick does not finish. Upstream master still drops
+the promise (checked 2026-10-05).

@@ -2,12 +2,13 @@
 import './lib/threadpool.js';
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
-import { migrationsApplied, runMigrationsWithLock, seedDatabase } from '@oci/db';
+import { runMigrationsWithLock, seedDatabase } from '@oci/db';
 import { createApp } from './app.js';
 import { ensureInitialAdmin } from './bootstrap.js';
 import { loadEnv } from './config/env.js';
 import { controlDatabaseUrl } from './db/control.js';
 import { db, sql } from './db/index.js';
+import { requireMigrationsRecorded } from './db/migration-check.js';
 import { closeReadReplica } from './db/read.js';
 import { startDatabasePresence } from './db/replicas.js';
 import {
@@ -71,10 +72,8 @@ async function main() {
     logger.info('Applying database migrations');
     await runMigrationsWithLock(controlDatabaseUrl(), { logger });
     await seedDatabase(db);
-  } else if (!(await migrationsApplied(db))) {
-    throw new Error(
-      'RUN_MIGRATIONS is false but the latest required database migration is not recorded. Run `pnpm db:migrate` first.',
-    );
+  } else {
+    await requireMigrationsRecorded(db);
   }
 
   await ensureInitialAdmin();

@@ -239,15 +239,33 @@ export async function runMigrationsWithLock(
   }
 }
 
+/** SQLSTATEs of a database with no migration history: no table, no schema. */
+const NO_MIGRATION_HISTORY = new Set(['42P01', '3F000']);
+
+function sqlState(error: unknown): string | undefined {
+  // Drizzle wraps the driver's error in a DrizzleQueryError.
+  for (let current = error, depth = 0; current && depth < 5; depth++) {
+    const { code, cause } = current as { code?: unknown; cause?: unknown };
+    if (typeof code === 'string') return code;
+    current = cause;
+  }
+  return undefined;
+}
+
 /**
  * Require the latest bundled migration's recorded timestamp before a replica
  * serves without migrating. This checks migration history, not physical schema
  * integrity or compatibility with additional, newer migrations.
+ *
+ * Only a database without the history table answers `false`. Any other error
+ * (the database unreachable, starting up or shutting down) is thrown: it is no
+ * answer, and reading it as "not recorded" told operators to run migrations
+ * while PostgreSQL was simply down (#137).
  */
 export async function migrationsApplied(db: Database): Promise<boolean> {
+  const latest = readMigrationFiles({ migrationsFolder }).at(-1);
+  if (!latest) return false;
   try {
-    const latest = readMigrationFiles({ migrationsFolder }).at(-1);
-    if (!latest) return false;
     const rows = await db.execute<{ applied: boolean }>(sql`
       select exists (
         select 1 from drizzle.__drizzle_migrations
@@ -255,7 +273,8 @@ export async function migrationsApplied(db: Database): Promise<boolean> {
       ) as applied
     `);
     return rows[0]?.applied === true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (NO_MIGRATION_HISTORY.has(sqlState(error) ?? '')) return false;
+    throw error;
   }
 }
