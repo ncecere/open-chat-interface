@@ -80,7 +80,8 @@ default:
 | `webhooks.deliver` | Audit events, including the switch itself, still reach your SIEM. |
 | `chat.recover-interrupted-replies` | A reply whose replica stopped is saved as interrupted, so its conversation is not left waiting. |
 
-Untick them, or tick others, and **Save jobs**.
+Untick them, or tick others, and **Save jobs**. The list holds the same jobs
+as **Background jobs**: those the replicas that run jobs schedule.
 
 ## The emergency switch: `OCI_READ_ONLY`
 
