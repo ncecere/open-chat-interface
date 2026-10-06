@@ -241,6 +241,13 @@ describe('Summarise earlier messages now', () => {
     );
     expect(dialog()?.querySelector('textarea')).toBeNull();
     expect(findButton('Summarise')).toBeUndefined();
+    // One control named Close, and it has focus (#246): an × beside it was
+    // a second "Close", and took focus first.
+    const closes = [...dialog()!.querySelectorAll('button')].filter(
+      (candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent) === 'Close',
+    );
+    expect(closes).toHaveLength(1);
+    expect(document.activeElement).toBe(closes[0]);
     await click(button('Close'));
     expect(dialog()).toBeNull();
     expect(api.post).not.toHaveBeenCalled();
