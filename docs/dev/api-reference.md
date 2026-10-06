@@ -91,7 +91,7 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/admin/lifecycle/config-sources` | Which retention and rate-limit values come from saved settings, environment variables or built-in defaults. |
-| GET | `/api/admin/lifecycle/jobs` | Answers "did cleanup actually run?", the first thing an admin asks. |
+| GET | `/api/admin/lifecycle/jobs` | Answers "did cleanup actually run?", the first thing an admin asks: every registered job with its most recent run (null before its first), whatever its schedule. |
 | POST | `/api/admin/lifecycle/jobs/:name/run` | — |
 | GET | `/api/admin/lifecycle/rate-limits` | — |
 | PUT | `/api/admin/lifecycle/rate-limits` | — |
@@ -150,6 +150,8 @@ Generated from 44 route files.
 | --- | --- | --- |
 | GET | `/api/admin/policies` | — |
 | POST | `/api/admin/policies` | Creates the next version. |
+| PATCH | `/api/admin/policies/:id` | Rewords a draft. |
+| DELETE | `/api/admin/policies/:id` | Deletes a draft. |
 | POST | `/api/admin/policies/:id/publish` | — |
 
 ## `routes/admin/providers.ts`
@@ -208,6 +210,7 @@ Generated from 44 route files.
 | PATCH | `/api/admin/settings` | — |
 | POST | `/api/admin/settings/logo` | Uploads an instance logo. |
 | POST | `/api/admin/settings/search/test` | Runs one sample search with the provider, address and key on the page, so an administrator can check them before or after saving, and the same for the fallback provider when the page has one (v0.10). |
+| POST | `/api/admin/settings/smtp/test` | Sends a test message to the administrator asking, with the saved settings (#115). |
 | POST | `/api/admin/settings/storage/test` | — |
 
 ## `routes/admin/setup.ts`

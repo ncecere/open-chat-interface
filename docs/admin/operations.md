@@ -163,8 +163,10 @@ a window, schedule a window with an announcement ahead of it, or set
 
 ### Background jobs
 
-The most recent run of each scheduled job: when it started, how long it took,
-how many items it processed, and any error. **Run** starts one now.
+Every scheduled job, how often it runs, and its most recent run: when it
+started, how long it took, how many items it processed, and any error. A job
+that has not run since the instance was set up says **Not run yet**. **Run**
+starts one now.
 
 Jobs run on their own schedule. Running one by hand is for after you have
 changed a setting it depends on and would rather not wait — retention, say, or

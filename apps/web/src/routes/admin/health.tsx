@@ -1,6 +1,6 @@
-import type { JobRun, ObservabilityStatus } from '@oci/shared';
+import type { BackgroundJob, JobRun, ObservabilityStatus } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CircleAlert, CircleCheck, Play, TriangleAlert } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleDashed, Play, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import {
@@ -62,6 +62,23 @@ const SUMMARY: Record<Status, string> = {
   warn: 'Working, with something worth looking at.',
   error: 'Something is broken and users are affected.',
 };
+
+/** A job's schedule in words: "every 15 seconds", "every hour", "every 6 hours". */
+function formatJobInterval(ms: number): string {
+  const units: [number, string][] = [
+    [24 * 60 * 60 * 1000, 'day'],
+    [60 * 60 * 1000, 'hour'],
+    [60 * 1000, 'minute'],
+    [1000, 'second'],
+  ];
+  for (const [size, unit] of units) {
+    if (ms >= size && ms % size === 0) {
+      const count = ms / size;
+      return count === 1 ? `every ${unit}` : `every ${count} ${unit}s`;
+    }
+  }
+  return `every ${ms} ms`;
+}
 
 /** A job run as one line (shown and as its tooltip, #130). */
 function runSummary(entry: JobRun): string {
@@ -175,7 +192,7 @@ function BackgroundJobs() {
 
   const jobs = useQuery({
     queryKey: ['admin', 'jobs'],
-    queryFn: () => api.get<{ runs: JobRun[] }>('/admin/lifecycle/jobs'),
+    queryFn: () => api.get<{ jobs: BackgroundJob[] }>('/admin/lifecycle/jobs'),
     refetchInterval: 30_000,
   });
   const { data, isLoading } = jobs;
@@ -199,20 +216,8 @@ function BackgroundJobs() {
 
   if (!data) return <LoadError title="Background jobs could not be loaded." query={jobs} />;
 
-  // One row per job, showing only its most recent run.
-  const latest = new Map<string, JobRun>();
-  for (const entry of data.runs) {
-    if (!latest.has(entry.jobName)) latest.set(entry.jobName, entry);
-  }
-  const runs = [...latest.values()].sort((a, b) => a.jobName.localeCompare(b.jobName));
-
-  if (runs.length === 0) {
-    return (
-      <p className="text-[var(--text-muted)] text-sm">
-        No background job has run yet. Jobs start on their own schedule after the API boots.
-      </p>
-    );
-  }
+  // Every registered job, run or not, so each has its Run button (#215).
+  const list = [...data.jobs].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div>
@@ -222,32 +227,44 @@ function BackgroundJobs() {
         className="mb-3"
       />
       <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
-        {runs.map((entry) => {
-          const failed = entry.status === 'error';
-          const running = entry.status === 'running';
-          const Icon = failed ? CircleAlert : running ? TriangleAlert : CircleCheck;
+        {list.map((job) => {
+          const entry = job.lastRun;
+          const failed = entry?.status === 'error';
+          const running = entry?.status === 'running';
+          const Icon = !entry
+            ? CircleDashed
+            : failed
+              ? CircleAlert
+              : running
+                ? TriangleAlert
+                : CircleCheck;
+          const summary = `${entry ? runSummary(entry) : 'Not run yet'} · runs ${formatJobInterval(job.intervalMs)}`;
           return (
-            <li key={entry.id} className="flex items-center gap-3 px-4 py-3">
+            <li key={job.name} className="flex items-center gap-3 px-4 py-3">
               <Icon
                 className={cn(
                   'size-4 shrink-0',
-                  failed
-                    ? 'text-[var(--danger)]'
-                    : running
-                      ? 'text-[var(--warning)]'
-                      : 'text-[var(--success)]',
+                  !entry
+                    ? 'text-[var(--text-muted)]'
+                    : failed
+                      ? 'text-[var(--danger)]'
+                      : running
+                        ? 'text-[var(--warning)]'
+                        : 'text-[var(--success)]',
                 )}
-                aria-label={failed ? 'Failed' : running ? 'Running' : 'Succeeded'}
+                aria-label={
+                  !entry ? 'Not run yet' : failed ? 'Failed' : running ? 'Running' : 'Succeeded'
+                }
                 role="img"
               />
 
               <div className="min-w-0 flex-1">
                 {/* Full values on hover when a narrow screen cuts them short (#130). */}
-                <p className="truncate font-mono text-xs" title={entry.jobName}>
-                  {entry.jobName}
+                <p className="truncate font-mono text-xs" title={job.name}>
+                  {job.name}
                 </p>
-                <p className="truncate text-[var(--text-muted)] text-xs" title={runSummary(entry)}>
-                  {runSummary(entry)}
+                <p className="truncate text-[var(--text-muted)] text-xs" title={summary}>
+                  {summary}
                 </p>
               </div>
 
@@ -256,11 +273,11 @@ function BackgroundJobs() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  aria-label={`Run ${entry.jobName} now`}
+                  aria-label={`Run ${job.name} now`}
                   disabled={run.isPending}
-                  onClick={() => run.mutate(entry.jobName)}
+                  onClick={() => run.mutate(job.name)}
                 >
-                  {run.isPending && run.variables === entry.jobName ? <Spinner /> : <Play />}
+                  {run.isPending && run.variables === job.name ? <Spinner /> : <Play />}
                   Run
                 </Button>
               </EditOnly>
@@ -421,7 +438,7 @@ export function AdminHealthPage() {
         <SettingsSection
           editable={false}
           title="Background jobs"
-          description="The most recent run of each scheduled job. Jobs hold a lock while running, so each runs on one replica at a time."
+          description="Every scheduled job, how often it runs, and its most recent run. Jobs hold a lock while running, so each runs on one replica at a time."
         >
           <BackgroundJobs />
         </SettingsSection>

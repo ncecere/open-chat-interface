@@ -235,17 +235,23 @@ describe('System health', () => {
         };
       if (path === '/admin/lifecycle/jobs')
         return {
-          runs: [
+          jobs: [
             {
-              id: 'r1',
-              jobName: 'attachment-orphan-reconciliation',
-              status: 'ok',
-              startedAt: new Date().toISOString(),
-              finishedAt: new Date().toISOString(),
-              durationMs: 120,
-              itemsProcessed: 3,
-              errorMessage: null,
+              name: 'attachment-orphan-reconciliation',
+              intervalMs: 60_000,
+              lastRun: {
+                id: 'r1',
+                jobName: 'attachment-orphan-reconciliation',
+                status: 'success',
+                startedAt: new Date().toISOString(),
+                finishedAt: new Date().toISOString(),
+                durationMs: 120,
+                itemsProcessed: 3,
+                errorMessage: null,
+              },
             },
+            // A daily job that has not run since the API started (#215).
+            { name: 'retention.audit-log', intervalMs: 86_400_000, lastRun: null },
           ],
         };
       if (path === '/admin/lifecycle/storage-health')
@@ -266,6 +272,10 @@ describe('System health', () => {
     expect(text).toContain('Set OTEL_EXPORTER_OTLP_ENDPOINT to export traces.');
     // A long job name and its run line can be cut short on a phone (#130).
     expect(text).toContain('attachment-orphan-reconciliation');
+    expect(text).toContain('runs every minute');
+    // Every registered job is listed, whether or not it has run (#215).
+    expect(text).toContain('retention.audit-log');
+    expect(text).toContain('Not run yet · runs every day');
     expect(untitledTruncations()).toEqual([]);
   });
 });

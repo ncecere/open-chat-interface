@@ -198,6 +198,14 @@ export const jobRunSchema = z.object({
   errorMessage: z.string().nullable(),
 });
 
+/** A registered background job and its most recent run, if it has run (#215). */
+export const backgroundJobSchema = z.object({
+  name: z.string(),
+  /** How often it ticks. */
+  intervalMs: z.number().int().positive(),
+  lastRun: jobRunSchema.nullable(),
+});
+
 export type StoragePolicy = z.infer<typeof storagePolicySchema>;
 export type UpsertStoragePolicyInput = z.infer<typeof upsertStoragePolicySchema>;
 export type StorageUsage = z.infer<typeof storageUsageSchema>;
@@ -208,5 +216,6 @@ export type ReserveAmounts = z.infer<typeof reserveAmountsSchema>;
 export type UpdateRateLimitSettings = z.infer<typeof updateRateLimitSettingsSchema>;
 export type TrashedThread = z.infer<typeof trashedThreadSchema>;
 export type JobRun = z.infer<typeof jobRunSchema>;
+export type BackgroundJob = z.infer<typeof backgroundJobSchema>;
 export type QuotaOverride = z.infer<typeof quotaOverrideSchema>;
 export type UpsertQuotaOverrideInput = z.infer<typeof upsertQuotaOverrideSchema>;
