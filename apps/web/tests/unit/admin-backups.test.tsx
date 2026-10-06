@@ -13,6 +13,7 @@ import {
   typeInto,
   validationFailure,
 } from './admin-test-utils';
+import { styleFor } from './css-test-utils';
 import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
@@ -282,6 +283,17 @@ describe('System health', () => {
     expect(text).toContain('retention.audit-log');
     expect(text).toContain('Not run yet · runs every day');
     expect(untitledTruncations()).toEqual([]);
+    // A tooltip cannot be read on a touch phone, where 18 of 28 run lines were
+    // cut at "runs every…" (#215): the name and run line wrap instead.
+    const lines = [...document.querySelectorAll('li p')].filter((line) =>
+      /runs every|attachment-orphan-reconciliation/.test(line.textContent ?? ''),
+    );
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    for (const line of lines) {
+      const style = await styleFor(line.className);
+      expect(style['text-overflow'], line.textContent ?? '').toBeUndefined();
+      expect(style['white-space'], line.textContent ?? '').not.toBe('nowrap');
+    }
   });
 });
 

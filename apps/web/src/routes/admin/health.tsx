@@ -259,13 +259,10 @@ function BackgroundJobs() {
               />
 
               <div className="min-w-0 flex-1">
-                {/* Full values on hover when a narrow screen cuts them short (#130). */}
-                <p className="truncate font-mono text-xs" title={job.name}>
-                  {job.name}
-                </p>
-                <p className="truncate text-[var(--text-muted)] text-xs" title={summary}>
-                  {summary}
-                </p>
+                {/* Wrapped, not cut short: a phone cannot show a tooltip, and the
+                    schedule is at the end of the line (#215). */}
+                <p className="break-all font-mono text-xs">{job.name}</p>
+                <p className="break-words text-[var(--text-muted)] text-xs">{summary}</p>
               </div>
 
               <EditOnly>
