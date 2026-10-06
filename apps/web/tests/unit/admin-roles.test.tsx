@@ -256,6 +256,48 @@ describe('Roles & access', () => {
     expect(upsertStoragePolicySchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
   });
 
+  it('shows an unsaved allowance as not enforced, and offers Save only for a change (#147)', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=user' }));
+    const enforce = document.getElementById('storage-user-enabled') as HTMLButtonElement;
+    expect(document.getElementById('role-panel')?.textContent).toContain('storage is unlimited');
+    expect(enforce.getAttribute('aria-checked')).toBe('false');
+    expect(button('Save allowance').disabled).toBe(true);
+
+    // Entering a limit turns enforcement on with it; clearing it turns it off again.
+    await typeInto(input('storage-user-count'), '50');
+    expect(enforce.getAttribute('aria-checked')).toBe('true');
+    expect(button('Save allowance').disabled).toBe(false);
+    await typeInto(input('storage-user-count'), '');
+    expect(enforce.getAttribute('aria-checked')).toBe('false');
+    expect(button('Save allowance').disabled).toBe(true);
+  });
+
+  it('offers Save for a saved allowance only once something changes (#147)', async () => {
+    roles.roles[2] = roleAccessFixture('user', {
+      storage: {
+        role: 'user',
+        maxTotalBytes: 2 * GB,
+        maxFileCount: null,
+        maxFileBytes: null,
+        enabled: true,
+      },
+    });
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=user' }));
+    const enforce = document.getElementById('storage-user-enabled') as HTMLButtonElement;
+    expect(enforce.getAttribute('aria-checked')).toBe('true');
+    expect(button('Save allowance').disabled).toBe(true);
+    await click(enforce);
+    expect(enforce.getAttribute('aria-checked')).toBe('false');
+    await click(button('Save allowance'));
+    expect(api.put).toHaveBeenCalledWith('/admin/lifecycle/storage-policies/user', {
+      role: 'user',
+      maxTotalBytes: 2 * GB,
+      maxFileCount: null,
+      maxFileBytes: null,
+      enabled: false,
+    });
+  });
+
   it('refuses 0 and negative storage limits instead of saving them as unlimited', async () => {
     ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=restricted' }));
 

@@ -355,8 +355,9 @@ limit; a blank per-file size falls back to the instance upload limit on
 [Storage](operations.md#storage). Any value you enter must be greater than 0
 (the file count a whole number), at most 1,024 GB in total and 1,024 MB per
 file; 0 is refused rather than read as "no limit". To stop a role storing files
-at all, turn off its attachments feature instead. **Enforce allowance** switches the allowance off without losing the values; a
-role with nothing saved is unlimited. Set on **People → Roles & access**.
+at all, turn off its attachments feature instead. **Enforce allowance** switches the allowance off without losing the values. A
+role with nothing saved is unlimited and shows the switch off; entering a limit
+turns it on, and **Save allowance** is available once something has changed. Set on **People → Roles & access**.
 
 Artifact versions count towards total storage (not towards the file count)
 while their conversation is not in the trash.

@@ -9,6 +9,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { MutationError } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -31,17 +32,31 @@ function draftFromPolicy(policy: StoragePolicy | null): StoragePolicyDraft {
     maxTotalGb: policy?.maxTotalBytes ? String(policy.maxTotalBytes / GB) : '',
     maxFileCount: policy?.maxFileCount ? String(policy.maxFileCount) : '',
     maxFileMb: policy?.maxFileBytes ? String(policy.maxFileBytes / MB) : '',
-    enabled: policy?.enabled ?? true,
+    // Nothing saved enforces nothing, so the switch starts off (#147).
+    enabled: policy?.enabled ?? false,
   };
 }
+
+const hasLimit = (draft: StoragePolicyDraft) =>
+  Boolean(draft.maxTotalGb.trim() || draft.maxFileCount.trim() || draft.maxFileMb.trim());
 
 export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
   const queryClient = useQueryClient();
   const { role, storage } = access;
   const [draft, setDraft] = useState(() => draftFromPolicy(storage));
+  // Whether the switch was set by hand; until then, for a role with nothing
+  // saved, entering a limit turns enforcement on with it.
+  const [switchTouched, setSwitchTouched] = useState(false);
   const [saved, setSaved] = useSavedFlash();
 
-  useEffect(() => setDraft(draftFromPolicy(storage)), [storage]);
+  useEffect(() => {
+    setDraft(draftFromPolicy(storage));
+    setSwitchTouched(false);
+  }, [storage]);
+
+  // Save is offered only for a real change, as in every other section (#147).
+  const hasChanges = JSON.stringify(draft) !== JSON.stringify(draftFromPolicy(storage));
+  useReportUnsaved(hasChanges);
 
   // Blank means no limit; anything else has to be a real limit. A 0 or a
   // negative used to be read as blank and saved as unlimited.
@@ -85,7 +100,12 @@ export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
   function update(patch: Partial<StoragePolicyDraft>) {
     save.reset();
     setSaved(false);
-    setDraft((current) => ({ ...current, ...patch }));
+    setDraft((current) => {
+      const next = { ...current, ...patch };
+      return storage === null && !switchTouched && patch.enabled === undefined
+        ? { ...next, enabled: hasLimit(next) }
+        : next;
+    });
   }
 
   return (
@@ -96,7 +116,7 @@ export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        if (valid) save.mutate();
+        if (valid && hasChanges) save.mutate();
       }}
     >
       <div className="flex items-center justify-between gap-4">
@@ -113,7 +133,10 @@ export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
         <Switch
           id={`storage-${role}-enabled`}
           checked={draft.enabled}
-          onCheckedChange={(enabled) => update({ enabled })}
+          onCheckedChange={(enabled) => {
+            setSwitchTouched(true);
+            update({ enabled });
+          }}
         />
       </div>
 
@@ -170,7 +193,11 @@ export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
             className="mr-auto"
           />
           <SavedNote show={saved} />
-          <Button type="submit" variant="primary" disabled={!valid || save.isPending}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!valid || !hasChanges || save.isPending}
+          >
             {save.isPending && <Spinner />}
             Save allowance
           </Button>
