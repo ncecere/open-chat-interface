@@ -361,6 +361,37 @@ describe('real router lazy admin and settings routes', () => {
     },
   );
 
+  it.each(['/admin/webhooks', '/settings/history', '/chat/t-1?message=m-2'])(
+    'sends an anonymous visit to %s to sign-in with the way back (#225)',
+    async (path) => {
+      const { ApiError } = await import('../../src/lib/api-client');
+      session.get.mockRejectedValue(new ApiError(401, 'UNAUTHORIZED', 'No session'));
+      await renderRoute(path);
+      expect(router.state.location.pathname).toBe('/auth/login');
+      expect(new URLSearchParams(router.state.location.searchStr).get('redirect')).toBe(path);
+    },
+  );
+
+  it('sends an anonymous visit to the home page to plain sign-in', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    session.get.mockRejectedValue(new ApiError(401, 'UNAUTHORIZED', 'No session'));
+    await renderRoute('/');
+    expect(router.state.location.href).toBe('/auth/login');
+  });
+
+  it.each([
+    ['/auth/login?redirect=%2Fadmin%2Fwebhooks', '/admin/webhooks'],
+    ['/auth/login?redirect=%2F%2Fevil.example%2Fadmin', '/'],
+    ['/auth/login?redirect=https%3A%2F%2Fevil.example%2F', '/'],
+    ['/auth/login?redirect=%2F%5Cevil.example', '/'],
+  ])('sends someone already signed in from %s on to %s, never off the site', async (path, to) => {
+    await renderRoute(path);
+    await act(async () => {
+      await router.load();
+    });
+    expect(router.state.location.pathname).toBe(to);
+  });
+
   it.each([
     ['/admin', 'routes/admin/overview', 'AdminOverviewPage'],
     ['/settings', 'components/settings/settings-layout', 'SettingsAccountPage'],

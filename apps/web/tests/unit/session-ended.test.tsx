@@ -111,7 +111,8 @@ it('goes to sign-in, saying so, when a request finds the session ended', async (
   });
   await settle();
   expect(location().pathname).toBe('/auth/login');
-  expect(location().search).toEqual({ 'signed-out': '1' });
+  // Signing in again comes back to the conversation (#225).
+  expect(location().search).toEqual({ 'signed-out': '1', redirect: '/chat/a' });
   expect(container.querySelector('[data-shell]')).toBeNull();
 });
 
@@ -125,7 +126,7 @@ it('does the same when sending a message finds it ended', async () => {
   });
   await settle();
   expect(location().pathname).toBe('/auth/login');
-  expect(location().search).toEqual({ 'signed-out': '1' });
+  expect(location().search).toEqual({ 'signed-out': '1', redirect: '/chat/a' });
 });
 
 it('says nothing to someone who was never signed in', async () => {
@@ -133,7 +134,8 @@ it('says nothing to someone who was never signed in', async () => {
   await open('/chat/a');
   await settle();
   expect(location().pathname).toBe('/auth/login');
-  expect(location().search).toEqual({});
+  // No notice, only the way back to the page asked for (#225).
+  expect(location().search).toEqual({ redirect: '/chat/a' });
 });
 
 it('says nothing after signing out on purpose', async () => {

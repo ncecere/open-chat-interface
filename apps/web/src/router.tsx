@@ -25,6 +25,7 @@ import {
   validateChatThreadSearch,
   validateProjectSearch,
 } from '~/lib/chat-search-params';
+import { returnPathFromSearch, signInSearch } from '~/lib/return-path';
 import { noteSessionConfirmed, onSessionEnded, SIGNED_OUT_PARAM } from '~/lib/session-ended';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
@@ -109,9 +110,10 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth/login',
   component: LoginPage,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await loadSession();
-    if (session) throw redirect({ to: '/' });
+    // Already signed in: straight on to the page the link asked for (#225).
+    if (session) throw redirect({ href: returnPathFromSearch(location.searchStr) ?? '/' });
   },
 });
 
@@ -127,9 +129,11 @@ const publicShareRoute = createRoute({
 const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'authenticated',
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await loadSession();
-    if (!session) throw redirect({ to: '/auth/login' });
+    // Sign-in comes back to this page afterwards (#225).
+    if (!session)
+      throw redirect({ to: '/auth/login', search: signInSearch(location.href) as never });
     return { session };
   },
   component: () => (
@@ -193,9 +197,10 @@ const chatThreadRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'settings',
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await loadSession();
-    if (!session) throw redirect({ to: '/auth/login' });
+    if (!session)
+      throw redirect({ to: '/auth/login', search: signInSearch(location.href) as never });
     return { session };
   },
   component: lazyRouteComponent(
@@ -274,9 +279,10 @@ const settingsTabRoutes = SETTINGS_TABS.map((tab) =>
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'admin',
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await loadSession();
-    if (!session) throw redirect({ to: '/auth/login' });
+    if (!session)
+      throw redirect({ to: '/auth/login', search: signInSearch(location.href) as never });
     // Auditors get read-only access: the API serves them GETs and rejects
     // writes, and the layout hides or disables every mutating control.
     if (session.user.role !== 'admin' && session.user.role !== 'auditor') {
@@ -543,9 +549,13 @@ export const router = createRouter({
  */
 onSessionEnded(() => {
   confirmedSession = null;
-  const { pathname } = router.state.location;
+  const { pathname, href } = router.state.location;
   if (pathname.startsWith('/auth/') || pathname.startsWith('/share/')) return;
-  void router.navigate({ to: '/auth/login', search: { [SIGNED_OUT_PARAM]: '1' } as never });
+  // Signing in again comes back to the page that was open (#225).
+  void router.navigate({
+    to: '/auth/login',
+    search: { [SIGNED_OUT_PARAM]: '1', ...signInSearch(href) } as never,
+  });
 });
 
 declare module '@tanstack/react-router' {

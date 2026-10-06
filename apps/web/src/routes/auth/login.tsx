@@ -12,6 +12,7 @@ import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
+import { returnPathFromSearch } from '~/lib/return-path';
 import { SIGNED_OUT_PARAM } from '~/lib/session-ended';
 
 const WRONG_CREDENTIALS = 'Unable to sign in. Check your email and password.';
@@ -51,6 +52,9 @@ export function LoginPage() {
   const [signedOut] = useState(() =>
     new URLSearchParams(window.location.search).has(SIGNED_OUT_PARAM),
   );
+  // The page a signed-out visit asked for, to return to afterwards (#225);
+  // only a path on this site, so the parameter cannot send anyone elsewhere.
+  const [returnTo] = useState(() => returnPathFromSearch() ?? '/');
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -77,12 +81,16 @@ export function LoginPage() {
     // this tab): an anonymous /me answer would otherwise be reused for the
     // new account, hiding its menu, projects and features until a reload.
     queryClient.clear();
-    await navigate({ to: '/' });
+    await navigate({ href: returnTo });
   }
 
   async function handleSso(providerId: string) {
     setError(null);
-    await authClient.signIn.sso({ providerId, callbackURL: '/', errorCallbackURL: SSO_ERROR_URL });
+    await authClient.signIn.sso({
+      providerId,
+      callbackURL: returnTo,
+      errorCallbackURL: SSO_ERROR_URL,
+    });
   }
 
   /**
@@ -126,10 +134,10 @@ export function LoginPage() {
     if (auto)
       void authClient.signIn.sso({
         providerId: auto.providerId,
-        callbackURL: '/',
+        callbackURL: returnTo,
         errorCallbackURL: SSO_ERROR_URL,
       });
-  }, [status, error, signedOut]);
+  }, [status, error, signedOut, returnTo]);
 
   const appName = status?.branding.appName;
 

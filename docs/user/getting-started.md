@@ -16,6 +16,10 @@ On a phone the same page is laid out for a narrow screen.
 
 ![Signing in on a phone](../images/mobile-sign-in.png)
 
+If you opened a link to a particular page (a conversation, a Settings section,
+an administration page) while signed out, signing in takes you to that page
+rather than the chat home.
+
 Some instances go straight to the identity provider without showing this page
 at all. If that happens and the provider is not working, adding `?local=1` to
 the sign-in address brings the form back.
@@ -37,7 +41,8 @@ Three refusals mean different things:
 If your session ends while the app is open (an administrator suspends the
 account or signs it out everywhere, or you sign out every other device from
 somewhere else), the next thing you do takes you to the sign-in page, which
-says you were signed out.
+says you were signed out. Signing in again brings you back to the page you were
+on.
 
 ### If you forget your password
 
