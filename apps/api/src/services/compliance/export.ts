@@ -8,7 +8,7 @@ import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
 import type { BackupTarget } from '../backups/settings.js';
-import { manualRunConflict, requestManualRun } from '../jobs/requests.js';
+import { assertManualRunPlaced, requestManualRun } from '../jobs/requests.js';
 import { runExclusively } from '../jobs/runner.js';
 import { withSpan } from '../observability/tracing.js';
 import { getDefaultOrganizationId } from '../organization.js';
@@ -419,8 +419,10 @@ export async function startManualComplianceExport(actor: Actor): Promise<'starte
     .limit(1);
   if (running) return 'running';
   // On a `web` replica (v0.11) a worker runs it.
-  const placed = await requestManualRun({ job: COMPLIANCE_JOB, actor: actor ?? undefined });
-  if (placed === 'no-worker') throw manualRunConflict();
+  // 'started' only once a worker has taken it (#265).
+  const placed = assertManualRunPlaced(
+    await requestManualRun({ job: COMPLIANCE_JOB, actor: actor ?? undefined }),
+  );
   if (placed === 'queued') return 'started';
   void runManualComplianceExport(actor).catch((error: unknown) =>
     logger.error(

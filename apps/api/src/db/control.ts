@@ -18,6 +18,7 @@ import { processRole } from '../lib/role.js';
  * | --- | --- | --- |
  * | A running background job's advisory lock | 1 per job running | services/jobs/lock.ts |
  * | `LISTEN` for work asked of a worker | 1 per worker/all replica | services/jobs/requests.ts |
+ * | `LISTEN` for a worker to take a manual run (#265) | 1 per run, for up to 5 s | services/jobs/requests.ts |
  * | Pre-deploy migrations (startup or `migrate`) | 1, plus 1 lock monitor | packages/db migrator |
  * | Post-deploy steps (`migrate --post`, or the job) | 1, plus 1 lock monitor | packages/db post-migrator |
  * | `pg_dump` for a backup | 1 while it runs | services/backups/run.ts |

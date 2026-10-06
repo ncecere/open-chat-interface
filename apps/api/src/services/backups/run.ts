@@ -6,7 +6,7 @@ import { errorText } from '../../lib/log-redaction.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
-import { manualRunConflict, requestManualRun } from '../jobs/requests.js';
+import { assertManualRunPlaced, requestManualRun } from '../jobs/requests.js';
 import { runExclusively } from '../jobs/runner.js';
 import { backupDuration, backupRuns } from '../observability/metrics.js';
 import { withSpan } from '../observability/tracing.js';
@@ -340,8 +340,10 @@ export async function startManualBackup(actor: Actor): Promise<'started' | 'runn
     .limit(1);
   if (running) return 'running';
   // On a `web` replica (v0.11) a worker runs it.
-  const placed = await requestManualRun({ job: BACKUP_JOB, actor: actor ?? undefined });
-  if (placed === 'no-worker') throw manualRunConflict();
+  // 'started' only once a worker has taken it (#265).
+  const placed = assertManualRunPlaced(
+    await requestManualRun({ job: BACKUP_JOB, actor: actor ?? undefined }),
+  );
   if (placed === 'queued') return 'started';
   void runManualBackup(actor).catch((error: unknown) =>
     logger.error(

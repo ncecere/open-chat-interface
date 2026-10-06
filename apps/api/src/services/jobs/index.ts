@@ -34,9 +34,9 @@ import { purgeExpiredTemporaryThreads, purgeUnusedThreads } from '../threads.js'
 import { foldUsageRollups, USAGE_ROLLUP_FOLD_JOB } from '../usage-report/rollup-fold.js';
 import { processWebhookDeliveries } from '../webhooks/delivery.js';
 import {
+  assertManualRunPlaced,
   type JobRequest,
   listenForJobRequests,
-  manualRunConflict,
   requestManualRun,
 } from './requests.js';
 import {
@@ -251,6 +251,16 @@ export async function handleJobRequest(request: JobRequest): Promise<unknown> {
   return runJobNow(request.job);
 }
 
+/**
+ * Whether this replica can run what a request asks for: a manual run it
+ * cannot is left unanswered, so the web replica reports it as not started
+ * rather than queued (#256, #265).
+ */
+export function takesJobRequest(request: JobRequest): boolean {
+  if (request.actor && (request.job === BACKUP_JOB || request.job === COMPLIANCE_JOB)) return true;
+  return isLifecycleJob(request.job);
+}
+
 /** The jobs this replica schedules, as its heartbeat reports them (#256). */
 export function scheduledHere(): ScheduledJob[] {
   return lifecycleJobs().map(({ name, intervalMs }) => ({ name, intervalMs }));
@@ -282,7 +292,7 @@ function notScheduledConflict(name: string) {
  */
 export async function startLifecycleJobs(): Promise<void> {
   startJobs(lifecycleJobs());
-  stopListening = await listenForJobRequests(handleJobRequest);
+  stopListening = await listenForJobRequests(handleJobRequest, takesJobRequest);
 }
 
 /** Stops the timers and the listener; jobs already running finish their batch. */
@@ -324,8 +334,9 @@ export async function runOrQueueJobNow(name: string): Promise<number | 'queued' 
     if (here || name === POST_MIGRATIONS_JOB) throw notScheduledConflict(name);
     throw notFound(`There is no job called ${name}`);
   }
-  const placed = await requestManualRun({ job: name });
-  if (placed === 'no-worker') throw manualRunConflict();
+  // Queued only once a worker has taken it: a request no worker hears is
+  // lost, so it is refused with the reason instead (#265).
+  assertManualRunPlaced(await requestManualRun({ job: name }));
   return 'queued';
 }
 

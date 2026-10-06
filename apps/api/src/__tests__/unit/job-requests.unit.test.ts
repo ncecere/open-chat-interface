@@ -28,9 +28,12 @@ vi.mock('../../lib/logger.js', () => ({
 vi.mock('../../services/jobs/workers.js', () => ({ workerStatus: mocks.workerStatus }));
 
 import {
+  assertManualRunPlaced,
+  JOB_ACK_CHANNEL,
   JOB_REQUEST_CHANNEL,
   kickJob,
   listenForJobRequests,
+  manualRunAck,
   manualRunConflict,
   requestManualRun,
 } from '../../services/jobs/requests.js';
@@ -102,10 +105,44 @@ describe('work a request starts (OCI_ROLE)', () => {
     mocks.workerStatus.mockResolvedValueOnce({ alive: false });
     expect(await requestManualRun({ job: 'backups.run', actor })).toBe('no-worker');
     expect(mocks.execute).not.toHaveBeenCalled();
+    // A worker answers the request as it takes it (#265).
+    let answer!: (payload: string) => void;
+    mocks.listen.mockImplementation(async (_channel: string, onNotify: (p: string) => void) => {
+      answer = onNotify;
+      return { unlisten: mocks.unlisten };
+    });
+    mocks.execute.mockImplementation(async () => {
+      const [, request] = notified().at(-1)!;
+      answer('another-request');
+      answer(request.requestId);
+      return [];
+    });
     mocks.workerStatus.mockResolvedValueOnce({ alive: true });
     expect(await requestManualRun({ job: 'backups.run', actor })).toBe('queued');
-    expect(notified()).toEqual([[JOB_REQUEST_CHANNEL, { job: 'backups.run', actor }]]);
+    expect(mocks.listen).toHaveBeenCalledWith(JOB_ACK_CHANNEL, expect.any(Function));
+    expect(notified()).toEqual([
+      [JOB_REQUEST_CHANNEL, { job: 'backups.run', actor, requestId: expect.any(String) }],
+    ]);
+    // The ack listener and its connection are closed again.
+    expect(mocks.unlisten).toHaveBeenCalledOnce();
+    expect(mocks.end).toHaveBeenCalledOnce();
     expect(manualRunConflict()).toMatchObject({ status: 409 });
+  });
+
+  it('reports a manual run no worker takes in time as not started (#265)', async () => {
+    mocks.role = 'web';
+    manualRunAck.timeoutMs = 50;
+    mocks.listen.mockResolvedValue({ unlisten: mocks.unlisten });
+    // A worker that has just stopped still looks alive.
+    mocks.workerStatus.mockResolvedValue({ alive: true, evidence: 'job-runs' });
+    expect(await requestManualRun({ job: 'reports.send-due' })).toBe('unanswered');
+    expect(() => assertManualRunPlaced('unanswered')).toThrow(/has not started/);
+    expect(assertManualRunPlaced('queued')).toBe('queued');
+    // Nor can it be confirmed without LISTEN.
+    mocks.listen.mockRejectedValueOnce(new Error('no control connection'));
+    expect(await requestManualRun({ job: 'reports.send-due' })).toBe('unanswered');
+    expect(mocks.end).toHaveBeenCalledTimes(2);
+    manualRunAck.timeoutMs = 5_000;
   });
 });
 
@@ -147,6 +184,28 @@ describe('a worker listening for requests', () => {
     expect(mocks.unlisten).toHaveBeenCalledOnce();
     // The control connection is closed with it.
     expect(mocks.end).toHaveBeenCalledOnce();
+  });
+
+  it('answers a manual run as it takes it, unless it cannot run it (#265)', async () => {
+    const handle = vi.fn(async () => undefined);
+    let deliver!: (payload: string) => void;
+    mocks.listen.mockImplementation(async (_channel: string, onNotify: (p: string) => void) => {
+      deliver = onNotify;
+      return { unlisten: mocks.unlisten };
+    });
+    await listenForJobRequests(handle, (request) => request.job !== 'not.here');
+    deliver(JSON.stringify({ job: 'reports.send-due', requestId: 'r-1' }));
+    deliver(JSON.stringify({ job: 'not.here', requestId: 'r-2' }));
+    // A kick is not a manual run: nothing to answer.
+    deliver(JSON.stringify({ job: 'imports.process' }));
+    await vi.waitFor(() => expect(handle).toHaveBeenCalledTimes(2));
+    expect(notified()).toEqual([['oci_job_request_acks', 'r-1']]);
+    expect(handle).not.toHaveBeenCalledWith(expect.objectContaining({ job: 'not.here' }));
+    // A draining worker neither answers nor runs it.
+    mocks.draining = true;
+    deliver(JSON.stringify({ job: 'reports.send-due', requestId: 'r-3' }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(notified()).toHaveLength(1);
   });
 
   it('ignores malformed requests, and everything once draining', async () => {

@@ -1,4 +1,4 @@
-import { and, eq, schema } from '@oci/db';
+import { and, createControlClient, eq, schema } from '@oci/db';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -21,12 +21,16 @@ const available = await livePostgresAvailable();
 const state = vi.hoisted(() => {
   // The web replica of the QA stack: RUN_MIGRATIONS=true, so post-deploy work is "its" job.
   process.env.RUN_POST_MIGRATIONS = 'true';
-  return { db: null as unknown, redis: null as unknown };
+  return { db: null as unknown, redis: null as unknown, url: '' };
 });
 vi.mock('../../db/index.js', () => ({
   get db() {
     return state.db;
   },
+}));
+// Run waits for the worker to take the request on a LISTEN connection (#265).
+vi.mock('../../db/control.js', () => ({
+  openControlClient: () => createControlClient(state.url),
 }));
 vi.mock('../../lib/role.js', () => ({
   processRole: () => 'web',
@@ -37,6 +41,7 @@ vi.mock('../../services/chat-streams.js', () => ({ sharedRedis: async () => stat
 const { lifecycleRoutes } = await import('../../routes/admin/lifecycle.js');
 const { lifecycleJobs } = await import('../../services/jobs/index.js');
 const { startReplicaHeartbeat } = await import('../../services/jobs/workers.js');
+const { listenForJobRequests, manualRunAck } = await import('../../services/jobs/requests.js');
 const { POST_MIGRATIONS_JOB } = await import('../../services/migrations/jobs.js');
 const { errorHandler } = await import('../../middleware/error-handler.js');
 
@@ -84,6 +89,8 @@ describe.skipIf(!available)('live: background jobs on a web replica (#256)', () 
   let admin: string;
   let organizationId: string;
   let stopWorker: () => Promise<void>;
+  let stopListening: (() => Promise<void>) | null = null;
+  const heard: unknown[] = [];
   const app = new Hono<AppBindings>();
   app.onError(errorHandler);
   app.use('*', async (c, next) => {
@@ -109,6 +116,7 @@ describe.skipIf(!available)('live: background jobs on a web replica (#256)', () 
   beforeAll(async () => {
     live = await createLiveDatabase('admin_jobs_web_role');
     state.db = live.db;
+    state.url = live.connectionString;
     organizationId = await seedOrganization(live.db);
     admin = await seedUser(live.db, organizationId, { role: 'admin' });
     state.redis = fakeRedis();
@@ -121,6 +129,7 @@ describe.skipIf(!available)('live: background jobs on a web replica (#256)', () 
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
   afterAll(async () => {
+    await stopListening?.();
     await stopWorker?.();
     await live?.destroy();
   });
@@ -147,13 +156,35 @@ describe.skipIf(!available)('live: background jobs on a web replica (#256)', () 
     expect(await runAudits(POST_MIGRATIONS_JOB)).toEqual([]);
   });
 
+  it('refuses Run while the worker that checked in takes no requests, and audits nothing (#265)', async () => {
+    // Its heartbeat is fresh, but it has stopped listening (stopped or crashed).
+    manualRunAck.timeoutMs = 500;
+    try {
+      const response = await app.request('/lifecycle/jobs/storage.recompute-usage/run', {
+        method: 'POST',
+      });
+      expect(response.status).toBe(409);
+      expect(((await response.json()) as { error: { message: string } }).error.message).toContain(
+        'has not started',
+      );
+      expect(await runAudits('storage.recompute-usage')).toEqual([]);
+    } finally {
+      manualRunAck.timeoutMs = 5_000;
+    }
+  });
+
   it('still queues and audits a job the worker runs', async () => {
+    // The worker listening, as a real one does: it takes the request.
+    stopListening = await listenForJobRequests(async (request) => {
+      heard.push(request);
+    });
     const response = await app.request('/lifecycle/jobs/storage.recompute-usage/run', {
       method: 'POST',
     });
     expect(response.status, await response.clone().text()).toBe(200);
     expect(await response.json()).toMatchObject({ queued: true });
     expect(await runAudits('storage.recompute-usage')).toHaveLength(1);
+    expect(heard).toEqual([{ job: 'storage.recompute-usage', requestId: expect.any(String) }]);
   });
 
   it('is still 404 for a job that exists nowhere', async () => {

@@ -303,7 +303,7 @@ PgBouncer in front of PostgreSQL:
 | Variable | Used for | May point at |
 | --- | --- | --- |
 | `DATABASE_URL` | The **application pool**: every request and every job's work | PostgreSQL, a session-mode pooler, or a **transaction-mode** pooler |
-| `CONTROL_DATABASE_URL` (default: `DATABASE_URL`) | **Control connections**: migrations (`migrate`, `migrate --post`, and at startup), background jobs' advisory locks, a worker's `LISTEN`, `pg_dump` for backups | PostgreSQL directly, or a **session-mode** pooler; never transaction mode |
+| `CONTROL_DATABASE_URL` (default: `DATABASE_URL`) | **Control connections**: migrations (`migrate`, `migrate --post`, and at startup), background jobs' advisory locks, a worker's `LISTEN` (and a `web` replica's, while it waits for a worker to take a manual run), `pg_dump` for backups | PostgreSQL directly, or a **session-mode** pooler; never transaction mode |
 | `READ_DATABASE_URL` (optional) | Heavy administrative reads ([below](#read-replica)) | A streaming replica, or a pooler in front of one |
 
 Nothing on the application pool keeps session state after a transaction:
@@ -316,13 +316,15 @@ connections:
 | --- | --- | --- |
 | A job's session advisory lock, held for the whole run | One control connection per running job | A second replica took a job the first was running (the lock was re-entered on the same pooled server connection), the first's lease check landed on another connection and found its lock gone, and the lock stayed behind on a pooled connection |
 | A worker's `LISTEN oci_job_requests` | One control connection per worker or `all` replica | No request from a `web` replica was ever heard (work waited for the job's next tick) |
+| A `web` replica's `LISTEN oci_job_request_acks` for **Run now**, **Back up now** or **Export now** | One control connection for up to 5 s per run | — |
 | `migrate --post`: session lock and `statement_timeout = 4h`, `lock_timeout`, `idle_in_transaction_session_timeout` | One control connection (plus one lock monitor) while it runs | Those settings and the lock stayed on a pooled server connection that ordinary requests then used |
 | Pre-deploy migrations (one transaction) | One control connection (plus one lock monitor) | Worked (transaction-scoped), moved for clarity |
 | `pg_dump` (session settings, one long transaction) | One control connection while a backup runs | Its `SET`s could land on a different server connection from its transaction |
 
 Pool sizes per replica: `DATABASE_POOL_MAX` (default 10) application
 connections; control connections only while used: one per job running at that
-moment (a few), one for `LISTEN` on a worker or `all` replica, one or two
+moment (a few), one for `LISTEN` on a worker or `all` replica, one for up to
+5 s on a `web` replica when an administrator runs a job by hand, one or two
 during a migration or backup, and, without Redis, one to show the replica is
 running (below). `READ_DATABASE_POOL_MAX` (default 5) connections to the
 replica when one is set.
@@ -1464,7 +1466,11 @@ replica has written one for a minute. System health also lists the replicas
 it has heard from and their roles. Without Redis, the worker check falls back
 to the interrupted-reply sweep's recorded runs (every 15 s on whichever
 replica runs jobs). **Run now**, **Back up now** and **Export now** on a `web`
-replica are handed to a worker, and refused with `409` while none is running.
+replica are handed to a worker, which confirms it has taken the request
+(`oci_job_request_acks`). They are refused with `409` while no worker is running,
+and also when no worker confirms within 5 s. A worker that has just stopped or
+crashed still looks alive for up to a minute, and a request it never hears
+would be lost, so the refusal says the work has not started.
 
 Jobs hold a PostgreSQL advisory lock while they run, so any number of `worker`
 and `all` replicas can run side by side; each job runs on one at a time.
