@@ -8,6 +8,7 @@ import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { withTrait } from '~/lib/traits';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
@@ -246,6 +247,8 @@ export function SettingsCustomizationPage() {
   // Leaving with an edit not saved asks first (#314).
   useReportUnsaved(dirty);
 
+  // Saving is refused while read-only, however much was changed (#353).
+  const lock = useReadOnlyLock();
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) => api.patch('/me/preferences', patch),
     onSuccess: () => {
@@ -356,7 +359,8 @@ export function SettingsCustomizationPage() {
           )}
           <Button
             variant="accent"
-            disabled={save.isPending || !dirty}
+            title={lock.title}
+            disabled={save.isPending || !dirty || lock.locked}
             onClick={() => save.mutate({ ...draft })}
           >
             Save Preferences

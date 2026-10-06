@@ -14,6 +14,7 @@ import {
 } from '~/components/ui/dropdown-menu';
 import { type CurrentFeatures, useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn } from '~/lib/utils';
 import { AttachmentList } from '~/routes/settings/attachment-list';
@@ -134,6 +135,8 @@ function deleteDescription(count: number, unsent: number): string {
 export function SettingsAttachmentsPage() {
   const queryClient = useQueryClient();
   const features = useCurrentUser().data?.features;
+  // Deleting files is refused while read-only (#353).
+  const lock = useReadOnlyLock();
   const [filter, setFilter] = useState<AttachmentFilter>('all');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -263,7 +266,10 @@ export function SettingsAttachmentsPage() {
             variant="accent"
             size="sm"
             className="sm:ml-auto"
-            disabled={selected.size > 0 && [...selected].every((id) => deletingIds.has(id))}
+            title={lock.title}
+            disabled={
+              lock.locked || (selected.size > 0 && [...selected].every((id) => deletingIds.has(id)))
+            }
             onClick={() => setConfirming([...selected])}
           >
             <Trash2 />
@@ -308,6 +314,7 @@ export function SettingsAttachmentsPage() {
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         errorMessage="The files could not be deleted."
+        confirmDisabled={lock.locked}
         onConfirm={() => remove.mutateAsync(confirming ?? [])}
       />
     </div>

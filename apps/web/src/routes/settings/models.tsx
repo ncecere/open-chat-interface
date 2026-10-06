@@ -17,6 +17,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 
 const CAPABILITY_META: Partial<Record<ModelCapability, { label: string; icon: typeof Eye }>> = {
   vision: { label: 'Vision', icon: Eye },
@@ -65,6 +66,8 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
   // A chosen default looked applied; leaving without Save dropped it (#314).
   useReportUnsaved(changed);
 
+  // Saving is refused while read-only, however much was changed (#353).
+  const lock = useReadOnlyLock();
   const save = useMutation({
     mutationFn: () =>
       api.patch('/me/preferences', {
@@ -165,7 +168,13 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
           />
         </Field>
         <div className="flex items-center gap-3">
-          <Button type="submit" variant="accent" size="sm" disabled={!changed || save.isPending}>
+          <Button
+            type="submit"
+            variant="accent"
+            size="sm"
+            title={lock.title}
+            disabled={!changed || save.isPending || lock.locked}
+          >
             {save.isPending && <Spinner />}
             Save defaults
           </Button>

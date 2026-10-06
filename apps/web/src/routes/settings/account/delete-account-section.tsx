@@ -8,6 +8,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 
 /**
  * Deleting your own account (v0.10), when an administrator has allowed it for
@@ -19,6 +20,8 @@ export function DeleteAccountSection() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data } = useCurrentUser();
+  // Deleting an account is refused while read-only (#353).
+  const lock = useReadOnlyLock();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [password, setPassword] = useState('');
@@ -60,6 +63,8 @@ export function DeleteAccountSection() {
             size="sm"
             variant="danger"
             className="shrink-0"
+            title={lock.title}
+            disabled={lock.locked}
             onClick={() => {
               setTyped('');
               setPassword('');
@@ -79,7 +84,9 @@ export function DeleteAccountSection() {
         confirmLabel="Delete my account"
         pendingLabel="Deleting…"
         errorMessage="Your account could not be deleted."
-        confirmDisabled={!deletionConfirmed(typed, email) || (needsPassword && !password)}
+        confirmDisabled={
+          lock.locked || !deletionConfirmed(typed, email) || (needsPassword && !password)
+        }
         onConfirm={deleteAccount}
       >
         <div className="flex flex-col gap-4">

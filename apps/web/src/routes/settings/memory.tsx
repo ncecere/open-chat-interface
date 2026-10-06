@@ -11,6 +11,7 @@ import { Switch } from '~/components/ui/switch';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
 import { fetchMemory, MEMORY_QUERY_KEY } from '~/lib/memory';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { formatRelativeTime } from '~/lib/utils';
 
 function useMemoryMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
@@ -68,6 +69,8 @@ function MemoryRow({
   canEdit: boolean;
   maxChars: number;
 }) {
+  // Every change to a memory is refused while read-only (#353).
+  const lock = useReadOnlyLock();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [draft, setDraft] = useState(entry.content);
@@ -164,7 +167,8 @@ function MemoryRow({
               type="submit"
               variant="primary"
               size="sm"
-              disabled={save.isPending || length === 0 || length > maxChars}
+              title={lock.title}
+              disabled={save.isPending || lock.locked || length === 0 || length > maxChars}
               aria-describedby={length > maxChars ? `${editId}-error` : undefined}
             >
               {save.isPending && <Spinner />}
@@ -189,6 +193,8 @@ function MemoryRow({
                 variant="ghost"
                 size="sm"
                 aria-label={`Edit memory: ${entry.content}`}
+                title={lock.title}
+                disabled={lock.locked}
                 onClick={() => {
                   setDraft(entry.content);
                   setEditing(true);
@@ -207,7 +213,8 @@ function MemoryRow({
                   variant="danger"
                   size="sm"
                   aria-label={`Confirm: delete memory: ${entry.content}`}
-                  disabled={remove.isPending}
+                  title={lock.title}
+                  disabled={remove.isPending || lock.locked}
                   onClick={() => {
                     // Once deleted, the next memory (or the list) gets focus (#128).
                     if (rowRef.current) keepFocusWhenRemoved(rowRef.current);
@@ -232,6 +239,8 @@ function MemoryRow({
                 variant="ghost"
                 size="sm"
                 aria-label={`Delete memory: ${entry.content}`}
+                title={lock.title}
+                disabled={lock.locked}
                 onClick={() => setConfirmingDelete(true)}
               >
                 Delete
@@ -251,6 +260,7 @@ function MemoryRow({
 
 function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) {
   const [draft, setDraft] = useState('');
+  const lock = useReadOnlyLock();
   const add = useMemoryMutation((content: string) => api.post('/memory', { content }));
   // A memory typed and not added is asked about before leaving (#314).
   useReportUnsaved(draft.trim() !== '');
@@ -287,7 +297,8 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
           type="submit"
           variant="primary"
           size="sm"
-          disabled={add.isPending || full || length === 0 || over}
+          title={lock.title}
+          disabled={add.isPending || lock.locked || full || length === 0 || over}
           // Why it cannot be pressed, as Back up now does (#261, #310).
           aria-describedby={over ? 'memory-new-error' : full ? 'memory-full' : undefined}
         >
@@ -307,6 +318,7 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
 
 function DeleteAll({ count }: { count: number }) {
   const [confirming, setConfirming] = useState(false);
+  const lock = useReadOnlyLock();
   const removeAll = useMemoryMutation(() => api.delete('/memory'));
   const wrapperRef = useRef<HTMLDivElement>(null);
   const openRef = useRef<HTMLButtonElement>(null);
@@ -338,7 +350,8 @@ function DeleteAll({ count }: { count: number }) {
           <Button
             variant="danger"
             size="sm"
-            disabled={removeAll.isPending}
+            title={lock.title}
+            disabled={removeAll.isPending || lock.locked}
             onClick={() => {
               // With every memory gone, so are these controls: the list's
               // heading takes focus. Watched as a whole, since "Delete all…"
@@ -355,7 +368,14 @@ function DeleteAll({ count }: { count: number }) {
           </Button>
         </>
       ) : (
-        <Button ref={openRef} variant="secondary" size="sm" onClick={() => setConfirming(true)}>
+        <Button
+          ref={openRef}
+          variant="secondary"
+          size="sm"
+          title={lock.title}
+          disabled={lock.locked}
+          onClick={() => setConfirming(true)}
+        >
           Delete all…
         </Button>
       )}
@@ -369,6 +389,7 @@ function DeleteAll({ count }: { count: number }) {
 }
 
 function MemoryContent({ state }: { state: MemoryState }) {
+  const lock = useReadOnlyLock();
   const toggle = useMemoryMutation((enabled: boolean) =>
     api.put<MemoryState>('/memory/settings', { enabled }),
   );
@@ -400,7 +421,8 @@ function MemoryContent({ state }: { state: MemoryState }) {
           className="mt-1 shrink-0"
           checked={enabled}
           // Switching off always works; switching on needs memory to be offered.
-          disabled={toggle.isPending || (!available && !enabled)}
+          title={lock.title}
+          disabled={toggle.isPending || lock.locked || (!available && !enabled)}
           onCheckedChange={(checked) => toggle.mutate(checked)}
         />
       </div>
