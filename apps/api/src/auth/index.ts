@@ -8,7 +8,7 @@ import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { clientIpFromHeaders } from '../lib/client-ip.js';
 import { logger } from '../lib/logger.js';
-import { sendPasswordResetEmail } from '../services/email.js';
+import { RESET_LINK_TTL_SECONDS, sendPasswordResetEmail } from '../services/email.js';
 import { getDefaultOrganizationId } from '../services/organization.js';
 import { getSetting } from '../services/settings.js';
 import { recordAuthEvent } from './audit.js';
@@ -151,8 +151,14 @@ export const auth = betterAuth({
     autoSignIn: true,
     // This value is safely overridden on each request by the before hook.
     requireEmailVerification: false,
+    // Set here, not left to Better Auth's default, because the email states it (#184).
+    resetPasswordTokenExpiresIn: RESET_LINK_TTL_SECONDS,
     sendResetPassword: async ({ user, url }) => {
-      await sendPasswordResetEmail({ to: user.email, url });
+      await sendPasswordResetEmail({
+        to: user.email,
+        url,
+        expiresInSeconds: RESET_LINK_TTL_SECONDS,
+      });
     },
     // A reset is what someone uses after losing control of their account, so
     // it ends every session, as Change Password does with "Sign out of all

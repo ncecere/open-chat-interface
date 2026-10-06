@@ -183,14 +183,35 @@ export async function sendVerificationEmail(params: { to: string; url: string })
   });
 }
 
-export async function sendPasswordResetEmail(params: { to: string; url: string }) {
+/** How long a password reset link works (Better Auth's resetPasswordTokenExpiresIn). */
+export const RESET_LINK_TTL_SECONDS = 60 * 60;
+
+/** "1 hour", "2 hours", "30 minutes". */
+function duration(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  if (minutes % 60 === 0) return minutes === 60 ? '1 hour' : `${minutes / 60} hours`;
+  return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+}
+
+/**
+ * The reset link and how long it works (#184): opened later it only said
+ * "This reset link is invalid or has expired", with no warning in the email.
+ */
+export async function sendPasswordResetEmail(params: {
+  to: string;
+  url: string;
+  expiresInSeconds?: number;
+}) {
   const appName = await currentAppName();
   const intro = `Use this link to choose a new password for your ${appName} account:`;
-  const footer = 'If you did not request this, you can ignore this email.';
+  const lifetime = duration(params.expiresInSeconds ?? RESET_LINK_TTL_SECONDS);
+  const expiry = `This link works for ${lifetime}. After that, ask for a new one with “Forgot your password?” on the sign-in page.`;
+  const ignore = 'If you did not request this, you can ignore this email.';
+  const footer = `${expiry} ${ignore}`;
   return sendEmail({
     to: params.to,
     subject: `Reset your ${appName} password`,
-    text: `${intro}\n\n${params.url}\n\n${footer}`,
+    text: `${intro}\n\n${params.url}\n\n${expiry}\n\n${ignore}`,
     html: actionEmailHtml({
       paragraphs: [intro],
       action: { label: 'Choose a new password', url: params.url },

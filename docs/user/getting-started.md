@@ -42,7 +42,8 @@ says you were signed out.
 ### If you forget your password
 
 **Forgot your password?** on the sign-in page emails you a link to choose a new
-one, if the instance can send email. Choosing a new password this way signs
+one, if the instance can send email. The link works for 1 hour; after that, ask
+for a new one. Choosing a new password this way signs
 your account out everywhere, including any device you have lost; sign in again
 with the new password.
 
