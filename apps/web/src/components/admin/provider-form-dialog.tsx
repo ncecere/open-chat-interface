@@ -253,11 +253,16 @@ export function ProviderFormDialog({
             <label htmlFor="provider-enabled" className="text-sm font-medium">
               Enabled
             </label>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            <p id="provider-enabled-hint" className="mt-0.5 text-xs text-[var(--text-muted)]">
               Disabling stops new requests without removing the catalog models.
             </p>
           </div>
-          <Switch id="provider-enabled" checked={enabled} onCheckedChange={setEnabled} />
+          <Switch
+            id="provider-enabled"
+            aria-describedby="provider-enabled-hint"
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
         </div>
 
         {error && (

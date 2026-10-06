@@ -74,6 +74,20 @@ function radio(label: string): HTMLInputElement {
 }
 
 describe('Settings → Customization', () => {
+  it('ties each character limit to its field (#310)', async () => {
+    await render();
+    for (const [id, max] of [
+      ['name', 50],
+      ['occupation', 100],
+      ['traits', 100],
+      ['context', 3000],
+    ] as const) {
+      const field = document.getElementById(id)!;
+      const count = document.getElementById(field.getAttribute('aria-describedby') ?? '');
+      expect(count?.textContent).toMatch(new RegExp(`^\\d+/${max} characters$`));
+    }
+  });
+
   it('no longer offers Hide Personal Information', async () => {
     await render();
     expect(document.body.textContent).not.toContain('Hide Personal Information');

@@ -460,11 +460,16 @@ export function ConnectorFormDialog({
             <label htmlFor="connector-enabled" className="text-sm font-medium">
               Enabled
             </label>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            <p id="connector-enabled-hint" className="mt-0.5 text-xs text-[var(--text-muted)]">
               Disabling stops every tool of this connector.
             </p>
           </div>
-          <Switch id="connector-enabled" checked={enabled} onCheckedChange={setEnabled} />
+          <Switch
+            id="connector-enabled"
+            aria-describedby="connector-enabled-hint"
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
         </div>
         <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
           <div>

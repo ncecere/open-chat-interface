@@ -22,7 +22,9 @@ where you left off.
 
 **You can write them yourself.** Under **Add a memory**, type a note (up to
 500 characters) and select **Add**. Write it as a fact about you: "I teach
-first-year chemistry" or "Prefers answers in British English".
+first-year chemistry" or "Prefers answers in British English". A longer note
+is not added: the field says how many characters it has over the limit until
+you shorten it.
 
 **Models can save them.** With memory on, models that use tools can save a note
 when you ask them to remember something, or when you mention a lasting

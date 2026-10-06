@@ -31,6 +31,8 @@ function CountedInput({
   multiline?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
+  // The limit is heard with the field, not only seen beside it (#310).
+  const countId = `${id}-count`;
   const shared = cn(
     'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/60 px-3 text-sm',
     'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
@@ -44,6 +46,7 @@ function CountedInput({
           id={id}
           rows={5}
           maxLength={max}
+          aria-describedby={countId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
@@ -53,6 +56,7 @@ function CountedInput({
         <input
           id={id}
           maxLength={max}
+          aria-describedby={countId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
@@ -60,8 +64,12 @@ function CountedInput({
           className={cn(shared, 'h-11 pr-16')}
         />
       )}
-      <span className="pointer-events-none absolute bottom-2.5 right-3 text-xs text-[var(--text-muted)]">
+      <span
+        id={countId}
+        className="pointer-events-none absolute bottom-2.5 right-3 text-xs text-[var(--text-muted)]"
+      >
         {value.length}/{max}
+        <span className="sr-only"> characters</span>
       </span>
     </div>
   );

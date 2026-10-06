@@ -124,7 +124,7 @@ export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
           <label htmlFor={`storage-${role}-enabled`} className="font-medium text-sm">
             Enforce allowance
           </label>
-          <p className="text-[var(--text-muted)] text-xs">
+          <p id={`storage-${role}-enabled-hint`} className="text-[var(--text-muted)] text-xs">
             {storage === null
               ? 'No allowance is saved for this role, so storage is unlimited.'
               : 'When off, people in this role can store without limit.'}
@@ -132,6 +132,8 @@ export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
         </div>
         <Switch
           id={`storage-${role}-enabled`}
+          // What off means is read with the switch (#310).
+          aria-describedby={`storage-${role}-enabled-hint`}
           checked={draft.enabled}
           onCheckedChange={(enabled) => {
             setSwitchTouched(true);

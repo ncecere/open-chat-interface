@@ -247,6 +247,14 @@ describe('Roles & access', () => {
     expect(api.put).not.toHaveBeenCalled();
   });
 
+  it('describes the Enforce allowance switch by what off means (#310)', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=auditor' }));
+    const id = document.getElementById('storage-auditor-enabled')?.getAttribute('aria-describedby');
+    expect(document.getElementById(id ?? '')?.textContent).toBe(
+      'No allowance is saved for this role, so storage is unlimited.',
+    );
+  });
+
   it('gives the allowed range when a rate limit is over its maximum (#321)', async () => {
     ({ root } = await renderAdmin(<AdminRolesPage />));
     await typeInto(input('rate-user-upload'), '20000');

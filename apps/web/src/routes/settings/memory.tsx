@@ -24,13 +24,39 @@ function useMemoryMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
   });
 }
 
-function Counted({ value, max }: { value: string; max: number }) {
+/**
+ * The characters used of the limit. The textarea is described by it, so the
+ * limit is heard with the field, not only seen (#310).
+ */
+function Counted({ id, value, max }: { id: string; value: string; max: number }) {
   const length = normalizeMemoryContent(value).length;
   return (
-    <span className={length > max ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}>
+    <span id={id} className={length > max ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}>
       {length}/{max}
+      <span className="sr-only"> characters</span>
     </span>
   );
+}
+
+/**
+ * A memory over the limit, said in words and tied to the field and to the
+ * disabled Save or Add, rather than by a red counter alone (#310).
+ */
+function OverLimit({ id, length, max }: { id: string; length: number; max: number }) {
+  if (length <= max) return null;
+  return (
+    <p id={id} role="alert" className="text-sm text-[var(--danger)]">
+      A memory can be at most {max} characters; this one has {length}. Shorten it to save it.
+    </p>
+  );
+}
+
+/** The field's `aria-*` for its counter and, when too long, its error (#310). */
+function countedFieldProps(id: string, over: boolean) {
+  return {
+    'aria-invalid': over ? true : undefined,
+    'aria-describedby': over ? `${id}-count ${id}-error` : `${id}-count`,
+  } as const;
 }
 
 function MemoryRow({
@@ -119,6 +145,7 @@ function MemoryRow({
             ref={editorRef}
             id={editId}
             rows={3}
+            {...countedFieldProps(editId, length > maxChars)}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -128,7 +155,7 @@ function MemoryRow({
             }}
           />
           <div className="flex items-center gap-2 text-xs">
-            <Counted value={draft} max={maxChars} />
+            <Counted id={`${editId}-count`} value={draft} max={maxChars} />
             <span className="flex-1" />
             <Button type="button" variant="ghost" size="sm" onClick={cancelEdit}>
               Cancel
@@ -138,11 +165,13 @@ function MemoryRow({
               variant="primary"
               size="sm"
               disabled={save.isPending || length === 0 || length > maxChars}
+              aria-describedby={length > maxChars ? `${editId}-error` : undefined}
             >
               {save.isPending && <Spinner />}
               Save
             </Button>
           </div>
+          <OverLimit id={`${editId}-error`} length={length} max={maxChars} />
         </form>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
@@ -226,10 +255,11 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
   // A memory typed and not added is asked about before leaving (#314).
   useReportUnsaved(draft.trim() !== '');
   const length = normalizeMemoryContent(draft).length;
+  const over = length > maxChars;
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (length === 0 || length > maxChars || full) return;
+    if (length === 0 || over || full) return;
     add.mutate(draft, { onSuccess: () => setDraft('') });
   }
 
@@ -241,6 +271,7 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
       <Textarea
         id="memory-new"
         rows={2}
+        {...countedFieldProps('memory-new', over)}
         value={draft}
         disabled={full}
         placeholder="For example: I teach first-year chemistry and prefer short answers."
@@ -250,18 +281,21 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
         }}
       />
       <div className="flex items-center gap-2 text-xs">
-        <Counted value={draft} max={maxChars} />
+        <Counted id="memory-new-count" value={draft} max={maxChars} />
         <span className="flex-1" />
         <Button
           type="submit"
           variant="primary"
           size="sm"
-          disabled={add.isPending || full || length === 0 || length > maxChars}
+          disabled={add.isPending || full || length === 0 || over}
+          // Why it cannot be pressed, as Back up now does (#261, #310).
+          aria-describedby={over ? 'memory-new-error' : full ? 'memory-full' : undefined}
         >
           {add.isPending && <Spinner />}
           Add
         </Button>
       </div>
+      <OverLimit id="memory-new-error" length={length} max={maxChars} />
       {add.error && (
         <p role="alert" className="text-sm text-[var(--danger)]">
           {apiErrorMessage(add.error, 'The memory could not be saved. Try again.')}
@@ -380,7 +414,7 @@ function MemoryContent({ state }: { state: MemoryState }) {
         <div className="mt-8">
           <AddMemoryForm maxChars={limits.maxChars} full={full} />
           {full && (
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
+            <p id="memory-full" className="mt-2 text-sm text-[var(--text-muted)]">
               You have reached the limit of {limits.maxEntries} memories. Delete some to add more.
             </p>
           )}
