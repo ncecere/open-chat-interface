@@ -32,6 +32,7 @@ import {
   type ToolPart,
   toolPlaceOf,
 } from '~/components/chat/tool-steps';
+import { messageExcerpt } from '~/lib/message-excerpt';
 import { cn } from '~/lib/utils';
 
 interface MessageRowProps {
@@ -73,12 +74,16 @@ export const MessageRow = memo(function MessageRow({
   // Without artifact attempts declined as reply content (#201).
   const message = shownReply(stored);
   const text = textOf(message);
+  // The message's opening words, which its code blocks' and tables' names
+  // also carry, as its own controls' do (#271).
+  const excerpt = messageExcerpt(text) ?? undefined;
 
   if (message.role === 'user') {
     return (
       <article
         className="group flex flex-col items-end"
         aria-label="Your message"
+        data-excerpt={excerpt}
         data-message-id={message.id}
         data-message-role="user"
       >
@@ -117,6 +122,7 @@ export const MessageRow = memo(function MessageRow({
     <article
       className="group flex flex-col"
       aria-label="Assistant message"
+      data-excerpt={excerpt}
       data-message-id={message.id}
     >
       {contextLimitedOf(message) && (

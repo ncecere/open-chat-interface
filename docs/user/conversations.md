@@ -17,7 +17,8 @@ Hovering over a message reveals its controls.
 Screen readers and voice control hear which message each control acts on, by
 its opening words: **Copy message “Walk3 table: give me a small…”**, **Fork
 conversation at “…”**. Code blocks and tables are numbered within their
-message in the same way: **Copy code block 2 (Python)**, **Download table 1**.
+message and named by its opening words too: **Copy code block 2 (Python) in
+“Here is the plan…”**, **Download table 1 in “Here is the plan…”**.
 
 ### Editing, retrying and forking preserve the original
 

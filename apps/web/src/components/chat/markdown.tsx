@@ -1,6 +1,10 @@
-import { type ComponentProps, lazy, memo, Suspense } from 'react';
+import { type ComponentProps, lazy, memo, Suspense, useMemo } from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
-import { DEMOTED_HEADINGS } from '~/components/chat/markdown-headings';
+import {
+  DEMOTED_HEADINGS,
+  HeadingLevels,
+  headingLevelsOf,
+} from '~/components/chat/markdown-headings';
 import { remarkSoftBreaks } from '~/components/chat/markdown-soft-breaks';
 import { TASK_LIST_COMPONENTS } from '~/components/chat/markdown-task-list';
 import {
@@ -59,7 +63,7 @@ const StreamdownMarkdown = lazy(() =>
             lineNumbers={false}
             // Links are real links that warn before leaving the instance (#174),
             // not Streamdown's link-safety buttons; headings sit below the
-            // page's h1 (#212); a task list's checkboxes are named (#240).
+            // page's h1 (#212, #271); a task list's checkboxes are named (#240).
             components={MESSAGE_COMPONENTS}
             // Share pages pass their own URL policy and keep the visible marker.
             {...(!skipHtml && !urlTransform && ownerRehypePlugins
@@ -262,15 +266,19 @@ export const Markdown = memo(function Markdown({
   skipHtml,
   urlTransform,
 }: MarkdownProps) {
+  // Its headings continue from the page's h1 without skipping a level (#271).
+  const levels = useMemo(() => headingLevelsOf(children), [children]);
   return (
     <Suspense
       fallback={
         <div className={cn('whitespace-pre-wrap wrap-anywhere', className)}>{children}</div>
       }
     >
-      <StreamdownMarkdown className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
-        {children}
-      </StreamdownMarkdown>
+      <HeadingLevels.Provider value={levels}>
+        <StreamdownMarkdown className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
+          {children}
+        </StreamdownMarkdown>
+      </HeadingLevels.Provider>
     </Suspense>
   );
 });
