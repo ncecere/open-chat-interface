@@ -1,8 +1,9 @@
 import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import {
   type CredentialAction,
@@ -11,8 +12,33 @@ import {
   makeDraft,
   type StoragePatch,
   type StorageSettings,
+  type StorageValidation,
   validateDraft,
 } from './storage-draft';
+
+/** The fields that show their own errors; any other is shown beside Save (#302). */
+const STORAGE_FIELDS: Array<keyof StorageValidation> = [
+  'maxFileMb',
+  'maxFilesPerMessage',
+  'allowedMimeTypes',
+  'bucket',
+  'region',
+  'endpoint',
+  'accessKeyId',
+  'secretAccessKey',
+];
+
+/** The page's names for the fields, so a refusal names the one it is about (#127). */
+const STORAGE_LABELS = {
+  maxFileBytes: 'Maximum file size',
+  maxFilesPerMessage: 'Maximum files per message',
+  allowedMimeTypes: 'Allowed MIME types',
+  bucket: 'Bucket',
+  region: 'Region',
+  endpoint: 'Endpoint',
+  accessKeyId: 'Access key ID',
+  secretAccessKey: 'Secret access key',
+};
 
 export function useStorageSettings(initialSettings: StorageSettings) {
   const queryClient = useQueryClient();
@@ -23,18 +49,34 @@ export function useStorageSettings(initialSettings: StorageSettings) {
   const [showValidation, setShowValidation] = useState(false);
   const [showDriverConfirmation, setShowDriverConfirmation] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
+  // A failed connection test (not a save) is said beside Save.
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // A read-only refusal goes once changes are accepted again (#308).
   useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
   const [healthMessage, setHealthMessage] = useState<string | null>(null);
+  // A refused save's problems, each at the field the API names (its size in
+  // bytes is the form's size in MB), gone once that field is edited (#283,
+  // #317's sweep); one about no field beside Save.
+  const form = useRef<HTMLFormElement>(null);
+  const [serverProblems, setServerProblems] = useFieldProblems(
+    { ...draft, secretAccessKey: [credentialAction, secretAccessKey] },
+    form,
+  );
 
-  const validation = validateDraft(
+  const clientValidation = validateDraft(
     draft,
     saved.s3.hasCredential,
     credentialAction,
     secretAccessKey,
   );
-  const isValid = Object.keys(validation).length === 0;
+  const isValid = Object.keys(clientValidation).length === 0;
+  // What each field shows: the form's own check once Save was pressed, else the API's refusal.
+  const validation: StorageValidation = Object.fromEntries(
+    STORAGE_FIELDS.flatMap((key) => {
+      const error = (showValidation && clientValidation[key]) || problemsAt(serverProblems, key);
+      return error ? [[key, error]] : [];
+    }),
+  );
   const patch = changedStorageSettings(saved, draft, credentialAction, secretAccessKey);
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);
@@ -67,6 +109,7 @@ export function useStorageSettings(initialSettings: StorageSettings) {
       setShowValidation(false);
       setShowDriverConfirmation(false);
       setErrorMessage(null);
+      setServerProblems([]);
       setHealthMessage(null);
       setSuccessMessage(true);
       queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
@@ -76,7 +119,12 @@ export function useStorageSettings(initialSettings: StorageSettings) {
     onError: (error) => {
       setShowDriverConfirmation(false);
       setSuccessMessage(false);
-      setErrorMessage(apiErrorMessage(error, 'Unable to save storage settings.'));
+      setServerProblems(
+        apiErrorProblems(error, 'Unable to save storage settings.', STORAGE_LABELS).map(
+          (problem) =>
+            problem.fields[0] === 'maxFileBytes' ? { ...problem, fields: ['maxFileMb'] } : problem,
+        ),
+      );
     },
   });
 
@@ -105,6 +153,7 @@ export function useStorageSettings(initialSettings: StorageSettings) {
 
   function submitChanges() {
     setShowValidation(true);
+    setServerProblems([]);
     if (!isValid || !hasChanges) return;
     if (driverChanged) {
       setShowDriverConfirmation(true);
@@ -125,7 +174,9 @@ export function useStorageSettings(initialSettings: StorageSettings) {
     showDriverConfirmation,
     setShowDriverConfirmation,
     successMessage,
-    errorMessage,
+    // A refusal about no field, or a failed connection test.
+    errorMessage: problemsElsewhere(serverProblems, STORAGE_FIELDS) ?? errorMessage,
+    form,
     healthMessage,
     validation,
     patch,

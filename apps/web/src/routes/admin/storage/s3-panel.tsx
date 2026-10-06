@@ -9,12 +9,11 @@ import { S3CredentialEditor } from './s3-credential-editor';
 import type { StorageSettingsController } from './use-storage-settings';
 
 export function S3Panel({ controller }: { controller: StorageSettingsController }) {
-  const { draft, setDraft, showValidation, validation, save, beginEdit, health, hasChanges } =
-    controller;
+  const { draft, setDraft, validation, save, beginEdit, health, hasChanges } = controller;
 
   // Each problem is shown under its field, in error colour, which is marked
   // invalid and described by it, not in place of the hint (#302).
-  const fieldError = (message?: string) => (showValidation && message) || null;
+  const fieldError = (message?: string) => message || null;
 
   return (
     <SettingsSection

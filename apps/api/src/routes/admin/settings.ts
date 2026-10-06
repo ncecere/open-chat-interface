@@ -415,12 +415,12 @@ settingsRoutes.patch('/', async (c) => {
       (SEARCH_PROVIDERS[next.fallbackProvider].needs === 'apiKey' ||
         (next.fallbackBaseUrl ?? null) === (next.baseUrl ?? null))
     ) {
-      throw validationFailed(
+      const message =
         SEARCH_PROVIDERS[next.fallbackProvider].needs === 'apiKey'
           ? 'Choose a different service as the fallback provider.'
-          : 'The fallback SearXNG must be at a different address.',
-        [{ path: ['search', 'fallbackProvider'], message: 'Same as the primary provider.' }],
-      );
+          : 'The fallback SearXNG must be at a different address.';
+      // The detail is shown at the field, so it says what to do (#317's sweep).
+      throw validationFailed(message, [{ path: ['search', 'fallbackProvider'], message }]);
     }
     await updateSetting('search', changes);
   }

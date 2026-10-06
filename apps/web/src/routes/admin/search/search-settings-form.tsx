@@ -8,7 +8,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, KeyRound } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
@@ -18,13 +18,14 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY, useSetupCheck } from '~/hooks/use-setup-status';
-import { api, apiErrorMessage } from '~/lib/api-client';
-import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
+import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 import { FallbackProviderSection, FallbackTestResult } from './fallback-provider-section';
 import {
   type CredentialAction,
   changedSearchSettings,
+  type DraftErrors,
   type FallbackKey,
   fallbackTestTarget,
   KEEP_FALLBACK_KEY,
@@ -54,6 +55,28 @@ function SearchAvailability() {
   return null;
 }
 
+/** The fields that show their own errors, by the API's names (#302, #317's sweep). */
+const SEARCH_FIELDS: Array<keyof DraftErrors> = [
+  'provider',
+  'baseUrl',
+  'maxResults',
+  'apiKey',
+  'fallbackProvider',
+  'fallbackBaseUrl',
+  'fallbackApiKey',
+];
+
+/** The page's names for the fields, so a refusal names the one it is about (#127). */
+const SEARCH_LABELS = {
+  provider: 'Provider',
+  baseUrl: 'Address',
+  maxResults: 'Maximum results',
+  apiKey: 'API key',
+  fallbackProvider: 'Fallback provider',
+  fallbackBaseUrl: 'Fallback address',
+  fallbackApiKey: 'Fallback API key',
+};
+
 export function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(settings.search);
@@ -65,9 +88,15 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
   const [fallbackKey, setFallbackKey] = useState<FallbackKey>(KEEP_FALLBACK_KEY);
   const [showValidation, setShowValidation] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // A read-only refusal goes once changes are accepted again (#308).
-  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
+  // A refused save's problems, each at the field the API names and gone once
+  // it is edited; one about no field (a failed save) beside the button
+  // (#283, #317). A read-only refusal goes once changes are accepted (#308).
+  const form = useRef<HTMLFormElement>(null);
+  const [serverProblems, setServerProblems] = useFieldProblems(
+    { ...draft, apiKey: [credentialAction, apiKey], fallbackApiKey: fallbackKey },
+    form,
+  );
+  const errorMessage = problemsElsewhere(serverProblems, SEARCH_FIELDS);
 
   const validation = validateDraft(saved, draft, credentialAction, apiKey, fallbackKey);
   const providerInfo = draft.provider ? SEARCH_PROVIDERS[draft.provider] : null;
@@ -76,7 +105,14 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
 
   // Each problem is shown under its field, in error colour, which is marked
   // invalid and described by it, not in place of the hint (#302).
-  const fieldError = (message?: string) => (showValidation && message) || null;
+  const fieldError = (key: keyof DraftErrors) =>
+    (showValidation && validation[key]) || problemsAt(serverProblems, key);
+  const fieldErrors = Object.fromEntries(
+    SEARCH_FIELDS.flatMap((key) => {
+      const error = fieldError(key);
+      return error ? [[key, error]] : [];
+    }),
+  ) as DraftErrors;
   const patch = changedSearchSettings(
     saved,
     savedEnabled,
@@ -141,7 +177,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
       setApiKey('');
       setFallbackKey(KEEP_FALLBACK_KEY);
       setShowValidation(false);
-      setErrorMessage(null);
+      setServerProblems([]);
       setSuccessMessage(true);
       queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
         current ? { ...current, search: next, features: nextFeatures } : current,
@@ -151,23 +187,24 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(apiErrorMessage(error, 'Unable to save search settings.'));
+      setServerProblems(apiErrorProblems(error, 'Unable to save search settings.', SEARCH_LABELS));
     },
   });
 
   function beginEdit() {
     setSuccessMessage(false);
-    setErrorMessage(null);
     test.reset();
   }
 
   return (
     <form
+      ref={form}
       className="flex flex-col gap-8"
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
         setShowValidation(true);
+        setServerProblems([]);
         if (isValid && hasChanges) save.mutate(patch);
       }}
     >
@@ -200,15 +237,11 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
           <SearchAvailability />
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              label="Provider"
-              htmlFor="search-provider"
-              error={fieldError(validation.provider)}
-            >
+            <Field label="Provider" htmlFor="search-provider" error={fieldError('provider')}>
               <Select
                 id="search-provider"
                 aria-describedby={
-                  fieldError(validation.provider) ? fieldErrorId('search-provider') : undefined
+                  fieldError('provider') ? fieldErrorId('search-provider') : undefined
                 }
                 value={draft.provider ?? 'off'}
                 disabled={save.isPending}
@@ -238,7 +271,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
             <Field
               label="Maximum results"
               htmlFor="search-max-results"
-              error={fieldError(validation.maxResults)}
+              error={fieldError('maxResults')}
               hint={`Maximum results requested for each search, up to ${MAX_SEARCH_RESULTS}.`}
             >
               <Input
@@ -250,7 +283,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
                 step={1}
                 value={draft.maxResults}
                 disabled={save.isPending}
-                {...invalidFieldProps('search-max-results', fieldError(validation.maxResults))}
+                {...invalidFieldProps('search-max-results', fieldError('maxResults'))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, maxResults: event.target.value }));
@@ -263,7 +296,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
             <Field
               label={providerInfo.fieldLabel}
               htmlFor="search-base-url"
-              error={fieldError(validation.baseUrl)}
+              error={fieldError('baseUrl')}
               hint={providerInfo.fieldHint}
             >
               <Input
@@ -272,7 +305,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
                 value={draft.baseUrl}
                 placeholder="https://search.example.edu"
                 disabled={save.isPending}
-                {...invalidFieldProps('search-base-url', fieldError(validation.baseUrl))}
+                {...invalidFieldProps('search-base-url', fieldError('baseUrl'))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, baseUrl: event.target.value }));
@@ -336,7 +369,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
               <Field
                 label={savedKeyApplies ? `New ${providerInfo.fieldLabel}` : providerInfo.fieldLabel}
                 htmlFor="search-api-key"
-                error={fieldError(validation.apiKey)}
+                error={fieldError('apiKey')}
                 hint={providerInfo.fieldHint}
               >
                 <Input
@@ -346,7 +379,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
                   maxLength={501}
                   autoComplete="new-password"
                   disabled={save.isPending}
-                  {...invalidFieldProps('search-api-key', fieldError(validation.apiKey))}
+                  {...invalidFieldProps('search-api-key', fieldError('apiKey'))}
                   onChange={(event) => {
                     beginEdit();
                     setApiKey(event.target.value);
@@ -381,7 +414,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
         saved={saved}
         draft={draft}
         fallbackKey={fallbackKey}
-        errors={showValidation ? validation : {}}
+        errors={fieldErrors}
         disabled={save.isPending}
         onDraftChange={(change) => {
           beginEdit();

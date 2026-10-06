@@ -16,7 +16,8 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsElsewhere } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
@@ -32,6 +33,17 @@ import {
 } from './branding-draft';
 import { BrandingPreview } from './branding-preview';
 import { LogoUpload } from './logo-upload';
+
+/** The fields that show their own errors; any other is shown beside Save (#302). */
+const BRANDING_FIELDS = ['appName', 'shortName', 'logoUrl', 'loginMessage'] as const;
+
+/** The page's names for the fields, so a refusal names the one it is about (#127). */
+const BRANDING_LABELS = {
+  appName: 'App name',
+  shortName: 'Short name',
+  logoUrl: 'Logo URL',
+  loginMessage: 'Login message',
+};
 
 export function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }) {
   const queryClient = useQueryClient();
@@ -68,7 +80,21 @@ export function BrandingForm({ initialSettings }: { initialSettings: BrandingSet
     },
     onError: (error) => {
       setSavedMessage(false);
-      setErrorMessage(apiErrorMessage(error, 'Unable to save branding settings.'));
+      // Each refusal at the field the API names, as the form's own checks
+      // are; only one about no field beside Save (#317's sweep).
+      const problems = apiErrorProblems(
+        error,
+        'Unable to save branding settings.',
+        BRANDING_LABELS,
+      );
+      setErrors(
+        Object.fromEntries(
+          problems.flatMap(({ fields: [field], text }) =>
+            (BRANDING_FIELDS as readonly string[]).includes(field ?? '') ? [[field, text]] : [],
+          ),
+        ),
+      );
+      setErrorMessage(problemsElsewhere(problems, BRANDING_FIELDS));
     },
   });
 

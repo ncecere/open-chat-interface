@@ -8,7 +8,6 @@ import {
   AdminPageHeader,
   EmptyState,
   LoadError,
-  MutationError,
   Notice,
   SaveRow,
   SettingsSection,
@@ -34,11 +33,11 @@ import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { ADMIN_USERS_QUERY_KEY } from '~/components/admin/user-role-select';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { ApiError, api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
@@ -294,6 +293,11 @@ function PlaceHoldForm() {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState('');
   const [reason, setReason] = useState('');
+  // A hold half placed is asked about before leaving (#300's sweep).
+  useReportUnsaved(Boolean(email.trim() || reason.trim()));
+  // "No account has that address" is about the address, so it is shown at
+  // it, and goes once it is edited (#217, #317's sweep).
+  const [problems, setProblems] = useFieldProblems({ email, reason });
   const place = useMutation({
     mutationFn: () =>
       api.post<{ hold: LegalHold }>('/admin/compliance/holds', {
@@ -308,9 +312,19 @@ function PlaceHoldForm() {
         queryClient.invalidateQueries({ queryKey: ADMIN_USERS_QUERY_KEY }),
       ]);
     },
+    onError: (cause) => {
+      const found = apiErrorProblems(cause, 'The hold could not be placed.', {
+        email: 'Email address',
+        reason: 'Reason',
+      });
+      setProblems(
+        cause instanceof ApiError && cause.status === 404
+          ? found.map((problem) => ({ ...problem, fields: ['email'] }))
+          : found,
+      );
+    },
   });
-  // "No account has that address" is about the address sent (#217).
-  useClearOnEdit({ email, reason }, () => place.reset());
+  const other = problemsElsewhere(problems, ['email', 'reason']);
 
   return (
     <form
@@ -318,13 +332,19 @@ function PlaceHoldForm() {
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
+        setProblems([]);
         if (email.trim() && reason.trim()) place.mutate();
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Person’s email address" htmlFor="hold-email">
+        <Field
+          label="Person’s email address"
+          htmlFor="hold-email"
+          error={problemsAt(problems, 'email')}
+        >
           <Input
             id="hold-email"
+            {...invalidFieldProps('hold-email', problemsAt(problems, 'email'))}
             type="email"
             autoComplete="off"
             value={email}
@@ -335,9 +355,11 @@ function PlaceHoldForm() {
           label="Reason"
           htmlFor="hold-reason"
           hint="A matter or case reference. Recorded in the audit log."
+          error={problemsAt(problems, 'reason')}
         >
           <Input
             id="hold-reason"
+            {...invalidFieldProps('hold-reason', problemsAt(problems, 'reason'))}
             value={reason}
             maxLength={1000}
             onChange={(e) => setReason(e.target.value)}
@@ -350,7 +372,11 @@ function PlaceHoldForm() {
           Place hold
         </Button>
       </div>
-      <MutationError error={place.error} message="The hold could not be placed." />
+      {other && (
+        <p role="alert" className="whitespace-pre-line text-[var(--danger)] text-sm">
+          {other}
+        </p>
+      )}
     </form>
   );
 }
