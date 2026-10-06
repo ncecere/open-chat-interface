@@ -34,7 +34,11 @@ export async function applyBulkUserAction(
     ]);
   }
 
+  // `affected` counts accounts for every action; `sessionsEnded` says how many
+  // sessions a sign-out or ban ended. Sign-out used to report sessions as
+  // `affected`, so signing out accounts with none read as nothing done (#145).
   let affected = 0;
+  let sessionsEnded: number | undefined;
   if (input.action === 'set_role' && input.role) {
     const rows = await db
       .update(schema.user)
@@ -52,15 +56,14 @@ export async function applyBulkUserAction(
     affected = rows.length;
 
     // A ban that leaves the session alive is not a ban until it expires.
-    if (banned) {
-      await db.delete(schema.session).where(inArray(schema.session.userId, targets));
-    }
+    if (banned) sessionsEnded = await endSessions(targets);
   } else {
-    const rows = await db
-      .delete(schema.session)
-      .where(inArray(schema.session.userId, targets))
-      .returning({ id: schema.session.id });
-    affected = rows.length;
+    const accounts = await db
+      .select({ id: schema.user.id })
+      .from(schema.user)
+      .where(inArray(schema.user.id, targets));
+    affected = accounts.length;
+    sessionsEnded = await endSessions(targets);
   }
 
   await recordAudit({
@@ -73,10 +76,20 @@ export async function applyBulkUserAction(
     metadata: {
       requested: input.userIds.length,
       affected,
+      ...(sessionsEnded !== undefined ? { sessionsEnded } : {}),
       ...(input.role ? { role: input.role } : {}),
       // Name the accounts so the audit entry can be checked afterwards.
       userIds: targets,
     },
   });
-  return { affected, skippedSelf };
+  return { affected, skippedSelf, ...(sessionsEnded !== undefined ? { sessionsEnded } : {}) };
+}
+
+/** Ends every session of these accounts and says how many there were. */
+async function endSessions(userIds: string[]): Promise<number> {
+  const rows = await db
+    .delete(schema.session)
+    .where(inArray(schema.session.userId, userIds))
+    .returning({ id: schema.session.id });
+  return rows.length;
 }

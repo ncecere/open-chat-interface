@@ -131,13 +131,17 @@ role, which is where the defaults come from.
 ![Selecting several accounts](../images/admin-users-bulk-actions.png)
 
 Select rows and the action bar appears. A role can be applied to the selection,
-or the selection signed out or banned.
+or the selection signed out or banned. Making accounts administrators, signing
+them out and banning them ask first; afterwards the page says what was done,
+such as "Signed out 2 accounts, ending 5 sessions."
 
 Three behaviours worth knowing:
 
-- **You cannot include your own account.** Selecting only yourself is refused;
-  selecting yourself alongside others silently skips you and says so. Locking
-  yourself out mid-operation is not something the interface will help with.
+- **You cannot include your own account.** Selecting only yourself leaves the
+  actions unavailable; selecting yourself alongside others skips you, and the
+  bar, the confirmation and the result say so and count only the others.
+  Locking yourself out mid-operation is not something the interface will help
+  with.
 - **A ban revokes sessions in the same action**, exactly as a single-account ban
   does.
 - **The audit entry names every account affected**, not just a count, so the

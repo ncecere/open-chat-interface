@@ -73,11 +73,13 @@ async function send(app: Hono<AppBindings>, method: string, path: string, body: 
     body: JSON.stringify(body),
   });
   expect(response.status, await response.clone().text()).toBeLessThan(300);
+  return response;
 }
 
 describe.skipIf(!available)('live: protected administrative audit events', () => {
   let live: LiveDatabase;
   let app: Hono<AppBindings>;
+  let actor: string;
 
   async function events(action: string) {
     return live.db.select().from(schema.auditLog).where(eq(schema.auditLog.action, action));
@@ -87,7 +89,8 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
     live = await createLiveDatabase('admin_audit');
     state.db = live.db;
     state.organizationId = await seedOrganization(live.db);
-    app = adminApp(await seedUser(live.db, state.organizationId, { role: 'admin' }));
+    actor = await seedUser(live.db, state.organizationId, { role: 'admin' });
+    app = adminApp(actor);
   });
   afterAll(async () => {
     invalidateSettingsCache();
@@ -145,6 +148,30 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
     expect(sessions).toHaveLength(0);
     const [stored] = await live.db.select().from(schema.user).where(eq(schema.user.id, target));
     expect(stored).toMatchObject({ banned: true, banReason: 'Test' });
+  });
+
+  it('reports accounts and sessions for a bulk sign-out, skipping yourself (#145)', async () => {
+    const busy = await seedUser(live.db, state.organizationId, { role: 'user' });
+    const idle = await seedUser(live.db, state.organizationId, { role: 'user' });
+    const expiresAt = new Date(Date.now() + 86_400_000);
+    await live.db.insert(schema.session).values(
+      [busy, busy, actor].map((userId) => ({
+        id: randomUUID(),
+        userId,
+        token: randomUUID(),
+        expiresAt,
+      })),
+    );
+    const response = await send(app, 'POST', '/users/bulk', {
+      action: 'revoke_sessions',
+      userIds: [actor, busy, idle],
+    });
+    expect(await response.json()).toEqual({ affected: 2, skippedSelf: true, sessionsEnded: 2 });
+    const [entry] = await events('user.bulk.revoke_sessions');
+    expect(entry?.metadata).toMatchObject({ requested: 3, affected: 2, sessionsEnded: 2 });
+    // Your own session is untouched.
+    const own = await live.db.select().from(schema.session).where(eq(schema.session.userId, actor));
+    expect(own).toHaveLength(1);
   });
 
   it('records sign-in policy changes separately from other settings', async () => {

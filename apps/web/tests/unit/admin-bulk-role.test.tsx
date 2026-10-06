@@ -4,6 +4,12 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { UserBulkToolbar } from '../../src/routes/admin/users/bulk-toolbar';
 import { button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
 
+// The toolbar asks who is signed in, to leave your own account out of its counts.
+vi.mock('../../src/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/lib/api-client')>()),
+  api: { get: async () => ({ user: { id: 'me' }, preferences: {}, features: {} }) },
+}));
+
 let root: Root | undefined;
 afterEach(async () => {
   if (root) await cleanup(root);
