@@ -18,11 +18,22 @@ export function AuthFormError({ id, children }: { id: string; children: string }
   );
 }
 
-/** The `aria-*` a field gets while the form shows `error`. */
-export function fieldErrorProps(errorId: string, error: string | null, invalid = Boolean(error)) {
+/**
+ * The `aria-*` a field gets while the form shows `error`, and always the
+ * field's own hint (`hintId`, such as "Use at least 12 characters."), which
+ * was a bare paragraph after it that screen readers did not read with it
+ * (#295).
+ */
+export function fieldErrorProps(
+  errorId: string,
+  error: string | null,
+  invalid = Boolean(error),
+  hintId?: string,
+) {
   return {
     'aria-invalid': invalid ? true : undefined,
-    'aria-describedby': error ? errorId : undefined,
+    'aria-describedby':
+      [error ? errorId : undefined, hintId].filter(Boolean).join(' ') || undefined,
   } as const;
 }
 

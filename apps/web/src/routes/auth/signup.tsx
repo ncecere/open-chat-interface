@@ -119,7 +119,7 @@ export function SignupPage() {
                 <Label htmlFor="signup-password">Password</Label>
                 <Input
                   id="signup-password"
-                  {...fieldErrorProps('signup-error', error, false)}
+                  {...fieldErrorProps('signup-error', error, false, 'signup-password-hint')}
                   type="password"
                   autoComplete="new-password"
                   required
@@ -128,7 +128,9 @@ export function SignupPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-                <p className="text-xs text-[var(--text-muted)]">Use at least 12 characters.</p>
+                <p id="signup-password-hint" className="text-xs text-[var(--text-muted)]">
+                  Use at least 12 characters.
+                </p>
               </div>
               {error && <AuthFormError id="signup-error">{error}</AuthFormError>}
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">

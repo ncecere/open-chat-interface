@@ -6,6 +6,7 @@ import type {
   KeyboardEventHandler,
 } from 'react';
 import { cn } from '~/lib/utils';
+import { useFieldDescribedBy } from './field-hint';
 import { HELD_CLASS, useHoldFocus } from './hold-focus';
 
 /** Types `readOnly` applies to; a checkbox or file input is disabled as before. */
@@ -39,14 +40,18 @@ function useHeldField<E extends HTMLInputElement | HTMLTextAreaElement>(props: {
   onKeyDown?: KeyboardEventHandler<E>;
   onFocus?: FocusEventHandler<E>;
   onBlur?: FocusEventHandler<E>;
+  'aria-describedby'?: string;
 }) {
   const { hold: focusedWhileDisabled, track } = useHoldFocus(props.disabled);
+  // Described by the hint of the Field it is in, too (#295).
+  const describedBy = useFieldDescribedBy(props['aria-describedby']);
   const hold = focusedWhileDisabled && READ_ONLY_TYPES.has(props.type ?? 'text');
   return {
     hold,
     disabled: hold ? false : props.disabled,
     readOnly: hold || props.readOnly,
     'aria-disabled': hold ? true : props['aria-disabled'],
+    'aria-describedby': describedBy,
     ...track<E>(props.onFocus, props.onBlur),
     onKeyDown: (event: KeyboardEvent<E>) => {
       if (!hold) return props.onKeyDown?.(event);
@@ -74,6 +79,7 @@ export function Input({
     onBlur,
     type: props.type,
     'aria-disabled': props['aria-disabled'],
+    'aria-describedby': props['aria-describedby'],
   });
   return (
     <input
@@ -107,6 +113,7 @@ export function Textarea({
     onFocus,
     onBlur,
     'aria-disabled': props['aria-disabled'],
+    'aria-describedby': props['aria-describedby'],
   });
   return (
     <textarea

@@ -46,6 +46,7 @@ export function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }
   return (
     <Field
       label="Logo file"
+      hintId="logo-file-hint"
       hint="PNG, JPEG, or WebP up to 1 MB. Shown in place of the Open Chat Interface mark and name, and used as the browser tab icon."
     >
       <div className="flex flex-wrap items-center gap-3">
@@ -78,6 +79,8 @@ export function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }
           variant="secondary"
           size="sm"
           disabled={upload.isPending}
+          // The formats and size it takes, read with it (#295).
+          aria-describedby="logo-file-hint"
           onClick={() => inputRef.current?.click()}
         >
           {upload.isPending && <Spinner />}

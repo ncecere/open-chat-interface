@@ -174,12 +174,16 @@ describe('Webhooks admin page', () => {
     await click(button('Add endpoint'));
     const actions = document.getElementById('webhook-actions') as HTMLTextAreaElement;
     await act(actions, 'user.*\nwalk.nonexistent.action');
-    const warning = document.getElementById(actions.getAttribute('aria-describedby') ?? '');
-    expect(warning?.textContent).toContain(
-      'Nothing recorded so far matches walk.nonexistent.action.',
-    );
+    // Described by the warning, as well as by the field's hint (#295).
+    const description = () =>
+      (actions.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent)
+        .join(' ');
+    expect(description()).toContain('Nothing recorded so far matches walk.nonexistent.action.');
     await act(actions, 'user.*');
-    expect(actions.getAttribute('aria-describedby')).toBeNull();
+    expect(description()).not.toContain('Nothing recorded');
+    expect(actions.getAttribute('aria-describedby')).toBe('webhook-actions-hint');
   });
 
   it('sends a test, rotates the secret after confirming, and shows the delivery log', async () => {

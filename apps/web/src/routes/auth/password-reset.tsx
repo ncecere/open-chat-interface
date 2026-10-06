@@ -282,7 +282,7 @@ export function ResetPasswordPage() {
             <Label htmlFor="new-password">New password</Label>
             <Input
               id="new-password"
-              {...fieldErrorProps('new-password-error', error)}
+              {...fieldErrorProps('new-password-error', error, Boolean(error), 'new-password-hint')}
               type="password"
               autoComplete="new-password"
               required
@@ -291,7 +291,9 @@ export function ResetPasswordPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
-            <p className="text-xs text-[var(--text-muted)]">Use at least 12 characters.</p>
+            <p id="new-password-hint" className="text-xs text-[var(--text-muted)]">
+              Use at least 12 characters.
+            </p>
           </div>
           {error && <AuthFormError id="new-password-error">{error}</AuthFormError>}
           <Button type="submit" variant="primary" disabled={submitting} className="w-full">

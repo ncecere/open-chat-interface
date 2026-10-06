@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { EFFORT_LABELS } from '~/components/admin/role-features-form';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
-import { Field } from '~/components/ui/field';
+import { Field, fieldHintId } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
@@ -187,6 +187,8 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
       >
         <select
           id="default-effort"
+          // A native select reads the Field's hint by hand (#295).
+          aria-describedby={fieldHintId('default-effort')}
           className="h-9 w-full max-w-xs rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-3 text-sm text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
           value={draft}
           disabled={save.isPending}

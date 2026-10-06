@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field, invalidFieldProps } from '~/components/ui/field';
+import { Field, fieldHintId, invalidFieldProps } from '~/components/ui/field';
 import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
@@ -263,7 +263,13 @@ function BroadcastDialog({
           </Field>
 
           <Field label="Audience" htmlFor="broadcast-roles" hint="Leave empty for everyone.">
-            <div id="broadcast-roles" className="flex flex-wrap gap-1.5">
+            {/* A group of toggles, named and described as one field (#295). */}
+            <fieldset
+              id="broadcast-roles"
+              aria-label="Audience"
+              aria-describedby={fieldHintId('broadcast-roles')}
+              className="m-0 flex min-w-0 flex-wrap gap-1.5 border-0 p-0"
+            >
               {USER_ROLES.map((role) => {
                 const selected = draft.audienceRoles.includes(role);
                 return (
@@ -290,7 +296,7 @@ function BroadcastDialog({
                   </button>
                 );
               })}
-            </div>
+            </fieldset>
           </Field>
         </div>
 

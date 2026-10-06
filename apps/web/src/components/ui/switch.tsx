@@ -1,6 +1,7 @@
 import * as SwitchPrimitive from '@radix-ui/react-switch';
 import type { ComponentProps } from 'react';
 import { cn } from '~/lib/utils';
+import { useFieldDescribedBy } from './field-hint';
 import { HELD_CLASS, useHoldFocus } from './hold-focus';
 
 /**
@@ -20,6 +21,8 @@ export function Switch({
   ...props
 }: ComponentProps<typeof SwitchPrimitive.Root>) {
   const { hold, track } = useHoldFocus(disabled);
+  // Described by the hint of the Field it is in, too (#295).
+  const describedBy = useFieldDescribedBy(props['aria-describedby']);
   return (
     <SwitchPrimitive.Root
       className={cn(
@@ -32,6 +35,7 @@ export function Switch({
       {...props}
       disabled={hold ? false : disabled}
       aria-disabled={hold ? true : props['aria-disabled']}
+      aria-describedby={describedBy}
       {...track(onFocus, onBlur)}
       onClick={(event) => {
         if (hold) return event.preventDefault();

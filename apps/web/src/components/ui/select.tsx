@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
+import { useFieldDescribedBy } from './field-hint';
 import { HELD_CLASS, useHoldFocus } from './hold-focus';
 import { MENU_ITEM_FOCUS } from './item-focus';
 
@@ -215,6 +216,8 @@ export function Select({
   /** A note about the field, such as why it is disabled. */
   'aria-describedby'?: string;
 }) {
+  // Described by the hint of the Field it is in, too (#295).
+  const describedBy = useFieldDescribedBy(ariaDescribedBy);
   // The popup's listbox is named like the field (#114): by its aria-label, or
   // else by the <label> pointing at it, read when the popup opens.
   const [labelText, setLabelText] = useState<string | undefined>(undefined);
@@ -234,7 +237,7 @@ export function Select({
         id={id}
         className={cn(className, held.hold && HELD_CLASS)}
         aria-label={ariaLabel}
-        aria-describedby={ariaDescribedBy}
+        aria-describedby={describedBy}
         valueTitle={options.find((option) => option.value === value)?.label}
       >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
@@ -264,6 +267,7 @@ export function GroupedSelect({
   placeholder,
   className,
   'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedBy,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -273,11 +277,14 @@ export function GroupedSelect({
   placeholder?: string;
   className?: string;
   'aria-label'?: string;
+  'aria-describedby'?: string;
 }) {
   // The popup's listbox is named like the field (#114): by its aria-label, or
   // else by the <label> pointing at it, read when the popup opens.
   const [labelText, setLabelText] = useState<string | undefined>(undefined);
   const held = useSelectHold(disabled, onChange);
+  // Described by the hint of the Field it is in, too (#295).
+  const describedBy = useFieldDescribedBy(ariaDescribedBy);
   return (
     <SelectRoot
       value={toRadixValue(value)}
@@ -293,6 +300,7 @@ export function GroupedSelect({
         id={id}
         className={cn(className, held.hold && HELD_CLASS)}
         aria-label={ariaLabel}
+        aria-describedby={describedBy}
         valueTitle={
           groups.flatMap((group) => group.options).find((option) => option.value === value)?.label
         }
