@@ -243,8 +243,15 @@ export const MARKDOWN_PROSE = cn(
   '[&_[data-streamdown=table-cell]]:max-w-[22rem]',
   '[&_hr]:border-[var(--border-subtle)]',
   '[&_li::marker]:text-[var(--accent-bright)]',
+  // Streamdown puts list markers inside the text: a wrapped line started under
+  // the bullet, and an item that was one long link left its bullet alone on a
+  // line. Outside markers give a hanging indent (#241).
+  '[&_ul]:list-outside [&_ol]:list-outside [&_ul]:pl-6 [&_ol]:pl-6',
+  // A task's checkbox sits where the bullet would, so its text hangs too:
+  // 16 px box, 4 px margin and the space after it fill the 24 px indent.
+  '[&_.task-list-item_input]:-ml-6 [&_.task-list-item_input]:w-4',
   // A task list item shows its checkbox, not a bullet as well (#240).
-  '[&_li.task-list-item]:list-none [&_.task-list-item_input]:mr-2',
+  '[&_li.task-list-item]:list-none [&_.task-list-item_input]:mr-1',
 );
 
 // Cache at the wrapper boundary, before normalization and the lazy renderer.
