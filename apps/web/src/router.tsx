@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-router';
 import { AppShell } from '~/components/layout/app-shell';
 import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
+import { NotFoundPage } from '~/components/ui/not-found-page';
 import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import {
@@ -68,6 +69,12 @@ export async function loadSession(): Promise<SessionSnapshot | null> {
 
 const rootRoute = createRootRoute({
   component: Outlet,
+  // An address outside every layout: the page itself is the landmark (#131).
+  notFoundComponent: () => (
+    <main className="h-dvh">
+      <NotFoundPage />
+    </main>
+  ),
 });
 
 const signupRoute = createRoute({
@@ -279,6 +286,8 @@ const adminRoute = createRoute({
   },
   component: lazyRouteComponent(() => import('~/components/admin/admin-layout'), 'AdminLayout'),
   pendingComponent: FullPageSpinner,
+  // "/admin/invitations" and the like: inside the admin chrome, with a way back (#131).
+  notFoundComponent: () => <NotFoundPage admin />,
 });
 
 const adminOverviewRoute = createRoute({
@@ -523,6 +532,8 @@ export const router = createRouter({
   defaultPreload: 'intent',
   defaultPendingComponent: FullPageSpinner,
   defaultErrorComponent: RouteLoadError,
+  // Inside a layout (the chat shell, settings): its page area says so (#131).
+  defaultNotFoundComponent: () => <NotFoundPage />,
 });
 
 /**

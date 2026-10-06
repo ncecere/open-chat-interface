@@ -1,13 +1,7 @@
 import { type PublicArtifact, toolLabel } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
-import {
-  ExternalLink,
-  Globe2,
-  Link2Off,
-  LockKeyhole,
-  MessageSquareText,
-  Wrench,
-} from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { ExternalLink, Globe2, LockKeyhole, MessageSquareText, Wrench } from 'lucide-react';
 import { PublicArtifactsProvider } from '~/components/artifacts/artifacts-provider';
 import { CreatedArtifactCards, ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { Wordmark } from '~/components/brand/wordmark';
@@ -18,6 +12,7 @@ import { WorkDisclosure } from '~/components/chat/reply-work';
 import { type WorkStep, workSummary } from '~/components/chat/work-summary';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { ApiError, api } from '~/lib/api-client';
 import { usePageTitle } from '~/lib/document-title';
@@ -101,29 +96,48 @@ function unavailableReason(error: unknown): 'expired' | 'revoked' | null {
   return reason === 'expired' || reason === 'revoked' ? reason : null;
 }
 
+/**
+ * A share that cannot be shown, in the layout of every unavailable page
+ * (#113, #131), with a way on: the visitor may have no account, so the way
+ * on is the app itself, which offers sign-in when needed.
+ */
 function PublicShareState({
   title,
   description,
   retry,
+  appName,
 }: {
   title: string;
   description: string;
   retry?: () => void;
+  appName?: string;
 }) {
+  const home = (
+    <Link to="/" className={retry ? 'text-sm underline' : undefined}>
+      Go to {appName || 'Open Chat Interface'}
+    </Link>
+  );
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-10">
-      <section className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 text-center sm:p-8">
-        <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
-          <Link2Off className="size-5 text-[var(--text-secondary)]" aria-hidden="true" />
-        </span>
-        <h1 className="mt-4 text-xl">{title}</h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{description}</p>
-        {retry && (
-          <Button className="mt-5" type="button" variant="primary" onClick={retry}>
-            Try again
-          </Button>
-        )}
-      </section>
+    <main className="flex min-h-dvh flex-col">
+      <UnavailableState
+        className="flex-1"
+        title={title}
+        alert={Boolean(retry)}
+        actions={
+          retry ? (
+            <>
+              <Button type="button" onClick={retry}>
+                Try again
+              </Button>
+              {home}
+            </>
+          ) : (
+            <Button asChild>{home}</Button>
+          )
+        }
+      >
+        {description}
+      </UnavailableState>
     </main>
   );
 }
@@ -305,6 +319,7 @@ export function PublicSharePage({ slug }: { slug: string }) {
     if (reason === 'expired') {
       return (
         <PublicShareState
+          appName={branding?.appName}
           title="This share link has expired"
           description="The owner set an expiration time for this shared conversation."
         />
@@ -313,6 +328,7 @@ export function PublicSharePage({ slug }: { slug: string }) {
     if (reason === 'revoked') {
       return (
         <PublicShareState
+          appName={branding?.appName}
           title="This share link was revoked"
           description="The owner has stopped sharing this conversation."
         />
@@ -321,6 +337,7 @@ export function PublicSharePage({ slug }: { slug: string }) {
     if (query.error instanceof ApiError && query.error.status === 404) {
       return (
         <PublicShareState
+          appName={branding?.appName}
           title="Shared conversation not found"
           description="Check the link, or ask its owner to create a new one."
         />
@@ -328,6 +345,7 @@ export function PublicSharePage({ slug }: { slug: string }) {
     }
     return (
       <PublicShareState
+        appName={branding?.appName}
         title="Could not load this conversation"
         description="A temporary error prevented the shared conversation from loading."
         retry={() => void query.refetch()}
