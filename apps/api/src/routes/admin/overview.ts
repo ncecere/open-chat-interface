@@ -5,6 +5,7 @@ import { db, sql as sqlClient } from '../../db/index.js';
 import { onReadReplica } from '../../db/read.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { chatStreamRedisStatus } from '../../services/chat-streams.js';
+import { activityWindowStart, fillActivityDays } from '../../services/overview-activity.js';
 import { APP_VERSION } from '../../version.js';
 
 export const overviewRoutes = new Hono<AppBindings>();
@@ -70,16 +71,18 @@ overviewRoutes.get('/', async (c) => {
             and(gte(schema.message.createdAt, twoDaysAgo), lt(schema.message.createdAt, dayAgo)),
           ),
         // Grouped in the database rather than fetched and bucketed here: the row
-        // count is fourteen either way, but the message table is not.
+        // count is fourteen either way, but the message table is not. Days are
+        // UTC whatever the database session's zone, and only the days with
+        // messages come back: fillActivityDays adds the quiet ones (#348).
         db
           .select({
-            day: sql<string>`to_char(date_trunc('day', ${schema.message.createdAt}), 'YYYY-MM-DD')`,
+            day: sql<string>`to_char(date_trunc('day', ${schema.message.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
             messages: count(),
           })
           .from(schema.message)
-          .where(gte(schema.message.createdAt, new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)))
-          .groupBy(sql`date_trunc('day', ${schema.message.createdAt})`)
-          .orderBy(sql`date_trunc('day', ${schema.message.createdAt})`),
+          .where(gte(schema.message.createdAt, activityWindowStart(new Date())))
+          .groupBy(sql`date_trunc('day', ${schema.message.createdAt} at time zone 'UTC')`)
+          .orderBy(sql`date_trunc('day', ${schema.message.createdAt} at time zone 'UTC')`),
         db
           .select({
             files: sql<number>`count(*) filter (where ${schema.attachment.deletedAt} is null)::int`,
@@ -116,7 +119,7 @@ overviewRoutes.get('/', async (c) => {
       last24h: recentMessages[0]?.value ?? 0,
       previous24h: previousMessages[0]?.value ?? 0,
     },
-    activity: activityRows.map((row) => ({ day: row.day, messages: row.messages })),
+    activity: fillActivityDays(activityRows, new Date()),
     models: { enabled: enabledModels[0]?.value ?? 0, total: modelTotals[0]?.value ?? 0 },
     providers: {
       configured: providerTotals[0]?.value ?? 0,
