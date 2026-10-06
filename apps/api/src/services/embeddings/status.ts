@@ -183,10 +183,12 @@ export async function embeddingsHealthCheck(): Promise<Check> {
       detail: `${extension}; storage for ${current?.modelId ?? settings.modelId ?? 'the model'} is not ready yet. The background job creates it.`,
     };
   }
-  let progress = `${status.passages.embedded} of ${status.passages.total} passages embedded with ${current.modelId}`;
+  // Grouped, as the Embeddings page writes them ("2,000 of 2,000", #228).
+  const n = (value: number) => value.toLocaleString('en-US');
+  let progress = `${n(status.passages.embedded)} of ${n(status.passages.total)} passages embedded with ${current.modelId}`;
   const filling = status.generations.filling;
   if (filling) {
-    progress += `; rebuilding for ${filling.modelId}: ${filling.passages.embedded} of ${filling.passages.total}`;
+    progress += `; rebuilding for ${filling.modelId}: ${n(filling.passages.embedded)} of ${n(filling.passages.total)}`;
     if (status.generations.switchBlocked) progress += ', switch waits for the upgrade to finish';
   }
   const failing = status.failures.files + (filling?.failures.files ?? 0);

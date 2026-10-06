@@ -80,7 +80,8 @@ it('clears "the end time must be after the start time" once Ends is moved later 
       (candidate) => candidate.textContent?.trim() === 'Create announcement',
     )!,
   );
-  expect(alerts(dialog()!).join(' ')).toContain('The end time must be after the start time.');
+  // "Ends", as the field is labelled, not "Ends at" (#228).
+  expect(alerts(dialog()!)).toEqual(['Ends: The end time must be after the start time.']);
   await typeInto(ends, '2026-10-24T10:00');
   expect(alerts(dialog()!)).toEqual([]);
 });

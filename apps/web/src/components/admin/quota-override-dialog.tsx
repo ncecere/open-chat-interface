@@ -80,7 +80,15 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
       setError(null);
       await invalidate();
     },
-    onError: (cause) => setError(apiErrorMessage(cause, 'The override could not be saved.')),
+    // "Expires", as the field is labelled, not "Expires at" (#228).
+    onError: (cause) =>
+      setError(
+        apiErrorMessage(cause, 'The override could not be saved.', {
+          limitValue: 'Limit',
+          expiresAt: 'Expires',
+          reason: 'Reason',
+        }),
+      ),
   });
 
   const clear = useMutation({

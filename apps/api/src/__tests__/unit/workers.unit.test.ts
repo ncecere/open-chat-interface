@@ -170,7 +170,7 @@ describe('whether any replica runs background jobs', () => {
     );
     expect(await workerStatus()).toMatchObject({ alive: true, evidence: 'heartbeat' });
     expect((await workersHealthCheck()).detail).toBe(
-      'Background jobs run on another replica. Replicas seen in the last minute: 1 web, 1 worker, 0 all.',
+      'Background jobs run on another replica. Replicas seen in the last minute: 1 web, 1 worker.',
     );
   });
 

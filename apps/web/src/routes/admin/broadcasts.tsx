@@ -52,6 +52,16 @@ const LEVEL_VARIANTS: Record<BroadcastLevel, 'neutral' | 'warning' | 'danger'> =
   critical: 'danger',
 };
 
+/** The form's names for the fields, as errors should use them (#228). */
+const BROADCAST_LABELS = {
+  title: 'Title',
+  body: 'Message',
+  level: 'Importance',
+  audienceRoles: 'Audience',
+  startsAt: 'Starts',
+  endsAt: 'Ends',
+};
+
 interface Draft {
   title: string;
   body: string;
@@ -144,7 +154,8 @@ function BroadcastDialog({
       ]);
       onClose();
     },
-    onError: (cause) => setError(apiErrorMessage(cause, 'The announcement could not be saved.')),
+    onError: (cause) =>
+      setError(apiErrorMessage(cause, 'The announcement could not be saved.', BROADCAST_LABELS)),
   });
   // The error is about the values sent; correcting them clears it (#217).
   useClearOnEdit(draft, () => setError(null));
@@ -165,7 +176,9 @@ function BroadcastDialog({
     });
 
     if (!parsed.success) {
-      setError(validationText(parsed.error.issues, 'Check the announcement fields.'));
+      setError(
+        validationText(parsed.error.issues, 'Check the announcement fields.', BROADCAST_LABELS),
+      );
       return;
     }
     save.mutate(parsed.data);

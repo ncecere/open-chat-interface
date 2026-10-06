@@ -26,6 +26,8 @@ import { CapacityLimitsButton } from '~/components/admin/capacity-limits';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { EmbeddingsSection } from '~/components/admin/embeddings-section';
 import { ModelFormDialog } from '~/components/admin/model-form-dialog';
+// One name per capability across admin and the model picker (#228).
+import { CAPABILITY_LABELS } from '~/components/chat/model-picker-data';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -41,17 +43,6 @@ import { DEFAULT_MODELS_TAB, type ModelsTab, validateModelsSearch } from '~/lib/
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 import { ProvidersSection } from '~/routes/admin/providers';
-
-const CAPABILITY_LABELS: Record<ModelCapability, string> = {
-  vision: 'Vision',
-  reasoning: 'Reasoning',
-  effort_control: 'Effort',
-  tool_calling: 'Tools',
-  image_generation: 'Images',
-  pdf_comprehension: 'PDF',
-  fast: 'Fast',
-  web_search: 'Search',
-};
 
 /**
  * The limits OCI budgets conversations with, and where an unset one comes

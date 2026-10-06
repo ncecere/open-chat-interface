@@ -90,7 +90,8 @@ it('clears the error once the policy text is filled in (#217)', async () => {
       (candidate) => candidate.textContent?.trim() === 'Publish version',
     )!,
   );
-  expect(alerts(dialog()!)).toHaveLength(1);
+  // In the form's words, not the API's "Body" (#228).
+  expect(alerts(dialog()!)).toEqual(['Policy text is required.']);
   expect(api.post).not.toHaveBeenCalled();
   await typeIntoTextarea(body, 'Be kind to the machines, please.');
   expect(alerts(dialog()!)).toEqual([]);

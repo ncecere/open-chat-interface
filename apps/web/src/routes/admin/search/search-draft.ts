@@ -70,7 +70,9 @@ function addressProblem(value: string): string | undefined {
       return 'Enter an HTTP or HTTPS address.';
     }
   } catch {
-    return 'Enter a full address, starting with https://.';
+    // http:// is accepted (a SearXNG beside OCI often has no TLS), so the
+    // message says so (#228).
+    return 'Enter a full address, starting with http:// or https://.';
   }
   return undefined;
 }

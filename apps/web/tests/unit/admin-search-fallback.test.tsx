@@ -146,7 +146,9 @@ describe('Web search fallback provider', () => {
     await type('search-fallback-base-url', 'not a url');
     await click(button('Save changes'));
     expect(api.patch).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain('Enter a full address, starting with https://.');
+    expect(document.body.textContent).toContain(
+      'Enter a full address, starting with http:// or https://.',
+    );
 
     await type('search-fallback-base-url', 'https://search2.example.edu');
     await click(button('Save changes'));

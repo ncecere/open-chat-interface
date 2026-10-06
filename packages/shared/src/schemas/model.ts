@@ -95,7 +95,8 @@ export const upsertModelSchema = z.object({
     .trim()
     .min(1)
     .max(120)
-    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
+    // Shown after the field's name ("OCI slug: …"), so not naming it again (#228).
+    .regex(/^[a-z0-9-]+$/, 'Use lowercase letters, digits and hyphens, such as gpt-4o.'),
   displayName: z.string().trim().min(1).max(120),
   description: z.string().trim().max(600).nullable().optional(),
   capabilities: z.array(modelCapabilitySchema).default([]),

@@ -135,6 +135,31 @@ describe('model limits', () => {
     expect(form).toContain('OCI then reserves 4,096, or a quarter of the context window');
   });
 
+  it('names capabilities the same in the row and the form, with the switch at the right (#228)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(
+      [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+        candidate.textContent?.endsWith('OpenAI · big-model'),
+      )!,
+    );
+    const pills = (scope: ParentNode) =>
+      [...scope.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')]
+        .map((pill) => pill.textContent?.trim() ?? '')
+        .filter((name) => name.includes('PDF') || name.includes('Pdf') || name.includes('Tool'));
+    expect(pills(document)).toEqual(['Tool calling', 'PDF comprehension']);
+
+    await click(button('Edit Big model'));
+    const form = dialog()!;
+    expect(pills(form)).toEqual(['Tool calling', 'PDF comprehension']);
+    // The pills are not capitalised word by word ("Pdf Comprehension").
+    const pdf = [...form.querySelectorAll('button[aria-pressed]')].find(
+      (pill) => pill.textContent === 'PDF comprehension',
+    );
+    expect(pdf?.className).not.toContain('capitalize');
+    const enabled = form.querySelector('label[for="model-enabled"]')!;
+    expect(enabled.parentElement?.className).not.toContain('grid-cols-2');
+  });
+
   it('saves both limits', async () => {
     await openEditor();
     await typeInto(field('model-context-window'), '200,000');
@@ -236,7 +261,7 @@ describe('the model form and inline rename (#79)', () => {
     await click(add!);
     const [alert] = alerts(dialog() as HTMLElement);
     expect(alert?.split('\n')).toEqual([
-      'OCI slug: Slug must be lowercase alphanumeric with dashes',
+      'OCI slug: Use lowercase letters, digits and hyphens, such as gpt-4o.',
       'The output limit must leave room for input: keep it below 7,488 tokens (the context window, less 512).',
     ]);
     expect(api.post).not.toHaveBeenCalled();
