@@ -173,8 +173,18 @@ Points worth knowing:
   or recipients; **Pause** stops it without losing it.
 - **Send due now** exists so you can check the recipients and the content
   without waiting a month to discover the address was wrong.
-- **A failure is recorded on the report**, not only in the logs, so you can see a
-  report has been failing without reading server output.
+- **A failed send does not count as sent.** The report stays due, shows
+  "Failed: Email delivery failed. It was not counted as sent, and will be tried
+  again", and is tried again by the hourly check after 15 minutes, then 1 hour,
+  then 4 hours. If all of those fail the report waits for its next period
+  (and says "Automatic tries are used up"), so a mail server that stays away
+  is not asked every hour. The failure is recorded on the report, not only in
+  the logs, so you can see it without reading server output.
+- **Send now** on each report sends it immediately, due or not, and is always
+  there after a failure: when it delivers, the failure is cleared and the report
+  counts as sent for its period. On a report that is not failing it sends a
+  copy and leaves its schedule as it was. If it cannot deliver, the page says
+  why.
 - Reports need email configured. Without SMTP none will arrive: the Reports
   page warns until email delivery is set up, enabling a report makes email a
   required step on the [setup checklist](first-run.md#5-set-up-email-delivery),

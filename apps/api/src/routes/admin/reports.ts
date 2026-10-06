@@ -8,7 +8,12 @@ import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
-import { nextReportRunAt, runDueReports } from '../../services/reports.js';
+import {
+  nextReportRunAt,
+  retriesLeft,
+  runDueReports,
+  sendReportNow,
+} from '../../services/reports.js';
 import { diffUpdate } from '../../services/settings-diff.js';
 
 export const reportRoutes = new Hono<AppBindings>();
@@ -26,6 +31,10 @@ reportRoutes.get('/', async (c) => {
     reports: rows.map((row) => ({
       ...row,
       lastRunAt: row.lastRunAt?.toISOString() ?? null,
+      lastAttemptAt: row.lastAttemptAt?.toISOString() ?? null,
+      // How many automatic tries a failing report has left before it waits for
+      // its next period (#352); the page says so beside the failure.
+      retriesLeft: row.lastStatus === 'error' ? retriesLeft(row) : null,
       nextRunAt: nextReportRunAt(row, now)?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -138,4 +147,29 @@ reportRoutes.post('/run', async (c) => {
   });
 
   return c.json({ sent });
+});
+
+/**
+ * Sends one report now, whether or not it is due (#352): what an
+ * administrator uses after a failure, instead of waiting for a retry or
+ * deleting and recreating the report. Answers 200 with `delivered: false` and
+ * the reason when the email could not be sent, so the page can show it.
+ */
+reportRoutes.post('/:id/send', async (c) => {
+  const actor = currentUser(c);
+  const id = c.req.param('id');
+  const result = await sendReportNow(id);
+  if (!result) throw notFound('Report not found');
+
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'report.send',
+    targetType: 'scheduled_report',
+    targetId: id,
+    ipAddress: clientIp(c),
+    metadata: { delivered: result.delivered },
+  });
+
+  return c.json(result);
 });

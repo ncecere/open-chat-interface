@@ -292,9 +292,14 @@ export const scheduledReport = pgTable(
     windowDays: integer('window_days').notNull().default(30),
     recipients: jsonb('recipients').$type<string[]>().notNull().default([]),
     enabled: boolean('enabled').notNull().default(true),
+    /** The last successful send; a failed attempt does not move it (#352). */
     lastRunAt: timestamp('last_run_at', { withTimezone: true }),
     lastStatus: text('last_status').$type<'success' | 'error'>(),
     lastError: text('last_error'),
+    /** When the last failed attempt was made; the retry pause counts from it (#352). */
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    /** Failed attempts since the last successful send (#352). */
+    failedAttempts: integer('failed_attempts').notNull().default(0),
     ...timestamps(),
   },
   (t) => [index('scheduled_report_enabled_idx').on(t.enabled, t.lastRunAt)],

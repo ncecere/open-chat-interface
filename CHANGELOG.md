@@ -7,14 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from eight QA walks of v0.11.0 (issues #35–#353). Two migrations, `0042`
-and `0043` (code artifacts, #298), run with `migrate` as usual. Four new
-post-deploy steps run with `migrate --post` after every replica runs the new
-release, as for any release: `0007`, `0008` and `0010` index the audit log so
-a person's trail includes bulk actions done to them and entries made with
-their address alone (#216, #342; until they run, the trail is complete but
-slower on a large audit log), and `0009` enables code artifacts (#298; until it runs, code stays in the reply, so a replica of the
-previous release never sees the new kind). The PostgreSQL driver patch
+Fixes from eight QA walks of v0.11.0 (issues #35–#353). Three migrations,
+`0042`, `0043` (code artifacts, #298) and `0044` (two columns that let a failed
+scheduled report be tried again, #352; no table rewrite), run with `migrate` as
+usual. Four new post-deploy steps run with `migrate --post` after every replica
+runs the new release, as for any release: `0007`, `0008` and `0010` index the
+audit log so a person's trail includes bulk actions done to them and entries
+made with their address alone (#216, #342; until they run, the trail is
+complete but slower on a large audit log), and `0009` enables code artifacts
+(#298; until it runs, code stays in the reply, so a replica of the previous
+release never sees the new kind). The PostgreSQL driver patch
 (`patches/postgres@3.4.9.patch`) is applied by `pnpm install`.
 
 ### Added
@@ -24,6 +26,9 @@ previous release never sees the new kind). The PostgreSQL driver patch
   /api/admin/settings/smtp/test`; `smtp.hasUsername` and `smtp.hasPassword` in
   the settings.
 - **Edit scheduled reports**, and see when each is next sent (#85).
+- **A scheduled report whose email failed is tried again** after 15 minutes,
+  1 hour and 4 hours, instead of counting as sent for its whole period, and each
+  report has a **Send now** button (#352). `POST /api/admin/reports/:id/send`.
 - **Unsaved-changes protection** in administration: leaving a page, closing
   the tab or pressing Escape in a half-filled dialog asks first (#45).
 - **Acceptable-use drafts** can be read, reworded and deleted before they are
