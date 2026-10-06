@@ -238,7 +238,20 @@ export function ShareThreadDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-h-[min(48rem,calc(100dvh-2rem))] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto">
+      <DialogContent
+        className="max-h-[min(48rem,calc(100dvh-2rem))] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto"
+        // "Share through" is disabled while the messages load, which is when
+        // the dialog opens, so Radix put focus on the first field it could:
+        // Expires, the second, which on touch devices can open its picker at
+        // once. Start at Share through when it is ready, else on the dialog,
+        // so Tab follows the visual order from the top (#158).
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          const first = document.getElementById('share-cutoff');
+          if (first && !first.hasAttribute('disabled')) first.focus();
+          else (event.currentTarget as HTMLElement | null)?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Share conversation</DialogTitle>
           <DialogDescription>
