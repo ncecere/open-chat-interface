@@ -137,7 +137,9 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={temporary ? 'Leave temporary chat' : 'Start temporary chat'}
+            // A toggle keeps its name and says whether it is on with
+            // aria-pressed (#325): "Leave temporary chat, pressed" read as two states.
+            aria-label="Temporary chat"
             aria-pressed={temporary}
             title="Temporary chat"
             onClick={toggleTemporary}

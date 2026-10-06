@@ -379,7 +379,7 @@ describe('renaming from the top bar', () => {
     for (const label of ['Rename conversation', 'Download this conversation', 'Move to project'])
       expect(action(label), label).toBeNull();
     // The page's own controls stay.
-    expect(action('Start temporary chat')).not.toBeNull();
+    expect(action('Temporary chat')).not.toBeNull();
   });
 
   it('is not shown away from a conversation', async () => {
@@ -400,13 +400,13 @@ describe('temporary chat for a role without it (#181)', () => {
         : get(path),
     );
     await render('/');
-    expect(document.querySelector('[aria-label="Start temporary chat"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Temporary chat"]')).toBeNull();
     expect(document.querySelector('[title="Temporary chat is unavailable"]')).toBeNull();
   });
 
   it('is offered to a role with it', async () => {
     await render('/');
-    const button = document.querySelector<HTMLButtonElement>('[aria-label="Start temporary chat"]');
+    const button = document.querySelector<HTMLButtonElement>('[aria-label="Temporary chat"]');
     expect(button?.disabled).toBe(false);
   });
 });
