@@ -141,3 +141,11 @@ it('explains a sign-in refused because the provider may not link to an existing 
   await act(() => root.render(withClient(<LoginPage />)));
   expect(container.textContent).toContain('An account with this email address already exists');
 });
+
+it('puts the sign-in page in a main landmark, as every other auth page (#173)', async () => {
+  await act(() => root.render(withClient(<LoginPage />)));
+  const main = container.querySelectorAll('main');
+  expect(main).toHaveLength(1);
+  expect(main[0]?.querySelector('h1')?.textContent).toMatch(/^Sign in to /);
+  expect(main[0]?.querySelector('#email')).not.toBeNull();
+});

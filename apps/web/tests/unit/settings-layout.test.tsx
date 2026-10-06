@@ -75,6 +75,19 @@ describe('settings layout', () => {
     expect(menu.textContent).toContain('History');
   });
 
+  it('has one main landmark, the section, and a skip link to it first (#173)', async () => {
+    await render();
+    const main = container.querySelectorAll('main');
+    expect(main).toHaveLength(1);
+    // The section is the landmark; the header and the tabs are not in it.
+    expect(main[0]?.querySelector('header, nav')).toBeNull();
+    expect(main[0]?.id).toBe('main-content');
+    expect(main[0]?.tabIndex).toBe(-1);
+    const first = container.querySelector<HTMLElement>('a[href], button');
+    expect(first?.textContent).toBe('Skip to main content');
+    expect(first?.getAttribute('href')).toBe('#main-content');
+  });
+
   it('keeps shortcuts and help in cards instead of tabs of their own', async () => {
     await render();
     const text = container.textContent ?? '';

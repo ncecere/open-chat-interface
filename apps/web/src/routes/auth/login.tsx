@@ -133,7 +133,8 @@ export function LoginPage() {
   const appName = status?.branding.appName;
 
   return (
-    <div className="flex min-h-dvh flex-col items-center px-4 pt-[12vh] pb-12">
+    // The page's main landmark, as on every other auth page (#173).
+    <main className="flex min-h-dvh flex-col items-center px-4 pt-[12vh] pb-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           {/* The page's heading; the wordmark beside it is an image of the name (#110). */}
@@ -264,6 +265,6 @@ export function LoginPage() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }

@@ -22,6 +22,18 @@ test.describe('WCAG 2.2 AA: keyboard operation', () => {
     await expect(page.locator('#main-content')).toBeFocused();
   });
 
+  test('Settings has a skip link first and one main landmark (#173)', async ({ page }) => {
+    await signIn(page);
+    await page.goto('/settings/account');
+    await expect(page.getByRole('main')).toHaveCount(1);
+
+    await page.keyboard.press('Tab');
+    const skip = page.getByRole('link', { name: 'Skip to main content' });
+    await expect(skip).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('main')).toBeFocused();
+  });
+
   test('controls reached by keyboard show a focus indicator', async ({ page }) => {
     await signIn(page);
 

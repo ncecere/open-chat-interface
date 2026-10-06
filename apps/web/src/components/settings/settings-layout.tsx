@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
 import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
+import { SkipLink } from '~/components/layout/skip-link';
 import { ThemeMenu } from '~/components/layout/theme-menu';
 import { UsageLimits } from '~/components/settings/usage-limits';
 import { Badge } from '~/components/ui/badge';
@@ -230,6 +231,8 @@ export function SettingsLayout() {
 
   return (
     <div className="min-h-dvh bg-[var(--bg-settings)]">
+      {/* Past Back to Chat, the menus and the section tabs to the page (#173). */}
+      <SkipLink />
       <div className="mx-auto w-full max-w-[75rem] px-4 py-6 sm:px-6">
         <header className="flex items-center justify-between">
           <Button variant="ghost" size="sm" asChild>
@@ -258,17 +261,21 @@ export function SettingsLayout() {
 
           <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <SectionNav pathname={pathname} />
-            {/* Read-only maintenance mode (v0.11): why changes are not saved. */}
-            <ReadOnlyBanner className="mt-6 rounded-xl border" />
-            {/* The page and the cards are shown once the page's first data is
-                in: on phones the cards follow the page, and were pushed down
-                in view as it filled in (#104). */}
-            <div className="relative mt-8 lg:pb-16" aria-busy={!loaded}>
-              {!loaded && <LoadingOverlay label="Loading settings" />}
-              <div className={loaded ? undefined : 'invisible'}>
-                <Outlet />
+            {/* The section itself is the page's main landmark and the skip
+                link's target, as in the chat shell and admin (#173). */}
+            <main id="main-content" tabIndex={-1} className="outline-none">
+              {/* Read-only maintenance mode (v0.11): why changes are not saved. */}
+              <ReadOnlyBanner className="mt-6 rounded-xl border" />
+              {/* The page and the cards are shown once the page's first data is
+                  in: on phones the cards follow the page, and were pushed down
+                  in view as it filled in (#104). */}
+              <div className="relative mt-8 lg:pb-16" aria-busy={!loaded}>
+                {!loaded && <LoadingOverlay label="Loading settings" />}
+                <div className={loaded ? undefined : 'invisible'}>
+                  <Outlet />
+                </div>
               </div>
-            </div>
+            </main>
           </div>
 
           <div
