@@ -1,5 +1,6 @@
 import { type ComponentProps, lazy, memo, Suspense } from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
+import { DEMOTED_HEADINGS } from '~/components/chat/markdown-headings';
 import { remarkSoftBreaks } from '~/components/chat/markdown-soft-breaks';
 import {
   installStreamdownOverlayFocus,
@@ -55,7 +56,8 @@ const StreamdownMarkdown = lazy(() =>
             // The reference interface shows plain code without a gutter.
             lineNumbers={false}
             // Links are real links that warn before leaving the instance (#174),
-            // not Streamdown's link-safety buttons.
+            // not Streamdown's link-safety buttons; headings sit below the
+            // page's h1 (#212).
             components={MESSAGE_COMPONENTS}
             // Share pages pass their own URL policy and keep the visible marker.
             {...(!skipHtml && !urlTransform && ownerRehypePlugins
@@ -74,7 +76,7 @@ const StreamdownMarkdown = lazy(() =>
   ),
 );
 
-const MESSAGE_COMPONENTS = { a: MessageLink };
+const MESSAGE_COMPONENTS = { a: MessageLink, ...DEMOTED_HEADINGS };
 
 type Pluggable = NonNullable<
   ComponentProps<typeof import('streamdown').Streamdown>['rehypePlugins']

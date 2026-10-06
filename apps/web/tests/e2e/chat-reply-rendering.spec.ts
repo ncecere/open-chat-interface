@@ -92,3 +92,15 @@ for (const width of [390, 1440]) {
     expect(right).toBeLessThanOrEqual(column.x + column.width + 0.5);
   });
 }
+
+test("a reply's headings sit below the page's one h1 (#212)", async ({ page }) => {
+  const reply = await openReply(page, 'fix3-headings', [
+    { type: 'text', text: '# Ten Facts About Owls\n\nOwls are birds.\n\n## Hunting\n\nAt night.' },
+  ]);
+  await expect(reply.getByRole('heading', { name: 'Ten Facts About Owls' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  await expect(
+    reply.getByRole('heading', { level: 2, name: 'Ten Facts About Owls' }),
+  ).toBeVisible();
+  await expect(reply.getByRole('heading', { level: 3, name: 'Hunting' })).toBeVisible();
+});
