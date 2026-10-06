@@ -156,7 +156,14 @@ function MoveToProjectForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await move.mutateAsync({ threadId, projectId: selected || null });
+    const name = (id: string | null) =>
+      (id && projects.data?.find((project) => project.id === id)?.name) || null;
+    await move.mutateAsync({
+      threadId,
+      projectId: selected || null,
+      projectName: name(selected || null),
+      fromProjectName: name(currentProjectId),
+    });
     onDone();
   }
 

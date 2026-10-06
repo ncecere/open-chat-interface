@@ -7,6 +7,7 @@ import type {
   UpdateProjectInput,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { ApiError, api } from '~/lib/api-client';
 import {
   invalidateConversationLists,
@@ -91,15 +92,34 @@ export function useUpdateProject(projectId: string) {
   });
 }
 
+/** What a deleted project's notice adds: where its conversations went. */
+export function deletedProjectText(detachedThreads: number): string | undefined {
+  if (detachedThreads === 0) return undefined;
+  return detachedThreads === 1
+    ? 'Its conversation is kept in your conversation list.'
+    : `Its ${detachedThreads} conversations are kept in your conversation list.`;
+}
+
+/**
+ * Deletes a project and says so (#294): the page then goes home, where
+ * nothing else said what happened. The notice comes from the mutation's own
+ * onSuccess, since the project page that asked has gone by then (#125).
+ */
 export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (projectId: string) =>
+    mutationFn: ({ id }: { id: string; name: string }) =>
       api.delete<{ ok: boolean; detachedThreads: number; removedFiles: number }>(
-        `/projects/${encodeURIComponent(projectId)}`,
+        `/projects/${encodeURIComponent(id)}`,
       ),
-    // Its conversations move to the general list.
-    onSuccess: () => invalidateConversationLists(queryClient),
+    onSuccess: (result, { id, name }) => {
+      toast.success(`Project “${name}” deleted.`, {
+        id: `project-deleted-${id}`,
+        description: deletedProjectText(result?.detachedThreads ?? 0),
+      });
+      // Its conversations move to the general list.
+      return invalidateConversationLists(queryClient);
+    },
   });
 }
 
@@ -139,15 +159,34 @@ export function useDeleteProjectFile(projectId: string) {
   });
 }
 
-/** Moves a conversation into a project, or out of one with `null`. */
+/**
+ * Moves a conversation into a project, or out of one with `null`, and says so
+ * (#294): the conversation on screen does not change, and the only sign was
+ * its row moving in the sidebar, which nobody hears. `projectName` is the
+ * project it goes to, `fromProjectName` the one it leaves.
+ */
 export function useMoveThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ threadId, projectId }: { threadId: string; projectId: string | null }) =>
+    mutationFn: ({
+      threadId,
+      projectId,
+    }: {
+      threadId: string;
+      projectId: string | null;
+      projectName?: string | null;
+      fromProjectName?: string | null;
+    }) =>
       api.patch<{ thread: ThreadSummary }>(`/threads/${encodeURIComponent(threadId)}`, {
         projectId,
       }),
-    onSuccess: (result) => {
+    onSuccess: (result, { threadId, projectId, projectName, fromProjectName }) => {
+      toast.success(
+        projectId
+          ? `Conversation moved to ${projectName ? `“${projectName}”` : 'the project'}.`
+          : `Conversation moved out of ${fromProjectName ? `“${fromProjectName}”` : 'its project'}.`,
+        { id: `thread-moved-${threadId}` },
+      );
       if (result?.thread) updateCachedConversation(queryClient, result.thread);
       return invalidateConversationLists(queryClient);
     },

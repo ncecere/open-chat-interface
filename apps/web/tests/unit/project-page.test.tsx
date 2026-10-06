@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import type { ProjectFile, ProjectSummary, ThreadSummary } from '@oci/shared';
+import { useRouterState } from '@tanstack/react-router';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
+import { Toaster, toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ProjectPage } from '../../src/routes/projects/project';
@@ -318,6 +320,42 @@ describe('project page', () => {
     )!;
     await click(confirmButton);
     expect(api.delete).toHaveBeenCalledExactlyOnceWith('/projects/project-1');
+  });
+
+  it('says the project was deleted on the page it lands on, and announces it (#294)', async () => {
+    api.delete.mockResolvedValue({ ok: true, detachedThreads: 2, removedFiles: 1 });
+    // As in the app: the project page goes away when the route changes, and
+    // with it anything only the page would have said (#125).
+    function Routed() {
+      const path = useRouterState({ select: (state) => state.location.pathname });
+      return path.startsWith('/projects/') ? <ProjectPage projectId="project-1" /> : null;
+    }
+    const rendered = await renderAdmin(
+      <TemporaryChatProvider>
+        <Routed />
+        <Toaster />
+      </TemporaryChatProvider>,
+      { path: '/projects/project-1?tab=settings' },
+    );
+    root = rendered.root;
+    await click(button('Delete project'));
+    const confirmButton = [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Delete project',
+    )!;
+    await click(confirmButton);
+
+    await vi.waitFor(() => expect(rendered.router.state.location.pathname).toBe('/'));
+    expect(document.body.textContent).not.toContain('Chapter one draft');
+    const region = document.querySelector('[aria-live="polite"]');
+    await vi.waitFor(() =>
+      expect(region?.querySelector('[data-sonner-toast]')?.textContent).toContain(
+        'Project “Thesis” deleted.',
+      ),
+    );
+    expect(region?.textContent).toContain(
+      'Its 2 conversations are kept in your conversation list.',
+    );
+    await act(async () => toast.dismiss());
   });
 
   it('words the delete confirmation to fit what the project holds (#210)', async () => {

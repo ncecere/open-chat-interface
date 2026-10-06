@@ -58,7 +58,8 @@ Temporary chats cannot be part of a project.
 
 To move an existing conversation, open it and select **Move to project** (the
 folder button at the top right). Choose a project, or **No project** to take
-it out. The change applies from the next reply.
+it out. A notice confirms the move (screen readers announce it), and the
+change applies from the next reply.
 
 Forks and edited branches stay in the same project as the conversation they
 came from.
@@ -191,7 +192,9 @@ continues after you approve a tool step, uses every file.
 and frees its storage. It is not moved to the trash.
 
 **Deleting a project** keeps its conversations: they simply leave the project.
-Its files are deleted and their storage freed. This cannot be undone.
+Its files are deleted and their storage freed. This cannot be undone. OCI
+then opens a new chat, with a notice that the project was deleted and how
+many conversations were kept.
 
 Projects are not affected by your institution's conversation retention. A
 conversation in a project can still be moved to the trash after a period of
