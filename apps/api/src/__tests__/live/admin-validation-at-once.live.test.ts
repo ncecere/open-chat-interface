@@ -149,6 +149,29 @@ describe.skipIf(!available)('live: admin validation reports every field at once'
     });
   });
 
+  it('a new connector: a missing name with the http:// URL, as the form now relies on (#301)', async () => {
+    const fields = await refused(
+      await send('POST', '/api/admin/connectors', {
+        name: '  ',
+        url: 'http://mcp.example.test/mcp',
+      }),
+    );
+    expect(Object.keys(fields).sort()).toEqual(['name', 'url']);
+    expect(fields.url).toBe(HTTPS_ONLY);
+  });
+
+  it('a webhook with no URL and no actions: one complaint about each (#301)', async () => {
+    const response = await send('POST', '/api/admin/webhooks', { url: '', actions: [] });
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as Refusal;
+    expect(
+      (body.error.details ?? []).map((issue) => [String(issue.path[0]), issue.message]),
+    ).toEqual([
+      ['url', 'Enter the endpoint\u2019s full URL, such as https://hooks.example.com/oci.'],
+      ['actions', 'Choose at least one audit action, or all of them.'],
+    ]);
+  });
+
   it('a webhook edit: checked against what the endpoint becomes', async () => {
     const [row] = await pool.db
       .insert(schema.webhookEndpoint)

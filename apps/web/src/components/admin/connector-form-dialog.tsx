@@ -242,14 +242,10 @@ export function ConnectorFormDialog({
   function submit(event: FormEvent) {
     event.preventDefault();
     setProblems([]);
-    const missing: FieldProblem[] = [
-      ...(name.trim() ? [] : [{ fields: ['name'], text: 'Enter a name for the connector.' }]),
-      ...(url.trim() ? [] : [{ fields: ['url'], text: 'Enter the server’s URL.' }]),
-    ];
-    if (missing.length > 0) {
-      report(missing);
-      return;
-    }
+    // No check of its own first: the API reports a missing name or URL
+    // together with the URL's network rule and the short name, so one save
+    // lists every problem; stopping at the form's own check left the rest
+    // for the next save (#301).
     if (connector) {
       const patch = connectorChanges(
         connector,

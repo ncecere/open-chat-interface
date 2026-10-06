@@ -132,16 +132,9 @@ export function WebhookFormDialog({
   function submit(event: FormEvent) {
     event.preventDefault();
     setProblems([]);
-    const missing: FieldProblem[] = [
-      ...(draft.url.trim() ? [] : [{ fields: ['url'], text: 'Enter the endpoint’s URL.' }]),
-      ...(!draft.allActions && parseActions(draft.actions).length === 0
-        ? [{ fields: ['actions'], text: 'Choose at least one audit action, or send all of them.' }]
-        : []),
-    ];
-    if (missing.length > 0) {
-      report(missing);
-      return;
-    }
+    // No check of its own first: the API reports a missing URL or action
+    // list together with the URL's network rule, which only it can check.
+    // Stopping at the form's own check left that one for the next save (#301).
     if (endpoint) {
       const patch = webhookChanges(endpoint, draft);
       if (Object.keys(patch).length === 0) onClose();

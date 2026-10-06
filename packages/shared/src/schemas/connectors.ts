@@ -63,7 +63,12 @@ const connectorUrlSchema = z
       const authority = /^https?:\/\/([^/?#]*)/i.exec(value)?.[1];
       return authority !== undefined && !authority.includes('@') && !value.includes('#');
     },
-    { message: 'Use an https:// URL without a user name, password or #fragment.' },
+    {
+      message: 'Use an https:// URL without a user name, password or #fragment.',
+      // Only about a URL: an empty or malformed one has its own complaint,
+      // and a second, about user names, only confused it (#301).
+      when: (payload) => payload.issues.length === 0,
+    },
   );
 
 const connectorFields = z.object({
