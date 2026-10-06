@@ -15,6 +15,7 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn } from '~/lib/utils';
 
 type SmtpSettings = InstanceSettings['smtp'];
@@ -239,6 +240,8 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
   const [showValidation, setShowValidation] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
 
   const errors = validateDraft(draft, usernameAction, username, passwordAction, password);
   const isValid = Object.keys(errors).length === 0;

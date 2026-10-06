@@ -26,6 +26,7 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
 
@@ -140,6 +141,8 @@ export function QuotaPolicyDialog({
   const [initial] = useState(() => JSON.stringify(initialDraft(policy)));
   const edited = JSON.stringify(draft) !== initial;
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
 
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>

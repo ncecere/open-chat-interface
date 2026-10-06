@@ -17,6 +17,7 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 type Features = InstanceSettings['features'];
 type FeatureKey = keyof Features;
@@ -92,6 +93,8 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
   const [draft, setDraft] = useState(() => normalizedPrompt(initialPrompt) ?? '');
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
 
   const normalizedDraft = normalizedPrompt(draft);
   const hasChanges = saved !== normalizedDraft;
@@ -159,6 +162,8 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
   const [draft, setDraft] = useState<ReasoningEffort>(initialEffort ?? 'instant');
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
   // Each of this page's sections asks before its edit is left behind (#300).
   useReportUnsaved(draft !== saved);
 
@@ -227,6 +232,8 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
   const [draft, setDraft] = useState(settings.features);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
 
   const hasChanges = featuresChanged(saved, draft);
 
@@ -323,6 +330,8 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
   const [draft, setDraft] = useState(String(initialSteps ?? DEFAULT_MAX_TOOL_STEPS));
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
   const value = Number(draft);
   const valid = /^\d+$/.test(draft) && value >= MIN_TOOL_STEPS && value <= MAX_TOOL_STEPS;
   useReportUnsaved(draft !== String(saved));
@@ -404,6 +413,8 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
   const [draft, setDraft] = useState(initialEnabled ?? true);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
   useReportUnsaved(draft !== saved);
 
   const save = useMutation({
@@ -464,6 +475,8 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
   const [draft, setDraft] = useState(initialEnabled ?? true);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
   useReportUnsaved(draft !== saved);
 
   const save = useMutation({

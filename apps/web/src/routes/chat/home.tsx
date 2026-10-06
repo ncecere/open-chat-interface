@@ -12,6 +12,7 @@ import { useModels, useModelsHiddenFromRole } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
 import { clearRestoredDraft, peekRestoredDraft } from '~/lib/unused-conversation';
@@ -74,6 +75,8 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const creating = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(startError, () => setStartError(null));
   const setDraft = useCallback((value: string) => {
     setDraftValue(value);
     if (started.current && !creating.current) {

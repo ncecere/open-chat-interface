@@ -44,6 +44,8 @@ for someone new (just-in-time provisioning).
   it off when you are done.
 - **Turn off read-only mode** is the one administration control that stays
   usable while read-only. Changes are accepted again on every replica at once.
+  Open pages learn it within 30 seconds: the banner goes, and so does any
+  "Read-only for maintenance" message left beside a change that was refused.
   The reason and expected end go with it: the next time, the form starts
   empty.
 - **Scheduled window**: a start and an end. From the start until the end the

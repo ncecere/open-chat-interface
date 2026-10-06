@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import {
   type CredentialAction,
   changedStorageSettings,
@@ -23,6 +24,8 @@ export function useStorageSettings(initialSettings: StorageSettings) {
   const [showDriverConfirmation, setShowDriverConfirmation] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
   const [healthMessage, setHealthMessage] = useState<string | null>(null);
 
   const validation = validateDraft(

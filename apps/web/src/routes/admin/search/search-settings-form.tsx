@@ -20,6 +20,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY, useSetupCheck } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { FallbackProviderSection, FallbackTestResult } from './fallback-provider-section';
 import {
   type CredentialAction,
@@ -65,6 +66,8 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
   const [showValidation, setShowValidation] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
 
   const validation = validateDraft(saved, draft, credentialAction, apiKey, fallbackKey);
   const providerInfo = draft.provider ? SEARCH_PROVIDERS[draft.provider] : null;

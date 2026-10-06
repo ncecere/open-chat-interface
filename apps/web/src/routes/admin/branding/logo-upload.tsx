@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Spinner } from '~/components/ui/spinner';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 /**
  * Uploads a logo file rather than requiring one to be hosted elsewhere.
@@ -16,6 +17,8 @@ export function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
 
   const upload = useMutation({
     mutationFn: async (file: File) => {

@@ -1,4 +1,5 @@
 import { type RefObject, useEffect, useRef, useState } from 'react';
+import { isReadOnlyRefusal, useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 /**
  * Clears a form's error once the form changes (#178, #217).
@@ -145,6 +146,10 @@ export function useFieldProblems(
     setProblems((current) =>
       current.length === 0 ? current : problemsAfterEdit(current, changed, formKeys),
     ),
+  );
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(problems, () =>
+    setProblems((current) => current.filter((problem) => !isReadOnlyRefusal(problem.text))),
   );
   useEffect(() => {
     if (attempts === 0) return;

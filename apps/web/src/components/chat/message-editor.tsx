@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import type { AttachmentCard } from '~/components/chat/message-attachments';
 import { Button } from '~/components/ui/button';
 import { keepFocusWhenRemoved, rememberPlace } from '~/lib/focus-return';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { isSendKey } from '~/lib/send-keys';
 
 /**
@@ -32,6 +33,8 @@ export function MessageEditor({
 }) {
   const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
   const [saving, setSaving] = useState(false);
   // The question's files, less any removed here; the edit is answered with them.
   const [kept, setKept] = useState(attachments);

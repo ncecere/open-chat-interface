@@ -33,14 +33,17 @@ export function setReadOnlyStatus(next: ReadOnlyStatus): void {
   for (const listener of listeners) listener();
 }
 
-function subscribe(listener: () => void): () => void {
+/** Calls `listener` whenever the status changes; returns the unsubscribe. */
+export function subscribeReadOnlyStatus(listener: () => void): () => void {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /** The current status; re-renders when it changes. */
 export function useReadOnlyStatus(): ReadOnlyStatus {
-  return useSyncExternalStore(subscribe, readOnlyStatus, readOnlyStatus);
+  return useSyncExternalStore(subscribeReadOnlyStatus, readOnlyStatus, readOnlyStatus);
 }
 
 /** Whether a value has the shape of `GET /api/maintenance`'s answer. */
@@ -111,11 +114,14 @@ export function formatReadOnlyTime(iso: string, now = new Date()): string {
   });
 }
 
+/** How every refusal's text (`readOnlyMessage`) begins. */
+export const READ_ONLY_MESSAGE_START = 'Read-only for maintenance';
+
 /** One sentence for people: why changes are paused, and until when if known. */
 export function readOnlyMessage(status: ReadOnlyStatus, now = new Date()): string {
   const until = status.until ? ` until about ${formatReadOnlyTime(status.until, now)}` : '';
   const reason = status.reason ? ` ${status.reason.trim().replace(/([^.!?])$/, '$1.')}` : '';
-  return `Read-only for maintenance${until}: you can read, search and export, but changes can’t be saved.${reason}`;
+  return `${READ_ONLY_MESSAGE_START}${until}: you can read, search and export, but changes can’t be saved.${reason}`;
 }
 
 /**
