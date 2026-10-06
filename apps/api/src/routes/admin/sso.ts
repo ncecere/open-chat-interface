@@ -14,7 +14,7 @@ import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
-import { parseBody } from '../../middleware/validate.js';
+import { parseBody, parseChanges } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
 import { diffUpdate } from '../../services/settings-diff.js';
@@ -257,7 +257,7 @@ const policyPatchSchema = z.object({
 ssoRoutes.patch('/providers/:providerId', async (c) => {
   const actor = currentUser(c);
   const providerId = c.req.param('providerId');
-  const patch = await parseBody(c, policyPatchSchema);
+  const patch = await parseChanges(c, policyPatchSchema);
 
   // The whole row, for what each changed setting was (#258).
   const [existing] = await db

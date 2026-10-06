@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
-import { parseBody } from '../../middleware/validate.js';
+import { parseBody, parseChanges } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { saveModelLimits } from '../../services/limits/capacity/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
@@ -165,7 +165,7 @@ modelRoutes.patch('/:id', async (c) => {
 
   if (!existing) throw notFound('Model not found');
 
-  const input = await parseBody(c, updateModelSchema);
+  const input = await parseChanges(c, updateModelSchema);
   if (input.contextWindow !== undefined || input.maxOutputTokens !== undefined) {
     assertUsableLimits(
       input.contextWindow !== undefined ? input.contextWindow : existing.contextWindow,

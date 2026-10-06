@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { ZodType } from 'zod';
+import type { ZodType, z } from 'zod';
 import { validationFailed } from '../lib/errors.js';
 
 /**
@@ -27,6 +27,27 @@ export async function parseBody<T>(
     throw validationFailed(sentence?.message ?? 'Request validation failed', result.error.issues);
   }
   return result.data;
+}
+
+/**
+ * The body of a PATCH or PUT whose fields are all optional. `{}`, or a body
+ * with no field the route knows (`{"foo":1}`: unknown keys are dropped), parsed
+ * to an empty change, and the route's `.set(patch)` threw "No values to set":
+ * a 500 that paged whoever watches 5xx for a mistake in the request (#341).
+ * It is a 422 that names the fields to send. Use it for every all-optional
+ * body that is written to a row; routes whose schema already requires a field
+ * need not.
+ */
+export async function parseChanges<T extends z.ZodRawShape>(
+  c: Context,
+  schema: z.ZodObject<T>,
+): Promise<z.infer<z.ZodObject<T>>> {
+  const message = `Send at least one change: ${Object.keys(schema.shape).join(', ')}.`;
+  return parseBody(
+    c,
+    schema.refine((body) => Object.values(body).some((value) => value !== undefined), { message }),
+    [message],
+  );
 }
 
 export function parseQuery<T>(c: Context, schema: ZodType<T>): T {
