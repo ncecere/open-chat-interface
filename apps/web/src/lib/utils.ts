@@ -94,3 +94,11 @@ export function formatBytes(bytes: number): string {
   const value = bytes / 1024 ** index;
   return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
+
+/**
+ * A limit as administrators set it and the docs give it: "20 MB", not
+ * "20.0 MB"; "1.5 MB" keeps its fraction (#209).
+ */
+export function formatLimit(bytes: number): string {
+  return formatBytes(bytes).replace(/\.0 /, ' ');
+}

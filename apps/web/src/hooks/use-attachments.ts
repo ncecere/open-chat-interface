@@ -2,7 +2,7 @@ import type { Attachment } from '@oci/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { ApiError, api } from '~/lib/api-client';
-import { formatBytes } from '~/lib/utils';
+import { formatLimit } from '~/lib/utils';
 
 export interface PendingAttachment {
   localId: string;
@@ -75,7 +75,7 @@ export function useAttachments() {
     for (const file of picked) {
       const reason =
         file.size > maxBytes
-          ? `${file.name} is larger than the ${formatBytes(maxBytes)} limit, so it was not uploaded.`
+          ? `${file.name} is larger than the ${formatLimit(maxBytes)} limit, so it was not uploaded.`
           : attached.current + files.length >= maxFiles
             ? `Only ${maxFiles} files can be sent with one message, so this one was not attached. Remove a file to add another.`
             : null;
@@ -162,10 +162,23 @@ export function useAttachments() {
           }
 
           resource.attachmentId = uploaded.id;
+          // The server checks the contents; the browser only guessed from the
+          // name. A text file named .png is text: no image preview (#209).
+          const image = uploaded.mimeType.startsWith('image/');
+          if (!image && resource.previewUrl) {
+            URL.revokeObjectURL(resource.previewUrl);
+            resource.previewUrl = undefined;
+          }
           setItems((current) =>
             current.map((item) =>
               item.localId === entry.localId
-                ? { ...item, status: 'ready', attachment: uploaded }
+                ? {
+                    ...item,
+                    status: 'ready',
+                    attachment: uploaded,
+                    mimeType: uploaded.mimeType,
+                    previewUrl: image ? item.previewUrl : undefined,
+                  }
                 : item,
             ),
           );
