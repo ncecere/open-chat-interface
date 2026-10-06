@@ -72,6 +72,13 @@ export const MICROS_PER_DOLLAR = 1_000_000;
 export const TOKENS_PER_PRICE_UNIT = 1_000_000;
 
 export const DEFAULT_MAX_FILE_BYTES = 20 * 1024 * 1024;
+/**
+ * The largest instance upload limit an administrator can save: 1 GiB, the same
+ * ceiling as a role's per-file storage allowance, so a role that falls back to
+ * the instance limit cannot end up with more (#142). Uploads are read into
+ * memory, so a multi-gigabyte limit was never workable anyway.
+ */
+export const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024;
 export const DEFAULT_MAX_FILES_PER_MESSAGE = 10;
 
 /**

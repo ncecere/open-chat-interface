@@ -1,7 +1,7 @@
 import { SettingsSection } from '~/components/admin/admin-ui';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
-import { bytesFromMb } from './storage-draft';
+import { bytesFromMb, MAX_UPLOAD_MB } from './storage-draft';
 import type { StorageSettingsController } from './use-storage-settings';
 
 /** In the units Roles & access uses (1 MB = 1,024 KB), so the two pages agree. */
@@ -39,7 +39,7 @@ export function UploadsPanel({
                 ? validation.maxFileMb
                 : Number.isSafeInteger(maxFileBytes)
                   ? `Currently ${formatBytes(maxFileBytes)} per file.`
-                  : 'Enter a positive number of MB.'
+                  : `Enter a number of MB, up to ${MAX_UPLOAD_MB.toLocaleString('en-US')}.`
             }
           >
             <Input
@@ -47,6 +47,7 @@ export function UploadsPanel({
               type="number"
               inputMode="decimal"
               min={0}
+              max={MAX_UPLOAD_MB}
               step="any"
               value={draft.maxFileMb}
               disabled={save.isPending}

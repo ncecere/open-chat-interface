@@ -166,6 +166,15 @@ describe('storage drafts and patches', () => {
 });
 
 describe('storage draft validation', () => {
+  it('caps the upload limit at 1,024 MB, as a role allowance is (#142)', () => {
+    expect(
+      validateDraft({ ...makeDraft(settings()), maxFileMb: '1024' }, true, 'keep', ''),
+    ).toEqual({});
+    expect(
+      validateDraft({ ...makeDraft(settings()), maxFileMb: '100000' }, true, 'keep', ''),
+    ).toEqual({ maxFileMb: 'File size can be at most 1,024 MB (1 GB).' });
+  });
+
   it.each(['', '0', '-1', 'NaN', 'Infinity', '1e300'])('rejects an invalid size: %s', (value) => {
     const draft = { ...makeDraft(settings()), maxFileMb: value };
     expect(validateDraft(draft, true, 'keep', '')).toEqual({
@@ -183,8 +192,8 @@ describe('storage draft validation', () => {
     },
   );
 
-  it('accepts a fraction of a MB and large bounds', () => {
-    for (const maxFileMb of ['0.5', '1.5', '1000000']) {
+  it('accepts a fraction of a MB and the largest allowed size', () => {
+    for (const maxFileMb of ['0.5', '1.5', '1024']) {
       const draft = { ...makeDraft(settings()), maxFileMb, maxFilesPerMessage: '1' };
       expect(validateDraft(draft, true, 'keep', '')).toEqual({});
     }

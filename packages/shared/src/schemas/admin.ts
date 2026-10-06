@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { HEX_COLOR_PATTERN, isSafeImageUrl } from '../branding.js';
 import {
   COLOR_THEMES,
+  MAX_UPLOAD_FILE_BYTES,
   QUOTA_METRICS,
   QUOTA_WINDOW_KINDS,
   REASONING_EFFORTS,
@@ -215,7 +216,11 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
       // deployment and must not be writable through the admin API.
       .omit({ s3: true, localPath: true })
       .partial()
-      .extend({ s3: updateS3SettingsSchema.optional() })
+      .extend({
+        // Capped (#142); a role with no per-file size falls back to this.
+        maxFileBytes: z.number().int().positive().max(MAX_UPLOAD_FILE_BYTES).optional(),
+        s3: updateS3SettingsSchema.optional(),
+      })
       .optional(),
     search: instanceSettingsSchema.shape.search
       .omit({ hasFallbackCredential: true })

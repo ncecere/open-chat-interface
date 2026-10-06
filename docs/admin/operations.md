@@ -54,7 +54,9 @@ Where attachments live — a local path or an S3-compatible bucket — and what 
 currently held.
 
 **Data & storage → Storage** (`/admin/storage`) has three tabs: the storage
-driver, the S3 connection, and the upload policy.
+driver, the S3 connection, and the upload policy. The upload policy's maximum
+file size can be at most 1,024 MB (1 GB), the same ceiling as a role's per-file
+[storage allowance](governance.md#storage-allowance).
 
 **Test put/read/delete** on the S3 tab checks the saved S3 settings actually
 work, and can be run while local storage is still active. Do this before
