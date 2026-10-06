@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminBackupsPage, backupChanges } from '../../src/routes/admin/backups';
 import { button, cleanup, click, findButton, renderAdmin, typeInto } from './admin-test-utils';
+import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -213,7 +214,21 @@ describe('System health', () => {
             tracingEndpoint: null,
           },
         };
-      if (path === '/admin/lifecycle/jobs') return { runs: [] };
+      if (path === '/admin/lifecycle/jobs')
+        return {
+          runs: [
+            {
+              id: 'r1',
+              jobName: 'attachment-orphan-reconciliation',
+              status: 'ok',
+              startedAt: new Date().toISOString(),
+              finishedAt: new Date().toISOString(),
+              durationMs: 120,
+              itemsProcessed: 3,
+              errorMessage: null,
+            },
+          ],
+        };
       if (path === '/admin/lifecycle/storage-health')
         return {
           liveBytes: 0,
@@ -230,6 +245,9 @@ describe('System health', () => {
     expect(text).toContain('1 enabled; 0 pending');
     expect(text).toContain('Served at /metrics');
     expect(text).toContain('Set OTEL_EXPORTER_OTLP_ENDPOINT to export traces.');
+    // A long job name and its run line can be cut short on a phone (#130).
+    expect(text).toContain('attachment-orphan-reconciliation');
+    expect(untitledTruncations()).toEqual([]);
   });
 });
 

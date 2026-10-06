@@ -12,6 +12,7 @@ import {
   findButton,
   renderAdmin,
 } from './admin-test-utils';
+import { untitledTruncations } from './truncation';
 
 /**
  * Settings → Sharing (v0.10): every share link the person made, with their
@@ -130,6 +131,12 @@ describe('Settings → Sharing', () => {
 
     expect(document.body.textContent).toContain('4 of 5 not revoked');
     expect(document.body.textContent).not.toContain('turned off for your account');
+  });
+
+  it('gives every conversation title a tooltip, as it can be cut short (#130)', async () => {
+    await render();
+    expect(document.querySelectorAll('[data-testid="share-link"]').length).toBeGreaterThan(0);
+    expect(untitledTruncations()).toEqual([]);
   });
 
   it('revokes one link after confirming', async () => {

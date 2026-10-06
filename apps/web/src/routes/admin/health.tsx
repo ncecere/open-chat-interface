@@ -63,6 +63,16 @@ const SUMMARY: Record<Status, string> = {
   error: 'Something is broken and users are affected.',
 };
 
+/** A job run as one line (shown and as its tooltip, #130). */
+function runSummary(entry: JobRun): string {
+  return [
+    formatRelativeTime(entry.startedAt),
+    entry.durationMs === null ? '' : ` · ${entry.durationMs} ms`,
+    ` · ${entry.itemsProcessed} item${entry.itemsProcessed === 1 ? '' : 's'}`,
+    entry.errorMessage ? ` · ${entry.errorMessage}` : '',
+  ].join('');
+}
+
 function HealthChecks() {
   const health = useQuery({
     queryKey: ['admin', 'health'],
@@ -232,12 +242,12 @@ function BackgroundJobs() {
               />
 
               <div className="min-w-0 flex-1">
-                <p className="truncate font-mono text-xs">{entry.jobName}</p>
-                <p className="truncate text-[var(--text-muted)] text-xs">
-                  {formatRelativeTime(entry.startedAt)}
-                  {entry.durationMs === null ? '' : ` · ${entry.durationMs} ms`} ·{' '}
-                  {entry.itemsProcessed} item{entry.itemsProcessed === 1 ? '' : 's'}
-                  {entry.errorMessage ? ` · ${entry.errorMessage}` : ''}
+                {/* Full values on hover when a narrow screen cuts them short (#130). */}
+                <p className="truncate font-mono text-xs" title={entry.jobName}>
+                  {entry.jobName}
+                </p>
+                <p className="truncate text-[var(--text-muted)] text-xs" title={runSummary(entry)}>
+                  {runSummary(entry)}
                 </p>
               </div>
 

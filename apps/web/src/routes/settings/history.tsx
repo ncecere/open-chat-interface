@@ -96,40 +96,46 @@ function TrashList() {
       </div>
 
       <div className="mt-4 flex flex-col">
-        {threads.map((thread) => (
-          <div
-            key={thread.id}
-            className="flex items-center gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[var(--text-primary)] text-sm">{thread.title}</p>
-              <p className="truncate text-[var(--text-muted)] text-xs">
-                {thread.messageCount} message{thread.messageCount === 1 ? '' : 's'} ·{' '}
-                {thread.deletedReason === 'retention'
-                  ? 'removed automatically'
-                  : `deleted ${formatRelativeTime(thread.deletedAt)}`}{' '}
-                · {purgeCountdown(thread.purgeAt)}
-              </p>
-            </div>
+        {threads.map((thread) => {
+          // One string, shown and as the tooltip when a phone cuts it short (#130).
+          const detail = `${thread.messageCount} message${thread.messageCount === 1 ? '' : 's'} · ${
+            thread.deletedReason === 'retention'
+              ? 'removed automatically'
+              : `deleted ${formatRelativeTime(thread.deletedAt)}`
+          } · ${purgeCountdown(thread.purgeAt)}`;
+          return (
+            <div
+              key={thread.id}
+              className="flex items-center gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[var(--text-primary)] text-sm" title={thread.title}>
+                  {thread.title}
+                </p>
+                <p className="truncate text-[var(--text-muted)] text-xs" title={detail}>
+                  {detail}
+                </p>
+              </div>
 
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={restore.isPending}
-              onClick={() => restore.mutate(thread.id)}
-            >
-              Restore
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={purge.isPending}
-              onClick={() => purge.mutate(thread.id)}
-            >
-              Delete now
-            </Button>
-          </div>
-        ))}
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={restore.isPending}
+                onClick={() => restore.mutate(thread.id)}
+              >
+                Restore
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={purge.isPending}
+                onClick={() => purge.mutate(thread.id)}
+              >
+                Delete now
+              </Button>
+            </div>
+          );
+        })}
       </div>
     </>
   );
@@ -364,11 +370,16 @@ function ConversationList({ archived }: { archived: boolean }) {
                       to="/chat/$threadId"
                       params={{ threadId: thread.id }}
                       className="block truncate text-sm text-[var(--text-primary)] hover:underline"
+                      // The full text on hover when a narrow screen cuts it short (#130).
+                      title={thread.title}
                     >
                       {thread.title}
                     </Link>
                     {projectName && (
-                      <p className="truncate text-xs text-[var(--text-muted)]">
+                      <p
+                        className="truncate text-xs text-[var(--text-muted)]"
+                        title={`Project: ${projectName}`}
+                      >
                         Project: {projectName}
                       </p>
                     )}

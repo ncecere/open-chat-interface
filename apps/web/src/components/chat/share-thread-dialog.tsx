@@ -91,7 +91,11 @@ function ShareLinkRow({
               {link.viewCount === 1 ? 'view' : 'views'}
             </span>
           </div>
-          <p className="mt-2 truncate font-mono text-xs text-[var(--text-secondary)]">
+          {/* The whole link on hover; the field is narrower than most links (#130). */}
+          <p
+            className="mt-2 truncate font-mono text-xs text-[var(--text-secondary)]"
+            title={url ?? 'Invalid share URL'}
+          >
             {url ?? 'Invalid share URL'}
           </p>
           <p className="mt-1 text-[0.6875rem] text-[var(--text-muted)]">

@@ -7,6 +7,7 @@ import { parseTokenCount } from '../../src/components/admin/model-form-dialog';
 import { ThemeProvider } from '../../src/providers/theme-provider';
 import { AdminModelsPage } from '../../src/routes/admin/models';
 import { alerts, button, cleanup, click, dialog, renderAdmin, typeInto } from './admin-test-utils';
+import { untitledTruncations } from './truncation';
 
 /**
  * A model's context window and output limit, which the admin form could not
@@ -59,7 +60,19 @@ beforeEach(() => {
   api.get.mockImplementation(async (path: string) => {
     if (path === '/admin/models') return { models: [model] };
     if (path === '/admin/providers') {
-      return { providers: [{ id: 'p1', label: 'OpenAI', kind: 'openai', enabled: true }] };
+      return {
+        providers: [
+          {
+            id: 'p1',
+            label: 'OpenAI',
+            kind: 'openai',
+            enabled: true,
+            baseUrl: 'https://gateway.example.edu/v1/openai-compatible',
+            credentialHint: 'sk-…1234',
+            modelCount: 1,
+          },
+        ],
+      };
     }
     if (path === '/admin/setup-status') return { checks: [] };
     throw new Error(`Unexpected GET ${path}`);
@@ -82,6 +95,14 @@ async function openEditor() {
   ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
   await click(button('Edit Big model'));
 }
+
+describe('truncated text (#130)', () => {
+  it.each(['models', 'providers'])('has a tooltip on the %s tab', async (tab) => {
+    ({ root } = await renderAdmin(page, { path: `/admin/models?tab=${tab}` }));
+    expect(document.body.textContent).toContain(tab === 'models' ? 'big-model' : 'gateway');
+    expect(untitledTruncations()).toEqual([]);
+  });
+});
 
 describe('model limits', () => {
   it('reads blank, thousands separators and anything else', () => {

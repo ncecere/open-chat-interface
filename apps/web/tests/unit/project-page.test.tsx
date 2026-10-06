@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ProjectPage } from '../../src/routes/projects/project';
 import { alerts, button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
+import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -159,6 +160,15 @@ describe('project page', () => {
     );
     expect(newChat?.getAttribute('href')).toBe('/?project=project-1');
   });
+
+  it.each(['conversations', 'files'])(
+    'gives each name on the %s tab a tooltip, as a phone cuts it short (#130)',
+    async (tab) => {
+      await render(tab === 'conversations' ? undefined : tab);
+      expect(document.querySelectorAll('li').length).toBeGreaterThan(0);
+      expect(untitledTruncations(document.querySelector('main') ?? document)).toEqual([]);
+    },
+  );
 
   it('shows whether each file is indexed for search and explains large projects', async () => {
     files = [

@@ -62,6 +62,15 @@ interface Draft {
 }
 
 /** Datetime-local values are local wall time; the API stores instants. */
+/** Who sees an announcement, as one line (shown and as its tooltip, #130). */
+function audienceOf(broadcast: Broadcast): string {
+  return [
+    broadcast.audienceRoles.length === 0 ? 'Everyone' : broadcast.audienceRoles.join(', '),
+    broadcast.dismissalCount > 0 ? ` · dismissed by ${broadcast.dismissalCount}` : '',
+    broadcast.dismissable ? '' : ' · cannot be dismissed',
+  ].join('');
+}
+
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
   const date = new Date(iso);
@@ -363,7 +372,10 @@ export function AdminBroadcastsPage() {
             <Row key={broadcast.id}>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-medium">{broadcast.title}</p>
+                  {/* Full values on hover when a narrow screen cuts them short (#130). */}
+                  <p className="truncate font-medium" title={broadcast.title}>
+                    {broadcast.title}
+                  </p>
                   <Badge variant={LEVEL_VARIANTS[broadcast.level]}>
                     {LEVEL_LABELS[broadcast.level]}
                   </Badge>
@@ -373,14 +385,11 @@ export function AdminBroadcastsPage() {
                     <Badge variant="outline">{broadcast.published ? 'scheduled' : 'draft'}</Badge>
                   )}
                 </div>
-                <p className="truncate text-[var(--text-muted)] text-xs">
-                  {broadcast.audienceRoles.length === 0
-                    ? 'Everyone'
-                    : broadcast.audienceRoles.join(', ')}
-                  {broadcast.dismissalCount > 0
-                    ? ` · dismissed by ${broadcast.dismissalCount}`
-                    : ''}
-                  {broadcast.dismissable ? '' : ' · cannot be dismissed'}
+                <p
+                  className="truncate text-[var(--text-muted)] text-xs"
+                  title={audienceOf(broadcast)}
+                >
+                  {audienceOf(broadcast)}
                 </p>
                 {/* The message itself, for everyone who can open this page:
                     auditors have no edit dialog to read it in (#87). */}

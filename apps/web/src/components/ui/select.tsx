@@ -12,8 +12,12 @@ export const SelectValue = SelectPrimitive.Value;
 export function SelectTrigger({
   className,
   children,
+  valueTitle,
   ...props
-}: ComponentProps<typeof SelectPrimitive.Trigger>) {
+}: ComponentProps<typeof SelectPrimitive.Trigger> & {
+  /** The chosen option's full text, as a tooltip when the trigger cuts it short (#130). */
+  valueTitle?: string;
+}) {
   return (
     <SelectPrimitive.Trigger
       className={cn(
@@ -28,7 +32,9 @@ export function SelectTrigger({
       )}
       {...props}
     >
-      <span className="min-w-0 truncate text-left">{children}</span>
+      <span className="min-w-0 truncate text-left" title={valueTitle}>
+        {children}
+      </span>
       <SelectPrimitive.Icon asChild>
         <ChevronDown className="size-4 shrink-0 text-[var(--text-muted)]" />
       </SelectPrimitive.Icon>
@@ -168,6 +174,7 @@ export function Select({
         className={className}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
+        valueTitle={options.find((option) => option.value === value)?.label}
       >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
@@ -220,7 +227,14 @@ export function GroupedSelect({
       }}
       disabled={disabled}
     >
-      <SelectTrigger id={id} className={className} aria-label={ariaLabel}>
+      <SelectTrigger
+        id={id}
+        className={className}
+        aria-label={ariaLabel}
+        valueTitle={
+          groups.flatMap((group) => group.options).find((option) => option.value === value)?.label
+        }
+      >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
       <SelectContent aria-label={ariaLabel ?? labelText}>

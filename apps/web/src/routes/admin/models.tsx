@@ -160,10 +160,16 @@ function ModelRow({
         >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <LabLogo labId={model.labId} className="size-4" />
-            <span className="min-w-0 truncate font-medium">{model.displayName}</span>
+            {/* Full values on hover when a narrow screen cuts them short (#130). */}
+            <span className="min-w-0 truncate font-medium" title={model.displayName}>
+              {model.displayName}
+            </span>
             {model.isDefault && <Badge variant="accent">default</Badge>}
           </div>
-          <p className="truncate text-xs text-[var(--text-muted)]">
+          <p
+            className="truncate text-xs text-[var(--text-muted)]"
+            title={`${model.providerLabel} · ${model.upstreamModelId}`}
+          >
             {model.providerLabel} · {model.upstreamModelId}
           </p>
         </button>

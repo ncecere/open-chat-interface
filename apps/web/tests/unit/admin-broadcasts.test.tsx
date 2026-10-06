@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminBroadcastsPage } from '../../src/routes/admin/broadcasts';
 import { cleanup, findButton, renderAdmin } from './admin-test-utils';
+import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -51,4 +52,10 @@ it('lets an auditor read each announcement’s message, formatted as shown (#87)
   const text = document.body.textContent ?? '';
   expect(text).toContain('Chat is read-only from 06:00. See the status page.');
   expect(document.querySelector('a[href="https://status.example.edu/"]')).not.toBeNull();
+});
+
+it('gives the title and audience line a tooltip, as a phone cuts them short (#130)', async () => {
+  ({ root } = await renderAdmin(<AdminBroadcastsPage />, { role: 'auditor' }));
+  expect(document.body.textContent).toContain('Walk maintenance on Sunday');
+  expect(untitledTruncations()).toEqual([]);
 });
