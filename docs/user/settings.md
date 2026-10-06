@@ -192,7 +192,8 @@ storage limit. Deleting asks you to confirm, since it cannot be undone; a
 deleted file is removed from its conversations, which stay, and models can no
 longer read it there. Project files show the project they
 belong to; open the project to delete them. A file attached in a chat and not
-sent yet is marked **Not sent**.
+sent yet is marked **Not sent**; deleting it says so, since it is in no
+conversation.
 
 ## Keyboard shortcuts and help
 
