@@ -60,14 +60,17 @@ export function ModelPickerOption({
         onClick={() => onSelect(model)}
         className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
       >
-        <span className="flex w-full items-center gap-2">
-          <LabLogo labId={model.labId} className="size-4 shrink-0" />
-          <span className="min-w-0 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
+        {/* Name and description wrap rather than end in an ellipsis: on a
+            phone there is no hover for a tooltip, and the cut hid what tells
+            two models apart, "Claude Haiku 4.5 (t…" for "(thinking)" (#195). */}
+        <span className="flex w-full items-start gap-2">
+          <LabLogo labId={model.labId} className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 text-base font-semibold leading-5 wrap-anywhere text-[var(--text-primary)]">
             {model.displayName}
           </span>
         </span>
 
-        <span className="w-full truncate pl-6 text-xs font-medium leading-4 text-[var(--text-muted)]">
+        <span className="w-full pl-6 text-xs font-medium leading-4 wrap-anywhere text-[var(--text-muted)]">
           {modelDescription(model)}
         </span>
         {model.capabilities.length > 0 && (

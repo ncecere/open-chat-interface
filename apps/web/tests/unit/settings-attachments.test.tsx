@@ -3,6 +3,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsAttachmentsPage } from '../../src/routes/settings/attachments';
 import { button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
+import { clippedWithoutTooltip } from './truncation';
 
 /**
  * Settings → Attachments (v0.9.1): project files are listed with their
@@ -109,6 +110,13 @@ describe('Settings → Attachments', () => {
     expect(document.querySelector('[aria-label="Select reading.txt"]')).toBeNull();
     expect(document.querySelector('[aria-label="Delete reading.txt"]')).toBeNull();
     expect(document.querySelector('[aria-label="Select chat-notes.txt"]')).not.toBeNull();
+  });
+
+  it("lets a file's details wrap rather than cut them off without a tooltip (#195)", async () => {
+    await render();
+    const list = document.querySelector('a[href="/projects/p1?tab=files"]')!.closest('p')!;
+    expect(list.textContent).toContain('text/plain');
+    expect(await clippedWithoutTooltip(document.body)).toEqual([]);
   });
 
   it('selects and deletes only chat files', async () => {

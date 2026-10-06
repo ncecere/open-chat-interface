@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelPicker } from '../../src/components/chat/model-picker';
 import { ThemeProvider } from '../../src/providers/theme-provider';
+import { clippedWithoutTooltip } from './truncation';
 
 type Props = ComponentProps<typeof ModelPicker>;
 function model(overrides: Partial<CatalogModel>): CatalogModel {
@@ -164,6 +165,24 @@ describe('ModelPicker interaction', () => {
     expect(container.textContent).toBe('No models available');
     expect(container.querySelector('button')).toBeNull();
     expect(document.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  it('wraps model names and descriptions instead of cutting them off (#195)', async () => {
+    await render({
+      models: [
+        ...models,
+        model({
+          id: 'haiku-thinking',
+          slug: 'haiku-thinking',
+          displayName: 'Claude Haiku 4.5 (thinking)',
+          description: 'Fast and cheap everyday model that thinks before it answers',
+        }),
+      ],
+    });
+    await open();
+    const listbox = document.querySelector('[role="listbox"]')!;
+    expect(listbox.textContent).toContain('Claude Haiku 4.5 (thinking)');
+    expect(await clippedWithoutTooltip(listbox)).toEqual([]);
   });
 
   it('focuses search when opened and lets Escape close the real Radix popover', async () => {
