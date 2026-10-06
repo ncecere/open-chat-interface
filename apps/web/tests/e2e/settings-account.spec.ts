@@ -154,7 +154,10 @@ test('changes a password and signs in with the new one', async ({ browser }) => 
   await login.getByLabel('Email').fill(user.email);
   await login.getByLabel('Password').fill(user.password);
   await login.getByRole('button', { name: 'Sign in' }).click();
-  await expect(login.getByText(/invalid email or password/i)).toBeVisible();
+  // Worded as the user guide quotes it (#97).
+  await expect(
+    login.getByText('Unable to sign in. Check your email and password.', { exact: true }),
+  ).toBeVisible();
   await expect(login).toHaveURL(/\/auth\/login/);
   await signIn(login, user.email, next);
   await fresh.close();
