@@ -150,6 +150,11 @@ export const auth = betterAuth({
     sendResetPassword: async ({ user, url }) => {
       await sendPasswordResetEmail({ to: user.email, url });
     },
+    // A reset is what someone uses after losing control of their account, so
+    // it ends every session, as Change Password does with "Sign out of all
+    // other devices" ticked; the person signs in again with the new password
+    // (#139).
+    revokeSessionsOnPasswordReset: true,
   },
 
   emailVerification: {

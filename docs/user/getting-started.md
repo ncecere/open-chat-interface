@@ -32,6 +32,13 @@ Two refusals mean different things:
   wrong. Note that a nonexistent account and a wrong password produce the same
   message, deliberately, so this does not confirm whether an account exists.
 
+### If you forget your password
+
+**Forgot your password?** on the sign-in page emails you a link to choose a new
+one, if the instance can send email. Choosing a new password this way signs
+your account out everywhere, including any device you have lost; sign in again
+with the new password.
+
 ## The introduction
 
 A new account is greeted by a short introduction asking your name, what you do,
