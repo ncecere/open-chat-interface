@@ -51,7 +51,9 @@ on.
 
 **Forgot your password?** on the sign-in page emails you a link to choose a new
 one, if the instance can send email. The link works for 1 hour; after that, ask
-for a new one. Choosing a new password this way signs
+for a new one. The page answers the same way, and just as quickly, whether or
+not the address has an account, so it does not confirm that one exists; the
+email is sent just after it answers. Choosing a new password this way signs
 your account out everywhere, including any device you have lost; sign in again
 with the new password.
 

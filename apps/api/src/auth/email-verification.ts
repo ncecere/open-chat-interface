@@ -1,6 +1,6 @@
 import { eq, schema } from '@oci/db';
 import { db } from '../db/index.js';
-import { logger } from '../lib/logger.js';
+import { sendAfterResponse } from '../services/account-email-delivery.js';
 import { sendVerificationEmail, VERIFY_LINK_TTL_SECONDS } from '../services/email.js';
 import { isEmailVerificationEnforced } from './policy.js';
 
@@ -19,16 +19,16 @@ export async function deliverVerificationEmail(
     return;
   }
 
-  try {
-    const result = await sendVerificationEmail({
+  // After answering (#328): resend verification's 500 ms floor hid a fast
+  // mail server, not a slow or unreachable one. A failure is never returned:
+  // the resend endpoint must not reveal whether an address exists through an
+  // account-specific delivery error. The account stays unverified and can ask
+  // again.
+  sendAfterResponse('email-verification', user.id, () =>
+    sendVerificationEmail({
       to: user.email,
       url,
       expiresInSeconds: VERIFY_LINK_TTL_SECONDS,
-    });
-    if (result.delivered) return;
-  } catch {
-    // The resend endpoint must not reveal whether an address exists by returning
-    // an account-specific delivery error. Keep it unverified and allow retry.
-  }
-  logger.warn({ userId: user.id }, 'Verification email not delivered; account remains unverified');
+    }),
+  );
 }
