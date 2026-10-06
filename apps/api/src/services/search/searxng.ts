@@ -26,6 +26,7 @@ export const searchSearxng: SearchAdapter = async ({ query, maxResults, baseUrl,
       signal,
     },
     NAME,
+    'searxng',
   )) as {
     results?: Array<{ title?: string; url?: string; content?: string }>;
   };

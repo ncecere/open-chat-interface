@@ -96,6 +96,21 @@ describe('the work block summary', () => {
       'Worked · 2 steps',
     );
   });
+
+  it('says a search the model made failed, rather than "a step" (#143)', () => {
+    expect(workSummary({ reasoning: false, steps: [{ ...search, state: 'error' }] })).toBe(
+      'Web search failed',
+    );
+    expect(
+      workSummary({
+        reasoning: true,
+        steps: [
+          { ...search, state: 'error' },
+          { ...search, state: 'error' },
+        ],
+      }),
+    ).toBe('Thought · web search failed twice');
+  });
 });
 
 describe('the current activity', () => {

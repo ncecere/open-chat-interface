@@ -38,7 +38,9 @@ import {
 function SearchAvailability() {
   const check = useSetupCheck('web-search');
   if (check?.status === 'complete') {
-    return <Notice title="Web search is available">{check.detail}</Notice>;
+    // Configured, which is all the check knows; the detail says how to see
+    // that the provider answers (#143).
+    return <Notice title="Web search is set up">{check.detail}</Notice>;
   }
   if (check?.status === 'attention') {
     return (

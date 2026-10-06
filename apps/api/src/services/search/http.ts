@@ -29,6 +29,23 @@ export function validateSearchEndpoint(endpoint: URL): URL {
 }
 
 /**
+ * What a refusal (HTTP 401 or 403) means. A hosted provider refuses a key; a
+ * self-hosted SearXNG has none, and a 403 from it almost always means its
+ * JSON output is off (`search.formats` without `json`), so it says that
+ * rather than send an administrator after a key the form does not have
+ * (#143).
+ */
+export type SearchRefusal = 'apiKey' | 'searxng';
+
+function refusalMessage(provider: string, status: number, refusal: SearchRefusal): string {
+  if (refusal === 'apiKey')
+    return `${provider} rejected the web search API key (HTTP ${status}). An administrator needs to check it on the Web search page.`;
+  return status === 403
+    ? `${provider} refused the search (HTTP 403). Its JSON output is probably not enabled: an administrator needs to add json to search.formats in its settings.yml.`
+    : `${provider} refused the search (HTTP ${status}). It may be behind a proxy that asks for a sign-in; an administrator needs to make it reachable without one.`;
+}
+
+/**
  * Calls a search provider. Failures name the provider and say what went wrong
  * in words people can act on; they reach the conversation and the Web search
  * page's test, so they never include the query or a credential.
@@ -37,6 +54,7 @@ export async function searchFetch(
   endpoint: URL,
   init: RequestInit,
   provider: string,
+  refusal: SearchRefusal = 'apiKey',
 ): Promise<unknown> {
   const trustedEndpoint = validateSearchEndpoint(endpoint);
   let response: Response;
@@ -56,9 +74,7 @@ export async function searchFetch(
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined);
     if (response.status === 401 || response.status === 403) {
-      throw providerError(
-        `${provider} rejected the web search API key (HTTP ${response.status}). An administrator needs to check it on the Web search page.`,
-      );
+      throw providerError(refusalMessage(provider, response.status, refusal));
     }
     if (response.status === 429) {
       throw providerError(

@@ -1,5 +1,5 @@
 import { count, eq, isNotNull, schema } from '@oci/db';
-import type { SetupCheck, SetupStatus } from '@oci/shared';
+import { SEARCH_PROVIDERS, type SetupCheck, type SetupStatus } from '@oci/shared';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { isSmtpUsable } from './email.js';
@@ -252,6 +252,11 @@ async function webSearchCheck(): Promise<SetupCheck> {
   const reason = webSearchProblem(features, search);
   // An incomplete fallback (v0.10) does not stop search; it is only not used.
   const fallback = reason ? null : fallbackSearchProblem(search);
+  // Complete means configured, not working: whether the provider answers is
+  // only known by searching, so it does not claim search "is available" when
+  // every search may be failing (#143).
+  const provider = search.provider ? SEARCH_PROVIDERS[search.provider].name : '';
+  const setUp = `Web search is set up with ${provider}; Test search checks that it answers`;
   return {
     id: 'web-search',
     title,
@@ -260,8 +265,8 @@ async function webSearchCheck(): Promise<SetupCheck> {
     detail: reason
       ? `Web search is unavailable: ${reason}.`
       : fallback
-        ? `Web search is available, but the fallback provider is not used: ${fallback}.`
-        : 'Web search is available.',
+        ? `${setUp}. The fallback provider is not used: ${fallback}.`
+        : `${setUp}.`,
     action,
   };
 }
