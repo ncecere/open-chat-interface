@@ -57,12 +57,12 @@ function EmailRequiredNotice() {
   );
 }
 
-/** "Next: in 3 days", "Next: within the hour" when due, or "Paused" (#85). */
+/** "Next: in 3d", "Next: within the hour" when due, or "Paused" (#85, #126). */
 export function nextRunText(report: Pick<ScheduledReport, 'nextRunAt'>, now = Date.now()): string {
   if (!report.nextRunAt) return 'Paused';
   const at = Date.parse(report.nextRunAt);
   if (at <= now + 60 * 60 * 1000) return 'Next: within the hour';
-  return `Next: ${formatRelativeTime(report.nextRunAt)}`;
+  return `Next: ${formatRelativeTime(report.nextRunAt, now)}`;
 }
 
 const CADENCES = [

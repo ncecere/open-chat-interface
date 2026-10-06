@@ -194,6 +194,36 @@ describe('Webhooks admin page', () => {
     );
   });
 
+  it('says when a pending retry is next tried, counting forward (#126)', async () => {
+    const retry = Date.now() + 4 * 60_000 + 10_000;
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/admin/webhooks') return { webhooks };
+      if (path === '/admin/audit/actions') return { actions: [] };
+      return {
+        deliveries: [
+          {
+            id: 'd1',
+            event: 'user.create',
+            status: 'pending',
+            attempts: 1,
+            maxAttempts: 8,
+            nextAttemptAt: new Date(retry).toISOString(),
+            lastAttemptAt: new Date(Date.now() - 60_000).toISOString(),
+            lastStatusCode: 500,
+            lastError: null,
+            deliveredAt: null,
+            createdAt: new Date(Date.now() - 60_000).toISOString(),
+          },
+        ],
+      };
+    });
+    await render();
+    await click(button('Show deliveries'));
+    const log = document.querySelector('table')!.textContent ?? '';
+    expect(log).toContain('HTTP 500 \u00b7 next in 4m');
+    expect(log).not.toContain('next just now');
+  });
+
   it('confirms before deleting', async () => {
     await render();
     await click(button('Delete https://hooks.example.test/oci'));
