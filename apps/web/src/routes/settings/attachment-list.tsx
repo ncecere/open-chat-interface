@@ -227,12 +227,14 @@ export function AttachmentList({
                       href={attachment.url}
                       target="_blank"
                       rel="noreferrer"
-                      title={attachment.filename}
                       // 24px tall at least: the WCAG 2.2 target size (#105).
-                      className="group flex min-h-6 min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--text-primary)] hover:underline"
+                      className="group flex min-h-6 min-w-0 items-start gap-1.5 py-0.5 text-sm font-medium text-[var(--text-primary)] hover:underline"
                     >
-                      <span className="truncate">{attachment.filename}</span>
-                      <ExternalLink className="size-3 shrink-0 text-[var(--text-secondary)]" />
+                      {/* Wraps, as the details line does (#195): cut short, the
+                          name could be read only in a tooltip, which touch
+                          cannot reach (#244). The icon stays by the first line. */}
+                      <span className="min-w-0 wrap-anywhere">{attachment.filename}</span>
+                      <ExternalLink className="mt-1 size-3 shrink-0 text-[var(--text-secondary)]" />
                     </a>
                     {/* Wraps: cut short on a phone, it hid the size and date,
                         with no tooltip to read them (#195). */}

@@ -472,8 +472,8 @@ function ProjectFiles({
                 href={file.url}
                 target="_blank"
                 rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-sm hover:underline"
-                title={file.filename}
+                // Wrapped, not cut: a tooltip is no use on touch (#244).
+                className="min-w-0 flex-1 text-sm wrap-anywhere hover:underline"
               >
                 {file.filename}
               </a>

@@ -3,7 +3,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsAttachmentsPage } from '../../src/routes/settings/attachments';
 import { button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
-import { clippedWithoutTooltip } from './truncation';
+import { clippedOnTouch, clippedWithoutTooltip } from './truncation';
 
 /**
  * Settings → Attachments (v0.9.1): project files are listed with their
@@ -117,6 +117,12 @@ describe('Settings → Attachments', () => {
     const list = document.querySelector('a[href="/projects/p1?tab=files"]')!.closest('p')!;
     expect(list.textContent).toContain('text/plain');
     expect(await clippedWithoutTooltip(document.body)).toEqual([]);
+  });
+
+  it("wraps a file's name, which a tooltip cannot show on touch (#244)", async () => {
+    await render();
+    const clipped = await clippedOnTouch(document.body);
+    expect(clipped.filter((text) => /chat-notes\.txt|reading\.txt/.test(text))).toEqual([]);
   });
 
   it('selects and deletes only chat files', async () => {

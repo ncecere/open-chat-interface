@@ -7,7 +7,7 @@ import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provid
 import { ProjectPage } from '../../src/routes/projects/project';
 import { alerts, button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
 import { shownTitle, TitleProbe } from './title-probe';
-import { untitledTruncations } from './truncation';
+import { clippedOnTouch, untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -187,6 +187,13 @@ describe('project page', () => {
       (link) => link.textContent?.trim() === 'New chat in project',
     );
     expect(newChat?.getAttribute('href')).toBe('/?project=project-1');
+  });
+
+  it("wraps each file's name on the Files tab, which a tooltip cannot show on touch (#244)", async () => {
+    await render('files');
+    const list = document.querySelector('[aria-label="Project files"]')!;
+    expect(list.textContent).toContain('outline.md');
+    expect(await clippedOnTouch(list)).toEqual([]);
   });
 
   it.each(['conversations', 'files'])(
