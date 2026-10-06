@@ -18,7 +18,12 @@ Screen readers and voice control hear which message each control acts on, by
 its opening words: **Copy message “Walk3 table: give me a small…”**, **Fork
 conversation at “…”**. Code blocks and tables are numbered within their
 message and named by its opening words too: **Copy code block 2 (Python) in
-“Here is the plan…”**, **Download table 1 in “Here is the plan…”**.
+“Here is the plan…”**, **Download table 1 in “Here is the plan…”**. When
+two messages open with the same words (two replies that begin alike, or two
+"Again." questions), their place among the questions or replies shown is
+added too: **Edit
+message “Again.” (question 2)**, **Copy table 1 in “Here is the short Python
+example you…” (reply 3)**.
 
 ### Editing, retrying and forking preserve the original
 

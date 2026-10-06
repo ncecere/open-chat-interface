@@ -1,3 +1,5 @@
+import { quotedMessage } from '~/lib/message-excerpt';
+
 /**
  * Names for the controls Streamdown puts on every code block, diagram and
  * table (#194). Streamdown names its buttons by `title` only, the same for
@@ -12,7 +14,9 @@
  * Numbers restart in every message, so a conversation of two replies with a
  * Python block each had two "Copy code block 1 (Python)" (#271). A block in a
  * message also names the message by its opening words, as the message's own
- * controls do: "Copy code block 1 (Python) in “Quick example…”".
+ * controls do: "Copy code block 1 (Python) in “Quick example…”". When
+ * another message opens with the same words, its place too (#293): "… in
+ * “Here is the short Python example you…” (reply 3)".
  *
  * Streamdown offers no prop for per-block names, so this runs on the rendered
  * DOM, with the scroll-region pass that already watches it. Names are set
@@ -75,10 +79,14 @@ function label(element: Element | null | undefined, name: string) {
     element.setAttribute('aria-label', name);
 }
 
-/** Which message the scope is: ` in “Quick example…”`, from its opening words. */
+/**
+ * Which message the scope is: ` in “Quick example…”`, from its opening words,
+ * and ` in “Again.” (reply 3)` when another message shares them.
+ */
 function inMessage(scope: ParentNode): string {
-  const excerpt = scope instanceof Element ? scope.getAttribute('data-excerpt') : null;
-  return excerpt ? ` in “${excerpt}”` : '';
+  if (!(scope instanceof Element)) return '';
+  const excerpt = scope.getAttribute('data-excerpt');
+  return excerpt ? ` in ${quotedMessage(excerpt, scope.getAttribute('data-position'))}` : '';
 }
 
 /** A block's buttons, told apart by the tooltip Streamdown gives each. */
@@ -141,9 +149,9 @@ function nameTables(scope: ParentNode) {
  * the button that opened it does.
  */
 export function nameTableFullscreen(overlay: Element, opener: Element | null): void {
-  // "View table 2 full screen", and the message it is in (#271).
+  // "View table 2 full screen", and the message it is in (#271, #293).
   const [, which, where = ''] =
-    opener?.getAttribute('aria-label')?.match(/^View table (\d+) full screen( in “.*”)?$/) ?? [];
+    opener?.getAttribute('aria-label')?.match(/^View table (\d+) full screen( in “.*)?$/) ?? [];
   const name = which ? `table ${which}` : 'table';
   label(overlay, `${which ? `Table ${which}` : 'Table'}${where}, full screen`);
   label(buttonTitled(overlay, 'Copy table'), `Copy ${name}${where}`);
