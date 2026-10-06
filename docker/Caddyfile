@@ -54,19 +54,27 @@
 			# replica leaves rotation through passive checks on real requests.
 			# A replica shutting down refuses new chat turns with 503 (and reports
 			# 503 on /api/health/ready); one that has exited refuses or times out
-			# connections. Either takes it out for 2 s, and every further refused
+			# connections. Either takes it out for 3 s, and every further refused
 			# turn or failed connection takes it out again, so the client's retry
 			# goes to another replica. The API answers 503 only when a replica
 			# cannot serve: shutting down, or its database unreachable. See
 			# docs/OPERATIONS.md, "Shutting down and draining".
 			#
+			# Longer than the client's resends: a refused turn is sent again after
+			# Retry-After (1 s), up to twice, about 2 s after the first. Each web
+			# replica keeps its own mark, and a resend can arrive through another
+			# web replica, so a 2 s mark could expire on the first one just before
+			# the last resend reached it: all three tries landed on the draining
+			# replica (seen in the rolling-upgrade test).
+			#
 			# Shorter than lb_try_duration on purpose: with a single replica (the
 			# default Compose stack) there is nowhere else to go, and a request
-			# that arrives while it is marked waits out the 2 s and is then served
+			# that arrives while it is marked waits out the 3 s and is then served
 			# by the draining replica, which still answers everything but new
 			# chat turns. At 10 s, one refused turn made every request (resuming
-			# the reply still being written included) fail with "no upstreams".
-			fail_duration 2s
+			# the reply still being written included) fail with "no upstreams"
+			# (#117).
+			fail_duration 3s
 			max_fails 1
 			unhealthy_status 503
 
