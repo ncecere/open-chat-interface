@@ -73,12 +73,20 @@ export function embeddingsChanges(
 }
 
 /** Where pgvector stands, and what the operator needs to do about it. */
-function PgvectorNotice({ pgvector }: { pgvector: EmbeddingsStatus['pgvector'] }) {
+function PgvectorNotice({
+  pgvector,
+  searchOn,
+}: {
+  pgvector: EmbeddingsStatus['pgvector'];
+  searchOn: boolean;
+}) {
   if (pgvector.state === 'enabled') {
     return (
       <Notice title={`pgvector ${pgvector.version ?? ''} is enabled`.replace('  ', ' ')}>
-        The database can store embeddings. Open Chat Interface creates its table when meaning-based
-        search is switched on.
+        {/* Once search is on, the table already exists (#182). */}
+        {searchOn
+          ? 'The database stores the embeddings that meaning-based search uses.'
+          : 'The database can store embeddings. Open Chat Interface creates its table when meaning-based search is switched on.'}
       </Notice>
     );
   }
@@ -345,7 +353,10 @@ function Progress({ status }: { status: EmbeddingsStatus }) {
         {status.generations.filling && status.generations.current
           ? ` with ${status.generations.current.modelId}`
           : ''}
-        . The background job embeds the rest.
+        .{/* Only when there is a rest to embed (#182). */}
+        {status.passages.embedded < status.passages.total
+          ? ' The background job embeds the rest.'
+          : ''}
       </p>
       {status.failures.files > 0 && (
         <Notice tone="warning" title="Some files could not be embedded">
@@ -571,7 +582,7 @@ function EmbeddingsSettings() {
         description="Embeddings are stored in PostgreSQL with the pgvector extension, which an operator enables."
         editable={false}
       >
-        <PgvectorNotice pgvector={status.data.pgvector} />
+        <PgvectorNotice pgvector={status.data.pgvector} searchOn={status.data.active} />
       </SettingsSection>
       <SettingsSection
         title="Embeddings model"

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectorChanges } from '../../src/components/admin/connector-form-dialog';
 import { toolGroups } from '../../src/components/admin/role-tools-form';
 import { formatDateTime } from '../../src/lib/utils';
-import { AdminConnectorsPage } from '../../src/routes/admin/connectors';
+import { AdminConnectorsPage, connectorDeleteText } from '../../src/routes/admin/connectors';
 import {
   button,
   cleanup,
@@ -179,6 +179,26 @@ describe('Connectors admin page', () => {
       enabled: true,
       allowPrivateNetwork: false,
     });
+  });
+
+  it('names only what deleting a connector removes (#182)', async () => {
+    connectors = [connector({ tools: [], accountCount: 0 })];
+    await render();
+    await click(button('Delete Docs'));
+    expect(dialog()?.textContent).toContain(
+      'It has no tools or connected accounts. This cannot be undone.',
+    );
+    expect(dialog()?.textContent).not.toContain('0 tools');
+    const tool = connector().tools[0]!;
+    expect(connectorDeleteText({ tools: [tool], accountCount: 0 })).toBe(
+      'Its 1 tool (and every role’s permission to use it) will be removed. This cannot be undone.',
+    );
+    expect(connectorDeleteText({ tools: [tool, tool], accountCount: 3 })).toBe(
+      'Its 2 tools (and every role’s permission to use them) and its 3 connected accounts will be removed. This cannot be undone.',
+    );
+    expect(connectorDeleteText({ tools: [], accountCount: 1 })).toBe(
+      'Its 1 connected account will be removed. This cannot be undone.',
+    );
   });
 
   it('shows a failure time in the admin date format (#177)', async () => {

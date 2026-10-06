@@ -84,7 +84,7 @@ async function openPolicyDialog() {
 const createPolicy = () =>
   click(
     [...dialog()!.querySelectorAll('button')].find(
-      (candidate) => candidate.textContent?.trim() === 'Create policy',
+      (candidate) => candidate.textContent?.trim() === 'Create budget',
     )!,
   );
 

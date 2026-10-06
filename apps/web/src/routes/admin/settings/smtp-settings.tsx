@@ -332,9 +332,9 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
               : 'Verification, reset, and invitation emails need SMTP'
           }
         >
-          Saving a complete configuration changes the status reported to the sign-in experience. The
-          settings API does not test the connection or send a test message, so confirm delivery
-          independently before requiring email verification.
+          Saving a complete configuration changes the status reported to the sign-in experience. Use{' '}
+          <strong>Send test email</strong> below to confirm messages arrive before requiring email
+          verification.
         </Notice>
       </SettingsSection>
 

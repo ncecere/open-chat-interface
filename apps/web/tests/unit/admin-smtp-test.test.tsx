@@ -40,6 +40,9 @@ it('says what is stored and sends a test email (#115)', async () => {
   expect(text).toContain('A username is stored.');
   expect(text).toContain('No password is stored.');
   expect(text).not.toContain('does not report whether');
+  // The page has a working test button, so it does not say it cannot test (#182).
+  expect(text).not.toContain('does not test the connection or send a test message');
+  expect(text).toContain('Use Send test email below to confirm messages arrive');
 
   api.post.mockResolvedValue({ ok: false, message: 'The mail server refused: Invalid login: 535' });
   await click(button('Send test email'));

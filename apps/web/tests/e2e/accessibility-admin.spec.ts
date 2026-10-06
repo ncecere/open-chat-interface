@@ -180,7 +180,7 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
   test('a dialog has no violations while open', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/quotas');
-    await page.getByRole('button', { name: 'New policy' }).click();
+    await page.getByRole('button', { name: 'New budget' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
 
     const results = await scan(page);

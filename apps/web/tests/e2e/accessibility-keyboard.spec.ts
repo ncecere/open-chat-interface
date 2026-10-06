@@ -71,7 +71,7 @@ test.describe('WCAG 2.2 AA: keyboard operation', () => {
     await signIn(page);
     await page.goto('/admin/quotas');
 
-    const trigger = page.getByRole('button', { name: 'New policy' });
+    const trigger = page.getByRole('button', { name: 'New budget' });
     await trigger.focus();
     await trigger.press('Enter');
 

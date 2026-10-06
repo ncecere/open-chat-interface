@@ -105,10 +105,10 @@ describe('auditor (read-only) access', () => {
     expect(document.querySelector('[aria-label="Name for this view"]')).toBeNull();
   });
 
-  it('hides creating, editing and deleting quota policies', async () => {
+  it('hides creating, editing and deleting usage budgets', async () => {
     ({ root } = await renderAdmin(<AdminQuotasPage />, { role: 'auditor' }));
     expect(document.body.textContent).toContain('Daily budget');
-    expect(findButton('New policy')).toBeUndefined();
+    expect(findButton('New budget')).toBeUndefined();
     expect(findButton('Edit Daily budget')).toBeUndefined();
     expect(findButton('Delete Daily budget')).toBeUndefined();
   });
@@ -178,7 +178,7 @@ describe('administrator access', () => {
 
   it('shows quota and rate limit actions', async () => {
     ({ root } = await renderAdmin(<AdminQuotasPage />));
-    expect(button('New policy')).toBeDefined();
+    expect(button('New budget')).toBeDefined();
     expect(button('Delete Daily budget')).toBeDefined();
   });
 });
