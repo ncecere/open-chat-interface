@@ -197,6 +197,13 @@ export const auth = betterAuth({
         );
         return replaced ? { context: { body: replaced.body } } : undefined;
       }
+      // Sign-out reads its cookie itself and ends the session, so the after
+      // hook saw none and audited it with no actor, as "System" (#279). The
+      // session it ends is found first and handed on to the after hook.
+      if (ctx.path === '/sign-out') {
+        const session = await getSessionFromCtx(ctx).catch(() => null);
+        return session ? { context: { context: { session } } } : undefined;
+      }
 
       const policy = await enforceAuthRequestPolicy(
         ctx.path,
@@ -241,7 +248,8 @@ export const auth = betterAuth({
       const returned = ctx.context.returned as { status?: number; statusCode?: number } | undefined;
       const status = returned instanceof Response ? returned.status : (returned?.statusCode ?? 200);
       // A new session (sign-in, or a password change that signs other devices
-      // out) names the actor; otherwise the session the request was made with.
+      // out) names the actor; otherwise the session the request was made with
+      // (for sign-out, as the before hook found it).
       const session = ctx.context.newSession ?? ctx.context.session;
 
       await recordAuthEvent({
