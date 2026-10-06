@@ -247,9 +247,11 @@ describe('post-deploy folder', () => {
       ['0008_audit_log_user_ids_index', '0.11.0', 'audit_log_user_ids_idx'],
       // Validates the code-artifact kind check, and gates code artifacts (#298).
       ['0009_artifact_kind_code', '0.11.0', undefined],
+      // Entries made with an account's address but no actor account (#342).
+      ['0010_audit_log_actor_email_index', '0.11.0', 'audit_log_actor_email_idx'],
     ]);
     const builds = steps.filter((step) => step.index);
-    expect(builds).toHaveLength(8);
+    expect(builds).toHaveLength(9);
     expect(builds.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

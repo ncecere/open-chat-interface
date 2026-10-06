@@ -46,7 +46,10 @@ It shows their totals, storage, **active sessions with the address and client
 each came from** (the ten newest, with the total above them, such as "Showing
 the 10 most recent of 616 active sessions"), their limits, recent conversation titles, and their audit
 trail — matched as actor, as target and among the accounts a bulk action named,
-so something done *to* them appears beside things they did. Each entry says
+so something done *to* them appears beside things they did. It also includes
+what was done with their address by someone not signed in, such as a
+password-reset request or a refused sign-in, so a report of a suspicious
+account starts here. Each entry says
 which: "By Ama Okafor, to j.weber@…" for something they did to another account,
 "To Ama Okafor, by admin@…" (or "by you") for something done to them. Searching the audit
 log for their email finds the same entries, even after the account is deleted:

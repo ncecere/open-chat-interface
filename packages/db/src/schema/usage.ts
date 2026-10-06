@@ -366,6 +366,13 @@ export const auditLog = pgTable(
     // migration: building them in one blocks writes to `audit_log`.
     index('audit_log_target_idx').on(t.targetId),
     index('audit_log_user_ids_idx').using('gin', sql`(${t.metadata} -> 'userIds')`),
+    // Entries made with an account's address but no signed-in actor (a reset
+    // request, a refused sign-in) belong to its trail too (#342). Partial: an
+    // entry with an actor account is found by that. Built by post-deploy step
+    // 0010_audit_log_actor_email_index.
+    index('audit_log_actor_email_idx')
+      .on(sql`lower(${t.actorEmail})`)
+      .where(sql`${t.actorUserId} is null`),
     uniqueIndex('audit_log_seq_unique').on(t.seq),
   ],
 );
