@@ -101,8 +101,11 @@ last administrator. It is also refused in a session an administrator opened
 as the person; delete under People instead, where the entry names you. It is
 recorded as a `user.delete` entry with
 `metadata.self: true` and `metadata.deletion.reason: "user"`; a wrong password
-is recorded as `user.delete.failure`. Better Auth's own delete-user endpoint
-stays disabled.
+is recorded as `user.delete.failure`. Better Auth's own admin endpoints
+(`/api/auth/admin/*`: roles, bans, account edits, passwords, impersonation and
+deletion) are disabled: they would make these changes without an audit entry,
+a webhook or these checks. Every account change goes through People → Users,
+and administrators cannot open a session as another person.
 
 For an account that signs in through single sign-on there is no password to
 ask for; signing in again later creates a new, empty account (through

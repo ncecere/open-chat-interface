@@ -336,7 +336,7 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET/POST | `/api/auth/*` | Better Auth owns every other /api/auth/* path; sign-in, sign-up, password reset and verification are limited per client address and per account (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After). |
-| POST | `/api/auth/admin/remove-user` | Answers 404: accounts are deleted with DELETE /api/admin/users/:id, which checks legal holds and the last administrator and records a `user.delete` deletion event. |
+| ALL | `/api/auth/admin/*` | Answers 404: Better Auth's admin endpoints are closed. Accounts are managed under /api/admin/users, which audits every change, sends webhooks, and checks legal holds and the last administrator. |
 
 ## `routes/maintenance.ts`
 
