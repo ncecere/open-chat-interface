@@ -1,0 +1,131 @@
+/**
+ * Names for the controls Streamdown puts on every code block, diagram and
+ * table (#194). Streamdown names its buttons by `title` only, the same for
+ * every block ("Download file", "Copy Code", "Copy table", "View
+ * fullscreen"), and our scroll regions were all "Code block" or "Table", so a
+ * screen-reader or voice user heard four identical sets in one reply. As the
+ * admin pages do (#175), each name now says what it acts on: the block's
+ * number within its message and, for code, its language ("Copy code block 2
+ * (Python)", "Download table 1", "View diagram 1 full screen"). The visible
+ * tooltip's words stay at the start of the name where they can.
+ *
+ * Streamdown offers no prop for per-block names, so this runs on the rendered
+ * DOM, with the scroll-region pass that already watches it. Names are set
+ * again on every pass, so a block added above another renumbers both.
+ */
+
+/** Common languages as people write them; others show as written. */
+const LANGUAGE_NAMES: Record<string, string> = {
+  bash: 'Bash',
+  c: 'C',
+  cpp: 'C++',
+  csharp: 'C#',
+  cs: 'C#',
+  css: 'CSS',
+  go: 'Go',
+  html: 'HTML',
+  java: 'Java',
+  javascript: 'JavaScript',
+  js: 'JavaScript',
+  json: 'JSON',
+  jsx: 'JSX',
+  kotlin: 'Kotlin',
+  markdown: 'Markdown',
+  md: 'Markdown',
+  php: 'PHP',
+  powershell: 'PowerShell',
+  ps1: 'PowerShell',
+  py: 'Python',
+  python: 'Python',
+  r: 'R',
+  rb: 'Ruby',
+  ruby: 'Ruby',
+  rust: 'Rust',
+  rs: 'Rust',
+  sh: 'Shell',
+  shell: 'Shell',
+  sql: 'SQL',
+  swift: 'Swift',
+  ts: 'TypeScript',
+  tsx: 'TSX',
+  typescript: 'TypeScript',
+  xml: 'XML',
+  yaml: 'YAML',
+  yml: 'YAML',
+  zsh: 'Zsh',
+};
+
+export function languageName(language: string): string | null {
+  const id = language.trim().toLowerCase();
+  if (!id || id === 'text' || id === 'plaintext' || id === 'txt') return null;
+  return LANGUAGE_NAMES[id] ?? language.trim();
+}
+
+/** Where blocks are numbered: one message, a dialog (the table's full-screen view), or the page. */
+const scopeOf = (element: Element): ParentNode =>
+  element.closest('article, [role="dialog"]') ?? element.ownerDocument;
+
+function label(element: Element | null | undefined, name: string) {
+  if (element && element.getAttribute('aria-label') !== name)
+    element.setAttribute('aria-label', name);
+}
+
+/** A block's buttons, told apart by the tooltip Streamdown gives each. */
+function buttonTitled(block: Element, ...titles: string[]): Element | undefined {
+  return [...block.querySelectorAll('button[title]')].find((button) =>
+    titles.includes(button.getAttribute('title') ?? ''),
+  );
+}
+
+/** The blocks numbered in this scope, not those of a message inside it. */
+const blocksOf = (scope: ParentNode, kind: string) =>
+  [...scope.querySelectorAll(`[data-streamdown="${kind}"]`)].filter(
+    (block) => scopeOf(block) === scope,
+  );
+
+function nameCodeBlocks(scope: ParentNode) {
+  blocksOf(scope, 'code-block').forEach((block, index) => {
+    const language = languageName(block.getAttribute('data-language') ?? '');
+    const which = `${index + 1}${language ? ` (${language})` : ''}`;
+    const name = `code block ${which}`;
+    label(block.querySelector('[data-streamdown="code-block-body"]'), `Code block ${which}`);
+    label(block.querySelector('[data-streamdown="code-block-copy-button"]'), `Copy ${name}`);
+    label(
+      block.querySelector('[data-streamdown="code-block-download-button"]'),
+      `Download ${name}`,
+    );
+  });
+}
+
+function nameDiagrams(scope: ParentNode) {
+  blocksOf(scope, 'mermaid-block').forEach((diagram, index) => {
+    const name = `diagram ${index + 1}`;
+    label(diagram.querySelector('[data-streamdown="code-block-copy-button"]'), `Copy ${name} code`);
+    label(buttonTitled(diagram, 'Download diagram'), `Download ${name}`);
+    label(buttonTitled(diagram, 'View fullscreen'), `View ${name} full screen`);
+  });
+}
+
+function nameTables(scope: ParentNode) {
+  blocksOf(scope, 'table-wrapper').forEach((table, index) => {
+    const name = `table ${index + 1}`;
+    label(table.querySelector(':scope > .overflow-x-auto'), `Table ${index + 1}`);
+    label(buttonTitled(table, 'Copy table'), `Copy ${name}`);
+    label(buttonTitled(table, 'Download table'), `Download ${name}`);
+    label(buttonTitled(table, 'View fullscreen'), `View ${name} full screen`);
+  });
+}
+
+/** Names every Streamdown block control under `root`, numbered within its message. */
+export function nameStreamdownControls(root: ParentNode = document): void {
+  const scopes = new Set<ParentNode>();
+  for (const block of root.querySelectorAll(
+    '[data-streamdown="code-block"], [data-streamdown="mermaid-block"], [data-streamdown="table-wrapper"]',
+  ))
+    scopes.add(scopeOf(block));
+  for (const scope of scopes) {
+    nameCodeBlocks(scope);
+    nameDiagrams(scope);
+    nameTables(scope);
+  }
+}

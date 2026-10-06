@@ -96,12 +96,15 @@ export function ExportMenu({
   state,
   compact = false,
   disabled = false,
+  about = '',
 }: {
   markdown: string;
   state: DocumentExport;
   /** An icon button (reply actions) rather than a labelled one (artifact panel). */
   compact?: boolean;
   disabled?: boolean;
+  /** Which reply, added to the icon button's name: ` “Here is the plan…”` (#194). */
+  about?: string;
 }) {
   const [open, setOpen] = useState(false);
   const label = state.busy ? 'Preparing file…' : 'Export as…';
@@ -117,7 +120,7 @@ export function ExportMenu({
           type="button"
           variant="ghost"
           size={compact ? 'icon-sm' : 'sm'}
-          aria-label={compact ? label : undefined}
+          aria-label={compact ? `${label}${about}` : undefined}
           title={compact ? label : undefined}
           data-export-menu=""
         >

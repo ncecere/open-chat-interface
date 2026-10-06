@@ -167,11 +167,17 @@ test('assistant actions show attribution and create a true fork', async ({ page 
         .locator('button')
         .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
     )
-    .toEqual(['Copy message', 'Export as…', 'Fork conversation here', 'Retry']);
+    // Named for the reply they act on (#194).
+    .toEqual([
+      'Copy message “Original answer”',
+      'Export as… “Original answer”',
+      'Fork conversation at “Original answer”',
+      'Retry',
+    ]);
 
   await Promise.all([
     page.waitForURL('**/chat/child-thread'),
-    assistant.getByRole('button', { name: 'Fork conversation here' }).click(),
+    assistant.getByRole('button', { name: 'Fork conversation at “Original answer”' }).click(),
   ]);
   expect(forkBody).toEqual({ messageId: 'assistant-message' });
 });

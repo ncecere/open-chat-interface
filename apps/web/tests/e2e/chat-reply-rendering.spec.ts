@@ -104,3 +104,31 @@ test("a reply's headings sit below the page's one h1 (#212)", async ({ page }) =
   ).toBeVisible();
   await expect(reply.getByRole('heading', { level: 3, name: 'Hunting' })).toBeVisible();
 });
+
+test("a reply's code blocks, tables and message controls have names of their own (#194)", async ({
+  page,
+}) => {
+  const reply = await openReply(
+    page,
+    'fix3-names',
+    [
+      {
+        type: 'text',
+        text: '```python\na = 1\n```\n\n```python\nb = 2\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |',
+      },
+    ],
+    'Two snippets please',
+  );
+  await expect(reply.getByRole('region', { name: 'Code block 2 (Python)' })).toBeVisible();
+  await expect(reply.getByRole('button', { name: 'Copy code block 1 (Python)' })).toBeAttached();
+  await expect(
+    reply.getByRole('button', { name: 'Download code block 2 (Python)' }),
+  ).toBeAttached();
+  await expect(reply.getByRole('region', { name: 'Table 1' })).toBeVisible();
+  await expect(reply.getByRole('button', { name: 'View table 1 full screen' })).toBeAttached();
+  const question = page.locator('[data-message-id="fix3-names-question"]');
+  await expect(
+    question.getByRole('button', { name: 'Copy message “Two snippets please”' }),
+  ).toBeAttached();
+  await expect(reply.getByRole('button', { name: /^Copy message “a = 1 b = 2/ })).toBeAttached();
+});

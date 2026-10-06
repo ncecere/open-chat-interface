@@ -14,6 +14,11 @@ Hovering over a message reveals its controls.
 | **Previous reply** / **Next reply** | The latest reply, once retried | Switches between the replies to your latest question |
 | **Fork conversation here** | Either | Starts a separate conversation from this point |
 
+Screen readers and voice control hear which message each control acts on, by
+its opening words: **Copy message “Walk3 table: give me a small…”**, **Fork
+conversation at “…”**. Code blocks and tables are numbered within their
+message in the same way: **Copy code block 2 (Python)**, **Download table 1**.
+
 ### Editing, retrying and forking preserve the original
 
 Editing creates a new conversation with your revised question; the original

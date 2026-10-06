@@ -32,10 +32,11 @@ it("makes a reply's table and code block reachable by keyboard, with names", asy
     const table = container.querySelector('[data-streamdown="table-wrapper"] > .overflow-x-auto');
     const body = container.querySelector('[data-streamdown="code-block-body"]');
     expect(table?.getAttribute('tabindex')).toBe('0');
-    expect(table?.getAttribute('aria-label')).toBe('Table');
+    expect(table?.getAttribute('aria-label')).toBe('Table 1');
     expect(body?.getAttribute('tabindex')).toBe('0');
     expect(body?.getAttribute('role')).toBe('region');
-    expect(body?.getAttribute('aria-label')).toBe('Code block');
+    // Named for the block (#194).
+    expect(body?.getAttribute('aria-label')).toBe('Code block 1 (JavaScript)');
   });
   await act(async () => root.unmount());
 });

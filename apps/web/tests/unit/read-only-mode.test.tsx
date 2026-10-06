@@ -168,14 +168,14 @@ describe('message actions', () => {
       );
     setReadOnlyStatus(ON);
     await render();
-    for (const label of ['Edit message', 'Retry', 'Fork conversation here']) {
-      const control = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    for (const label of ['Edit message', 'Retry', 'Fork conversation']) {
+      const control = container.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`)!;
       expect(control.disabled, label).toBe(true);
       expect(control.title).toContain('Read-only for maintenance');
     }
     // Copying is reading.
     expect(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Copy message"]')!.disabled,
+      container.querySelector<HTMLButtonElement>('button[aria-label^="Copy message"]')!.disabled,
     ).toBe(false);
   });
 });

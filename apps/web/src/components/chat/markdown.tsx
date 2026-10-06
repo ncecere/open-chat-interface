@@ -53,6 +53,7 @@ const StreamdownMarkdown = lazy(() =>
             plugins={plugins}
             className={cn(MARKDOWN_BASE, className)}
             remarkPlugins={remarkPlugins}
+            translations={TRANSLATIONS}
             // The reference interface shows plain code without a gutter.
             lineNumbers={false}
             // Links are real links that warn before leaving the instance (#174),
@@ -75,6 +76,9 @@ const StreamdownMarkdown = lazy(() =>
     },
   ),
 );
+
+/** "Copy Code" was the one title-cased tooltip among the reply's controls (#194). */
+const TRANSLATIONS = { copyCode: 'Copy code' };
 
 const MESSAGE_COMPONENTS = { a: MessageLink, ...DEMOTED_HEADINGS };
 
