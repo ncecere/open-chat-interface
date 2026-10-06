@@ -1,5 +1,5 @@
-import { THREAD_HISTORY_PAGE_SIZE, type ThreadSummary, type TrashedThread } from '@oci/shared';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { THREAD_HISTORY_PAGE_SIZE, type ThreadSummary } from '@oci/shared';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useEffect, useId, useMemo, useState } from 'react';
@@ -13,6 +13,7 @@ import { useProjects, useProjectsAvailable } from '~/hooks/use-projects';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { formatRelativeTime } from '~/lib/utils';
+import { TrashList } from './trash-list';
 
 /** How long typing pauses before the title search runs. */
 export const HISTORY_SEARCH_DEBOUNCE_MS = 300;
@@ -23,123 +24,6 @@ const HISTORY_TABS = [
   { id: 'trash', label: 'Trash' },
 ] as const;
 const PANEL_ID = 'history-panel';
-
-function purgeCountdown(purgeAt: string): string {
-  const remaining = new Date(purgeAt).getTime() - Date.now();
-  if (remaining <= 0) return 'deleting soon';
-
-  const days = Math.ceil(remaining / 86_400_000);
-  if (days > 1) return `deletes in ${days} days`;
-  const hours = Math.max(1, Math.ceil(remaining / 3_600_000));
-  return `deletes in ${hours} hour${hours === 1 ? '' : 's'}`;
-}
-
-function TrashList() {
-  const queryClient = useQueryClient();
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['threads', 'trash'],
-    queryFn: () => api.get<{ threads: TrashedThread[] }>('/threads/trash'),
-    select: (result) => result.threads,
-  });
-
-  const invalidate = () =>
-    Promise.all([
-      invalidateConversationLists(queryClient),
-      queryClient.invalidateQueries({ queryKey: ['attachments'] }),
-    ]);
-
-  const restore = useMutation({
-    mutationFn: (id: string) => api.post(`/threads/${id}/restore`),
-    onSuccess: invalidate,
-  });
-
-  const purge = useMutation({
-    mutationFn: (id: string) => api.delete(`/threads/${id}/permanent`),
-    onSuccess: invalidate,
-  });
-
-  const emptyAll = useMutation({
-    mutationFn: () => api.delete('/threads/trash'),
-    onSuccess: invalidate,
-  });
-
-  const threads = data ?? [];
-
-  if (isLoading) {
-    return (
-      <div className="py-16">
-        <Spinner className="mx-auto size-6" />
-      </div>
-    );
-  }
-
-  if (threads.length === 0) {
-    return <p className="mt-10 text-sm text-[var(--text-muted)]">Trash is empty.</p>;
-  }
-
-  return (
-    <>
-      <div className="mt-6 flex items-center justify-between gap-4">
-        <p className="text-xs text-[var(--text-muted)]">
-          Deleted conversations stay here until their deletion date, then are removed permanently.
-          Deleting now cannot be undone, so download anything you want to keep first.
-        </p>
-        <Button
-          variant="danger"
-          size="sm"
-          disabled={emptyAll.isPending}
-          onClick={() => emptyAll.mutate()}
-        >
-          Empty trash
-        </Button>
-      </div>
-
-      <div className="mt-4 flex flex-col">
-        {threads.map((thread) => {
-          // One string, shown and as the tooltip when a phone cuts it short (#130).
-          const detail = `${thread.messageCount} message${thread.messageCount === 1 ? '' : 's'} · ${
-            thread.deletedReason === 'retention'
-              ? 'removed automatically'
-              : `deleted ${formatRelativeTime(thread.deletedAt)}`
-          } · ${purgeCountdown(thread.purgeAt)}`;
-          return (
-            <div
-              key={thread.id}
-              className="flex items-center gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[var(--text-primary)] text-sm" title={thread.title}>
-                  {thread.title}
-                </p>
-                <p className="truncate text-[var(--text-muted)] text-xs" title={detail}>
-                  {detail}
-                </p>
-              </div>
-
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={restore.isPending}
-                onClick={() => restore.mutate(thread.id)}
-              >
-                Restore
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={purge.isPending}
-                onClick={() => purge.mutate(thread.id)}
-              >
-                Delete now
-              </Button>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
 
 interface HistoryPage {
   threads: ThreadSummary[];
