@@ -72,3 +72,47 @@ it('every form uses the app’s own validation messages, never the browser’s b
   const native = forms.filter(({ tag }) => !/\bnoValidate\b/.test(tag)).map(({ path }) => path);
   expect(native).toEqual([]);
 });
+
+/**
+ * Forms that write without registering protection themselves, and why that
+ * is right. Anything else that saves must ask before its edit is lost.
+ */
+const PROTECTED_ELSEWHERE: Record<string, string> = {
+  'routes/admin/storage/storage-settings-form.tsx':
+    'its state lives in useStorageSettings (use-storage-settings.ts), which reports it',
+  'routes/admin/users/saved-views.tsx':
+    'names a view of the filters in the address; only the typed name is at stake',
+  'components/admin/operations/destination.tsx':
+    'fields inside the Backups and Compliance forms, which report their edits',
+};
+
+/** Where forms ask before unsaved edits are left behind: administration and settings. */
+const GUARDED_DIRS = [
+  'routes/admin/',
+  'routes/settings/',
+  'components/admin/',
+  'components/settings/',
+];
+
+it('every admin and settings form that saves asks before its edit is left behind (#300, #314)', () => {
+  // A form that saves: it submits, or it has a Save button, and it writes.
+  const saves = (source: string) =>
+    (formTags(source).length > 0 || /(>|^)\s*Save\b/m.test(source)) &&
+    /\bapi\.(put|patch|post)\b|authClient\.(updateUser|changePassword)\b/.test(source);
+  // A page form reports to its layout's guard; a dialog asks on Escape.
+  const guarded = (source: string) =>
+    /\buseReportUnsaved\(|\buseEditedSince\(|\bconfirmDiscard\b/.test(source);
+  const forms = files.filter(
+    ({ path, source }) => GUARDED_DIRS.some((dir) => path.startsWith(dir)) && saves(source),
+  );
+  // The sweep found this many; a much smaller number means the scan broke.
+  expect(forms.length).toBeGreaterThan(30);
+  const unguarded = forms
+    .filter(({ path, source }) => !guarded(source) && !(path in PROTECTED_ELSEWHERE))
+    .map(({ path }) => path);
+  expect(unguarded).toEqual([]);
+  // The hook that protects the Storage form still does.
+  expect(readFileSync(join(SRC, 'routes/admin/storage/use-storage-settings.ts'), 'utf8')).toContain(
+    'useReportUnsaved(',
+  );
+});
