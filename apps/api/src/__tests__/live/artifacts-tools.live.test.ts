@@ -428,6 +428,21 @@ describe.skipIf(!available)('live artifacts', () => {
         '| Earth | 12,742 |',
       ].join('\n');
       const code = '```python\ndef add(a, b):\n    """Add two numbers."""\n    return a + b\n```';
+      // What Claude Haiku 4.5 (thinking) saved as a Document (#313): over 500
+      // characters outside code, but most of them table, markup and a URL.
+      const owls = [
+        '## Owls and Code\n\n| Name | Wingspan | Region |\n| --- | --- | --- |',
+        '| Great Horned Owl | 101 to 145 centimetres | North and South America |',
+        '| Snowy Owl | 125 to 150 centimetres | Arctic tundra of the north |',
+        '| Barn Owl | 80 to 95 centimetres | Nearly worldwide, every continent |\n',
+        '```python\ndef wingspan_m(cm):\n    return cm / 100\n```\n',
+        '1. Owls can turn their heads about 270 degrees.\n2. Their feathers make flight silent.',
+        '3. Many species hunt mostly at night.\n\nThe owl looks out over the silent wood,',
+        'and waits for night as every hunter should.\n\nRead more at [Example](https://example.com).',
+      ].join('\n');
+      expect(owls.replace(/```[\s\S]*?```/, '').trim().length).toBeGreaterThan(
+        MIN_MARKDOWN_ARTIFACT_CHARS,
+      );
       const report = `# Report\n\n${'A sentence of the report that runs on. '.repeat(20)}`;
       expect(report.length).toBeGreaterThan(MIN_MARKDOWN_ARTIFACT_CHARS);
       const calls = (): Array<[string, string, unknown]> => [
@@ -435,6 +450,7 @@ describe.skipIf(!available)('live artifacts', () => {
         ['c2', 'create_artifact', { title: 'Add', kind: 'markdown', content: code }],
         ['c3', 'create_artifact', { title: 'Report', kind: 'markdown', content: report }],
         ['c4', 'create_artifact', { title: 'Dot', kind: 'svg', content: SVG_IMAGE }],
+        ['c5', 'create_artifact', { title: 'Owls', kind: 'markdown', content: owls }],
       ];
       const chat = await thread();
       script(toolStep(calls()), textStep('Here they are.'));
@@ -456,11 +472,13 @@ describe.skipIf(!available)('live artifacts', () => {
         c2: ['output-available', null, CODE_MARKDOWN_REFUSAL],
         c3: ['output-available', null, null],
         c4: ['output-available', null, null],
+        c5: ['output-available', null, SHORT_MARKDOWN_REFUSAL],
       });
       // The stored reply's steps, as every renderer lists them, leave them out.
       expect(reply.parts.filter(isDeclinedArtifactPart).map((part) => part.toolCallId)).toEqual([
         'c1',
         'c2',
+        'c5',
       ]);
       expect(toolStepsOf(reply.parts).map((step) => step.summary)).toEqual([
         "Created artifact 'Report'",
@@ -473,10 +491,11 @@ describe.skipIf(!available)('live artifacts', () => {
 
       // Asked for by name, the same content is saved.
       const asked = await thread();
-      script(toolStep(calls().slice(0, 2)), textStep('Done.'));
+      script(toolStep(calls().filter(([id]) => id !== 'c3' && id !== 'c4')), textStep('Done.'));
       await turn(asked.id, 'Put the planets table and the function in artifacts');
       expect((await artifactsOf(asked.id)).map((artifact) => artifact.title).sort()).toEqual([
         'Add',
+        'Owls',
         'Planets',
       ]);
     });

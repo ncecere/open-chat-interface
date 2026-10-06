@@ -22,14 +22,52 @@ export const SHORT_MARKDOWN_REFUSAL = `${ARTIFACT_NOT_SAVED}: short content such
 
 export const CODE_MARKDOWN_REFUSAL = `${ARTIFACT_NOT_SAVED}: program code belongs in fenced code blocks in your reply, not in a document. Write it in your reply once (do not repeat it if you already have).`;
 
+/** A GFM table's delimiter row: `| --- | :---: |` or `--- | ---`. */
+const TABLE_DELIMITER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/;
+
+/**
+ * The text of Markdown outside its code blocks that reads as prose (#313).
+ * Everything outside code once counted, so a Markdown table, the URL of a
+ * link and the `#`, `-` and `1.` of headings and lists did too: a 710-byte
+ * answer of a heading, a three-row table, a function, a three-item list, a
+ * two-line poem and a link came to about 540 characters and was saved as a
+ * "Document", the reply only saying "Done!". Tables are left out (like code,
+ * they are structured content that belongs in the reply), as are markup and
+ * link targets; the words of headings, list items and quotes still count, so a
+ * long plan written as lists is still a document.
+ */
+export function markdownProse(content: string): string {
+  const blocks = fencedBlocks(content);
+  let text = content;
+  // Last first, so earlier offsets stay valid.
+  for (const block of [...blocks].reverse())
+    text = text.slice(0, block.start) + text.slice(block.end);
+  const lines = text.split('\n');
+  const kept: string[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? '';
+    if (line.includes('|') && TABLE_DELIMITER.test(lines[index + 1] ?? '')) {
+      // The header, the delimiter and every row up to the first blank line.
+      index++;
+      while (index + 1 < lines.length && (lines[index + 1] ?? '').trim() !== '') index++;
+      continue;
+    }
+    kept.push(
+      line
+        .replace(/^\s{0,3}(>\s?)+/, '')
+        .replace(/^\s*#{1,6}\s+/, '')
+        .replace(/^\s*([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, '')
+        .replace(/^\s*([-*_]\s*){3,}$/, '')
+        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1'),
+    );
+  }
+  return kept.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 /** Why this Markdown is not artifact-worthy by itself, or null if it is. */
 export function markdownArtifactRefusal(content: string): string | null {
   const blocks = fencedBlocks(content);
-  let prose = content;
-  // Last first, so earlier offsets stay valid.
-  for (const block of [...blocks].reverse())
-    prose = prose.slice(0, block.start) + prose.slice(block.end);
-  const proseLength = prose.trim().length;
+  const proseLength = markdownProse(content).length;
   const codeLength = blocks.reduce((total, block) => total + block.content.trim().length, 0);
   if (codeLength > 0 && codeLength >= proseLength) return CODE_MARKDOWN_REFUSAL;
   if (proseLength < MIN_MARKDOWN_ARTIFACT_CHARS) return SHORT_MARKDOWN_REFUSAL;

@@ -58,6 +58,7 @@ const contentSchema = z
 const createArtifactTool: ToolDefinition = {
   id: 'create_artifact',
   label: 'Create artifact',
+  // "Say ... what it holds": a reply of only "Done!" left the person nothing to read or copy (#313).
   description: [
     'Save content the person will want to see rendered as an artifact they can open, preview, copy and download:',
     'an HTML page or small app (a complete, self-contained document), an SVG image or diagram,',
@@ -65,7 +66,7 @@ const createArtifactTool: ToolDefinition = {
     'Program code goes in fenced code blocks in your reply, one per language or file, unless the person asks for it as an artifact:',
     'then save it as kind code with its language (for example python), the code alone, never wrapped in an HTML page.',
     'Never use it for tables, lists or short answers: write those in your reply.',
-    'Do not repeat the content in your reply or link to it; a card appears on its own. Returns the artifact id for later updates.',
+    'Do not repeat the content in your reply or link to it; a card appears on its own. Say in your reply, in a sentence or two, what it holds. Returns the artifact id for later updates.',
   ].join(' '),
   kind: 'read',
   source: 'builtin',
