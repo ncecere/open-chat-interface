@@ -106,6 +106,8 @@ export const answerToolApprovalsSchema = z
       )
       .min(1)
       .max(32),
+    /** The person's time zone, as when sending a message (#248). */
+    timeZone: z.string().max(100).optional(),
   })
   .strict();
 export type AnswerToolApprovalsInput = z.infer<typeof answerToolApprovalsSchema>;

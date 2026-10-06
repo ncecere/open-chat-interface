@@ -208,6 +208,12 @@ export const sendMessageSchema = z
     excludedProjectFileIds: z.array(z.string().min(1).max(200)).max(20).optional(),
     temporary: z.boolean().default(false),
     trigger: z.enum(['submit-message', 'regenerate-message']).default('submit-message'),
+    /**
+     * The person's IANA time zone, as their browser gives it (#248), for the
+     * date the model is told. An unknown zone, or none, falls back to the
+     * instance's display time zone; it never refuses the message.
+     */
+    timeZone: z.string().max(100).optional(),
   })
   .strict();
 

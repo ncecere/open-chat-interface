@@ -26,6 +26,20 @@ import { startingModel } from '~/lib/starting-model';
 import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
 const EMPTY_MODELS: CatalogModel[] = [];
+
+/**
+ * This browser's time zone, sent with each turn so the model is told today's
+ * date where the person is, not where the instance is (#248). Read per send:
+ * a laptop can travel. Absent when the browser does not say.
+ */
+function browserTimeZone(): { timeZone?: string } {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone ? { timeZone: zone } : {};
+  } catch {
+    return {};
+  }
+}
 /** Times a turn handed back by a server shutting down is sent again in a row. */
 const HANDOFF_RETRIES = 2;
 
@@ -195,7 +209,7 @@ export function useChatSession(options: {
           if (answered && responses.length) {
             return {
               api: `/api/chat/${encodeURIComponent(options.threadId)}/approvals`,
-              body: { messageId: answered.id, responses },
+              body: { messageId: answered.id, responses, ...browserTimeZone() },
             };
           }
           const latestUser = messages.findLast((message) => message.role === 'user');
@@ -216,6 +230,7 @@ export function useChatSession(options: {
               temporary: options.temporary ?? false,
               attachmentIds: trigger === 'regenerate-message' ? [] : (body?.attachmentIds ?? []),
               trigger,
+              ...browserTimeZone(),
             },
           };
         },
