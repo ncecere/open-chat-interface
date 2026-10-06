@@ -1,6 +1,7 @@
 import { PROVIDER_KINDS, type Provider, type ProviderKind } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -50,6 +51,8 @@ export function ProviderFormDialog({
     provider?.hasCredential ? 'keep' : 'replace',
   );
   const [error, setError] = useState<string | null>(null);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince({ kind, label, baseUrl, enabled, apiKey, credentialAction });
 
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -108,7 +111,7 @@ export function ProviderFormDialog({
   const kindLocked = Boolean(provider && provider.modelCount > 0);
 
   return (
-    <DialogContent>
+    <DialogContent confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{provider ? 'Edit provider' : 'Add provider'}</DialogTitle>
         <DialogDescription>

@@ -4,6 +4,7 @@ import { Check, Copy, Link2, MailPlus, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, Row, RowList } from '~/components/admin/admin-ui';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -55,6 +56,8 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
   const [expiresInDays, setExpiresInDays] = useState('7');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'copied' | 'failed' | null>(null);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const changed = useEditedSince({ email, role, expiresInDays });
 
   const create = useMutation({
     mutationFn: (body: ReturnType<typeof createInviteSchema.parse>) =>
@@ -167,7 +170,7 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     (create.error && apiErrorMessage(create.error, 'Failed to create invitation.'));
 
   return (
-    <DialogContent className="w-[calc(100%-2rem)]">
+    <DialogContent className="w-[calc(100%-2rem)]" confirmDiscard={changed}>
       <DialogHeader>
         <DialogTitle>Create invitation</DialogTitle>
         <DialogDescription>

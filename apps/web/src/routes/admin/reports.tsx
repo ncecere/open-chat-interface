@@ -12,6 +12,7 @@ import {
   Notice,
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -117,6 +118,16 @@ export function AdminReportsPage() {
   const [deleteFor, setDeleteFor] = useState<ScheduledReport | null>(null);
   // The form adds a report, or saves changes to this one (#85).
   const [editing, setEditing] = useState<ScheduledReport | null>(null);
+  // Leaving with a report half added, or an edit not saved, asks first (#45,
+  // #300): against the report being edited, or the empty form.
+  useReportUnsaved(
+    editing
+      ? name !== editing.name ||
+          cadence !== editing.cadence ||
+          windowDays !== editing.windowDays ||
+          recipients !== editing.recipients.join(', ')
+      : name !== '' || cadence !== 'monthly' || windowDays !== 30 || recipients !== '',
+  );
 
   function resetForm() {
     setProblems([]);

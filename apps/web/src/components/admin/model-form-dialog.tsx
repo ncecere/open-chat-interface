@@ -17,6 +17,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { CAPABILITY_LABELS } from '~/components/chat/model-picker-data';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
@@ -246,6 +247,7 @@ export function ModelFormDialog({
   // The listed problems were about the form as it was submitted; each goes
   // once its own field changes (#178), and the rest stay until fixed (#257).
   const [problems, setProblems] = useFieldProblems(draft);
+  const edited = useEditedSince(draft); // Escape asks before discarding (#300).
   const error = problemsText(problems, '\n');
 
   // Whether thinking can be surfaced at all depends on the wire protocol, so
@@ -328,7 +330,7 @@ export function ModelFormDialog({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{model ? 'Edit model' : 'Add model'}</DialogTitle>
         <DialogDescription>

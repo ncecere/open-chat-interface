@@ -19,6 +19,7 @@ import {
   RowList,
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -150,6 +151,8 @@ function BroadcastDialog({
   // goes when that field is corrected (#217, #283).
   const form = useRef<HTMLFormElement>(null);
   const [problems, setProblems] = useFieldProblems(draft, form);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince(draft);
   const error = problemsElsewhere(problems, FIELDS_SHOWN);
   const at = (field: keyof Draft) => problemsAt(problems, field);
 
@@ -205,7 +208,7 @@ function BroadcastDialog({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{broadcast ? 'Edit announcement' : 'New announcement'}</DialogTitle>
         <DialogDescription>

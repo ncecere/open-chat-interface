@@ -153,6 +153,8 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
   const [draft, setDraft] = useState<ReasoningEffort>(initialEffort ?? 'instant');
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Each of this page's sections asks before its edit is left behind (#300).
+  useReportUnsaved(draft !== saved);
 
   const save = useMutation({
     mutationFn: (defaultEffort: ReasoningEffort) =>
@@ -321,6 +323,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const value = Number(draft);
   const valid = /^\d+$/.test(draft) && value >= MIN_TOOL_STEPS && value <= MAX_TOOL_STEPS;
+  useReportUnsaved(draft !== String(saved));
 
   const save = useMutation({
     mutationFn: (maxToolSteps: number) =>
@@ -394,6 +397,7 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
   const [draft, setDraft] = useState(initialEnabled ?? true);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  useReportUnsaved(draft !== saved);
 
   const save = useMutation({
     mutationFn: (autoCompact: boolean) =>
@@ -453,6 +457,7 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
   const [draft, setDraft] = useState(initialEnabled ?? true);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  useReportUnsaved(draft !== saved);
 
   const save = useMutation({
     mutationFn: (diagramGuidance: boolean) =>

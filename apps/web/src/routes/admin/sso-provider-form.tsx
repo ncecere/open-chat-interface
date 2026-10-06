@@ -1,6 +1,7 @@
 import type { CreateSsoProviderInput, SsoProviderSummary } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -41,6 +42,8 @@ export function SsoProviderForm({
   const [policy, setPolicy] = useState<PolicyDraft>(() => policyFromProvider(provider));
   const [protocol, setProtocol] = useState<ProtocolDraft>(EMPTY_PROTOCOL);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince({ policy, protocol });
 
   const save = useMutation({
     mutationFn: async (body: CreateSsoProviderInput | PatchSsoProviderBody) => {
@@ -77,7 +80,10 @@ export function SsoProviderForm({
     (save.error ? apiErrorMessage(save.error, 'The SSO provider could not be saved.') : null);
 
   return (
-    <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
+    <DialogContent
+      className="max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto p-4 sm:p-6"
+      confirmDiscard={edited}
+    >
       <DialogHeader>
         <DialogTitle>{editing ? `Edit ${provider?.label}` : 'Add SSO provider'}</DialogTitle>
         <DialogDescription>

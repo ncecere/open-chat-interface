@@ -61,6 +61,8 @@ export function DiscoverModelsDialog({
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Escape or a click outside asks before a selection is thrown away (#45, #300).
+  const edited = selected.size > 0;
 
   const visible = useMemo(() => {
     const term = filter.trim().toLowerCase();
@@ -106,7 +108,7 @@ export function DiscoverModelsDialog({
   }
 
   return (
-    <DialogContent className="max-w-2xl">
+    <DialogContent className="max-w-2xl" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>Models available from {provider.label}</DialogTitle>
         <DialogDescription>

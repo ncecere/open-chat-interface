@@ -11,6 +11,7 @@ import { Gauge } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { EditableFieldset, EditOnly } from '~/components/admin/admin-access';
 import { LoadError, SaveRow } from '~/components/admin/admin-ui';
+import { useEditedSince, useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -102,6 +103,7 @@ export function CapacityLimitsDialog({
   // others listed while their fields are still wrong (#257).
   const [problems, setProblems] = useFieldProblems(values);
   const error = problemsText(problems, '\n');
+  const edited = useEditedSince(values);
   const save = useMutation({
     mutationFn: (limits: CapacityLimits) =>
       api.put(
@@ -146,7 +148,7 @@ export function CapacityLimitsDialog({
   }
 
   return (
-    <DialogContent>
+    <DialogContent confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>Capacity limits for {target.name}</DialogTitle>
         <DialogDescription>
@@ -273,6 +275,8 @@ export function ProviderCapacitySection() {
     Boolean(queue && priority) &&
     (maxWait !== String(queue?.maxWaitSeconds) ||
       USER_ROLES.some((role) => priority?.[role] !== queue?.rolePriority[role]));
+  // Leaving the page asks first, as every admin form does (#45, #300).
+  useReportUnsaved(changed);
 
   function submit(event: FormEvent) {
     event.preventDefault();

@@ -1,6 +1,7 @@
 import type { AdminConnector, ConnectorAuthMode } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useRef, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -208,6 +209,8 @@ export function ConnectorFormDialog({
   };
   const form = useRef<HTMLFormElement>(null);
   const [problems, setProblems] = useFieldProblems(values, form);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince(values);
   const report = (found: FieldProblem[]) => setProblems(linkFields(found, LINKED_FIELDS));
   const at = (field: keyof typeof values) => problemsAt(problems, field);
   // The fields on screen; an error about any other is shown at the foot.
@@ -302,7 +305,7 @@ export function ConnectorFormDialog({
     connector.accountCount > 0;
 
   return (
-    <DialogContent className="max-h-[90dvh] overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{connector ? `Edit ${connector.name}` : 'Add connector'}</DialogTitle>
         <DialogDescription>
