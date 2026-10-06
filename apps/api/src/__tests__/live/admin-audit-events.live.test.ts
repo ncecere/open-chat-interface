@@ -107,6 +107,28 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
     });
   });
 
+  it('writes one audit entry (one webhook event) for one role change (#140)', async () => {
+    const target = await seedUser(live.db, state.organizationId, { role: 'user' });
+    const forTarget = () =>
+      live.db.select().from(schema.auditLog).where(eq(schema.auditLog.targetId, target));
+
+    await send(app, 'PATCH', `/users/${target}`, { role: 'restricted' });
+    expect((await forTarget()).map(({ action, metadata }) => ({ action, metadata }))).toEqual([
+      { action: 'user.role.change', metadata: { from: 'user', to: 'restricted' } },
+    ]);
+
+    // A rename with the role change keeps the rename under user.update, without the role.
+    await send(app, 'PATCH', `/users/${target}`, { role: 'user', name: 'Walk3 renamed' });
+    const entries = (await forTarget()).map(({ action, metadata }) => ({ action, metadata }));
+    expect(entries).toHaveLength(3);
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        { action: 'user.role.change', metadata: { from: 'restricted', to: 'user' } },
+        { action: 'user.update', metadata: { name: 'Walk3 renamed' } },
+      ]),
+    );
+  });
+
   it('ends active sessions when a single account is banned', async () => {
     const target = await seedUser(live.db, state.organizationId, { role: 'user' });
     await live.db.insert(schema.session).values({
