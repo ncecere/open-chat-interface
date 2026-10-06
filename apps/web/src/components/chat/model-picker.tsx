@@ -13,10 +13,13 @@ export const ModelPicker = memo(function ModelPicker({
   models,
   selected,
   onSelect,
+  loading = false,
 }: {
   models: CatalogModel[];
   selected: CatalogModel | null;
   onSelect: (model: CatalogModel) => void;
+  /** The list has not arrived yet: say so, not that there are no models (#156). */
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -150,7 +153,9 @@ export const ModelPicker = memo(function ModelPicker({
 
   if (models.length === 0) {
     return (
-      <span className="px-2 text-[0.8125rem] text-[var(--text-muted)]">No models available</span>
+      <span className="px-2 text-[0.8125rem] text-[var(--text-muted)]">
+        {loading ? 'Loading models…' : 'No models available'}
+      </span>
     );
   }
 

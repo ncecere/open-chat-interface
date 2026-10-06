@@ -44,7 +44,8 @@ export function useChatSession(options: {
   temporary?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { data: models = EMPTY_MODELS } = useModels();
+  const modelsQuery = useModels();
+  const models = modelsQuery.data ?? EMPTY_MODELS;
   const { data: currentUser } = useCurrentUser();
   const scope = useMemo(
     () => ({
@@ -386,6 +387,8 @@ export function useChatSession(options: {
     webSearch,
     setWebSearch,
     models,
+    /** The models or the person's features have not arrived yet (#156). */
+    optionsLoading: modelsQuery.isPending || !currentUser,
     selectedModel,
     selectModel,
     send,

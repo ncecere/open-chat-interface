@@ -27,6 +27,12 @@ export interface ComposerOptionsProps {
   /** Why attaching is paused for now (read-only maintenance): shown, disabled, with it. */
   attachmentsPausedReason?: string;
   onAttachFiles?: (files: File[]) => void;
+  /**
+   * The model list or the person's features are still loading: the picker
+   * says so and Attach waits, rather than claiming there are no models or
+   * hiding Attach until they arrive (#156).
+   */
+  loading?: boolean;
 }
 
 /**
@@ -80,6 +86,7 @@ export function ComposerOptions({
   attachmentsAvailable = true,
   attachmentsPausedReason,
   onAttachFiles,
+  loading = false,
 }: ComposerOptionsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const availableEfforts = selectedModel ? effectiveSupportedEfforts(selectedModel) : [];
@@ -148,7 +155,7 @@ export function ComposerOptions({
               control with no reason (#99). */}
           {attachmentsAvailable && (
             <DropdownMenuItem
-              disabled={!onAttachFiles || Boolean(attachmentsPausedReason)}
+              disabled={!onAttachFiles || Boolean(attachmentsPausedReason) || loading}
               onSelect={() => fileInputRef.current?.click()}
             >
               <Paperclip />
@@ -158,7 +165,12 @@ export function ComposerOptions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
+      <ModelPicker
+        models={models}
+        selected={selectedModel}
+        onSelect={onSelectModel}
+        loading={loading}
+      />
 
       {supportsEffort && (
         <div className="hidden md:block">
@@ -205,7 +217,7 @@ export function ComposerOptions({
         <Pill
           icon={Paperclip}
           label="Attach"
-          disabled={!onAttachFiles || Boolean(attachmentsPausedReason)}
+          disabled={!onAttachFiles || Boolean(attachmentsPausedReason) || loading}
           title={attachmentsPausedReason}
           onClick={() => fileInputRef.current?.click()}
           className="hidden md:inline-flex"

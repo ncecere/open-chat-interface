@@ -430,7 +430,8 @@ function ThreadConversation({
           webSearch={session.webSearch}
           onWebSearchChange={session.setWebSearch}
           webSearchAvailable={session.features?.webSearch ?? false}
-          attachmentsAvailable={session.features?.attachments ?? false}
+          attachmentsAvailable={session.features ? session.features.attachments : true}
+          loading={session.optionsLoading}
           attachments={session.attachments.items}
           onAttachFiles={session.attachments.upload}
           onRemoveAttachment={session.attachments.remove}
