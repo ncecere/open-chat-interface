@@ -60,7 +60,7 @@ export async function artifactGuidance(context: {
     'Artifacts: content the person will want to see rendered, such as an HTML page or small app, an SVG image or diagram, or a Mermaid diagram,',
     'is shown to the person as an artifact they can open, preview, copy and download.',
     context.tools
-      ? 'Create one with the create_artifact tool and revise it with update_artifact, preferring small find-and-replace edits; or write it as a single fenced code block (```html, ```svg or ```mermaid). Use a Markdown artifact only for a long prose document the person asked for, such as a report, letter or plan.'
+      ? 'Create one with the create_artifact tool and revise it with update_artifact, preferring small find-and-replace edits; or write it as a single fenced code block (```html, ```svg or ```mermaid). Use a Markdown artifact only for a long prose document the person asked for, such as a report, letter or plan; tables, lists and short answers go in your reply, and anything you put in an artifact is not repeated in your reply.'
       : 'Write each one as a single fenced code block (```html, ```svg or ```mermaid); HTML should be a complete document.',
     PROGRAM_CODE_IN_CHAT,
     'Never link to an artifact in your text: a card for it appears below your reply on its own.',

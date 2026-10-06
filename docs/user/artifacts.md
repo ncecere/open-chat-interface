@@ -13,8 +13,10 @@ separate object with its own versions, which you can open, copy and download.
   reply, with a card below it.
 - **Long documents you ask for.** Models that can use tools can also create a
   long document you ask for, such as a report or plan, and revise it later.
-  Program code stays in the reply as ordinary code blocks unless you ask for
-  an artifact.
+  Program code, tables, lists and short answers stay in the reply unless you
+  ask for an artifact: OCI does not save a document that is mostly code or
+  only a few hundred characters long, and the model writes it in its reply
+  instead. To get one anyway, say "artifact" in your message.
 
 Other code blocks are not affected. Artifacts work with every model: models
 without tools write a code block and OCI saves it once the reply is finished.

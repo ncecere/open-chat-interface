@@ -139,7 +139,8 @@ describe.skipIf(!available)('live artifacts', () => {
         toolStep([['c1', 'create_artifact', { title: 'Notes', kind: 'markdown', content: 'v1' }]]),
         textStep('Done.'),
       );
-      await turn(chat.id, 'Notes please');
+      // Short, so it is saved only because the person asked for an artifact (#149).
+      await turn(chat.id, 'Notes in an artifact please');
       const list = (await (await get(`/api/artifacts?threadId=${chat.id}`)).json()) as {
         artifacts: Array<{ id: string; currentVersion: number; sizeBytes: number }>;
       };
@@ -191,7 +192,7 @@ describe.skipIf(!available)('live artifacts', () => {
         toolStep([['c1', 'create_artifact', { title: 'Doc', kind: 'markdown', content: 'v1' }]]),
         textStep('Done.'),
       );
-      await turn(chat.id, 'Doc');
+      await turn(chat.id, 'Doc artifact');
       const [artifact] = await artifactsOf(chat.id);
       const big = await post(`/api/artifacts/${artifact!.id}/versions`, {
         content: 'x'.repeat(MAX_ARTIFACT_BYTES + 1),
