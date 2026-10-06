@@ -57,6 +57,11 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
   const [pending, setPending] = useState<Pending | null>(null);
   const open = (kind: Pending['kind']) => setPending({ kind, count: others, withSelf });
   const accounts = describeAccounts(pending?.count ?? others);
+  // One account is "an administrator", like the title already said (#219).
+  const makeAdmins =
+    (pending?.count ?? others) === 1
+      ? 'Make 1 account an administrator'
+      : `Make ${accounts} administrators`;
   const selfNote = pending?.withSelf
     ? 'Your own account is selected but will be left unchanged.'
     : 'Your own account is never included.';
@@ -149,13 +154,9 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
       <ConfirmDialog
         open={pending?.kind === 'admin'}
         onOpenChange={(isOpen) => !isOpen && setPending(null)}
-        title={
-          (pending?.count ?? others) === 1
-            ? 'Make 1 account an administrator?'
-            : `Make ${accounts} administrators?`
-        }
+        title={`${makeAdmins}?`}
         description={`Administrators can see and change every setting, manage every account (including other administrators), and read the audit log. ${selfNote}`}
-        confirmLabel={`Make ${accounts} administrators`}
+        confirmLabel={makeAdmins}
         pendingLabel="Applying…"
         errorMessage={BULK_ACTION_FAILURES.set_role ?? ''}
         onConfirm={() => bulk.mutateAsync({ action: 'set_role', role: 'admin' })}

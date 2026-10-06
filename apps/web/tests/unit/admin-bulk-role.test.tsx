@@ -16,9 +16,9 @@ afterEach(async () => {
   root = undefined;
 });
 
-function selection(bulkRole: 'admin' | 'user') {
+function selection(bulkRole: 'admin' | 'user', ids = ['user-1', 'user-2']) {
   return {
-    selected: new Set(['user-1', 'user-2']),
+    selected: new Set(ids),
     bulkRole,
     setBulkRole: vi.fn(),
     clear: vi.fn(),
@@ -42,6 +42,17 @@ it('asks before making the selected accounts administrators', async () => {
   expect(dialog()?.textContent).toContain('Make 2 accounts administrators?');
 
   await click(button('Make 2 accounts administrators'));
+  expect(chosen.bulk.mutateAsync).toHaveBeenCalledWith({ action: 'set_role', role: 'admin' });
+});
+
+it('makes one account "an administrator", in the title and on the button (#219)', async () => {
+  // Yourself and one other: yours is skipped, so one account changes.
+  const chosen = selection('admin', ['me', 'user-1']);
+  ({ root } = await renderAdmin(<UserBulkToolbar selection={chosen} />));
+
+  await click(button('Apply role'));
+  expect(dialog()?.textContent).toContain('Make 1 account an administrator?');
+  await click(button('Make 1 account an administrator'));
   expect(chosen.bulk.mutateAsync).toHaveBeenCalledWith({ action: 'set_role', role: 'admin' });
 });
 
