@@ -72,9 +72,18 @@ describe('links in messages (#174)', () => {
     expect(click(container.querySelector('a[href]')!)).toBe(true);
     await vi.waitFor(() =>
       expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-        'Open External Link',
+        'Open external link',
       ),
     );
+    // The safe choice has focus, not the checkbox that turns the warning off (#196).
+    const dialog = document.querySelector('[role="dialog"]')!;
+    await vi.waitFor(() => expect(document.activeElement?.textContent).toBe('Cancel'));
+    const remember = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const label = document.querySelector(`label[for="${remember.id}"]`);
+    expect(label?.textContent).toBe("Don't show this warning again");
+    expect(
+      document.getElementById(remember.getAttribute('aria-describedby')!)?.textContent,
+    ).toMatch(/^External sites remain outside/);
     expect(open).not.toHaveBeenCalled();
     const proceed = [...document.querySelectorAll('[role="dialog"] button')].find(
       (button) => button.textContent === 'Continue',
