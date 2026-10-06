@@ -27,7 +27,8 @@ const STORAGE_TABS = [
 
 export function StorageSettingsForm({ initialSettings }: { initialSettings: StorageSettings }) {
   // The tab lives in the URL; switching only toggles `hidden`, so every panel
-  // stays mounted and the shared draft survives.
+  // stays mounted and the shared draft survives. So a tab change loses nothing
+  // and skips the unsaved-changes question, which is for leaving the page (#45).
   const navigate = useNavigate();
   const tab = validateStorageSearch(useSearch({ strict: false })).tab ?? DEFAULT_STORAGE_TAB;
   const setTab = (next: StorageTab) =>
@@ -35,6 +36,7 @@ export function StorageSettingsForm({ initialSettings }: { initialSettings: Stor
       to: '/admin/storage',
       search: { tab: next === DEFAULT_STORAGE_TAB ? undefined : next },
       replace: true,
+      ignoreBlocker: true,
     });
   const controller = useStorageSettings(initialSettings);
   const {

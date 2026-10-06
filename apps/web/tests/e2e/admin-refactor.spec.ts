@@ -27,6 +27,13 @@ test('storage tabs retain one draft and submit only changed public settings', as
     return route.fulfill({ json: initial });
   });
 
+  // Changing tab keeps the draft, so it must not ask about unsaved changes (#45).
+  const dialogs: string[] = [];
+  page.on('dialog', (dialog) => {
+    dialogs.push(dialog.message());
+    void dialog.dismiss();
+  });
+
   await page.goto('/admin/storage');
   await page.getByRole('tab', { name: 'Upload policy' }).click();
   const nextLimit = String(initial.storage.maxFilesPerMessage + 1);
@@ -38,6 +45,7 @@ test('storage tabs retain one draft and submit only changed public settings', as
   await page.getByRole('tab', { name: 'Upload policy' }).click();
   await expect(page).toHaveURL(/[?&]tab=uploads\b/);
   await expect(page.getByLabel('Maximum files per message')).toHaveValue(nextLimit);
+  expect(dialogs).toEqual([]);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByText('Storage settings saved.', { exact: true })).toBeVisible();
   expect(patches).toEqual([{ storage: { maxFilesPerMessage: Number(nextLimit) } }]);
