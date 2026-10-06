@@ -386,6 +386,22 @@ describe('user limits', () => {
     expect(text).toContain('Resets in 3h');
   });
 
+  it("names a budget's models as the catalog does, not by slug (#285)", async () => {
+    allowances = [{ ...budget, modelSlugs: ['e2e-catalog-beta', 'retired-model'] }];
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) =>
+      path === '/admin/models'
+        ? { models: [{ slug: 'e2e-catalog-beta', displayName: 'E2E catalog beta' }] }
+        : base(path),
+    );
+    ({ root } = await renderDetail());
+
+    const text = document.body.textContent ?? '';
+    // A slug no longer in the catalog is still shown, as it is.
+    expect(text).toContain('Applies to E2E catalog beta, retired-model');
+    expect(text).not.toContain('e2e-catalog-beta');
+  });
+
   it('reports unlimited storage and the file allowance', async () => {
     ({ root } = await renderDetail());
 
