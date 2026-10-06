@@ -101,7 +101,8 @@ test('sidebar exposes fork lineage and collapses pinned threads', async ({ page 
     'href',
     '/chat/parent-thread',
   );
-  const pinned = page.getByRole('button', { name: 'Pinned' });
+  // Exact: each row's controls carry its title ("Unpin thread: Pinned fixture", #111).
+  const pinned = page.getByRole('button', { name: 'Pinned', exact: true });
   await expect(pinned).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('link', { name: 'Pinned fixture' })).toBeVisible();
   await pinned.click();
