@@ -95,3 +95,44 @@ describe('a failed reply (#133)', () => {
     expect(reply().textContent).not.toContain('failed');
   });
 });
+
+describe('a reply the person stopped (#154)', () => {
+  const copy = () => reply().querySelector('button[aria-label="Copy message"]');
+
+  it('says it was stopped before it began, and offers nothing to copy', async () => {
+    await render({
+      messages: [question, saved('cancelled', null)],
+      streaming: false,
+      onRetry: vi.fn(),
+    });
+    expect(reply().querySelector('[role="note"]')?.textContent).toBe(
+      'You stopped this reply before it began.',
+    );
+    expect(copy()).toBeNull();
+    expect(reply().querySelector('button[aria-label="Retry"]')).not.toBeNull();
+  });
+
+  it('keeps the text of a reply stopped part-way, and says it was stopped', async () => {
+    await render({
+      messages: [question, saved('cancelled', null, [{ type: 'text', text: 'The first lines' }])],
+      streaming: false,
+    });
+    expect(reply().textContent).toContain('The first lines');
+    expect(reply().querySelector('[role="note"]')?.textContent).toBe('You stopped this reply.');
+    expect(copy()).not.toBeNull();
+  });
+
+  it('gives an interrupted reply its own reason, not a stopped note', async () => {
+    await render({
+      messages: [
+        question,
+        saved('cancelled', 'The server restarted before this reply finished.', [
+          { type: 'text', text: 'Partial' },
+        ]),
+      ],
+      streaming: false,
+    });
+    const notes = [...reply().querySelectorAll('[role="note"]')].map((node) => node.textContent);
+    expect(notes).toEqual(['The server restarted before this reply finished.']);
+  });
+});

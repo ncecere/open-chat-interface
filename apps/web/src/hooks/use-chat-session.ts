@@ -286,7 +286,7 @@ export function useChatSession(options: {
   const stop = useCallback(async () => {
     // Stopping the browser reader alone must not leave the detached resumable
     // producer running. The owner-scoped endpoint aborts it server-side.
-    recovery.waitForServer();
+    recovery.waitForStop();
     scope.reconnectAbort?.abort();
     const localStop = stopChat();
     const remoteStop = fetch(`/api/chat/${encodeURIComponent(options.threadId)}/stream`, {
@@ -294,7 +294,7 @@ export function useChatSession(options: {
       credentials: 'same-origin',
     }).catch(() => undefined);
     await Promise.all([localStop, remoteStop]);
-  }, [stopChat, options.threadId, recovery.waitForServer, scope]);
+  }, [stopChat, options.threadId, recovery.waitForStop, scope]);
 
   // Lasts for this conversation only; Settings → Models sets where new ones start.
   const selectModel = useCallback((model: CatalogModel) => setChosenSlug(model.slug), []);

@@ -372,22 +372,28 @@ function ThreadConversation({
                   )}
                   {waitingOnServer && (
                     <p role="status" className="text-sm text-[var(--text-muted)]">
-                      A reply is pending on the server. You can stop it or wait for saved messages.
+                      {/* Just after Stop, the server is still saving the stopped
+                          reply: say that, not that one is pending (#154). */}
+                      {session.recovery.stopping
+                        ? 'Stopping the reply\u2026'
+                        : 'A reply is pending on the server. You can stop it or wait for saved messages.'}
                     </p>
                   )}
-                  <button
-                    type="button"
-                    className="text-sm underline"
-                    disabled={
-                      session.recovery.refreshing ||
-                      session.recovery.resuming ||
-                      session.status === 'streaming' ||
-                      session.status === 'submitted'
-                    }
-                    onClick={session.recovery.recover}
-                  >
-                    Reload saved messages
-                  </button>
+                  {!session.recovery.stopping && (
+                    <button
+                      type="button"
+                      className="text-sm underline"
+                      disabled={
+                        session.recovery.refreshing ||
+                        session.recovery.resuming ||
+                        session.status === 'streaming' ||
+                        session.status === 'submitted'
+                      }
+                      onClick={session.recovery.recover}
+                    >
+                      Reload saved messages
+                    </button>
+                  )}
                 </div>
               )}
             </div>

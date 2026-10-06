@@ -122,7 +122,10 @@ request; copy any unsaved message text before replacing local history. A draft
 you are typing stays in the composer during recovery.
 
 A pending reply may still be running. You can wait or request **Stop**; a local
-reader closing is not proof that the server stopped. Moving to another
+reader closing is not proof that the server stopped. After **Stop** the page
+says **Stopping the reply…** until the server has saved it; the reply keeps
+what was written and says you stopped it (or that you stopped it before it
+began). Moving to another
 conversation closes its browser reader without cancelling the server response.
 
 Load failures show a retry or unavailable state rather than an empty chat.

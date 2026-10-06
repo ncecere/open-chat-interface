@@ -14,6 +14,7 @@ import {
   interruptionOf,
   metadataOf,
   replyLayoutOf,
+  stoppedOf,
   textOf,
   type WorkEntry,
 } from '~/components/chat/message-content';
@@ -105,6 +106,7 @@ export const MessageRow = memo(function MessageRow({
   const metadata = metadataOf(message);
   const interruption = interruptionOf(message);
   const failure = streaming ? null : failureOf(message);
+  const stopped = !streaming && stoppedOf(message);
   const capacity = capacityWaitOf(message);
 
   return (
@@ -139,6 +141,11 @@ export const MessageRow = memo(function MessageRow({
         </p>
       )}
       {failure && <ReplyFailureNote reason={failure} onRetry={onRetry} latest={Boolean(onRetry)} />}
+      {stopped && (
+        <p role="note" className="mb-1 text-xs text-[var(--text-muted)]">
+          {text.trim() ? 'You stopped this reply.' : 'You stopped this reply before it began.'}
+        </p>
+      )}
       {(replySwitch || !streaming) && (
         <div className="flex flex-wrap items-center gap-1">
           {replySwitch && <ReplySwitcher {...replySwitch} />}

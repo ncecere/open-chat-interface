@@ -75,18 +75,21 @@ export function MessageActions({
         'sm:has-[[aria-expanded=true]]:opacity-100 sm:has-[[role=alert]]:opacity-100',
       )}
     >
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Copy message"
-        onClick={async () => {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
-      >
-        {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
-      </Button>
+      {/* Nothing to copy from a reply stopped or failed before its first word (#154). */}
+      {text.trim() && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Copy message"
+          onClick={async () => {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+        >
+          {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
+        </Button>
+      )}
       {exportTarget && text.trim() && <ReplyExport target={exportTarget} text={text} />}
       {onFork && (
         <Button

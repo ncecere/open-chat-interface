@@ -43,6 +43,16 @@ export function failureOf(message: UIMessage): string | null {
   return errorMessage ?? 'The reply could not be generated.';
 }
 
+/**
+ * Whether the person stopped this saved reply (#154): stored as cancelled
+ * with no reason (an interrupted one has one; see interruptionOf). Said, so a
+ * reply stopped before its first word is not an unexplained empty space.
+ */
+export function stoppedOf(message: UIMessage): boolean {
+  const { status, errorMessage } = metadataOf(message);
+  return message.role === 'assistant' && status === 'cancelled' && !errorMessage;
+}
+
 export function contextLimitedOf(message: UIMessage): boolean {
   return message.parts.some(
     (part) =>

@@ -229,6 +229,9 @@ it('stops a reconnect still waiting for headers, then recovers the saved cancell
   expect(session.recovery.resuming).toBe(false);
   expect(session.streaming).toBe(false);
   expect(session.messages.at(-1)?.metadata).toEqual({ status: 'cancelled' });
+  // Saved as stopped: nothing is pending or stopping any more (#154).
+  expect(session.recovery.stopping).toBe(false);
+  expect(session.recovery.remotePending).toBe(false);
 });
 
 it.each([false, true])(
@@ -331,6 +334,8 @@ it('closes a connected browser replay even when the explicit server stop fails',
   expect(aborted).toHaveBeenCalledOnce();
   expect(session.recovery.resuming).toBe(false);
   expect(session.recovery.remotePending).toBe(true); // A local abort is not proof the producer stopped.
+  // The person asked to stop: the page says so rather than "a reply is pending" (#154).
+  expect(session.recovery.stopping).toBe(true);
   expect(session.streaming).toBe(true); // Stop remains available for another explicit attempt.
   expect(fetch.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1);
   expect(
