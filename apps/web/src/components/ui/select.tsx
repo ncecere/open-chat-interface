@@ -28,7 +28,12 @@ export function SelectTrigger({
         'flex h-9 w-full items-center justify-between gap-2 rounded-lg px-3 text-sm',
         'border border-[var(--border-subtle)] bg-[var(--bg-control)] text-[var(--text-primary)]',
         'transition-colors hover:bg-[var(--bg-control-hover)]',
-        'focus-visible:border-[var(--border-strong)] focus-visible:outline-none',
+        // The 2 px accent ring every other control gets from :focus-visible
+        // (#239). A border step alone was 1.2:1 against the unfocused one, so a
+        // keyboard user could not see which row's role select had focus.
+        'focus-visible:border-[var(--border-strong)]',
+        'focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2',
+        'focus-visible:outline-[var(--accent-bright)]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         // A placeholder should read as absence rather than as a value.
         'data-[placeholder]:text-[var(--text-muted)]',
