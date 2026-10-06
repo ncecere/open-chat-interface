@@ -238,8 +238,8 @@ first; that is the only proof a backup works.
 ## Audit and metrics
 
 Saving settings is audited as `backup.settings.update` (which fields changed,
-never a credential), and **Test destination** as `backup.test` with whether it
-passed. Every run, scheduled or manual, is audited as `backup.run`
+never a credential), and **Test destination** as `backup.test` with the destination, whether it
+passed and, when it did not, why (never a credential). Every run, scheduled or manual, is audited as `backup.run`
 with its outcome (and, with copying on, the files and bytes copied), so a
 [webhook](observability.md#webhooks) can alert on a failed backup. The
 [metrics](observability.md#metrics) endpoint exposes `oci_backup_runs_total`,

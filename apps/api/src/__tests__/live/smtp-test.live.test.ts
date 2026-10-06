@@ -136,7 +136,9 @@ describe.skipIf(!available)('live: testing email delivery', () => {
   });
 
   it('gives the mail server’s reason when it fails, and audits both', async () => {
-    state.fail = new Error('Invalid login: 535 5.7.8 Authentication failed');
+    state.fail = new Error(
+      'Invalid login: 535 5.7.8 Authentication failed (password=walk-secret-password)',
+    );
     const result = await test();
     expect(result.ok).toBe(false);
     expect(result.message).toContain('Invalid login: 535');
@@ -144,9 +146,20 @@ describe.skipIf(!available)('live: testing email delivery', () => {
       .select({ metadata: schema.auditLog.metadata })
       .from(schema.auditLog)
       .where(eq(schema.auditLog.action, 'smtp.test'));
+    // Who it went to and which server; a failure says why (#343), without the
+    // credential the server's wording repeated.
+    const where = { to: 'admin-mail@example.test', host: 'mail.example.test', port: 587 };
     expect(rows.map((row) => row.metadata)).toEqual(
-      expect.arrayContaining([{ ok: true }, { ok: false }]),
+      expect.arrayContaining([
+        { ok: true, ...where },
+        {
+          ok: false,
+          ...where,
+          reason: expect.stringContaining('Invalid login: 535 5.7.8 Authentication failed'),
+        },
+      ]),
     );
+    expect(JSON.stringify(rows)).not.toContain('walk-secret-password');
   });
 
   it('is not available to auditors', async () => {

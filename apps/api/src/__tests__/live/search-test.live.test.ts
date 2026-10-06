@@ -141,11 +141,50 @@ describe.skipIf(!available)('live: testing the web search provider', () => {
     expect(rows.map((row) => row.metadata)).toEqual(
       expect.arrayContaining([
         { provider: 'serpapi', ok: true },
-        { provider: 'serpapi', ok: false },
-        { provider: 'tavily', ok: false },
+        {
+          provider: 'serpapi',
+          ok: false,
+          reason: expect.stringContaining('SerpApi rejected the web search API key (HTTP 401)'),
+        },
+        {
+          provider: 'tavily',
+          ok: false,
+          reason: 'Tavily needs an API key. Add it on the Web search page.',
+        },
       ]),
     );
-    expect(JSON.stringify(rows)).not.toContain('key');
+    // A failure says why (#343), never with a key typed or saved.
+    for (const secret of ['typed-key', 'wrong', 'saved-serpapi-key']) {
+      expect(JSON.stringify(rows)).not.toContain(secret);
+    }
+  });
+
+  it('records where an unreachable self-hosted search was tried and why, without credentials in the address (#343)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    );
+    const outcome = await result({
+      provider: 'searxng',
+      baseUrl: 'http://walk-user:walk-pass@127.0.0.1:9/search?token=walk-query-token',
+    });
+    expect(outcome.ok).toBe(false);
+    const rows = await live.db
+      .select({ metadata: schema.auditLog.metadata })
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, 'search.test'));
+    const entry = rows
+      .map((row) => row.metadata as Record<string, unknown>)
+      .find((meta) => meta.provider === 'searxng');
+    expect(entry).toMatchObject({
+      ok: false,
+      baseUrl: 'http://127.0.0.1:9/search',
+      reason: expect.any(String),
+    });
+    expect((entry as { reason: string }).reason).not.toBe('');
+    expect(JSON.stringify(entry)).not.toMatch(/walk-pass|walk-query-token/);
   });
 
   it('is not available to auditors', async () => {

@@ -4,6 +4,7 @@ import { conflict, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { auditedAddress, redactedReason } from '../../services/audit-test-details.js';
 import { pgDumpVersion } from '../../services/backups/pg-tools.js';
 import { backupStatus, startManualBackup, testBackupTarget } from '../../services/backups/run.js';
 import {
@@ -84,13 +85,23 @@ backupRoutes.post('/test', async (c) => {
     result = { ok: false, detail: message.slice(0, 300) };
   }
   // Audited as every other Test button is: it reaches an address an
-  // administrator chose (#287).
+  // administrator chose (#287). A failure says where and why (#343).
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'backup.test',
     targetType: 'instance',
-    metadata: { ok: result.ok },
+    metadata: {
+      ok: result.ok,
+      destination: settings.destination,
+      ...(settings.destination === 'separate'
+        ? {
+            bucket: settings.s3.bucket || null,
+            endpoint: auditedAddress(settings.s3.endpoint),
+          }
+        : {}),
+      ...(result.ok ? {} : { reason: redactedReason(result.detail) }),
+    },
   });
   return c.json(result);
 });

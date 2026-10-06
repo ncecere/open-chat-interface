@@ -146,7 +146,39 @@ describe.skipIf(!available)('live: automated backups', () => {
       .select()
       .from(schema.auditLog)
       .where(eq(schema.auditLog.action, 'backup.test'));
-    expect(tests.map((entry) => entry.metadata)).toEqual([{ ok: true }]);
+    expect(tests.map((entry) => entry.metadata)).toEqual([
+      {
+        ok: true,
+        destination: 'separate',
+        bucket: separateBucket,
+        endpoint: expect.stringContaining(new URL(liveS3Config.endpoint).host),
+      },
+    ]);
+
+    // A failed test says where it went and why (#343), not only `ok: false`.
+    response = await call('PATCH', '/api/admin/backups/settings', {
+      body: { s3: { bucket: 'oci-no-such-bucket-343' } },
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    response = await call('POST', '/api/admin/backups/test');
+    expect(await response.json()).toMatchObject({ ok: false });
+    response = await call('PATCH', '/api/admin/backups/settings', {
+      body: { s3: { bucket: separateBucket } },
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const failed = await pool.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, 'backup.test'));
+    const failure = failed.map((entry) => entry.metadata).find((meta) => meta?.ok === false);
+    expect(failure).toMatchObject({
+      ok: false,
+      destination: 'separate',
+      bucket: 'oci-no-such-bucket-343',
+      reason: expect.any(String),
+    });
+    expect((failure as { reason: string }).reason.length).toBeGreaterThan(0);
+    expect(JSON.stringify(failed)).not.toContain(liveS3Config.secretAccessKey);
 
     await pool.db.delete(schema.backupRun);
     response = await call('POST', '/api/admin/backups/run');

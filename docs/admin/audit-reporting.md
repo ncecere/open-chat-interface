@@ -67,7 +67,9 @@ its path (`roles.user.chatRequestsPerMinute`); an announcement, webhook or
 acceptable-use save that changes nothing is not recorded. Every **Test** button
 that reaches an outside service is recorded with its outcome (`smtp.test`,
 `storage.test`, `search.test`, `embeddings.test`, `reranking.test`,
-`backup.test`, `compliance.test`, `connector.test`, `webhook.test.send`). A deletion records what was removed: a
+`backup.test`, `compliance.test`, `connector.test`, `webhook.test.send`),
+with where it went (for the test email, the server and the address it was sent to) and, when
+it failed, the reason, cleaned of anything that looks like a credential. A deletion records what was removed: a
 deleted usage budget keeps its measure, limit, window, roles, models and how
 many per-user overrides went with it, a deleted storage allowance its values,
 and a cleared override its limit. **Sign out everywhere** records how many sessions it ended.

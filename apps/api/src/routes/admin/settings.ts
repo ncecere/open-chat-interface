@@ -16,6 +16,7 @@ import { logger } from '../../lib/logger.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { redactedReason, searchTestAuditDetails } from '../../services/audit-test-details.js';
 import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
 import { sendTestEmail } from '../../services/email.js';
 import {
@@ -154,12 +155,20 @@ settingsRoutes.get('/', async (c) => {
 settingsRoutes.post('/smtp/test', async (c) => {
   const actor = currentUser(c);
   const result = await sendTestEmail(actor.email);
+  const smtp = await getSetting('smtp');
+  // Where the message went and which server it was handed to; a failure also
+  // says why (#343), as `webhook.test.send` records the URL and HTTP status.
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'smtp.test',
     targetType: 'instance',
-    metadata: { ok: result.ok },
+    metadata: {
+      ok: result.ok,
+      to: actor.email,
+      ...(smtp.host ? { host: smtp.host, port: smtp.port } : {}),
+      ...(result.ok ? {} : { reason: redactedReason(result.message) }),
+    },
   });
   return c.json(result);
 });
@@ -231,6 +240,15 @@ async function testSearchProvider(
   }
 }
 
+/** A stored search key, for removing it from an audit reason; null when none or unreadable. */
+function storedKey(stored: SearchSettings, which: 'primary' | 'fallback'): string | null {
+  try {
+    return which === 'primary' ? storedSearchKey(stored) : storedFallbackSearchKey(stored);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Runs one sample search with the provider, address and key on the page, so
  * an administrator can check them before or after saving, and the same for
@@ -261,13 +279,23 @@ settingsRoutes.post('/search/test', async (c) => {
     actorEmail: actor.email,
     action: 'search.test',
     targetType: 'instance',
+    // What was tried and, when it failed, why (#343). A key typed on the page
+    // or stored never appears: the reason is redacted of both, and an address
+    // is recorded without any user, password or query.
     metadata: {
       provider: input.provider,
       ok: result.ok,
+      ...searchTestAuditDetails(input, primary, [input.apiKey, storedKey(stored, 'primary')]),
       ...(fallback &&
         fallbackResult && {
           fallbackProvider: fallback.provider,
           fallbackOk: fallbackResult.ok,
+          ...searchTestAuditDetails(
+            fallback,
+            fallbackResult,
+            [fallback.apiKey, storedKey(stored, 'fallback')],
+            'fallback',
+          ),
         }),
     },
   });
