@@ -35,7 +35,9 @@ edit it or fork from it instead.
 
 Forking copies the conversation up to the chosen point into a new one and leaves
 the original untouched, so you can pursue an alternative without losing the
-answer you already have.
+answer you already have. The new conversation is titled "Fork of" and the
+original's title. Forked at one of your questions, it answers that question
+again as it opens, as an edit does.
 
 This is worth reaching for more often than people do. Asking "what if we did it
 the other way?" as a fork means you end up with both answers side by side in

@@ -12,7 +12,12 @@ import {
   schema,
   sql,
 } from '@oci/db';
-import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
+import {
+  type BranchMessageInput,
+  type ForkMessageInput,
+  THREAD_TITLE_MAX_LENGTH,
+  type UserRole,
+} from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, rateLimited, validationFailed } from '../lib/errors.js';
 import { containsPattern } from '../lib/like.js';
@@ -302,7 +307,7 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
       .values({
         organizationId: sourceThread.organizationId,
         userId,
-        title: sourceThread.title,
+        title: forkTitle(sourceThread.title),
         parentThreadId: sourceThread.id,
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
@@ -356,6 +361,38 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
 
     return fork;
   });
+}
+
+/**
+ * A fork's title: its source's, marked, so the two can be told apart in the
+ * sidebar, which shows the start of a long title (#213). A fork of a fork is
+ * not marked twice.
+ */
+export function forkTitle(title: string): string {
+  if (title.startsWith(FORK_PREFIX)) return title;
+  return `${FORK_PREFIX}${title}`.slice(0, THREAD_TITLE_MAX_LENGTH);
+}
+const FORK_PREFIX = 'Fork of ';
+
+/**
+ * The fork's copy of the message it was made at: a fork made at a question
+ * is answered at once, as an edit is (#213).
+ */
+export async function forkedMessage(forkId: string, sourceMessageId: string) {
+  const [copy] = await db
+    .select({
+      id: schema.message.id,
+      role: schema.message.role,
+      modelSlug: schema.message.modelSlug,
+      effort: schema.message.effort,
+    })
+    .from(schema.message)
+    .where(
+      and(eq(schema.message.threadId, forkId), eq(schema.message.parentMessageId, sourceMessageId)),
+    )
+    .limit(1);
+  if (!copy) throw notFound('Message not found');
+  return copy;
 }
 
 /**

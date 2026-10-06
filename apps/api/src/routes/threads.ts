@@ -57,6 +57,7 @@ import {
   assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
+  forkedMessage,
   forkFromMessage,
   getOwnedThread,
   listMessages,
@@ -275,7 +276,9 @@ threadRoutes.post('/:id/forks', async (c) => {
 
   const input = await parseBody(c, forkMessageSchema);
   const fork = await forkFromMessage(c.req.param('id'), user.id, input);
-  return c.json({ thread: serializeThread(fork) }, 201);
+  // The copy of the message forked at: a question is answered in the fork.
+  const message = await forkedMessage(fork.id, input.messageId);
+  return c.json({ thread: serializeThread(fork), message }, 201);
 });
 
 threadRoutes.post('/:id/branches', async (c) => {

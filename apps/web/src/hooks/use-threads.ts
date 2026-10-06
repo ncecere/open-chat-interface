@@ -43,12 +43,18 @@ export interface BranchMessageResult {
   };
 }
 
+interface ForkMessageResult {
+  thread: ThreadSummary;
+  /** The fork's copy of the message it was made at (absent from older servers). */
+  message?: BranchMessageResult['message'] & { role: 'user' | 'assistant' };
+}
+
 export function useForkMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ threadId, messageId }: { threadId: string; messageId: string }) =>
-      api.post<{ thread: ThreadSummary }>(`/threads/${threadId}/forks`, { messageId }),
+      api.post<ForkMessageResult>(`/threads/${threadId}/forks`, { messageId }),
     onSuccess: () => invalidateConversationLists(queryClient),
   });
 }

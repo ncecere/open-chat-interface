@@ -227,33 +227,44 @@ function ThreadConversation({
     await send();
   }, [send, replySettled]);
 
+  /** The new conversation answers its last question once it opens. */
+  const answerInBranch = useCallback(
+    (
+      branchId: string,
+      message: { id: string; modelSlug: string | null; effort: ReasoningEffort | null },
+    ) => {
+      sessionStorage.setItem(
+        PENDING_BRANCH_KEY,
+        JSON.stringify({
+          threadId: branchId,
+          messageId: message.id,
+          modelSlug: message.modelSlug ?? selectedModelSlug ?? null,
+          // Without a recorded level the new thread starts at the instance default.
+          effort: message.effort ?? undefined,
+        } satisfies PendingBranchResponse),
+      );
+    },
+    [selectedModelSlug],
+  );
+
   const forkAtMessage = useCallback(
     async (messageId: string) => {
       const result = await forkMessage({ threadId, messageId });
+      // A fork made at a question would end unanswered, with no Retry: it is
+      // answered, as an edit is (#213).
+      if (result.message?.role === 'user') answerInBranch(result.thread.id, result.message);
       await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
     },
-    [forkMessage, threadId, navigate],
+    [forkMessage, threadId, navigate, answerInBranch],
   );
 
   const editAndBranch = useCallback(
     async (messageId: string, text: string) => {
       const result = await branchMessage({ threadId, messageId, text });
-      const modelSlug = result.message.modelSlug ?? selectedModelSlug ?? null;
-      // Without a recorded level the new thread starts at the instance default.
-      const effort = result.message.effort ?? undefined;
-
-      sessionStorage.setItem(
-        PENDING_BRANCH_KEY,
-        JSON.stringify({
-          threadId: result.thread.id,
-          messageId: result.message.id,
-          modelSlug,
-          effort,
-        }),
-      );
+      answerInBranch(result.thread.id, result.message);
       await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
     },
-    [branchMessage, threadId, selectedModelSlug, navigate],
+    [branchMessage, threadId, navigate, answerInBranch],
   );
 
   // Earlier pages, kept apart from the chat session's live part (v0.11).
