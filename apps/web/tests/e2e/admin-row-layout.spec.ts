@@ -175,3 +175,30 @@ for (const width of [768, 900, 1024, 1100, 1280, 1440]) {
     }
   });
 }
+
+// The hint is the only on-screen word on what the box searches, and it was
+// cut to "Search actor, ac" between 768 and about 1100 px, where the box shared
+// its row with two filters and Export (#335).
+for (const width of [390, 768, 1024, 1100, 1280, 1440]) {
+  test(`the Audit log search box shows its whole hint at ${width} px (#335)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await signIn(page);
+    await page.goto('/admin/audit');
+    const search = page.getByRole('searchbox', { name: 'Search audit events' });
+    await expect(search).toBeVisible();
+    const { needed, available } = await search.evaluate((element) => {
+      const input = element as HTMLInputElement;
+      const style = getComputedStyle(input);
+      const context = document.createElement('canvas').getContext('2d')!;
+      context.font = style.font;
+      const sides = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'] as const;
+      return {
+        needed: context.measureText(input.placeholder).width,
+        available:
+          input.getBoundingClientRect().width -
+          sides.reduce((sum, side) => sum + Number.parseFloat(style[side]), 0),
+      };
+    });
+    expect(needed).toBeLessThanOrEqual(available);
+  });
+}
