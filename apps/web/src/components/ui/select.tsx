@@ -3,6 +3,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useState } from 'react';
 import { cn } from '~/lib/utils';
+import { MENU_ITEM_FOCUS } from './item-focus';
 
 export const SelectRoot = SelectPrimitive.Root;
 export const SelectGroup = SelectPrimitive.Group;
@@ -73,8 +74,9 @@ export function SelectItem({
     <SelectPrimitive.Item
       className={cn(
         'relative flex cursor-pointer select-none items-center gap-2 rounded-lg py-2 pr-2 pl-8',
-        'text-sm outline-none transition-colors',
-        'data-[highlighted]:bg-[var(--bg-control-hover)]',
+        'text-sm transition-colors',
+        // A visible ring on the keyboard-focused option, as in menus (#135).
+        MENU_ITEM_FOCUS,
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         className,
       )}

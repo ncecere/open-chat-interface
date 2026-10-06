@@ -2,12 +2,22 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { cn } from '~/lib/utils';
+import { MENU_ITEM_FOCUS } from './item-focus';
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 export const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
+
+// Every kind of item marks keyboard focus the same visible way (#135).
+const ITEM_CLASSES = cn(
+  'relative flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm',
+  'text-[var(--text-secondary)] transition-colors',
+  MENU_ITEM_FOCUS,
+  'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+  '[&_svg]:size-4 [&_svg]:shrink-0',
+);
 
 export function DropdownMenuContent({
   className,
@@ -37,14 +47,7 @@ export function DropdownMenuSubTrigger({
 }: ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) {
   return (
     <DropdownMenuPrimitive.SubTrigger
-      className={cn(
-        'relative flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none',
-        'text-[var(--text-secondary)] transition-colors',
-        'focus:bg-[var(--bg-control)] focus:text-[var(--text-primary)] data-[state=open]:bg-[var(--bg-control)]',
-        'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-        '[&_svg]:size-4 [&_svg]:shrink-0',
-        className,
-      )}
+      className={cn(ITEM_CLASSES, 'data-[state=open]:bg-[var(--bg-control-hover)]', className)}
       {...props}
     />
   );
@@ -74,28 +77,8 @@ export function DropdownMenuItem({
   className,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Item>) {
-  return (
-    <DropdownMenuPrimitive.Item
-      className={cn(
-        'relative flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none',
-        'text-[var(--text-secondary)] transition-colors',
-        'focus:bg-[var(--bg-control)] focus:text-[var(--text-primary)]',
-        'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-        '[&_svg]:size-4 [&_svg]:shrink-0',
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <DropdownMenuPrimitive.Item className={cn(ITEM_CLASSES, className)} {...props} />;
 }
-
-const ITEM_CLASSES = cn(
-  'relative flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none',
-  'text-[var(--text-secondary)] transition-colors',
-  'focus:bg-[var(--bg-control)] focus:text-[var(--text-primary)]',
-  'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-  '[&_svg]:size-4 [&_svg]:shrink-0',
-);
 
 /**
  * One choice of several (menuitemradio): the chosen one is announced as

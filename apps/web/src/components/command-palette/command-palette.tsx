@@ -1,5 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Search } from 'lucide-react';
+import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
 import { Spinner } from '~/components/ui/spinner';
 import { cn } from '~/lib/utils';
 import type { CommandPaletteProps } from './types';
@@ -105,9 +106,14 @@ export function CommandPalette(props: CommandPaletteProps) {
                         'flex min-h-9 w-full gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm',
                         item.content ? 'items-start' : 'items-center',
                         'transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
+                        // The active option gets the focus ring the model picker uses: the
+                        // border and wash alone were 1.5:1 in light (#135).
                         selected
-                          ? 'border-[var(--border-strong)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]',
+                          ? cn(
+                              'border-transparent bg-[var(--accent-soft)] text-[var(--text-primary)]',
+                              ACTIVE_OPTION_RING,
+                            )
+                          : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)]',
                       )}
                     >
                       <Icon
