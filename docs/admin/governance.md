@@ -201,8 +201,10 @@ every role except `restricted`).
   `create_artifact` and `update_artifact`; the system prompt gains a short
   section on how to make them; and people can edit Markdown documents. With it
   off, none of these happen and an edit is refused with `403` ("Artifacts are
-  not available for your role"); existing artifacts stay readable by their
-  owner.
+  not available for your role"); the system prompt instead tells the model
+  that it cannot create documents or files, so it writes the content in its
+  reply rather than claiming to have made one; existing artifacts stay
+  readable by their owner.
 - **Artifact tools** change only OCI's own data in the current conversation,
   so they need no approval and are not listed under the role's tools. Each call
   is still a `tool.call` audit event (kind `read`).

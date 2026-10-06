@@ -11,6 +11,14 @@ import { artifactsForPrompt } from './store.js';
 export const PROGRAM_CODE_IN_CHAT =
   'Program code in any language (examples, functions, implementations, scripts, configuration) belongs in ordinary fenced code blocks in your reply, one block per language or file, never in an artifact, unless the person asks for an artifact.';
 
+/**
+ * For a role without artifacts (#277). With no word on them, a model asked
+ * for "a Document artifact" answered "Created a Document artifact titled…"
+ * though it had no tool to make one and nothing existed to open or download.
+ */
+export const NO_ARTIFACTS =
+  'Artifacts, documents and files cannot be created, saved or attached for this person. When asked for one, write its content in your reply, and never say you created, saved or attached an artifact, document or file.';
+
 /** Whether the administrator left the Diagram Design guidance on (the default). */
 async function diagramGuidanceEnabled(): Promise<boolean> {
   const chat = await getSetting('chat');
@@ -45,8 +53,8 @@ export function diagramGuidance(accent: string): string {
 
 /**
  * The system-prompt section shown when artifacts are available to the person:
- * how to make one, and (with the artifact tools) which ones exist. Empty when
- * the role's switch is off.
+ * how to make one, and (with the artifact tools) which ones exist. When the
+ * role's switch is off, only that they are unavailable (#277).
  */
 export async function artifactGuidance(context: {
   role: UserRole;
@@ -55,7 +63,7 @@ export async function artifactGuidance(context: {
   /** The artifact tools are offered this turn. */
   tools: boolean;
 }): Promise<string> {
-  if (!(await roleFeatures(context.role)).artifacts) return '';
+  if (!(await roleFeatures(context.role)).artifacts) return NO_ARTIFACTS;
   const lines = [
     'Artifacts: content the person will want to see rendered, such as an HTML page or small app, an SVG image or diagram, or a Mermaid diagram,',
     'is shown to the person as an artifact they can open, preview, copy and download.',

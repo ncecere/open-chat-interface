@@ -179,4 +179,5 @@ without it.
 
 Your administrator can switch artifacts off for your role. Code blocks then
 appear as ordinary code blocks, and models are not offered the artifact tools.
-Artifacts you already have stay readable.
+If you ask for a document, the reply contains its text instead. Artifacts you
+already have stay readable.
