@@ -35,6 +35,7 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
@@ -121,6 +122,8 @@ function BroadcastDialog({
     },
     onError: (cause) => setError(apiErrorMessage(cause, 'The announcement could not be saved.')),
   });
+  // The error is about the values sent; correcting them clears it (#217).
+  useClearOnEdit(draft, () => setError(null));
 
   function submit(event: FormEvent) {
     event.preventDefault();

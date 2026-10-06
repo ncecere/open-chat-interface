@@ -14,6 +14,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
 
 export const AUTH_MODE_LABELS: Record<ConnectorAuthMode, string> = {
@@ -183,6 +184,10 @@ export function ConnectorFormDialog({
     onError: (cause) =>
       setError(apiErrorMessage(cause, 'The connector could not be saved.', CONNECTOR_LABELS)),
   });
+  // The error is about the values sent; correcting them clears it (#217).
+  const values = { name, url, slug, authMode, headerName, headerValue, headerAction };
+  const oauth = { clientId, clientSecret, secretAction, scopes, enabled, allowPrivate };
+  useClearOnEdit({ ...values, ...oauth }, () => setError(null));
 
   function submit(event: FormEvent) {
     event.preventDefault();

@@ -214,6 +214,18 @@ export async function typeInto(input: HTMLInputElement, value: string) {
   await settle();
 }
 
+/** Sets a textarea's value the way React observes a user typing. */
+export async function typeIntoTextarea(input: HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      input,
+      value,
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+}
+
 /**
  * The error the API returns when `body` fails `schema`: the real schema's Zod
  * issues, through JSON, as middleware/error-handler.ts sends them.

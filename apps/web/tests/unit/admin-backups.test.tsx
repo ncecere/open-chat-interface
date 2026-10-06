@@ -179,6 +179,11 @@ describe('Backups admin page', () => {
     await typeInto(document.getElementById('backups-keep-daily') as HTMLInputElement, '0');
     await click(button('Save changes'));
     expect(alerts()).toContain('Daily backups kept must be at least 1.');
+    // Corrected back to the saved value, Save is disabled: the error used to
+    // stay indefinitely (#217).
+    await typeInto(document.getElementById('backups-keep-daily') as HTMLInputElement, '7');
+    expect(alerts()).not.toContain('Daily backups kept must be at least 1.');
+    expect(button('Save changes').disabled).toBe(true);
   });
 
   it('turns copying files on and chooses how many are checked', async () => {

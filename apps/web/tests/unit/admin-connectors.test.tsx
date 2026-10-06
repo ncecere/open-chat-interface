@@ -238,6 +238,9 @@ describe('Connectors admin page', () => {
     expect(alert).toBe(
       'Short name: Use up to 24 lowercase letters, digits and hyphens, such as docs or crm-eu.',
     );
+    // Corrected, the complaint goes (#217).
+    await typeInto(document.getElementById('connector-slug') as HTMLInputElement, 'walk2');
+    expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('confirms before deleting, naming what goes with it', async () => {

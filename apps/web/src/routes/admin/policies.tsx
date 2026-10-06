@@ -26,6 +26,7 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { formatDate } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
@@ -65,6 +66,8 @@ function PolicyDialog({
     },
     onError: (cause) => setError(apiErrorMessage(cause, 'The policy could not be saved.')),
   });
+  // The error is about the values sent; correcting them clears it (#217).
+  useClearOnEdit({ title, body, publish }, () => setError(null));
 
   function submit(event: FormEvent) {
     event.preventDefault();

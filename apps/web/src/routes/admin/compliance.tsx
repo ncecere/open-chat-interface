@@ -37,6 +37,7 @@ import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
@@ -303,6 +304,8 @@ function PlaceHoldForm() {
       ]);
     },
   });
+  // "No account has that address" is about the address sent (#217).
+  useClearOnEdit({ email, reason }, () => place.reset());
 
   return (
     <form

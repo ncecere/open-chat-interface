@@ -16,7 +16,7 @@ import {
   upsertModelSchema,
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
 import {
@@ -31,6 +31,7 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
@@ -233,8 +234,7 @@ export function ModelFormDialog({
   const [error, setError] = useState<string | null>(null);
   // The listed problems were about the form as it was submitted; once it
   // changes they may no longer hold, so they go until the next attempt (#178).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every draft change
-  useEffect(() => setError(null), [draft]);
+  useClearOnEdit(draft, () => setError(null));
 
   // Whether thinking can be surfaced at all depends on the wire protocol, so
   // the guidance follows whichever provider is selected.

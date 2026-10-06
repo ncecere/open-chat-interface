@@ -3,7 +3,17 @@ import type { Broadcast } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminBroadcastsPage } from '../../src/routes/admin/broadcasts';
-import { cleanup, findButton, renderAdmin } from './admin-test-utils';
+import {
+  alerts,
+  button,
+  cleanup,
+  click,
+  dialog,
+  findButton,
+  renderAdmin,
+  typeInto,
+  typeIntoTextarea,
+} from './admin-test-utils';
 import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
@@ -44,6 +54,30 @@ afterEach(async () => {
   if (root) await cleanup(root);
   root = undefined;
   vi.clearAllMocks();
+});
+
+it('clears "the end time must be after the start time" once Ends is moved later (#217)', async () => {
+  ({ root } = await renderAdmin(<AdminBroadcastsPage />));
+  await click(button('New announcement'));
+  await typeInto(document.getElementById('broadcast-title') as HTMLInputElement, 'Walk3');
+  await typeIntoTextarea(
+    document.getElementById('broadcast-body') as HTMLTextAreaElement,
+    'Maintenance.',
+  );
+  await typeInto(
+    document.getElementById('broadcast-starts') as HTMLInputElement,
+    '2026-10-22T10:00',
+  );
+  const ends = document.getElementById('broadcast-ends') as HTMLInputElement;
+  await typeInto(ends, '2026-10-20T10:00');
+  await click(
+    [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Create announcement',
+    )!,
+  );
+  expect(alerts(dialog()!).join(' ')).toContain('The end time must be after the start time.');
+  await typeInto(ends, '2026-10-24T10:00');
+  expect(alerts(dialog()!)).toEqual([]);
 });
 
 it('lets an auditor read each announcement’s message, formatted as shown (#87)', async () => {

@@ -30,6 +30,7 @@ import { Badge } from '~/components/ui/badge';
 import { Field } from '~/components/ui/field';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
@@ -180,6 +181,8 @@ function SettingsForm({
       await queryClient.invalidateQueries({ queryKey: ['admin', 'health'] });
     },
   });
+  // The error is about the values sent; correcting them clears it (#217).
+  useClearOnEdit(draft, () => save.reset());
   const patch = backupChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);

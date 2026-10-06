@@ -65,6 +65,14 @@ it('Retention names the time zone field and the rule', async () => {
   ).toBe('Reporting timezone: Use an IANA time zone such as Europe/London or America/New_York.');
 });
 
+it('Retention clears the error once the field is corrected, with Save disabled (#217)', async () => {
+  await saveRetention('display-timezone', 'Mars/Olympus', { displayTimezone: 'Mars/Olympus' });
+  expect(document.querySelector('[role="alert"]')).not.toBeNull();
+  await typeInto(document.getElementById('display-timezone') as HTMLInputElement, 'UTC');
+  expect(document.querySelector('[role="alert"]')).toBeNull();
+  expect(button('Save retention').disabled).toBe(true);
+});
+
 it('Retention names a number field and its bound', async () => {
   expect(await saveRetention('usage-days', '5000', { usageEventRetentionDays: 5000 })).toBe(
     'Usage history (days) must be at most 3,650.',

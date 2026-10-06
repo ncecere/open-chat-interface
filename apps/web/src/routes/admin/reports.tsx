@@ -16,6 +16,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { FullPageSpinner } from '~/components/ui/spinner';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { useSetupCheck } from '~/hooks/use-setup-status';
 import { api } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
@@ -115,6 +116,9 @@ export function AdminReportsPage() {
       invalidate();
     },
   });
+
+  // The error is about the values sent; correcting them clears it (#217).
+  useClearOnEdit({ name, cadence, windowDays, recipients }, () => create.reset());
 
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
