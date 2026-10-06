@@ -152,15 +152,20 @@ export async function updateUser(
 }
 
 export async function revokeUserSessions(actor: AdminUserActor, targetId: string) {
-  await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  const ended = await db
+    .delete(schema.session)
+    .where(eq(schema.session.userId, targetId))
+    .returning({ id: schema.session.id });
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'user.revoke_sessions',
     targetType: 'user',
     targetId,
+    // How many sessions this ended, so the entry says what it did (#148).
+    metadata: { sessionsEnded: ended.length },
   });
-  return { ok: true };
+  return { ok: true, sessionsEnded: ended.length };
 }
 
 export const LAST_ADMIN_SELF_DELETION_MESSAGE =

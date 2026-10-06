@@ -21,6 +21,7 @@ import {
   updateRetentionSettings,
 } from '../../services/lifecycle/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
+import { diffSettings } from '../../services/settings-diff.js';
 import { listStoragePolicies, storageTotals } from '../../services/storage/quota.js';
 import { pendingDeletionCount, reconcileStorage } from '../../services/storage/reaper.js';
 
@@ -29,6 +30,14 @@ export const lifecycleRoutes = new Hono<AppBindings>();
 lifecycleRoutes.get('/storage-policies', async (c) => {
   return c.json({ policies: await listStoragePolicies() });
 });
+
+/** A storage allowance's values, as its audit entries record them. */
+const STORAGE_POLICY_VALUES = {
+  maxTotalBytes: schema.storagePolicy.maxTotalBytes,
+  maxFileCount: schema.storagePolicy.maxFileCount,
+  maxFileBytes: schema.storagePolicy.maxFileBytes,
+  enabled: schema.storagePolicy.enabled,
+};
 
 /** The role a storage-policy URL names; 404 for anything that is not a role. */
 function roleFromPath(value: string): UserRole {
@@ -51,26 +60,31 @@ lifecycleRoutes.put('/storage-policies/:role', async (c) => {
     ]);
   }
   const organizationId = await getDefaultOrganizationId();
+  const next = {
+    maxTotalBytes: input.maxTotalBytes ?? null,
+    maxFileCount: input.maxFileCount ?? null,
+    maxFileBytes: input.maxFileBytes ?? null,
+    enabled: input.enabled,
+  };
+  // Read first, so the audit entry says what each value was as well as what
+  // it became (#148).
+  const [previous] = await db
+    .select(STORAGE_POLICY_VALUES)
+    .from(schema.storagePolicy)
+    .where(
+      and(
+        eq(schema.storagePolicy.organizationId, organizationId),
+        eq(schema.storagePolicy.role, role),
+      ),
+    )
+    .limit(1);
 
   await db
     .insert(schema.storagePolicy)
-    .values({
-      organizationId,
-      role,
-      maxTotalBytes: input.maxTotalBytes ?? null,
-      maxFileCount: input.maxFileCount ?? null,
-      maxFileBytes: input.maxFileBytes ?? null,
-      enabled: input.enabled,
-    })
+    .values({ organizationId, role, ...next })
     .onConflictDoUpdate({
       target: [schema.storagePolicy.organizationId, schema.storagePolicy.role],
-      set: {
-        maxTotalBytes: input.maxTotalBytes ?? null,
-        maxFileCount: input.maxFileCount ?? null,
-        maxFileBytes: input.maxFileBytes ?? null,
-        enabled: input.enabled,
-        updatedAt: new Date(),
-      },
+      set: { ...next, updatedAt: new Date() },
     });
 
   await recordAudit({
@@ -79,12 +93,8 @@ lifecycleRoutes.put('/storage-policies/:role', async (c) => {
     action: 'storage.policy.update',
     targetType: 'storage_policy',
     targetId: role,
-    metadata: {
-      maxTotalBytes: input.maxTotalBytes ?? null,
-      maxFileCount: input.maxFileCount ?? null,
-      maxFileBytes: input.maxFileBytes ?? null,
-      enabled: input.enabled,
-    },
+    // Each changed value as it was and as it became (null before a first save).
+    metadata: { ...next, changes: diffSettings(previous ?? {}, next) },
   });
 
   return c.json({ ok: true });
@@ -103,9 +113,10 @@ lifecycleRoutes.delete('/storage-policies/:role', async (c) => {
         eq(schema.storagePolicy.role, role),
       ),
     )
-    .returning({ id: schema.storagePolicy.id });
+    .returning(STORAGE_POLICY_VALUES);
 
-  if (removed.length === 0) throw notFound('Storage policy not found');
+  const [policy] = removed;
+  if (!policy) throw notFound('Storage policy not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -113,6 +124,8 @@ lifecycleRoutes.delete('/storage-policies/:role', async (c) => {
     action: 'storage.policy.delete',
     targetType: 'storage_policy',
     targetId: role,
+    // What was removed, so it can be put back (#148).
+    metadata: { ...policy },
   });
 
   return c.json({ ok: true });

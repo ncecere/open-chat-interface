@@ -100,6 +100,42 @@ describe.skipIf(!available)('live: storage allowances by role', () => {
     ]);
   });
 
+  it('records what an allowance was as well as what it became, and what a delete removed (#148)', async () => {
+    await put('user', { enabled: true, maxFileCount: 5 });
+    await put('user', { enabled: false, maxFileCount: 9 });
+    const updates = await audit('storage.policy.update');
+    const first = updates.find(
+      (entry) => (entry.metadata as { maxFileCount: number }).maxFileCount === 5,
+    );
+    const second = updates.find(
+      (entry) => (entry.metadata as { maxFileCount: number }).maxFileCount === 9,
+    );
+    expect(first?.metadata).toMatchObject({
+      changes: expect.arrayContaining([
+        { key: 'maxFileCount', before: null, after: 5 },
+        { key: 'enabled', before: null, after: true },
+      ]),
+    });
+    expect(second?.metadata).toMatchObject({
+      maxFileCount: 9,
+      enabled: false,
+      changes: [
+        { key: 'maxFileCount', before: 5, after: 9 },
+        { key: 'enabled', before: true, after: false },
+      ],
+    });
+
+    const removed = await app.request('/lifecycle/storage-policies/user', { method: 'DELETE' });
+    expect(removed.status).toBe(200);
+    const [deleted] = await audit('storage.policy.delete');
+    expect(deleted?.metadata).toEqual({
+      maxTotalBytes: null,
+      maxFileCount: 9,
+      maxFileBytes: null,
+      enabled: false,
+    });
+  });
+
   it('answers 404 for a URL that names no role', async () => {
     expect((await put('owner', { enabled: true })).status).toBe(404);
     expect(await policies()).toEqual([]);

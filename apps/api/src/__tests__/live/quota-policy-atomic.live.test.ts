@@ -268,6 +268,32 @@ describe.skipIf(!available)('live Postgres: atomic quota policy administration',
     ]);
   });
 
+  it('records what a deleted policy was, including its roles, models and overrides (#148)', async () => {
+    await db.insert(schema.quotaPolicyOverride).values({
+      policyId,
+      userId: actor.id,
+      limitValue: 500,
+    });
+    await deleteQuotaPolicy(actor, policyId);
+    const [entry] = await db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, 'quota.policy.delete'));
+    expect(entry?.metadata).toEqual({
+      name: 'Original',
+      description: 'Existing policy',
+      metric: 'messages',
+      limitValue: 100,
+      windowKind: 'daily',
+      windowHours: null,
+      timezone: 'UTC',
+      enabled: true,
+      roles: ['user'],
+      modelSlugs: ['model-a'],
+      overrideCount: 1,
+    });
+  });
+
   async function delayPolicyWrites() {
     // Hold each mutation long enough for the other request's name precheck to
     // finish. This exercises the unique-index error rather than only the precheck.

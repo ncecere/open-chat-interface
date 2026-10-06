@@ -174,6 +174,19 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
     expect(own).toHaveLength(1);
   });
 
+  it('records how many sessions Sign out everywhere ended (#148)', async () => {
+    const target = await seedUser(live.db, state.organizationId, { role: 'user' });
+    const expiresAt = new Date(Date.now() + 86_400_000);
+    await live.db
+      .insert(schema.session)
+      .values(
+        [1, 2].map(() => ({ id: randomUUID(), userId: target, token: randomUUID(), expiresAt })),
+      );
+    await send(app, 'POST', `/users/${target}/revoke-sessions`, {});
+    const [entry] = (await events('user.revoke_sessions')).filter((row) => row.targetId === target);
+    expect(entry?.metadata).toEqual({ sessionsEnded: 2 });
+  });
+
   it('records sign-in policy changes separately from other settings', async () => {
     await send(app, 'PATCH', '/settings', { colorTheme: 'violet' });
     expect(await events('settings.auth.update')).toHaveLength(0);
