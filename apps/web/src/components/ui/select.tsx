@@ -2,8 +2,12 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useState } from 'react';
+import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import { MENU_ITEM_FOCUS } from './item-focus';
+
+// An open Select hides the page; it is also made inert, so nothing hidden takes focus (#172).
+keepHiddenContentInert();
 
 export const SelectRoot = SelectPrimitive.Root;
 export const SelectGroup = SelectPrimitive.Group;

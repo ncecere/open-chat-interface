@@ -2,7 +2,11 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useFocusReturn } from '~/hooks/use-focus-return';
+import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
+
+// A modal dialog hides the page; it is also made inert, so nothing hidden takes focus (#172).
+keepHiddenContentInert();
 
 export const Dialog = DialogPrimitive.Root;
 

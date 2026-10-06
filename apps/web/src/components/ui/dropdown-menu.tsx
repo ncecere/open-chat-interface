@@ -1,8 +1,12 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import { MENU_ITEM_FOCUS } from './item-focus';
+
+// A modal menu hides the page; it is also made inert, so nothing hidden takes focus (#172).
+keepHiddenContentInert();
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;

@@ -132,6 +132,17 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('the appearance menu has no violations while open (#172)', async ({ page }) => {
+    await signIn(page);
+    await page.goto('/');
+    // A modal menu: the page behind it is hidden and must not stay focusable.
+    await page.getByRole('button', { name: 'Appearance settings' }).click();
+    await expect(page.getByRole('menu')).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('the reply switcher on a retried turn has no violations', async ({ page }) => {
     const created = '2026-01-01T00:00:00.000Z';
     const reply = (id: string, text: string) => ({

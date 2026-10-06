@@ -3,11 +3,15 @@ import { Search } from 'lucide-react';
 import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
 import { Spinner } from '~/components/ui/spinner';
 import { useFocusReturn } from '~/hooks/use-focus-return';
+import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import type { CommandPaletteProps } from './types';
 import { useCommandPaletteState } from './use-command-palette-state';
 
 const LISTBOX_ID = 'oci-command-palette-listbox';
+
+// The palette hides the page; it is also made inert (#172).
+keepHiddenContentInert();
 
 /** Global command and thread search, controlled by the app shell. */
 export function CommandPalette(props: CommandPaletteProps) {
