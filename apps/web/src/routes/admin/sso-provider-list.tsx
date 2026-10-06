@@ -302,7 +302,7 @@ export function DeleteSsoProviderDialog({
         </p>
       )}
 
-      <DialogFooter className="flex-col-reverse sm:flex-row">
+      <DialogFooter>
         <Button type="button" variant="ghost" disabled={remove.isPending} onClick={onClose}>
           Cancel
         </Button>

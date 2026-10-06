@@ -240,7 +240,7 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
 
-        <DialogFooter className="flex-col-reverse sm:flex-row">
+        <DialogFooter>
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
@@ -289,7 +289,7 @@ function RevokeInviteDialog({
         </p>
       )}
 
-      <DialogFooter className="flex-col-reverse sm:flex-row">
+      <DialogFooter>
         <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
         </Button>
