@@ -256,6 +256,20 @@ export function SearchStep({ grounding }: { grounding: SearchGroundingView }) {
       icon={grounding.error ? TriangleAlert : Globe2}
       muted={Boolean(grounding.error)}
     >
+      <SearchDetails grounding={grounding} />
+    </StepDisclosure>
+  );
+}
+
+/**
+ * What a web search found, as a reader wants it: the query, the provider that
+ * answered and each source with its snippet. Shared by the search before a
+ * reply and the model's own web_search steps (#203), which showed a JSON
+ * object of inputs and bare titles instead.
+ */
+export function SearchDetails({ grounding }: { grounding: SearchGroundingView }) {
+  return (
+    <>
       <section>
         <h3 className="font-medium text-[var(--text-primary)]">Search query</h3>
         <p className="mt-1">{grounding.query ?? 'Query not retained for this older response'}</p>
@@ -282,7 +296,7 @@ export function SearchStep({ grounding }: { grounding: SearchGroundingView }) {
           )}
         </section>
       )}
-    </StepDisclosure>
+    </>
   );
 }
 

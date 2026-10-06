@@ -132,3 +132,36 @@ test("a reply's code blocks, tables and message controls have names of their own
   ).toBeAttached();
   await expect(reply.getByRole('button', { name: /^Copy message “a = 1 b = 2/ })).toBeAttached();
 });
+
+test("the model's web search step shows its query, provider and snippets (#203)", async ({
+  page,
+}) => {
+  const reply = await openReply(page, 'fix3-search', [
+    {
+      type: 'tool-web_search',
+      toolCallId: 'search-1',
+      state: 'output-available',
+      input: { query: 'latest stable release of PostgreSQL' },
+      output: {
+        query: 'latest stable release of PostgreSQL',
+        results: [
+          {
+            title: 'PostgreSQL: Versioning Policy',
+            url: 'https://www.postgresql.org/support/versioning/',
+            snippet: 'The PostgreSQL Global Development Group releases a new major version yearly.',
+          },
+        ],
+        provider: 'SearXNG',
+      },
+    },
+    { type: 'text', text: 'PostgreSQL 18 is the latest major release.' },
+  ]);
+  await reply.getByRole('button', { name: 'Searched the web', exact: true }).click();
+  const step = reply.getByRole('button', { name: /^Searched the web for/ });
+  await step.click();
+  const details = reply.locator(`[id="${await step.getAttribute('aria-controls')}"]`);
+  await expect(details.getByText('latest stable release of PostgreSQL')).toBeVisible();
+  await expect(details.getByText('SearXNG')).toBeVisible();
+  await expect(details.getByText(/releases a new major version yearly/)).toBeVisible();
+  await expect(details.getByText('Inputs')).toHaveCount(0);
+});

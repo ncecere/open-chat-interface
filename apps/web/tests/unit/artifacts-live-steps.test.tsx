@@ -249,17 +249,18 @@ describe('artifact tool call details', () => {
   });
 
   it('keep the JSON inputs view for other tools', async () => {
-    const search: UIMessage = reply({
-      type: 'tool-web_search',
+    // A connector's tool (a web search shows what it found instead, #203).
+    const lookup: UIMessage = reply({
+      type: 'tool-mcp__crm__lookup',
       toolCallId: 's1',
       state: 'output-available',
-      input: { query: 'hours' },
-      output: { query: 'hours', results: [] },
+      input: { account: 'Acme' },
+      output: { found: true },
     } as never);
-    await renderSteps(search, false);
-    await click(button('Searched the web'));
-    await click(button("Searched the web for 'hours' · 0 results"));
-    expect(container.textContent).toContain('"query": "hours"');
+    await renderSteps(lookup, false);
+    await click(container.querySelector<HTMLButtonElement>('[data-reply-group="work"] button')!);
+    await click(container.querySelector<HTMLButtonElement>('[data-work-timeline] button')!);
+    expect(container.textContent).toContain('"account": "Acme"');
     expect(container.querySelector('[aria-label^="Show details for"]')).toBeNull();
   });
 });

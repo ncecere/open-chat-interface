@@ -39,9 +39,10 @@ const searched = {
   output: {
     query: 'library opening hours',
     results: [
-      { title: 'Library hours', url: 'https://library.test/hours', snippet: 'RAW_SNIPPET' },
+      { title: 'Library hours', url: 'https://library.test/hours', snippet: 'Open until 8 pm' },
       { title: 'City guide', url: 'https://city.test', snippet: 'more' },
     ],
+    provider: 'SearXNG',
   },
 };
 const awaiting = {
@@ -80,7 +81,7 @@ const blockHeader = () => block()!.querySelector<HTMLButtonElement>('button')!;
 const expandBlock = () => act(async () => blockHeader().click());
 
 describe('tool steps', () => {
-  it('shows a collapsed one-line summary that expands to inputs and a result summary', async () => {
+  it('shows a collapsed one-line summary that expands to what the search found', async () => {
     await show(reply(searched));
     // A reply with tool calls and no reasoning: the work block names what it did.
     expect(blockHeader().textContent).toBe('Searched the web');
@@ -95,14 +96,46 @@ describe('tool steps', () => {
     expect(
       container.querySelector(`#${CSS.escape(toggle.getAttribute('aria-controls')!)}`),
     ).not.toBeNull();
-    expect(container.textContent).toContain('"query": "library opening hours"');
-    expect(container.textContent).toContain('Library hours');
-    // A summary of the result, never the raw snippets.
-    expect(container.textContent).not.toContain('RAW_SNIPPET');
-    // Each result says where it leads, as the search before a reply does.
-    const sources = container.querySelector('ul[aria-label="Sources"]');
-    expect(sources?.textContent).toContain('https://library.test/hours');
+    // As the search before a reply shows it (#203): the query as text, the
+    // provider, and each source with its address and snippet; no JSON.
+    const details = container.querySelector(
+      `#${CSS.escape(toggle.getAttribute('aria-controls')!)}`,
+    )!;
+    const sections = [...details.querySelectorAll('section')].map((section) => [
+      section.querySelector('h3')?.textContent,
+      section.querySelector('h3')?.nextElementSibling?.textContent,
+    ]);
+    expect(sections.slice(0, 2)).toEqual([
+      ['Search query', 'library opening hours'],
+      ['Search provider', 'SearXNG'],
+    ]);
+    expect(details.textContent).not.toContain('{');
+    expect(details.textContent).not.toContain('Inputs');
+    const sources = details.querySelector('ul[aria-label="Sources"]');
     expect(sources?.querySelectorAll('li')).toHaveLength(2);
+    expect(sources?.querySelector('li')?.textContent).toBe(
+      'Library hourshttps://library.test/hoursOpen until 8 pm',
+    );
+  });
+
+  it('says why a web search failed, with its query (#203)', async () => {
+    await show(
+      reply({
+        ...searched,
+        state: 'output-error',
+        output: undefined,
+        errorText: 'Web search is not available right now.',
+      }),
+    );
+    await expandBlock();
+    const toggle = button("Web search for 'library opening hours' failed")!;
+    await act(() => toggle.click());
+    const details = container.querySelector(
+      `#${CSS.escape(toggle.getAttribute('aria-controls')!)}`,
+    )!;
+    expect(details.textContent).toContain('library opening hours');
+    expect(details.textContent).toContain('Web search is not available right now.');
+    expect(details.textContent).not.toContain('{');
   });
 
   it('shows the note when a reply hit its step limit, outside the block', async () => {
