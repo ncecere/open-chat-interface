@@ -146,9 +146,11 @@ began). Moving to another
 conversation closes its browser reader without cancelling the server response.
 
 Load failures show a retry or unavailable state rather than an empty chat.
-A conversation, or the sidebar's projects, that could not load because the
-server was briefly unreachable loads again by itself every few seconds for two
-minutes, so you do not need to press **Retry** once the server is back.
+A conversation, or the sidebar's conversations or projects, that could not
+load because the server was briefly unreachable loads again by itself every few
+seconds for two minutes, so you do not need to press **Retry** or reload once
+the server is back. A new chat whose first reply was cut off this way gets its
+title in the sidebar then too.
 A reply that failed says so in its place, with the reason and **Try again**,
 both as it happens and after a reload.
 Opening another conversation will not send a pending new-chat prompt there.

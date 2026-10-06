@@ -4,6 +4,7 @@ import { Archive, ChevronDown, Folder, GitFork, Pencil, Pin, PinOff } from 'luci
 import { useState } from 'react';
 import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
+import { useAutoRetry } from '~/hooks/use-auto-retry';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
 import { useArchiveThread, useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
@@ -166,7 +167,11 @@ export function ThreadRow({
  * (SidebarProjects).
  */
 export function ThreadList() {
-  const { data: threads, isLoading } = useSidebarThreads();
+  const { data: threads, isLoading, isError, refetch } = useSidebarThreads();
+  // A refresh that failed while the server was unreachable (the end of a new
+  // chat's first reply during an outage) is tried again by itself, as the
+  // projects are (#233); the list kept "New Chat" until a reload (#249).
+  useAutoRetry(isError, () => void refetch());
   const projectsAvailable = useProjectsAvailable();
   const { data: projects } = useSidebarProjects(projectsAvailable);
   const projectNames = new Map(projects?.map((project) => [project.id, project.name]));
