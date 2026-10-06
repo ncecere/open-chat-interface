@@ -107,7 +107,8 @@ export function UsageLimits() {
   return (
     <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
       <div className="mb-3 flex items-center gap-1.5">
-        <p className="text-sm font-semibold">Usage Limits</p>
+        {/* A heading, as the other cards' titles are (#272). */}
+        <h2 className="text-sm font-semibold">Usage Limits</h2>
         <Info
           className="size-3.5 text-[var(--text-muted)]"
           aria-label={
