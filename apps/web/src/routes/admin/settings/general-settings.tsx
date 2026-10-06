@@ -12,13 +12,19 @@ import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { EFFORT_LABELS } from '~/components/admin/role-features-form';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
-import { Field, fieldHintId, invalidFieldProps } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
+import { Select } from '~/components/ui/select';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
 
 type Features = InstanceSettings['features'];
 type FeatureKey = keyof Features;
+
+const EFFORT_OPTIONS = REASONING_EFFORTS.map((effort) => ({
+  value: effort,
+  label: EFFORT_LABELS[effort],
+}));
 
 /**
  * Web search is switched on the Web search page, together with its provider.
@@ -187,25 +193,21 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
         htmlFor="default-effort"
         hint="Where new conversations start. When the selected model or a person's role does not allow it, the composer uses Instant instead. Allowed levels per role are set on Roles & access."
       >
-        <select
+        {/* The shared Select, as every other dropdown on these pages: the
+            native one showed the system's arrow and menu (#305). It reads
+            the Field's hint itself. */}
+        <Select
           id="default-effort"
-          // A native select reads the Field's hint by hand (#295).
-          aria-describedby={fieldHintId('default-effort')}
-          className="h-9 w-full max-w-xs rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-3 text-sm text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="max-w-xs"
           value={draft}
           disabled={save.isPending}
-          onChange={(event) => {
-            setDraft(event.target.value as ReasoningEffort);
+          options={EFFORT_OPTIONS}
+          onChange={(value) => {
+            setDraft(value as ReasoningEffort);
             setErrorMessage(null);
             setSuccessMessage(false);
           }}
-        >
-          {REASONING_EFFORTS.map((effort) => (
-            <option key={effort} value={effort}>
-              {EFFORT_LABELS[effort]}
-            </option>
-          ))}
-        </select>
+        />
       </Field>
 
       <SaveRow

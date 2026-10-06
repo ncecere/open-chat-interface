@@ -107,8 +107,8 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
               setSearch('');
             }
           }}
-          placeholder="Search your threads..."
-          aria-label="Search your threads"
+          placeholder="Search your conversations..."
+          aria-label="Search your conversations"
           aria-describedby="thread-search-hint"
           className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
         />

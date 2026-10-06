@@ -68,7 +68,7 @@ describe('the command palette', () => {
       <ThemeProvider>
         <textarea aria-label="Message" />
         <button type="button" onClick={palette.show}>
-          Search commands and threads
+          Search commands and conversations
         </button>
         <CommandPalette
           open={palette.open}
@@ -90,7 +90,7 @@ describe('the command palette', () => {
 
   it('returns focus to the Search button that opened it', async () => {
     ({ root } = await renderAdmin(<Shell />));
-    const search = button('Search commands and threads');
+    const search = button('Search commands and conversations');
     search.focus();
     await click(search);
     expect(document.activeElement?.getAttribute('role')).toBe('combobox');
@@ -250,7 +250,7 @@ describe('deleting a row', () => {
       return {};
     });
     ({ root } = await renderAdmin(<ThreadList />));
-    const archive = button('Archive thread: First');
+    const archive = button('Archive conversation: First');
     archive.focus();
     await click(archive);
     await settle();

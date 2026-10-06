@@ -97,7 +97,7 @@ describe('auditor (read-only) access', () => {
     expect(isDisabled(searchBox())).toBe(false);
     expect(isDisabled(button('Filter by role'))).toBe(false);
     expect(isDisabled(button('Filter by status'))).toBe(false);
-    expect(isDisabled(button('Threads'))).toBe(false);
+    expect(isDisabled(button('Conversations'))).toBe(false);
 
     expect(document.querySelector('[aria-label="Role for review@example.test"]')).toBeNull();
     expect(findButton('Limits')).toBeUndefined();

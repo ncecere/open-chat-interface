@@ -156,6 +156,21 @@ describe('user detail title (#197)', () => {
   });
 });
 
+describe('conversations, not threads (#305)', () => {
+  it("says Conversations on the account's card and in the People column", async () => {
+    ({ root } = await renderDetail());
+    const labels = () => [...document.querySelectorAll('p')].map((p) => p.textContent?.trim());
+    expect(labels()).toContain('Conversations');
+    expect(labels()).not.toContain('Threads');
+    await cleanup(root!);
+
+    ({ root } = await renderAdmin(<AdminUsersPage />, { path: '/admin/users' }));
+    const headers = [...document.querySelectorAll('th')].map((th) => th.textContent?.trim());
+    expect(headers).toContain('Conversations');
+    expect(headers).not.toContain('Threads');
+  });
+});
+
 describe('user detail actions', () => {
   it('confirms before removing administrator access and sends the new role', async () => {
     ({ root } = await renderDetail());

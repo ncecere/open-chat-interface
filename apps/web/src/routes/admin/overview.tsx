@@ -130,7 +130,7 @@ export function AdminOverviewPage() {
         />
         <div className="min-w-0 p-4 sm:p-5">
           <p className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
-            Threads
+            Conversations
           </p>
           <p className="mt-2 truncate font-semibold text-xl sm:text-2xl">{data.threads.total}</p>
           <p className="mt-1 text-xs">

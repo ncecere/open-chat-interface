@@ -93,11 +93,11 @@ it.each([
 
 it('General › Default reasoning level asks before leaving', async () => {
   await expectAsked(<GeneralSettings settings={settings} />, async () => {
-    const select = byId<HTMLSelectElement>('default-effort');
-    await act(async () => {
-      select.value = 'high';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await click(byId('default-effort'));
+    const high = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (option) => option.textContent === 'High',
+    );
+    await click(high!);
     await settle();
   });
 });

@@ -190,7 +190,9 @@ async function pressEnter() {
 }
 
 function renameButtons(): HTMLButtonElement[] {
-  return [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Rename thread: "]')];
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Rename conversation: "]'),
+  ];
 }
 
 describe('renaming from the sidebar', () => {
@@ -219,12 +221,12 @@ describe('renaming from the sidebar', () => {
     await render();
     const labels = [...document.querySelectorAll('nav button[aria-label], button[aria-label]')]
       .map((button) => button.getAttribute('aria-label') ?? '')
-      .filter((label) => / thread: /.test(label));
+      .filter((label) => / conversation: /.test(label));
     expect(labels).toEqual(
       expect.arrayContaining([
-        'Pin thread: Trip plans',
-        'Rename thread: Trip plans',
-        'Archive thread: Trip plans',
+        'Pin conversation: Trip plans',
+        'Rename conversation: Trip plans',
+        'Archive conversation: Trip plans',
       ]),
     );
     expect(new Set(labels).size).toBe(labels.length);
@@ -251,7 +253,7 @@ describe('renaming from the sidebar', () => {
       return { thread: changed };
     });
     toast.success.mockClear();
-    await click(button('Archive thread: Trip plans'));
+    await click(button('Archive conversation: Trip plans'));
     expect(api.patch).toHaveBeenCalledWith('/threads/t1', { archived: true });
     await vi.waitFor(() => expect(rowTitles()).not.toContain('Trip plans'));
     await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
@@ -310,7 +312,7 @@ describe('renaming from the sidebar', () => {
     await render();
     const projectRow = document.querySelector('ul[aria-label="Conversations in Thesis"]');
     const rename = projectRow?.querySelector<HTMLButtonElement>(
-      'button[aria-label^="Rename thread: "]',
+      'button[aria-label^="Rename conversation: "]',
     );
     expect(rename).toBeTruthy();
     await click(rename!);

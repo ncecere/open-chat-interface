@@ -198,9 +198,10 @@ does **not** guarantee one run per scheduled interval. Staggered replicas can
 run sequentially. A lost database connection releases its lock but cannot cancel
 external work already underway, so job side effects still need safe retries.
 
-Conversation retention considers up to 500 eligible, unlocked threads per pass
-and commits each thread separately. Busy accounts or threads are skipped. A failed
-pass can have completed some threads; retrying continues with those still eligible
+Conversation retention considers up to 500 eligible, unlocked conversations per
+pass and commits each conversation separately. Busy accounts or conversations are
+skipped. A failed pass can have completed some conversations; retrying continues
+with those still eligible
 rather than repeating their storage adjustments.
 
 Conversation summaries (`chat.compact-conversations`) are queued per

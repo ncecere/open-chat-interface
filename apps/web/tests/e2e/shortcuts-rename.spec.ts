@@ -99,7 +99,8 @@ test('renames a conversation with Enter, and Escape cancels', async ({ page }) =
   const id = await createThread(page, original);
   await page.goto(`/chat/${id}`);
 
-  const rename = page.getByRole('button', { name: 'Rename conversation' });
+  // Exact: each sidebar row has its own "Rename conversation: <title>" (#305).
+  const rename = page.getByRole('button', { name: 'Rename conversation', exact: true });
   await rename.click();
   const field = page.getByRole('dialog', { name: 'Rename conversation' }).getByLabel('Name');
   await expect(field).toHaveValue(original);

@@ -91,7 +91,7 @@ have already decided against.
 
 The conversation is given a title automatically from what you asked, and
 appears in the sidebar. To rename it, point at it in the list and choose the
-pencil (**Rename thread**), or use the pencil at the top right of the open
+pencil (**Rename conversation**), or use the pencil at the top right of the open
 conversation; see [Renaming](conversations.md#renaming-a-conversation).
 
 ## Choosing a model

@@ -115,9 +115,16 @@ it('saves the default reasoning level on its own', async () => {
   } as unknown as InstanceSettings;
   ({ root } = await renderAdmin(<GeneralSettings settings={settings} />));
 
-  const select = document.getElementById('default-effort') as HTMLSelectElement;
-  expect(select.value).toBe('instant');
-  expect([...select.options].map((option) => option.textContent)).toEqual([
+  // The shared Select, as on every other admin page, not the native one (#305).
+  const select = document.getElementById('default-effort') as HTMLButtonElement;
+  expect(select.tagName).toBe('BUTTON');
+  expect(select.getAttribute('role')).toBe('combobox');
+  expect(select.textContent).toContain('Instant');
+  // Described by the Field's hint, as the native select was (#295).
+  expect(select.getAttribute('aria-describedby')).toContain('default-effort-hint');
+  await click(select);
+  const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(options().map((option) => option.textContent)).toEqual([
     'Instant',
     'Low',
     'Medium',
@@ -126,14 +133,9 @@ it('saves the default reasoning level on its own', async () => {
   const save = submitButton(select.closest('form')!);
   expect(save.disabled).toBe(true);
 
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(
-      select,
-      'medium',
-    );
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await click(options().find((option) => option.textContent === 'Medium')!);
   await settle();
+  expect(select.textContent).toContain('Medium');
   await click(save);
 
   // Only the level is sent, so the system prompt and features stay as stored.

@@ -75,7 +75,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
             variant="ghost"
             size="icon-sm"
             onClick={onOpenCommandPalette}
-            aria-label="Search commands and threads"
+            aria-label="Search commands and conversations"
             aria-keyshortcuts="Meta+K Control+K"
           >
             <Search />

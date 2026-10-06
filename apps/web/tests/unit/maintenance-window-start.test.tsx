@@ -99,6 +99,6 @@ it('hands over from the announcement to the read-only banner at the start', asyn
     .formatToParts(new Date(endsAt))
     .find((part) => part.type === 'timeZoneName')!.value;
   expect(banner).toMatch(
-    new RegExp(`until about [^:]*\\d{2}:\\d{2}[^:]*${zone.replace(/[+]/g, '\\+')}:`),
+    new RegExp(`until about [^:]*\\d{1,2}:\\d{2}[^:]*${zone.replace(/[+]/g, '\\+')}:`),
   );
 }, 10_000);

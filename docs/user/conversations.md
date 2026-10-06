@@ -297,9 +297,9 @@ under its project, not in the date groupings.
 ## Renaming a conversation
 
 A conversation is named automatically from your first message. To change the
-name, point at the conversation in the sidebar and choose the pencil
-(**Rename thread**), or, with the conversation open, choose the pencil at the
-top right (**Rename conversation**). Type the new name and press Enter to save,
+name, point at the conversation in the sidebar and choose the pencil, or, with
+the conversation open, choose the pencil at the top right (both are **Rename
+conversation**). Type the new name and press Enter to save,
 or Escape to leave it as it was.
 
 Names are 1 to 200 characters; spaces at either end are dropped. The new name

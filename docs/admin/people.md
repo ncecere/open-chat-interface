@@ -9,7 +9,7 @@ status. All three are applied **on the server**, so they describe every account
 rather than the page in front of you — which matters once the directory is
 larger than one page.
 
-Sorting works the same way. Sorting by **Threads** finds the busiest people
+Sorting works the same way. Sorting by **Conversations** finds the busiest people
 across the whole instance, not the busiest fifty on this page.
 
 The list can also be opened already filtered to one role: the people count on

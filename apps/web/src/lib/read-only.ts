@@ -1,5 +1,6 @@
 import { INACTIVE_READ_ONLY_STATUS, type ReadOnlyStatus } from '@oci/shared';
 import { useSyncExternalStore } from 'react';
+import { TIME_OF_DAY } from './utils';
 
 /**
  * Read-only maintenance mode in the browser (v0.11 design, section 9).
@@ -94,7 +95,9 @@ export async function noteReadOnlyResponse(response: Response): Promise<void> {
  * the year in another year ("Sun 10 Jan 2027, 14:30 GMT", #81), in the
  * person's own zone, named: a scheduled window's announcement gives its times
  * in the instance's zone, and an unnamed local time beside it read as a
- * different time (#160).
+ * different time (#160). The time of day is written as every admin list
+ * writes it (`formatDateTime`, "6:30 AM"): a two-digit hour gave "07:30 AM"
+ * here beside "6:30 AM" there (#305).
  */
 export function formatReadOnlyTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
@@ -103,8 +106,7 @@ export function formatReadOnlyTime(iso: string, now = new Date()): string {
   return date.toLocaleString(undefined, {
     ...(sameDay ? {} : { weekday: 'short', day: 'numeric', month: 'short' }),
     ...(sameYear ? {} : { year: 'numeric' }),
-    hour: '2-digit',
-    minute: '2-digit',
+    ...TIME_OF_DAY,
     timeZoneName: 'short',
   });
 }

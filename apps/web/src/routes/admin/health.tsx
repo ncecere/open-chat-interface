@@ -12,6 +12,7 @@ import {
 } from '~/components/admin/admin-ui';
 import { MaintenanceMode } from '~/components/admin/maintenance-mode';
 import { Replicas } from '~/components/admin/operations/replicas';
+import { RUNNING_ICON_CLASS, RunningIcon } from '~/components/admin/operations/runs';
 import { BackgroundWorkSection, UpgradesSection } from '~/components/admin/upgrades';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
@@ -277,7 +278,7 @@ function BackgroundJobs() {
             : failed
               ? CircleAlert
               : running
-                ? TriangleAlert
+                ? RunningIcon
                 : CircleCheck;
           const summary = `${entry ? runSummary(entry) : 'Not run yet'} · runs ${formatJobInterval(job.intervalMs)}`;
           return (
@@ -290,7 +291,7 @@ function BackgroundJobs() {
                     : failed
                       ? 'text-[var(--danger)]'
                       : running
-                        ? 'text-[var(--warning)]'
+                        ? RUNNING_ICON_CLASS
                         : 'text-[var(--success)]',
                 )}
                 aria-label={

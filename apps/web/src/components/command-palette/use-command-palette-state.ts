@@ -79,7 +79,7 @@ export function useCommandPaletteState({
     if (normalizedQuery && searchIsSettled && !threadsAreStale && threads.length > 0) {
       nextGroups.push({
         id: 'threads',
-        label: 'Threads',
+        label: 'Conversations',
         items: threads.map((result) => ({
           id: `thread-${result.thread.id}`,
           label: stripHighlights(result.titleHighlight) || result.thread.title,

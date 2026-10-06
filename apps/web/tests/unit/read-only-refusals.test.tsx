@@ -158,7 +158,7 @@ describe('read-only refusals in the sidebar', () => {
 
   it('says why Pin was refused instead of failing silently', async () => {
     await renderSidebar();
-    await click(button('Pin thread: Trip plans'));
+    await click(button('Pin conversation: Trip plans'));
     await settle();
     expect(writes).toEqual(['PATCH /api/threads/t1']);
     const toast = document.querySelector('[data-sonner-toast]');
@@ -168,7 +168,7 @@ describe('read-only refusals in the sidebar', () => {
 
   it('says why Archive was refused', async () => {
     await renderSidebar();
-    await click(button('Archive thread: Trip plans'));
+    await click(button('Archive conversation: Trip plans'));
     await settle();
     expect(document.querySelector('[data-sonner-toast]')?.textContent).toContain(
       'The conversation could not be archived',
@@ -181,9 +181,9 @@ describe('read-only refusals in the sidebar', () => {
     setReadOnlyStatus(ON);
     await renderSidebar();
     for (const name of [
-      'Pin thread: Trip plans',
-      'Rename thread: Trip plans',
-      'Archive thread: Trip plans',
+      'Pin conversation: Trip plans',
+      'Rename conversation: Trip plans',
+      'Archive conversation: Trip plans',
     ]) {
       expect(button(name).disabled).toBe(true);
       expect(button(name).title).toMatch(/^Read-only for maintenance until about /);

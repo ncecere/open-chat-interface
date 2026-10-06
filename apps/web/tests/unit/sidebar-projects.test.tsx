@@ -423,11 +423,11 @@ describe('sidebar general list', () => {
     };
   }
 
-  it('makes "Go to parent thread" a 24 × 24 target (#193)', async () => {
+  it('makes "Go to parent conversation" a 24 × 24 target (#193)', async () => {
     threads = [thread('f1', 'Forked plan', { parentThreadId: 'u1' })];
     await render();
-    const parent = document.querySelector('a[title="Go to parent thread"]')!;
-    expect(parent.getAttribute('aria-label')).toBe('Go to parent thread of: Forked plan');
+    const parent = document.querySelector('a[title="Go to parent conversation"]')!;
+    expect(parent.getAttribute('aria-label')).toBe('Go to parent conversation of: Forked plan');
     const size = await targetSize(parent);
     expect(size.width).toBeGreaterThanOrEqual(24);
     expect(size.height).toBeGreaterThanOrEqual(24);
