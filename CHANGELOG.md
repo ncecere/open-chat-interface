@@ -141,6 +141,15 @@ release never sees the new kind). The PostgreSQL driver patch
   search box fit from 768 px up (#334, #335).
 - **Accounts:** the verify-email page's Resend button is focusable and says
   why it is off (#337); each auth field is described once (#338).
+- **Outages and email:** a Stop pressed during a database outage reaches the
+  reply: the server waits out a short outage and signals the run, and the page
+  resends the stop and says so until it gets through (#351); a scheduled
+  report whose email failed stays due and is tried again after 15 minutes,
+  1 hour and 4 hours, and every report has a Send now button (#352; migration
+  `0044`).
+- **Read-only mode:** every Settings control that saves or deletes is turned
+  off with the reason, including Edit name, Change password and History's
+  import (#353).
 
 ### Fixed after a seventh QA walk (#310–#331)
 
