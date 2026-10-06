@@ -266,7 +266,12 @@ export function SettingsAttachmentsPage() {
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
         title={confirmTitle}
-        description="It is removed from the conversations it was attached to, and models can no longer read it there. This cannot be undone."
+        // Said in the plural for several files (#179).
+        description={
+          (confirming?.length ?? 0) > 1
+            ? 'They are removed from the conversations they were attached to, and models can no longer read them there. This cannot be undone.'
+            : 'It is removed from the conversations it was attached to, and models can no longer read it there. This cannot be undone.'
+        }
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         errorMessage="The files could not be deleted."

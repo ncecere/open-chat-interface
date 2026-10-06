@@ -27,8 +27,10 @@ const file = (id: string, filename: string, project: { id: string; name: string 
 });
 
 let files: ReturnType<typeof file>[];
+let deletedBytes = 0;
 let root: Root | undefined;
 beforeEach(() => {
+  deletedBytes = 0;
   files = [
     file('a1', 'chat-notes.txt', null),
     file('a2', 'reading.txt', { id: 'p1', name: 'Reading list' }),
@@ -39,8 +41,9 @@ beforeEach(() => {
       return {
         liveBytes: 300 * 1024,
         liveFileCount: 2,
-        pendingBytes: 0,
-        pendingFileCount: 0,
+        // As the server counts them: deleted files wait to be removed from storage.
+        pendingBytes: deletedBytes,
+        pendingFileCount: deletedBytes / 2048,
         artifactBytes: 100 * 1024,
         breakdown: {
           chatFiles: { bytes: 2048, count: 1 },
@@ -53,7 +56,11 @@ beforeEach(() => {
       };
     throw new Error(`Unexpected GET ${path}`);
   });
-  api.delete.mockReset().mockResolvedValue({ ok: true });
+  api.delete.mockReset().mockImplementation(async (path: string) => {
+    files = files.filter((entry) => `/attachments/${entry.id}` !== path);
+    deletedBytes += 2048;
+    return { ok: true };
+  });
 });
 afterEach(async () => {
   if (root) await cleanup(root);
@@ -113,6 +120,32 @@ describe('Settings → Attachments', () => {
     );
     expect(api.delete).toHaveBeenCalledTimes(1);
     expect(api.delete).toHaveBeenCalledWith('/attachments/a1');
+  });
+
+  it('says "they" for several files, and does not put deleted files in a trash (#179)', async () => {
+    files = [
+      file('a1', 'one.txt', null),
+      file('a3', 'two.txt', null),
+      file('a4', 'three.txt', null),
+    ];
+    await render();
+    await click(document.querySelector('[aria-label="Select all visible attachments"]')!);
+    await click(button('Delete (3)'));
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Delete 3 files?');
+    expect(dialog()?.textContent).toContain(
+      'They are removed from the conversations they were attached to, and models can no longer read them there.',
+    );
+    expect(dialog()?.textContent).not.toContain('It is removed');
+    await click(
+      [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Delete')!,
+    );
+    expect(api.delete).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain(
+        '6 KB of deleted files, and of conversations in the trash, no longer counts against your limit.',
+      ),
+    );
+    expect(document.body.textContent).not.toContain('is in the trash');
   });
 
   it('shows an empty list as one compact line', async () => {
