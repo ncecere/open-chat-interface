@@ -15,6 +15,7 @@ import {
 import { useMemo } from 'react';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { NAV_SECTIONS } from '~/lib/admin-navigation';
+import { focusComposerSoon, touchOnly } from '~/lib/focus-after-navigation';
 import { shortcutKeys } from '~/lib/keyboard-shortcuts';
 import { useTheme } from '~/providers/theme-provider';
 import type { CommandPaletteProps, PaletteGroup } from './types';
@@ -39,7 +40,13 @@ export function usePaletteActions({
             keywords: 'start conversation home',
             icon: Plus,
             shortcut: shortcutKeys('new-chat'),
-            onSelect: () => navigate({ to: '/' }),
+            // The cursor goes to the new chat's message box once the palette
+            // has closed, not back to whatever opened it (#251).
+            keepFocusOnClose: !touchOnly(),
+            onSelect: async () => {
+              await navigate({ to: '/' });
+              focusComposerSoon();
+            },
           },
           {
             id: 'history',

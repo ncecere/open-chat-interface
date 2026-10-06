@@ -196,7 +196,7 @@ shortcuts worth learning:
 | Shortcut | Does |
 | --- | --- |
 | `Cmd/Ctrl + K` | Search and commands |
-| `Cmd/Ctrl + Shift + O` | New conversation |
+| `Cmd/Ctrl + Shift + O` | New conversation, with the cursor in its message box |
 | `Cmd/Ctrl + B` | Show or hide the sidebar |
 | `Cmd/Ctrl + /` | Open the model picker, with its search ready for typing |
 | `Enter` | Send the message (`Cmd/Ctrl + Enter` when inverted) |

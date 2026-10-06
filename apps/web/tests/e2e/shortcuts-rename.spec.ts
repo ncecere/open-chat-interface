@@ -80,6 +80,16 @@ test('the global shortcuts work from the composer', async ({ page }) => {
   await composer.click();
   await page.keyboard.press(`${mod}+Shift+O`);
   await expect(page).toHaveURL(/\/$/);
+  // Typing straight away goes into the new chat (#251); not on a touch-only
+  // device, where focusing would open the on-screen keyboard.
+  const touchOnly = await page.evaluate(
+    () => matchMedia('(hover: none) and (pointer: coarse)').matches,
+  );
+  if (!touchOnly) {
+    await expect(composer).toBeFocused();
+    await page.keyboard.type('abc');
+    await expect(composer).toHaveValue('abc');
+  }
 });
 
 test('renames a conversation with Enter, and Escape cancels', async ({ page }) => {

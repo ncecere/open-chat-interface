@@ -9,6 +9,7 @@ import { UserMenu } from '~/components/layout/user-menu';
 import { Button } from '~/components/ui/button';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
+import { focusComposerSoon } from '~/lib/focus-after-navigation';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { loopTab } from '~/lib/tab-loop';
 import { cn } from '~/lib/utils';
@@ -36,6 +37,8 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
   async function handleNewChat() {
     await navigate({ to: '/' });
     if (mobile) onToggle();
+    // After the drawer's own focus return, so the message box wins (#251).
+    focusComposerSoon();
   }
 
   return (

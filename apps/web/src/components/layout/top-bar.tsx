@@ -10,6 +10,7 @@ import { Button } from '~/components/ui/button';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useConversationUnavailable } from '~/lib/conversation-cache';
+import { focusComposerSoon } from '~/lib/focus-after-navigation';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
@@ -86,7 +87,14 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
             aria-label="New chat"
             aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
           >
-            <Link to="/" onClick={() => setTemporary(false)}>
+            <Link
+              to="/"
+              onClick={() => {
+                setTemporary(false);
+                // Also on the home page already, where nothing remounts (#251).
+                focusComposerSoon();
+              }}
+            >
               <Plus />
             </Link>
           </Button>
