@@ -18,7 +18,13 @@ const s3Floors = {
   'src/services/backups/files.ts': { statements: 90, branches: 85, functions: 100 },
   'src/services/backups/restore-files.ts': { statements: 90, branches: 80, functions: 100 },
   'src/routes/admin/backups.ts': { statements: 85, branches: 50, functions: 100 },
-  'src/services/compliance/export.ts': { statements: 90, branches: 78, functions: 90 },
+  // #124 split this module; each part has a floor just under CI's measurement (run 37413586820).
+  // export.ts keeps the timing-dependent schedule callbacks, so its functions vary.
+  'src/services/compliance/export.ts': { statements: 88, branches: 78, functions: 80 },
+  'src/services/compliance/export-lines.ts': { statements: 90, branches: 73, functions: 100 },
+  'src/services/compliance/export-status.ts': { statements: 98, branches: 75, functions: 100 },
+  'src/services/compliance/export-objects.ts': { statements: 98, branches: 95, functions: 100 },
+  'src/services/compliance/export-schedule.ts': { statements: 98, branches: 95, functions: 100 },
   'src/services/compliance/cursor.ts': { statements: 82, branches: 75, functions: 80 },
   'src/services/compliance/holds.ts': { statements: 75, branches: 60, functions: 75 },
   'src/services/compliance/settings.ts': { statements: 98, branches: 95, functions: 100 },
@@ -102,7 +108,12 @@ export default defineConfig({
         'src/services/tools/role-tools.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/tools/web-search.ts': { statements: 95, branches: 90, functions: 100 },
         // v0.9 artifacts: ownership, size and storage admission, tools, the API and guidance.
-        'src/services/artifacts/store.ts': { statements: 90, branches: 78, functions: 100 },
+        // #124 split this module; each part has a floor just under CI's measurement (run 37413586820).
+        'src/services/artifacts/store.ts': { statements: 85, branches: 68, functions: 100 },
+        'src/services/artifacts/detection.ts': { statements: 91, branches: 88, functions: 100 },
+        'src/services/artifacts/mutations.ts': { statements: 88, branches: 77, functions: 100 },
+        'src/services/artifacts/queries.ts': { statements: 98, branches: 90, functions: 100 },
+        'src/services/artifacts/rows.ts': { statements: 98, branches: 95, functions: 100 },
         'src/services/artifacts/guidance.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/tools/artifacts.ts': { statements: 95, branches: 90, functions: 100 },
         'src/routes/artifacts.ts': { statements: 95, branches: 95, functions: 100 },
@@ -124,7 +135,12 @@ export default defineConfig({
         'src/services/chat/pending-approvals.ts': { statements: 95, branches: 90, functions: 100 },
         // v0.8 MCP connectors: outbound network checks, credentials and OAuth, tool execution.
         'src/services/connectors/network.ts': { statements: 92, branches: 90, functions: 100 },
-        'src/services/connectors/oauth.ts': { statements: 80, branches: 65, functions: 95 },
+        // #124 split this module; each part has a floor just under CI's measurement (run 37413586820).
+        'src/services/connectors/oauth.ts': { statements: 74, branches: 48, functions: 100 },
+        'src/services/connectors/oauth-client.ts': { statements: 89, branches: 73, functions: 100 },
+        'src/services/connectors/oauth-connect.ts': { statements: 82, branches: 72, functions: 93 },
+        'src/services/connectors/oauth-refresh.ts': { statements: 80, branches: 72, functions: 93 },
+        'src/services/connectors/oauth-tokens.ts': { statements: 98, branches: 73, functions: 100 },
         'src/services/connectors/client.ts': { statements: 95, branches: 95, functions: 85 },
         'src/services/connectors/tools.ts': { statements: 90, branches: 85, functions: 90 },
         'src/services/connectors/admin.ts': { statements: 90, branches: 78, functions: 95 },
@@ -161,7 +177,13 @@ export default defineConfig({
         // Embedding generations and the vector store (v0.11).
         'src/services/embeddings/generations.ts': { statements: 90, branches: 88, functions: 100 },
         'src/services/embeddings/rebuild.ts': { statements: 95, branches: 85, functions: 100 },
-        'src/services/vector-store/pgvector.ts': { statements: 90, branches: 80, functions: 100 },
+        // #124 split this module; each part has a floor just under CI's measurement (run 37413586820).
+        'src/services/vector-store/pgvector.ts': { statements: 89, branches: 77, functions: 100 },
+        'src/services/vector-store/pgvector-sql.ts': {
+          statements: 94,
+          branches: 93,
+          functions: 100,
+        },
         'src/services/vector-store/index.ts': { statements: 100, branches: 100, functions: 100 },
         'src/services/project-search/embedding.ts': {
           statements: 90,
