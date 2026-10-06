@@ -57,6 +57,7 @@ import {
   assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
+  destroyUnusedThread,
   forkedMessage,
   forkFromMessage,
   getOwnedThread,
@@ -429,6 +430,17 @@ threadRoutes.patch('/:id', async (c) => {
       .returning();
   }
   return c.json({ thread: serializeThread(updated ?? thread) });
+});
+
+/**
+ * Removes the person's conversation if it is still unused (no message, still
+ * untitled), skipping the trash: what the page does when its first message
+ * was refused and the person leaves it (#234). `removed` is false for one in
+ * use, someone else's or one already gone; none of those is an error.
+ */
+threadRoutes.delete('/:id/unused', async (c) => {
+  const user = currentUser(c);
+  return c.json({ removed: await destroyUnusedThread(c.req.param('id'), user.id) });
 });
 
 /**

@@ -156,6 +156,33 @@ export async function purgeUnusedThreads(now = new Date()): Promise<number> {
   return removed.length;
 }
 
+/**
+ * Destroys one of the person's conversations if it is still unused (untitled,
+ * without a message), as the daily cleanup would, but at once: the page that
+ * started it calls this when the person leaves after its first message was
+ * refused (a server restarting, a rate limit), so no empty "New Chat" is left
+ * in their history (#234). Holds nothing to keep, so it skips the trash. A
+ * conversation that has a message by now (a send that was accepted after
+ * all; the turn's transaction locks the conversation as this does) is kept.
+ */
+export async function destroyUnusedThread(threadId: string, userId: string): Promise<boolean> {
+  const removed = await destroyThreads(
+    and(
+      eq(schema.thread.id, threadId),
+      eq(schema.thread.userId, userId),
+      unused(),
+      isNull(schema.thread.lastMessageAt),
+      eq(schema.thread.pinned, false),
+      eq(schema.thread.archived, false),
+      isNull(schema.thread.deletedAt),
+      isNull(schema.thread.importSource),
+      notOnLegalHold(schema.thread.userId),
+    ),
+    { reason: 'unused_expiry', actorUserId: userId },
+  );
+  return removed.length > 0;
+}
+
 export async function listThreads(
   userId: string,
   options?: {

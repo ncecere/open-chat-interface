@@ -433,6 +433,7 @@ Generated from 44 route files.
 | GET | `/api/threads/:id/messages/:messageId/export` | Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX. |
 | DELETE | `/api/threads/:id/permanent` | Destroys a trashed thread now, without waiting out the grace window. |
 | POST | `/api/threads/:id/restore` | — |
+| DELETE | `/api/threads/:id/unused` | Removes the person's conversation if it is still unused (no message, still untitled), skipping the trash: what the page does when its first message was refused and the person leaves it (#234). |
 | GET | `/api/threads/search` | Full-text search over titles and message text, best match first. |
 | GET | `/api/threads/trash` | Trash listing is a fixed path, so it must be declared before `/:id`. |
 | DELETE | `/api/threads/trash` | — |

@@ -17,6 +17,7 @@ import { useHistoryPages } from '~/hooks/use-history-pages';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
+import { useRemoveUnusedConversation } from '~/hooks/use-unused-conversation';
 import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getInitialHistory, type HistoryIsland } from '~/lib/chat-history';
 import { usePageTitle } from '~/lib/document-title';
@@ -152,6 +153,9 @@ function ThreadConversation({
     temporary,
   });
   const { send, stop, regenerate, selectedModel } = session;
+  // Its first message refused and nothing saved: not left in the history as
+  // an empty "New Chat" once the person leaves (#234).
+  useRemoveUnusedConversation(threadId, session.refused && session.messages.length === 0);
   const selectedModelSlug = selectedModel?.slug;
   const navigate = useNavigate();
   const { mutateAsync: branchMessage } = useBranchMessage();
@@ -391,7 +395,9 @@ function ThreadConversation({
                         : 'A reply is pending on the server. You can stop it or wait for saved messages.'}
                     </p>
                   )}
-                  {!session.recovery.stopping && (
+                  {/* Nothing was saved from a refused message: no saved
+                      messages to reload, unless a reply is pending (#234). */}
+                  {!session.recovery.stopping && (!session.refused || waitingOnServer) && (
                     <button
                       type="button"
                       className="text-sm underline"
