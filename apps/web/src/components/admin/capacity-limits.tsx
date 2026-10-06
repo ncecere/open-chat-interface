@@ -21,11 +21,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { type FieldProblem, problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import {
+  type FieldProblem,
+  problemsAt,
+  problemsElsewhere,
+  useFieldProblems,
+} from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 
 /**
@@ -102,7 +107,12 @@ export function CapacityLimitsDialog({
   // A correction clears the complaint about that field (#178) and leaves the
   // others listed while their fields are still wrong (#257).
   const [problems, setProblems] = useFieldProblems(values);
-  const error = problemsText(problems, '\n');
+  // Each at its field (#302); one about no field (a failed save) at the foot.
+  const at = (key: LimitField) => problemsAt(problems, key);
+  const error = problemsElsewhere(
+    problems,
+    FIELDS.map(({ key }) => key),
+  );
   const edited = useEditedSince(values);
   const save = useMutation({
     mutationFn: (limits: CapacityLimits) =>
@@ -166,9 +176,11 @@ export function CapacityLimitsDialog({
             label={field.label}
             htmlFor={`capacity-${field.key}`}
             hint={field.hint}
+            error={at(field.key)}
           >
             <Input
               id={`capacity-${field.key}`}
+              {...invalidFieldProps(`capacity-${field.key}`, at(field.key))}
               inputMode="numeric"
               value={values[field.key]}
               placeholder="No limit"
@@ -270,7 +282,8 @@ export function ProviderCapacitySection() {
       await queryClient.invalidateQueries({ queryKey: CAPACITY_QUERY_KEY });
     },
   });
-  const [formError, setFormError] = useState<string | null>(null);
+  // Shown under the field and described by it, not beside Save (#302).
+  const [waitError, setWaitError] = useState<string | null>(null);
   const changed =
     Boolean(queue && priority) &&
     (maxWait !== String(queue?.maxWaitSeconds) ||
@@ -281,10 +294,10 @@ export function ProviderCapacitySection() {
   function submit(event: FormEvent) {
     event.preventDefault();
     setSaved(false);
-    setFormError(null);
+    setWaitError(null);
     const seconds = Number(maxWait);
     if (!Number.isInteger(seconds) || seconds < 5 || seconds > 1800) {
-      setFormError('The longest wait must be between 5 and 1,800 seconds.');
+      setWaitError('The longest wait must be between 5 and 1,800 seconds.');
       return;
     }
     if (priority) save.mutate({ maxWaitSeconds: seconds, rolePriority: priority });
@@ -404,16 +417,18 @@ export function ProviderCapacitySection() {
                 label="Longest wait (seconds)"
                 htmlFor="capacity-max-wait"
                 hint="A message that waits longer fails with a message to try again later."
+                error={waitError}
               >
                 <Input
                   id="capacity-max-wait"
+                  {...invalidFieldProps('capacity-max-wait', waitError)}
                   inputMode="numeric"
                   value={maxWait}
                   onChange={(event) => {
                     setSaved(false);
                     // Editing the value clears the complaint about it, which
                     // otherwise stayed while Save was disabled (#178).
-                    setFormError(null);
+                    setWaitError(null);
                     save.reset();
                     setMaxWait(event.target.value);
                   }}
@@ -452,10 +467,9 @@ export function ProviderCapacitySection() {
                 hasChanges={changed}
                 isPending={save.isPending}
                 errorMessage={
-                  formError ??
-                  (save.error
+                  save.error
                     ? apiErrorMessage(save.error, 'The queue settings could not be saved.')
-                    : null)
+                    : null
                 }
                 successMessage={saved && !changed ? 'Queue settings saved.' : null}
               />

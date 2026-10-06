@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { EFFORT_LABELS } from '~/components/admin/role-features-form';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
-import { Field, fieldHintId } from '~/components/ui/field';
+import { Field, fieldHintId, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
@@ -324,6 +324,8 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
   const value = Number(draft);
   const valid = /^\d+$/.test(draft) && value >= MIN_TOOL_STEPS && value <= MAX_TOOL_STEPS;
   useReportUnsaved(draft !== String(saved));
+  // Shown under the field and described by it, not beside Save (#302).
+  const [fieldError, setFieldError] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: (maxToolSteps: number) =>
@@ -349,7 +351,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
       onSubmit={(event) => {
         event.preventDefault();
         if (!valid) {
-          setErrorMessage(`Enter a whole number from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}.`);
+          setFieldError(`Enter a whole number from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}.`);
           return;
         }
         if (value !== saved) save.mutate(value);
@@ -358,6 +360,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
       <Field
         label="Tool step limit"
         htmlFor="max-tool-steps"
+        error={fieldError}
         hint={`Steps one reply may spend using tools, from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}. A reply that reaches it answers with what it found, with a note. Default ${DEFAULT_MAX_TOOL_STEPS}.`}
       >
         <Input
@@ -369,10 +372,12 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
           step={1}
           className="max-w-32"
           value={draft}
+          {...invalidFieldProps('max-tool-steps', fieldError)}
           aria-invalid={!valid}
           disabled={save.isPending}
           onChange={(event) => {
             setDraft(event.target.value);
+            setFieldError(null);
             setErrorMessage(null);
             setSuccessMessage(false);
           }}

@@ -1,4 +1,4 @@
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import type { ProtocolDraft } from './provider-draft';
@@ -14,10 +14,13 @@ export function SamlFields({
   protocol,
   disabled,
   onChange,
+  errorAt,
 }: {
   protocol: ProtocolDraft;
   disabled: boolean;
   onChange: (protocol: ProtocolDraft) => void;
+  /** The problem shown at a field, by its key in the draft (#302). */
+  errorAt: (field: string) => string | null;
 }) {
   const set = <Key extends keyof ProtocolDraft>(key: Key, value: ProtocolDraft[Key]) =>
     onChange({ ...protocol, [key]: value });
@@ -27,9 +30,10 @@ export function SamlFields({
       <h3 id="saml-heading" className="text-sm font-semibold text-[var(--text-primary)]">
         SAML 2.0 identity provider
       </h3>
-      <Field label="IdP entity ID / issuer" htmlFor="saml-issuer">
+      <Field label="IdP entity ID / issuer" htmlFor="saml-issuer" error={errorAt('issuer')}>
         <Input
           id="saml-issuer"
+          {...invalidFieldProps('saml-issuer', errorAt('issuer'))}
           value={protocol.issuer}
           disabled={disabled}
           required
@@ -38,9 +42,10 @@ export function SamlFields({
           onChange={(event) => set('issuer', event.target.value)}
         />
       </Field>
-      <Field label="Single sign-on URL" htmlFor="saml-entry-point">
+      <Field label="Single sign-on URL" htmlFor="saml-entry-point" error={errorAt('entryPoint')}>
         <Input
           id="saml-entry-point"
+          {...invalidFieldProps('saml-entry-point', errorAt('entryPoint'))}
           type="url"
           value={protocol.entryPoint}
           disabled={disabled}
@@ -53,10 +58,12 @@ export function SamlFields({
       <Field
         label="IdP signing certificate"
         htmlFor="saml-certificate"
+        error={errorAt('idpCertificate')}
         hint="Paste the PEM certificate. It is submitted once and is not returned by the API."
       >
         <Textarea
           id="saml-certificate"
+          {...invalidFieldProps('saml-certificate', errorAt('idpCertificate'))}
           value={protocol.idpCertificate}
           disabled={disabled}
           required
@@ -71,10 +78,12 @@ export function SamlFields({
       <Field
         label="SP entity ID / audience (optional)"
         htmlFor="saml-audience"
+        error={errorAt('audience')}
         hint="Defaults to this OCI instance URL."
       >
         <Input
           id="saml-audience"
+          {...invalidFieldProps('saml-audience', errorAt('audience'))}
           value={protocol.audience}
           disabled={disabled}
           maxLength={500}

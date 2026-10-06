@@ -1,5 +1,5 @@
 import { USER_ROLES, type UserRole } from '@oci/shared';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import type { PolicyDraft } from './provider-draft';
@@ -10,10 +10,13 @@ export function PolicyFields({
   policy,
   disabled,
   onChange,
+  errorAt,
 }: {
   policy: PolicyDraft;
   disabled: boolean;
   onChange: (policy: PolicyDraft) => void;
+  /** The problem shown at a field, by its key in the draft (#302). */
+  errorAt: (field: string) => string | null;
 }) {
   const set = <Key extends keyof PolicyDraft>(key: Key, value: PolicyDraft[Key]) =>
     onChange({ ...policy, [key]: value });
@@ -24,9 +27,15 @@ export function PolicyFields({
         Access policy
       </h3>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Display name" htmlFor="sso-label" hint="Shown to administrators and users.">
+        <Field
+          label="Display name"
+          htmlFor="sso-label"
+          error={errorAt('label')}
+          hint="Shown to administrators and users."
+        >
           <Input
             id="sso-label"
+            {...invalidFieldProps('sso-label', errorAt('label'))}
             value={policy.label}
             disabled={disabled}
             required
@@ -50,10 +59,12 @@ export function PolicyFields({
       <Field
         label="Allowed email domains"
         htmlFor="sso-domains"
+        error={errorAt('allowedDomains')}
         hint="Separate domains with spaces or commas. Leave blank to allow any domain."
       >
         <Input
           id="sso-domains"
+          {...invalidFieldProps('sso-domains', errorAt('allowedDomains'))}
           value={policy.allowedDomains}
           disabled={disabled}
           placeholder="example.com, subsidiary.example"
@@ -105,10 +116,12 @@ export function PolicyFields({
         <Field
           label="Message for a refused sign-in"
           htmlFor="sso-role-message"
+          error={errorAt('roleRequiredMessage')}
           hint="Shown to somebody who authenticated but matched no role. Leave blank for a generic message."
         >
           <Input
             id="sso-role-message"
+            {...invalidFieldProps('sso-role-message', errorAt('roleRequiredMessage'))}
             value={policy.roleRequiredMessage}
             disabled={disabled}
             maxLength={500}
@@ -134,36 +147,40 @@ export function PolicyFields({
           differently.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Email" htmlFor="sso-claim-email">
+          <Field label="Email" htmlFor="sso-claim-email" error={errorAt('claimEmail')}>
             <Input
               id="sso-claim-email"
+              {...invalidFieldProps('sso-claim-email', errorAt('claimEmail'))}
               value={policy.claimEmail}
               disabled={disabled}
               placeholder="email"
               onChange={(event) => set('claimEmail', event.target.value)}
             />
           </Field>
-          <Field label="Display name" htmlFor="sso-claim-name">
+          <Field label="Display name" htmlFor="sso-claim-name" error={errorAt('claimName')}>
             <Input
               id="sso-claim-name"
+              {...invalidFieldProps('sso-claim-name', errorAt('claimName'))}
               value={policy.claimName}
               disabled={disabled}
               placeholder="name"
               onChange={(event) => set('claimName', event.target.value)}
             />
           </Field>
-          <Field label="Picture" htmlFor="sso-claim-image">
+          <Field label="Picture" htmlFor="sso-claim-image" error={errorAt('claimImage')}>
             <Input
               id="sso-claim-image"
+              {...invalidFieldProps('sso-claim-image', errorAt('claimImage'))}
               value={policy.claimImage}
               disabled={disabled}
               placeholder="picture"
               onChange={(event) => set('claimImage', event.target.value)}
             />
           </Field>
-          <Field label="Subject" htmlFor="sso-claim-subject">
+          <Field label="Subject" htmlFor="sso-claim-subject" error={errorAt('claimSubject')}>
             <Input
               id="sso-claim-subject"
+              {...invalidFieldProps('sso-claim-subject', errorAt('claimSubject'))}
               value={policy.claimSubject}
               disabled={disabled}
               placeholder="sub"

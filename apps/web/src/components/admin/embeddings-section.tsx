@@ -22,7 +22,7 @@ import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { RerankingSection } from '~/components/admin/reranking-section';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
@@ -467,11 +467,9 @@ function EmbeddingsForm({ status }: { status: EmbeddingsStatus }) {
         <Field
           label="Price"
           htmlFor="embeddings-price"
-          hint={
-            invalidPrice
-              ? 'Enter a price of zero or more, or leave it blank.'
-              : 'US dollars per million tokens. Leave blank to record usage at no cost.'
-          }
+          // Under the field in error colour, not in place of its hint (#302).
+          error={invalidPrice ? 'Enter a price of zero or more, or leave it blank.' : null}
+          hint={'US dollars per million tokens. Leave blank to record usage at no cost.'}
         >
           <Input
             id="embeddings-price"
@@ -480,7 +478,10 @@ function EmbeddingsForm({ status }: { status: EmbeddingsStatus }) {
             step="0.01"
             value={draft.price}
             placeholder="0.02"
-            aria-invalid={invalidPrice}
+            {...invalidFieldProps(
+              'embeddings-price',
+              invalidPrice ? 'Enter a price of zero or more, or leave it blank.' : null,
+            )}
             disabled={save.isPending}
             onChange={(event) => edit({ price: event.target.value })}
           />

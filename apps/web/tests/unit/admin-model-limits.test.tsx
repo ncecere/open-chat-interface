@@ -210,6 +210,15 @@ describe('model limits', () => {
   });
 });
 
+/** The error shown at a control, as a screen reader reaches it: null when it has none. */
+function errorAt(id: string): string | null {
+  const control = document.getElementById(id)!;
+  if (control.getAttribute('aria-invalid') !== 'true') return null;
+  const error = document.getElementById(`${id}-error`);
+  expect(control.getAttribute('aria-describedby')?.split(' ')).toContain(`${id}-error`);
+  return error?.textContent ?? null;
+}
+
 describe('the model form and inline rename (#79)', () => {
   it('lists every problem with a new model at once', async () => {
     ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
@@ -221,13 +230,16 @@ describe('the model form and inline rename (#79)', () => {
       (candidate) => candidate.textContent?.trim() === 'Add model',
     );
     await click(add!);
-    const [alert] = alerts(dialog() as HTMLElement);
-    expect(alert?.split('\n')).toEqual([
-      'Max output must be a whole number of tokens.',
+    // Each under its own field, which is marked invalid and described by it (#302).
+    expect(alerts(dialog() as HTMLElement)).toEqual([
       'Upstream model ID is required.',
       'Display name is required.',
       'OCI slug is required.',
+      'Max output must be a whole number of tokens.',
     ]);
+    expect(errorAt('model-display-name')).toBe('Display name is required.');
+    expect(errorAt('model-max-output')).toBe('Max output must be a whole number of tokens.');
+    expect(errorAt('model-description')).toBeNull();
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -241,7 +253,7 @@ describe('the model form and inline rename (#79)', () => {
         )!,
       );
     await add();
-    expect(alerts(dialog() as HTMLElement)[0]).toContain('Display name is required.');
+    expect(alerts(dialog() as HTMLElement)).toContain('Display name is required.');
     await typeInto(field('upstream-model-id'), 'walk3-upstream');
     await typeInto(field('model-display-name'), 'Walk3 model');
     expect(alerts(dialog() as HTMLElement)).toEqual([]);
@@ -259,15 +271,15 @@ describe('the model form and inline rename (#79)', () => {
       (candidate) => candidate.textContent?.trim() === 'Add model',
     );
     await click(add!);
-    const listed = alerts(dialog() as HTMLElement)[0]?.split('\n') ?? [];
+    const listed = alerts(dialog() as HTMLElement);
     expect(listed).toContain('Context window must be a whole number of tokens.');
     expect(listed.some((line) => line.startsWith('OCI slug'))).toBe(true);
     await typeInto(field('model-slug'), 'walk4-good');
-    expect(alerts(dialog() as HTMLElement)[0]?.split('\n')).toEqual(
+    expect(alerts(dialog() as HTMLElement)).toEqual(
       listed.filter((line) => !line.startsWith('OCI slug')),
     );
     await typeInto(field('model-context-window'), '');
-    expect(alerts(dialog() as HTMLElement)[0]).not.toContain('Context window');
+    expect(alerts(dialog() as HTMLElement).join('\n')).not.toContain('Context window');
     await typeInto(field('model-max-output'), '');
     expect(alerts(dialog() as HTMLElement)).toEqual([]);
   });
@@ -284,11 +296,12 @@ describe('the model form and inline rename (#79)', () => {
       (candidate) => candidate.textContent?.trim() === 'Add model',
     );
     await click(add!);
-    const [alert] = alerts(dialog() as HTMLElement);
-    expect(alert?.split('\n')).toEqual([
+    expect(alerts(dialog() as HTMLElement)).toEqual([
       'OCI slug: Use lowercase letters, digits and hyphens, such as gpt-4o.',
       'The output limit must leave room for input: keep it below 7,488 tokens (the context window, less 512).',
     ]);
+    // The room-for-input rule is about both limits; it is shown at the first.
+    expect(errorAt('model-context-window')).toMatch(/^The output limit must leave room/);
     expect(api.post).not.toHaveBeenCalled();
   });
 

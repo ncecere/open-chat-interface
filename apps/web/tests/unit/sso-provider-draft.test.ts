@@ -306,8 +306,11 @@ describe('SSO provider validation errors', () => {
         },
         EMPTY_PROTOCOL,
       ),
-    ).toEqual({ success: false, error: 'Enter a display name.' });
-    expect(toPatchBody(EMPTY_POLICY)).toEqual({ success: false, error: 'Enter a display name.' });
+    ).toMatchObject({ success: false, error: 'Enter a display name.' });
+    expect(toPatchBody(EMPTY_POLICY)).toMatchObject({
+      success: false,
+      error: 'Enter a display name.',
+    });
   });
 
   it.each([
@@ -318,28 +321,30 @@ describe('SSO provider validation errors', () => {
       ...policy,
       claimRoleMappings: [{ draftId: 'local', claim, value, role: 'user' }],
     };
-    expect(toPatchBody(draft)).toEqual({ success: false, error: message });
-    expect(toCreateBody(draft, EMPTY_PROTOCOL)).toEqual({ success: false, error: message });
+    expect(toPatchBody(draft)).toMatchObject({ success: false, error: message });
+    expect(toCreateBody(draft, EMPTY_PROTOCOL)).toMatchObject({ success: false, error: message });
   });
 
   it.each([oidc, saml])('validates provider ID before protocol fields for $kind', (protocol) => {
     expect(
       toCreateBody(policy, { ...protocol, providerId: 'INVALID', issuer: '', clientSecret: '' }),
-    ).toEqual({
+    ).toMatchObject({
       success: false,
       error: 'Provider ID must be lowercase alphanumeric with dashes',
     });
   });
 
   it('keeps OIDC URL validation before client credentials', () => {
-    expect(toCreateBody(policy, { ...oidc, issuer: 'not-a-url', clientId: '' })).toEqual({
+    expect(toCreateBody(policy, { ...oidc, issuer: 'not-a-url', clientId: '' })).toMatchObject({
       success: false,
       error: 'Invalid URL',
     });
   });
 
   it('keeps SAML entry point validation before certificate validation', () => {
-    expect(toCreateBody(policy, { ...saml, entryPoint: 'not-a-url', idpCertificate: '' })).toEqual({
+    expect(
+      toCreateBody(policy, { ...saml, entryPoint: 'not-a-url', idpCertificate: '' }),
+    ).toMatchObject({
       success: false,
       error: 'Invalid URL',
     });
@@ -349,9 +354,26 @@ describe('SSO provider validation errors', () => {
     { protocol: oidc, patch: { clientSecret: '' } },
     { protocol: saml, patch: { idpCertificate: '' } },
   ])('requires the $protocol.kind credential', ({ protocol, patch }) => {
-    expect(toCreateBody(policy, { ...protocol, ...patch })).toEqual({
+    expect(toCreateBody(policy, { ...protocol, ...patch })).toMatchObject({
       success: false,
       error: 'Too small: expected string to have >=1 characters',
     });
+  });
+
+  it('lists every problem at once, each with the field it is about (#302)', () => {
+    const result = toCreateBody(
+      { ...EMPTY_POLICY, allowedDomains: 'x'.repeat(260) },
+      { ...oidc, providerId: 'INVALID', issuer: 'not-a-url', clientSecret: '' },
+    );
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.problems.map((problem) => problem.fields)).toEqual([
+      ['label'],
+      ['allowedDomains'],
+      ['providerId'],
+      ['issuer'],
+      ['clientSecret'],
+    ]);
+    expect(result.problems[0]?.text).toBe('Display name: Enter a display name.');
   });
 });

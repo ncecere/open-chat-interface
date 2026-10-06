@@ -13,7 +13,7 @@ import { EditOnly } from '~/components/admin/admin-access';
 import { Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, fieldErrorId, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
@@ -70,6 +70,10 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
   const providerInfo = draft.provider ? SEARCH_PROVIDERS[draft.provider] : null;
   const savedKeyApplies = keyApplies(saved, draft);
   const isValid = Object.keys(validation).length === 0;
+
+  // Each problem is shown under its field, in error colour, which is marked
+  // invalid and described by it, not in place of the hint (#302).
+  const fieldError = (message?: string) => (showValidation && message) || null;
   const patch = changedSearchSettings(
     saved,
     savedEnabled,
@@ -196,10 +200,13 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
             <Field
               label="Provider"
               htmlFor="search-provider"
-              hint={showValidation ? validation.provider : undefined}
+              error={fieldError(validation.provider)}
             >
               <Select
                 id="search-provider"
+                aria-describedby={
+                  fieldError(validation.provider) ? fieldErrorId('search-provider') : undefined
+                }
                 value={draft.provider ?? 'off'}
                 disabled={save.isPending}
                 onChange={(next) => {
@@ -228,11 +235,8 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
             <Field
               label="Maximum results"
               htmlFor="search-max-results"
-              hint={
-                showValidation && validation.maxResults
-                  ? validation.maxResults
-                  : `Maximum results requested for each search, up to ${MAX_SEARCH_RESULTS}.`
-              }
+              error={fieldError(validation.maxResults)}
+              hint={`Maximum results requested for each search, up to ${MAX_SEARCH_RESULTS}.`}
             >
               <Input
                 id="search-max-results"
@@ -243,7 +247,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
                 step={1}
                 value={draft.maxResults}
                 disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(validation.maxResults)}
+                {...invalidFieldProps('search-max-results', fieldError(validation.maxResults))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, maxResults: event.target.value }));
@@ -256,9 +260,8 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
             <Field
               label={providerInfo.fieldLabel}
               htmlFor="search-base-url"
-              hint={
-                showValidation && validation.baseUrl ? validation.baseUrl : providerInfo.fieldHint
-              }
+              error={fieldError(validation.baseUrl)}
+              hint={providerInfo.fieldHint}
             >
               <Input
                 id="search-base-url"
@@ -266,7 +269,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
                 value={draft.baseUrl}
                 placeholder="https://search.example.edu"
                 disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(validation.baseUrl)}
+                {...invalidFieldProps('search-base-url', fieldError(validation.baseUrl))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, baseUrl: event.target.value }));
@@ -330,9 +333,8 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
               <Field
                 label={savedKeyApplies ? `New ${providerInfo.fieldLabel}` : providerInfo.fieldLabel}
                 htmlFor="search-api-key"
-                hint={
-                  showValidation && validation.apiKey ? validation.apiKey : providerInfo.fieldHint
-                }
+                error={fieldError(validation.apiKey)}
+                hint={providerInfo.fieldHint}
               >
                 <Input
                   id="search-api-key"
@@ -341,7 +343,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
                   maxLength={501}
                   autoComplete="new-password"
                   disabled={save.isPending}
-                  aria-invalid={showValidation && Boolean(validation.apiKey)}
+                  {...invalidFieldProps('search-api-key', fieldError(validation.apiKey))}
                   onChange={(event) => {
                     beginEdit();
                     setApiKey(event.target.value);

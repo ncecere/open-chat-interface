@@ -6,7 +6,7 @@ import { MutationError } from '~/components/admin/admin-ui';
 import { ConfigSourceBadge } from '~/components/admin/config-source';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -66,9 +66,12 @@ export function RateLimitForm({ access }: { access: RoleAccess }) {
       <div className="grid gap-4 sm:grid-cols-3">
         {RATE_FIELDS.map(({ key, label, max }) => {
           const id = `rate-${role}-${RATE_FIELD_IDS[key]}`;
-          const fieldInvalid = invalid.some((field) => field.key === key);
+          // Each field's problem under it, marked invalid and described by it (#302).
+          const fieldError = invalid.some((field) => field.key === key)
+            ? 'Enter a whole number of 1 or more.'
+            : null;
           return (
-            <Field key={key} label={label} htmlFor={id}>
+            <Field key={key} label={label} htmlFor={id} error={fieldError}>
               <Input
                 id={id}
                 type="number"
@@ -76,8 +79,7 @@ export function RateLimitForm({ access }: { access: RoleAccess }) {
                 max={max}
                 step="1"
                 value={draft[key]}
-                aria-invalid={fieldInvalid}
-                aria-describedby={`${id}-source`}
+                {...invalidFieldProps(id, fieldError, `${id}-source`)}
                 onChange={(event) => {
                   save.reset();
                   setSaved(false);
@@ -89,12 +91,6 @@ export function RateLimitForm({ access }: { access: RoleAccess }) {
           );
         })}
       </div>
-      {invalid.length > 0 && (
-        <p role="alert" className="text-[var(--danger)] text-sm">
-          Enter a whole number of 1 or more for{' '}
-          {invalid.map((field) => field.label.toLowerCase()).join(', ')}.
-        </p>
-      )}
 
       <EditOnly>
         <div className="flex items-center justify-end gap-3">

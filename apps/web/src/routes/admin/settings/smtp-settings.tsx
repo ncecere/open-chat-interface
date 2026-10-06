@@ -10,7 +10,7 @@ import {
 } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
@@ -180,10 +180,8 @@ function CredentialEditor({
           <Field
             label={`Replacement ${kind}`}
             htmlFor={`smtp-${kind}`}
-            hint={
-              error ??
-              `A blank field is not sent and will not clear an existing ${kind}. Maximum ${maxLength - 1} characters.`
-            }
+            error={error ?? null}
+            hint={`A blank field is not sent and will not clear an existing ${kind}. Maximum ${maxLength - 1} characters.`}
           >
             <Input
               id={`smtp-${kind}`}
@@ -192,7 +190,7 @@ function CredentialEditor({
               maxLength={maxLength}
               autoComplete={kind === 'password' ? 'new-password' : 'username'}
               disabled={disabled}
-              aria-invalid={Boolean(error)}
+              {...invalidFieldProps(`smtp-${kind}`, error ?? null)}
               onChange={(event) => onValueChange(event.target.value)}
             />
           </Field>
@@ -244,6 +242,10 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
 
   const errors = validateDraft(draft, usernameAction, username, passwordAction, password);
   const isValid = Object.keys(errors).length === 0;
+
+  // Each problem is shown under its field, in error colour, which is marked
+  // invalid and described by it, not in place of the hint (#302).
+  const fieldError = (message?: string) => (showValidation && message) || null;
   const patch = changedSmtpSettings(
     saved,
     draft,
@@ -351,14 +353,15 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
           <Field
             label="SMTP host"
             htmlFor="smtp-host"
-            hint={showValidation && errors.host ? errors.host : 'For example, smtp.example.com.'}
+            error={fieldError(errors.host)}
+            hint={'For example, smtp.example.com.'}
           >
             <Input
               id="smtp-host"
               value={draft.host}
               placeholder="smtp.example.com"
               disabled={save.isPending}
-              aria-invalid={showValidation && Boolean(errors.host)}
+              {...invalidFieldProps('smtp-host', fieldError(errors.host))}
               onChange={(event) => {
                 beginEdit();
                 setDraft((current) => ({ ...current, host: event.target.value }));
@@ -370,7 +373,8 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
             <Field
               label="Port"
               htmlFor="smtp-port"
-              hint={showValidation && errors.port ? errors.port : 'Commonly 465 or 587.'}
+              error={fieldError(errors.port)}
+              hint={'Commonly 465 or 587.'}
             >
               <Input
                 id="smtp-port"
@@ -381,7 +385,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
                 step={1}
                 value={draft.port}
                 disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(errors.port)}
+                {...invalidFieldProps('smtp-port', fieldError(errors.port))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, port: event.target.value }));
@@ -392,11 +396,8 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
             <Field
               label="From address"
               htmlFor="smtp-from-address"
-              hint={
-                showValidation && errors.fromAddress
-                  ? errors.fromAddress
-                  : 'Mailbox value shown as the sender of system email.'
-              }
+              error={fieldError(errors.fromAddress)}
+              hint={'Mailbox value shown as the sender of system email.'}
             >
               <Input
                 id="smtp-from-address"
@@ -404,7 +405,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
                 value={draft.fromAddress}
                 placeholder="noreply@example.com"
                 disabled={save.isPending}
-                aria-invalid={showValidation && Boolean(errors.fromAddress)}
+                {...invalidFieldProps('smtp-from-address', fieldError(errors.fromAddress))}
                 onChange={(event) => {
                   beginEdit();
                   setDraft((current) => ({ ...current, fromAddress: event.target.value }));

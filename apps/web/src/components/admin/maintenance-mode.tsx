@@ -15,14 +15,14 @@ import { useAdminAccess } from '~/components/admin/admin-access';
 import { LoadError, MutationError, Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { api } from '~/lib/api-client';
 import { formatReadOnlyTime, setReadOnlyStatus } from '~/lib/read-only';
 import { formatRelativeTime } from '~/lib/utils';
-import { validationText } from '~/lib/validation-issues';
+import { validationProblems } from '~/lib/validation-issues';
 
 export const MAINTENANCE_QUERY_KEY = ['admin', 'maintenance'] as const;
 
@@ -176,8 +176,10 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
   const [reason, setReason] = useState('');
   const [until, setUntil] = useState('');
   const [confirming, setConfirming] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  useClearOnEdit({ reason, until }, () => setProblem(null));
+  // Each problem under its field, marked invalid and described by it, until
+  // that field is edited (#222, #302).
+  const [problems, setProblems] = useFieldProblems({ reason, until });
+  const at = (field: string) => problemsAt(problems, field);
   // Each form here asks before its edit is left behind (#45, #300).
   useReportUnsaved(reason !== '' || until !== '');
 
@@ -209,7 +211,12 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
     const parsed = updateMaintenanceSchema.safeParse(input);
     if (!parsed.success) {
       setConfirming(false);
-      setProblem(validationText(parsed.error.issues, 'Check the fields.', SWITCH_LABELS));
+      setProblems(
+        validationProblems(parsed.error.issues, SWITCH_LABELS).map(({ field, text }) => ({
+          fields: field ? [field] : [],
+          text,
+        })),
+      );
       return;
     }
     if (!confirming) {
@@ -227,9 +234,11 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
           label="Reason shown to people"
           htmlFor={`${id}-reason`}
           hint="Optional, such as “Upgrading the database”."
+          error={at('reason')}
         >
           <Input
             id={`${id}-reason`}
+            {...invalidFieldProps(`${id}-reason`, at('reason'))}
             value={reason}
             maxLength={500}
             onChange={(event) => setReason(event.target.value)}
@@ -239,18 +248,20 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
           label="Expected end"
           htmlFor={`${id}-until`}
           hint="Optional. Shown to people and sent as Retry-After; nothing ends by itself."
+          error={at('until')}
         >
           <Input
             id={`${id}-until`}
+            {...invalidFieldProps(`${id}-until`, at('until'))}
             type="datetime-local"
             value={until}
             onChange={(event) => setUntil(event.target.value)}
           />
         </Field>
       </div>
-      {problem && (
+      {problemsElsewhere(problems, ['reason', 'until']) && (
         <p role="alert" className="text-[var(--danger)] text-sm">
-          {problem}
+          {problemsElsewhere(problems, ['reason', 'until'])}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">

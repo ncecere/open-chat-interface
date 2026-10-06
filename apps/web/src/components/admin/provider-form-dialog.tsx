@@ -10,13 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { api, apiErrorProblems } from '~/lib/api-client';
 
 export const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
   openai: 'OpenAI',
@@ -34,6 +35,9 @@ const KIND_HINTS: Record<ProviderKind, string> = {
 
 type CredentialAction = 'keep' | 'replace' | 'clear';
 
+/** The form's names for the fields, so each error names the one it is about (#127). */
+const PROVIDER_LABELS = { label: 'Display name', baseUrl: 'Base URL', apiKey: 'API key' };
+
 export function ProviderFormDialog({
   provider,
   onClose,
@@ -50,9 +54,14 @@ export function ProviderFormDialog({
   const [credentialAction, setCredentialAction] = useState<CredentialAction>(
     provider?.hasCredential ? 'keep' : 'replace',
   );
-  const [error, setError] = useState<string | null>(null);
+  const values = { kind, label, baseUrl, enabled, apiKey, credentialAction };
   // Escape or a click outside asks before throwing edits away (#45, #300).
-  const edited = useEditedSince({ kind, label, baseUrl, enabled, apiKey, credentialAction });
+  const edited = useEditedSince(values);
+  // Each problem under its field, marked invalid and described by it, until
+  // that field is edited; one about no field at the foot (#283, #302).
+  const [problems, setProblems] = useFieldProblems(values);
+  const at = (field: string) => problemsAt(problems, field);
+  const error = problemsElsewhere(problems, ['label', 'baseUrl', 'apiKey']);
 
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -68,7 +77,8 @@ export function ProviderFormDialog({
       ]);
       onClose();
     },
-    onError: (cause) => setError(apiErrorMessage(cause, 'The provider could not be saved.')),
+    onError: (cause) =>
+      setProblems(apiErrorProblems(cause, 'The provider could not be saved.', PROVIDER_LABELS)),
   });
 
   const requiresBaseUrl = kind === 'openai-compatible';
@@ -82,10 +92,12 @@ export function ProviderFormDialog({
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    setProblems([]);
 
     if (requiresBaseUrl && !trimmedBaseUrl) {
-      setError('OpenAI-compatible providers require a base URL.');
+      setProblems([
+        { fields: ['baseUrl'], text: 'OpenAI-compatible providers require a base URL.' },
+      ]);
       return;
     }
 
@@ -141,9 +153,15 @@ export function ProviderFormDialog({
           />
         </Field>
 
-        <Field label="Display name" htmlFor="provider-label" hint="Shown only in this dashboard.">
+        <Field
+          label="Display name"
+          htmlFor="provider-label"
+          hint="Shown only in this dashboard."
+          error={at('label')}
+        >
           <Input
             id="provider-label"
+            {...invalidFieldProps('provider-label', at('label'))}
             value={label}
             // The API's limit (upsertProviderSchema), so it cannot be overrun.
             maxLength={80}
@@ -161,9 +179,11 @@ export function ProviderFormDialog({
               ? 'For example http://localhost:11434/v1'
               : 'Override the default endpoint.'
           }
+          error={at('baseUrl')}
         >
           <Input
             id="provider-base-url"
+            {...invalidFieldProps('provider-base-url', at('baseUrl'))}
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
             placeholder="https://api.example.com/v1"
@@ -176,6 +196,7 @@ export function ProviderFormDialog({
             label="API key"
             htmlFor="provider-api-key"
             hint={`A key ending in ${provider.credentialHint ?? '••••'} is stored. Existing keys are never displayed.`}
+            error={at('apiKey')}
           >
             <div className="flex flex-col gap-2">
               <Select
@@ -192,6 +213,7 @@ export function ProviderFormDialog({
               {credentialAction === 'replace' && (
                 <Input
                   id="provider-api-key"
+                  {...invalidFieldProps('provider-api-key', at('apiKey'))}
                   type="password"
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
@@ -211,9 +233,11 @@ export function ProviderFormDialog({
                 ? 'Leave blank for endpoints that need no key.'
                 : 'Required while the provider is enabled.'
             }
+            error={at('apiKey')}
           >
             <Input
               id="provider-api-key"
+              {...invalidFieldProps('provider-api-key', at('apiKey'))}
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
@@ -239,7 +263,7 @@ export function ProviderFormDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           >
             {error}
           </p>

@@ -1,7 +1,7 @@
 import { KeyRound } from 'lucide-react';
 import { SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
@@ -11,6 +11,10 @@ import type { StorageSettingsController } from './use-storage-settings';
 export function S3Panel({ controller }: { controller: StorageSettingsController }) {
   const { draft, setDraft, showValidation, validation, save, beginEdit, health, hasChanges } =
     controller;
+
+  // Each problem is shown under its field, in error colour, which is marked
+  // invalid and described by it, not in place of the hint (#302).
+  const fieldError = (message?: string) => (showValidation && message) || null;
 
   return (
     <SettingsSection
@@ -28,35 +32,27 @@ export function S3Panel({ controller }: { controller: StorageSettingsController 
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field
-            label="Bucket"
-            htmlFor="s3-bucket"
-            hint={showValidation && validation.bucket ? validation.bucket : undefined}
-          >
+          <Field label="Bucket" htmlFor="s3-bucket" error={fieldError(validation.bucket)}>
             <Input
               id="s3-bucket"
               value={draft.bucket}
               maxLength={255}
               disabled={save.isPending}
-              aria-invalid={showValidation && Boolean(validation.bucket)}
+              {...invalidFieldProps('s3-bucket', fieldError(validation.bucket))}
               onChange={(event) => {
                 beginEdit();
                 setDraft((current) => ({ ...current, bucket: event.target.value }));
               }}
             />
           </Field>
-          <Field
-            label="Region"
-            htmlFor="s3-region"
-            hint={showValidation && validation.region ? validation.region : undefined}
-          >
+          <Field label="Region" htmlFor="s3-region" error={fieldError(validation.region)}>
             <Input
               id="s3-region"
               value={draft.region}
               maxLength={100}
               placeholder="us-east-1"
               disabled={save.isPending}
-              aria-invalid={showValidation && Boolean(validation.region)}
+              {...invalidFieldProps('s3-region', fieldError(validation.region))}
               onChange={(event) => {
                 beginEdit();
                 setDraft((current) => ({ ...current, region: event.target.value }));
@@ -68,10 +64,9 @@ export function S3Panel({ controller }: { controller: StorageSettingsController 
         <Field
           label="Endpoint (optional)"
           htmlFor="s3-endpoint"
+          error={fieldError(validation.endpoint)}
           hint={
-            showValidation && validation.endpoint
-              ? validation.endpoint
-              : 'Leave blank for AWS S3. Use an absolute HTTP(S) URL for MinIO or another compatible service.'
+            'Leave blank for AWS S3. Use an absolute HTTP(S) URL for MinIO or another compatible service.'
           }
         >
           <Input
@@ -81,7 +76,7 @@ export function S3Panel({ controller }: { controller: StorageSettingsController 
             maxLength={2_048}
             placeholder="https://s3.example.com"
             disabled={save.isPending}
-            aria-invalid={showValidation && Boolean(validation.endpoint)}
+            {...invalidFieldProps('s3-endpoint', fieldError(validation.endpoint))}
             onChange={(event) => {
               beginEdit();
               setDraft((current) => ({ ...current, endpoint: event.target.value }));
@@ -92,11 +87,8 @@ export function S3Panel({ controller }: { controller: StorageSettingsController 
         <Field
           label="Access key ID"
           htmlFor="s3-access-key-id"
-          hint={
-            showValidation && validation.accessKeyId
-              ? validation.accessKeyId
-              : 'Stored as connection metadata; this is not the secret access key.'
-          }
+          error={fieldError(validation.accessKeyId)}
+          hint={'Stored as connection metadata; this is not the secret access key.'}
         >
           <Input
             id="s3-access-key-id"
@@ -104,7 +96,7 @@ export function S3Panel({ controller }: { controller: StorageSettingsController 
             maxLength={255}
             autoComplete="off"
             disabled={save.isPending}
-            aria-invalid={showValidation && Boolean(validation.accessKeyId)}
+            {...invalidFieldProps('s3-access-key-id', fieldError(validation.accessKeyId))}
             onChange={(event) => {
               beginEdit();
               setDraft((current) => ({ ...current, accessKeyId: event.target.value }));
