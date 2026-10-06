@@ -9,6 +9,7 @@ import { UserMenu } from '~/components/layout/user-menu';
 import { Button } from '~/components/ui/button';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
+import { useConfirmRemovedConversation } from '~/hooks/use-unused-conversation';
 import { focusComposerSoon } from '~/lib/focus-after-navigation';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { loopTab } from '~/lib/tab-loop';
@@ -29,6 +30,8 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const createThread = useCreateThread();
+  // After a reload that removed an unused conversation, not listed (#266).
+  useConfirmRemovedConversation();
 
   useEffect(() => {
     if (mobile && open) closeButtonRef.current?.focus();

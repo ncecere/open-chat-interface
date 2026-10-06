@@ -183,7 +183,9 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** `keepalive` lets a request made as the page closes outlive it (#266). */
+  delete: <T>(path: string, options?: Pick<RequestInit, 'keepalive'>) =>
+    request<T>(path, { ...options, method: 'DELETE' }),
   /** A file response as a blob; failures are ApiErrors with the API's message. */
   download: async (path: string): Promise<DownloadedFile> => {
     const response = await send(path);

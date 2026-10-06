@@ -207,3 +207,12 @@ it('keeps the draft and previous handover untouched when thread creation fails',
   expect(mocks.composer?.value).toBe('Question');
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
+
+it('starts with the unsent text of a conversation a reload removed, once (#266)', async () => {
+  await act(() => root.unmount());
+  sessionStorage.setItem('oci.restoredDraft', 'Walk4 drain send');
+  root = createRoot(container);
+  await act(() => root.render(<ChatHomePage />));
+  expect(mocks.composer?.value).toBe('Walk4 drain send');
+  expect(sessionStorage.getItem('oci.restoredDraft')).toBeNull();
+});

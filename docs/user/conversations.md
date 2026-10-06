@@ -177,8 +177,10 @@ Whenever a message is refused like this, or because you are sending too quickly
 or have reached a usage limit, it is not sent: its text goes back into the
 message box and its files stay attached, so you can send it again once the
 reason is dealt with. The conversation is left as it was. If it was the
-first message of a new chat and you leave it without sending again, the empty
-chat is removed rather than left in your history as "New Chat".
+first message of a new chat and you leave it without sending again (for
+another page, or by closing or reloading the tab), the empty chat is removed
+rather than left in your history as "New Chat". Reloading the tab opens a new
+chat with your text back in the message box; attach any files again.
 
 ## Long conversations
 

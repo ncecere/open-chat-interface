@@ -28,6 +28,7 @@ import {
 } from '~/lib/chat-search-params';
 import { returnPathFromSearch, signInSearch } from '~/lib/return-path';
 import { noteSessionConfirmed, onSessionEnded, SIGNED_OUT_PARAM } from '~/lib/session-ended';
+import { redirectRemovedConversation } from '~/lib/unused-conversation-route';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
@@ -177,6 +178,9 @@ const chatThreadRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/chat/$threadId',
   validateSearch: validateChatThreadSearch,
+  // The conversation this tab removed as it closed or reloaded, never used
+  // (#266): a new chat with its unsent text, not "unavailable".
+  beforeLoad: ({ params }) => redirectRemovedConversation(params.threadId),
   component: function ChatThreadRoute() {
     const { threadId } = chatThreadRoute.useParams();
     const { message } = chatThreadRoute.useSearch();

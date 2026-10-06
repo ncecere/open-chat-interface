@@ -154,8 +154,11 @@ function ThreadConversation({
   });
   const { send, stop, regenerate, selectedModel } = session;
   // Its first message refused and nothing saved: not left in the history as
-  // an empty "New Chat" once the person leaves (#234).
-  useRemoveUnusedConversation(threadId, session.refused && session.messages.length === 0);
+  // an empty "New Chat" once the person leaves, the app or the tab (#234, #266).
+  useRemoveUnusedConversation(threadId, session.refused && session.messages.length === 0, {
+    draft: session.draft,
+    projectId,
+  });
   const selectedModelSlug = selectedModel?.slug;
   const navigate = useNavigate();
   const { mutateAsync: branchMessage } = useBranchMessage();

@@ -14,6 +14,7 @@ import { apiErrorMessage } from '~/lib/api-client';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
+import { clearRestoredDraft, peekRestoredDraft } from '~/lib/unused-conversation';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -56,7 +57,9 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   }, [projectId, temporaryMode, setTemporary]);
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
-  const [draft, setDraftValue] = useState('');
+  // The unsent text of a conversation this tab removed as it reloaded (#266).
+  const [draft, setDraftValue] = useState(peekRestoredDraft);
+  useEffect(() => clearRestoredDraft(), []);
   /**
    * One conversation per send (v0.10.2). `started` is set synchronously before
    * the first await, so a key that repeats, an automated browser flooding

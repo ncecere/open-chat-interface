@@ -1314,8 +1314,10 @@ replies. On the first `SIGTERM` (or `SIGINT`) it:
    twice, and the person sees nothing unless every attempt is refused; then
    it says the server is restarting and puts the message back in the
    composer, as for any other refused send. If that was the first message of
-   a new chat and the person leaves it instead of sending again, the empty
-   conversation is removed rather than left in their history. Every
+   a new chat and the person leaves it instead of sending again (for another
+   page, or by closing or reloading the tab), the empty conversation is
+   removed rather than left in their history; a reload opens a new chat with
+   the text. Every
    other request is answered as usual, with `Connection: close`, so a proxy's
    pooled connections stop carrying new requests to the replica.
 3. Stops its background jobs: no new runs start on it (another replica's tick
