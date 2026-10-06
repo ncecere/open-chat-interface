@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminReportsPage, nextRunText } from '../../src/routes/admin/reports';
-import { button, cleanup, click, renderAdmin, typeInto } from './admin-test-utils';
+import { button, buttonNames, cleanup, click, renderAdmin, typeInto } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -95,4 +95,17 @@ it('shows an empty list as the other admin lists do (#113)', async () => {
   const empty = document.querySelector('.border-dashed');
   expect(empty?.textContent).toContain('No reports scheduled.');
   expect(empty?.querySelector('svg')).not.toBeNull();
+});
+
+it("names each report's Pause and Delete buttons for the report (#175)", async () => {
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  expect(buttonNames()).toEqual(
+    expect.arrayContaining([
+      'Edit Walk monthly usage',
+      'Pause Walk monthly usage',
+      'Delete Walk monthly usage',
+    ]),
+  );
+  expect(buttonNames()).not.toContain('Pause');
+  expect(buttonNames()).not.toContain('Delete');
 });

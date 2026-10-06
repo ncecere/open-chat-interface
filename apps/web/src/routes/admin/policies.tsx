@@ -284,7 +284,13 @@ export function AdminPoliciesPage() {
                         <Trash2 />
                         Delete
                       </Button>
-                      <Button variant="secondary" size="sm" onClick={() => setPublishing(policy)}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        // Named for its version, as View, Edit and Delete are (#175).
+                        aria-label={`Publish ${policy.title} v${policy.version}`}
+                        onClick={() => setPublishing(policy)}
+                      >
                         <Send />
                         Publish
                       </Button>

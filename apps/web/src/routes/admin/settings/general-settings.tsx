@@ -137,6 +137,7 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
       </Field>
 
       <SaveRow
+        subject="the system instructions"
         hasChanges={hasChanges}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -204,6 +205,7 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
       </Field>
 
       <SaveRow
+        subject="the default reasoning level"
         hasChanges={draft !== saved}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -298,6 +300,7 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
       )}
 
       <SaveRow
+        subject="the features"
         hasChanges={hasChanges}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -372,6 +375,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
       </Field>
 
       <SaveRow
+        subject="the tool step limit"
         hasChanges={draft !== String(saved)}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -427,6 +431,7 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
         }}
       />
       <SaveRow
+        subject="conversation summaries"
         hasChanges={draft !== saved}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -485,6 +490,7 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
         }}
       />
       <SaveRow
+        subject="editorial diagrams"
         hasChanges={draft !== saved}
         isPending={save.isPending}
         errorMessage={errorMessage}

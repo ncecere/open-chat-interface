@@ -295,11 +295,18 @@ export function SaveRow({
   isPending,
   errorMessage,
   successMessage,
+  subject,
 }: {
   hasChanges: boolean;
   isPending: boolean;
   errorMessage: string | null;
   successMessage: string | null;
+  /**
+   * What the button saves, where a page has several ("the system
+   * instructions"): its accessible name becomes "Save changes to …" so the
+   * buttons are told apart (#175). The visible text stays "Save changes".
+   */
+  subject?: string;
 }) {
   // A read-only viewer cannot change anything, so there is nothing to save.
   const { canEdit } = useAdminAccess();
@@ -320,7 +327,12 @@ export function SaveRow({
           </p>
         )}
       </div>
-      <Button type="submit" variant="primary" disabled={!hasChanges || isPending}>
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={!hasChanges || isPending}
+        aria-label={subject ? `Save changes to ${subject}` : undefined}
+      >
         {isPending && <Spinner />}
         {isPending ? 'Saving…' : 'Save changes'}
       </Button>

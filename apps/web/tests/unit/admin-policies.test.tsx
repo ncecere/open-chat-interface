@@ -3,7 +3,15 @@ import type { UsagePolicy } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminPoliciesPage } from '../../src/routes/admin/policies';
-import { button, cleanup, click, dialog, findButton, renderAdmin } from './admin-test-utils';
+import {
+  button,
+  buttonNames,
+  cleanup,
+  click,
+  dialog,
+  findButton,
+  renderAdmin,
+} from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -81,7 +89,7 @@ it('deletes a draft after confirmation', async () => {
 
 it('asks before publishing, since everyone must accept again', async () => {
   ({ root } = await renderAdmin(<AdminPoliciesPage />));
-  await click(button('Publish'));
+  await click(button('Publish Walk AUP draft v2'));
   expect(api.post).not.toHaveBeenCalled();
   expect(dialog()?.textContent).toContain('cannot be changed or withdrawn');
 
@@ -90,4 +98,15 @@ it('asks before publishing, since everyone must accept again', async () => {
   );
   if (confirm) await click(confirm);
   expect(api.post).toHaveBeenCalledWith('/admin/policies/policy-2/publish');
+});
+
+it("names each version's Publish button for its version (#175)", async () => {
+  api.get.mockResolvedValue({
+    policies: [{ ...draft, id: 'policy-3', version: 3, title: 'Walk AUP second draft' }, draft],
+  });
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  expect(buttonNames().filter((name) => name.startsWith('Publish'))).toEqual([
+    'Publish Walk AUP second draft v3',
+    'Publish Walk AUP draft v2',
+  ]);
 });

@@ -224,3 +224,10 @@ export function validationFailure(schema: ZodType, body: unknown): ApiError {
   const details = JSON.parse(JSON.stringify(result.error.issues));
   return new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', details);
 }
+
+/** Each button's accessible name: its aria-label, else its text. */
+export function buttonNames(scope: ParentNode = document): string[] {
+  return [...scope.querySelectorAll('button')].map(
+    (candidate) => candidate.getAttribute('aria-label') ?? candidate.textContent?.trim() ?? '',
+  );
+}

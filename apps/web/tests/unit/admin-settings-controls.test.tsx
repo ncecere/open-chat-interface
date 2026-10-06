@@ -5,7 +5,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AuthenticationSettingsForm } from '../../src/routes/admin/settings/authentication-settings';
 import { GeneralSettings } from '../../src/routes/admin/settings/general-settings';
-import { cleanup, click, renderAdmin, settle } from './admin-test-utils';
+import { buttonNames, cleanup, click, renderAdmin, settle } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -140,4 +140,36 @@ it('saves the default reasoning level on its own', async () => {
   expect(api.patch).toHaveBeenCalledExactlyOnceWith('/admin/settings', { defaultEffort: 'medium' });
   const parsed = updateInstanceSettingsSchema.safeParse(api.patch.mock.calls[0]?.[1]);
   expect(parsed.success && parsed.data).toEqual({ defaultEffort: 'medium' });
+});
+
+it('names each Save changes button for what it saves (#175)', async () => {
+  const settings = {
+    defaultSystemPrompt: null,
+    defaultEffort: 'instant',
+    maxToolSteps: 8,
+    autoCompact: true,
+    diagramGuidance: true,
+    storage: { driver: 'local' },
+    features: {
+      shareLinks: false,
+      temporaryChat: true,
+      webSearch: false,
+      attachments: false,
+      branching: true,
+    },
+  } as unknown as InstanceSettings;
+  ({ root } = await renderAdmin(<GeneralSettings settings={settings} />));
+  const saves = [...document.querySelectorAll('button')].filter(
+    (candidate) => candidate.textContent?.trim() === 'Save changes',
+  );
+  const names = buttonNames().filter((name) => name.startsWith('Save changes'));
+  expect(saves).toHaveLength(6);
+  expect(names).toEqual([
+    'Save changes to the system instructions',
+    'Save changes to the default reasoning level',
+    'Save changes to the tool step limit',
+    'Save changes to conversation summaries',
+    'Save changes to editorial diagrams',
+    'Save changes to the features',
+  ]);
 });
