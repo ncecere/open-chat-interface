@@ -1362,7 +1362,8 @@ passive checks on real requests: a `503` from it, or a connection that is
 refused or takes longer than 1 s, marks it down for 3 s
 (`fail_duration 3s`, `max_fails 1`, `unhealthy_status 503`,
 `dial_timeout 1s`), and `lb_try_duration 5s` sends a request whose
-connection failed to another replica, whatever its method. Each further
+connection failed to another replica, whatever its method, trying again
+every 250 ms (`lb_try_interval 250ms`). Each further
 refused turn marks a draining replica down again. The mark outlasts the
 client's two resends of a refused turn (1 s apart), which may arrive through
 another web replica with its own mark. It is shorter than
@@ -1380,7 +1381,17 @@ or (readiness only) its database has been unreachable for more than 30 s. A
 request that fails because the database connection dropped answers `500`
 marked retryable instead (see [Database failover](#database-failover)).
 Keep it that way: an instance-wide `503`
-from every replica would mark them all down for 10 s.
+from every replica would mark them all down for 3 s at a time.
+
+While no replica can be reached (the API stopped or restarting), each
+request to `/api` waits the 5 s and answers `502`. The web container logs
+one error line for each (`"logger":"http.log.error"`, `no upstreams
+available` or the failed connection). While the API name does not resolve,
+the failed lookup behind it (`failed getting dynamic upstreams`) is logged
+once every 10 s rather than on every try: the proxy's own messages (`http.handlers.reverse_proxy`) go to
+a logger that keeps the first of each message every 10 s and one in 1,000
+after it. Before, a 40-second API restart wrote over 1,000 lines. See
+[Logs](#logs).
 
 ### Kubernetes
 
@@ -1566,6 +1577,11 @@ The same applies to Better Auth's messages, which go through the same logger
 (marked `"component": "better-auth"`), and to the error text stored and shown
 for a failed job run, background migration, backup, compliance export or file
 embedding.
+
+The web container's Caddy writes JSON lines to standard error. With the API
+unreachable it logs one error line per failed `/api` request and, while the
+API name does not resolve, the failed lookup once every 10 s; see
+[Docker Compose and the bundled proxy](#docker-compose-and-the-bundled-proxy).
 
 ## Service objectives and alerts
 
