@@ -80,6 +80,8 @@ describe.skipIf(!available)('live: role changes, bans and revocations apply at o
     app.use('/api/*', sessionMiddleware);
     app.get('/api/probe', requireAuth, (c) => c.json({ role: c.get('user')?.role }));
     app.get('/api/admin-probe', requireAdmin, (c) => c.json({ ok: true }));
+    const { meRoutes } = await import('../../routes/me.js');
+    app.route('/api/me', meRoutes);
   });
 
   afterAll(async () => {
@@ -130,6 +132,58 @@ describe.skipIf(!available)('live: role changes, bans and revocations apply at o
     expect((await get('/api/probe', revoked.cookie)).status).toBe(200);
     await pool.db.execute(sql`delete from session where user_id = ${revoked.id}`);
     expect((await get('/api/probe', revoked.cookie)).status).toBe(401);
+  });
+
+  // Settings -> Account -> Devices said a device signed out there "may stay
+  // signed in for up to five minutes", from the days of the cookie cache
+  // (#235). Through the Devices endpoints themselves: at once.
+  it('signs a device out from Devices on its next request', async () => {
+    const owner = await signedInAdmin();
+    const [{ email }] = (await pool.db.execute<{ email: string }>(
+      sql`select email from "user" where id = ${owner.id}`,
+    )) as unknown as [{ email: string }];
+    const signIn = async () => {
+      const response = await app.request('/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin },
+        body: JSON.stringify({ email, password: PASSWORD }),
+      });
+      return response.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+    };
+    const [laptop, phone] = [await signIn(), await signIn()];
+    // The laptop's session, as Devices lists it (by its cookie's token).
+    const token = decodeURIComponent(/oci\.session_token=([^;]+)/.exec(laptop)![1]!).split('.')[0];
+    const [{ id: laptopId }] = (await pool.db.execute<{ id: string }>(
+      sql`select id from session where token = ${token}`,
+    )) as unknown as [{ id: string }];
+    const { sessions } = (await (await get('/api/me/sessions', owner.cookie)).json()) as {
+      sessions: { id: string; current: boolean }[];
+    };
+    expect(sessions.find((session) => session.id === laptopId)?.current).toBe(false);
+    for (const cookie of [laptop, phone])
+      expect((await get('/api/probe', cookie)).status).toBe(200);
+
+    // Sign out one device: the next request it makes is refused.
+    const removed = await app.request(`/api/me/sessions/${laptopId}`, {
+      method: 'DELETE',
+      headers: { cookie: owner.cookie, origin },
+    });
+    expect(removed.status).toBe(200);
+    expect((await get('/api/probe', laptop)).status).toBe(401);
+    expect((await get('/api/probe', phone)).status).toBe(200);
+
+    // Sign out all other devices: the other one too, at once.
+    const all = await app.request('/api/me/sessions/revoke-others', {
+      method: 'POST',
+      headers: { cookie: owner.cookie, origin },
+    });
+    expect(all.status).toBe(200);
+    for (const cookie of [laptop, phone])
+      expect((await get('/api/probe', cookie)).status).toBe(401);
+    expect((await get('/api/probe', owner.cookie)).status).toBe(200);
   });
 
   it('ends every session when the password is reset from the emailed link (#139)', async () => {
