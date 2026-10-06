@@ -175,7 +175,18 @@ it('Providers › Capacity: the longest-wait error is at its field', async () =>
   expect(api.put).not.toHaveBeenCalled();
 });
 
-it('Add provider: a missing base URL is at the Base URL field', async () => {
+it('Add provider: a missing base URL and API key refused by the API are each at their field', async () => {
+  // As the API refuses it: the configuration rules, each with its field (#283).
+  api.post.mockRejectedValue(
+    new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', [
+      {
+        code: 'custom',
+        path: ['baseUrl'],
+        message: 'OpenAI-compatible providers require a base URL.',
+      },
+      { code: 'custom', path: ['label'], message: 'A display name is required.' },
+    ]),
+  );
   ({ root } = await renderAdmin(
     <Dialog open>
       <ProviderFormDialog provider={null} onClose={() => {}} />
@@ -190,6 +201,8 @@ it('Add provider: a missing base URL is at the Base URL field', async () => {
   // Spaces pass the browser's own required check; the form trims them away.
   await typeInto(document.getElementById('provider-base-url') as HTMLInputElement, '   ');
   await submitIn(dialog()!, 'Add provider');
-  expect(fieldError('provider-base-url')).toBe('OpenAI-compatible providers require a base URL.');
-  expect(api.post).not.toHaveBeenCalled();
+  expect(fieldError('provider-base-url')).toBe(
+    'Base URL: OpenAI-compatible providers require a base URL.',
+  );
+  expect(fieldError('provider-label')).toBe('Display name: A display name is required.');
 });

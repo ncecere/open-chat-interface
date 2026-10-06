@@ -93,13 +93,9 @@ export function ProviderFormDialog({
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setProblems([]);
-
-    if (requiresBaseUrl && !trimmedBaseUrl) {
-      setProblems([
-        { fields: ['baseUrl'], text: 'OpenAI-compatible providers require a base URL.' },
-      ]);
-      return;
-    }
+    // No check of its own first: the API reports a missing base URL with a
+    // blank name or a missing key in one refusal, each at its field; stopping
+    // at the base URL left the others for the next save (#301, #320).
 
     save.mutate(
       provider

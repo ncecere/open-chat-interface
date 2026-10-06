@@ -1,4 +1,5 @@
 import type { ProviderKind, UpdateProviderInput } from '@oci/shared';
+import type { z } from 'zod';
 
 export interface ProviderCredentialState {
   kind: ProviderKind;
@@ -89,4 +90,33 @@ export function getProviderConfigurationIssues(
   }
 
   return issues;
+}
+
+/**
+ * `schema` with the configuration rules above checked alongside it, so every
+ * problem comes back in one refusal (#283): a base URL the schema refused and
+ * a missing API key were reported one save apart. `merged` turns the fields
+ * the schema accepts into the provider they would make; a field the schema
+ * refuses is left to that refusal, so it is not reported twice.
+ */
+export function withConfigurationIssues<T extends z.ZodObject>(
+  schema: T,
+  merged: (accepted: Partial<z.infer<T>>) => ProviderCredentialState | null,
+) {
+  return schema.superRefine((body, ctx) => {
+    const raw = (body ?? {}) as Record<string, unknown>;
+    const accepted: Record<string, unknown> = {};
+    const refused = new Set<string>();
+    for (const [key, field] of Object.entries(schema.shape)) {
+      const result = (field as z.ZodType).safeParse(raw[key]);
+      if (!result.success) refused.add(key);
+      else if (result.data !== undefined) accepted[key] = result.data;
+    }
+    const provider = merged(accepted as Partial<z.infer<T>>);
+    if (!provider) return;
+    for (const issue of getProviderConfigurationIssues(provider)) {
+      if (refused.has(issue.field)) continue;
+      ctx.addIssue({ code: 'custom', path: [issue.field], message: issue.message });
+    }
+  });
 }

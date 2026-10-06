@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useId, useState } from 'react';
+import { type FormEvent, useId, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -9,12 +9,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
+import {
+  type FieldProblem,
+  problemsAt,
+  problemsElsewhere,
+  useFieldProblems,
+} from '~/hooks/use-clear-on-edit';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
-import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import {
   type AuthResult,
   authErrorMessage,
@@ -22,6 +27,39 @@ import {
   PASSWORD_MIN,
   SESSIONS_KEY,
 } from './account-helpers';
+
+/** The field a refusal from the sign-in service is about, by its code. */
+const REFUSAL_FIELDS: Record<string, string> = {
+  INVALID_PASSWORD: 'current',
+  PASSWORD_TOO_SHORT: 'next',
+  PASSWORD_TOO_LONG: 'next',
+};
+
+/** Every problem with what was typed, each with its field (#320's sweep). */
+export function passwordProblems(current: string, next: string, confirm: string): FieldProblem[] {
+  const problems: FieldProblem[] = [];
+  if (!current) problems.push({ fields: ['current'], text: 'Enter your current password.' });
+  if (next.length < PASSWORD_MIN) {
+    problems.push({
+      fields: ['next'],
+      text: `Your new password must be at least ${PASSWORD_MIN} characters.`,
+    });
+  } else if (next.length > PASSWORD_MAX) {
+    problems.push({
+      fields: ['next'],
+      text: `Your new password must be at most ${PASSWORD_MAX} characters.`,
+    });
+  } else if (current && next === current) {
+    problems.push({
+      fields: ['next'],
+      text: 'Choose a password different from your current one.',
+    });
+  }
+  if (next !== confirm) {
+    problems.push({ fields: ['confirm'], text: 'The new passwords do not match.' });
+  }
+  return problems;
+}
 
 export function ChangePasswordDialog({
   open,
@@ -36,9 +74,13 @@ export function ChangePasswordDialog({
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [revokeOthers, setRevokeOthers] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  // A read-only refusal goes once changes are accepted again (#308).
-  useClearReadOnlyRefusal(error, () => setError(null));
+  // Every problem at once, each under its field and kept until that field is
+  // edited, rather than one at a time at the foot. A read-only refusal goes
+  // once changes are accepted again (#308).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems({ current, next, confirm }, form);
+  const at = (field: string) => problemsAt(problems, field);
+  const error = problemsElsewhere(problems, ['current', 'next', 'confirm']);
   const [done, setDone] = useState<string | null>(null);
 
   const change = useMutation({
@@ -49,7 +91,7 @@ export function ChangePasswordDialog({
         revokeOtherSessions: revokeOthers,
       })) as AuthResult;
       const message = authErrorMessage(result, 'Your password could not be changed. Try again.');
-      if (message) throw new Error(message);
+      if (message) throw Object.assign(new Error(message), { code: result.error?.code });
     },
     onSuccess: () => {
       setDone(
@@ -62,7 +104,10 @@ export function ChangePasswordDialog({
       setConfirm('');
       void queryClient.invalidateQueries({ queryKey: SESSIONS_KEY });
     },
-    onError: (failure) => setError(failure.message),
+    onError: (failure: Error & { code?: string }) => {
+      const field = REFUSAL_FIELDS[failure.code ?? ''];
+      setProblems([{ fields: field ? [field] : [], text: failure.message }]);
+    },
   });
 
   function reset(nextOpen: boolean) {
@@ -71,7 +116,7 @@ export function ChangePasswordDialog({
       setNext('');
       setConfirm('');
       setRevokeOthers(true);
-      setError(null);
+      setProblems([]);
       setDone(null);
       change.reset();
     }
@@ -81,15 +126,9 @@ export function ChangePasswordDialog({
   function submit(event: FormEvent) {
     event.preventDefault();
     setDone(null);
-    if (!current) return setError('Enter your current password.');
-    if (next.length < PASSWORD_MIN)
-      return setError(`Your new password must be at least ${PASSWORD_MIN} characters.`);
-    if (next.length > PASSWORD_MAX)
-      return setError(`Your new password must be at most ${PASSWORD_MAX} characters.`);
-    if (next !== confirm) return setError('The new passwords do not match.');
-    if (next === current) return setError('Choose a password different from your current one.');
-    setError(null);
-    change.mutate();
+    const found = passwordProblems(current, next, confirm);
+    setProblems(found);
+    if (found.length === 0) change.mutate();
   }
 
   return (
@@ -117,10 +156,11 @@ export function ChangePasswordDialog({
             </DialogFooter>
           </>
         ) : (
-          <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-            <Field label="Current password" htmlFor={`${formId}-current`}>
+          <form ref={form} onSubmit={submit} noValidate className="flex flex-col gap-4">
+            <Field label="Current password" htmlFor={`${formId}-current`} error={at('current')}>
               <Input
                 id={`${formId}-current`}
+                {...invalidFieldProps(`${formId}-current`, at('current'))}
                 type="password"
                 autoComplete="current-password"
                 value={current}
@@ -130,10 +170,12 @@ export function ChangePasswordDialog({
             <Field
               label="New password"
               htmlFor={`${formId}-new`}
+              error={at('next')}
               hint={`${PASSWORD_MIN} to ${PASSWORD_MAX} characters.`}
             >
               <Input
                 id={`${formId}-new`}
+                {...invalidFieldProps(`${formId}-new`, at('next'))}
                 type="password"
                 autoComplete="new-password"
                 maxLength={PASSWORD_MAX}
@@ -141,9 +183,10 @@ export function ChangePasswordDialog({
                 onChange={(event) => setNext(event.target.value)}
               />
             </Field>
-            <Field label="Confirm new password" htmlFor={`${formId}-confirm`}>
+            <Field label="Confirm new password" htmlFor={`${formId}-confirm`} error={at('confirm')}>
               <Input
                 id={`${formId}-confirm`}
+                {...invalidFieldProps(`${formId}-confirm`, at('confirm'))}
                 type="password"
                 autoComplete="new-password"
                 maxLength={PASSWORD_MAX}
@@ -161,7 +204,7 @@ export function ChangePasswordDialog({
               Sign out of all other devices
             </label>
             {error && (
-              <p role="alert" className="text-sm text-[var(--danger)]">
+              <p role="alert" className="whitespace-pre-line text-sm text-[var(--danger)]">
                 {error}
               </p>
             )}

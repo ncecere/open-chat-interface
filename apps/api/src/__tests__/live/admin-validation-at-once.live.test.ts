@@ -192,4 +192,46 @@ describe.skipIf(!available)('live: admin validation reports every field at once'
     expect(fields.url).toBeDefined();
     expect(fields.actions).toBe('Choose at least one audit action, or all of them.');
   });
+  /** Every refused field, once each, in order. */
+  async function refusedFields(response: Response): Promise<string[]> {
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as Refusal;
+    return (body.error.details ?? []).map((issue) => String(issue.path[0]));
+  }
+
+  it('a new provider: a malformed base URL and the missing API key in one save', async () => {
+    const response = await send('POST', '/api/admin/providers', {
+      kind: 'openai',
+      label: 'Fix7 provider',
+      baseUrl: 'not a url',
+      enabled: true,
+    });
+    expect(await refusedFields(response.clone())).toEqual(['baseUrl', 'apiKey']);
+    expect((await refused(response)).apiKey).toBe('An API key is required for this provider.');
+  });
+
+  it('a new provider: a blank name is refused once, with the missing base URL', async () => {
+    const fields = await refusedFields(
+      await send('POST', '/api/admin/providers', { kind: 'openai-compatible', label: '  ' }),
+    );
+    expect(fields).toEqual(['label', 'baseUrl']);
+  });
+
+  it('a provider edit: a blank name with the key cleared, checked against what it becomes', async () => {
+    const [row] = await pool.db
+      .insert(schema.provider)
+      .values({
+        organizationId: state.organizationId,
+        kind: 'openai',
+        label: 'Fix7 provider',
+        enabled: true,
+        encryptedApiKey: 'x',
+        credentialHint: 'x',
+      })
+      .returning();
+    const fields = await refusedFields(
+      await send('PATCH', `/api/admin/providers/${row!.id}`, { label: '', apiKey: null }),
+    );
+    expect(fields).toEqual(['label', 'apiKey']);
+  });
 });

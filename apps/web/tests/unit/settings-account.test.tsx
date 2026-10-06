@@ -13,6 +13,7 @@ import {
   findButton,
   pressEscape,
   renderAdmin,
+  settle,
 } from './admin-test-utils';
 
 /**
@@ -271,6 +272,32 @@ describe('Settings → Account', () => {
       await click(button('Change Password'));
       await submitPassword('Wrong-password-1', 'New-password-4567');
       expect(alerts(dialog()!)).toEqual(['Your current password is not correct.']);
+      // At the Current password field, which is marked invalid and described by it.
+      const current = field('Current password');
+      expect(current.getAttribute('aria-invalid')).toBe('true');
+      expect(
+        document.getElementById(current.getAttribute('aria-describedby') ?? '')?.textContent,
+      ).toBe('Your current password is not correct.');
+    });
+
+    it('reports every problem at once, each at its field', async () => {
+      await render();
+      await click(button('Change Password'));
+      await submitPassword('', 'short', 'different');
+      expect(authClient.changePassword).not.toHaveBeenCalled();
+      const errorOf = (label: string) => {
+        const control = field(label);
+        expect(control.getAttribute('aria-invalid')).toBe('true');
+        return document.getElementById(`${control.id}-error`)?.textContent;
+      };
+      expect(errorOf('Current password')).toBe('Enter your current password.');
+      expect(errorOf('New password')).toBe('Your new password must be at least 12 characters.');
+      expect(errorOf('Confirm new password')).toBe('The new passwords do not match.');
+      // Correcting one leaves the others.
+      await type(field('Current password'), 'Old-password-123');
+      await settle();
+      expect(field('Current password').getAttribute('aria-invalid')).toBeNull();
+      expect(errorOf('Confirm new password')).toBe('The new passwords do not match.');
     });
 
     it('says local sign-in is off instead of offering a change that would be refused', async () => {
