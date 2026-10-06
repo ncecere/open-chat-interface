@@ -172,14 +172,24 @@ export function AdminReportsPage() {
       resetForm();
       invalidate();
     },
-    onError: (cause) =>
+    onError: (cause, body) => {
+      const found = apiErrorProblems(
+        cause,
+        editing ? 'The report could not be saved.' : 'The report could not be added.',
+        REPORT_LABELS,
+      );
+      // The API can only say "Recipients (item 2) must be a valid email
+      // address"; the addresses are named instead (#283).
+      const named = recipientsProblem((body.recipients as string[] | undefined) ?? []);
       setProblems(
-        apiErrorProblems(
-          cause,
-          editing ? 'The report could not be saved.' : 'The report could not be added.',
-          REPORT_LABELS,
-        ),
-      ),
+        named
+          ? [
+              ...found.filter((problem) => problem.fields[0] !== 'recipients'),
+              { fields: ['recipients'], text: named },
+            ]
+          : found,
+      );
+    },
   });
 
   const toggle = useMutation({
@@ -201,13 +211,11 @@ export function AdminReportsPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const addresses = parseRecipients(recipients);
-    const invalid = recipientsProblem(addresses);
-    if (invalid) {
-      setProblems([{ fields: ['recipients'], text: invalid }]);
-      return;
-    }
-    create.mutate({ name, cadence, windowDays, recipients: addresses });
+    // No check of its own first: the API reports a blank name or a window
+    // out of range together with the addresses, and stopping at a bad
+    // address left those for the next save (#318), as #301 found in the
+    // webhook and connector forms.
+    create.mutate({ name, cadence, windowDays, recipients: parseRecipients(recipients) });
   }
 
   if (isLoading) return <FullPageSpinner />;

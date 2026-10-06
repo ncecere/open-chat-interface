@@ -278,3 +278,19 @@ export const observabilityStatusSchema = z.object({
   tracingEndpoint: z.string().nullable(),
 });
 export type ObservabilityStatus = z.infer<typeof observabilityStatusSchema>;
+
+// ---------------------------------------------------------------------------
+// Scheduled reports
+// ---------------------------------------------------------------------------
+
+/**
+ * A scheduled usage report. Shared so the admin form's tests refuse a body
+ * exactly as the API does (#318).
+ */
+export const scheduledReportInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  cadence: z.enum(['daily', 'weekly', 'monthly']),
+  windowDays: z.number().int().min(1).max(365).default(30),
+  recipients: z.array(z.string().trim().toLowerCase().email()).min(1).max(20),
+  enabled: z.boolean().default(true),
+});

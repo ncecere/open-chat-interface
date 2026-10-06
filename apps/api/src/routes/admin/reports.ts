@@ -1,7 +1,6 @@
 import { desc, eq, schema } from '@oci/db';
-import { patchSchema } from '@oci/shared';
+import { patchSchema, scheduledReportInputSchema } from '@oci/shared';
 import { Hono } from 'hono';
-import { z } from 'zod';
 import { db } from '../../db/index.js';
 import { clientIp } from '../../lib/client-ip.js';
 import { notFound } from '../../lib/errors.js';
@@ -14,13 +13,7 @@ import { diffUpdate } from '../../services/settings-diff.js';
 
 export const reportRoutes = new Hono<AppBindings>();
 
-const reportSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  cadence: z.enum(['daily', 'weekly', 'monthly']),
-  windowDays: z.number().int().min(1).max(365).default(30),
-  recipients: z.array(z.string().trim().toLowerCase().email()).min(1).max(20),
-  enabled: z.boolean().default(true),
-});
+const reportSchema = scheduledReportInputSchema;
 
 reportRoutes.get('/', async (c) => {
   const rows = await db

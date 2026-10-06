@@ -4,6 +4,7 @@ import {
   createConnectorSchema,
   createWebhookSchema,
   type QuotaOverride,
+  scheduledReportInputSchema,
 } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -261,11 +262,13 @@ it('Reports: a bad recipient is named at the Recipients field, and goes when cor
     if (path === '/admin/setup-status') return { checks: [] };
     throw new Error(`Unexpected GET ${path}`);
   });
+  api.post.mockImplementation(async (_path: string, body: unknown) => {
+    throw validationFailure(scheduledReportInputSchema, body);
+  });
   ({ root } = await renderAdmin(<AdminReportsPage />));
   await typeInto(input('report-name'), 'Fix5 report');
   await typeInto(input('report-recipients'), 'not-an-email, admin@northbrook.edu');
   await click(button('Add report'));
-  expect(api.post).not.toHaveBeenCalled();
   expect(fieldError('report-recipients')).toBe('Recipients: not-an-email is not an email address.');
   await typeInto(input('report-recipients'), 'admin@northbrook.edu');
   expect(fieldError('report-recipients')).toBeNull();

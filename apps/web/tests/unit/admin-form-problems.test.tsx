@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { updateInstanceSettingsSchema } from '@oci/shared';
+import { scheduledReportInputSchema, updateInstanceSettingsSchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { AdminReportsPage } from '../../src/routes/admin/reports';
 import { SmtpSettingsForm } from '../../src/routes/admin/settings/smtp-settings';
 import {
   alerts,
@@ -112,4 +113,34 @@ it('Email delivery: a field the API refuses is shown at that field, not at the f
   // Corrected, it goes.
   await typeInto(input('smtp-host'), 'smtp2.example.edu');
   expect(fieldError('smtp-host')).toBeNull();
+});
+
+/** The reports page with no reports, whose API refuses a body as its real schema does. */
+async function renderReports() {
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/reports') return { reports: [] };
+    if (path === '/admin/setup-status') return { checks: [] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  api.post.mockImplementation(async (_path: string, body: unknown) => {
+    const parsed = scheduledReportInputSchema.safeParse(body);
+    if (!parsed.success) throw validationFailure(scheduledReportInputSchema, body);
+    return { id: 'r1' };
+  });
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+}
+
+it('Reports: a blank name and a bad recipient are both reported in one save (#318)', async () => {
+  await renderReports();
+  await typeInto(input('report-name'), ' ');
+  await typeInto(input('report-recipients'), 'not-an-email');
+  await click(button('Add report'));
+
+  expect(fieldError('report-name')).toBe('Name is required.');
+  expect(fieldError('report-recipients')).toBe('Recipients: not-an-email is not an email address.');
+
+  // Correcting the recipients leaves the name's error where it is.
+  await typeInto(input('report-recipients'), 'admin@northbrook.edu');
+  expect(fieldError('report-recipients')).toBeNull();
+  expect(fieldError('report-name')).toBe('Name is required.');
 });
