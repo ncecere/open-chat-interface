@@ -75,6 +75,58 @@ export function diffSettings(
   return changes;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    Object.keys(value).length > 0
+  );
+}
+
+/** Nested plain objects as dotted paths (`roles.user.chatRequestsPerMinute`). */
+function flatten(value: Record<string, unknown>, prefix = ''): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (isPlainObject(entry)) Object.assign(out, flatten(entry, path));
+    else out[path] = entry instanceof Date ? entry.toISOString() : entry;
+  }
+  return out;
+}
+
+/**
+ * What an update changed, as each value was and became: the one helper for
+ * an entry that should answer "and what was it before" (#221, #258).
+ *
+ * `before` and `after` are the values as saved before and after, with any
+ * nested object in full; only `after`'s keys are compared (or only `keys`, to
+ * leave out columns such as encrypted secrets and timestamps). Nested objects
+ * are compared field by field and named by path, so raising one role's limit
+ * records that limit, not two whole copies of every role's, and a field a
+ * nested object no longer has is recorded as becoming null. Dates are
+ * compared and recorded as ISO strings; secrets as `[set]`/`[unset]`, as in
+ * `diffSettings`.
+ */
+export function diffUpdate(
+  before: object | null | undefined,
+  after: object,
+  keys?: readonly string[],
+): SettingChange[] {
+  const pick = (value: object) =>
+    Object.fromEntries(
+      Object.entries(value).filter(([key]) => !keys || keys.includes(key)),
+    ) as Record<string, unknown>;
+  const next = pick(after);
+  const previous = flatten(pick(before ?? {}));
+  const flat = flatten(next);
+  for (const path of Object.keys(previous)) {
+    const top = path.split('.')[0] as string;
+    if (path !== top && !(path in flat) && top in next) flat[path] = null;
+  }
+  return diffSettings(previous, flat);
+}
+
 /**
  * Recursively strips secret-looking values from a nested settings object,
  * for the branches that arrive as one object rather than as flat keys.

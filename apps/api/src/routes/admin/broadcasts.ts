@@ -8,6 +8,7 @@ import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { listBroadcasts } from '../../services/broadcasts.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
+import { diffUpdate } from '../../services/settings-diff.js';
 
 export const broadcastRoutes = new Hono<AppBindings>();
 
@@ -48,11 +49,28 @@ broadcastRoutes.post('/', async (c) => {
   return c.json({ id: created?.id }, 201);
 });
 
+/** What an edit can change, for its audit entry. */
+const BROADCAST_FIELDS = [
+  'title',
+  'body',
+  'level',
+  'audienceRoles',
+  'dismissable',
+  'published',
+  'startsAt',
+  'endsAt',
+] as const;
+
 broadcastRoutes.put('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
   const input = await parseBody(c, upsertBroadcastSchema);
   const organizationId = await getDefaultOrganizationId();
+  const where = and(
+    eq(schema.broadcast.id, id),
+    eq(schema.broadcast.organizationId, organizationId),
+  );
+  const [existing] = await db.select().from(schema.broadcast).where(where).limit(1);
 
   const updated = await db
     .update(schema.broadcast)
@@ -67,10 +85,11 @@ broadcastRoutes.put('/:id', async (c) => {
       endsAt: input.endsAt ? new Date(input.endsAt) : null,
       updatedAt: new Date(),
     })
-    .where(and(eq(schema.broadcast.id, id), eq(schema.broadcast.organizationId, organizationId)))
-    .returning({ id: schema.broadcast.id });
+    .where(where)
+    .returning();
 
-  if (updated.length === 0) throw notFound('Announcement not found');
+  const [saved] = updated;
+  if (!saved || !existing) throw notFound('Announcement not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -78,7 +97,13 @@ broadcastRoutes.put('/:id', async (c) => {
     action: 'broadcast.update',
     targetType: 'broadcast',
     targetId: id,
-    metadata: { title: input.title, published: input.published },
+    // Which fields changed and from what; the window and audience were not
+    // recorded at all (#258).
+    metadata: {
+      title: input.title,
+      published: input.published,
+      changes: diffUpdate(existing, saved, BROADCAST_FIELDS),
+    },
   });
 
   return c.json({ ok: true });

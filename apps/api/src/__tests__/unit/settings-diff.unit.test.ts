@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diffSettings, redactSecrets } from '../../services/settings-diff.js';
+import { diffSettings, diffUpdate, redactSecrets } from '../../services/settings-diff.js';
 
 describe('diffSettings', () => {
   it('records what a value was as well as what it became', () => {
@@ -97,5 +97,42 @@ describe('diffSettings with nested secrets', () => {
     expect(redactSecrets(snapshot)).toEqual({ provider: 'searxng', encryptedApiKey: '[unset]' });
     const changes = diffSettings({ search: snapshot }, { search: { provider: 'serpapi' } });
     expect(changes[0]?.before).toEqual({ provider: 'searxng', encryptedApiKey: '[unset]' });
+  });
+});
+
+describe('diffUpdate (#258)', () => {
+  it('names a nested change by its path and leaves the rest out', () => {
+    const before = { roles: { user: { chat: 20, upload: 10 }, admin: { chat: 60 } }, auth: 10 };
+    const after = { roles: { user: { chat: 7, upload: 10 }, admin: { chat: 60 } }, auth: 1000 };
+    expect(diffUpdate(before, after)).toEqual([
+      { key: 'roles.user.chat', before: 20, after: 7 },
+      { key: 'auth', before: 10, after: 1000 },
+    ]);
+  });
+
+  it('compares only the keys asked for, dates as ISO strings, secrets by presence', () => {
+    const before = {
+      url: 'https://old.example.com',
+      endsAt: null,
+      encryptedSecret: 'cipher',
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+    const after = {
+      url: 'https://new.example.com',
+      endsAt: new Date('2026-10-07T10:00:00Z'),
+      encryptedSecret: 'other',
+      updatedAt: new Date('2026-10-06T00:00:00Z'),
+    };
+    expect(diffUpdate(before, after, ['url', 'endsAt', 'encryptedSecret'])).toEqual([
+      { key: 'url', before: 'https://old.example.com', after: 'https://new.example.com' },
+      { key: 'endsAt', before: null, after: '2026-10-07T10:00:00.000Z' },
+      { key: 'encryptedSecret', before: '[set]', after: '[set]' },
+    ]);
+  });
+
+  it('records a nested field that is gone as becoming null', () => {
+    expect(
+      diffUpdate({ claims: { email: 'mail', name: 'cn' } }, { claims: { email: 'mail' } }),
+    ).toEqual([{ key: 'claims.name', before: 'cn', after: null }]);
   });
 });

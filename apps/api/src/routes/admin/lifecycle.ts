@@ -21,7 +21,7 @@ import {
   updateRetentionSettings,
 } from '../../services/lifecycle/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
-import { diffSettings } from '../../services/settings-diff.js';
+import { diffSettings, diffUpdate } from '../../services/settings-diff.js';
 import { listStoragePolicies, storageTotals } from '../../services/storage/quota.js';
 import { pendingDeletionCount, reconcileStorage } from '../../services/storage/reaper.js';
 
@@ -138,6 +138,7 @@ lifecycleRoutes.get('/retention', async (c) => {
 lifecycleRoutes.put('/retention', async (c) => {
   const actor = currentUser(c);
   const patch = await parseBody(c, updateRetentionSettingsSchema);
+  const before = await getRetentionSettings();
   const settings = await updateRetentionSettings(patch);
 
   await recordAudit({
@@ -146,7 +147,8 @@ lifecycleRoutes.put('/retention', async (c) => {
     action: 'retention.settings.update',
     targetType: 'settings',
     targetId: 'retention',
-    metadata: patch,
+    // Each value as it was in effect and as it became (#258).
+    metadata: { ...patch, changes: diffUpdate(before, settings, Object.keys(patch)) },
   });
 
   return c.json(settings);
@@ -166,6 +168,7 @@ lifecycleRoutes.get('/rate-limits', async (c) => {
 lifecycleRoutes.put('/rate-limits', async (c) => {
   const actor = currentUser(c);
   const patch = await parseBody(c, updateRateLimitSettingsSchema);
+  const before = await getRateLimitSettings();
   const settings = await updateRateLimitSettings(patch);
 
   await recordAudit({
@@ -174,7 +177,9 @@ lifecycleRoutes.put('/rate-limits', async (c) => {
     action: 'rate_limit.settings.update',
     targetType: 'settings',
     targetId: 'rateLimits',
-    metadata: patch,
+    // "authAttemptsPerMinute 10 → 1000" in one entry, not worked out by
+    // comparing two snapshots (#258). Values in effect, defaults included.
+    metadata: { ...patch, changes: diffUpdate(before, settings) },
   });
 
   return c.json(settings);
