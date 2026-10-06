@@ -119,7 +119,8 @@ it('Email delivery: a field the API refuses is shown at that field, not at the f
   await typeInto(input('smtp-host'), 'smtp.example.edu');
   await click(button('Save changes'));
 
-  expect(fieldError('smtp-host')).toBe('SMTP host is missing or not the right kind of value.');
+  // Says what kind of value to enter (#347), not "missing or not the right kind".
+  expect(fieldError('smtp-host')).toBe('SMTP host must be text.');
   // Only at the field: nothing beside Save changes.
   expect(alerts().filter((text) => text.includes('SMTP host'))).toHaveLength(1);
   // Corrected, it goes.

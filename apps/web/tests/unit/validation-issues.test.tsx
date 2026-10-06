@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { upsertQuotaPolicySchema } from '@oci/shared';
+import { updateRetentionSettingsSchema, upsertQuotaPolicySchema } from '@oci/shared';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
@@ -115,4 +115,46 @@ it('apiErrorMessage lists the reasons instead of "Request validation failed" (#1
     'Already exists.',
   );
   expect(apiErrorMessage(new Error('offline'), 'Not saved.')).toBe('Not saved.');
+});
+
+it('says what kind of value to enter, from what the schema expected (#347)', () => {
+  // The real schema's refusals: a fraction for a whole number, text for a number.
+  const retention = updateRetentionSettingsSchema.safeParse({ memoryRetentionDays: 1.5 });
+  expect(
+    describeValidationIssues(retention.error?.issues, { memoryRetentionDays: 'Memory' }),
+  ).toEqual(['Memory must be a whole number.']);
+  const wire = (expected: string, message = 'Invalid input') => [
+    { code: 'invalid_type', expected, path: ['field'], message },
+  ];
+  expect(describeValidationIssues(wire('number'))).toEqual(['Field must be a number.']);
+  expect(describeValidationIssues(wire('string'))).toEqual(['Field must be text.']);
+  expect(describeValidationIssues(wire('boolean'))).toEqual(['Field must be on or off.']);
+  // Nothing was sent: Zod's English says so; the bundle's bare wording cannot.
+  expect(
+    describeValidationIssues(wire('string', 'Invalid input: expected string, received undefined')),
+  ).toEqual(['Field is required.']);
+  expect(describeValidationIssues(wire('object'))).toEqual([
+    'Field is missing or not the right kind of value.',
+  ]);
+});
+
+it('rewords the model form’s bare "Invalid input" from the issue (#347)', async () => {
+  const { modelFieldProblems } = await import('../../src/components/admin/model-form-draft');
+  // As a production bundle reports them: the schema's wording is gone.
+  const bare = [
+    { path: ['sortOrder'], code: 'invalid_type', message: 'Invalid input', expected: 'number' },
+    {
+      path: ['inputPriceMicros'],
+      code: 'too_small',
+      message: 'Invalid input',
+      origin: 'number',
+      minimum: 0,
+      inclusive: true,
+    },
+  ];
+  expect(
+    modelFieldProblems(bare as unknown as Parameters<typeof modelFieldProblems>[0]).map(
+      (problem) => problem.text,
+    ),
+  ).toEqual(['Sort order must be a number.', 'Input price must be at least 0.']);
 });
