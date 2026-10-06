@@ -138,9 +138,12 @@ describe.skipIf(!available)('live connection closed while a job tick connects', 
       .from(schema.jobRun)
       .where(eq(schema.jobRun.jobName, 'test.type-fetch'));
     expect(runs).toMatchObject([{ status: 'success', itemsProcessed: 3 }]);
-    // The lock was released on its own connection.
+    // The lock was released on its own connection. Only this test's database:
+    // pg_locks covers the whole server, where another instance may hold its own.
     const [lock] = await work.db.execute<{ held: number }>(
-      sql`select count(*)::integer as held from pg_locks where locktype = 'advisory'`,
+      sql`select count(*)::integer as held from pg_locks
+          where locktype = 'advisory'
+            and database = (select oid from pg_database where datname = current_database())`,
     );
     expect(lock!.held).toBe(0);
   });
