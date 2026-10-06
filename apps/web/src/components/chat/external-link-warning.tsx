@@ -1,6 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
-import type { LinkSafetyConfig, LinkSafetyModalProps } from 'streamdown';
+import { type ComponentProps, type ReactNode, useState } from 'react';
+import type { LinkSafetyModalProps } from 'streamdown';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { cn } from '~/lib/utils';
 
 const SKIP_EXTERNAL_LINK_WARNING_KEY = 'oci.skipExternalLinkWarning';
 
@@ -96,11 +97,59 @@ export function ExternalLinkWarning({ isOpen, onClose, onConfirm, url }: LinkSaf
   );
 }
 
-export const MARKDOWN_LINK_SAFETY: LinkSafetyConfig = {
-  enabled: true,
-  onLinkCheck: canOpenWithoutWarning,
-  renderModal: (props) => <ExternalLinkWarning {...props} />,
-};
+/** What Streamdown puts in place of a link's address while it is still streaming. */
+const INCOMPLETE_LINK = 'streamdown:incomplete-link';
+
+/**
+ * A link in a message, for Streamdown's `components.a` (#174). Streamdown's
+ * own link-safety mode renders every link as an inline-block <button>: a long
+ * address broke the sentence around it, screen readers heard "button", and it
+ * could not be opened in a new tab or have its address copied. This is an
+ * ordinary link that opens in a new tab; a click on one leaving this instance
+ * still shows the external-link warning first, as before.
+ */
+export function MessageLink({
+  href,
+  children,
+  className,
+  node: _node,
+  ...rest
+}: ComponentProps<'a'> & { node?: unknown }) {
+  const [open, setOpen] = useState(false);
+  const linkClass = cn('wrap-anywhere font-medium text-primary underline', className);
+  // Being written (or refused by the URL policy): text until it is complete.
+  if (!href || href === INCOMPLETE_LINK)
+    return (
+      <span className={linkClass} data-streamdown="link" data-incomplete={Boolean(href)}>
+        {children}
+      </span>
+    );
+  return (
+    <>
+      <a
+        {...rest}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkClass}
+        data-streamdown="link"
+        onClick={(event) => {
+          if (canOpenWithoutWarning(href)) return;
+          event.preventDefault();
+          setOpen(true);
+        }}
+      >
+        {children}
+      </a>
+      <ExternalLinkWarning
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        onConfirm={() => window.open(href, '_blank', 'noopener,noreferrer')}
+        url={href}
+      />
+    </>
+  );
+}
 
 export function SafeExternalLink({
   href,
