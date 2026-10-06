@@ -2,6 +2,7 @@ import type { ThemeMode } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useState } from 'react';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { TraitChips, traitChange } from '~/components/settings/trait-chips';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
@@ -234,6 +235,8 @@ export function SettingsCustomizationPage() {
       }
     : null;
   const dirty = stored !== null && !samePersonalisation(draft, stored);
+  // Leaving with an edit not saved asks first (#314).
+  useReportUnsaved(dirty);
 
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) => api.patch('/me/preferences', patch),
@@ -333,6 +336,10 @@ export function SettingsCustomizationPage() {
           <span role="status" className="text-xs text-[var(--success)]">
             {saved ? 'Saved' : ''}
           </span>
+          {/* An edit looked applied until Save was pressed (#314). */}
+          {dirty && !save.isPending && (
+            <span className="text-xs text-[var(--text-muted)]">Not saved yet</span>
+          )}
           {save.isError && (
             <span role="alert" className="text-xs text-[var(--danger)]">
               {/* A read-only refusal gives its reason, not "Try again" (#159). */}

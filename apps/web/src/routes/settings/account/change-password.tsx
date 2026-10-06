@@ -94,7 +94,11 @@ export function ChangePasswordDialog({
 
   return (
     <Dialog open={open} onOpenChange={reset}>
-      <DialogContent aria-describedby={`${formId}-description`}>
+      <DialogContent
+        aria-describedby={`${formId}-description`}
+        // Escape or a click outside asks before throwing typed passwords away (#314).
+        confirmDiscard={!done && Boolean(current || next || confirm)}
+      >
         <DialogHeader>
           <DialogTitle>Change password</DialogTitle>
           <DialogDescription id={`${formId}-description`}>

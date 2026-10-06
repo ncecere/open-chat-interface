@@ -1,6 +1,7 @@
 import { PROFILE_NAME_MAX_LENGTH } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
@@ -18,6 +19,8 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
   useClearReadOnlyRefusal(error, () => setError(null));
   const [saved, setSaved] = useState(false);
   const trimmed = draft.trim();
+  // A name changed and not saved is asked about before leaving (#314).
+  useReportUnsaved(editing && trimmed !== name);
   const inputRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLButtonElement>(null);
   const mounted = useRef(false);

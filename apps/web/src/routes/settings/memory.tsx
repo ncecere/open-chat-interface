@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Brain } from 'lucide-react';
 import { type FormEvent, useId, useLayoutEffect, useRef, useState } from 'react';
 import { LoadError } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
@@ -58,6 +59,8 @@ function MemoryRow({
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const mounted = useRef(false);
   const editMounted = useRef(false);
+  // An edit not saved is asked about before leaving (#314).
+  useReportUnsaved(editing && draft !== entry.content);
 
   // Edit and the form replace each other, removing the control that had
   // focus: into the editor on Edit, back on Edit after Cancel, Escape or
@@ -220,6 +223,8 @@ function MemoryRow({
 function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) {
   const [draft, setDraft] = useState('');
   const add = useMemoryMutation((content: string) => api.post('/memory', { content }));
+  // A memory typed and not added is asked about before leaving (#314).
+  useReportUnsaved(draft.trim() !== '');
   const length = normalizeMemoryContent(draft).length;
 
   function submit(event: FormEvent) {
