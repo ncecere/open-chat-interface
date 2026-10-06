@@ -117,7 +117,10 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
 
     await send(app, 'PATCH', `/users/${target}`, { role: 'restricted' });
     expect((await forTarget()).map(({ action, metadata }) => ({ action, metadata }))).toEqual([
-      { action: 'user.role.change', metadata: { from: 'user', to: 'restricted' } },
+      {
+        action: 'user.role.change',
+        metadata: { email: expect.any(String), from: 'user', to: 'restricted' },
+      },
     ]);
 
     // A rename with the role change keeps the rename under user.update, without the role.
@@ -126,8 +129,19 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
     expect(entries).toHaveLength(3);
     expect(entries).toEqual(
       expect.arrayContaining([
-        { action: 'user.role.change', metadata: { from: 'restricted', to: 'user' } },
-        { action: 'user.update', metadata: { name: 'Walk3 renamed' } },
+        {
+          action: 'user.role.change',
+          metadata: { email: expect.any(String), from: 'restricted', to: 'user' },
+        },
+        // With the name it replaced (#323).
+        {
+          action: 'user.update',
+          metadata: {
+            email: expect.any(String),
+            name: 'Walk3 renamed',
+            before: { name: 'Test User' },
+          },
+        },
       ]),
     );
   });
@@ -184,7 +198,7 @@ describe.skipIf(!available)('live: protected administrative audit events', () =>
       );
     await send(app, 'POST', `/users/${target}/revoke-sessions`, {});
     const [entry] = (await events('user.revoke_sessions')).filter((row) => row.targetId === target);
-    expect(entry?.metadata).toEqual({ sessionsEnded: 2 });
+    expect(entry?.metadata).toEqual({ email: expect.any(String), sessionsEnded: 2 });
   });
 
   it('records sign-in policy changes separately from other settings', async () => {

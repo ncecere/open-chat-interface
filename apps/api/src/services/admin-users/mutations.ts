@@ -102,7 +102,14 @@ export async function updateUser(
   const { target, updated } = await db.transaction(async (tx) => {
     const admins = demotes || bans ? await lockAdministrators(tx) : [];
     const [target] = await tx
-      .select({ id: schema.user.id, role: schema.user.role, banned: schema.user.banned })
+      .select({
+        id: schema.user.id,
+        email: schema.user.email,
+        name: schema.user.name,
+        role: schema.user.role,
+        banned: schema.user.banned,
+        banReason: schema.user.banReason,
+      })
       .from(schema.user)
       .where(eq(schema.user.id, targetId))
       .limit(1)
@@ -145,17 +152,28 @@ export async function updateUser(
   // recorded once: the role is left out of `user.update`, which is written only
   // when something else changed too, so one role change is one entry and one
   // webhook (#140).
+  //
+  // Both name the account by its email as well as its ID, and `user.update`
+  // records each changed value as it was (`before`), as #221 and #258 did for
+  // other changes (#323): the Target column showed only an ID, a ban's entry
+  // could not be found by the email once the account was deleted, and an
+  // unban did not say which reason it lifted.
   const roleChanged = patch.role !== undefined && patch.role !== target.role;
   const { role: _role, ...otherChanges } = patch;
   const updateMetadata = roleChanged ? otherChanges : patch;
   if (Object.keys(updateMetadata).length > 0) {
+    const before = Object.fromEntries(
+      (['name', 'role', 'banned', 'banReason'] as const)
+        .filter((key) => key in updateMetadata)
+        .map((key) => [key, target[key]]),
+    );
     await recordAudit({
       actorUserId: actor.id,
       actorEmail: actor.email,
       action: 'user.update',
       targetType: 'user',
       targetId,
-      metadata: updateMetadata,
+      metadata: { email: target.email, ...updateMetadata, before },
     });
   }
 
@@ -166,7 +184,7 @@ export async function updateUser(
       action: 'user.role.change',
       targetType: 'user',
       targetId,
-      metadata: { from: target.role, to: patch.role },
+      metadata: { email: target.email, from: target.role, to: patch.role },
     });
   }
 
@@ -174,6 +192,12 @@ export async function updateUser(
 }
 
 export async function revokeUserSessions(actor: AdminUserActor, targetId: string) {
+  // Named by email too, as a role change or ban is (#323).
+  const [target] = await db
+    .select({ email: schema.user.email })
+    .from(schema.user)
+    .where(eq(schema.user.id, targetId))
+    .limit(1);
   const ended = await db
     .delete(schema.session)
     .where(eq(schema.session.userId, targetId))
@@ -185,7 +209,7 @@ export async function revokeUserSessions(actor: AdminUserActor, targetId: string
     targetType: 'user',
     targetId,
     // How many sessions this ended, so the entry says what it did (#148).
-    metadata: { sessionsEnded: ended.length },
+    metadata: { ...(target && { email: target.email }), sessionsEnded: ended.length },
   });
   return { ok: true, sessionsEnded: ended.length };
 }

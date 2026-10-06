@@ -23,7 +23,14 @@ export function actorLabel(entry: AuditLogEntry): string {
   return entry.actorEmail ?? entry.actorUserId ?? 'System';
 }
 
+/**
+ * The target as a reader knows it. An account changed by an administrator is
+ * named by the email its entry records (#323), not only by an internal ID
+ * ("user: 4f331194-…") to be looked up elsewhere; the row still links to it.
+ */
 export function targetLabel(entry: AuditLogEntry): string {
+  const email = entry.metadata?.email;
+  if (entry.targetType === 'user' && typeof email === 'string' && email) return `user: ${email}`;
   if (entry.targetType && entry.targetId) return `${entry.targetType}: ${entry.targetId}`;
   return entry.targetType ?? entry.targetId ?? '—';
 }
