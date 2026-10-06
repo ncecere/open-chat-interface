@@ -34,7 +34,11 @@ Choose **Add connector** and enter:
 
 Then select **Refresh tools**. OCI asks the server for its tools
 (`tools/list`) and lists them on the connector. **Test connection** checks the
-MCP handshake and reports how many tools the server lists.
+MCP handshake and reports how many tools the server lists. A server that
+answers but not as MCP (a web page, or JSON that is not JSON-RPC) is reported
+as such, with its HTTP status when known: check that the URL is the server's
+MCP endpoint. The connector's status line gives its last successful contact,
+or says it has never connected successfully, and its last failure.
 
 ## Authentication
 

@@ -226,6 +226,9 @@ describe('Connectors admin page', () => {
     const text = document.body.textContent ?? '';
     expect(text).toContain(`Last failure ${formatDateTime(failedAt)}: Connection refused`);
     expect(text).not.toContain(new Date(failedAt).toLocaleString());
+    // A failed test may have reached the server: not "Not contacted yet" (#223).
+    expect(text).toContain('Never connected successfully · Last failure');
+    expect(text).not.toContain('Not contacted yet');
   });
 
   it('says which field the API refused and why (#127)', async () => {

@@ -282,6 +282,40 @@ describe('results', () => {
     expect(findNetworkError(null)).toBeNull();
   });
 
+  it('says a server that answered, but not as MCP, answered (#223)', async () => {
+    // Real answers, read by the real MCP client: JSON that is not JSON-RPC,
+    // and an HTML page, both with HTTP 200.
+    const pages = createServer((request, response) => {
+      const html = request.url === '/html';
+      response.writeHead(200, { 'content-type': html ? 'text/html' : 'application/json' });
+      response.end(html ? '<html>Hello</html>' : '{"ok":true}');
+    });
+    await new Promise<void>((resolve) => pages.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${(pages.address() as AddressInfo).port}`;
+    const { createMCPClient } = await import('@ai-sdk/mcp');
+    const failure = async (path: string) => {
+      try {
+        await createMCPClient({
+          transport: { type: 'http', url: `${base}${path}` },
+          initializationOptions: { timeout: 5_000 },
+        });
+      } catch (error) {
+        return connectorFailure('Walk3', error, undefined).message;
+      }
+      throw new Error('The client connected');
+    };
+    try {
+      expect(await failure('/json')).toBe(
+        'Walk3 answered, but not as an MCP server. Check that the URL is the server’s MCP endpoint.',
+      );
+      expect(await failure('/html')).toBe(
+        'Walk3 answered, but not as an MCP server (HTTP 200). Check that the URL is the server’s MCP endpoint.',
+      );
+    } finally {
+      pages.close();
+    }
+  });
+
   it('defaults kinds from readOnlyHint only', () => {
     expect(serverKindOf({ annotations: { readOnlyHint: true } })).toBe('read');
     expect(serverKindOf({ annotations: { readOnlyHint: 'true' } })).toBe('write');

@@ -211,9 +211,14 @@ function ConnectorCard({
               }`}
           </p>
           <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            {/* "Last contact" is the last exchange that worked. A failed one
+                may well have reached the server, so after a failure this does
+                not say "Not contacted yet" beside it (#223). */}
             {connector.lastContactAt
               ? `Last contact ${when(connector.lastContactAt)}`
-              : 'Not contacted yet'}
+              : connector.lastErrorAt
+                ? 'Never connected successfully'
+                : 'Not contacted yet'}
             {failing && (
               <span className="text-[var(--danger)]">
                 {` · Last failure ${when(connector.lastErrorAt)}: ${connector.lastError}`}
