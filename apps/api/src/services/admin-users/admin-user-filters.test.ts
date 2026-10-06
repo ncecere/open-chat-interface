@@ -127,6 +127,8 @@ describe('admin user listing and detail', () => {
       [{ value: 9 }],
       [{ bytes: '120', files: 2 }],
       [{ id: 'session', createdAt: date, expiresAt: date }],
+      // The true number of active sessions, beyond the ten listed (#134).
+      [{ value: 14 }],
       [{ id: 'thread', updatedAt: date }],
       [{ id: 'audit', createdAt: date, seq: 12 }],
       [
@@ -145,7 +147,8 @@ describe('admin user listing and detail', () => {
     ])
       mocks.db.select.mockReturnValueOnce(query(rows));
     const detail = await getUserDetail('target');
-    expect(mocks.db.select).toHaveBeenCalledTimes(8);
+    expect(mocks.db.select).toHaveBeenCalledTimes(9);
+    expect(detail.sessionCount).toBe(14);
     expect(detail.user).toMatchObject({ threadCount: 4, messageCount: 9, legalHold: true });
     expect(detail.legalHold).toEqual({
       reason: 'Matter 42',
@@ -201,7 +204,7 @@ describe('bulk user actions', () => {
         },
         '192.0.2.1',
       ),
-    ).toEqual({ affected: 1, skippedSelf: true });
+    ).toEqual({ affected: 1, skippedSelf: true, sessionsEnded: 0 });
     expect(update.set).toHaveBeenCalledWith({ banned: true, banReason: 'Reason' });
     expect(mocks.db.delete).toHaveBeenCalledWith(schema.session);
     expect(mocks.db.update.mock.invocationCallOrder[0]).toBeLessThan(
@@ -217,11 +220,17 @@ describe('bulk user actions', () => {
       targetType: 'user',
       targetId: null,
       ipAddress: '192.0.2.1',
-      metadata: { requested: 3, affected: 1, role: 'user', userIds: ['target', 'target'] },
+      metadata: {
+        requested: 3,
+        affected: 1,
+        sessionsEnded: 0,
+        role: 'user',
+        userIds: ['target', 'target'],
+      },
     });
   });
 
-  it('unbans without deleting sessions and counts revoked sessions rather than users', async () => {
+  it('unbans without deleting sessions, and counts signed-out accounts and their sessions apart', async () => {
     const update = query([{ id: 'target' }]);
     mocks.db.update.mockReturnValueOnce(update);
     await applyBulkUserAction(
@@ -231,10 +240,12 @@ describe('bulk user actions', () => {
     );
     expect(update.set).toHaveBeenCalledWith({ banned: false, banReason: null });
     expect(mocks.db.delete).not.toHaveBeenCalled();
+    // Sign-out reports accounts as `affected` and sessions separately (#145).
+    mocks.db.select.mockReturnValueOnce(query([{ id: 'target' }]));
     mocks.db.delete.mockReturnValueOnce(query([{ id: 'one' }, { id: 'two' }]));
     expect(
       await applyBulkUserAction(actor, { userIds: ['target'], action: 'revoke_sessions' }, null),
-    ).toEqual({ affected: 2, skippedSelf: false });
+    ).toEqual({ affected: 1, skippedSelf: false, sessionsEnded: 2 });
   });
 });
 
@@ -332,7 +343,7 @@ describe('individual user mutations', () => {
     // Deleting nobody used to answer ok and record a deletion that never happened.
     await expect(deleteUser(actor, 'missing')).rejects.toMatchObject({ status: 404 });
     expect(mocks.db.delete).not.toHaveBeenCalled();
-    expect(await revokeUserSessions(actor, 'missing')).toEqual({ ok: true });
+    expect(await revokeUserSessions(actor, 'missing')).toEqual({ ok: true, sessionsEnded: 0 });
     expect(mocks.recordAudit.mock.calls.map(([entry]) => entry.action)).toEqual([
       'user.revoke_sessions',
     ]);
