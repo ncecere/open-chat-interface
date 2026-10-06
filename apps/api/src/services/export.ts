@@ -1,7 +1,8 @@
-import { and, asc, eq, schema } from '@oci/db';
+import { and, asc, eq, inArray, schema } from '@oci/db';
 import {
   ARTIFACT_KIND_LABELS,
   type ArtifactKind,
+  artifactOfToolPart,
   isToolPart,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
@@ -75,7 +76,11 @@ export function exportableParts(parts: Record<string, unknown>[]): Record<string
  * The note of a reply that hit its tool limit follows its last tool step.
  * Each block ends with a blank line.
  */
-export function orderedReplyLines(parts: Record<string, unknown>[]): string[] {
+export function orderedReplyLines(
+  parts: Record<string, unknown>[],
+  /** Tool steps said another way (an artifact a reply made has its own line). */
+  skip: (part: Record<string, unknown>) => boolean = () => false,
+): string[] {
   const blocks: Array<{ type: 'tools' | 'text'; lines: string[] }> = [];
   const add = (type: 'tools' | 'text', line: string) => {
     const last = blocks.at(-1);
@@ -83,8 +88,9 @@ export function orderedReplyLines(parts: Record<string, unknown>[]): string[] {
     else blocks.push({ type, lines: [line] });
   };
   for (const part of parts) {
-    if (isToolPart(part)) add('tools', `_${summarizeToolPart(part).summary}_`);
-    else if (part.type === 'text' && typeof part.text === 'string' && part.text.trim())
+    if (isToolPart(part)) {
+      if (!skip(part)) add('tools', `_${summarizeToolPart(part).summary}_`);
+    } else if (part.type === 'text' && typeof part.text === 'string' && part.text.trim())
       add('text', part.text.trim());
   }
   const limit = parts.find((part) => part.type === 'data-tool-limit')?.data as
@@ -101,6 +107,8 @@ export function orderedReplyLines(parts: Record<string, unknown>[]): string[] {
 
 /** An artifact as Markdown exports reference it (the JSON export carries the content). */
 interface ExportArtifactReference {
+  /** Matches a reply's artifact tool step to this artifact; absent in older callers. */
+  id?: string;
   messageId: string;
   title: string;
   kind: ArtifactKind;
@@ -108,20 +116,38 @@ interface ExportArtifactReference {
   versions: Array<{ version: number; messageId: string | null }>;
 }
 
-/** One line per artifact version a message made: "Artifact 'Report' (HTML, version 2)". */
+/** The artifact versions a message made, each with its line: "Artifact 'Report' (HTML, version 2)". */
 function artifactLines(
   messageId: string | undefined,
   artifacts: readonly ExportArtifactReference[],
-): string[] {
+): Array<{ key: string | null; line: string }> {
   if (!messageId) return [];
   return artifacts.flatMap((artifact) =>
     artifact.versions
       .filter((version) => version.messageId === messageId)
-      .map(
-        (version) =>
-          `_Artifact \u201c${artifact.title}\u201d (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${version.version})_`,
-      ),
+      .map((version) => ({
+        key: artifact.id ? `${artifact.id}:${version.version}` : null,
+        line: `_Artifact \u201c${artifact.title}\u201d (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${version.version})_`,
+      })),
   );
+}
+
+/**
+ * Display names for the models that wrote replies, by slug, as the app shows
+ * them ("GPT-4.1 mini", not "gpt-4-1-mini"; #152). A model since deleted has
+ * none, and its reply keeps the slug.
+ */
+export async function modelDisplayNames(
+  organizationId: string,
+  messages: ReadonlyArray<{ modelSlug: string | null }>,
+): Promise<Map<string, string>> {
+  const slugs = [...new Set(messages.flatMap((message) => message.modelSlug ?? []))];
+  if (slugs.length === 0) return new Map();
+  const rows = await db
+    .select({ slug: schema.model.slug, displayName: schema.model.displayName })
+    .from(schema.model)
+    .where(and(eq(schema.model.organizationId, organizationId), inArray(schema.model.slug, slugs)));
+  return new Map(rows.map((row) => [row.slug, row.displayName]));
 }
 
 /**
@@ -140,6 +166,8 @@ export function renderMarkdown(
   messages: ExportMessage[],
   artifacts: readonly ExportArtifactReference[] = [],
   source?: string,
+  /** Model display names by slug (modelDisplayNames); a missing one shows the slug. */
+  modelNames: ReadonlyMap<string, string> = new Map(),
 ): string {
   const lines: string[] = [
     `# ${thread.title}`,
@@ -156,7 +184,7 @@ export function renderMarkdown(
     const heading =
       message.role === 'user'
         ? '## You'
-        : `## Assistant${message.modelSlug ? ` · ${message.modelSlug}` : ''}`;
+        : `## Assistant${message.modelSlug ? ` · ${modelNames.get(message.modelSlug) ?? message.modelSlug}` : ''}`;
     lines.push(heading, '');
 
     if (message.status === 'error') {
@@ -172,11 +200,19 @@ export function renderMarkdown(
       lines.push(`_Attached: ${attachments.join(', ')}_`, '');
     }
 
-    // Tool steps and text in the order the reply wrote them.
-    lines.push(...orderedReplyLines(message.parts));
-
+    // Tool steps and text in the order the reply wrote them. A step that made
+    // an artifact listed below is left out, so each artifact is named once,
+    // with its kind and version (#152).
     const made = artifactLines(message.id, artifacts);
-    if (made.length > 0) lines.push(...made, '');
+    const listed = new Set(made.flatMap((entry) => entry.key ?? []));
+    lines.push(
+      ...orderedReplyLines(message.parts, (part) => {
+        const artifact = artifactOfToolPart(part);
+        return artifact !== null && listed.has(`${artifact.artifactId}:${artifact.version}`);
+      }),
+    );
+
+    if (made.length > 0) lines.push(...made.map((entry) => entry.line), '');
 
     const sources = sourcesFromParts(message.parts);
     if (sources.length > 0) {
@@ -213,7 +249,11 @@ export function exportFilename(title: string): string {
 /** Ownership is enforced by the caller before this runs. */
 export async function exportThreadMarkdown(threadId: string, userId: string): Promise<string> {
   const [thread] = await db
-    .select({ title: schema.thread.title, createdAt: schema.thread.createdAt })
+    .select({
+      title: schema.thread.title,
+      createdAt: schema.thread.createdAt,
+      organizationId: schema.thread.organizationId,
+    })
     .from(schema.thread)
     .where(eq(schema.thread.id, threadId))
     .limit(1);
@@ -240,5 +280,11 @@ export async function exportThreadMarkdown(threadId: string, userId: string): Pr
     userId,
     messages.map((message) => message.id),
   );
-  return renderMarkdown(thread, messages, artifacts, await currentAppName());
+  return renderMarkdown(
+    thread,
+    messages,
+    artifacts,
+    await currentAppName(),
+    await modelDisplayNames(thread.organizationId, messages),
+  );
 }
