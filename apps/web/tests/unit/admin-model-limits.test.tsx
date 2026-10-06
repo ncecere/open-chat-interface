@@ -250,4 +250,51 @@ describe('the model form and inline rename (#79)', () => {
     expect(api.patch).toHaveBeenCalledTimes(1);
     expect(api.patch).toHaveBeenCalledWith('/admin/models/m1', { displayName: 'Walk renamed' });
   });
+
+  it('does not leave a cleared name blank: it says why and puts the name back (#146)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(
+      [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+        candidate.textContent?.endsWith('OpenAI · big-model'),
+      )!,
+    );
+    const name = field('name-m1');
+    await typeInto(name, '   ');
+    await act(async () => {
+      name.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+    });
+    expect(api.patch).not.toHaveBeenCalled();
+    const note = document.getElementById(name.getAttribute('aria-describedby') ?? '');
+    expect(note?.textContent).toBe('A display name is required, so Big model was kept.');
+    expect(name.value).toBe('Big model');
+    await act(async () => name.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    expect(name.value).toBe('Big model');
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it('puts the name back even when the field was emptied without an input React saw (#146)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(
+      [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+        candidate.textContent?.endsWith('OpenAI · big-model'),
+      )!,
+    );
+    const name = field('name-m1');
+    // What the walk's browser tool did: set the value directly. React tracks
+    // that assignment, so the input event that follows changes no state.
+    await act(async () => {
+      name.value = '';
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(name.value).toBe('');
+    await act(async () => {
+      name.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+    });
+    expect(name.value).toBe('Big model');
+    expect(api.patch).not.toHaveBeenCalled();
+  });
 });

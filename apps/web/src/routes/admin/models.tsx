@@ -91,6 +91,8 @@ function ModelRow({
   const { canEdit } = useAdminAccess();
   const [expanded, setExpanded] = useState(false);
   const [displayName, setDisplayName] = useState(model.displayName);
+  /** Why a cleared name was not saved; shown under the field until it is edited (#146). */
+  const [nameNote, setNameNote] = useState<string | null>(null);
 
   /** The name last sent, until the server's changes; so Enter and blur save once. */
   const lastSentName = useRef<string | null>(null);
@@ -116,15 +118,24 @@ function ModelRow({
     },
   });
 
-  /** Saves a changed, non-blank name; otherwise puts the saved one back. */
-  function commitDisplayName() {
-    const next = displayName.trim();
+  /**
+   * Saves a changed, non-blank name; otherwise puts the saved one back. Reads
+   * the field itself, which is what the person sees: a value set without an
+   * input event React noticed (a browser tool, autofill) never reached state.
+   */
+  function commitDisplayName(field: HTMLInputElement) {
+    const next = field.value.trim();
     // Enter, then leaving the field: one save, not two.
     if (next === lastSentName.current) return;
     if (next && next !== model.displayName) {
       lastSentName.current = next;
       update.mutate({ displayName: next });
     } else {
+      // A blank name is never saved: say so, rather than silently reverting
+      // (#146). Setting the note also re-renders the field, so the saved name
+      // comes back even when state never saw it emptied: putting back a name
+      // state still holds would otherwise change nothing on screen.
+      if (!next) setNameNote(`A display name is required, so ${model.displayName} was kept.`);
       setDisplayName(model.displayName);
     }
   }
@@ -218,19 +229,32 @@ function ModelRow({
               <Input
                 id={`name-${model.id}`}
                 value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                onBlur={commitDisplayName}
+                aria-describedby={nameNote ? `name-${model.id}-note` : undefined}
+                onChange={(event) => {
+                  setDisplayName(event.target.value);
+                  setNameNote(null);
+                }}
+                onBlur={(event) => commitDisplayName(event.currentTarget)}
                 // Enter saves as leaving the field does; Escape puts the name back (#79).
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
-                    commitDisplayName();
+                    commitDisplayName(event.currentTarget);
                   } else if (event.key === 'Escape') {
                     event.preventDefault();
                     setDisplayName(model.displayName);
                   }
                 }}
               />
+              {nameNote && (
+                <p
+                  id={`name-${model.id}-note`}
+                  role="status"
+                  className="mt-1.5 text-xs text-[var(--text-muted)]"
+                >
+                  {nameNote}
+                </p>
+              )}
             </Field>
           </div>
 
