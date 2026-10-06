@@ -68,7 +68,8 @@ contact your administrator**; an administrator can delete it under People.
 What you set at the top is sent with every message, which is why it changes
 replies without you repeating yourself.
 
-- **What to call you** — used when a reply addresses you directly.
+- **What to call you** — used when a reply addresses you directly, and in the
+  greeting on a new chat.
 - **What you do** — saves explaining your field every time. "Research
   administrator" produces different examples from "undergraduate".
 - **Traits** — how replies should read. "Concise" is the one most people want

@@ -12,6 +12,7 @@ import { useModels, useModelsHiddenFromRole } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
+import { greetingName } from '~/lib/greeting-name';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
@@ -99,7 +100,8 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   // model and role allow.
   const [effort, setEffort] = useComposerEffort(selectedModel);
 
-  const firstName = data?.user.name.split(' ')[0];
+  // What the introduction asked to be called, else the account's given name (#315).
+  const firstName = data && greetingName(data.user.name, data.preferences?.displayName);
   const prompts =
     SUGGESTION_CATEGORIES.find((category) => category.id === activeCategory)?.prompts ??
     DEFAULT_PROMPTS;
