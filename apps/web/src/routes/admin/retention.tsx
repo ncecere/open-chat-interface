@@ -87,7 +87,7 @@ function RetentionForm({
   }
 
   return (
-    <form ref={form} onSubmit={submit} className="flex flex-col gap-5 pb-10">
+    <form noValidate ref={form} onSubmit={submit} className="flex flex-col gap-5 pb-10">
       <EditableFieldset className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field

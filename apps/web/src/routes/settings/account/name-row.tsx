@@ -71,7 +71,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
 
   if (editing) {
     return (
-      <form onSubmit={submit} className="border-b border-[var(--border-subtle)] pb-3">
+      <form noValidate onSubmit={submit} className="border-b border-[var(--border-subtle)] pb-3">
         <label htmlFor={inputId} className="text-[var(--text-muted)]">
           Name
         </label>

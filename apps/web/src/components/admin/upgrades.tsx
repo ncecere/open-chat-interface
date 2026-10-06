@@ -14,9 +14,11 @@ import { ProgressBar } from '~/components/admin/progress-bar';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { fieldErrorId, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { api } from '~/lib/api-client';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
@@ -200,10 +202,52 @@ const STATUS_LABEL: Record<BackgroundMigrationSummary['status'], string> = {
   failed: 'Failed',
 };
 
+/** One of a migration's pace numbers, with its refusal under it (#320). */
+function PaceField({
+  id,
+  label,
+  range,
+  value,
+  error,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  range: { min: number; max: number };
+  value: string;
+  error: string | null;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1 text-[var(--text-muted)] text-xs">
+      <label htmlFor={id}>{label}</label>
+      <Input
+        id={id}
+        type="number"
+        className="w-28"
+        min={range.min}
+        max={range.max}
+        value={value}
+        {...invalidFieldProps(id, error)}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {error && (
+        <span id={fieldErrorId(id)} role="alert" className="max-w-56 text-[var(--danger)]">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Pace({ migration }: { migration: BackgroundMigrationSummary }) {
   const queryClient = useQueryClient();
   const [batchSize, setBatchSize] = useState(String(migration.batchSize));
   const [pauseMs, setPauseMs] = useState(String(migration.pauseMs));
+  // Each refused value under its field, both at once, kept until that field
+  // is edited; the browser's own range bubble is not used (#320).
+  const [problems, setProblems] = useFieldProblems({ batchSize, pauseMs });
+  const other = problemsElsewhere(problems, ['batchSize', 'pauseMs']);
   const save = useMutation({
     mutationFn: () =>
       api.patch<BackgroundMigrationSummary>(
@@ -214,6 +258,13 @@ function Pace({ migration }: { migration: BackgroundMigrationSummary }) {
         },
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: BACKGROUND_KEY }),
+    onError: (cause) =>
+      setProblems(
+        apiErrorProblems(cause, 'The pace could not be changed.', {
+          batchSize: 'Rows per batch',
+          pauseMs: 'Pause between batches',
+        }),
+      ),
   });
   const changed =
     batchSize !== String(migration.batchSize) || pauseMs !== String(migration.pauseMs);
@@ -223,46 +274,38 @@ function Pace({ migration }: { migration: BackgroundMigrationSummary }) {
   return (
     <form
       className="mt-2 flex flex-wrap items-end gap-3"
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
+        setProblems([]);
         save.mutate();
       }}
     >
-      <label
-        className="flex flex-col gap-1 text-[var(--text-muted)] text-xs"
-        htmlFor={`${id}-batch`}
-      >
-        Rows per batch
-        <Input
-          id={`${id}-batch`}
-          type="number"
-          className="w-28"
-          min={BACKGROUND_MIGRATION_BATCH_SIZE.min}
-          max={BACKGROUND_MIGRATION_BATCH_SIZE.max}
-          value={batchSize}
-          onChange={(event) => setBatchSize(event.target.value)}
-        />
-      </label>
-      <label
-        className="flex flex-col gap-1 text-[var(--text-muted)] text-xs"
-        htmlFor={`${id}-pause`}
-      >
-        Pause between batches (ms)
-        <Input
-          id={`${id}-pause`}
-          type="number"
-          className="w-28"
-          min={BACKGROUND_MIGRATION_PAUSE_MS.min}
-          max={BACKGROUND_MIGRATION_PAUSE_MS.max}
-          value={pauseMs}
-          onChange={(event) => setPauseMs(event.target.value)}
-        />
-      </label>
+      <PaceField
+        id={`${id}-batch`}
+        label="Rows per batch"
+        range={BACKGROUND_MIGRATION_BATCH_SIZE}
+        value={batchSize}
+        error={problemsAt(problems, 'batchSize')}
+        onChange={setBatchSize}
+      />
+      <PaceField
+        id={`${id}-pause`}
+        label="Pause between batches (ms)"
+        range={BACKGROUND_MIGRATION_PAUSE_MS}
+        value={pauseMs}
+        error={problemsAt(problems, 'pauseMs')}
+        onChange={setPauseMs}
+      />
       <Button type="submit" variant="secondary" size="sm" disabled={!changed || save.isPending}>
         {save.isPending && <Spinner />}
         Save
       </Button>
-      <MutationError error={save.error} message="The pace could not be changed." />
+      {other && (
+        <p role="alert" className="text-[var(--danger)] text-sm">
+          {other}
+        </p>
+      )}
     </form>
   );
 }

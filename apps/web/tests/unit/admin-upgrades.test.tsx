@@ -1,10 +1,22 @@
 // @vitest-environment happy-dom
-import type { BackgroundMigrationSummary, UpgradeReport } from '@oci/shared';
+import {
+  type BackgroundMigrationSummary,
+  type UpgradeReport,
+  updateBackgroundMigrationSchema,
+} from '@oci/shared';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackgroundWorkSection, UpgradesSection } from '../../src/components/admin/upgrades';
-import { cleanup, click, findButton, renderAdmin, settle } from './admin-test-utils';
+import {
+  cleanup,
+  click,
+  findButton,
+  renderAdmin,
+  settle,
+  typeInto,
+  validationFailure,
+} from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -198,6 +210,33 @@ describe('Background work', () => {
       batchSize: 250,
       pauseMs: 50,
     });
+  });
+
+  it('shows each refused pace number at its field, both in one save (#320)', async () => {
+    api.get.mockResolvedValue({ migrations: [migration()] });
+    api.patch.mockImplementation(async (_path: string, body: unknown) => {
+      throw validationFailure(updateBackgroundMigrationSchema, body);
+    });
+    ({ root } = await renderAdmin(<BackgroundWorkSection />));
+    const batch = document.querySelector<HTMLInputElement>('#migration-0-11-backfill-batch')!;
+    const pause = document.querySelector<HTMLInputElement>('#migration-0-11-backfill-pause')!;
+    await typeInto(batch, '0');
+    await typeInto(pause, '700000');
+    // Not the browser's bubble: the form opts out of it.
+    expect(batch.form?.noValidate).toBe(true);
+    await click(findButton('Save')!);
+    expect(batch.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById('migration-0-11-backfill-batch-error')?.textContent).toBe(
+      'Rows per batch must be at least 1.',
+    );
+    expect(pause.getAttribute('aria-describedby')).toContain('migration-0-11-backfill-pause-error');
+    expect(document.getElementById('migration-0-11-backfill-pause-error')?.textContent).toBe(
+      'Pause between batches must be at most 600,000.',
+    );
+    // Correcting one leaves the other.
+    await typeInto(batch, '250');
+    expect(document.getElementById('migration-0-11-backfill-batch-error')).toBeNull();
+    expect(document.getElementById('migration-0-11-backfill-pause-error')).not.toBeNull();
   });
 
   it('offers resume for a failed migration and shows its error', async () => {

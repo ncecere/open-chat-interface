@@ -131,7 +131,7 @@ export function ProviderFormDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label="Provider type"
           htmlFor="provider-kind"

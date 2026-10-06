@@ -118,7 +118,7 @@ export function SsoProviderForm({
         </DialogDescription>
       </DialogHeader>
 
-      <form ref={form} onSubmit={submit} className="flex flex-col gap-6">
+      <form noValidate ref={form} onSubmit={submit} className="flex flex-col gap-6">
         {provider ? (
           <section
             className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)] p-4"

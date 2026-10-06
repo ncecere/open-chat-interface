@@ -169,7 +169,7 @@ export function CapacityLimitsDialog({
           instead of failing.
         </DialogDescription>
       </DialogHeader>
-      <form onSubmit={submit} className="flex flex-col gap-4">
+      <form noValidate onSubmit={submit} className="flex flex-col gap-4">
         {FIELDS.map((field) => (
           <Field
             key={field.key}
@@ -412,7 +412,7 @@ export function ProviderCapacitySection() {
           )}
 
           <EditableFieldset>
-            <form onSubmit={submit} className="flex flex-col gap-4">
+            <form noValidate onSubmit={submit} className="flex flex-col gap-4">
               <Field
                 label="Longest wait (seconds)"
                 htmlFor="capacity-max-wait"

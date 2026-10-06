@@ -2,13 +2,18 @@
 import { scheduledReportInputSchema, updateInstanceSettingsSchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { QuotaPolicyDialog } from '../../src/components/admin/quota-policy-dialog';
+import { Dialog } from '../../src/components/ui/dialog';
+import { AdminInvitesPage } from '../../src/routes/admin/invites';
 import { AdminReportsPage } from '../../src/routes/admin/reports';
+import { AuthenticationSettingsForm } from '../../src/routes/admin/settings/authentication-settings';
 import { SmtpSettingsForm } from '../../src/routes/admin/settings/smtp-settings';
 import {
   alerts,
   button,
   cleanup,
   click,
+  dialog,
   renderAdmin,
   typeInto,
   validationFailure,
@@ -143,4 +148,86 @@ it('Reports: a blank name and a bad recipient are both reported in one save (#31
   await typeInto(input('report-recipients'), 'admin@northbrook.edu');
   expect(fieldError('report-recipients')).toBeNull();
   expect(fieldError('report-name')).toBe('Name is required.');
+});
+
+/** Presses the dialog's button named `label`. */
+const submitIn = (label: string) =>
+  click(
+    [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === label,
+    )!,
+  );
+
+/**
+ * Whether the browser would stop this field's form with its own bubble: it
+ * does so only when the form does not opt out with noValidate (#320).
+ */
+const browserWouldStop = (id: string) => {
+  const control = input(id);
+  return !control.form?.noValidate && !control.checkValidity();
+};
+
+it('Invitations: an expiry over 365 days is the app’s error at the field, not the browser’s bubble (#320)', async () => {
+  api.get.mockResolvedValue({ invites: [] });
+  ({ root } = await renderAdmin(<AdminInvitesPage />));
+  await click(button('Create invitation'));
+  await typeInto(input('invite-expiry'), '400');
+  expect(browserWouldStop('invite-expiry')).toBe(false);
+  await submitIn('Create invitation');
+  expect(fieldError('invite-expiry')).toBe('Expires in days must be at most 365.');
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+it('Reports: a window of 0 days is the app’s error at the field (#320)', async () => {
+  await renderReports();
+  await typeInto(input('report-name'), 'Fix7 report');
+  await typeInto(input('report-window'), '0');
+  await typeInto(input('report-recipients'), 'admin@northbrook.edu');
+  expect(browserWouldStop('report-window')).toBe(false);
+  await click(button('Add report'));
+  expect(fieldError('report-window')).toBe('Window (days) must be at least 1.');
+});
+
+it('Authentication › Session length: 0 days is the app’s error at the field (#320)', async () => {
+  ({ root } = await renderAdmin(
+    <AuthenticationSettingsForm
+      initialSettings={{
+        registrationMode: 'open',
+        emailVerificationRequired: false,
+        localAuthEnabled: true,
+        sessionLifetimeDays: 30,
+      }}
+      smtpConfigured
+    />,
+  ));
+  await typeInto(input('session-lifetime'), '0');
+  expect(browserWouldStop('session-lifetime')).toBe(false);
+  await click(button('Save changes'));
+  expect(fieldError('session-lifetime')).toBe('Enter a whole number of days from 1 to 365.');
+  expect(api.patch).not.toHaveBeenCalled();
+  // Corrected, it goes and the value is saved.
+  await typeInto(input('session-lifetime'), '14');
+  expect(fieldError('session-lifetime')).toBeNull();
+  api.patch.mockResolvedValue({ ok: true });
+  await click(button('Save changes'));
+  expect(api.patch).toHaveBeenCalledWith('/admin/settings', { sessionLifetimeDays: 14 });
+});
+
+it('Usage budgets › New budget: an empty name and a negative limit are both at their fields (#320)', async () => {
+  api.get.mockResolvedValue({ models: [] });
+  ({ root } = await renderAdmin(
+    <Dialog open>
+      <QuotaPolicyDialog policy={null} onClose={() => undefined} />
+    </Dialog>,
+  ));
+  await typeInto(input('policy-limit'), '-5');
+  expect(browserWouldStop('policy-name')).toBe(false);
+  await submitIn('Create budget');
+  expect(fieldError('policy-name')).toBe('Name is required.');
+  expect(fieldError('policy-limit')).toBe('Limit must be more than 0.');
+  expect(api.post).not.toHaveBeenCalled();
+  // Each goes with its own correction; the other stays.
+  await typeInto(input('policy-name'), 'Fix7 budget');
+  expect(fieldError('policy-name')).toBeNull();
+  expect(fieldError('policy-limit')).toBe('Limit must be more than 0.');
 });

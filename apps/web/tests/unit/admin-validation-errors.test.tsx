@@ -139,8 +139,10 @@ it('the usage budget dialog caps a rolling window at the API limit', async () =>
   await click(rolling);
   const length = document.getElementById('policy-window-hours') as HTMLInputElement;
   await typeInto(length, '100000');
-  // The browser refuses it before anything is sent, saying what the maximum is.
-  expect(length.validity.rangeOverflow).toBe(true);
+  // Refused before anything is sent, at the field, saying what the maximum is (#320).
   await createPolicy();
   expect(api.post).not.toHaveBeenCalled();
+  expect(document.getElementById('policy-window-hours-error')?.textContent).toBe(
+    'Window length (hours) must be at most 8,760.',
+  );
 });

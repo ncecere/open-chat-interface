@@ -101,6 +101,7 @@ function MemoryRow({
     >
       {editing ? (
         <form
+          noValidate
           className="flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
@@ -228,7 +229,7 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-2">
       <label htmlFor="memory-new" className="text-sm font-medium">
         Add a memory
       </label>

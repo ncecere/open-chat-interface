@@ -101,7 +101,7 @@ function PolicyDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={submit} className="flex flex-col gap-5">
+      <form noValidate onSubmit={submit} className="flex flex-col gap-5">
         <Field label="Title" htmlFor="policy-title">
           <Input
             id="policy-title"

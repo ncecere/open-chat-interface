@@ -216,7 +216,7 @@ function BroadcastDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form ref={form} onSubmit={submit} className="flex flex-col gap-5">
+      <form noValidate ref={form} onSubmit={submit} className="flex flex-col gap-5">
         <Field label="Title" htmlFor="broadcast-title" error={at('title')}>
           <Input
             id="broadcast-title"

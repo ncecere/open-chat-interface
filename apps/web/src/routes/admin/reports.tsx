@@ -245,6 +245,7 @@ export function AdminReportsPage() {
       {/* Adds a report, or edits the one chosen with Edit. */}
       <EditOnly>
         <form
+          noValidate
           ref={form}
           onSubmit={submit}
           className="mb-8 grid gap-3 sm:grid-cols-2"
