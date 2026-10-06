@@ -6,9 +6,11 @@ export function HighlightedText({ text }: { text: string }) {
     <>
       {parseHighlights(text).map((segment) =>
         segment.highlighted ? (
+          // No horizontal padding: it read as extra space either side of the
+          // matched word ("about a  lighthouse  keeper", #176).
           <mark
             key={segment.start}
-            className="rounded-sm bg-[var(--accent-soft)] px-0.5 font-semibold text-[var(--text-primary)]"
+            className="rounded-sm bg-[var(--accent-soft)] font-semibold text-[var(--text-primary)]"
           >
             {segment.text}
           </mark>
