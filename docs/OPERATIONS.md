@@ -145,7 +145,7 @@ failure, liveness on `/api/health/live`, a startup probe, and
 `preStop`). PodDisruptionBudgets let a node drain stop one pod of each kind at
 a time. The web pods find API pods through a headless Service, which lists
 only ready pods, and Caddy balances across them itself, so its passive checks
-take a single draining pod out of rotation. Workers get the same grace period
+take a single draining pod out of rotation for new chat turns. Workers get the same grace period
 and no `preStop` (nothing routes to them).
 
 ### Chart security
@@ -1369,31 +1369,42 @@ with a new image and `down` all drain.
 
 The web container's Caddy finds API replicas by re-resolving the `api` name
 every 2 s. Caddy runs no active health checks for upstreams found that way,
-so the bundled `docker/Caddyfile` takes a replica out of rotation through
-passive checks on real requests: a `503` from it, or a connection that is
-refused or takes longer than 1 s, marks it down for 3 s
+so the bundled `docker/Caddyfile` sends new chat turns (`POST /api/chat`,
+and continuing after tool approvals) through a proxy with passive checks on
+real requests: a `503` from a replica, or a connection that is refused or
+takes longer than 1 s, takes it out of rotation **for chat turns** for 3 s
 (`fail_duration 3s`, `max_fails 1`, `unhealthy_status 503`,
-`dial_timeout 1s`), and `lb_try_duration 5s` sends a request whose
-connection failed to another replica, whatever its method, trying again
-every 250 ms (`lb_try_interval 250ms`). Each further
-refused turn marks a draining replica down again. The mark outlasts the
-client's two resends of a refused turn (1 s apart), which may arrive through
-another web replica with its own mark. It is shorter than
-`lb_try_duration` so that a single replica (the default Compose stack) is
-never left with nowhere to go: a request that arrives while it is marked
-waits out the 3 s and is served by the draining replica, which still
-answers everything but new chat turns, including a resume of the reply it
-is finishing. A draining replica also lets replay readers finish (up to
-2 s) before it ends them. Its pooled
-connections are kept for 30 s, below the API's 65-second keep-alive, so it
-never sends a request on a connection the API is closing.
+`dial_timeout 1s`). Each further refused turn marks a draining replica down
+again. The mark outlasts the client's two resends of a refused turn (1 s
+apart), which may arrive through another web replica with its own mark, so
+the resends go to a replica that is not draining. It is shorter than
+`lb_try_duration 5s`, so with a single replica (the default Compose stack) a
+turn that arrives while it is marked waits out the 3 s and reaches the
+draining replica, which refuses it again (and the web app says the server is
+restarting) rather than failing with "no upstreams available".
+
+Every other request goes through a second proxy that does not look at those
+marks: a draining replica still answers everything but new chat turns,
+including a resume of the reply it is finishing, so nothing else needs to
+avoid it. Caddy keeps one failure count per replica address, shared by
+every proxy, so with the marks applying to all requests a single replica
+refusing the turns several tabs sent and resent was marked again each time
+a queued resend reached it, and a request waiting meanwhile could wait the
+whole 5 s and fail with `503` "no upstreams available" (#306). Now nothing
+but turns waits. A connection that fails is tried on the next replica in
+turn (`lb_policy round_robin`) every 250 ms (`lb_try_interval 250ms`) within
+`lb_try_duration 5s`, whatever its method, and a replica that has exited
+leaves at the next lookup (2 s). A draining replica also lets replay readers
+finish (up to 2 s) before it ends them. Pooled connections are kept for
+30 s, below the API's 65-second keep-alive, so the proxy never sends a
+request on a connection the API is closing.
 
 The API answers `503` only when a replica cannot serve: it is shutting down,
 or (readiness only) its database has been unreachable for more than 30 s. A
 request that fails because the database connection dropped answers `500`
 marked retryable instead (see [Database failover](#database-failover)).
 Keep it that way: an instance-wide `503`
-from every replica would mark them all down for 3 s at a time.
+to chat turns from every replica would mark them all down for 3 s at a time.
 
 While no replica can be reached (the API stopped or restarting), each
 request to `/api` waits the 5 s and answers `502`. The web container logs

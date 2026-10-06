@@ -22,8 +22,9 @@ import { ERROR_CODES } from '@oci/shared';
  * orchestrator may restart the container mid-drain), and a proxy cannot tell a
  * refused connection from a dead replica. A 503 before any work is the
  * standard "try elsewhere" answer; the web app retries it transparently, and
- * the bundled Caddy takes a replica that answers 503 out of rotation
- * (passive health, `unhealthy_status 503`).
+ * the bundled Caddy takes a replica that answers 503 out of rotation for new
+ * chat turns (passive health, `unhealthy_status 503`; other requests ignore
+ * that mark, since a draining replica still answers them, #306).
  */
 
 export interface DrainState {
