@@ -4,6 +4,7 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { LoginPage } from '../../src/routes/auth/login';
+import { fillAuthForm } from './auth-test-utils';
 
 /**
  * Screen readers and the sign-in error (#183): it was a plain paragraph, so
@@ -56,6 +57,7 @@ afterEach(async () => {
 });
 
 async function signIn() {
+  await fillAuthForm(container);
   await act(async () => {
     container
       .querySelector('form')!
@@ -97,4 +99,35 @@ it('announces a rate limit without calling the fields invalid', async () => {
   expect(alert.textContent).toBe('Too many attempts. Wait a minute and try again.');
   expect(field('email').getAttribute('aria-invalid')).toBeNull();
   expect(field('email').getAttribute('aria-describedby')).toBe(alert.id);
+});
+
+it('says in its own words which fields are empty or malformed, not the browser’s bubble (#320)', async () => {
+  let asked = 0;
+  network.answer = () => {
+    asked += 1;
+    return new Response(null, { status: 500 });
+  };
+  // The form opts out of the browser's check, which stopped at the first field.
+  expect(container.querySelector('form')!.noValidate).toBe(true);
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setter.call(field('email'), 'not-an-email');
+    field('email').dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    container
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  const alert = container.querySelector('[role="alert"]')!;
+  expect(alert.textContent).toBe(
+    'Enter an email address such as you@example.com. Enter your password.',
+  );
+  for (const id of ['email', 'password']) {
+    expect(field(id).getAttribute('aria-invalid')).toBe('true');
+    expect(field(id).getAttribute('aria-describedby')).toBe(alert.id);
+  }
+  expect(asked).toBe(0);
 });

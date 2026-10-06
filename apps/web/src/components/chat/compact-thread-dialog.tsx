@@ -148,7 +148,7 @@ function CompactThreadForm({
   }
 
   return (
-    <form onSubmit={(event) => void submit(event).catch(() => undefined)}>
+    <form noValidate onSubmit={(event) => void submit(event).catch(() => undefined)}>
       {pending && (
         <p className="mb-3 text-xs text-[var(--text-muted)]">
           {COMPACTION_PENDING_TEXT} Asking again does not start a second summary.

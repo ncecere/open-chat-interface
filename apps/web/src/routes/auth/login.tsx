@@ -3,7 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { AuthFormError, fieldErrorProps, useFocusAfterRender } from '~/components/auth/form-error';
+import {
+  AuthFormError,
+  authFormProblems,
+  emailProblem,
+  fieldErrorProps,
+  useFocusAfterRender,
+} from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -51,6 +57,8 @@ export function LoginPage() {
   const focusAfterRender = useFocusAfterRender();
   // Only wrong credentials are about the fields; a rate limit is not (#183).
   const invalidCredentials = error === WRONG_CREDENTIALS;
+  // The fields the form's own check found empty or malformed (#320's sweep).
+  const [missing, setMissing] = useState<string[]>([]);
   // Sent here because the session ended while the app was open (#165).
   const [signedOut] = useState(() =>
     new URLSearchParams(window.location.search).has(SIGNED_OUT_PARAM),
@@ -63,6 +71,16 @@ export function LoginPage() {
     event.preventDefault();
     setError(null);
     setNeedsVerification(false);
+    const problems = authFormProblems([
+      { id: 'email', problem: emailProblem(email) },
+      { id: 'password', problem: password ? null : 'Enter your password.' },
+    ]);
+    setMissing(problems?.ids ?? []);
+    if (problems) {
+      setError(problems.message);
+      focusAfterRender(problems.ids[0]!);
+      return;
+    }
     setSubmitting(true);
 
     const result = await answered(authClient.signIn.email({ email, password }));
@@ -172,7 +190,7 @@ export function LoginPage() {
           </div>
         ) : (
           <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
               {signedOut && !error && (
                 <p
                   role="status"
@@ -196,7 +214,11 @@ export function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
-                  {...fieldErrorProps('login-error', error, invalidCredentials)}
+                  {...fieldErrorProps(
+                    'login-error',
+                    error,
+                    invalidCredentials || missing.includes('email'),
+                  )}
                   type="email"
                   autoComplete="email"
                   required
@@ -210,7 +232,11 @@ export function LoginPage() {
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
-                  {...fieldErrorProps('login-error', error, invalidCredentials)}
+                  {...fieldErrorProps(
+                    'login-error',
+                    error,
+                    invalidCredentials || missing.includes('password'),
+                  )}
                   type="password"
                   autoComplete="current-password"
                   required

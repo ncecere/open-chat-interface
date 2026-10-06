@@ -43,6 +43,7 @@ export function DocumentEditor({
 
   return (
     <form
+      noValidate
       className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-5"
       onSubmit={(event) => {
         event.preventDefault();

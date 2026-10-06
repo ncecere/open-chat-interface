@@ -44,10 +44,7 @@ function formTags(source: string): string[] {
   return tags;
 }
 
-/** Where the forms checked here live. */
-const FORM_DIRS = ['routes/admin', 'routes/settings', 'components/admin', 'components/settings'];
-
-const files = FORM_DIRS.flatMap((dir) => sourceFiles(join(SRC, dir))).map((path) => ({
+const files = sourceFiles(SRC).map((path) => ({
   path: relative(SRC, path),
   source: readFileSync(path, 'utf8'),
 }));
@@ -71,7 +68,7 @@ it('every form uses the app’s own validation messages, never the browser’s b
   // attribute yet: a field gains a `min` more easily than its form a check.
   const forms = files.flatMap(({ path, source }) => formTags(source).map((tag) => ({ path, tag })));
   // The sweep found this many; a much smaller number means the scan broke.
-  expect(forms.length).toBeGreaterThan(40);
+  expect(forms.length).toBeGreaterThan(50);
   const native = forms.filter(({ tag }) => !/\bnoValidate\b/.test(tag)).map(({ path }) => path);
   expect(native).toEqual([]);
 });

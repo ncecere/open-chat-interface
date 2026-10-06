@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { LoginPage } from '../../src/routes/auth/login';
 import { SignupPage } from '../../src/routes/auth/signup';
+import { fillAuthForm } from './auth-test-utils';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -60,6 +61,7 @@ afterEach(async () => {
   await act(() => root.unmount());
 });
 async function submit() {
+  await fillAuthForm(container);
   await act(async () =>
     container
       .querySelector('form')!
@@ -148,4 +150,28 @@ it('puts the sign-in page in a main landmark, as every other auth page (#173)', 
   expect(main).toHaveLength(1);
   expect(main[0]?.querySelector('h1')?.textContent).toMatch(/^Sign in to /);
   expect(main[0]?.querySelector('#email')).not.toBeNull();
+});
+
+it('lists every empty or malformed sign-up field at once, marking each (#320)', async () => {
+  await act(() => root.render(withClient(<SignupPage />)));
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  const field = (id: string) => container.querySelector<HTMLInputElement>(`#${id}`)!;
+  await act(async () => {
+    setter.call(field('signup-password'), 'short');
+    field('signup-password').dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // Without filling the rest: the browser's bubble would have stopped at Name.
+  await act(async () =>
+    container
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+  expect(mocks.signup).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    'Enter your name. Enter your email address. Use at least 12 characters for your password.',
+  );
+  for (const id of ['signup-name', 'signup-email', 'signup-password']) {
+    expect(field(id).getAttribute('aria-invalid')).toBe('true');
+    expect(field(id).getAttribute('aria-describedby')).toContain('signup-error');
+  }
 });

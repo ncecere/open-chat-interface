@@ -4,7 +4,9 @@ import { type FormEvent, useState } from 'react';
 import {
   AuthFormError,
   AuthOutcomeHeading,
+  emailProblem,
   fieldErrorProps,
+  newPasswordProblem,
   useFocusAfterRender,
 } from '~/components/auth/form-error';
 import { AuthStatusUnavailable } from '~/components/auth/status-unavailable';
@@ -62,6 +64,13 @@ export function ForgotPasswordPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    // The app's own words, not the browser's bubble (#320's sweep).
+    const problem = emailProblem(email);
+    if (problem) {
+      setError(problem);
+      focusAfterRender('reset-email');
+      return;
+    }
     setSubmitting(true);
     const result = await answered(
       authClient.requestPasswordReset({ email, redirectTo: '/auth/reset-password' }),
@@ -138,7 +147,7 @@ export function ForgotPasswordPage() {
           </Button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           <div className="text-center">
             <h1 className="text-lg font-semibold">Reset your password</h1>
           </div>
@@ -146,7 +155,7 @@ export function ForgotPasswordPage() {
             <Label htmlFor="reset-email">Email</Label>
             <Input
               id="reset-email"
-              {...fieldErrorProps('reset-request-error', error, false)}
+              {...fieldErrorProps('reset-request-error', error, error === emailProblem(email))}
               type="email"
               autoComplete="email"
               required
@@ -194,6 +203,12 @@ export function ResetPasswordPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const problem = newPasswordProblem(password);
+    if (problem) {
+      setError(problem);
+      focusAfterRender('new-password');
+      return;
+    }
     setSubmitting(true);
     const result = await answered(authClient.resetPassword({ newPassword: password, token }));
     setSubmitted(true);
@@ -249,7 +264,7 @@ export function ResetPasswordPage() {
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           <div className="text-center">
             <h1 className="text-lg font-semibold">Choose a new password</h1>
           </div>

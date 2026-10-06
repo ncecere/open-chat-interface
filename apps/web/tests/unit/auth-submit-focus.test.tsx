@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginPage } from '../../src/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '../../src/routes/auth/password-reset';
+import { fillAuthForm } from './auth-test-utils';
 
 /**
  * #190: after submitting sign-in, Forgot password or a reset, focus fell to
@@ -84,6 +85,7 @@ async function submit(id: string, value: string) {
     button.disabled = true;
   });
   fixup.observe(button, { attributes: true, attributeFilter: ['disabled'] });
+  await fillAuthForm(container);
   await act(async () => {
     container
       .querySelector('form')!

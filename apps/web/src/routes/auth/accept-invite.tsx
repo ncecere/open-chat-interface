@@ -1,6 +1,12 @@
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
+import {
+  AuthFormError,
+  authFormProblems,
+  emailProblem,
+  fieldErrorProps,
+  newPasswordProblem,
+} from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -43,6 +49,8 @@ export function AcceptInvitePage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [verificationRequired, setVerificationRequired] = useState(false);
+  // The fields the form's own check found empty or malformed (#320's sweep).
+  const [missing, setMissing] = useState<string[]>([]);
 
   useEffect(() => {
     // Remove the bearer token from the address bar/history before making any
@@ -78,6 +86,17 @@ export function AcceptInvitePage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const problems = authFormProblems([
+      { id: 'invite-name', problem: name.trim() ? null : 'Enter your name.' },
+      { id: 'invite-email', problem: emailProblem(email) },
+      { id: 'invite-password', problem: newPasswordProblem(password) },
+    ]);
+    setMissing(problems?.ids ?? []);
+    if (problems) {
+      setError(problems.message);
+      document.getElementById(problems.ids[0]!)?.focus();
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -129,11 +148,12 @@ export function AcceptInvitePage() {
           )}
 
           {inviteState === 'valid' && (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="invite-name">Name</Label>
                 <Input
                   id="invite-name"
+                  {...fieldErrorProps('invite-error', error, missing.includes('invite-name'))}
                   autoComplete="name"
                   required
                   maxLength={120}
@@ -146,7 +166,7 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-email">Email</Label>
                 <Input
                   id="invite-email"
-                  {...fieldErrorProps('invite-error', error, false)}
+                  aria-invalid={missing.includes('invite-email') ? true : undefined}
                   type="email"
                   autoComplete="email"
                   required
@@ -174,7 +194,12 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-password">Password</Label>
                 <Input
                   id="invite-password"
-                  {...fieldErrorProps('invite-error', error, false, 'invite-password-hint')}
+                  {...fieldErrorProps(
+                    'invite-error',
+                    error,
+                    missing.includes('invite-password'),
+                    'invite-password-hint',
+                  )}
                   type="password"
                   autoComplete="new-password"
                   required
