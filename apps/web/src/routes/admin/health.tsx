@@ -16,6 +16,7 @@ import { BackgroundWorkSection, UpgradesSection } from '~/components/admin/upgra
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
+import { formatReadOnlyTime } from '~/lib/read-only';
 import { cn, formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
@@ -90,6 +91,20 @@ function runSummary(entry: JobRun): string {
   ].join('');
 }
 
+const ISO_INSTANT = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z\b/g;
+
+/**
+ * A check's detail with each time in it in the reader's local time. The API
+ * writes ISO 8601 instants, since it does not know where the reader is; the
+ * Read-only row read "until 2026-10-06T05:39:00.000Z" while the Maintenance
+ * card beside it said "until about 01:39 AM EDT" (#259). Exported for tests.
+ */
+export function localTimesIn(detail: string, now = new Date()): string {
+  return detail.replace(ISO_INSTANT, (iso) =>
+    Number.isNaN(Date.parse(iso)) ? iso : formatReadOnlyTime(iso, now),
+  );
+}
+
 function HealthChecks() {
   const health = useQuery({
     queryKey: ['admin', 'health'],
@@ -134,7 +149,7 @@ function HealthChecks() {
               />
               <div className="min-w-0">
                 <p className="font-medium text-sm">{check.label}</p>
-                <p className="text-[var(--text-muted)] text-xs">{check.detail}</p>
+                <p className="text-[var(--text-muted)] text-xs">{localTimesIn(check.detail)}</p>
               </div>
             </li>
           );

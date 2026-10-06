@@ -2,6 +2,7 @@
 import { type BackupStatus, updateBackupSettingsSchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { formatReadOnlyTime } from '../../src/lib/read-only';
 import { AdminBackupsPage, backupChanges } from '../../src/routes/admin/backups';
 import {
   alerts,
@@ -237,6 +238,7 @@ describe('Backups admin page', () => {
 describe('System health', () => {
   it('shows the backup and webhook rows and the read-only observability status', async () => {
     const { AdminHealthPage } = await import('../../src/routes/admin/health');
+    const until = new Date(Date.now() + 9 * 60_000).toISOString();
     api.get.mockImplementation(async (path: string) => {
       if (path === '/admin/health')
         return {
@@ -249,6 +251,12 @@ describe('System health', () => {
               detail: 'The latest backup failed',
             },
             { id: 'webhooks', label: 'Webhooks', status: 'ok', detail: '1 enabled; 0 pending' },
+            {
+              id: 'read-only',
+              label: 'Read-only mode',
+              status: 'warn',
+              detail: `On, by an administrator, until about ${until}: changes are refused.`,
+            },
           ],
           observability: {
             metrics: true,
@@ -291,6 +299,11 @@ describe('System health', () => {
     const text = document.body.textContent ?? '';
     expect(text).toContain('The latest backup failed');
     expect(text).toContain('1 enabled; 0 pending');
+    // In local time, as the Maintenance card and the banner show it, not ISO (#259).
+    expect(text).toContain(
+      `On, by an administrator, until about ${formatReadOnlyTime(until)}: changes are refused.`,
+    );
+    expect(text).not.toContain(until);
     expect(text).toContain('Served at /metrics');
     expect(text).toContain('Set OTEL_EXPORTER_OTLP_ENDPOINT to export traces.');
     // A long job name and its run line can be cut short on a phone (#130).

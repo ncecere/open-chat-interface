@@ -350,7 +350,12 @@ export async function updateMaintenance(
   return maintenanceView(knownJobs);
 }
 
-/** System health's row: a warning while writes are refused, saying why and until when. */
+/**
+ * System health's row: a warning while writes are refused, saying why and
+ * until when. Times stay ISO 8601 instants here (the server does not know the
+ * reader's time zone); the System health page shows each in the reader's
+ * local time, as the Maintenance card does (#259).
+ */
 export async function readOnlyHealthCheck(): Promise<{
   id: string;
   label: string;
@@ -368,16 +373,17 @@ export async function readOnlyHealthCheck(): Promise<{
         : 'Off: people can make changes.',
     };
   }
+  // Worded as the Maintenance card words it ("Read-only, by an administrator").
   const by =
     status.source === 'environment'
-      ? 'OCI_READ_ONLY is set in the environment (unset it on every replica to end it)'
+      ? 'because OCI_READ_ONLY is set in the environment (unset it on every replica to end it)'
       : status.source === 'schedule'
-        ? 'a scheduled window'
-        : 'an administrator';
+        ? 'for a scheduled window'
+        : 'by an administrator';
   return {
     ...base,
     status: 'warn',
-    detail: `On (${by})${status.until ? ` until ${status.until}` : ''}: changes are refused.${
+    detail: `On, ${by}${status.until ? `, until about ${status.until}` : ''}: changes are refused.${
       status.reason ? ` Reason: ${status.reason}` : ''
     }`,
   };

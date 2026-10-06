@@ -143,7 +143,8 @@ describe('read-only state', () => {
     state.maintenance = { readOnly: true, reason: 'Upgrade', until: at(100_000) };
     expect(await readOnlyHealthCheck()).toMatchObject({
       status: 'warn',
-      detail: expect.stringMatching(/an administrator.*Reason: Upgrade/),
+      // Worded as the Maintenance card; the page shows the instant in local time (#259).
+      detail: `On, by an administrator, until about ${at(100_000)}: changes are refused. Reason: Upgrade`,
     });
     state.env.OCI_READ_ONLY = true;
     expect((await readOnlyHealthCheck()).detail).toContain('OCI_READ_ONLY');
