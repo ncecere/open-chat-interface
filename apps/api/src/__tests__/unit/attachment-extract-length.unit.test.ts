@@ -7,9 +7,13 @@ function handbook(chars: number, factAt: number): string {
   const section = (n: number) =>
     `## Section ${n}\n\nRoutine guidance for the reading rooms, opening hours and loans.\n\n`;
   let text = '';
+  // A flag, not `text.includes`: searching the growing text on every pass is
+  // quadratic, and took over 5 s on CI runners.
+  let factAdded = false;
   for (let n = 1; text.length < chars; n += 1) {
     text += section(n);
-    if (text.length >= factAt && !text.includes('Quarrington')) {
+    if (text.length >= factAt && !factAdded) {
+      factAdded = true;
       text +=
         'The rare-books vault contact is conservator Elspeth Quarrington, extension 4471.\n\n';
     }
