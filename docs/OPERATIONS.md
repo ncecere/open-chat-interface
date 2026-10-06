@@ -1334,14 +1334,16 @@ The web container's Caddy finds API replicas by re-resolving the `api` name
 every 2 s. Caddy runs no active health checks for upstreams found that way,
 so the bundled `docker/Caddyfile` takes a replica out of rotation through
 passive checks on real requests: a `503` from it, or a connection that is
-refused or takes longer than 1 s, marks it down for 2 s
-(`fail_duration 2s`, `max_fails 1`, `unhealthy_status 503`,
+refused or takes longer than 1 s, marks it down for 3 s
+(`fail_duration 3s`, `max_fails 1`, `unhealthy_status 503`,
 `dial_timeout 1s`), and `lb_try_duration 5s` sends a request whose
 connection failed to another replica, whatever its method. Each further
-refused turn marks a draining replica down again. The mark is shorter than
+refused turn marks a draining replica down again. The mark outlasts the
+client's two resends of a refused turn (1 s apart), which may arrive through
+another web replica with its own mark. It is shorter than
 `lb_try_duration` so that a single replica (the default Compose stack) is
 never left with nowhere to go: a request that arrives while it is marked
-waits out the 2 s and is served by the draining replica, which still
+waits out the 3 s and is served by the draining replica, which still
 answers everything but new chat turns, including a resume of the reply it
 is finishing. A draining replica also lets replay readers finish (up to
 2 s) before it ends them. Its pooled
