@@ -76,7 +76,9 @@ it('shows email delivery times in local time, with the instant as the tooltip', 
   expect(failing.textContent).toBe(
     `The latest email through mailpit failed, most recently at ${formatReadOnlyTime(failedAt)}: connect ECONNREFUSED 172.29.0.2:1026. Until email works, people cannot verify their address or reset their password.`,
   );
-  expect(failing.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}|\bUTC\b/);
+  // No ISO instant in the text. (Not "no UTC": a machine whose own zone is UTC,
+  // CI's, writes its local time as "UTC".)
+  expect(failing.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   // The precise instant stays available.
   expect(failing.title).toContain(failedAt);
 
