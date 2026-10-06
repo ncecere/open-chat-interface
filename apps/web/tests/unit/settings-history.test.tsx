@@ -206,6 +206,55 @@ describe('Settings → History', () => {
     expect(toast.success).toHaveBeenCalledWith('Moved 2 conversations to the trash.');
   });
 
+  describe('focus after a bulk change (#189)', () => {
+    // The server forgets what was deleted or archived, so the refetch drops the rows.
+    let gone: Set<string>;
+    beforeEach(() => {
+      gone = new Set();
+      const list = api.get.getMockImplementation()!;
+      api.get.mockImplementation(async (path: string) => {
+        const result = await list(path);
+        if (!path.startsWith('/threads?')) return result;
+        return {
+          ...result,
+          threads: result.threads.filter((entry: { id: string }) => !gone.has(entry.id)),
+        };
+      });
+      api.delete.mockImplementation(async (path: string) => {
+        gone.add(path.split('/').pop()!);
+        return { ok: true };
+      });
+      api.patch.mockImplementation(async (path: string) => {
+        gone.add(path.split('/').pop()!);
+        return {};
+      });
+    });
+
+    const press = async (name: string) => {
+      const target = button(name);
+      target.focus();
+      expect(document.activeElement).toBe(target);
+      await click(target);
+    };
+
+    it.each(['Delete', 'Archive'])('%s moves focus to the next conversation', async (name) => {
+      await render();
+      await click(checkbox('Select Lab report'));
+      await press(name);
+      expect(rows().map((row) => row.querySelector('a')?.textContent)).toEqual(['Holiday plans']);
+      expect(document.activeElement).toBe(checkbox('Select Holiday plans'));
+    });
+
+    it('Delete in Archived moves focus to the heading once the list is empty', async () => {
+      await render();
+      await click([...document.querySelectorAll<HTMLElement>('[role="tab"]')][1]!);
+      await click(checkbox('Select Old plan'));
+      await press('Delete');
+      expect(rows()).toHaveLength(0);
+      expect(document.activeElement).toBe(document.querySelector('h1'));
+    });
+  });
+
   it('reports partial failures once', async () => {
     api.delete.mockImplementation(async (path: string) => {
       if (path === '/threads/t2') throw new Error('nope');

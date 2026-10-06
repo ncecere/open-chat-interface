@@ -2,7 +2,7 @@ import { THREAD_HISTORY_PAGE_SIZE, type ThreadSummary } from '@oci/shared';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { type MouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { YourDataButtons } from '~/components/settings/your-data';
 import { Button } from '~/components/ui/button';
@@ -12,6 +12,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { useProjects, useProjectsAvailable } from '~/hooks/use-projects';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import { keepFocusWhenRemoved, placeBesideRows } from '~/lib/focus-return';
 import { formatRelativeTime } from '~/lib/utils';
 import { TrashList } from './trash-list';
 
@@ -88,6 +89,7 @@ function ConversationList({ archived }: { archived: boolean }) {
   const [query, setQuery] = useState('');
   const search = useDebounced(query.trim(), HISTORY_SEARCH_DEBOUNCE_MS);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const listRef = useRef<HTMLUListElement>(null);
   const projectsAvailable = useProjectsAvailable();
   const projects = useProjects(projectsAvailable);
   const projectNames = useMemo(
@@ -149,6 +151,20 @@ function ConversationList({ archived }: { archived: boolean }) {
     onSettled: () => invalidateConversationLists(queryClient),
   });
 
+  /**
+   * The bulk bar leaves as the selection clears, taking the focused button
+   * with it, and the rows go when the list refetches: focus went to the body
+   * (#189). It moves to the row that takes the first removed one's place,
+   * which stays, else the one before, else the page's heading.
+   */
+  function runBulk(event: MouseEvent<HTMLButtonElement>, action: 'archive' | 'delete') {
+    const removing = [...(listRef.current?.children ?? [])].filter(
+      (row) => row.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked,
+    );
+    keepFocusWhenRemoved(event.currentTarget, placeBesideRows(event.currentTarget, removing));
+    bulk.mutate({ ids: [...selected], action });
+  }
+
   function toggle(id: string) {
     setSelected((current) => {
       const next = new Set(current);
@@ -192,7 +208,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                 variant="secondary"
                 size="sm"
                 disabled={bulk.isPending}
-                onClick={() => bulk.mutate({ ids: [...selected], action: 'archive' })}
+                onClick={(event) => runBulk(event, 'archive')}
               >
                 Archive
               </Button>
@@ -201,7 +217,7 @@ function ConversationList({ archived }: { archived: boolean }) {
               variant="danger"
               size="sm"
               disabled={bulk.isPending}
-              onClick={() => bulk.mutate({ ids: [...selected], action: 'delete' })}
+              onClick={(event) => runBulk(event, 'delete')}
             >
               Delete
             </Button>
@@ -234,7 +250,7 @@ function ConversationList({ archived }: { archived: boolean }) {
               onChange={toggleAll}
             />
           </div>
-          <ul aria-label="Conversations" className="flex flex-col">
+          <ul ref={listRef} aria-label="Conversations" className="flex flex-col">
             {threads.map((thread) => {
               const projectName = thread.projectId ? projectNames.get(thread.projectId) : undefined;
               return (

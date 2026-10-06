@@ -83,6 +83,30 @@ export function rememberPlace(element: HTMLElement): FocusPlace {
   };
 }
 
+/**
+ * The place for `element` (a bulk action's button) when the `removing` rows
+ * of one list are about to go: the row that takes the first one's place, else
+ * the last one before them, else the section's heading (#189). The rows next
+ * to the control itself would be no use: the control is not in the list.
+ */
+export function placeBesideRows(element: HTMLElement, removing: readonly Element[]): FocusPlace {
+  const place = rememberPlace(element);
+  const list = removing[0]?.parentElement;
+  if (!list) return place;
+  const rows = [...list.children];
+  const gone = new Set(removing);
+  const first = Math.min(...removing.map((row) => rows.indexOf(row)).filter((index) => index >= 0));
+  return {
+    ...place,
+    next: rows.slice(first + 1).find((row) => !gone.has(row)) ?? null,
+    previous:
+      rows
+        .slice(0, first)
+        .reverse()
+        .find((row) => !gone.has(row)) ?? null,
+  };
+}
+
 function focusRow(row: Element | null): boolean {
   if (!(row instanceof HTMLElement) || !row.isConnected) return false;
   const target = row.matches(FOCUSABLE) ? row : row.querySelector<HTMLElement>(FOCUSABLE);
