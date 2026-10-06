@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { UnsavedChangesGuard, useReportUnsaved } from '../../src/components/admin/unsaved-changes';
 import { Dialog, DialogContent, DialogTitle } from '../../src/components/ui/dialog';
+import { StorageSettingsForm } from '../../src/routes/admin/storage/storage-settings-form';
 import { cleanup, dialog, renderAdmin, settle, typeInto } from './admin-test-utils';
 
 let root: Root | undefined;
@@ -72,6 +73,51 @@ it('leaves without asking when nothing was changed', async () => {
   });
   expect(confirm).not.toHaveBeenCalled();
   expect(router.state.location.pathname).toBe('/admin/quotas');
+});
+
+it('switches Storage tabs without asking, since every tab shares one kept draft', async () => {
+  // Storage keeps all three panels mounted on one draft, so changing tab loses
+  // nothing; asking "Leave without saving them?" there was wrong, and saying no
+  // left the person unable to reach the other tabs before saving.
+  let router!: Awaited<ReturnType<typeof renderAdmin>>['router'];
+  ({ root, router } = await renderAdmin(
+    <UnsavedChangesGuard>
+      <StorageSettingsForm
+        initialSettings={{
+          driver: 'local',
+          localPath: '/data/attachments',
+          maxFileBytes: 10_485_760,
+          maxFilesPerMessage: 5,
+          allowedMimeTypes: ['image/png'],
+          s3: {
+            bucket: 'attachments',
+            region: 'us-east-1',
+            endpoint: null,
+            accessKeyId: 'access-id',
+            forcePathStyle: false,
+            hasCredential: true,
+          },
+        }}
+      />
+    </UnsavedChangesGuard>,
+    { path: '/admin/storage?tab=uploads' },
+  ));
+  const limit = () => document.querySelector<HTMLInputElement>('#max-files-per-message')!;
+  await typeInto(limit(), '6');
+  const tab = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+      (element) => element.textContent === name,
+    )!;
+
+  await act(async () => tab('S3 connection').click());
+  await settle();
+  expect(confirm).not.toHaveBeenCalled();
+  expect(router.state.location.search).toEqual({ tab: 's3' });
+  await act(async () => tab('Upload policy').click());
+  await settle();
+  expect(router.state.location.search).toEqual({ tab: 'uploads' });
+  expect(limit().value).toBe('6');
+  expect(confirm).not.toHaveBeenCalled();
 });
 
 /** Like a real key press, the event can be cancelled (the shared helper's cannot). */
