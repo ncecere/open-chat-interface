@@ -1,5 +1,6 @@
 import {
   type InstanceSettings,
+  MAX_FILES_PER_MESSAGE,
   MAX_UPLOAD_FILE_BYTES,
   type StorageDriver,
   type UpdateInstanceSettings,
@@ -100,6 +101,8 @@ export function validateDraft(
   }
   if (!Number.isSafeInteger(maxFilesPerMessage) || maxFilesPerMessage <= 0) {
     errors.maxFilesPerMessage = 'File count must be a positive whole number.';
+  } else if (maxFilesPerMessage > MAX_FILES_PER_MESSAGE) {
+    errors.maxFilesPerMessage = `File count can be at most ${MAX_FILES_PER_MESSAGE}.`;
   }
 
   const invalidMimeType = allowedMimeTypes.find((mimeType) => !/^[^\s/]+\/[^\s/]+$/.test(mimeType));

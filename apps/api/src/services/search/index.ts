@@ -1,4 +1,4 @@
-import { SEARCH_PROVIDERS, type SearchProviderKind } from '@oci/shared';
+import { MAX_SEARCH_RESULTS, SEARCH_PROVIDERS, type SearchProviderKind } from '@oci/shared';
 import { decryptSecret } from '../../lib/crypto.js';
 import { providerError, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -94,7 +94,8 @@ export async function runSearch(
     try {
       const results = await adapter({
         query: normalizedQuery,
-        maxResults: Math.min(Math.max(config.maxResults, 1), 20),
+        // A value saved before the cap (#218) still asks for no more.
+        maxResults: Math.min(Math.max(config.maxResults, 1), MAX_SEARCH_RESULTS),
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
         signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,

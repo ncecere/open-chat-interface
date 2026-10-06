@@ -56,7 +56,8 @@ currently held.
 **Data & storage → Storage** (`/admin/storage`) has three tabs: the storage
 driver, the S3 connection, and the upload policy. The upload policy's maximum
 file size can be at most 1,024 MB (1 GB), the same ceiling as a role's per-file
-[storage allowance](governance.md#storage-allowance).
+[storage allowance](governance.md#storage-allowance), and the files per message
+at most 20 (the default is 10). The count also bounds a single project upload.
 
 **Test put/read/delete** on the S3 tab checks the saved S3 settings actually
 work, and can be run while local storage is still active. Do this before
@@ -101,6 +102,9 @@ one is rejected by the other. **Test search** tells you which way round it is.
 Hosted providers use their own fixed endpoints, so they ask for no address. A
 key belongs to one provider: switching provider removes the saved key, and the
 page asks for the new provider's key before search can be switched on.
+
+**Maximum results** is how many results each search asks for, from 1 to 20:
+Brave and Tavily return no more than 20.
 
 **Test search** runs one sample search with the provider and the key or address
 on the page, saved or not, and says whether it worked or what the provider

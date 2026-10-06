@@ -303,6 +303,37 @@ describe.skipIf(!available)('live: partial administrative updates', () => {
     expect((await storage())?.maxFileBytes).toBe(1024 * 1024 * 1024);
   });
 
+  it('caps files per message at 20 and web search results at 20 (#218)', async () => {
+    const stored = async (key: 'storage' | 'search') => {
+      const [row] = await live.db
+        .select({ value: schema.instanceSetting.value })
+        .from(schema.instanceSetting)
+        .where(
+          and(
+            eq(schema.instanceSetting.organizationId, state.organizationId),
+            eq(schema.instanceSetting.key, key),
+          ),
+        );
+      return row?.value as { maxFilesPerMessage?: number; maxResults?: number } | undefined;
+    };
+    const patch = (body: unknown) =>
+      app.request('/settings', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    // The values the walk saved.
+    expect((await patch({ storage: { maxFilesPerMessage: 100_000 } })).status).toBe(422);
+    expect((await stored('storage'))?.maxFilesPerMessage).not.toBe(100_000);
+    expect((await patch({ search: { maxResults: 500 } })).status).toBe(422);
+    expect((await stored('search'))?.maxResults).not.toBe(500);
+
+    await send(app, 'PATCH', '/settings', { storage: { maxFilesPerMessage: 20 } });
+    expect((await stored('storage'))?.maxFilesPerMessage).toBe(20);
+    await send(app, 'PATCH', '/settings', { search: { maxResults: 20 } });
+    expect((await stored('search'))?.maxResults).toBe(20);
+  });
+
   it('stores only what the search provider uses and drops a key when switching', async () => {
     async function stored() {
       const [row] = await live.db

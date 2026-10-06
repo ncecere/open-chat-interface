@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { HEX_COLOR_PATTERN, isSafeImageUrl } from '../branding.js';
 import {
   COLOR_THEMES,
+  MAX_FILES_PER_MESSAGE,
+  MAX_SEARCH_RESULTS,
   MAX_UPLOAD_FILE_BYTES,
   QUOTA_METRICS,
   QUOTA_WINDOW_KINDS,
@@ -219,6 +221,8 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
       .extend({
         // Capped (#142); a role with no per-file size falls back to this.
         maxFileBytes: z.number().int().positive().max(MAX_UPLOAD_FILE_BYTES).optional(),
+        // Capped (#218): upload body limits are size × count.
+        maxFilesPerMessage: z.number().int().positive().max(MAX_FILES_PER_MESSAGE).optional(),
         s3: updateS3SettingsSchema.optional(),
       })
       .optional(),
@@ -226,6 +230,8 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
       .omit({ hasFallbackCredential: true })
       .partial()
       .extend({
+        // Capped at what providers return and search requests (#218).
+        maxResults: z.number().int().positive().max(MAX_SEARCH_RESULTS).optional(),
         apiKey: z.string().max(500).nullable().optional(),
         fallbackBaseUrl: z.string().max(2000).nullable().optional(),
         fallbackApiKey: z.string().max(500).nullable().optional(),

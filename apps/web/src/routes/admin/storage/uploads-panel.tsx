@@ -1,3 +1,4 @@
+import { MAX_FILES_PER_MESSAGE } from '@oci/shared';
 import { SettingsSection } from '~/components/admin/admin-ui';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
@@ -65,7 +66,7 @@ export function UploadsPanel({
             hint={
               showValidation && validation.maxFilesPerMessage
                 ? validation.maxFilesPerMessage
-                : 'Maximum attachment count accepted on one message.'
+                : `Maximum attachment count accepted on one message, up to ${MAX_FILES_PER_MESSAGE}.`
             }
           >
             <Input
@@ -73,6 +74,7 @@ export function UploadsPanel({
               type="number"
               inputMode="numeric"
               min={1}
+              max={MAX_FILES_PER_MESSAGE}
               step={1}
               value={draft.maxFilesPerMessage}
               disabled={save.isPending}
