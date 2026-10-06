@@ -33,3 +33,12 @@ test('the greeting is not crowded or covered by the composer on a phone', async 
   const menu = (await page.getByRole('menu').boundingBox())!;
   expect(menu.y).toBeGreaterThanOrEqual(greeting.y + greeting.height);
 });
+
+test('the model picker keeps the page margin on both sides of a phone (#169)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page);
+  await page.getByRole('combobox', { name: /^Select model/ }).click();
+  const panel = (await page.getByRole('dialog', { name: 'Choose a model' }).boundingBox())!;
+  expect(panel.x).toBeGreaterThanOrEqual(16);
+  expect(390 - (panel.x + panel.width)).toBeGreaterThanOrEqual(16);
+});
