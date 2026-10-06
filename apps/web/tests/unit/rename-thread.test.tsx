@@ -370,3 +370,26 @@ describe('renaming from the top bar', () => {
     expect(findButton('Rename conversation')).toBeUndefined();
   });
 });
+
+describe('temporary chat for a role without it (#181)', () => {
+  it('is not offered, rather than shown disabled with a reason nobody can read', async () => {
+    const get = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) =>
+      path === '/me'
+        ? {
+            user: { id: 'me', name: 'Pat' },
+            features: { projects: true, shareLinks: false, temporaryChat: false },
+          }
+        : get(path),
+    );
+    await render('/');
+    expect(document.querySelector('[aria-label="Start temporary chat"]')).toBeNull();
+    expect(document.querySelector('[title="Temporary chat is unavailable"]')).toBeNull();
+  });
+
+  it('is offered to a role with it', async () => {
+    await render('/');
+    const button = document.querySelector<HTMLButtonElement>('[aria-label="Start temporary chat"]');
+    expect(button?.disabled).toBe(false);
+  });
+});

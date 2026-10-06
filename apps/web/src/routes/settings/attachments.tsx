@@ -12,6 +12,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
+import { type CurrentFeatures, useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 import { AttachmentList } from '~/routes/settings/attachment-list';
@@ -101,8 +102,21 @@ function FilterMenu({ value, onChange }: FilterMenuProps) {
   );
 }
 
+/**
+ * Where this person's uploads would come from (#181): no invitation to upload
+ * for a role that can do neither, which says so as other refused features do.
+ */
+function emptyHint(features: CurrentFeatures | undefined): string | undefined {
+  if (!features) return undefined;
+  if (features.attachments && features.projects) return undefined;
+  if (features.attachments) return 'Files you attach in chats will appear here.';
+  if (features.projects) return 'Files you add to projects will appear here.';
+  return 'Uploading files is not available for your role.';
+}
+
 export function SettingsAttachmentsPage() {
   const queryClient = useQueryClient();
+  const features = useCurrentUser().data?.features;
   const [filter, setFilter] = useState<AttachmentFilter>('all');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -258,6 +272,7 @@ export function SettingsAttachmentsPage() {
         onToggle={toggle}
         onToggleAll={toggleAllVisible}
         onDelete={(ids) => setConfirming(ids)}
+        emptyHint={emptyHint(features)}
       />
 
       {/* Deleting is permanent, so it asks first (#101). Failures are reported

@@ -28,15 +28,18 @@ const file = (id: string, filename: string, project: { id: string; name: string 
 
 let files: ReturnType<typeof file>[];
 let deletedBytes = 0;
+let features: Record<string, boolean>;
 let root: Root | undefined;
 beforeEach(() => {
   deletedBytes = 0;
+  features = { attachments: true, projects: true };
   files = [
     file('a1', 'chat-notes.txt', null),
     file('a2', 'reading.txt', { id: 'p1', name: 'Reading list' }),
   ];
   api.get.mockReset().mockImplementation(async (path: string) => {
     if (path === '/attachments') return { attachments: files };
+    if (path === '/me') return { user: { id: 'u1', name: 'Ada', role: 'user' }, features };
     if (path === '/attachments/usage')
       return {
         liveBytes: 300 * 1024,
@@ -146,6 +149,18 @@ describe('Settings → Attachments', () => {
       ),
     );
     expect(document.body.textContent).not.toContain('is in the trash');
+  });
+
+  it.each([
+    [{ attachments: false, projects: false }, 'Uploading files is not available for your role.'],
+    [{ attachments: true, projects: false }, 'Files you attach in chats will appear here.'],
+    [{ attachments: false, projects: true }, 'Files you add to projects will appear here.'],
+  ])('invites only the uploads this role can make (#181): %o', async (allowed, hint) => {
+    features = allowed;
+    files = [];
+    await render();
+    await vi.waitFor(() => expect(document.body.textContent).toContain(hint));
+    expect(document.body.textContent).not.toContain('Files uploaded in chats and to projects');
   });
 
   it('shows an empty list as one compact line', async () => {

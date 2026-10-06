@@ -98,7 +98,8 @@ they changed it), and it lists only the levels your role may use.
 
 A temporary chat stays off the sidebar, becomes unavailable when it expires,
 and is removed by background cleanup. The instance still stores it while it is
-active.
+active. Start one with the clock icon at the top right; if your role does not
+have temporary chats, the icon is not shown.
 
 Temporary does not mean trace-free: usage and audit records may remain, and the
 model provider's retention policy still applies. Check your institution's data

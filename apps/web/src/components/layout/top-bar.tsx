@@ -116,21 +116,25 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
         {threadId && data?.features.shareLinks && <ShareThreadDialog threadId={threadId} />}
         {threadId && data?.features.projects && <MoveToProjectControl threadId={threadId} />}
         {threadId && <CompactConversationControl threadId={threadId} />}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={!available}
-          aria-label={temporary ? 'Leave temporary chat' : 'Start temporary chat'}
-          aria-pressed={temporary}
-          title={available ? 'Temporary chat' : 'Temporary chat is unavailable'}
-          onClick={toggleTemporary}
-          className={cn(
-            temporary &&
-              'bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-bright)]',
-          )}
-        >
-          <History />
-        </Button>
+        {/* Not offered to a role without temporary chats, as Attach is not
+            (#99): a disabled button's reason was only a title, which a
+            disabled button never shows or announces (#181). */}
+        {available && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={temporary ? 'Leave temporary chat' : 'Start temporary chat'}
+            aria-pressed={temporary}
+            title="Temporary chat"
+            onClick={toggleTemporary}
+            className={cn(
+              temporary &&
+                'bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-bright)]',
+            )}
+          >
+            <History />
+          </Button>
+        )}
         <ThemeMenu />
       </div>
     </header>
