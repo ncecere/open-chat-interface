@@ -206,6 +206,22 @@ describe('the model form and inline rename (#79)', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
+  it('clears the listed problems once the form is edited (#178)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(button('Add model'));
+    const add = () =>
+      click(
+        [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+          (candidate) => candidate.textContent?.trim() === 'Add model',
+        )!,
+      );
+    await add();
+    expect(alerts(dialog() as HTMLElement)[0]).toContain('Display name is required.');
+    await typeInto(field('upstream-model-id'), 'walk3-upstream');
+    await typeInto(field('model-display-name'), 'Walk3 model');
+    expect(alerts(dialog() as HTMLElement)).toEqual([]);
+  });
+
   it('lists a bad slug and an output with no room for input together (#129)', async () => {
     ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
     await click(button('Add model'));

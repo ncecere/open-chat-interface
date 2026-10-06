@@ -16,7 +16,7 @@ import {
   upsertModelSchema,
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
 import {
@@ -231,6 +231,10 @@ export function ModelFormDialog({
   const [draft, setDraft] = useState(() => initialDraft(model, providers));
   const [slugTouched, setSlugTouched] = useState(Boolean(model));
   const [error, setError] = useState<string | null>(null);
+  // The listed problems were about the form as it was submitted; once it
+  // changes they may no longer hold, so they go until the next attempt (#178).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every draft change
+  useEffect(() => setError(null), [draft]);
 
   // Whether thinking can be surfaced at all depends on the wire protocol, so
   // the guidance follows whichever provider is selected.

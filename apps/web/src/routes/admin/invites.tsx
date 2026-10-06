@@ -62,6 +62,12 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] }),
   });
 
+  /** Any edit clears the last attempt's error, which is about what was sent (#178). */
+  function edited() {
+    setValidationError(null);
+    if (create.isError) create.reset();
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setValidationError(null);
@@ -179,7 +185,10 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
             id="invite-email"
             type="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              edited();
+              setEmail(event.target.value);
+            }}
             placeholder="person@example.com"
             autoComplete="email"
             maxLength={320}
@@ -190,7 +199,10 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           <Select
             id="invite-role"
             value={role}
-            onChange={(next) => setRole(next as UserRole)}
+            onChange={(next) => {
+              edited();
+              setRole(next as UserRole);
+            }}
             options={USER_ROLES.map((option) => ({
               value: option,
               label: option.charAt(0).toUpperCase() + option.slice(1),
@@ -211,7 +223,10 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
             step={1}
             inputMode="numeric"
             value={expiresInDays}
-            onChange={(event) => setExpiresInDays(event.target.value)}
+            onChange={(event) => {
+              edited();
+              setExpiresInDays(event.target.value);
+            }}
             placeholder="No expiration"
           />
         </Field>

@@ -156,9 +156,11 @@ export function CapacityLimitsDialog({
               inputMode="numeric"
               value={values[field.key]}
               placeholder="No limit"
-              onChange={(event) =>
-                setValues((current) => ({ ...current, [field.key]: event.target.value }))
-              }
+              onChange={(event) => {
+                // A correction clears the complaint about it (#178).
+                setError(null);
+                setValues((current) => ({ ...current, [field.key]: event.target.value }));
+              }}
             />
           </Field>
         ))}
@@ -393,6 +395,10 @@ export function ProviderCapacitySection() {
                   value={maxWait}
                   onChange={(event) => {
                     setSaved(false);
+                    // Editing the value clears the complaint about it, which
+                    // otherwise stayed while Save was disabled (#178).
+                    setFormError(null);
+                    save.reset();
                     setMaxWait(event.target.value);
                   }}
                   className="max-w-40"
@@ -412,6 +418,7 @@ export function ProviderCapacitySection() {
                         value={priority?.[role] ?? 'normal'}
                         onChange={(next) => {
                           setSaved(false);
+                          save.reset();
                           setPriority((current) =>
                             current ? { ...current, [role]: next as QueuePriority } : current,
                           );
