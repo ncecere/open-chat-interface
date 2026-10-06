@@ -15,7 +15,12 @@ import type { TurnContext } from './turn-context.js';
 
 export type SummaryModel = Pick<
   TurnContext['resolved'],
-  'slug' | 'languageModel' | 'contextWindow' | 'maxOutputTokens'
+  | 'slug'
+  | 'languageModel'
+  | 'contextWindow'
+  | 'maxOutputTokens'
+  | 'capabilities'
+  | 'supportedEfforts'
 >;
 
 /** Upper bound for one summary, in tokens. */
@@ -31,6 +36,25 @@ export function summaryMaxTokens(budget: { units: number; outputTokens: number }
     256,
     Math.min(budget.outputTokens, MAX_SUMMARY_TOKENS, Math.floor(budget.units / 16)),
   );
+}
+
+/**
+ * The output limit sent with each summary call. A model that thinks before it
+ * answers spends its thinking from the same limit, and the thinking budget is
+ * often fixed where we cannot see it (a gateway alias such as
+ * `claude-haiku-4.5-thinking`); Anthropic refuses any request whose limit is
+ * not above that budget, and OpenAI reasoning models can spend a small limit
+ * on thinking alone and return nothing. So such a model gets its whole output
+ * limit, as its replies do (thinking is not ours to turn off there). The
+ * summary text is still expected within summaryMaxTokens, which the prompt's
+ * fixed format keeps it to. (#202)
+ */
+export function summaryCallTokens(model: SummaryModel): number {
+  const budget = contextBudget(model);
+  const thinks = model.capabilities.includes('reasoning') || model.supportedEfforts.length > 0;
+  return thinks
+    ? Math.max(budget.outputTokens, summaryMaxTokens(budget))
+    : summaryMaxTokens(budget);
 }
 
 /**
@@ -74,7 +98,7 @@ export async function summarize(
   instructions: string | null | undefined,
   tally: Tally,
 ): Promise<string> {
-  const maxOutputTokens = summaryMaxTokens(contextBudget(model));
+  const maxOutputTokens = summaryCallTokens(model);
   let summary = plan.previous?.summary ?? null;
   const chunkUnits = summaryChunkUnits(model, summary, instructions);
   const turns = groupTurns(plan.summarized, () => 0)
