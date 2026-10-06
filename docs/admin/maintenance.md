@@ -40,9 +40,12 @@ for someone new (just-in-time provisioning).
 
 - **Turn on read-only mode**, with an optional reason (shown to everyone) and
   an expected end. The expected end is shown to people and sent to API clients
-  as `Retry-After`; nothing ends by itself, so turn it off when you are done.
+  as `Retry-After`; it must be later than now. Nothing ends by itself, so turn
+  it off when you are done.
 - **Turn off read-only mode** is the one administration control that stays
   usable while read-only. Changes are accepted again on every replica at once.
+  The reason and expected end go with it: the next time, the form starts
+  empty.
 - **Scheduled window**: a start and an end. From the start until the end the
   instance is read-only without anybody at the switch, and it ends by itself.
   With **Announce it now**, everybody sees an announcement (an ordinary
@@ -55,7 +58,7 @@ for someone new (just-in-time provisioning).
 
 Every change is in the audit log as `maintenance.read_only.update`, with who
 made it, when, the reason, the expected end or window and the jobs kept
-running. Auditors see this page without its controls. **Health checks** shows a
+running, and what the reason and expected end were before. Auditors see this page without its controls. **Health checks** shows a
 **Read-only mode** row, a warning while it is on, and the `oci_read_only` metric
 is 1 on each replica that refuses writes.
 

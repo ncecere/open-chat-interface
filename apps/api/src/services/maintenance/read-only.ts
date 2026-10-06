@@ -274,8 +274,11 @@ export async function updateMaintenance(
     next.readOnly = input.readOnly;
     next.changedAt = new Date().toISOString();
     next.changedBy = actor.email;
-    // Turning it off ends the stated expectation with it.
+    // Turning it off ends the stated expectation and its reason with it: a
+    // reason kept from an earlier window prefilled the next one and stood in
+    // for a scheduled window's missing reason (#222).
     if (!input.readOnly && input.until === undefined) next.until = null;
+    if (!input.readOnly && input.reason === undefined) next.reason = null;
   }
   if (input.reason !== undefined) next.reason = input.reason || null;
   if (input.until !== undefined) next.until = input.until;

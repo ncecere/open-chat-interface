@@ -1,4 +1,8 @@
-import type { MaintenanceSettings, UpdateMaintenanceInput } from '@oci/shared';
+import {
+  type MaintenanceSettings,
+  type UpdateMaintenanceInput,
+  updateMaintenanceSchema,
+} from '@oci/shared';
 import {
   type UseMutationResult,
   useMutation,
@@ -13,9 +17,11 @@ import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api } from '~/lib/api-client';
 import { formatReadOnlyTime, setReadOnlyStatus } from '~/lib/read-only';
 import { formatRelativeTime } from '~/lib/utils';
+import { validationText } from '~/lib/validation-issues';
 
 export const MAINTENANCE_QUERY_KEY = ['admin', 'maintenance'] as const;
 
@@ -36,6 +42,9 @@ export function fromLocalInput(value: string): string | null {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
+
+/** The switch form's names for the fields the API checks. */
+const SWITCH_LABELS = { reason: 'Reason shown to people', until: 'Expected end' };
 
 const SOURCE_LABELS = {
   environment: 'the OCI_READ_ONLY environment variable',
@@ -86,6 +95,8 @@ function MaintenanceForm({ settings }: { settings: MaintenanceSettings }) {
       queryClient.setQueryData(MAINTENANCE_QUERY_KEY, next);
       // This tab follows at once; the others within their next poll.
       setReadOnlyStatus(next.status);
+      // The Health checks row above says whether read-only is on (#222).
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'health'] });
     },
   });
 
@@ -98,7 +109,8 @@ function MaintenanceForm({ settings }: { settings: MaintenanceSettings }) {
           here. Unset it on every replica (and worker) and restart them to end it.
         </Notice>
       )}
-      {isAdmin && <Switch settings={settings} save={save} />}
+      {/* Remounted on each switch, so the form starts empty every time (#222). */}
+      {isAdmin && <Switch key={String(settings.readOnly)} settings={settings} save={save} />}
       {isAdmin && <ScheduledWindow settings={settings} save={save} />}
       <Jobs settings={settings} save={save} editable={isAdmin} />
       <MutationError error={save.error} message="The change could not be saved." />
@@ -153,9 +165,13 @@ function Status({ settings }: { settings: MaintenanceSettings }) {
 
 function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save }) {
   const id = useId();
-  const [reason, setReason] = useState(settings.reason ?? '');
-  const [until, setUntil] = useState(toLocalInput(settings.until));
+  // Empty, not the last window's reason: someone switching on in a hurry
+  // would show people an old one (#222).
+  const [reason, setReason] = useState('');
+  const [until, setUntil] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  useClearOnEdit({ reason, until }, () => setProblem(null));
 
   if (settings.readOnly) {
     return (
@@ -179,12 +195,21 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    const input = { readOnly: true, reason: reason.trim() || null, until: fromLocalInput(until) };
+    // An expected end in the past is refused here before the confirmation,
+    // as the API refuses it (#222).
+    const parsed = updateMaintenanceSchema.safeParse(input);
+    if (!parsed.success) {
+      setConfirming(false);
+      setProblem(validationText(parsed.error.issues, 'Check the fields.', SWITCH_LABELS));
+      return;
+    }
     if (!confirming) {
       setConfirming(true);
       return;
     }
     setConfirming(false);
-    save.mutate({ readOnly: true, reason: reason.trim() || null, until: fromLocalInput(until) });
+    save.mutate(input);
   }
 
   return (
@@ -215,6 +240,11 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
           />
         </Field>
       </div>
+      {problem && (
+        <p role="alert" className="text-[var(--danger)] text-sm">
+          {problem}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="submit"
