@@ -7,7 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from three QA walks of v0.11.0 (issues #35–#237). One migration, `0042`,
+Fixes from four QA walks of v0.11.0 (issues #35–#266). One migration, `0042`,
 runs with `migrate` as usual. Two new post-deploy steps, `0007` and `0008`, index
 the audit log so a person's trail includes bulk actions done to them (#216): run
 `migrate --post` after every replica runs the new release, as for any release.
@@ -110,6 +110,33 @@ PostgreSQL driver patch (`patches/postgres@3.4.9.patch`) is applied by
 - **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
+
+### Fixed after a fourth QA walk (#239–#266)
+
+- **Security:** database errors no longer write query parameters to the log
+  (reply text, session tokens): every logged error, Better Auth's included,
+  is redacted in the logger, and so is error text stored for administrators
+  (#264).
+- **Accessibility:** a visible focus ring on every dropdown (#239); focus
+  after choosing a conversation in the phone drawer, restoring, deleting
+  memories and removing attachments (#242, #250); new chats put the cursor in
+  the message box, except on touch devices (#251); named task-list checkboxes
+  (#240); file names wrap (#244); load errors are announced (#245); control
+  names and target sizes (#246).
+- **Chat:** list indentation (#241); a too-long message says the limit
+  (#247); the model's "today" is the person's own date (#248); the sidebar
+  picks up a title after a lost connection (#249); revoking a share link asks
+  first everywhere (#252); stop notes under reasoning (#253); Markdown
+  downloads nest reply headings (#255); wording (#254); an unused New Chat is
+  also removed on reload or close (#266).
+- **Administration:** Background jobs lists only jobs a worker runs, and Run
+  says when no worker takes it (#256, #265); correcting one field keeps other
+  fields' errors (#257); more edits record previous values (#258); read-only
+  status reads in local time (#259); button names and disabled reasons (#260,
+  #261); usage counts explained (#262); wording (#263); phone layout of
+  Settings › Models and tab strips (#243).
+- **Operations:** the web proxy marks a draining API replica down for 3 s,
+  past the client's resends (#117 follow-up).
 
 ### Fixed after a third QA walk (#186–#237)
 
