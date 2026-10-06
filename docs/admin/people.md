@@ -179,6 +179,8 @@ worth doing when somebody's circumstances change between offer and acceptance.
 An address that already has an account cannot be invited (change the
 account's role instead), and an address can have only one pending invitation
 at a time: revoke it to send a new one, for example with a different role.
+A save with several problems, such as an expiry of 400 days for an address that
+already has an account, shows them all at their fields at once.
 An invitation for an address can only be accepted with that address, so the
 invitation page fills it in. When email verification is required, the new
 account still verifies its address as any other does: whoever opens the link
