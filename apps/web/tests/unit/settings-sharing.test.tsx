@@ -237,4 +237,21 @@ describe('Settings → Sharing', () => {
     await render();
     expect(alerts().join(' ')).toContain('could not be loaded');
   });
+
+  it('turns Revoke and Revoke all off with the reason while read-only (#331)', async () => {
+    const { setReadOnlyStatus } = await import('../../src/lib/read-only');
+    const { INACTIVE_READ_ONLY_STATUS } = await import('@oci/shared');
+    setReadOnlyStatus({ ...INACTIVE_READ_ONLY_STATUS, active: true, source: 'administrator' });
+    try {
+      await render();
+      for (const name of ['Revoke the link to Conversation snap', 'Revoke all']) {
+        expect(button(name).disabled, name).toBe(true);
+        expect(button(name).title, name).toBe('Read-only for maintenance');
+      }
+      // Copying a link is reading, and stays on.
+      expect(findButton('Copy')?.disabled).toBe(false);
+    } finally {
+      setReadOnlyStatus(INACTIVE_READ_ONLY_STATUS);
+    }
+  });
 });

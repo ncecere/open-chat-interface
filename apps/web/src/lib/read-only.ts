@@ -140,3 +140,15 @@ export function readOnlyShortReason(status: ReadOnlyStatus, now = new Date()): s
     ? `Read-only for maintenance until about ${formatReadOnlyTime(status.until, now)}`
     : 'Read-only for maintenance';
 }
+
+/**
+ * For a control that changes something: whether it is off now, and the
+ * reason for its title, as the message and sidebar actions show it (#159).
+ * The conversation header's Rename, Share and Move to project, and the
+ * sidebar's New project, stayed on while the sidebar's own Rename was off,
+ * and only refused once used (#331).
+ */
+export function useReadOnlyLock(): { locked: boolean; title: string | undefined } {
+  const status = useReadOnlyStatus();
+  return { locked: status.active, title: status.active ? readOnlyShortReason(status) : undefined };
+}

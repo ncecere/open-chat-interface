@@ -17,6 +17,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 
 interface OwnerShareLink {
   id: string;
@@ -76,6 +77,8 @@ function ShareLinkRow({
 }) {
   const status = statusOf(link);
   const url = shareUrl(link.slug);
+  // Copying is reading; revoking is a change, off while read-only (#331).
+  const lock = useReadOnlyLock();
 
   return (
     <li className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/45 p-3 sm:p-4">
@@ -120,7 +123,8 @@ function ShareLinkRow({
             variant="ghost"
             aria-label="Revoke share link"
             aria-haspopup="dialog"
-            disabled={status === 'revoked'}
+            title={lock.title}
+            disabled={status === 'revoked' || lock.locked}
             onClick={onRevoke}
           >
             <Trash2 />
@@ -153,6 +157,9 @@ export function ShareThreadDialog({
   const [revoking, setRevoking] = useState<OwnerShareLink | null>(null);
   const queryClient = useQueryClient();
   const linksKey = ['share-links', threadId] as const;
+  // Making a link is a change: off while read-only, with the reason, as the
+  // sidebar's Rename is (#331). Existing links stay listed in Settings → Sharing.
+  const lock = useReadOnlyLock();
 
   const links = useQuery({
     queryKey: linksKey,
@@ -230,7 +237,14 @@ export function ShareThreadDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ?? (
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Share conversation">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Share conversation"
+            title={lock.title}
+            disabled={lock.locked}
+          >
             <Share2 />
           </Button>
         )}
@@ -296,7 +310,13 @@ export function ShareThreadDialog({
             <p className="text-xs text-[var(--text-muted)]">
               Existing links are independent; creating a new link does not revoke them.
             </p>
-            <Button type="button" variant="primary" disabled={create.isPending} onClick={submit}>
+            <Button
+              type="button"
+              variant="primary"
+              title={lock.title}
+              disabled={create.isPending || lock.locked}
+              onClick={submit}
+            >
               {create.isPending ? <Spinner /> : <Link2 />}
               Create and copy link
             </Button>

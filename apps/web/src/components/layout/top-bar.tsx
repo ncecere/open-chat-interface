@@ -12,6 +12,7 @@ import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useConversationUnavailable } from '~/lib/conversation-cache';
 import { focusComposerSoon } from '~/lib/focus-after-navigation';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -161,6 +162,8 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
 function RenameConversationControl({ threadId }: { threadId: string }) {
   const [open, setOpen] = useState(false);
   const title = useOpenConversation(threadId)?.thread.title;
+  // Off while read-only, as the sidebar's Rename is (#331).
+  const lock = useReadOnlyLock();
 
   return (
     <>
@@ -168,9 +171,9 @@ function RenameConversationControl({ threadId }: { threadId: string }) {
         variant="ghost"
         size="icon-sm"
         aria-label="Rename conversation"
-        title="Rename"
+        title={lock.title ?? 'Rename'}
         aria-haspopup="dialog"
-        disabled={title === undefined}
+        disabled={title === undefined || lock.locked}
         onClick={() => setOpen(true)}
       >
         <Pencil />
@@ -189,6 +192,7 @@ function MoveToProjectControl({ threadId }: { threadId: string }) {
   // the sidebar does not list it (an older project conversation).
   const conversation = useOpenConversation(threadId)?.thread;
   const current = conversation?.projectId ?? null;
+  const lock = useReadOnlyLock();
   // Temporary chats cannot join a project; offering it only led to a refusal (#91).
   if (conversation?.temporary) return null;
 
@@ -198,7 +202,9 @@ function MoveToProjectControl({ threadId }: { threadId: string }) {
         variant="ghost"
         size="icon-sm"
         aria-label="Move to project"
-        title="Move to project"
+        // Off while read-only, with the reason (#331).
+        title={lock.title ?? 'Move to project'}
+        disabled={lock.locked}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
