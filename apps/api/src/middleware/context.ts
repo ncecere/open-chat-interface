@@ -6,6 +6,7 @@ import { SESSION_LOOKUP_FAILED } from '../lib/db-connection.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { noteSessionActivity } from '../services/account-sessions.js';
+import { isNewTurnRequest, retryTurnStep, turnDeadline } from '../services/chat/turn-patience.js';
 
 export interface AuthenticatedUser {
   id: string;
@@ -53,7 +54,12 @@ async function lookUpSession(headers: Headers) {
 
 /** Resolves the session for every request without rejecting anonymous ones. */
 export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) => {
-  const session = await lookUpSession(c.req.raw.headers);
+  // A new message waits out a database outage rather than failing at once and
+  // losing its text (#326); the lookup changes nothing, so it is safe to repeat.
+  const request = c.req.raw;
+  const session = isNewTurnRequest(request)
+    ? await retryTurnStep(turnDeadline(request), 'session', () => lookUpSession(request.headers))
+    : await lookUpSession(request.headers);
 
   if (session?.user) {
     const raw = session.user as typeof session.user & {

@@ -15,6 +15,15 @@ export type TurnContext = {
   resolved: Awaited<ReturnType<typeof resolveModelForRole>>;
   /** Tools offered to the model this turn; empty for models without tool calling. */
   tools: TurnTools;
+  /** A new message's patience with a database outage (turn-patience.ts, #326). */
+  admission?: TurnAdmission;
+};
+
+export type TurnAdmission = {
+  /** Steps up to the prompt's saving retry a lost connection until then. */
+  deadline: number;
+  /** Called as the prompt's transaction begins: the message may be stored from here. */
+  onSaving: () => void;
 };
 
 /** Validate access and model before claiming; no history or turn writes. */

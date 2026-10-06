@@ -123,12 +123,14 @@ export async function reserveQuota(params: {
       const totalsByPolicy = new Map<string, WindowTotals>();
       for (const policy of params.policies) {
         const { start } = resolveWindow(policy, now);
+        // Not counting this run's own reservation, stored by an attempt whose
+        // commit was lost with its connection (#326; none on a first attempt).
         const totals = await windowTotalsIncludingPending(
           tx,
           params.userId,
           start,
           policy.modelSlugs,
-          undefined,
+          params.runId,
           source,
         );
         totalsByPolicy.set(policy.id, totals);
@@ -155,9 +157,13 @@ export async function reserveQuota(params: {
           pending: true,
           usageUnknown: true,
         })
+        // The run's ID is new to this request: a row already there is this
+        // run's, reserved by an attempt whose commit was lost (#326).
+        .onConflictDoNothing({ target: schema.usageEvent.id })
         .returning({ id: schema.usageEvent.id });
-      if (!created) throw new Error('Failed to reserve quota');
-      return created.id;
+      if (created) return created.id;
+      if (params.runId) return params.runId;
+      throw new Error('Failed to reserve quota');
     })
     .catch(async (error) => {
       if (error instanceof QuotaDenied) {

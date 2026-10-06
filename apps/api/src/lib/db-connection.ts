@@ -117,6 +117,11 @@ export function connectionLossCount(): number {
 export interface RetryOptions {
   /** Total time to keep trying after the first failure (default 30 s). */
   budgetMs?: number;
+  /**
+   * Stop trying at this time (`Date.now()`) instead, however soon the first
+   * failure came: for work bounded by when its request arrived (#326).
+   */
+  deadline?: number;
   /** First pause; doubles each attempt up to `maxDelayMs` (default 250 ms). */
   initialDelayMs?: number;
   maxDelayMs?: number;
@@ -146,7 +151,7 @@ export async function retryOnConnectionError<T>(
       return await operation(attempt);
     } catch (error) {
       if (!isConnectionError(error)) throw error;
-      deadline ??= Date.now() + budgetMs;
+      deadline ??= options.deadline ?? Date.now() + budgetMs;
       const wait = Math.min(delayMs, maxDelayMs, deadline - Date.now());
       if (wait <= 0) throw error;
       options.onRetry?.({ attempt, delayMs: wait, error });

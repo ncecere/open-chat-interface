@@ -6,6 +6,7 @@ import { nextPosition } from '../threads.js';
 import { denyOpenApprovals } from './pending-approvals.js';
 import { claimProducerQuietInMs, recoverStaleClaim, runLiveness } from './run-recovery.js';
 import type { TurnContext } from './turn-context.js';
+import { retryTurnStep } from './turn-patience.js';
 
 export type ChatTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -87,7 +88,10 @@ export function claimRefusal(updatedAt: Date, now = Date.now(), redisQuietInMs =
  */
 export async function claimThread(context: TurnContext, runId: string): Promise<{ id: string }> {
   try {
-    return await claimOnce(context, runId);
+    // A new message waits out a lost connection here too (#326).
+    return await retryTurnStep(context.admission?.deadline, 'claim', () =>
+      claimOnce(context, runId),
+    );
   } catch (error) {
     if (!(error instanceof ActiveClaim)) throw error;
     const recovered = await recoverStaleClaim({
@@ -127,6 +131,10 @@ async function claimOnce(context: TurnContext, runId: string): Promise<{ id: str
         ),
       )
       .limit(1);
+    // Our own claim: an earlier attempt committed just as its connection was
+    // lost (#326). It stands, and is not made twice; only the audit events of
+    // the approvals it denied were lost with that attempt's answer.
+    if (active?.id === runId) return { claim: { id: runId }, auditDenials: async () => {} };
     if (active) throw new ActiveClaim(active.id, active.updatedAt);
     // Sending a message instead of answering denies open approvals, so the
     // model never sees a dangling call.

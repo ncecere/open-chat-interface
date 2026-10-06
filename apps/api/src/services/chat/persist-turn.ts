@@ -40,6 +40,8 @@ export async function persistTurn(
   regenerationParent: string,
   historicalAttachments: HistoricalAttachmentReference[] = [],
 ) {
+  // From here a failure may leave the message stored (#326).
+  context.admission?.onSaving();
   const result = await retryOnConnectionError(
     (attempt) =>
       persistTurnOnce(
