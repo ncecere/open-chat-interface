@@ -1,11 +1,13 @@
 import type { TrashedThread } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { type MouseEvent, useState } from 'react';
+import { toast } from 'sonner';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
-import { api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import { keepFocusWhenRemoved } from '~/lib/focus-return';
 import { formatRelativeTime } from '~/lib/utils';
 
 function purgeCountdown(purgeAt: string): string {
@@ -45,9 +47,23 @@ export function TrashList() {
     ]);
 
   const restore = useMutation({
-    mutationFn: (id: string) => api.post(`/threads/${id}/restore`),
-    onSuccess: invalidate,
+    mutationFn: (thread: TrashedThread) => api.post(`/threads/${thread.id}/restore`),
+    // Said, as Delete is: the row only vanished, with no word of where the
+    // conversation went (#250). It returns to where it was when deleted.
+    onSuccess: (_, thread) => {
+      toast.success(`Restored “${thread.title}” from the trash.`);
+      return invalidate();
+    },
+    onError: (error, thread) =>
+      toast.error(apiErrorMessage(error, `“${thread.title}” could not be restored. Try again.`)),
   });
+
+  /** The row leaves once the trash refetches; focus goes to the next one, not the body (#250). */
+  function restoreRow(event: MouseEvent<HTMLButtonElement>, thread: TrashedThread) {
+    const row = event.currentTarget.closest<HTMLElement>('[data-focus-row]');
+    if (row) keepFocusWhenRemoved(row);
+    restore.mutate(thread);
+  }
 
   const threads = data ?? [];
 
@@ -86,6 +102,7 @@ export function TrashList() {
           return (
             <div
               key={thread.id}
+              data-focus-row
               className="flex items-center gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0"
             >
               <div className="min-w-0 flex-1">
@@ -101,9 +118,10 @@ export function TrashList() {
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={restore.isPending}
+                // Only this row's: a disabled neighbour cannot take focus when this row goes.
+                disabled={restore.isPending && restore.variables?.id === thread.id}
                 aria-label={`Restore ${thread.title}`}
-                onClick={() => restore.mutate(thread.id)}
+                onClick={(event) => restoreRow(event, thread)}
               >
                 Restore
               </Button>

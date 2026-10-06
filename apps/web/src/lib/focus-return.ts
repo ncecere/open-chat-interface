@@ -68,6 +68,11 @@ export interface FocusPlace {
   next: Element | null;
   previous: Element | null;
   ancestors: HTMLElement[];
+  /**
+   * Where focus goes when no row is left, before the section's heading: the
+   * message box after a composer's last attachment chip (#250).
+   */
+  fallback?: HTMLElement | null;
 }
 
 /** Notes what surrounds `element`, to find a new place if it is removed. */
@@ -130,6 +135,10 @@ export function focusPlace(place: FocusPlace): boolean {
     if (document.activeElement === place.element) return true;
   }
   if (focusRow(place.next) || focusRow(place.previous)) return true;
+  if (place.fallback?.isConnected) {
+    place.fallback.focus();
+    if (document.activeElement === place.fallback) return true;
+  }
   const container = place.ancestors.find((ancestor) => ancestor.isConnected);
   const landmark = container?.closest<HTMLElement>('section, main, [role="dialog"], body');
   const heading = landmark?.querySelector<HTMLElement>('h1, h2, h3') ?? null;

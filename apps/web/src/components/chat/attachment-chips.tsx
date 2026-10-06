@@ -1,6 +1,7 @@
 import { AlertCircle, FileText, X } from 'lucide-react';
-import { useState } from 'react';
+import { type RefObject, useState } from 'react';
 import type { PendingAttachment } from '~/hooks/use-attachments';
+import { keepFocusWhenRemoved, rememberPlace } from '~/lib/focus-return';
 import { cn, formatBytes } from '~/lib/utils';
 
 /**
@@ -17,9 +18,12 @@ export function failureText(item: Pick<PendingAttachment, 'filename' | 'error'>)
 export function AttachmentChips({
   items,
   onRemove,
+  messageBox,
 }: {
   items: PendingAttachment[];
   onRemove: (localId: string) => void;
+  /** Where focus goes when the last chip is removed. */
+  messageBox?: RefObject<HTMLElement | null>;
 }) {
   // Previews the browser could not draw: a file named .png that is not an
   // image shows as a document while it uploads, not as a broken image (#209).
@@ -37,6 +41,7 @@ export function AttachmentChips({
           return (
             <div
               key={item.localId}
+              data-focus-row
               className={cn(
                 'group relative flex items-center gap-2 rounded-lg border px-2 py-1.5',
                 failed
@@ -77,7 +82,19 @@ export function AttachmentChips({
 
               <button
                 type="button"
-                onClick={() => onRemove(item.localId)}
+                onClick={(event) => {
+                  // The chip goes, and its × with it: focus went to the body.
+                  // It moves to the next chip's ×, else the one before, else
+                  // the message box (#250).
+                  const chip = event.currentTarget.closest<HTMLElement>('[data-focus-row]');
+                  if (chip) {
+                    keepFocusWhenRemoved(chip, {
+                      ...rememberPlace(event.currentTarget),
+                      fallback: messageBox?.current,
+                    });
+                  }
+                  onRemove(item.localId);
+                }}
                 aria-label={`Remove ${item.filename}`}
                 className="rounded p-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
               >

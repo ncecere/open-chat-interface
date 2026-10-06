@@ -147,7 +147,11 @@ function ConversationList({ archived }: { archived: boolean }) {
   });
 
   const unarchive = useMutation({
-    mutationFn: (id: string) => api.patch(`/threads/${id}`, { archived: false }),
+    mutationFn: (thread: ThreadSummary) => api.patch(`/threads/${thread.id}`, { archived: false }),
+    // Said, as archiving is: the row only vanished (#250).
+    onSuccess: (_, thread) => toast.success(`Restored “${thread.title}” to Active.`),
+    onError: (error, thread) =>
+      toast.error(apiErrorMessage(error, `“${thread.title}” could not be restored. Try again.`)),
     onSettled: () => invalidateConversationLists(queryClient),
   });
 
@@ -291,9 +295,15 @@ function ConversationList({ archived }: { archived: boolean }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={unarchive.isPending}
+                      // Only this row's: a disabled neighbour cannot take focus.
+                      disabled={unarchive.isPending && unarchive.variables?.id === thread.id}
                       aria-label={`Restore ${thread.title}`}
-                      onClick={() => unarchive.mutate(thread.id)}
+                      onClick={(event) => {
+                        // The row leaves on refetch: focus goes to the next, not the body (#250).
+                        const row = event.currentTarget.closest('li');
+                        if (row) keepFocusWhenRemoved(row);
+                        unarchive.mutate(thread);
+                      }}
                     >
                       Restore
                     </Button>

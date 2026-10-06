@@ -243,9 +243,26 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
 function DeleteAll({ count }: { count: number }) {
   const [confirming, setConfirming] = useState(false);
   const removeAll = useMemoryMutation(() => api.delete('/memory'));
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(false);
+
+  // Asking and cancelling swap the buttons, removing the one that had focus:
+  // focus went to the body (#250). It goes to the counterpart, as on a single
+  // memory's Delete (#128).
+  useLayoutEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (document.activeElement && document.activeElement !== document.body) return;
+    (confirming ? cancelRef : openRef).current?.focus();
+  }, [confirming]);
+
   if (count === 0) return null;
   return (
-    <div className="mt-6 flex flex-wrap items-center gap-2">
+    <div ref={wrapperRef} className="mt-6 flex flex-wrap items-center gap-2">
       {confirming ? (
         <>
           <p className="text-sm text-[var(--text-secondary)]">
@@ -255,17 +272,23 @@ function DeleteAll({ count }: { count: number }) {
             variant="danger"
             size="sm"
             disabled={removeAll.isPending}
-            onClick={() => removeAll.mutate(undefined, { onSuccess: () => setConfirming(false) })}
+            onClick={() => {
+              // With every memory gone, so are these controls: the list's
+              // heading takes focus. Watched as a whole, since "Delete all…"
+              // can come back for a moment before the emptied list arrives.
+              if (wrapperRef.current) keepFocusWhenRemoved(wrapperRef.current);
+              removeAll.mutate(undefined, { onSuccess: () => setConfirming(false) });
+            }}
           >
             {removeAll.isPending && <Spinner />}
             Delete all memories
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+          <Button ref={cancelRef} variant="ghost" size="sm" onClick={() => setConfirming(false)}>
             Cancel
           </Button>
         </>
       ) : (
-        <Button variant="secondary" size="sm" onClick={() => setConfirming(true)}>
+        <Button ref={openRef} variant="secondary" size="sm" onClick={() => setConfirming(true)}>
           Delete all…
         </Button>
       )}
