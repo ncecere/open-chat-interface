@@ -95,14 +95,15 @@ export function validateDraft(
         : hasSavedCredential;
 
   if (!Number.isSafeInteger(maxFileBytes)) {
-    errors.maxFileMb = 'File size must be a positive number of MB.';
+    // Named by the fields' labels, as #228 did elsewhere (#263).
+    errors.maxFileMb = 'Maximum file size must be a positive number of MB.';
   } else if (maxFileBytes > MAX_UPLOAD_FILE_BYTES) {
-    errors.maxFileMb = `File size can be at most ${MAX_UPLOAD_MB.toLocaleString('en-US')} MB (1 GB).`;
+    errors.maxFileMb = `Maximum file size can be at most ${MAX_UPLOAD_MB.toLocaleString('en-US')} MB (1 GB).`;
   }
   if (!Number.isSafeInteger(maxFilesPerMessage) || maxFilesPerMessage <= 0) {
-    errors.maxFilesPerMessage = 'File count must be a positive whole number.';
+    errors.maxFilesPerMessage = 'Maximum files per message must be a positive whole number.';
   } else if (maxFilesPerMessage > MAX_FILES_PER_MESSAGE) {
-    errors.maxFilesPerMessage = `File count can be at most ${MAX_FILES_PER_MESSAGE}.`;
+    errors.maxFilesPerMessage = `Maximum files per message can be at most ${MAX_FILES_PER_MESSAGE}.`;
   }
 
   const invalidMimeType = allowedMimeTypes.find((mimeType) => !/^[^\s/]+\/[^\s/]+$/.test(mimeType));

@@ -212,6 +212,27 @@ describe('Background work', () => {
     expect(api.post).toHaveBeenCalledWith('/admin/migrations/background/0.11.backfill/resume');
   });
 
+  it('counts rows without "of about" when there is no estimate (#263)', async () => {
+    api.get.mockResolvedValue({
+      migrations: [
+        migration({ status: 'finished', estimatedRows: null, rowsProcessed: 9, progress: 1 }),
+        migration({
+          name: '0.11.one',
+          status: 'finished',
+          estimatedRows: null,
+          rowsProcessed: 1,
+          progress: 1,
+        }),
+      ],
+    });
+    ({ root } = await renderAdmin(<BackgroundWorkSection />));
+    const bars = [...document.querySelectorAll('[role="progressbar"]')].map((bar) =>
+      bar.getAttribute('aria-valuetext'),
+    );
+    expect(bars).toEqual(['9 rows processed (100%)', '1 row processed (100%)']);
+    expect(document.body.textContent).not.toContain('of about');
+  });
+
   it('is read-only for auditors', async () => {
     api.get.mockResolvedValue({ migrations: [migration()] });
     ({ root } = await renderAdmin(<BackgroundWorkSection />, { role: 'auditor' }));

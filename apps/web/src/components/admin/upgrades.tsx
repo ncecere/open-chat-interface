@@ -42,6 +42,11 @@ function rows(value: number | null): string {
   return value === null ? 'rows unknown' : `${value.toLocaleString()} rows`;
 }
 
+/** "1 row", "9 rows". */
+function rowCount(value: number): string {
+  return `${value.toLocaleString()} ${value === 1 ? 'row' : 'rows'}`;
+}
+
 function PostStep({ step }: { step: PostStepSummary }) {
   const table = step.statement.tables.find((candidate) => candidate.exists);
   const state =
@@ -276,9 +281,13 @@ function BackgroundRow({ migration }: { migration: BackgroundMigrationSummary })
   const canPause = ['pending', 'running', 'failed'].includes(migration.status) && migration.bundled;
   const canResume = ['paused', 'failed'].includes(migration.status) && migration.bundled;
   const scheduled = migration.status !== 'not_scheduled';
-  const progressText = `${migration.rowsProcessed.toLocaleString()} of about ${rows(migration.estimatedRows)}${
-    percent === null ? '' : ` (${percent}%)`
-  }`;
+  // Without an estimate there is no "of about": "9 rows processed", not
+  // "9 of about rows unknown" (#263).
+  const progressText = `${
+    migration.estimatedRows === null
+      ? `${rowCount(migration.rowsProcessed)} processed`
+      : `${migration.rowsProcessed.toLocaleString()} of about ${rows(migration.estimatedRows)}`
+  }${percent === null ? '' : ` (${percent}%)`}`;
 
   return (
     <li className="px-4 py-3">

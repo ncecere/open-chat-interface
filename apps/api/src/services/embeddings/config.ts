@@ -49,7 +49,20 @@ export function embeddingModelKey(settings: ActiveEmbeddingsSettings): string {
   return `${settings.providerId}/${settings.modelId}/${settings.dimensions}`;
 }
 
+const EMBEDDING_USAGE_PREFIX = 'embedding:';
+
 /** The model name usage events are recorded under; embeddings models are not in the catalog. */
 export function embeddingUsageSlug(modelId: string): string {
-  return `embedding:${modelId}`;
+  return `${EMBEDDING_USAGE_PREFIX}${modelId}`;
+}
+
+/**
+ * The embeddings model a usage event's model name stands for, or null for a
+ * chat model. Reports name it by its model ID rather than the internal key
+ * (#263).
+ */
+export function embeddingModelOfUsageSlug(slug: string): string | null {
+  return slug.startsWith(EMBEDDING_USAGE_PREFIX)
+    ? slug.slice(EMBEDDING_USAGE_PREFIX.length) || null
+    : null;
 }

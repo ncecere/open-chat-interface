@@ -159,8 +159,8 @@ describe('storage drafts and patches', () => {
     const draft = { ...makeDraft(saved), maxFileMb: 'abc', maxFilesPerMessage: 'NaN' };
     expect(changedStorageSettings(saved, draft, 'keep', '')).toEqual({});
     expect(validateDraft(draft, true, 'keep', '')).toEqual({
-      maxFileMb: 'File size must be a positive number of MB.',
-      maxFilesPerMessage: 'File count must be a positive whole number.',
+      maxFileMb: 'Maximum file size must be a positive number of MB.',
+      maxFilesPerMessage: 'Maximum files per message must be a positive whole number.',
     });
   });
 });
@@ -172,7 +172,7 @@ describe('storage draft validation', () => {
     ).toEqual({});
     expect(
       validateDraft({ ...makeDraft(settings()), maxFileMb: '100000' }, true, 'keep', ''),
-    ).toEqual({ maxFileMb: 'File size can be at most 1,024 MB (1 GB).' });
+    ).toEqual({ maxFileMb: 'Maximum file size can be at most 1,024 MB (1 GB).' });
   });
 
   it('caps the files per message at 20 (#218)', () => {
@@ -182,14 +182,14 @@ describe('storage draft validation', () => {
     });
     expect(validateDraft(draft('20'), true, 'keep', '')).toEqual({});
     expect(validateDraft(draft('100000'), true, 'keep', '')).toEqual({
-      maxFilesPerMessage: 'File count can be at most 20.',
+      maxFilesPerMessage: 'Maximum files per message can be at most 20.',
     });
   });
 
   it.each(['', '0', '-1', 'NaN', 'Infinity', '1e300'])('rejects an invalid size: %s', (value) => {
     const draft = { ...makeDraft(settings()), maxFileMb: value };
     expect(validateDraft(draft, true, 'keep', '')).toEqual({
-      maxFileMb: 'File size must be a positive number of MB.',
+      maxFileMb: 'Maximum file size must be a positive number of MB.',
     });
   });
 
@@ -198,7 +198,7 @@ describe('storage draft validation', () => {
     (value) => {
       const draft = { ...makeDraft(settings()), maxFilesPerMessage: value };
       expect(validateDraft(draft, true, 'keep', '')).toEqual({
-        maxFilesPerMessage: 'File count must be a positive whole number.',
+        maxFilesPerMessage: 'Maximum files per message must be a positive whole number.',
       });
     },
   );
@@ -294,7 +294,7 @@ describe('storage draft validation', () => {
     const odd = { ...settings(), maxFileBytes: 1_500_000 };
     expect(changedStorageSettings(odd, makeDraft(odd), 'keep', '')).toEqual({});
     expect(validateDraft({ ...makeDraft(odd), maxFileMb: 'abc' }, true, 'keep', '')).toMatchObject({
-      maxFileMb: 'File size must be a positive number of MB.',
+      maxFileMb: 'Maximum file size must be a positive number of MB.',
     });
   });
 });

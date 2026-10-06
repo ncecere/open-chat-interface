@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, schema, sql } from '@oci/db';
 import { DELETED_ACCOUNTS_LABEL } from '@oci/shared';
 import { db } from '../../db/index.js';
+import { embeddingModelOfUsageSlug } from '../embeddings/config.js';
 import { getDisplayTimezone } from '../lifecycle/settings.js';
 import { type Bounded, type ReportOptions, rangeStart, reportSource } from './common.js';
 import { rollupRows, straddlingHours } from './source.js';
@@ -132,7 +133,10 @@ export async function dailyUsage(days: number, options: ReportOptions = {}): Pro
 
 export interface ModelUsage {
   modelSlug: string;
+  /** The catalog name; for an embeddings model, its model ID. */
   displayName: string | null;
+  /** Embeddings count tokens (and cost) but no messages. */
+  kind: 'chat' | 'embeddings';
   labId: string | null;
   /**
    * Whether the catalog model is enabled; null when the slug is not in the
@@ -245,16 +249,21 @@ export async function modelUsage(
   );
 
   return {
-    entries: rows.map((row) => ({
-      modelSlug: row.model_slug,
-      displayName: row.display_name,
-      labId: row.lab_id,
-      enabled: row.enabled,
-      messages: Number(row.messages),
-      tokens: Number(row.tokens),
-      costMicros: Number(row.cost_micros),
-      errors: errorsBySlug.get(row.model_slug) ?? 0,
-    })),
+    entries: rows.map((row) => {
+      const embeddingsModel = embeddingModelOfUsageSlug(row.model_slug);
+      return {
+        modelSlug: row.model_slug,
+        // Named by its model ID, not the internal `embedding:` key (#263).
+        displayName: embeddingsModel ?? row.display_name,
+        kind: embeddingsModel ? ('embeddings' as const) : ('chat' as const),
+        labId: row.lab_id,
+        enabled: row.enabled,
+        messages: Number(row.messages),
+        tokens: Number(row.tokens),
+        costMicros: Number(row.cost_micros),
+        errors: errorsBySlug.get(row.model_slug) ?? 0,
+      };
+    }),
     totalCount: total,
   };
 }
