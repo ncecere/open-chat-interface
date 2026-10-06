@@ -372,3 +372,35 @@ it('cancels late reconnect bodies after navigation without stopping the server p
   expect(session.status).toBe('ready');
   expect(fetch).toHaveBeenCalledTimes(1); // No DELETE and no stale history request.
 });
+
+it('says the connection was lost when the reply stream breaks off, not the browser’s text (#162)', async () => {
+  const { chatErrorText } = await import('../../src/lib/api-client');
+  const fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (new URL(String(url), 'http://local').pathname.endsWith('/messages'))
+      return Response.json({
+        thread: { id: 'thread', temporary: false, expiresAt: null },
+        messages: [{ id: 'run', role: 'assistant', parts: [], metadata: { status: 'streaming' } }],
+      });
+    if (init?.method === 'DELETE') return Response.json({ cancelled: true });
+    // The API crashes mid-reply: the browser fails the body read.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of healthy.slice(0, 3))
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        setTimeout(() => controller.error(new TypeError('network error')), 0);
+      },
+    });
+    return new Response(body, {
+      headers: { ...UI_MESSAGE_STREAM_HEADERS, 'X-OCI-Chat-Run-Id': 'run' },
+    });
+  });
+  vi.stubGlobal('fetch', fetch);
+  localStorage.setItem('oci.model', 'model');
+  await act(() => root.render(<Harness />));
+  await act(async () => {
+    await session.send('Walk3 crash: write a long answer');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+  expect(session.error?.message).toBe('network error');
+  expect(chatErrorText(session.error!)).toBe('The connection to the server was lost.');
+});

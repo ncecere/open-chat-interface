@@ -27,10 +27,24 @@ export function apiErrorMessage(error: unknown, fallback: string, labels?: Field
 }
 
 /**
+ * What each browser says when a request or its response stream breaks off
+ * (the server crashed or restarted, or the network dropped): Chrome's
+ * "Failed to fetch" and "network error", Firefox's "NetworkError when
+ * attempting to fetch resource.", Safari's "Load failed" and "The network
+ * connection was lost."
+ */
+const BROWSER_NETWORK_ERROR =
+  /^(?:failed to fetch|network ?error(?: when attempting to fetch resource)?|load failed|the network connection was lost)\.?$/i;
+
+export const CONNECTION_LOST_TEXT = 'The connection to the server was lost.';
+
+/**
  * The text of a failed chat request. The AI SDK puts the response body in the
- * error message, so an API error arrives as JSON; show only its message.
+ * error message, so an API error arrives as JSON; show only its message. A
+ * browser's own network failure text is said in plain words instead (#162).
  */
 export function chatErrorText(error: Error): string {
+  if (BROWSER_NETWORK_ERROR.test(error.message.trim())) return CONNECTION_LOST_TEXT;
   try {
     const body = JSON.parse(error.message) as Partial<ApiErrorBody>;
     // A send that raced read-only maintenance mode (v0.11): say why, in the
