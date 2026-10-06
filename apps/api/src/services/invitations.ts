@@ -39,7 +39,15 @@ function assertUsableInvite(invite: {
   }
 }
 
-export async function validateInvitation(token: string): Promise<{ emailLocked: boolean }> {
+/**
+ * Whether a link can be used, and the address it is for, if it is for one: the
+ * page fills it in, since no other address is accepted (#214). The link
+ * holder learns nothing new: the invitation was sent to that address, and a
+ * different one is refused with that reason anyway.
+ */
+export async function validateInvitation(
+  token: string,
+): Promise<{ emailLocked: boolean; email: string | null }> {
   await assertInviteRegistrationAvailable();
   const [invite] = await db
     .select({
@@ -54,7 +62,7 @@ export async function validateInvitation(token: string): Promise<{ emailLocked: 
 
   if (!invite) throw validationFailed(INVALID_INVITE_MESSAGE);
   assertUsableInvite(invite);
-  return { emailLocked: Boolean(invite.email) };
+  return { emailLocked: Boolean(invite.email), email: invite.email?.trim().toLowerCase() || null };
 }
 
 interface RedeemedInvite {

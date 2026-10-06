@@ -165,6 +165,10 @@ worth doing when somebody's circumstances change between offer and acceptance.
 An address that already has an account cannot be invited (change the
 account's role instead), and an address can have only one pending invitation
 at a time: revoke it to send a new one, for example with a different role.
+An invitation for an address can only be accepted with that address, so the
+invitation page fills it in. When email verification is required, the new
+account still verifies its address as any other does: whoever opens the link
+could have been given it by hand.
 
 Invitations need email to be configured. Without SMTP you can still create one,
 but you will have to deliver the link yourself.

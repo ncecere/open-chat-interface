@@ -293,7 +293,7 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/auth/accept-invite` | — |
-| POST | `/api/auth/accept-invite/validate` | — |
+| POST | `/api/auth/accept-invite/validate` | Whether an invitation link can be used: `emailLocked`, and `email`, the address it is for (null when it is for none). |
 | GET | `/api/auth/status` | Public bootstrap payload for the login screen: which auth methods exist and how the instance is branded. |
 
 ## `routes/branding.ts`
