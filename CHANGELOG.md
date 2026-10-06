@@ -7,7 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from four QA walks of v0.11.0 (issues #35–#266). One migration, `0042`,
+Fixes from five QA walks of v0.11.0 (issues #35–#287). One migration, `0042`,
 runs with `migrate` as usual. Two new post-deploy steps, `0007` and `0008`, index
 the audit log so a person's trail includes bulk actions done to them (#216): run
 `migrate --post` after every replica runs the new release, as for any release.
@@ -110,6 +110,30 @@ PostgreSQL driver patch (`patches/postgres@3.4.9.patch`) is applied by
 - **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
+
+### Fixed after a fifth QA walk (#268–#287)
+
+- **Security:** Better Auth's admin endpoints (`/api/auth/admin/*`) are
+  closed: they changed roles, bans, emails and passwords, and impersonated
+  people, with no audit entry and none of OCI's checks. Every account change
+  goes through People → Users; administrators can no longer open a session
+  as another person (#268).
+- **Chat:** an edit or a fork at a question is answered with the model shown
+  in the picker (#275); edited branches are titled from the revised question
+  (#278); a role without artifacts is told so (#277); artifact bytes are no
+  longer counted twice in file storage (#276).
+- **Audit:** sign-outs and tool calls name who did them (#279, #280); edits
+  to acceptable-use drafts record what changed (#284); a save that changes
+  nothing is not recorded, and every Test button is (#287).
+- **Administration:** server errors on Announcements, Retention, Connectors,
+  Webhooks, Reports and Adjust limits show at their field, all at once (#283);
+  Maintenance lists the same jobs as Background jobs (#281); a job's row
+  updates right after Run (#282); budgets name models (#285); wording (#286).
+- **Accessibility:** a button that disables itself while working keeps focus
+  (#269); Edit name returns focus (#270); code block and table names are
+  unique across a conversation, and reply headings start at h2 (#271);
+  Settings' side column is in landmarks (#272); the admin not-found page
+  (#273); long Select lists scroll by keyboard (#274).
 
 ### Fixed after a fourth QA walk (#239–#266)
 
