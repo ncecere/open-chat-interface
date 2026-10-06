@@ -4,9 +4,7 @@
  * item 13). A reply counts from just before its model starts until its final
  * save, usage settlement and stream finalization are done.
  */
-
-/** Abort reason for a reply stopped by shutdown rather than by the person. */
-export const SHUTDOWN_ABORT_REASON = 'shutdown';
+import { runAbortReason, runStopKind } from '../../lib/run-abort.js';
 
 const runs = new Map<string, AbortController>();
 let interrupting = false;
@@ -15,7 +13,7 @@ let interrupting = false;
 export function trackRun(runId: string, abort: AbortController): () => void {
   runs.set(runId, abort);
   // A turn admitted before the drain may only reach its model after the limit.
-  if (interrupting) abort.abort(SHUTDOWN_ABORT_REASON);
+  if (interrupting) abort.abort(runAbortReason('shutdown'));
   return () => {
     if (runs.get(runId) === abort) runs.delete(runId);
   };
@@ -32,12 +30,12 @@ export function activeRunCount(): number {
 /** Stops every reply still running; each saves what it has as interrupted. */
 export function interruptActiveRuns(): number {
   interrupting = true;
-  for (const abort of runs.values()) abort.abort(SHUTDOWN_ABORT_REASON);
+  for (const abort of runs.values()) abort.abort(runAbortReason('shutdown'));
   return runs.size;
 }
 
 export function stoppedByShutdown(signal: AbortSignal): boolean {
-  return signal.aborted && signal.reason === SHUTDOWN_ABORT_REASON;
+  return runStopKind(signal) === 'shutdown';
 }
 
 /** Test seam. */

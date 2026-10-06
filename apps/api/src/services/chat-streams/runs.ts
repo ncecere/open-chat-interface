@@ -1,3 +1,4 @@
+import { runAbortReason } from '../../lib/run-abort.js';
 import { withStore } from './connection.js';
 import type { BeginChatRunResult, BeginOptions, ChatRunIdentity } from './types.js';
 
@@ -65,7 +66,7 @@ export async function cancelActiveChatRun(threadId: string, userId: string): Pro
   const local = [...localRuns.values()]
     .reverse()
     .find((run) => run.identity.threadId === threadId && run.identity.userId === userId);
-  if (local) local.abort.abort('user-stop');
+  if (local) local.abort.abort(runAbortReason('user-stop'));
 
   const active = await withStore((store) => store.activeRun(threadId, userId));
   const requested = active ? await withStore((store) => store.requestCancellation(active)) : false;
