@@ -131,8 +131,12 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (temporary) setTemporary(false);
   }, [temporary, setTemporary]);
-  // The project by name in the tab, rather than the app name alone (#110).
-  usePageTitle(project.data?.name ?? 'Project');
+  // The project by name in the tab, rather than the app name alone (#110);
+  // when it cannot be shown, the page that says so names the tab (#197).
+  const unavailable =
+    Boolean(me) &&
+    (!me?.features.projects || (!project.isLoading && (Boolean(project.error) || !project.data)));
+  usePageTitle(unavailable ? null : (project.data?.name ?? 'Project'));
 
   if (me && !me.features.projects) {
     return (

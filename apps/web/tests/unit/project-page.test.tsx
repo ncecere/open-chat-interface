@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ProjectPage } from '../../src/routes/projects/project';
 import { alerts, button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
+import { shownTitle, TitleProbe } from './title-probe';
 import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
@@ -119,6 +120,33 @@ async function typeInto(control: HTMLInputElement | HTMLTextAreaElement, value: 
   });
   await settle();
 }
+
+describe('project page title (#197)', () => {
+  const renderTitled = async () => {
+    ({ root } = await renderAdmin(
+      <TemporaryChatProvider>
+        <ProjectPage projectId="project-1" />
+        <TitleProbe />
+      </TemporaryChatProvider>,
+      { path: '/projects/project-1' },
+    ));
+  };
+
+  it('names the project in the tab', async () => {
+    await renderTitled();
+    expect(shownTitle()).toBe('Thesis · Acme');
+  });
+
+  it('says in the tab that a missing project was not found', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    projectResponse = async () => {
+      throw new ApiError(404, 'NOT_FOUND', 'Project not found');
+    };
+    await renderTitled();
+    expect(document.querySelector('h1')?.textContent).toBe('Project not found');
+    expect(shownTitle()).toBe('Project not found · Acme');
+  });
+});
 
 describe('project page', () => {
   it('opens on its conversations, with pill tabs for the rest, and starts a chat inside it', async () => {

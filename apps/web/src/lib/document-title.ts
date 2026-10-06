@@ -50,6 +50,15 @@ export function pageTitleFor(pathname: string): string | null {
   return null;
 }
 
+/**
+ * A page within one named by its path: "Marcus Bell · Users · Admin" for a
+ * user's own page, which the path alone names "Users · Admin" (#197).
+ */
+export function pageWithin(name: string, pathname: string): string {
+  const parent = pageTitleFor(pathname);
+  return parent ? `${name}${SEPARATOR}${parent}` : name;
+}
+
 export function documentTitle(page: string | null | undefined, appName?: string | null): string {
   const name = instanceName(appName);
   const own = page?.trim();

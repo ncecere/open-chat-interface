@@ -295,7 +295,8 @@ function ThreadConversation({
 
   const conversationTitle = useOpenConversation(threadId)?.thread.title;
   const pageName = temporary ? 'Temporary chat' : conversationTitle || 'Conversation';
-  usePageTitle(pageName);
+  // Unavailable: the page says so, and its heading names the tab (#197).
+  usePageTitle(session.recovery.unavailable ? null : pageName);
 
   if (session.recovery.unavailable)
     return (
