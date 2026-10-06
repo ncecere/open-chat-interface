@@ -1,7 +1,7 @@
 import type { UIMessage } from 'ai';
 import { FileText } from 'lucide-react';
 
-interface AttachmentCard {
+export interface AttachmentCard {
   id: string;
   filename: string;
   mimeType: string;
@@ -9,7 +9,7 @@ interface AttachmentCard {
 }
 
 /** Attachment metadata the server records alongside a sent user turn. */
-function attachmentsOf(message: UIMessage): AttachmentCard[] {
+export function attachmentsOf(message: UIMessage): AttachmentCard[] {
   return message.parts.flatMap((part) => {
     if (part.type !== 'data-attachment') return [];
     const data = (part as { data?: Partial<AttachmentCard> }).data;

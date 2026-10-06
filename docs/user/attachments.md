@@ -66,8 +66,10 @@ conversation context. Switching models can send those contents to a different
 provider. Ask your administrator which providers are appropriate for your data.
 Deleting a file cannot recall contents already sent to a provider.
 
-Forks reference the original file rather than making an independent copy. If
-that file or its source conversation becomes unavailable, the fork cannot use
+Forks and edits reference the original file rather than making an independent
+copy: an edited question keeps its files unless you remove them in the edit
+box. If that file or its source conversation becomes unavailable, the fork or
+edit cannot use
 its contents. Current role and attachment-feature restrictions also apply to
 historical files; a file-free conversation can still be used when file access
 is disabled.

@@ -107,3 +107,30 @@ export function regenerationContext<T extends StoredTurn>(
     latest: { id: target.id, role: 'user', parts: textParts(target.parts) } satisfies UIMessage,
   };
 }
+
+type FilePart = { type: 'data-attachment'; data: { id: string } };
+
+/**
+ * An edited question's parts: the new text, then the files the question was
+ * sent with (#296), as a fork and Retry keep them, less any the person removed
+ * in the edit box (`keep`, when given). Only the stored question's own file
+ * references are copied, never anything the client sends; the files stay
+ * allocated to the original question and are read through it, as a fork's are.
+ */
+export function editedQuestionParts(stored: unknown, text: string, keep?: string[]) {
+  const files = (Array.isArray(stored) ? stored : []).filter(
+    (part): part is FilePart =>
+      isRecord(part) &&
+      part.type === 'data-attachment' &&
+      isRecord(part.data) &&
+      typeof part.data.id === 'string' &&
+      part.data.id.length > 0,
+  );
+  const own = new Set(files.map((part) => part.data.id));
+  if (keep?.some((id) => !own.has(id)))
+    throw validationFailed('Only files sent with this message can be kept');
+  return [
+    { type: 'text', text },
+    ...files.filter((part) => !keep || keep.includes(part.data.id)),
+  ] as Record<string, unknown>[];
+}

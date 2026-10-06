@@ -272,8 +272,8 @@ function ThreadConversation({
   );
 
   const editAndBranch = useCallback(
-    async (messageId: string, text: string) => {
-      const result = await branchMessage({ threadId, messageId, text });
+    async (messageId: string, text: string, attachmentIds: string[]) => {
+      const result = await branchMessage({ threadId, messageId, text, attachmentIds });
       answerInBranch(result.thread.id, result.message);
       await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
     },

@@ -8,7 +8,7 @@ import { ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { CapacityNote, CapacityWait, capacityWaitOf } from '~/components/chat/capacity-wait';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
-import { MessageAttachments } from '~/components/chat/message-attachments';
+import { attachmentsOf, MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
   failureOf,
@@ -20,7 +20,7 @@ import {
   textOf,
   type WorkEntry,
 } from '~/components/chat/message-content';
-import { MessageEditor } from '~/components/chat/message-editor';
+import { type EditMessage, MessageEditor } from '~/components/chat/message-editor';
 import { ProjectSearchNote } from '~/components/chat/project-search-note';
 import { ReplyFailureNote } from '~/components/chat/reply-outcome-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
@@ -43,7 +43,7 @@ interface MessageRowProps {
   editing: boolean;
   onEditingChange: Dispatch<SetStateAction<string | null>>;
   onRetry?: () => void;
-  onEdit?: (messageId: string, text: string) => Promise<void>;
+  onEdit?: EditMessage;
   onFork?: (messageId: string) => Promise<void>;
   replySwitch?: ReplySwitch;
   /** Answers this reply's open approvals; only the latest reply can be answered. */
@@ -112,6 +112,7 @@ export const MessageRow = memo(function MessageRow({
           <MessageEditor
             messageId={message.id}
             initialText={text}
+            attachments={attachmentsOf(message)}
             onEdit={onEdit}
             onClose={() => onEditingChange((current) => (current === message.id ? null : current))}
           />

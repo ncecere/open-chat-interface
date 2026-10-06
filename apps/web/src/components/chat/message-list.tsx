@@ -5,6 +5,7 @@ import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { capacityWaitOf } from '~/components/chat/capacity-wait';
 import { CompactionDivider } from '~/components/chat/compaction-divider';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
+import type { EditMessage } from '~/components/chat/message-editor';
 import { MessageRow, messageExcerptOf } from '~/components/chat/message-row';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
 import { replySearchOf, SearchLoading } from '~/components/chat/search-grounding';
@@ -20,7 +21,7 @@ interface MessageListProps {
   streaming: boolean;
   onRetry: () => void;
   searching?: boolean;
-  onEdit?: (messageId: string, text: string) => Promise<void>;
+  onEdit?: EditMessage;
   onFork?: (messageId: string) => Promise<void>;
   /** Switching between the latest turn's replies; shown on the last reply only. */
   replySwitch?: ReplySwitch;

@@ -67,11 +67,19 @@ export function useBranchMessage() {
       threadId,
       messageId,
       text,
+      attachmentIds,
     }: {
       threadId: string;
       messageId: string;
       text: string;
-    }) => api.post<BranchMessageResult>(`/threads/${threadId}/branches`, { messageId, text }),
+      /** The question's files the edit keeps (#296); absent keeps them all. */
+      attachmentIds?: string[];
+    }) =>
+      api.post<BranchMessageResult>(`/threads/${threadId}/branches`, {
+        messageId,
+        text,
+        attachmentIds,
+      }),
     onSuccess: () => invalidateConversationLists(queryClient),
   });
 }

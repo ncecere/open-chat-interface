@@ -29,7 +29,11 @@ example you…” (reply 3)**.
 
 Editing creates a new conversation with your revised question; the original
 stays as it was. The new conversation is titled from your revised question, so
-each edit can be told apart in the sidebar; rename it if you prefer.
+each edit can be told apart in the sidebar; rename it if you prefer. Files
+sent with the question stay with it: the edit box shows them below the text,
+and the revised question is answered with them. Choose **Remove** (×) on a
+file to leave it out of the revised question; **Cancel** keeps everything as
+it was.
 
 Editing, retrying and forking at a question answer with the model and
 reasoning level shown in the model picker when you do it. If a model failed or
