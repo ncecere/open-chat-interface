@@ -3,10 +3,19 @@ import { createDatabase, eq, schema } from '@oci/db';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { outageProxy } from '../../../test/failover.js';
-import { auth } from '../../auth/index.js';
-import { db } from '../../db/index.js';
-import { errorText } from '../../lib/log-redaction.js';
-import { logger } from '../../lib/logger.js';
+
+// An address where nothing listens, whatever the environment provides: CI
+// runs this suite with DATABASE_URL pointing at a real PostgreSQL (before its
+// migrations, so queries happened to fail on missing tables), and
+// test/setup.ts only fills it in when unset. Set before the app's database
+// and auth modules load.
+const UNREACHABLE = 'postgres://oci_test:oci_test@127.0.0.1:1/oci_test';
+process.env.DATABASE_URL = UNREACHABLE;
+process.env.CONTROL_DATABASE_URL = UNREACHABLE;
+const { auth } = await import('../../auth/index.js');
+const { db } = await import('../../db/index.js');
+const { errorText } = await import('../../lib/log-redaction.js');
+const { logger } = await import('../../lib/logger.js');
 
 /**
  * #264: a failed query's parameters (the reply being saved, a session token)
