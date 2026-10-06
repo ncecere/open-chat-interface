@@ -175,6 +175,32 @@ describe('Composer interaction', () => {
     },
   );
 
+  it('says the length limit before Send for a message the server would refuse (#247)', async () => {
+    // The walk's paste: 100,012 characters.
+    const pasted = `Walk4 long: ${'x '.repeat(50_000)}`.trim();
+    expect(pasted.length).toBe(100_011);
+    await render({ value: pasted });
+    expect(button('Send message').disabled).toBe(true);
+    await act(() => button('Send message').click());
+    await enter();
+    expect(props.onSubmit).not.toHaveBeenCalled();
+    const note = document.getElementById(textarea().getAttribute('aria-describedby') ?? '');
+    expect(note?.textContent).toBe(
+      'This message is 100,011 characters long. Messages can be up to 100,000 characters. Shorten it, or attach long text as a file instead.',
+    );
+    expect(textarea().getAttribute('aria-invalid')).toBe('true');
+    // Without files for this person, the advice is only to shorten it.
+    await render({ attachmentsAvailable: false });
+    expect(note?.isConnected && note.textContent).toContain('Shorten it to send it.');
+
+    // At the limit, after trimming as the server does, it can be sent.
+    await render({ value: `${'x'.repeat(100_000)}\n\n`, attachmentsAvailable: true });
+    expect(button('Send message').disabled).toBe(false);
+    expect(textarea().hasAttribute('aria-describedby')).toBe(false);
+    await enter();
+    expect(props.onSubmit).toHaveBeenCalledOnce();
+  });
+
   it('gates Enter while streaming and routes Stop only to onStop', async () => {
     await render({ streaming: true });
     expect(container.querySelector('[aria-label="Send message"]')).toBeNull();

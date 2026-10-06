@@ -2,6 +2,7 @@ import {
   answerToolApprovalsSchema,
   CHAT_HISTORY_MAX_PAGE_SIZE,
   CHAT_HISTORY_PAGE_SIZE,
+  MESSAGE_TOO_LONG_TEXT,
   sendMessageSchema,
 } from '@oci/shared';
 import { UI_MESSAGE_STREAM_HEADERS } from 'ai';
@@ -38,7 +39,8 @@ chatRoutes.post('/', async (c) => {
     );
   }
 
-  const input = await parseBody(c, sendMessageSchema);
+  // A message that is too long says so, and what to do instead (#247).
+  const input = await parseBody(c, sendMessageSchema, [MESSAGE_TOO_LONG_TEXT]);
   const { turn, run } = await setupTurn(user, input);
   return streamResponse(turn, run, { receivedAt: requestStartedAt(c.req.raw) });
 });

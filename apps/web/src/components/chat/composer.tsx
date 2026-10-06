@@ -1,5 +1,6 @@
+import { MESSAGE_TEXT_MAX_LENGTH } from '@oci/shared';
 import { ArrowUp, Square } from 'lucide-react';
-import { type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef } from 'react';
+import { type KeyboardEvent, memo, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { AttachmentChips } from '~/components/chat/attachment-chips';
 import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
@@ -86,8 +87,14 @@ export const Composer = memo(function Composer({
   // banner above says why, and the field says so where the person types.
   const readOnly = useReadOnlyStatus();
   const uploading = attachments.some((item) => item.status === 'uploading');
+  // Longer than the server accepts (#247): said here, before Send, rather
+  // than refused afterwards with only "Request validation failed".
+  const length = value.trim().length;
+  const tooLong = length > MESSAGE_TEXT_MAX_LENGTH;
+  const lengthNoteId = useId();
   const canSubmit =
-    value.trim().length > 0 &&
+    length > 0 &&
+    !tooLong &&
     Boolean(selectedModel) &&
     !streaming &&
     !uploading &&
@@ -124,12 +131,23 @@ export const Composer = memo(function Composer({
           placeholder={readOnly.active ? `${readOnlyShortReason(readOnly)}.` : placeholder}
           disabled={readOnly.active}
           aria-label="Message input"
+          aria-invalid={tooLong || undefined}
+          aria-describedby={tooLong ? lengthNoteId : undefined}
           className={cn(
             'w-full resize-none bg-transparent text-[0.9375rem] leading-relaxed',
             'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
             'focus:outline-none',
           )}
         />
+        {tooLong && (
+          <p id={lengthNoteId} className="mt-2 text-xs font-medium text-[var(--text-primary)]">
+            This message is {length.toLocaleString('en-US')} characters long. Messages can be up to{' '}
+            {MESSAGE_TEXT_MAX_LENGTH.toLocaleString('en-US')} characters.{' '}
+            {attachmentsAvailable === false
+              ? 'Shorten it to send it.'
+              : 'Shorten it, or attach long text as a file instead.'}
+          </p>
+        )}
 
         <div className="mt-5 flex items-center gap-2">
           <ComposerOptions

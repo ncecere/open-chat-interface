@@ -166,7 +166,9 @@ Your latest request, system instructions, selected attachments and any current
 search grounding must fit together. If they do not, the request is refused
 before a new user turn is saved. Shorten it, remove files, or choose a model with
 more context. The application also has fixed safety ceilings, so choosing a
-larger model does not remove every limit.
+larger model does not remove every limit. One is the length of a single
+message: up to 100,000 characters. The message box says so, and holds back
+**Send**, as soon as a message is longer; attach long text as a file instead.
 
 Whenever a message is refused like this, or because you are sending too quickly
 or have reached a usage limit, it is not sent: its text goes back into the
