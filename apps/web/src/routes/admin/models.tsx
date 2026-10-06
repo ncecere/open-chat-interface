@@ -257,9 +257,12 @@ function ModelRow({
               {MODEL_CAPABILITIES.map((capability) => {
                 const active = model.capabilities.includes(capability);
                 return (
-                  <button
+                  // The shared Button keeps focus while the save disables it (#292).
+                  <Button
                     key={capability}
                     type="button"
+                    variant={null}
+                    size={null}
                     aria-pressed={active}
                     disabled={update.isPending}
                     onClick={() => toggleCapability(capability)}
@@ -271,7 +274,7 @@ function ModelRow({
                     )}
                   >
                     {CAPABILITY_LABELS[capability]}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -283,9 +286,12 @@ function ModelRow({
               {USER_ROLES.map((role) => {
                 const active = model.visibleToRoles.includes(role);
                 return (
-                  <button
+                  // The shared Button keeps focus while the save disables it (#292).
+                  <Button
                     key={role}
                     type="button"
+                    variant={null}
+                    size={null}
                     aria-pressed={active}
                     disabled={update.isPending}
                     onClick={() => toggleRole(role)}
@@ -297,7 +303,7 @@ function ModelRow({
                     )}
                   >
                     {role}
-                  </button>
+                  </Button>
                 );
               })}
             </div>

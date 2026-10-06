@@ -1,7 +1,8 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { type ComponentProps, useState } from 'react';
+import type { ComponentProps } from 'react';
 import { cn } from '~/lib/utils';
+import { useHoldFocus } from './hold-focus';
 
 const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
@@ -49,7 +50,8 @@ export interface ButtonProps extends ComponentProps<'button'>, VariantProps<type
  * aria-disabled instead, looks the same, and ignores activation (click, which
  * Enter and Space fire, and the pointer and key presses menus open on), so it
  * still cannot be pressed twice. Once focus leaves, or the button is disabled
- * without focus, it is natively disabled as before.
+ * without focus, it is natively disabled as before. Switches, selects and
+ * fields do the same through `useHoldFocus` (#292).
  */
 export function Button({
   className,
@@ -64,8 +66,8 @@ export function Button({
   onBlur,
   ...props
 }: ButtonProps) {
-  const [focused, setFocused] = useState(false);
-  const holdFocus = !asChild && Boolean(disabled) && focused;
+  const { hold, track } = useHoldFocus(disabled);
+  const holdFocus = !asChild && hold;
   const Comp = asChild ? Slot : 'button';
   return (
     <Comp
@@ -77,14 +79,7 @@ export function Button({
       {...props}
       disabled={holdFocus ? undefined : disabled}
       aria-disabled={holdFocus ? true : props['aria-disabled']}
-      onFocus={(event) => {
-        if (event.target === event.currentTarget) setFocused(true);
-        onFocus?.(event);
-      }}
-      onBlur={(event) => {
-        if (event.target === event.currentTarget) setFocused(false);
-        onBlur?.(event);
-      }}
+      {...track(onFocus, onBlur)}
       onClick={(event) => {
         // Also stops a submit button submitting its form again.
         if (holdFocus) return event.preventDefault();

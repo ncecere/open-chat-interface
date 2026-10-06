@@ -1,9 +1,10 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
-import type { ComponentProps, ReactNode } from 'react';
-import { useState } from 'react';
+import type { ComponentProps, ReactNode, SyntheticEvent } from 'react';
+import { useRef, useState } from 'react';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
+import { HELD_CLASS, useHoldFocus } from './hold-focus';
 import { MENU_ITEM_FOCUS } from './item-focus';
 
 // An open Select hides the page; it is also made inert, so nothing hidden takes focus (#172).
@@ -148,6 +149,42 @@ const toRadixValue = (value: string) => (value === '' ? EMPTY_VALUE : value);
 const fromRadixValue = (value: string) => (value === EMPTY_VALUE ? '' : value);
 
 /**
+ * A select that saves on change (a user's role) disables itself while it
+ * saves, so the trigger focus returns to when the popup closes was already
+ * disabled and focus fell to the body (#292). While it is disabled and focus is
+ * on the trigger or in its popup, the trigger stays focusable but
+ * aria-disabled and ignores the pointer and key presses that open it, as the
+ * shared Button does (#269); a choice made meanwhile is ignored.
+ */
+function useSelectHold(disabled: boolean | undefined, onChange: (value: string) => void) {
+  const { hold, track, setFocused } = useHoldFocus(disabled);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const block = (event: SyntheticEvent) => {
+    if (hold) event.preventDefault();
+  };
+  return {
+    hold,
+    rootProps: {
+      disabled: hold ? false : disabled,
+      onValueChange: (next: string) => {
+        if (!disabled) onChange(fromRadixValue(next));
+      },
+    },
+    triggerProps: {
+      'aria-disabled': hold || undefined,
+      // Focus moving into the popup and back keeps the hold.
+      ...track<HTMLButtonElement>(undefined, undefined, (target) =>
+        Boolean(contentRef.current?.contains(target)),
+      ),
+      onPointerDown: block,
+      onKeyDown: block,
+      onClick: block,
+    },
+    contentProps: { ref: contentRef, onFocus: () => setFocused(true) },
+  };
+}
+
+/**
  * A styled select over the native element.
  *
  * The signature mirrors `<select>` — `value`, `onChange`, `id`, `disabled` —
@@ -181,27 +218,28 @@ export function Select({
   // The popup's listbox is named like the field (#114): by its aria-label, or
   // else by the <label> pointing at it, read when the popup opens.
   const [labelText, setLabelText] = useState<string | undefined>(undefined);
+  const held = useSelectHold(disabled, onChange);
   return (
     <SelectRoot
       value={toRadixValue(value)}
-      onValueChange={(next) => onChange(fromRadixValue(next))}
+      {...held.rootProps}
       onOpenChange={(open) => {
         if (!open || ariaLabel || !id) return;
         const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
         setLabelText(label?.textContent?.trim() || undefined);
       }}
-      disabled={disabled}
     >
       <SelectTrigger
+        {...held.triggerProps}
         id={id}
-        className={className}
+        className={cn(className, held.hold && HELD_CLASS)}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         valueTitle={options.find((option) => option.value === value)?.label}
       >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
-      <SelectContent aria-label={ariaLabel ?? labelText}>
+      <SelectContent {...held.contentProps} aria-label={ariaLabel ?? labelText}>
         {options.map((option) => (
           <SelectItem
             key={option.value}
@@ -239,20 +277,21 @@ export function GroupedSelect({
   // The popup's listbox is named like the field (#114): by its aria-label, or
   // else by the <label> pointing at it, read when the popup opens.
   const [labelText, setLabelText] = useState<string | undefined>(undefined);
+  const held = useSelectHold(disabled, onChange);
   return (
     <SelectRoot
       value={toRadixValue(value)}
-      onValueChange={(next) => onChange(fromRadixValue(next))}
+      {...held.rootProps}
       onOpenChange={(open) => {
         if (!open || ariaLabel || !id) return;
         const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
         setLabelText(label?.textContent?.trim() || undefined);
       }}
-      disabled={disabled}
     >
       <SelectTrigger
+        {...held.triggerProps}
         id={id}
-        className={className}
+        className={cn(className, held.hold && HELD_CLASS)}
         aria-label={ariaLabel}
         valueTitle={
           groups.flatMap((group) => group.options).find((option) => option.value === value)?.label
@@ -260,7 +299,7 @@ export function GroupedSelect({
       >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
-      <SelectContent aria-label={ariaLabel ?? labelText}>
+      <SelectContent {...held.contentProps} aria-label={ariaLabel ?? labelText}>
         {groups.map((group) => (
           <SelectGroup key={group.label}>
             <SelectLabel>{group.label}</SelectLabel>
