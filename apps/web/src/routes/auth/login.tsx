@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
+import { AuthFormError, fieldErrorProps, useFocusAfterRender } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -44,6 +44,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  const focusAfterRender = useFocusAfterRender();
   // Only wrong credentials are about the fields; a rate limit is not (#183).
   const invalidCredentials = error === WRONG_CREDENTIALS;
   // Sent here because the session ended while the app was open (#165).
@@ -63,11 +64,11 @@ export function LoginPage() {
       setNeedsVerification(result.error.code === 'EMAIL_NOT_VERIFIED');
       // Wrong credentials get the wording the user guide quotes (#97); other
       // refusals (unverified, banned, rate limited) keep the server's reason.
-      setError(
-        result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || !result.error.message
-          ? WRONG_CREDENTIALS
-          : result.error.message,
-      );
+      const wrong = result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || !result.error.message;
+      setError(wrong ? WRONG_CREDENTIALS : result.error.message!);
+      // Back to the form rather than the body (#190): the fields at fault, which
+      // the error describes, or the button for a refusal that is not theirs.
+      focusAfterRender(wrong ? 'email' : 'login-submit');
       setSubmitting(false);
       return;
     }
@@ -204,7 +205,13 @@ export function LoginPage() {
 
               {error && <AuthFormError id="login-error">{error}</AuthFormError>}
 
-              <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
+              <Button
+                id="login-submit"
+                type="submit"
+                variant="primary"
+                disabled={submitting}
+                className="mt-1 w-full"
+              >
                 {submitting ? <Spinner className="text-white" /> : <KeyRound />}
                 Sign in
               </Button>
