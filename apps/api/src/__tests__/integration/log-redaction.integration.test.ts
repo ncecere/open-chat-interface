@@ -1,5 +1,4 @@
 import { createHmac, randomUUID } from 'node:crypto';
-import { type AddressInfo, createServer } from 'node:net';
 import { createDatabase, eq, schema } from '@oci/db';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +22,8 @@ const { logger } = await import('../../lib/logger.js');
  * queries fail for real (no database answers in this suite: DATABASE_URL
  * points at port 1), and the lines are read from the application logger's
  * own output stream, so the configuration under test is the one in use.
+ * A connection cut mid-query needs a real server:
+ * log-redaction-cut.live.test.ts.
  */
 
 const REPLY_CANARY = 'ZEBRA-CANARY-4417 the reply text';
@@ -97,25 +98,6 @@ describe('log redaction of failed queries (#264)', () => {
 
   const sources: Array<[string, () => Promise<Error>]> = [
     ['refused connection (the application pool)', () => failure(() => saveReply(db))],
-    [
-      'connection cut by a proxy',
-      async () => {
-        // A socket that accepts and then drops the connection, as a proxy or
-        // failover does mid-session; local, so it answers at once in any
-        // environment (CI's port 1 did not refuse in time behind a proxy).
-        const cutter = createServer((socket) => socket.destroy());
-        await new Promise<void>((resolve) => cutter.listen(0, '127.0.0.1', resolve));
-        const url = new URL(UNREACHABLE);
-        url.port = String((cutter.address() as AddressInfo).port);
-        const pool = createDatabase(url.toString(), { max: 1 });
-        try {
-          return await failure(() => saveReply(pool.db as unknown as typeof db));
-        } finally {
-          await pool.sql.end({ timeout: 1 });
-          await new Promise((resolve) => cutter.close(resolve));
-        }
-      },
-    ],
     [
       'closed pool',
       async () => {
