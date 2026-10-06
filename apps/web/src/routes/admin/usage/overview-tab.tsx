@@ -15,18 +15,28 @@ export function OverviewTab({ days }: { days: number }) {
 
   return (
     <div className="flex flex-col gap-10">
-      <StatGrid
-        stats={[
-          { label: 'Conversations', value: compact(data.activity.threadsCreated) },
-          { label: 'Messages sent', value: compact(data.activity.messagesSent) },
-          { label: 'People active', value: String(data.totals.activeUsers) },
-          { label: 'Attachments', value: compact(data.activity.attachmentsUploaded) },
-        ]}
-      />
+      <div className="flex flex-col gap-3">
+        <StatGrid
+          stats={[
+            { label: 'Conversations', value: compact(data.activity.threadsCreated) },
+            { label: 'Messages sent', value: compact(data.activity.messagesSent) },
+            { label: 'People active', value: String(data.totals.activeUsers) },
+            { label: 'Attachments', value: compact(data.activity.attachmentsUploaded) },
+          ]}
+        />
+        {/* These count rows still stored, the usage figures count usage records,
+          which outlive deletion: the gap is mostly deleted conversations, not
+          regenerations as the caption said (#262). */}
+        <p className="text-[var(--text-muted)] text-xs leading-relaxed">
+          Conversations, messages sent and attachments count what is still stored: anything deleted
+          since is not counted. Replies and the Spend tab come from usage records, which are kept
+          when conversations or accounts are deleted.
+        </p>
+      </div>
 
       <SettingsSection
         title="Activity over time"
-        description={`Replies generated per day (regenerations included, so this can exceed Messages sent), with days ending at midnight ${data.range.timezone}.`}
+        description={`Replies generated per day, from the usage records, with days ending at midnight ${data.range.timezone}. Each regeneration is a reply, and replies in conversations deleted since still count, so this can exceed Messages sent.`}
       >
         <Trend
           label="Daily replies"

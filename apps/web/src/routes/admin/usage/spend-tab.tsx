@@ -18,14 +18,22 @@ export function SpendTab({ days }: { days: number }) {
 
   return (
     <div className="flex flex-col gap-10">
-      <StatGrid
-        stats={[
-          { label: 'Spend', value: money(data.totals.costMicros) },
-          { label: 'Messages', value: compact(data.totals.messages) },
-          { label: 'Tokens', value: compact(data.totals.tokens) },
-          { label: 'People', value: String(data.totals.activeUsers) },
-        ]}
-      />
+      <div className="flex flex-col gap-3">
+        <StatGrid
+          stats={[
+            { label: 'Spend', value: money(data.totals.costMicros) },
+            { label: 'Messages', value: compact(data.totals.messages) },
+            { label: 'Tokens', value: compact(data.totals.tokens) },
+            { label: 'People', value: String(data.totals.activeUsers) },
+          ]}
+        />
+        {/* "Messages" here is not Overview's "Messages sent" (#262). */}
+        <p className="text-[var(--text-muted)] text-xs leading-relaxed">
+          Messages counts each reply generated, regenerations included, as usage budgets do. Usage
+          records are kept when conversations or accounts are deleted, so these figures can exceed
+          Overview’s Messages sent, which counts only messages still stored.
+        </p>
+      </div>
 
       <SettingsSection
         title="Spend over time"

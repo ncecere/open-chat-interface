@@ -106,6 +106,31 @@ it('says what the chart shows in words, for anyone who cannot hover', async () =
   expect(document.body.textContent).toContain('Replies generated per day');
 });
 
+it('says why Messages sent and the usage figures differ: deleted conversations (#262)', async () => {
+  ({ root } = await renderAdmin(<AdminUsagePage />, { path: '/admin/usage?range=30' }));
+  const overview = document.body.textContent ?? '';
+  // The caption blamed regenerations; most of the gap is what was deleted since.
+  expect(overview).toContain(
+    'Conversations, messages sent and attachments count what is still stored: anything deleted since is not counted.',
+  );
+  expect(overview).toContain('replies in conversations deleted since still count');
+  expect(overview).not.toContain('regenerations included, so this can exceed');
+  await cleanup(root!);
+
+  ({ root } = await renderAdmin(
+    <ThemeProvider>
+      <AdminUsagePage />
+    </ThemeProvider>,
+    { path: '/admin/usage?tab=spend&range=30' },
+  ));
+  expect(document.body.textContent).toContain(
+    'Messages counts each reply generated, regenerations included, as usage budgets do.',
+  );
+  expect(document.body.textContent).toContain(
+    'Overview’s Messages sent, which counts only messages still stored.',
+  );
+});
+
 it('labels a disabled model and one outside the chat catalog for what they are', async () => {
   ({ root } = await renderAdmin(
     <ThemeProvider>

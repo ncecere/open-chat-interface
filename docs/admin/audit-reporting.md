@@ -100,6 +100,16 @@ before 0.11 to the hourly usage rollups*). Until it finishes the page reads
 the individual records as before: the numbers are the same, only slower.
 About 125,000 usage records take ten seconds.
 
+### Deleted conversations
+
+Usage records are kept when a conversation is deleted, so **Messages** (each
+reply generated, regenerations included, as usage budgets count them), tokens
+and spend do not change afterwards. The Overview tab's **Conversations**,
+**Messages sent** and **Attachments**, and its feature counts, count what is
+still stored, so they leave out anything deleted since; on an instance where
+people delete conversations, **Messages sent** can be well below the replies
+and Spend's **Messages** for the same days.
+
 ### Deleted accounts
 
 Deleting an account keeps its usage records (events, daily totals and limit
