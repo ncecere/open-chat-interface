@@ -36,12 +36,30 @@ interface SessionSnapshot {
   user: { id: string; role: string };
 }
 
-/** Route guards read the session directly so redirects happen before render. */
-async function loadSession(): Promise<SessionSnapshot | null> {
+/** The session this tab last confirmed; null once it is known to have ended. */
+let confirmedSession: SessionSnapshot | null = null;
+
+/**
+ * Route guards read the session directly so redirects happen before render.
+ *
+ * Only a 401 says the session has ended. Any other failure (the database away
+ * for a few seconds: a 500, a network error) says nothing about it, and every
+ * navigation runs this, so it replaced the whole app with "Could not load
+ * this page" until a reload. Within an app already signed in, navigation now
+ * carries on with the session last confirmed, and the page's own requests
+ * show their retry states; only a first load, with nothing confirmed yet,
+ * fails (#164).
+ */
+export async function loadSession(): Promise<SessionSnapshot | null> {
   try {
-    return await api.get<SessionSnapshot>('/me');
+    confirmedSession = await api.get<SessionSnapshot>('/me');
+    return confirmedSession;
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) return null;
+    if (error instanceof ApiError && error.status === 401) {
+      confirmedSession = null;
+      return null;
+    }
+    if (confirmedSession) return confirmedSession;
     throw error;
   }
 }
