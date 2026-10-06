@@ -65,7 +65,8 @@ accounts also remain unverified when delivery fails.
 Configure and test SMTP before enabling this setting. After delivery recovers,
 users can **Resend verification email** from the signup or invitation confirmation,
 or after an unverified sign-in is refused. They do not need a new account or
-invitation. A resend confirmation is not proof that a message reached the inbox.
+invitation. The link in a verification email works for 1 hour, and the email
+says so; after that, the same **Resend verification email** sends a new one. A resend confirmation is not proof that a message reached the inbox.
 
 Already-verified administrators retain the local recovery path when settings
 cannot be read. If needed, use the operator-only

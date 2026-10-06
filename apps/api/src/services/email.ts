@@ -167,18 +167,31 @@ export async function sendTestEmail(to: string): Promise<{ ok: boolean; message:
 // Each message names the instance (Branding > App name) in its subject and
 // body, so a person with accounts on several instances can tell them apart.
 
-export async function sendVerificationEmail(params: { to: string; url: string }) {
+/** How long an email verification link works (Better Auth's emailVerification.expiresIn). */
+export const VERIFY_LINK_TTL_SECONDS = 60 * 60;
+
+/**
+ * The verification link and how long it works (#236), as the reset email
+ * says since #184: opened later, the link only failed.
+ */
+export async function sendVerificationEmail(params: {
+  to: string;
+  url: string;
+  expiresInSeconds?: number;
+}) {
   const appName = await currentAppName();
   const intro = `Confirm your email address to finish setting up your ${appName} account:`;
-  const footer = 'If you did not create an account, you can ignore this email.';
+  const lifetime = duration(params.expiresInSeconds ?? VERIFY_LINK_TTL_SECONDS);
+  const expiry = `This link works for ${lifetime}. After that, sign in and choose “Resend verification email” for a new one.`;
+  const ignore = 'If you did not create an account, you can ignore this email.';
   return sendEmail({
     to: params.to,
     subject: `Verify your email address for ${appName}`,
-    text: `${intro}\n\n${params.url}\n\n${footer}`,
+    text: `${intro}\n\n${params.url}\n\n${expiry}\n\n${ignore}`,
     html: actionEmailHtml({
       paragraphs: [intro],
       action: { label: 'Verify email address', url: params.url },
-      footer,
+      footer: `${expiry} ${ignore}`,
     }),
   });
 }

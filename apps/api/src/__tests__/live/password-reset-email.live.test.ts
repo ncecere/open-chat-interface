@@ -9,13 +9,15 @@ import {
 } from '../../../test/live-postgres.js';
 
 /**
- * The password reset email says how long its link works (#184), and what it
- * says is the reset token's real lifetime: the request goes through Better
- * Auth and the real email module; only the SMTP transport is captured.
+ * The password reset email (#184) and the verification email (#236) say how
+ * long their link works, and what they say is the token's real lifetime: the
+ * request goes through Better Auth and the real email module; only the SMTP
+ * transport is captured.
  */
 const state = vi.hoisted(() => ({
   db: null as unknown,
   organizationId: '',
+  verificationRequired: false,
   sent: [] as Array<{ to: string; text: string; html?: string }>,
 }));
 vi.mock('../../db/index.js', () => ({
@@ -44,7 +46,7 @@ vi.mock('../../services/settings.js', async (importOriginal) => ({
       return {
         registrationMode: 'open',
         localAuthEnabled: true,
-        emailVerificationRequired: false,
+        emailVerificationRequired: state.verificationRequired,
         sessionLifetimeDays: 30,
         sessionRefreshDays: 1,
       };
@@ -110,5 +112,37 @@ describe.skipIf(!available)('live: the password reset email', () => {
       .where(like(schema.verification.identifier, 'reset-password:%'));
     const lifetimeMs = token!.expiresAt.getTime() - token!.createdAt.getTime();
     expect(Math.abs(lifetimeMs - 60 * 60_000)).toBeLessThan(5_000);
+  });
+
+  it('says how long the verification link works, which is how long its token lasts (#236)', async () => {
+    state.verificationRequired = true;
+    state.sent.length = 0;
+    try {
+      const email = 'walk3-verify@example.test';
+      const signedUp = await app.request('/api/auth/sign-up/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin },
+        body: JSON.stringify({ email, password: 'verify-email-password-1234', name: 'Walk3' }),
+      });
+      expect(signedUp.status).toBe(200);
+      await vi.waitFor(() => expect(state.sent).toHaveLength(1));
+      const [mail] = state.sent;
+      expect(mail?.to).toBe(email);
+      const expiry =
+        'This link works for 1 hour. After that, sign in and choose “Resend verification email” for a new one.';
+      expect(mail?.text).toContain(expiry);
+      expect(mail?.html).toContain('This link works for 1 hour.');
+
+      // The link's token (a signed JWT) expires exactly then.
+      const link = /https?:\/\/\S+/.exec(mail!.text)![0];
+      const token = new URL(link).searchParams.get('token')!;
+      const payload = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString()) as {
+        iat: number;
+        exp: number;
+      };
+      expect(payload.exp - payload.iat).toBe(60 * 60);
+    } finally {
+      state.verificationRequired = false;
+    }
   });
 });

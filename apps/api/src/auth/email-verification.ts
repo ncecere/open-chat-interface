@@ -1,7 +1,7 @@
 import { eq, schema } from '@oci/db';
 import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
-import { sendVerificationEmail } from '../services/email.js';
+import { sendVerificationEmail, VERIFY_LINK_TTL_SECONDS } from '../services/email.js';
 import { isEmailVerificationEnforced } from './policy.js';
 
 /** Better Auth owns token generation and proof; delivery is never proof of ownership. */
@@ -20,7 +20,11 @@ export async function deliverVerificationEmail(
   }
 
   try {
-    const result = await sendVerificationEmail({ to: user.email, url });
+    const result = await sendVerificationEmail({
+      to: user.email,
+      url,
+      expiresInSeconds: VERIFY_LINK_TTL_SECONDS,
+    });
     if (result.delivered) return;
   } catch {
     // The resend endpoint must not reveal whether an address exists by returning
