@@ -364,17 +364,22 @@ describe.skipIf(!available)('live: the sidebar project tree and general list', (
   describe('GET /api/threads?view=history (Settings → History, v0.9.1)', () => {
     type Page = { threads: ThreadSummary[]; nextCursor: string | null };
 
-    /** `count` live conversations with distinct update times, plus ties. */
+    /** `count` live conversations with distinct activity times, plus ties. */
     async function seedHistory(userId: string, count: number) {
       const base = Date.UTC(2026, 0, 1);
-      const rows = Array.from({ length: count }, (_, index) => ({
-        organizationId: state.organizationId,
-        userId,
-        title: index % 10 === 0 ? `Budget review ${index}` : `Conversation ${index}`,
-        // Pairs share an update time, so the id must break the tie.
-        updatedAt: new Date(base + Math.floor(index / 2) * 1000 + 0.4),
-        pinned: index === count - 1,
-      }));
+      const rows = Array.from({ length: count }, (_, index) => {
+        // Pairs share an activity time, so the id must break the tie.
+        const at = new Date(base + Math.floor(index / 2) * 1000 + 0.4);
+        return {
+          organizationId: state.organizationId,
+          userId,
+          title: index % 10 === 0 ? `Budget review ${index}` : `Conversation ${index}`,
+          createdAt: new Date(base - 60_000),
+          updatedAt: at,
+          lastMessageAt: at,
+          pinned: index === count - 1,
+        };
+      });
       await live.db.insert(schema.thread).values(rows);
     }
 
@@ -413,7 +418,7 @@ describe.skipIf(!available)('live: the sidebar project tree and general list', (
       expect(pages).toBe(3);
       expect(seen).toHaveLength(230);
       expect(new Set(seen.map((thread) => thread.id)).size).toBe(230);
-      const times = seen.map((thread) => new Date(thread.updatedAt).getTime());
+      const times = seen.map((thread) => new Date(thread.lastMessageAt!).getTime());
       expect([...times].sort((a, b) => b - a)).toEqual(times);
 
       // The default page is 50, and the sidebar list is unchanged (pinned first, 200 rows).
@@ -444,6 +449,27 @@ describe.skipIf(!available)('live: the sidebar project tree and general list', (
       );
       expect(archived.threads.map((thread) => thread.title)).toEqual(['Budget review archived']);
       expect(archived.nextCursor).toBeNull();
+    });
+
+    it('orders by the activity time each row shows, not by moves or renames (#151)', async () => {
+      const owner = await person();
+      const project = await createProject(owner, 'Walk3 proj');
+      // Activity 7 and 8 minutes ago; one never had a message (its creation counts).
+      const newer = await thread(owner, 'Walk3 proj', 7);
+      const older = await thread(owner, 'Walk3 attach', 8);
+      const empty = await thread(owner, 'Walk3 empty', 0, {
+        createdAt: new Date(Date.UTC(2026, 5, 1, 12) - 9 * 60_000),
+        lastMessageAt: null,
+      });
+      // Moving and renaming the older ones updates them, as in the QA walk.
+      await json(await call(owner, 'PATCH', `/threads/${older.id}`, { projectId: project.id }));
+      await json(await call(owner, 'PATCH', `/threads/${empty.id}`, { title: 'Walk3 renamed' }));
+
+      const { seen, pages } = await allPages(owner, '&limit=1');
+      expect(pages).toBe(3);
+      expect(seen.map((row) => row.id)).toEqual([newer.id, older.id, empty.id]);
+      const shown = seen.map((row) => new Date(row.lastMessageAt ?? row.createdAt).getTime());
+      expect([...shown].sort((a, b) => b - a)).toEqual(shown);
     });
 
     it('lists only the caller’s conversations and refuses a forged cursor', async () => {
