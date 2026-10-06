@@ -106,6 +106,53 @@ with `migrate` as usual; nothing else is needed to upgrade.
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
 
+### Fixed after a second QA walk (#125–#184)
+
+- **Replies and resilience:** a reply cut off by a restart's drain limit, or
+  stopped by the person, is saved as interrupted or stopped, not complete
+  (#136); a failed reply keeps its reason and Try again after a reload (#133);
+  stopping before the first word says so (#154); a refused send during a drain
+  keeps its text (#161); the interrupted-reply countdown no longer stalls
+  (#163); a lost connection reads "The connection to the server was lost."
+  (#162); a brief database outage no longer replaces the app (#164).
+- **Worker and database:** the worker no longer crashes, or hangs a job lock,
+  when PostgreSQL drops a connection while the driver reads types (patched in
+  `patches/postgres@3.4.9.patch`), and an unreachable database is no longer
+  reported as a missing migration (#137).
+- **Accounts:** a password reset ends every session (#139) and its email says
+  the link lasts an hour (#184); forgot password during read-only mode says it
+  is paused (#138); a session ended by a ban or Sign out everywhere returns to
+  sign-in (#165); sign-in errors are announced (#183); read-only refusals give
+  their reason everywhere (#159); a maintenance window's announcement hands
+  over to the banner on time, with time zones named (#160).
+- **Conversations:** archiving says so, with Undo (#125); deleting from the
+  trash asks first (#132); history is in newest-activity order (#151); the
+  Markdown download names models and lists artifacts once (#152); Summarise is
+  not offered when there is nothing to summarise (#153); small tables and code
+  stay in the reply instead of becoming documents (#149); Export as
+  Spreadsheet needs a real table (#150); links in messages are links (#174);
+  upload refusals name file types in words (#180).
+- **Administration:** report and retry times in the future read "in 30d"
+  (#126); every admin form names the field a save failed on (#127, #129,
+  #178); a user's page gives the true number of sessions (#134); one role
+  change, one audit entry (#140); the storage-allowance API follows the role
+  in its URL (#141); the instance upload limit is capped at 1 GiB (#142);
+  webhook Send test records the delivery (#144); bulk actions count and
+  confirm correctly (#145); audit entries record what changed (#148); dates
+  share one format (#177); and fixes to model rename, storage allowance,
+  reranking, the policies page on phones, the users table, button names and
+  wording (#146, #147, #157, #168, #170, #175, #182).
+- **Accessibility and layout:** a visible focus ring in menus and lists
+  (#135); focus returns to the opener, or the next row when the opener is gone
+  (#128); the page behind a modal menu or dialog is inert (#172); code colours
+  meet AA (#171); Settings and sign-in have a main landmark and Settings a skip
+  link (#173); the top bars no longer cover the conversation (#166); the
+  announcement no longer shifts the page (#167); one layout for every "not
+  found" state (#131); tooltips on truncated text (#130); and fixes to the
+  model picker on phones, loading states, the full-screen table, the share
+  dialog, the command palette, SearXNG errors, attachment wording and
+  restricted roles (#143, #155, #156, #158, #169, #176, #179, #181).
+
 ## [0.11.0] - 2026-10-05
 
 v0.11 "always on": upgrade from the previous minor release with no downtime,
