@@ -382,6 +382,7 @@ async function publicArtifacts(
       sourceKey: schema.artifact.sourceKey,
       title: schema.artifact.title,
       kind: schema.artifact.kind,
+      language: schema.artifact.language,
       version: schema.artifactVersion.version,
       source: schema.artifactVersion.source,
       versionMessageId: schema.artifactVersion.messageId,
@@ -410,6 +411,7 @@ async function publicArtifacts(
     sourceKey: row.sourceKey,
     title: redactCredentials(row.title.slice(0, MAX_ARTIFACT_TITLE_LENGTH)),
     kind: row.kind,
+    language: row.language,
     version: row.version,
     content: redactCredentials(row.content),
   }));

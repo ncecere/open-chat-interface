@@ -61,6 +61,7 @@ export async function copyArtifactsToFork(
         sourceKey: source.sourceKey,
         title: source.title,
         kind: source.kind,
+        language: source.language,
         currentVersion: versions.length,
         createdAt: source.createdAt,
       })

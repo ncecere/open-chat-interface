@@ -29,6 +29,7 @@ export const created = (overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
   sourceKey: 'tool:call-1',
   title: 'Sign-Up Page',
   kind: 'html',
+  language: null,
   currentVersion: 1,
   sizeBytes: PAGE.length,
   createdAt: '2026-01-01T00:00:00.000Z',

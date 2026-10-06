@@ -1182,6 +1182,18 @@ entries carry the key), so the trail is three index scans rather than a pass
 over the whole log. Until `migrate --post` has built them the trail is
 complete but read by scanning the table.
 
+#### Code artifacts (migration 0043, post-deploy step 0009)
+
+Migration 0043 lets an artifact be program code (#298): a nullable column
+`artifact.language` and a wider kind check, added `NOT VALID` so nothing scans
+the table. Step 0009 validates that check (reads and writes go on). The
+previous release's web app cannot draw a code artifact's card, so OCI makes
+none until step 0009 has finished, that is, until every replica and web proxy
+runs the new release: until then a person who asks for code as an artifact
+gets it in the reply. A single instance that migrates itself runs the step on
+its own shortly after starting. People with a tab open from before the
+upgrade should reload it.
+
 #### Usage rollups (migration 0040, background migration 0.11.usage-rollups)
 
 Migration 0040 adds a nullable column `usage_event.in_rollup` (no default, so

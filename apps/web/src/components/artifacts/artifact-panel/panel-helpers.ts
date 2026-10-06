@@ -1,4 +1,4 @@
-import { ARTIFACT_FILE_TYPES, type ArtifactKind } from '@oci/shared';
+import { type ArtifactKind, artifactFileType } from '@oci/shared';
 import type { ArtifactDraft } from '~/components/artifacts/artifact-drafts';
 import type { ArtifactRef } from '~/components/artifacts/artifacts-context';
 import { saveBlob } from '~/lib/api-client';
@@ -30,14 +30,27 @@ export function filenameBase(title: string): string {
   );
 }
 
-/** A file name for a download: the title, made safe, with the kind's extension. */
-export function artifactFilename(title: string, kind: ArtifactRef['kind']): string {
-  return `${filenameBase(title)}.${ARTIFACT_FILE_TYPES[kind].extension}`;
+/**
+ * A file name for a download: the title, made safe, with the kind's extension
+ * (a code artifact's language's: `.py`, #298).
+ */
+export function artifactFilename(
+  title: string,
+  kind: ArtifactRef['kind'],
+  language?: string | null,
+): string {
+  return `${filenameBase(title)}.${artifactFileType(kind, language).extension}`;
 }
 
-export function download(title: string, kind: ArtifactRef['kind'], content: string) {
-  const blob = new Blob([content], { type: `${ARTIFACT_FILE_TYPES[kind].mimeType};charset=utf-8` });
-  saveBlob(blob, artifactFilename(title, kind));
+export function download(
+  title: string,
+  kind: ArtifactRef['kind'],
+  content: string,
+  language?: string | null,
+) {
+  const type = artifactFileType(kind, language).mimeType;
+  const blob = new Blob([content], { type: `${type};charset=utf-8` });
+  saveBlob(blob, artifactFilename(title, kind, language));
 }
 
 export function formatDate(value: string): string {

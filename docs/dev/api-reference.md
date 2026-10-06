@@ -275,9 +275,9 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/artifacts` | `GET /api/artifacts?threadId=…`: every artifact of one conversation, oldest first. |
+| GET | `/api/artifacts` | `GET /api/artifacts?threadId=…`: every artifact of one conversation, oldest first. Each has a `kind` (`html`, `svg`, `mermaid`, `markdown` or `code`) and a `language`: a code artifact's (`python`, `bash`, ...), null for the other kinds (#298). |
 | GET | `/api/artifacts/:id` | The artifact, its versions (newest first) and the current version's content. |
-| GET | `/api/artifacts/:id/export` | Downloads a Markdown artifact (the current version, or `?version=`) as DOCX, PDF, XLSX or PPTX. |
+| GET | `/api/artifacts/:id/export` | Downloads a Markdown artifact (the current version, or `?version=`) as DOCX, PDF, XLSX or PPTX. Other kinds, code included, are refused with 422. |
 | POST | `/api/artifacts/:id/versions` | A person's edit of a Markdown document, saved as a new version. |
 | GET | `/api/artifacts/:id/versions/:version` | — |
 

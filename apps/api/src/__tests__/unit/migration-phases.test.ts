@@ -234,7 +234,7 @@ describe('post-deploy folder', () => {
     return folder;
   };
 
-  it('reads the bundled steps: one concurrent index build each', () => {
+  it('reads the bundled steps: concurrent index builds, and a constraint validation', () => {
     const steps = readPostSteps();
     expect(steps.map((step) => [step.name, step.release, step.index?.name])).toEqual([
       ['0001_message_created_at_index', '0.11.0', 'message_created_at_idx'],
@@ -245,8 +245,12 @@ describe('post-deploy folder', () => {
       ['0006_thread_created_at_index', '0.11.0', 'thread_created_at_idx'],
       ['0007_audit_log_target_index', '0.11.0', 'audit_log_target_idx'],
       ['0008_audit_log_user_ids_index', '0.11.0', 'audit_log_user_ids_idx'],
+      // Validates the code-artifact kind check, and gates code artifacts (#298).
+      ['0009_artifact_kind_code', '0.11.0', undefined],
     ]);
-    expect(steps.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
+    const builds = steps.filter((step) => step.index);
+    expect(builds).toHaveLength(8);
+    expect(builds.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);
   });
 

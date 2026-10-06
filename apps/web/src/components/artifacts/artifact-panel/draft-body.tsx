@@ -1,4 +1,4 @@
-import { ARTIFACT_KIND_LABELS } from '@oci/shared';
+import { artifactKindLabel } from '@oci/shared';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ArtifactSource } from '~/components/artifacts/artifact-source';
 import { type Chrome, PanelHeader } from './panel-header';
@@ -48,7 +48,7 @@ export function DraftBody({
       <PanelHeader
         chrome={chrome}
         title={name}
-        description={`${kind ? ARTIFACT_KIND_LABELS[kind] : 'Artifact'} · ${state}`}
+        description={`${kind ? artifactKindLabel(kind, draft.language) : 'Artifact'} · ${state}`}
       />
       <section
         ref={scroller}
@@ -65,7 +65,12 @@ export function DraftBody({
       >
         <div ref={inner}>
           {draft.mode === 'content' ? (
-            <ArtifactSource kind={kind} content={draft.content} writing={writing} />
+            <ArtifactSource
+              kind={kind}
+              language={draft.language}
+              content={draft.content}
+              writing={writing}
+            />
           ) : (
             <p className="p-4 text-sm text-[var(--text-muted)]">Preparing…</p>
           )}

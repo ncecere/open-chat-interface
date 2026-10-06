@@ -112,6 +112,7 @@ export async function artifactVersionForExport(
   threadId: string;
   title: string;
   kind: ArtifactKind;
+  language: string | null;
   version: number;
   content: string;
 } | null> {
@@ -121,6 +122,7 @@ export async function artifactVersionForExport(
       threadId: schema.artifact.threadId,
       title: schema.artifact.title,
       kind: schema.artifact.kind,
+      language: schema.artifact.language,
       version: schema.artifactVersion.version,
       content: schema.artifactVersion.content,
     })
@@ -151,6 +153,7 @@ export async function artifactsForPrompt(threadId: string, userId: string, limit
       id: schema.artifact.id,
       title: schema.artifact.title,
       kind: schema.artifact.kind,
+      language: schema.artifact.language,
       currentVersion: schema.artifact.currentVersion,
     })
     .from(schema.artifact)

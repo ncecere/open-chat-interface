@@ -20,6 +20,15 @@ separate object with its own versions, which you can open, copy and download.
   no artifact panel. A long document's card appears once enough of it has
   been written to keep. To get a short one anyway, say "artifact" in your
   message; its card then appears when it is saved.
+- **Code you ask for as an artifact.** Models that can use tools save program
+  code as a code artifact when you ask for one ("create a code artifact with a
+  Python script that…"). Its card names the language (**Python · version 1**),
+  its preview shows the code exactly as written, and **Download** saves it
+  with that language's extension (`.py`, `.sh`, `.ts`, ...; `.txt` for a
+  language OCI does not know). Without the word "artifact", code stays in the
+  reply. Models without tools write it in the reply and say that code is not
+  saved as an artifact. While your administrator is still upgrading OCI, code
+  also stays in the reply until the upgrade is finished.
 
 Other code blocks are not affected. Artifacts work with every model: models
 without tools write a code block and OCI saves it once the reply is finished.
@@ -85,7 +94,7 @@ the panel fills the screen until you close it.
 The panel has three views:
 
 - **Preview** shows the artifact: the page or image itself, the drawn diagram,
-  or the formatted document.
+  the formatted document, or the code with syntax colouring.
 - **Source** shows the text it is made of, with the same syntax colouring as
   code in replies (and your **Wrap Long Code Lines** choice). Very large
   sources are shown without colouring so the page stays responsive.
@@ -93,7 +102,8 @@ The panel has three views:
   Select one to look at it.
 
 **Copy** puts the version you are looking at on the clipboard; **Download**
-saves it as a file (`.html`, `.svg`, `.mmd` or `.md`). For documents,
+saves it as a file (`.html`, `.svg`, `.mmd` or `.md`, and code in its
+language's file type, such as `.py`). For documents,
 **Export as…** saves the version as a Word document, PDF, presentation or
 spreadsheet ([Exporting as files](exporting.md)). Press Escape (with focus in
 the panel) or select Close to go back to the conversation. After clicking

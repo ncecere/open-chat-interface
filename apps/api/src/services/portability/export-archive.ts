@@ -447,6 +447,7 @@ export async function* exportArchive(
             sourceKey: artifact.sourceKey,
             title: artifact.title,
             kind: artifact.kind,
+            language: artifact.language,
             currentVersion: artifact.currentVersion,
             createdAt: artifact.createdAt.toISOString(),
             updatedAt: artifact.updatedAt.toISOString(),

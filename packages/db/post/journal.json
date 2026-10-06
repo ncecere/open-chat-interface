@@ -40,6 +40,11 @@
       "idx": 7,
       "tag": "0008_audit_log_user_ids_index",
       "release": "0.11.0"
+    },
+    {
+      "idx": 8,
+      "tag": "0009_artifact_kind_code",
+      "release": "0.11.0"
     }
   ]
 }

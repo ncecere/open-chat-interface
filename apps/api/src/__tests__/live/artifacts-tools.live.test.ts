@@ -1,4 +1,4 @@
-import { createDatabase, eq, schema, sql } from '@oci/db';
+import { createDatabase, eq, runPostMigrations, schema, sql } from '@oci/db';
 import { MAX_ARTIFACT_BYTES } from '@oci/shared';
 import type { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +30,7 @@ import type { AppBindings } from '../../middleware/context.js';
  */
 const state = vi.hoisted(() => ({
   db: null as unknown,
+  sql: null as unknown,
   organizationId: '',
   model: null as unknown,
   capabilities: ['tool_calling'] as string[],
@@ -38,6 +39,10 @@ const state = vi.hoisted(() => ({
 vi.mock('../../db/index.js', () => ({
   get db() {
     return state.db;
+  },
+  // Post-deploy readiness (code artifacts, #298) reads it.
+  get sql() {
+    return state.sql;
   },
 }));
 vi.mock('../../lib/logger.js', () => ({
@@ -108,6 +113,7 @@ describe.skipIf(!available)('live artifacts', () => {
     live = await createLiveDatabase('artifacts_tools');
     pool = createDatabase(live.connectionString, { max: 8 });
     state.db = pool.db;
+    state.sql = pool.sql;
     state.organizationId = await seedOrganization(pool.db);
     owner = await seedUser(pool.db, state.organizationId);
     stranger = await seedUser(pool.db, state.organizationId);
@@ -152,8 +158,105 @@ describe.skipIf(!available)('live artifacts', () => {
         (entry) => 'name' in entry && entry.name === 'create_artifact',
       );
       expect(tool && 'description' in tool ? tool.description : '').toContain(
-        'Never use it for program code',
+        'Program code goes in fenced code blocks in your reply',
       );
+    });
+
+    it('saves code asked for as an artifact as code in its language, not an HTML page (#298)', async () => {
+      const { CODE_ARTIFACTS, CODE_ARTIFACTS_WITHOUT_TOOLS } = await import(
+        '../../services/artifacts/guidance.js'
+      );
+      const { CODE_ARTIFACT_NOT_YET, CODE_ARTIFACT_REFUSAL } = await import(
+        '../../services/tools/artifacts.js'
+      );
+      const { resetReadinessCache } = await import('../../services/migrations/readiness.js');
+      // What the QA walk asked for; the usage line was dropped from an HTML page.
+      const code = [
+        'import csv',
+        'import sys',
+        '',
+        'if len(sys.argv) < 2:',
+        '    print("Usage: python inventory.py <inventory.csv> [threshold]")',
+      ].join('\n');
+      const call = (): Array<[string, string, unknown]> => [
+        [
+          'c1',
+          'create_artifact',
+          { title: 'Walk6 inventory script', kind: 'code', language: 'py', content: code },
+        ],
+      ];
+      const ask =
+        'Walk6 GW code: create a Code artifact titled Walk6 inventory script: a Python script that reads a CSV.';
+
+      // During a rolling upgrade (post-deploy step 0009 not run), the previous
+      // release's web app may still open the conversation and cannot draw a
+      // code artifact's card: code stays in the reply.
+      resetReadinessCache();
+      const early = await thread();
+      const before = script(toolStep(call()), textStep('Here it is.'));
+      const { reply: declined } = await turn(early.id, ask);
+      expect(systemOf(before)).toContain(CODE_ARTIFACTS_WITHOUT_TOOLS);
+      expect(systemOf(before)).not.toContain(CODE_ARTIFACTS);
+      expect(declined.parts.find((part) => part.type === 'tool-create_artifact')?.output).toEqual({
+        saved: false,
+        note: CODE_ARTIFACT_NOT_YET,
+      });
+      expect(await artifactsOf(early.id)).toEqual([]);
+
+      await runPostMigrations(live.connectionString, {
+        logger: { info: () => {}, warn: () => {} },
+        backgroundMigrations: [],
+      });
+      resetReadinessCache();
+      const chat = await thread();
+      const model = script(toolStep(call()), textStep('Saved.'));
+      await turn(chat.id, ask);
+      expect(systemOf(model)).toContain(CODE_ARTIFACTS);
+      const tool = (model.doStreamCalls[0]?.tools ?? []).find(
+        (entry) => 'name' in entry && entry.name === 'create_artifact',
+      );
+      expect(tool && 'description' in tool ? tool.description : '').toContain(
+        'save it as kind code with its language',
+      );
+      const [artifact] = await artifactsOf(chat.id);
+      expect(artifact).toMatchObject({
+        kind: 'code',
+        language: 'python',
+        title: 'Walk6 inventory script',
+      });
+      expect((await versionsOf(artifact!.id)).map((version) => version.content)).toEqual([code]);
+      // The conversation's list and the artifact itself carry the language.
+      const listed = (await (
+        await app.request(`/api/artifacts?threadId=${chat.id}`, {
+          headers: { 'x-test-user': owner },
+        })
+      ).json()) as { artifacts: Array<{ kind: string; language: string | null }> };
+      expect(listed.artifacts).toMatchObject([{ kind: 'code', language: 'python' }]);
+      const { exportThreadMarkdown } = await import('../../services/export.js');
+      expect(await exportThreadMarkdown(chat.id, owner)).toContain(
+        '\u201cWalk6 inventory script\u201d (Python, version 1',
+      );
+      // A fork keeps it.
+      const forked = (await (
+        await app.request(`/api/threads/${chat.id}/forks`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-test-user': owner },
+          body: JSON.stringify({ messageId: artifact!.messageId }),
+        })
+      ).json()) as { thread: { id: string } };
+      expect(await artifactsOf(forked.thread.id)).toMatchObject([
+        { kind: 'code', language: 'python' },
+      ]);
+
+      // Not asked for: code stays in the reply (#149).
+      const unasked = await thread();
+      script(toolStep(call()), textStep('Here it is.'));
+      const { reply } = await turn(unasked.id, 'Write a Python script that reads a CSV.');
+      expect(reply.parts.find((part) => part.type === 'tool-create_artifact')?.output).toEqual({
+        saved: false,
+        note: CODE_ARTIFACT_REFUSAL,
+      });
+      expect(await artifactsOf(unasked.id)).toEqual([]);
     });
 
     it('offers no artifact tools, and says artifacts are unavailable, when the role switch is off', async () => {

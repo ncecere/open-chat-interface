@@ -1,17 +1,20 @@
 import {
-  ARTIFACT_KIND_LABELS,
   ARTIFACT_KINDS,
+  ARTIFACT_NOT_SAVED,
   type ArtifactKind,
   applyArtifactEdits,
+  artifactKindLabel,
   type DeclinedArtifactResult,
   MAX_ARTIFACT_BYTES,
   MAX_ARTIFACT_EDITS,
   MAX_ARTIFACT_TITLE_LENGTH,
+  MAX_CODE_LANGUAGE_LENGTH,
   markdownArtifactRefusal,
   toolKey,
 } from '@oci/shared';
 import { z } from 'zod';
 import { validationFailed } from '../../lib/errors.js';
+import { codeArtifactsReady } from '../artifacts/code-kind.js';
 import { personAskedForArtifact } from '../artifacts/markdown-floor.js';
 import { addArtifactVersion, createArtifact, currentContent } from '../artifacts/store.js';
 import { roleFeatures } from '../role-features.js';
@@ -31,9 +34,17 @@ interface ArtifactToolResult {
   artifactId: string;
   title: string;
   kind: ArtifactKind;
+  /** A code artifact's language (#298). */
+  language?: string | null;
   version: number;
   sizeBytes: number;
 }
+
+/** Code nobody asked to have as an artifact stays in the reply (#149, #298). */
+export const CODE_ARTIFACT_REFUSAL = `${ARTIFACT_NOT_SAVED}: program code belongs in fenced code blocks in your reply unless the person asks for an artifact. Write it in your reply once (do not repeat it if you already have).`;
+
+/** Before every replica reads code artifacts (see code-kind.ts), code stays in the reply. */
+export const CODE_ARTIFACT_NOT_YET = `${ARTIFACT_NOT_SAVED}: code cannot be saved as an artifact here yet. Write it in a fenced code block in your reply once, and say that code is not saved as an artifact.`;
 
 const available: ToolDefinition['available'] = async (turn) =>
   (await roleFeatures(turn.role)).artifacts;
@@ -51,7 +62,8 @@ const createArtifactTool: ToolDefinition = {
     'Save content the person will want to see rendered as an artifact they can open, preview, copy and download:',
     'an HTML page or small app (a complete, self-contained document), an SVG image or diagram,',
     'a Mermaid diagram, or a long prose document they asked for (a report, letter or plan) as Markdown.',
-    'Never use it for program code: write code in fenced code blocks in your reply, one per language or file.',
+    'Program code goes in fenced code blocks in your reply, one per language or file, unless the person asks for it as an artifact:',
+    'then save it as kind code with its language (for example python), the code alone, never wrapped in an HTML page.',
     'Never use it for tables, lists or short answers: write those in your reply.',
     'Do not repeat the content in your reply or link to it; a card appears on its own. Returns the artifact id for later updates.',
   ].join(' '),
@@ -59,16 +71,32 @@ const createArtifactTool: ToolDefinition = {
   source: 'builtin',
   inputSchema: z.object({
     title: z.string().trim().min(1).max(MAX_ARTIFACT_TITLE_LENGTH).describe('A short title'),
-    kind: z.enum(ARTIFACT_KINDS).describe('html, svg, mermaid or markdown'),
+    kind: z.enum(ARTIFACT_KINDS).describe('html, svg, mermaid, markdown or code'),
+    language: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_CODE_LANGUAGE_LENGTH)
+      .optional()
+      .describe('For kind code: the programming language, such as python, javascript or bash'),
     content: contentSchema.describe('The full content'),
   }),
   available,
   async execute(input, { caller, toolCallId }) {
-    const { title, kind, content } = input as {
+    const { title, kind, language, content } = input as {
       title: string;
       kind: ArtifactKind;
+      language?: string;
       content: string;
     };
+    // Code becomes an artifact only when the person asked for one (#298);
+    // otherwise it stays in the reply, as the guidance says (#149).
+    if (kind === 'code') {
+      if (!(await codeArtifactsReady()))
+        return { saved: false, note: CODE_ARTIFACT_NOT_YET } satisfies DeclinedArtifactResult;
+      if (!(await personAskedForArtifact(caller.threadId)))
+        return { saved: false, note: CODE_ARTIFACT_REFUSAL } satisfies DeclinedArtifactResult;
+    }
     // The guidance alone did not stop small tables and functions becoming
     // Markdown artifacts (#149); see markdownArtifactRefusal in @oci/shared.
     // Declined as a result, not thrown as an error (#201): nothing failed,
@@ -87,12 +115,14 @@ const createArtifactTool: ToolDefinition = {
       sourceKey: toolKey(toolCallId ?? crypto.randomUUID()),
       title,
       kind,
+      language,
       content,
     });
     return {
       artifactId: artifact.id,
       title: artifact.title,
       kind: artifact.kind,
+      language: artifact.language,
       version: artifact.currentVersion,
       sizeBytes: artifact.sizeBytes,
     } satisfies ArtifactToolResult;
@@ -158,6 +188,7 @@ const updateArtifactTool: ToolDefinition = {
       artifactId: artifact.id,
       title: artifact.title,
       kind: artifact.kind,
+      language: artifact.language,
       version: artifact.currentVersion,
       sizeBytes: artifact.sizeBytes,
     } satisfies ArtifactToolResult;
@@ -166,10 +197,11 @@ const updateArtifactTool: ToolDefinition = {
 
 export const ARTIFACT_TOOLS: readonly ToolDefinition[] = [createArtifactTool, updateArtifactTool];
 
-/** For the system prompt: "Report (HTML, version 2)". */
+/** For the system prompt: "Report (HTML, version 2)", "Inventory script (Python, version 1)". */
 export const describeArtifact = (artifact: {
   title: string;
   kind: ArtifactKind;
+  language?: string | null;
   currentVersion: number;
 }) =>
-  `"${artifact.title}" (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${artifact.currentVersion})`;
+  `"${artifact.title}" (${artifactKindLabel(artifact.kind, artifact.language)}, version ${artifact.currentVersion})`;
