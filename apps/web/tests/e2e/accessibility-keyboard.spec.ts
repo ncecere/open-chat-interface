@@ -24,7 +24,10 @@ test.describe('WCAG 2.2 AA: keyboard operation', () => {
 
   test('Settings has a skip link first and one main landmark (#173)', async ({ page }) => {
     await signIn(page);
-    await page.goto('/settings/account');
+    // Account is /settings; /settings/account is the not-found page, whose own
+    // <main> once let this pass without Settings ever loading.
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();
     await expect(page.getByRole('main')).toHaveCount(1);
 
     await page.keyboard.press('Tab');
