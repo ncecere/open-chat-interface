@@ -1,6 +1,10 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Search } from 'lucide-react';
-import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
+import {
+  ACTIVE_OPTION_RING,
+  HIGHLIGHTED_ROW_TEXT,
+  HOVERED_ROW_TEXT,
+} from '~/components/ui/item-focus';
 import { Spinner } from '~/components/ui/spinner';
 import { useFocusReturn } from '~/hooks/use-focus-return';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
@@ -131,8 +135,13 @@ export function CommandPalette(props: CommandPaletteProps) {
                           ? cn(
                               'border-transparent bg-[var(--accent-soft)] text-[var(--text-primary)]',
                               ACTIVE_OPTION_RING,
+                              // A result's snippet stays readable on the wash (#188).
+                              HIGHLIGHTED_ROW_TEXT,
                             )
-                          : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)]',
+                          : cn(
+                              'border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)]',
+                              HOVERED_ROW_TEXT,
+                            ),
                       )}
                     >
                       <Icon

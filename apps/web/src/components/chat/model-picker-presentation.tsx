@@ -3,7 +3,11 @@ import { Info } from 'lucide-react';
 import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
 import { ModelInfoCard } from '~/components/model/model-info-card';
-import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
+import {
+  ACTIVE_OPTION_RING,
+  HIGHLIGHTED_ROW_TEXT,
+  HOVERED_ROW_TEXT,
+} from '~/components/ui/item-focus';
 import { cn } from '~/lib/utils';
 import { CAPABILITY_LABELS, modelDescription } from './model-picker-data';
 
@@ -41,7 +45,9 @@ export function ModelPickerOption({
         'relative flex w-full items-center rounded-lg transition-colors',
         // --bg-control is the panel's own white in light, so it showed nothing (#135).
         'hover:bg-[var(--bg-control-hover)]',
-        selected && 'bg-[var(--accent-soft)]',
+        HOVERED_ROW_TEXT,
+        // The description stays readable on the wash (#188).
+        selected && cn('bg-[var(--accent-soft)]', HIGHLIGHTED_ROW_TEXT),
         // Visible like a focus ring, since focus itself stays in the search box.
         active && ACTIVE_OPTION_RING,
       )}
