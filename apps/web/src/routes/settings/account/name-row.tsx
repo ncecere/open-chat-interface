@@ -1,6 +1,6 @@
 import { PROFILE_NAME_MAX_LENGTH } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useId, useState } from 'react';
+import { type FormEvent, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
@@ -15,6 +15,32 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const trimmed = draft.trim();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(false);
+
+  // Opening and closing the editor swap Edit for the form, removing the
+  // control that had focus, which fell to the body (#270). Opening puts the
+  // cursor in the field; Save and Cancel return focus to Edit name, as the
+  // sidebar rename does. Not on first render, and not if focus has moved on.
+  useLayoutEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (editing) {
+      inputRef.current?.focus();
+      return;
+    }
+    if (!document.activeElement || document.activeElement === document.body) {
+      editRef.current?.focus();
+    }
+  }, [editing]);
+
+  function cancel() {
+    setEditing(false);
+    setError(null);
+  }
 
   const save = useMutation({
     mutationFn: async (next: string) => {
@@ -48,6 +74,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
         </label>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <Input
+            ref={inputRef}
             id={inputId}
             value={draft}
             maxLength={PROFILE_NAME_MAX_LENGTH}
@@ -55,21 +82,16 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? `${inputId}-error` : undefined}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && !save.isPending) cancel();
+            }}
           />
           <div className="flex gap-2">
             <Button type="submit" variant="accent" size="sm" disabled={save.isPending}>
               {save.isPending && <Spinner />}
               Save
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setEditing(false);
-                setError(null);
-              }}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={cancel}>
               Cancel
             </Button>
           </div>
@@ -95,6 +117,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
         <span className="truncate text-[var(--text-primary)]">{name}</span>
         {editable ? (
           <Button
+            ref={editRef}
             variant="ghost"
             size="sm"
             aria-label="Edit name"
