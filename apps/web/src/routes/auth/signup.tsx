@@ -4,9 +4,10 @@ import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import {
   AuthFormError,
+  authFieldProps,
   authFormProblems,
   emailProblem,
-  fieldErrorProps,
+  type FieldMessage,
   newPasswordProblem,
 } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
@@ -32,7 +33,7 @@ export function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState(false);
   // The fields the form's own check found empty or malformed (#320's sweep).
-  const [missing, setMissing] = useState<string[]>([]);
+  const [messages, setMessages] = useState<FieldMessage[]>([]);
 
   const registrationAvailable = status?.localAuthEnabled && status.registrationMode === 'open';
 
@@ -44,7 +45,7 @@ export function SignupPage() {
       { id: 'signup-email', problem: emailProblem(email) },
       { id: 'signup-password', problem: newPasswordProblem(password) },
     ]);
-    setMissing(problems?.ids ?? []);
+    setMessages(problems?.messages ?? []);
     if (problems) {
       setError(problems.message);
       document.getElementById(problems.ids[0]!)?.focus();
@@ -121,7 +122,12 @@ export function SignupPage() {
                 <Label htmlFor="signup-name">Name</Label>
                 <Input
                   id="signup-name"
-                  {...fieldErrorProps('signup-error', error, missing.includes('signup-name'))}
+                  {...authFieldProps({
+                    errorId: 'signup-error',
+                    error,
+                    messages,
+                    fieldId: 'signup-name',
+                  })}
                   autoComplete="name"
                   required
                   maxLength={120}
@@ -133,7 +139,12 @@ export function SignupPage() {
                 <Label htmlFor="signup-email">Email</Label>
                 <Input
                   id="signup-email"
-                  {...fieldErrorProps('signup-error', error, missing.includes('signup-email'))}
+                  {...authFieldProps({
+                    errorId: 'signup-error',
+                    error,
+                    messages,
+                    fieldId: 'signup-email',
+                  })}
                   type="email"
                   autoComplete="email"
                   required
@@ -146,12 +157,14 @@ export function SignupPage() {
                 <Label htmlFor="signup-password">Password</Label>
                 <Input
                   id="signup-password"
-                  {...fieldErrorProps(
-                    'signup-error',
+                  {...authFieldProps({
+                    errorId: 'signup-error',
                     error,
-                    missing.includes('signup-password'),
-                    'signup-password-hint',
-                  )}
+                    messages,
+                    fieldId: 'signup-password',
+                    hintId: 'signup-password-hint',
+                    hintRestated: true,
+                  })}
                   type="password"
                   autoComplete="new-password"
                   required
@@ -164,7 +177,11 @@ export function SignupPage() {
                   Use at least 12 characters.
                 </p>
               </div>
-              {error && <AuthFormError id="signup-error">{error}</AuthFormError>}
+              {error && (
+                <AuthFormError id="signup-error" messages={messages}>
+                  {error}
+                </AuthFormError>
+              )}
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
                 {submitting ? <Spinner /> : <UserPlus />} Create account
               </Button>
