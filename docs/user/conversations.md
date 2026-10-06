@@ -23,7 +23,8 @@ message and named by its opening words too: **Copy code block 2 (Python) in
 ### Editing, retrying and forking preserve the original
 
 Editing creates a new conversation with your revised question; the original
-stays as it was.
+stays as it was. The new conversation is titled from your revised question, so
+each edit can be told apart in the sidebar; rename it if you prefer.
 
 Editing, retrying and forking at a question answer with the model and
 reasoning level shown in the model picker when you do it. If a model failed or

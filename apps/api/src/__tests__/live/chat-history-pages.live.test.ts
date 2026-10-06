@@ -368,6 +368,32 @@ describe.skipIf(!available)('live conversation pages', () => {
     expect(texts(await page(source, '?limit=24'))).toEqual(full.messages.map(textOf));
   });
 
+  it('titles every edit from its revised question, so branches can be told apart (#278)', async () => {
+    const source = await conversation(3);
+    const full = (await (await get(source)).json()) as PageBody;
+    const edit = async (threadId: string, messageId: string, text: string) => {
+      const response = await app.request(`/api/threads/${threadId}/branches`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-test-user': owner },
+        body: JSON.stringify({ messageId, text }),
+      });
+      expect(response.status).toBe(201);
+      return (await response.json()) as { thread: { id: string; title: string } };
+    };
+    // A later question edited twice, and again inside the first branch.
+    const first = await edit(source, full.messages[2]!.id, 'q1 as a table');
+    const second = await edit(source, full.messages[2]!.id, 'q1 in French');
+    const inBranch = (await page(first.thread.id, '?limit=10')).messages.at(-1)!;
+    const third = await edit(first.thread.id, inBranch.id, 'q1 as a shorter table');
+    expect([first, second, third].map((result) => result.thread.title)).toEqual([
+      'q1 as a table',
+      'q1 in French',
+      'q1 as a shorter table',
+    ]);
+    // Editing the first question was already titled this way.
+    expect((await edit(source, full.messages[0]!.id, 'q0 again')).thread.title).toBe('q0 again');
+  });
+
   it('validates paging parameters and ownership', async () => {
     const id = await conversation(4);
     const first = ((await (await get(id)).json()) as PageBody).messages[0]!.id;
