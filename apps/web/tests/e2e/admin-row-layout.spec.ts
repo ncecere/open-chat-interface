@@ -108,8 +108,12 @@ const account = (index: number, email: string) => ({
   legalHold: false,
 });
 
-for (const width of [768, 1024]) {
-  test(`the Users table keeps Limits in view at ${width} px (#319)`, async ({ page }) => {
+// Every width the admin shell supports from a tablet up. Below 768 the table
+// scrolls sideways inside its own region by design.
+for (const width of [768, 900, 1024, 1100, 1280, 1440]) {
+  test(`the Users table keeps Limits in view and its addresses readable at ${width} px (#319, #334)`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.route('**/api/admin/users?*', (route) =>
       route.fulfill({
@@ -117,8 +121,9 @@ for (const width of [768, 1024]) {
           users: [
             account(1, 'walk7-resilience-invitee2@example.edu'),
             account(2, 'o.fitzgerald@northbrook.edu'),
+            account(3, 'walk8-target@example.com'),
           ],
-          total: 2,
+          total: 3,
         },
       }),
     );
@@ -129,10 +134,44 @@ for (const width of [768, 1024]) {
     // Since "Threads" became "Conversations" (#305) the table needed 750 px
     // and cut Limits off in a 718 or 686 px area, with nothing showing that
     // it scrolled sideways.
-    const { scrollWidth, clientWidth } = await table.evaluate((element) => ({
-      scrollWidth: element.scrollWidth,
-      clientWidth: element.clientWidth,
-    }));
-    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+    const measured = await table.evaluate((element) => {
+      const headers = [...element.querySelectorAll('thead th')];
+      const user = headers.findIndex((header) => header.textContent?.includes('User'));
+      // Where each address wraps: the character that opens each line after
+      // the first. A word is never cut mid-way when it can break at "@" or ".".
+      const lineStarts = [...element.querySelectorAll('tbody tr td p')].map((paragraph) => {
+        const starts: string[] = [];
+        let top: number | null = null;
+        const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const value = node.textContent ?? '';
+          for (let index = 0; index < value.length; index++) {
+            const range = document.createRange();
+            range.setStart(node, index);
+            range.setEnd(node, index + 1);
+            const rect = range.getClientRects()[0];
+            if (!rect) continue;
+            if (top !== null && Math.abs(rect.top - top) > 4) starts.push(value[index]!);
+            top = rect.top;
+          }
+        }
+        return { text: paragraph.textContent ?? '', starts };
+      });
+      return {
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+        userWidth: headers[user]!.getBoundingClientRect().width,
+        lineStarts,
+      };
+    });
+    expect(measured.scrollWidth).toBeLessThanOrEqual(measured.clientWidth);
+    // The address column was squeezed to about 100 px (#334).
+    expect(measured.userWidth).toBeGreaterThanOrEqual(150);
+    for (const { text, starts } of measured.lineStarts) {
+      expect(
+        starts.filter((start) => start !== '@' && start !== '.'),
+        text,
+      ).toEqual([]);
+    }
   });
 }

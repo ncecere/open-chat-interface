@@ -16,6 +16,24 @@ const ROLE_VARIANT = {
   restricted: 'outline',
 } as const;
 
+/**
+ * An address that may break at its `@` and dots, so a narrow column wraps
+ * "walk8-target@" / "example.com", not "walk8- / target@example. / com"
+ * (#334). A word-break opportunity adds no text, so the name read is the
+ * address. A part wider than the column still breaks anywhere (the cell's
+ * `overflow-wrap`), as before.
+ */
+function BreakableEmail({ email }: { email: string }) {
+  const parts = email.split(/(?=[@.])/);
+  return parts.map((part, index) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: the parts are static text.
+    <span key={index}>
+      {index > 0 && <wbr />}
+      {part}
+    </span>
+  ));
+}
+
 /** aria-sort exposes the active order independently of the arrow icon. */
 function SortableHeader({
   label,
@@ -33,7 +51,7 @@ function SortableHeader({
   const isActive = active === sortKey;
   return (
     <th
-      className="px-3 py-3 xl:px-4 font-medium"
+      className="px-2 py-3 xl:px-4 font-medium"
       aria-sort={isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <button
@@ -86,7 +104,7 @@ export function UserTable({
         <thead>
           <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             {canEdit && (
-              <th className="w-10 px-3 py-3 xl:px-4">
+              <th className="w-10 px-2 py-3 xl:px-4">
                 <input
                   type="checkbox"
                   aria-label="Select every account on this page"
@@ -124,7 +142,7 @@ export function UserTable({
               onSort={onSort}
             />
             {canEdit && (
-              <th className="px-3 py-3 xl:px-4">
+              <th className="px-2 py-3 xl:px-4">
                 <span className="sr-only">Actions</span>
               </th>
             )}
@@ -134,7 +152,7 @@ export function UserTable({
           {users.map((user) => (
             <tr key={user.id} className="border-b border-[var(--border-subtle)] last:border-0">
               {canEdit && (
-                <td className="px-3 py-3 xl:px-4">
+                <td className="px-2 py-3 xl:px-4">
                   <input
                     type="checkbox"
                     aria-label={`Select ${user.email}`}
@@ -143,7 +161,10 @@ export function UserTable({
                   />
                 </td>
               )}
-              <td className="px-3 py-3 xl:px-4">
+              {/* The one column that takes the width the others leave (#334):
+                  the rest are as wide as their content, so an address is not
+                  squeezed while Role keeps room it does not use. */}
+              <td className="w-full px-2 py-3 xl:px-4">
                 <Link
                   to="/admin/users/$userId"
                   params={{ userId: user.id }}
@@ -157,10 +178,10 @@ export function UserTable({
                     1024 px (#319, the range #57 fixed for the audit log). Cells
                     are a little narrower below 1280 px for the same reason. */}
                 <p className="text-xs text-[var(--text-muted)] [overflow-wrap:anywhere]">
-                  {user.email}
+                  <BreakableEmail email={user.email} />
                 </p>
               </td>
-              <td className="px-3 py-3 xl:px-4">
+              <td className="px-2 py-3 xl:px-4">
                 <div className="flex flex-wrap items-center gap-1">
                   {canEdit ? (
                     <UserRoleSelect user={user} />
@@ -177,14 +198,14 @@ export function UserTable({
               </td>
               {/* Short figures and dates stay on one line; the Role column,
                   mostly empty, is the one that gives way (#170). */}
-              <td className="whitespace-nowrap px-3 py-3 xl:px-4 text-[var(--text-secondary)]">
+              <td className="whitespace-nowrap px-2 py-3 xl:px-4 text-[var(--text-secondary)]">
                 {user.threadCount}
               </td>
-              <td className="whitespace-nowrap px-3 py-3 xl:px-4 text-[var(--text-muted)]">
+              <td className="whitespace-nowrap px-2 py-3 xl:px-4 text-[var(--text-muted)]">
                 {formatRelativeTime(user.createdAt)}
               </td>
               {canEdit && (
-                <td className="whitespace-nowrap px-3 py-3 xl:px-4 text-right">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-4 text-right">
                   {/* Named for its account, as Select and Role beside it are (#260). */}
                   <Button
                     size="sm"
