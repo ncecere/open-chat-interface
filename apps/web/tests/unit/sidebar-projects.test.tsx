@@ -432,6 +432,21 @@ describe('sidebar general list', () => {
     expect(size.width).toBeGreaterThanOrEqual(24);
     expect(size.height).toBeGreaterThanOrEqual(24);
   });
+
+  it('heads every group, so heading navigation reaches each day (#198)', async () => {
+    threads = [
+      thread('pg', 'Pinned grant', { pinned: true, projectId: 'p2' }),
+      thread('u1', 'Unfiled today'),
+      thread('o1', 'Unfiled long ago', { lastMessageAt: LONG_AGO, createdAt: LONG_AGO }),
+    ];
+    await render();
+    const headings = [...document.querySelectorAll('nav h2')].map((h) => h.textContent);
+    expect(headings).toEqual(['Projects', 'Pinned', 'Today', 'Older']);
+    // Pinned keeps its disclosure, inside the heading.
+    const pinned = button('Pinned');
+    expect(pinned.closest('h2')).not.toBeNull();
+    expect(pinned.getAttribute('aria-expanded')).toBe('true');
+  });
 });
 
 describe('sidebar refresh after conversation changes', () => {
