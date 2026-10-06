@@ -43,7 +43,8 @@ have been doing, why they are hitting a limit, whether the account is behaving
 oddly.
 
 It shows their totals, storage, **active sessions with the address and client
-each came from**, their limits, recent conversation titles, and their audit
+each came from** (the ten newest, with the total above them, such as "Showing
+the 10 most recent of 616 active sessions"), their limits, recent conversation titles, and their audit
 trail — matched both as actor and as target, so something done *to* them appears
 beside things they did. **See every event for this account** opens the audit log
 filtered to their address.

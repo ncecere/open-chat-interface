@@ -1,15 +1,25 @@
-import { and, count, desc, eq, isNull, or, schema } from '@oci/db';
+import { and, count, desc, eq, gt, isNull, or, schema } from '@oci/db';
 import { db } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
 import { activeLegalHold } from '../compliance/holds.js';
 import { toAdminUser } from './listing.js';
+
+/** How many of an account's sessions the detail page lists; `sessionCount` is the total. */
+export const DETAIL_SESSION_LIMIT = 10;
 
 /** Gather account activity, storage usage and security context in a single response. */
 export async function getUserDetail(targetId: string) {
   const [target] = await db.select().from(schema.user).where(eq(schema.user.id, targetId)).limit(1);
   if (!target) throw notFound('User not found');
 
-  const [threads, messages, storage, sessions, recentThreads, auditEntries, hold] =
+  // Only unexpired sessions are active. The page lists the newest few and
+  // states the total, so an administrator investigating a compromise is not
+  // told "10 active sessions" when there are hundreds (#134).
+  const activeSession = and(
+    eq(schema.session.userId, targetId),
+    gt(schema.session.expiresAt, new Date()),
+  );
+  const [threads, messages, storage, sessions, sessionTotal, recentThreads, auditEntries, hold] =
     await Promise.all([
       db.select({ value: count() }).from(schema.thread).where(eq(schema.thread.userId, targetId)),
       db.select({ value: count() }).from(schema.message).where(eq(schema.message.userId, targetId)),
@@ -27,9 +37,10 @@ export async function getUserDetail(targetId: string) {
           userAgent: schema.session.userAgent,
         })
         .from(schema.session)
-        .where(eq(schema.session.userId, targetId))
+        .where(activeSession)
         .orderBy(desc(schema.session.createdAt))
-        .limit(10),
+        .limit(DETAIL_SESSION_LIMIT),
+      db.select({ value: count() }).from(schema.session).where(activeSession),
       db
         .select({
           id: schema.thread.id,
@@ -72,6 +83,7 @@ export async function getUserDetail(targetId: string) {
       createdAt: session.createdAt.toISOString(),
       expiresAt: session.expiresAt.toISOString(),
     })),
+    sessionCount: sessionTotal[0]?.value ?? 0,
     recentThreads: recentThreads.map((thread) => ({
       ...thread,
       updatedAt: thread.updatedAt.toISOString(),
