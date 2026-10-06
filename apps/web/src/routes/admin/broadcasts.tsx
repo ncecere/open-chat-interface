@@ -35,8 +35,9 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
+import { validationText } from '~/lib/validation-issues';
 
 const LEVEL_LABELS: Record<BroadcastLevel, string> = {
   info: 'Information',
@@ -118,8 +119,7 @@ function BroadcastDialog({
       ]);
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The announcement could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The announcement could not be saved.')),
   });
 
   function submit(event: FormEvent) {
@@ -138,7 +138,7 @@ function BroadcastDialog({
     });
 
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the announcement fields.');
+      setError(validationText(parsed.error.issues, 'Check the announcement fields.'));
       return;
     }
     save.mutate(parsed.data);

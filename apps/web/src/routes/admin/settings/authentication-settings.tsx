@@ -18,7 +18,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 type AuthSettings = Pick<
   InstanceSettings,
@@ -84,9 +84,7 @@ export function AuthenticationSettingsForm({
     },
     onError: (error) => {
       setSavedMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save authentication settings.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save authentication settings.'));
     },
   });
 

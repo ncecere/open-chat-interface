@@ -19,6 +19,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { validationText } from '~/lib/validation-issues';
 
 interface InvitesResponse {
   invites: Array<Omit<Invite, 'token'>>;
@@ -79,7 +80,7 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     });
 
     if (!result.success) {
-      setValidationError(result.error.issues[0]?.message ?? 'Check the invitation details.');
+      setValidationError(validationText(result.error.issues, 'Check the invitation details.'));
       return;
     }
 

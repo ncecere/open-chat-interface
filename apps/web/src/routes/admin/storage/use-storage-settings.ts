@@ -2,7 +2,7 @@ import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import {
   type CredentialAction,
   changedStorageSettings,
@@ -73,9 +73,7 @@ export function useStorageSettings(initialSettings: StorageSettings) {
     onError: (error) => {
       setShowDriverConfirmation(false);
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save storage settings.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save storage settings.'));
     },
   });
 
@@ -92,7 +90,7 @@ export function useStorageSettings(initialSettings: StorageSettings) {
     },
     onError: (error) => {
       setHealthMessage(null);
-      setErrorMessage(error instanceof ApiError ? error.message : 'S3 connection test failed.');
+      setErrorMessage(apiErrorMessage(error, 'S3 connection test failed.'));
     },
   });
 

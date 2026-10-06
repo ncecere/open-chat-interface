@@ -24,7 +24,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 /**
  * Provider capacity (v0.11): limits OCI keeps below a provider's own rate
@@ -108,8 +108,7 @@ export function CapacityLimitsDialog({
       await queryClient.invalidateQueries({ queryKey: CAPACITY_QUERY_KEY });
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The limits could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The limits could not be saved.')),
   });
 
   function submit(event: FormEvent) {
@@ -432,9 +431,7 @@ export function ProviderCapacitySection() {
                 errorMessage={
                   formError ??
                   (save.error
-                    ? save.error instanceof ApiError
-                      ? save.error.message
-                      : 'The queue settings could not be saved.'
+                    ? apiErrorMessage(save.error, 'The queue settings could not be saved.')
                     : null)
                 }
                 successMessage={saved && !changed ? 'Queue settings saved.' : null}

@@ -16,7 +16,17 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
+
+/** The form's names for the fields, as the API names them (#127). */
+const RETENTION_LABELS = {
+  trashRetentionDays: 'Trash retention (days)',
+  threadRetentionDays: 'Conversation retention (days)',
+  usageEventRetentionDays: 'Usage history (days)',
+  displayTimezone: 'Reporting timezone',
+  auditLogRetentionDays: 'Audit log (days)',
+  memoryRetentionDays: 'Memory retention (days)',
+};
 
 /**
  * Only changed fields are sent: saving one value must not pin the others,
@@ -60,7 +70,7 @@ function RetentionForm({
       ]);
     },
     onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'Retention could not be saved.'),
+      setError(apiErrorMessage(cause, 'Retention could not be saved.', RETENTION_LABELS)),
   });
 
   function submit(event: FormEvent) {

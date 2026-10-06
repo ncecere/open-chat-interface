@@ -16,7 +16,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { priceMicros } from '~/lib/price';
 
 const RERANKING_QUERY_KEY = ['admin', 'reranking'] as const;
@@ -229,9 +229,7 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
         isPending={save.isPending}
         errorMessage={
           save.error
-            ? save.error instanceof ApiError
-              ? save.error.message
-              : 'The reranking settings could not be saved.'
+            ? apiErrorMessage(save.error, 'The reranking settings could not be saved.')
             : null
         }
         successMessage={saved ? 'Reranking settings saved.' : null}

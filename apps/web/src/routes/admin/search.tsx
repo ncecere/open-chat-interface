@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AdminPageHeader } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { SearchSettingsForm } from './search/search-settings-form';
 
 export { onThisPage } from './search/search-draft';
@@ -40,9 +40,7 @@ export function AdminSearchPage() {
       ) : settings.isError || !settings.data ? (
         <div>
           <p role="alert" className="text-sm text-[var(--danger)]">
-            {settings.error instanceof ApiError
-              ? settings.error.message
-              : 'Unable to load search settings.'}
+            {apiErrorMessage(settings.error, 'Unable to load search settings.')}
           </p>
           <Button
             type="button"

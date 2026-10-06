@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AdminPageHeader } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { brandingFromResponse } from './branding/branding-draft';
 import { BrandingForm } from './branding/branding-form';
 
@@ -50,9 +50,7 @@ export function AdminBrandingPage() {
       ) : settings.isError || !settings.data ? (
         <div>
           <p role="alert" className="text-sm text-[var(--danger)]">
-            {settings.error instanceof ApiError
-              ? settings.error.message
-              : 'Unable to load branding settings.'}
+            {apiErrorMessage(settings.error, 'Unable to load branding settings.')}
           </p>
           <Button
             type="button"

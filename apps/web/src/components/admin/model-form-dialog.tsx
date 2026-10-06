@@ -32,7 +32,7 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 interface ModelDraft {
@@ -248,8 +248,7 @@ export function ModelFormDialog({
       ]);
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The model could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The model could not be saved.')),
   });
 
   function submit(event: FormEvent) {

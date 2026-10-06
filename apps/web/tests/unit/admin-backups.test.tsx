@@ -1,9 +1,18 @@
 // @vitest-environment happy-dom
-import type { BackupStatus } from '@oci/shared';
+import { type BackupStatus, updateBackupSettingsSchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminBackupsPage, backupChanges } from '../../src/routes/admin/backups';
-import { button, cleanup, click, findButton, renderAdmin, typeInto } from './admin-test-utils';
+import {
+  alerts,
+  button,
+  cleanup,
+  click,
+  findButton,
+  renderAdmin,
+  typeInto,
+  validationFailure,
+} from './admin-test-utils';
 import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
@@ -160,6 +169,16 @@ describe('Backups admin page', () => {
       keepDaily: 14,
       s3: { bucket: 'other-bucket', secretAccessKey: 'new-secret' },
     });
+  });
+
+  it('names the field and the rule when the API refuses a value (#127)', async () => {
+    await render();
+    api.patch.mockRejectedValueOnce(
+      validationFailure(updateBackupSettingsSchema, { keepDaily: 0 }),
+    );
+    await typeInto(document.getElementById('backups-keep-daily') as HTMLInputElement, '0');
+    await click(button('Save changes'));
+    expect(alerts()).toContain('Daily backups kept must be at least 1.');
   });
 
   it('turns copying files on and chooses how many are checked', async () => {

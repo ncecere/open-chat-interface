@@ -13,7 +13,7 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import {
   type Draft,
   parseActions,
@@ -96,8 +96,7 @@ export function WebhookFormDialog({
       if (!endpoint) onCreated(result as WebhookWithSecret);
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The endpoint could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The endpoint could not be saved.')),
   });
 
   function submit(event: FormEvent) {

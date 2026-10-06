@@ -18,7 +18,7 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY, useSetupCheck } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { FallbackProviderSection, FallbackTestResult } from './fallback-provider-section';
 import {
   type CredentialAction,
@@ -143,9 +143,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save search settings.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save search settings.'));
     },
   });
 
@@ -410,10 +408,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
             {(test.data?.ok === false || test.error) && (
               <p role="alert" className="text-sm text-[var(--danger)]">
                 {onThisPage(
-                  test.data?.message ??
-                    (test.error instanceof ApiError
-                      ? test.error.message
-                      : 'The test could not run.'),
+                  test.data?.message ?? apiErrorMessage(test.error, 'The test could not run.'),
                 )}
               </p>
             )}

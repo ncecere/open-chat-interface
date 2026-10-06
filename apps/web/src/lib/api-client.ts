@@ -1,6 +1,7 @@
 import type { ApiErrorBody, ReadOnlyStatus } from '@oci/shared';
 import { noteReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
 import { noteUnauthorized } from '~/lib/session-ended';
+import { type FieldLabels, validationText } from '~/lib/validation-issues';
 
 export class ApiError extends Error {
   constructor(
@@ -14,9 +15,15 @@ export class ApiError extends Error {
   }
 }
 
-/** Only server API errors are suitable for display; other failures use caller-specific copy. */
-export function apiErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+/**
+ * Only server API errors are suitable for display; other failures use
+ * caller-specific copy. A validation failure names each field and rule rather
+ * than "Request validation failed" (#127).
+ */
+export function apiErrorMessage(error: unknown, fallback: string, labels?: FieldLabels): string {
+  return error instanceof ApiError
+    ? validationText(error.details, error.message, labels)
+    : fallback;
 }
 
 /**

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { AdminConnector } from '@oci/shared';
+import { type AdminConnector, createConnectorSchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectorChanges } from '../../src/components/admin/connector-form-dialog';
@@ -13,6 +13,7 @@ import {
   findButton,
   renderAdmin,
   typeInto,
+  validationFailure,
 } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
@@ -177,6 +178,34 @@ describe('Connectors admin page', () => {
       enabled: true,
       allowPrivateNetwork: false,
     });
+  });
+
+  it('says which field the API refused and why (#127)', async () => {
+    connectors = [];
+    await render();
+    await click(button('Add connector'));
+    await typeInto(document.getElementById('connector-name') as HTMLInputElement, 'Walk2');
+    await typeInto(
+      document.getElementById('connector-url') as HTMLInputElement,
+      'https://wiki.example.test/mcp',
+    );
+    await typeInto(document.getElementById('connector-slug') as HTMLInputElement, 'Walk2 Bad!');
+    api.post.mockRejectedValueOnce(
+      validationFailure(createConnectorSchema, {
+        name: 'Walk2',
+        url: 'https://wiki.example.test/mcp',
+        slug: 'Walk2 Bad!',
+        authMode: 'none',
+      }),
+    );
+    const submit = [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Add connector',
+    )!;
+    await click(submit);
+    const alert = dialog()?.querySelector('[role="alert"]')?.textContent;
+    expect(alert).toBe(
+      'Short name: Use up to 24 lowercase letters, digits and hyphens, such as docs or crm-eu.',
+    );
   });
 
   it('confirms before deleting, naming what goes with it', async () => {

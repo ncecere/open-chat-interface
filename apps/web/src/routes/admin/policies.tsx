@@ -26,7 +26,8 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
+import { validationText } from '~/lib/validation-issues';
 
 /**
  * Writes a new version, or rewords a draft (`draft`). A published version is
@@ -61,8 +62,7 @@ function PolicyDialog({
       await queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] });
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The policy could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The policy could not be saved.')),
   });
 
   function submit(event: FormEvent) {
@@ -73,7 +73,7 @@ function PolicyDialog({
       ? updatePolicyDraftSchema.safeParse({ title, body })
       : upsertUsagePolicySchema.safeParse({ title, body, publish });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the policy fields.');
+      setError(validationText(parsed.error.issues, 'Check the policy fields.'));
       return;
     }
     save.mutate(parsed.data);

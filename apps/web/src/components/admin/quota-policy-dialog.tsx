@@ -25,8 +25,9 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
+import { validationText } from '~/lib/validation-issues';
 
 const METRIC_LABELS: Record<QuotaMetric, string> = {
   messages: 'Messages',
@@ -45,6 +46,17 @@ const WINDOW_LABELS: Record<QuotaWindowKind, string> = {
   daily: 'Daily (resets at midnight)',
   weekly: 'Weekly (resets Sunday)',
   monthly: 'Monthly (resets on the 1st)',
+};
+
+/** The dialog's names for the fields, as the schema names them (#127). */
+const POLICY_LABELS = {
+  metric: 'Measure',
+  limitValue: 'Limit',
+  windowKind: 'Window',
+  windowHours: 'Window length (hours)',
+  timezone: 'Reset timezone',
+  roles: 'Applies to roles',
+  modelSlugs: 'Applies to models',
 };
 
 /** A short, dependency-free list covering the common deployment zones. */
@@ -140,7 +152,7 @@ export function QuotaPolicyDialog({
       onClose();
     },
     onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The policy could not be saved.'),
+      setError(apiErrorMessage(cause, 'The policy could not be saved.', POLICY_LABELS)),
   });
 
   const isRolling = draft.windowKind === 'rolling';
@@ -163,7 +175,7 @@ export function QuotaPolicyDialog({
     });
 
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the policy fields.');
+      setError(validationText(parsed.error.issues, 'Check the policy fields.', POLICY_LABELS));
       return;
     }
     save.mutate(parsed.data);
@@ -260,6 +272,8 @@ export function QuotaPolicyDialog({
                 id="policy-window-hours"
                 type="number"
                 min="1"
+                // The API's limit (a year), so the browser says so before saving (#127).
+                max="8760"
                 step="1"
                 value={draft.windowHours}
                 required

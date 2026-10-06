@@ -5,7 +5,7 @@ import { AdminPageHeader, Notice } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { useSetupCheck } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { SsoProvidersSection } from '~/routes/admin/sso';
 import { AuthenticationSettingsForm } from './settings/authentication-settings';
 import { GeneralSettings } from './settings/general-settings';
@@ -74,9 +74,7 @@ function InstanceSettingsPage({
       ) : settings.isError || !settings.data ? (
         <div className="rounded-xl border border-[var(--border-subtle)] p-5">
           <p role="alert" className="text-sm text-[var(--danger)]">
-            {settings.error instanceof ApiError
-              ? settings.error.message
-              : 'Unable to load instance settings.'}
+            {apiErrorMessage(settings.error, 'Unable to load instance settings.')}
           </p>
           <Button
             type="button"

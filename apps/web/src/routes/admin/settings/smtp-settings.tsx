@@ -14,7 +14,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 type SmtpSettings = InstanceSettings['smtp'];
@@ -290,7 +290,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(error instanceof ApiError ? error.message : 'Unable to save SMTP settings.');
+      setErrorMessage(apiErrorMessage(error, 'Unable to save SMTP settings.'));
     },
   });
 

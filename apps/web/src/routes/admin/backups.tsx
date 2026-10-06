@@ -30,7 +30,7 @@ import { Badge } from '~/components/ui/badge';
 import { Field } from '~/components/ui/field';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
@@ -281,9 +281,7 @@ function SettingsForm({
         isPending={save.isPending}
         errorMessage={
           save.error
-            ? save.error instanceof ApiError
-              ? save.error.message
-              : 'Backup settings could not be saved.'
+            ? apiErrorMessage(save.error, 'Backup settings could not be saved.', BACKUP_LABELS)
             : null
         }
         successMessage={saved && !hasChanges ? 'Backup settings saved.' : null}
@@ -291,6 +289,13 @@ function SettingsForm({
     </form>
   );
 }
+
+/** The form's names for the fields the API names differently (#127). */
+const BACKUP_LABELS = {
+  keepDaily: 'Daily backups kept',
+  keepWeekly: 'Weekly backups kept',
+  hourUtc: 'Time of day',
+};
 
 function History({ runs }: { runs: BackupRun[] }) {
   return (

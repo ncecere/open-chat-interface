@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
+import { upsertQuotaPolicySchema } from '@oci/shared';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 import { MutationError } from '../../src/components/admin/admin-ui';
-import { ApiError } from '../../src/lib/api-client';
+import { ApiError, apiErrorMessage } from '../../src/lib/api-client';
 import { describeValidationIssues } from '../../src/lib/validation-issues';
 
 // What the API sent for the QA walk's examples (Zod 4 issues).
@@ -16,9 +17,15 @@ const issues = [
     path: ['recipients', 1],
     origin: 'string',
     format: 'email',
-    message: 'x',
+    message: 'Invalid email address',
   },
-  { code: 'invalid_format', path: ['actions', 0], origin: 'string', format: 'regex', message: 'x' },
+  {
+    code: 'invalid_format',
+    path: ['actions', 0],
+    origin: 'string',
+    format: 'regex',
+    message: 'Invalid string: must match pattern /^[a-z.*]+$/',
+  },
   { code: 'too_small', path: ['body'], origin: 'string', minimum: 1, message: 'Too small' },
 ];
 
@@ -58,4 +65,54 @@ it('lists the reasons under the failure instead of "Request validation failed"',
   expect(container.textContent).toContain('Label must be at most 80 characters.');
   expect(container.textContent).not.toContain('Request validation failed');
   await act(async () => root.unmount());
+});
+
+it('keeps a message the schema wrote, in the form’s own words for the field (#127)', () => {
+  // A refine's own sentence, not "Display timezone Use an IANA ….".
+  expect(
+    describeValidationIssues(
+      [
+        {
+          code: 'custom',
+          path: ['displayTimezone'],
+          message: 'Use an IANA time zone such as Europe/London or America/New_York.',
+        },
+      ],
+      { displayTimezone: 'Reporting timezone' },
+    ),
+  ).toEqual([
+    'Reporting timezone: Use an IANA time zone such as Europe/London or America/New_York.',
+  ]);
+});
+
+it('says "more than 0" for a positive number, and rewords Zod’s bare "Invalid input"', () => {
+  const result = upsertQuotaPolicySchema.safeParse({
+    name: 'Walk3',
+    metric: 'messages',
+    limitValue: 0,
+    windowKind: 'daily',
+  });
+  expect(result.success).toBe(false);
+  expect(describeValidationIssues(result.error?.issues)).toEqual([
+    'Limit value must be more than 0.',
+  ]);
+  // A production bundle drops Zod's English messages, leaving "Invalid input".
+  expect(
+    describeValidationIssues([
+      { code: 'invalid_value', path: ['metric'], message: 'Invalid input' },
+    ]),
+  ).toEqual(['Metric is not one of the allowed choices.']);
+});
+
+it('apiErrorMessage lists the reasons instead of "Request validation failed" (#127)', () => {
+  const error = new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', [
+    { code: 'too_big', path: ['keepDaily'], origin: 'number', maximum: 90, inclusive: true },
+  ]);
+  expect(apiErrorMessage(error, 'Not saved.', { keepDaily: 'Daily backups kept' })).toBe(
+    'Daily backups kept must be at most 90.',
+  );
+  expect(apiErrorMessage(new ApiError(409, 'CONFLICT', 'Already exists.'), 'Not saved.')).toBe(
+    'Already exists.',
+  );
+  expect(apiErrorMessage(new Error('offline'), 'Not saved.')).toBe('Not saved.');
 });

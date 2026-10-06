@@ -15,7 +15,7 @@ import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 type Features = InstanceSettings['features'];
 type FeatureKey = keyof Features;
@@ -105,9 +105,7 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the system prompt.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the system prompt.'));
     },
   });
 
@@ -169,9 +167,7 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the default reasoning level.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the default reasoning level.'));
     },
   });
 
@@ -243,9 +239,7 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save feature settings.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save feature settings.'));
     },
   });
 
@@ -336,9 +330,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the tool step limit.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the tool step limit.'));
     },
   });
 
@@ -410,9 +402,7 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the compaction setting.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the compaction setting.'));
     },
   });
 
@@ -470,9 +460,7 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the diagram setting.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the diagram setting.'));
     },
   });
 
