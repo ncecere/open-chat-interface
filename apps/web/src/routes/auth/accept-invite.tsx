@@ -1,5 +1,6 @@
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -138,6 +139,7 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-email">Email</Label>
                 <Input
                   id="invite-email"
+                  {...fieldErrorProps('invite-error', error, false)}
                   type="email"
                   autoComplete="email"
                   required
@@ -156,6 +158,7 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-password">Password</Label>
                 <Input
                   id="invite-password"
+                  {...fieldErrorProps('invite-error', error, false)}
                   type="password"
                   autoComplete="new-password"
                   required
@@ -167,11 +170,7 @@ export function AcceptInvitePage() {
                 <p className="text-xs text-[var(--text-muted)]">Use at least 12 characters.</p>
               </div>
 
-              {error && (
-                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]">
-                  {error}
-                </p>
-              )}
+              {error && <AuthFormError id="invite-error">{error}</AuthFormError>}
 
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
                 {submitting ? <Spinner /> : <UserPlus />}

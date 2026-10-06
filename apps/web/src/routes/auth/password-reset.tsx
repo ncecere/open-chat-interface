@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { CheckCircle2, KeyRound, Lock, Mail } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
 import { Wordmark } from '~/components/brand/wordmark';
 import { useReadOnlyPolling } from '~/components/layout/read-only-banner';
 import { Button } from '~/components/ui/button';
@@ -115,6 +116,7 @@ export function ForgotPasswordPage() {
             <Label htmlFor="reset-email">Email</Label>
             <Input
               id="reset-email"
+              {...fieldErrorProps('reset-request-error', error, false)}
               type="email"
               autoComplete="email"
               required
@@ -122,14 +124,7 @@ export function ForgotPasswordPage() {
               onChange={(event) => setEmail(event.target.value)}
             />
           </div>
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
-            >
-              {error}
-            </p>
-          )}
+          {error && <AuthFormError id="reset-request-error">{error}</AuthFormError>}
           <Button type="submit" variant="primary" disabled={submitting} className="w-full">
             {submitting ? <Spinner /> : <Mail />} Send reset link
           </Button>
@@ -213,6 +208,7 @@ export function ResetPasswordPage() {
             <Label htmlFor="new-password">New password</Label>
             <Input
               id="new-password"
+              {...fieldErrorProps('new-password-error', error)}
               type="password"
               autoComplete="new-password"
               required
@@ -223,11 +219,7 @@ export function ResetPasswordPage() {
             />
             <p className="text-xs text-[var(--text-muted)]">Use at least 12 characters.</p>
           </div>
-          {error && (
-            <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]">
-              {error}
-            </p>
-          )}
+          {error && <AuthFormError id="new-password-error">{error}</AuthFormError>}
           <Button type="submit" variant="primary" disabled={submitting} className="w-full">
             {submitting ? <Spinner /> : <KeyRound />} Update password
           </Button>

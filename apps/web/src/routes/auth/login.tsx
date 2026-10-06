@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -43,6 +44,8 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  // Only wrong credentials are about the fields; a rate limit is not (#183).
+  const invalidCredentials = error === WRONG_CREDENTIALS;
   // Sent here because the session ended while the app was open (#165).
   const [signedOut] = useState(() =>
     new URLSearchParams(window.location.search).has(SIGNED_OUT_PARAM),
@@ -175,6 +178,7 @@ export function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  {...fieldErrorProps('login-error', error, invalidCredentials)}
                   type="email"
                   autoComplete="email"
                   required
@@ -188,6 +192,7 @@ export function LoginPage() {
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
+                  {...fieldErrorProps('login-error', error, invalidCredentials)}
                   type="password"
                   autoComplete="current-password"
                   required
@@ -196,11 +201,7 @@ export function LoginPage() {
                 />
               </div>
 
-              {error && (
-                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]">
-                  {error}
-                </p>
-              )}
+              {error && <AuthFormError id="login-error">{error}</AuthFormError>}
 
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
                 {submitting ? <Spinner className="text-white" /> : <KeyRound />}
