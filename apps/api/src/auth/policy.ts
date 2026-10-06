@@ -1,6 +1,7 @@
 import { eq, schema } from '@oci/db';
 import { APIError } from 'better-auth/api';
 import { db } from '../db/index.js';
+import { isConnectionError } from '../lib/db-connection.js';
 import { logger } from '../lib/logger.js';
 import { type AuthSettings, getSetting } from '../services/settings.js';
 
@@ -46,6 +47,10 @@ export async function getAuthPolicySettings(): Promise<AuthSettings> {
     }
     return settings;
   } catch (error) {
+    // An unreachable database is an outage, not a policy problem: passed on,
+    // the API answers it as a lost connection (500, retryable), not with a
+    // 503, which takes the replica out of the proxy's rotation (#288).
+    if (isConnectionError(error)) throw error;
     logger.error({ error }, 'Could not resolve authentication policy');
     throw new APIError('SERVICE_UNAVAILABLE', {
       code: 'AUTH_POLICY_UNAVAILABLE',

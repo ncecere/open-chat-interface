@@ -12,6 +12,7 @@ import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
+import { answered, isServiceFailure, SIGN_IN_UNAVAILABLE } from '~/lib/auth-unavailable';
 import { returnPathFromSearch } from '~/lib/return-path';
 import { SIGNED_OUT_PARAM } from '~/lib/session-ended';
 
@@ -62,14 +63,18 @@ export function LoginPage() {
     setNeedsVerification(false);
     setSubmitting(true);
 
-    const result = await authClient.signIn.email({ email, password });
+    const result = await answered(authClient.signIn.email({ email, password }));
 
     if (result.error) {
       setNeedsVerification(result.error.code === 'EMAIL_NOT_VERIFIED');
+      // The service failing (its database unreachable, the API restarting) is
+      // not the person's doing, so it is not worded as a wrong password (#288).
+      const failed = isServiceFailure(result.error);
       // Wrong credentials get the wording the user guide quotes (#97); other
       // refusals (unverified, banned, rate limited) keep the server's reason.
-      const wrong = result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || !result.error.message;
-      setError(wrong ? WRONG_CREDENTIALS : result.error.message!);
+      const wrong =
+        !failed && (result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || !result.error.message);
+      setError(failed ? SIGN_IN_UNAVAILABLE : wrong ? WRONG_CREDENTIALS : result.error.message!);
       // Back to the form rather than the body (#190): the fields at fault, which
       // the error describes, or the button for a refusal that is not theirs.
       focusAfterRender(wrong ? 'email' : 'login-submit');
@@ -175,7 +180,8 @@ export function LoginPage() {
                   continue.
                 </p>
               )}
-              {!status?.localAuthEnabled && (
+              {/* Only when known: a status that failed to load (#288) is not a setting. */}
+              {status && !status.localAuthEnabled && (
                 // The form stays usable because administrators still need a way
                 // in when an identity provider is misconfigured. Saying so
                 // plainly avoids the form looking simply broken to everyone else.

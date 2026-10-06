@@ -1685,7 +1685,11 @@ Patroni cluster under load; the design and the results are in
   database-connection`. The change may or may not have been saved; send it
   again if that is safe, or check first. `503` is never used for this (it
   means a replica is draining, and proxies take `503` replicas out of
-  rotation).
+  rotation). Sign-in, sign-up and password reset (Better Auth's endpoints,
+  and the authentication settings they read) answer the same way, and the
+  sign-in and reset pages then say the service is temporarily unavailable
+  and to try again, not that the password is wrong or that resets are
+  turned off.
 - **Replies** being written keep streaming (they go through Redis); their final
   save waits out the failover for up to 30 s. If the database is away for
   longer, the reply is saved once it is back by the recovery described in

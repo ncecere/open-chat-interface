@@ -7,6 +7,7 @@ import { admin as adminPlugin } from 'better-auth/plugins';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { clientIpFromHeaders } from '../lib/client-ip.js';
+import { isConnectionError } from '../lib/db-connection.js';
 import { logger } from '../lib/logger.js';
 import {
   RESET_LINK_TTL_SECONDS,
@@ -296,6 +297,27 @@ export const auth = betterAuth({
    * and budget single sign-on per identity provider.
    */
   rateLimit: { enabled: false },
+
+  /**
+   * A lost database connection goes on to the API's error handler, which
+   * answers it as everywhere else: 500 with `retryable: true` and
+   * X-OCI-Retryable (middleware/error-handler.ts). Better Auth answered it
+   * itself with an empty 500, marked retryable only when a connection dropped
+   * during that very request, so the sign-in page could not tell an outage
+   * from a wrong password (#288). Called synchronously by Better Auth's
+   * router; a non-APIError thrown here leaves `auth.handler` as it is.
+   * Anything else is logged as Better Auth logs it when this is unset.
+   */
+  onAPIError: {
+    onError(error, ctx) {
+      if (isConnectionError(error)) throw error;
+      if (error instanceof APIError) {
+        if (error.status === 'INTERNAL_SERVER_ERROR') ctx.logger.error(error.status, error);
+        return;
+      }
+      ctx.logger.error(error instanceof Error ? error.name : '', error);
+    },
+  },
 
   advanced: {
     cookiePrefix: 'oci',
