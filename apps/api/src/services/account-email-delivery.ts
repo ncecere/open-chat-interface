@@ -117,7 +117,9 @@ function attempt(job: {
         logger.info({ userId, kind }, 'Account email skipped: one was delivered a moment ago');
         outcome = { delivered: true };
       } else {
-        outcome = await job.send();
+        // A sender that reports nothing (an older caller, a test double) is
+        // taken as delivered, as before retries existed: never retried blindly.
+        outcome = (await job.send()) ?? { delivered: true };
         if (outcome.delivered && job.cooldown > 0) await noteDelivered(key, job.cooldown);
       }
     } catch (error) {
