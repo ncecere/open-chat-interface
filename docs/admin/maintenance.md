@@ -63,8 +63,10 @@ for someone new (just-in-time provisioning).
   people who had hidden it; cancelling the window removes it.
 
 Every change is in the audit log as `maintenance.read_only.update`, with who
-made it, when, the reason, the expected end or window and the jobs kept
-running, and what the reason and expected end were before. Auditors see this page without its controls. **Health checks** shows a
+made it, when, the reason, the expected end or the window (only one that is in
+effect or still to come: a window that has ended is dropped the next time
+anything here is changed) and the jobs kept running, and what the reason and
+expected end were before. Auditors see this page without its controls. **Health checks** shows a
 **Read-only mode** row, a warning while it is on, and the `oci_read_only` metric
 is 1 on each replica that refuses writes.
 

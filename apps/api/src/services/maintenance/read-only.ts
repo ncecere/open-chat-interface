@@ -285,6 +285,16 @@ export async function updateMaintenance(
   if (input.keepRunningJobs !== undefined)
     next.keepRunningJobs = [...new Set(input.keepRunningJobs)];
 
+  // A window that has ended is history: the status already hides it. Left in
+  // the stored setting it kept turning up in the audit entries of every later
+  // change, as though it were in force (#349), so any change clears it (and
+  // the announcement made for it, if one is left).
+  const ended = parseWindow(current.window);
+  if (input.window === undefined && ended && ended.endsAt <= Date.now()) {
+    await removeAnnouncement(ended.announcementId);
+    next.window = null;
+  }
+
   if (input.window !== undefined) {
     const previous = parseWindow(current.window);
     if (input.window === null) {
@@ -336,7 +346,9 @@ export async function updateMaintenance(
         reason: current.reason ?? null,
         until: current.until ?? null,
       },
-      window: next.window ? { startsAt: next.window.startsAt, endsAt: next.window.endsAt } : null,
+      // Only a window that is in effect or still to come, as the status shows
+      // it; one that has passed is not recorded (#349).
+      window: after.window,
       keepRunningJobs: keepRunningJobs(next),
     },
   });
