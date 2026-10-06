@@ -241,7 +241,12 @@ test('approves a tool call, continues the same reply and keeps it after a reload
   // The same reply continued: still two replies on screen.
   await expect(assistant(page)).toHaveCount(2);
   expect(server.answered).toEqual([
-    { messageId: 'reply-2', responses: [{ approvalId: 'approval-1', approved: true }] },
+    {
+      messageId: 'reply-2',
+      responses: [{ approvalId: 'approval-1', approved: true }],
+      // The browser's zone, for the date the model is told (#248).
+      timeZone: expect.any(String),
+    },
   ]);
 
   await page.reload();
