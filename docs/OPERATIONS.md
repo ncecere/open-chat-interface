@@ -1639,8 +1639,12 @@ Patroni cluster under load; the design and the results are in
   means a replica is draining, and proxies take `503` replicas out of
   rotation).
 - **Replies** being written keep streaming (they go through Redis); their final
-  save waits out the failover for up to 30 s. A new message whose saving meets
-  the failover is retried for up to 10 s.
+  save waits out the failover for up to 30 s. If the database is away for
+  longer, the reply is saved once it is back by the recovery described in
+  [Recovering an interrupted chat run](#recovering-an-interrupted-chat-run): a
+  reply that had finished is saved as complete (its token counts unknown), not
+  as interrupted. A new message whose saving meets the failover is retried for
+  up to 10 s.
 - **Background jobs** stop after the batch in hand when their lock goes with
   the old primary, and the next tick continues on the new one. Imports resume
   where they stopped. A tick whose lock connection is closed as it opens
@@ -1799,7 +1803,10 @@ the reader is idle, then every 5 s), a new message in its conversation
 `chat.recover-interrupted-replies` (every 15 seconds, runs started in the last
 six hours). Recovery ends the run's Redis stream, so every reader finishes with
 what was captured; saves the reply as `cancelled` with the interrupted
-message, rebuilt from the captured stream so it keeps what the person saw;
+message, rebuilt from the captured stream so it keeps what the person saw (a
+reply whose captured stream reached the model's finish, so that only its
+final save was lost, is saved as `complete` instead, with its token counts
+unknown);
 settles the usage reservation as unknown (keeping its estimate, as the quota
 sweep does); and frees the person's concurrency slot. A producer that was
 only paused and saves later replaces the interrupted copy with its real

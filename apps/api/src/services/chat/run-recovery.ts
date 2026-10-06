@@ -37,7 +37,9 @@ import { settledParts } from './settled-parts.js';
  * what was captured), then saves the reply as interrupted: `cancelled`, with
  * what the person saw rebuilt from the captured stream and an `error_message`
  * saying why, then settles the usage reservation as unknown and frees the
- * concurrency slot. The update only applies while the claim is still stale, so
+ * concurrency slot. A reply whose captured stream reached the model's finish
+ * lost only its final save, and is saved as complete instead (#231). The
+ * update only applies while the claim is still stale, so
  * a producer that comes back first wins, and a late final save from one that
  * was only paused replaces the interrupted copy with the real reply.
  */
@@ -107,12 +109,28 @@ export function startRunHeartbeat(identity: RunIdentity): () => void {
   return () => clearInterval(timer);
 }
 
-/** Replays the captured stream into the message the reader saw; null if it cannot. */
+/**
+ * Whether a captured stream ran to its end: the model's `finish`, with no
+ * error or abort before it. Such a reply is whole; only its save was lost.
+ */
+function finishedStream(chunks: UIMessageChunk[]): boolean {
+  let finished = false;
+  for (const chunk of chunks) {
+    if (chunk.type === 'error' || chunk.type === 'abort') return false;
+    if (chunk.type === 'finish') finished = chunk.finishReason !== 'error';
+  }
+  return finished;
+}
+
+/**
+ * Replays the captured stream into the message the reader saw, and whether
+ * the stream finished; null if it cannot.
+ */
 async function rebuildReply(
   runId: string,
   messageId: string,
   saved: UIMessage['parts'],
-): Promise<UIMessage['parts'] | null> {
+): Promise<{ parts: UIMessage['parts']; finished: boolean } | null> {
   const frames = await capturedChatRunFrames(runId);
   if (!frames?.length) return null;
   const chunks: UIMessageChunk[] = [];
@@ -149,7 +167,7 @@ async function rebuildReply(
   }
   if (failed || !latest) return null;
   // Nothing more will arrive (the rule every saved reply follows).
-  return settledParts(latest.parts);
+  return { parts: settledParts(latest.parts), finished: finishedStream(chunks) };
 }
 
 async function settleReservation(identity: RunIdentity): Promise<void> {
@@ -210,14 +228,19 @@ export async function recoverInterruptedRun(identity: RunIdentity): Promise<bool
     .limit(1);
   if (!row) return false;
   const saved = row.parts as unknown as UIMessage['parts'];
-  const parts = await rebuildReply(identity.runId, messageId, saved).catch(() => null);
+  const rebuilt = await rebuildReply(identity.runId, messageId, saved).catch(() => null);
+  // The model finished the reply and only its final save was lost (the
+  // database was away for longer than the save's retries, or the producer
+  // stopped between the two): it is whole, so it is saved as complete, not
+  // as interrupted by a server stop and offered for a paid Retry (#231).
+  const finished = rebuilt?.finished === true;
   await finalizeInterruptedChatRun(identity, 'interrupted');
   const [recovered] = await db
     .update(schema.message)
     .set({
-      status: 'cancelled',
-      errorMessage: INTERRUPTED_REPLY_MESSAGE,
-      parts: (parts ?? saved) as unknown as Record<string, unknown>[],
+      status: finished ? 'complete' : 'cancelled',
+      errorMessage: finished ? null : INTERRUPTED_REPLY_MESSAGE,
+      parts: (rebuilt?.parts ?? saved) as unknown as Record<string, unknown>[],
       updatedAt: new Date(),
     })
     .where(claim)
@@ -230,8 +253,10 @@ export async function recoverInterruptedRun(identity: RunIdentity): Promise<bool
     releaseSlot(identity).catch(() => undefined),
   ]);
   logger.warn(
-    { runId: identity.runId, threadId: identity.threadId, rebuilt: parts !== null },
-    'Saved a reply whose producer stopped as interrupted',
+    { runId: identity.runId, threadId: identity.threadId, rebuilt: rebuilt !== null },
+    finished
+      ? 'Saved a finished reply whose final save was lost as complete (usage unknown)'
+      : 'Saved a reply whose producer stopped as interrupted',
   );
   return true;
 }
