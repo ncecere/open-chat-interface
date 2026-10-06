@@ -51,6 +51,18 @@ export function SelectTrigger({
   );
 }
 
+/**
+ * A long list scrolls, and a scrolling region must be focusable or hold
+ * something in the tab order (WCAG 2.1.1, axe scrollable-region-focusable).
+ * Radix scrolls its viewport, a presentational div, and its options are out of
+ * the tab order, so the 40-action audit filter failed (#274); a focusable
+ * viewport would be a focusable child the listbox does not allow. So the
+ * listbox itself scrolls and is in the tab order, as a listbox may be; the
+ * viewport keeps its natural height. Radix still keeps Tab inside the popup
+ * and moves focus between the options; a focused option scrolls into view.
+ */
+const VIEWPORT_DOES_NOT_SCROLL = { overflow: 'visible', flex: 'none' } as const;
+
 export function SelectContent({
   className,
   children,
@@ -62,8 +74,10 @@ export function SelectContent({
       <SelectPrimitive.Content
         position={position}
         sideOffset={6}
+        tabIndex={0}
         className={cn(
-          'z-50 max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden',
+          'z-50 max-h-72 min-w-[var(--radix-select-trigger-width)]',
+          'scrollbar-thin overflow-y-auto overscroll-contain',
           'rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]',
           'text-[var(--text-primary)] shadow-[var(--shadow-popover)]',
           'data-[state=open]:animate-in data-[state=open]:fade-in-0',
@@ -72,7 +86,7 @@ export function SelectContent({
         )}
         {...props}
       >
-        <SelectPrimitive.Viewport className="scrollbar-thin max-h-72 overflow-y-auto p-1.5">
+        <SelectPrimitive.Viewport className="p-1.5" style={VIEWPORT_DOES_NOT_SCROLL}>
           {children}
         </SelectPrimitive.Viewport>
       </SelectPrimitive.Content>
