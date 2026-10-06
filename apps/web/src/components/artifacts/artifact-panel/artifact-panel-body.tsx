@@ -6,13 +6,14 @@ import {
 } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Check, Copy, Download, Pencil } from 'lucide-react';
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArtifactSource } from '~/components/artifacts/artifact-source';
 import { type ArtifactRef, useArtifacts } from '~/components/artifacts/artifacts-context';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { Button } from '~/components/ui/button';
 import { PillTabs } from '~/components/ui/pill-tabs';
 import { api } from '~/lib/api-client';
+import { returnFocusIfLost } from '~/lib/focus-return';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { ArtifactPreview } from './artifact-preview';
 import { DocumentEditor } from './document-editor';
@@ -40,6 +41,17 @@ export function ArtifactPanelBody({
   const viewId = useId();
   // Saving a version is a change: Edit is off while read-only (#331).
   const lock = useReadOnlyLock();
+
+  // Edit and the editor replace each other. The editor takes focus on open;
+  // when it closes (Cancel, Save or Escape) the button that opened it gets it
+  // back rather than the page (#333).
+  const editButton = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(editing);
+  useLayoutEffect(() => {
+    const closed = wasEditing.current && !editing;
+    wasEditing.current = editing;
+    if (closed) returnFocusIfLost(editButton.current);
+  }, [editing]);
 
   const detail = useQuery({
     queryKey: ['artifact', id],
@@ -138,6 +150,7 @@ export function ArtifactPanelBody({
             )}
             {canEdit && !editing && (
               <Button
+                ref={editButton}
                 type="button"
                 variant="ghost"
                 size="sm"

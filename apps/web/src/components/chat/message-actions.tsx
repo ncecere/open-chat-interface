@@ -130,6 +130,7 @@ export function MessageActions({
           variant="ghost"
           size="icon-sm"
           aria-label={`Edit message${about}`}
+          data-message-edit=""
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={onEdit}

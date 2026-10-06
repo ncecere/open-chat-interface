@@ -1,6 +1,6 @@
 import { isToolPart } from '@oci/shared';
 import type { UIMessage } from 'ai';
-import { type Dispatch, memo, type SetStateAction, useRef } from 'react';
+import { type Dispatch, memo, type SetStateAction, useLayoutEffect, useRef } from 'react';
 import { showsArtifactCard } from '~/components/artifacts/artifact-tool-step';
 import { useArtifacts } from '~/components/artifacts/artifacts-context';
 import { shownReply } from '~/components/artifacts/declined-artifacts';
@@ -32,6 +32,7 @@ import {
   type ToolPart,
   toolPlaceOf,
 } from '~/components/chat/tool-steps';
+import { returnFocusIfLost } from '~/lib/focus-return';
 import { messageExcerpt } from '~/lib/message-excerpt';
 import { cn } from '~/lib/utils';
 
@@ -98,9 +99,23 @@ export const MessageRow = memo(function MessageRow({
   const excerpt = messageExcerptOf(stored) ?? undefined;
   const place = (excerpt && position) || undefined;
 
+  // Closing the editor (Cancel, Escape, Save) removes the control that had
+  // focus; it goes back to this message's Edit button rather than the page
+  // (#333). Not on first render, and not if focus has moved on.
+  const article = useRef<HTMLElement>(null);
+  const wasEditing = useRef(editing);
+  useLayoutEffect(() => {
+    const closed = wasEditing.current && !editing;
+    wasEditing.current = editing;
+    if (closed) {
+      returnFocusIfLost(article.current?.querySelector<HTMLElement>('[data-message-edit]'));
+    }
+  }, [editing]);
+
   if (message.role === 'user') {
     return (
       <article
+        ref={article}
         className="group flex flex-col items-end"
         aria-label="Your message"
         data-excerpt={excerpt}
