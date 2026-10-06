@@ -72,7 +72,9 @@ export function ThreadRow({
           // screen reader's list of buttons is not N copies of one name (#111).
           aria-label={`Go to parent thread of: ${thread.title}`}
           title="Go to parent thread"
-          className="ml-2 rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          // 24 × 24, the WCAG 2.2 target floor; it was the 14 px icon plus
+          // padding, 22 × 22, right against the row's link (#193).
+          className="ml-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <GitFork className="size-3.5" aria-hidden="true" />
         </Link>

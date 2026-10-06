@@ -19,6 +19,7 @@ import { useMoveThread } from '../../src/hooks/use-projects';
 import { useCreateThread } from '../../src/hooks/use-threads';
 import { chatHistoryKey } from '../../src/lib/conversation-cache';
 import { button, click, settle } from './admin-test-utils';
+import { styleFor, toPx } from './css-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -407,6 +408,29 @@ describe('sidebar projects', () => {
     expect(api.get).not.toHaveBeenCalledWith('/projects/sidebar');
     expect(generalList).toThrow();
     expect(document.body.textContent).toContain('Unfiled today');
+  });
+});
+
+describe('sidebar general list', () => {
+  /** The size of a box from its compiled classes: its own, else its padding round its icon. */
+  async function targetSize(element: Element) {
+    const style = await styleFor(element.getAttribute('class') ?? '');
+    const icon = await styleFor(element.querySelector('svg')?.getAttribute('class') ?? '');
+    const padding = 2 * toPx(style.padding);
+    return {
+      width: style.width ? toPx(style.width) : toPx(icon.width) + padding,
+      height: style.height ? toPx(style.height) : toPx(icon.height) + padding,
+    };
+  }
+
+  it('makes "Go to parent thread" a 24 × 24 target (#193)', async () => {
+    threads = [thread('f1', 'Forked plan', { parentThreadId: 'u1' })];
+    await render();
+    const parent = document.querySelector('a[title="Go to parent thread"]')!;
+    expect(parent.getAttribute('aria-label')).toBe('Go to parent thread of: Forked plan');
+    const size = await targetSize(parent);
+    expect(size.width).toBeGreaterThanOrEqual(24);
+    expect(size.height).toBeGreaterThanOrEqual(24);
   });
 });
 
