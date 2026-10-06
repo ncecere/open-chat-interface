@@ -122,8 +122,9 @@ describe('provider capacity', () => {
       'Replies at once must be a whole number of at least 1, or empty for no limit.',
     ]);
     expect(input('tokensPerMinute').getAttribute('aria-invalid')).toBe('true');
+    // The error first, then the field's hint (#295).
     expect(input('tokensPerMinute').getAttribute('aria-describedby')).toBe(
-      'capacity-tokensPerMinute-error',
+      'capacity-tokensPerMinute-error capacity-tokensPerMinute-hint',
     );
     expect(api.put).not.toHaveBeenCalled();
   });
