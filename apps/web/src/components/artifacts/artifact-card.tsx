@@ -73,10 +73,13 @@ export function ArtifactCardButton({
         <Icon className="size-4 text-[var(--text-secondary)]" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-[var(--text-primary)]">
+        {/* The title wraps rather than ending in an ellipsis: a tooltip is no
+            help on touch, and the card is the only place the full title shows
+            before the panel opens (#336, as the panel's own title, #312). */}
+        <span className="block wrap-anywhere text-sm font-medium text-[var(--text-primary)]">
           {title}
         </span>
-        <span className="block truncate text-xs text-[var(--text-muted)]">{meta}</span>
+        <span className="block wrap-anywhere text-xs text-[var(--text-muted)]">{meta}</span>
         {preview && preview.length > 0 && (
           <span
             data-live-preview=""
