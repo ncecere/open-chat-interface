@@ -25,6 +25,10 @@ message and named by its opening words too: **Copy code block 2 (Python) in
 Editing creates a new conversation with your revised question; the original
 stays as it was.
 
+Editing, retrying and forking at a question answer with the model and
+reasoning level shown in the model picker when you do it. If a model failed or
+was slow, switch the picker to another one first and then edit or retry.
+
 Retrying answers your latest question again, using the conversation up to that
 question. The earlier reply is kept: below the latest reply, **‹ 2 / 3 ›**
 shows which reply you are reading, and **Previous reply** and **Next reply**
