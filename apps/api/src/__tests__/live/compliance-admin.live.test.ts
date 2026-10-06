@@ -112,6 +112,12 @@ describe.skipIf(!available)('live: compliance export and legal hold', () => {
 
     response = await call('POST', '/api/admin/compliance/test');
     expect(await response.json()).toMatchObject({ ok: true });
+    // Audited, as every Test button is (#287).
+    const tests = await pool.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, 'compliance.test'));
+    expect(tests.map((entry) => entry.metadata)).toEqual([{ ok: true }]);
 
     response = await call('POST', '/api/admin/compliance/run');
     expect(response.status).toBe(202);

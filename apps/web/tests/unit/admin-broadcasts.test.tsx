@@ -86,6 +86,32 @@ it('clears "the end time must be after the start time" once Ends is moved later 
   expect(alerts(dialog()!)).toEqual([]);
 });
 
+it('closes an unchanged edit without saving, so nothing is audited (#287)', async () => {
+  ({ root } = await renderAdmin(<AdminBroadcastsPage />));
+  await click(button('Edit Walk maintenance on Sunday'));
+  await click(
+    [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Save changes',
+    )!,
+  );
+  expect(api.put).not.toHaveBeenCalled();
+  expect(dialog()).toBeNull();
+
+  // A real change is still saved.
+  api.put.mockResolvedValueOnce({ ok: true });
+  await click(button('Edit Walk maintenance on Sunday'));
+  await typeInto(document.getElementById('broadcast-title') as HTMLInputElement, 'Walk renamed');
+  await click(
+    [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Save changes',
+    )!,
+  );
+  expect(api.put).toHaveBeenCalledWith(
+    '/admin/broadcasts/b1',
+    expect.objectContaining({ title: 'Walk renamed' }),
+  );
+});
+
 it('says when a scheduled announcement shows, to auditors too (#227)', async () => {
   const startsAt = new Date(Date.now() + 15 * 86_400_000).toISOString();
   const endsAt = new Date(Date.now() + 17 * 86_400_000).toISOString();

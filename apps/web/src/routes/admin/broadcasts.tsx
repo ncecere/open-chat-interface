@@ -174,6 +174,12 @@ function BroadcastDialog({
   function submit(event: FormEvent) {
     event.preventDefault();
     setProblems([]);
+    // Nothing changed: nothing to save or record, as the connector and
+    // webhook dialogs do (#287).
+    if (broadcast && JSON.stringify(draft) === JSON.stringify(initialDraft(broadcast))) {
+      onClose();
+      return;
+    }
 
     const parsed = upsertBroadcastSchema.safeParse({
       title: draft.title,

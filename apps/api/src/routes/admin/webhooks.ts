@@ -133,7 +133,19 @@ webhookRoutes.post('/:id/rotate', async (c) => {
 webhookRoutes.post('/:id/test', async (c) => {
   const actor = currentUser(c);
   const existing = await loadWebhookOrThrow(c.req.param('id'));
-  return c.json(await sendTestDelivery(existing, { id: actor.id, email: actor.email }));
+  const result = await sendTestDelivery(existing, { id: actor.id, email: actor.email });
+  // Audited as every other Test button is: it posts to an address an
+  // administrator chose (#287). Not "webhook.test", the event the endpoint
+  // was just sent, so an endpoint receiving every action can tell the two apart.
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'webhook.test.send',
+    targetType: 'webhook',
+    targetId: existing.id,
+    metadata: { url: existing.url, ok: result.ok, status: result.status },
+  });
+  return c.json(result);
 });
 
 /** The endpoint's delivery log, newest first. */

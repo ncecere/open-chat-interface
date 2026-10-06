@@ -138,7 +138,18 @@ connectorRoutes.delete('/:id', async (c) => {
 connectorRoutes.post('/:id/test', async (c) => {
   const actor = currentUser(c);
   const existing = await loadConnectorOrThrow(c.req.param('id'));
-  return c.json(await testConnector(existing, actor.id));
+  const result = await testConnector(existing, actor.id);
+  // It connects to an address an administrator chose, so it is audited as
+  // every other Test button is (#287).
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'connector.test',
+    targetType: 'connector',
+    targetId: existing.id,
+    metadata: { slug: existing.slug, url: existing.url, ok: result.ok },
+  });
+  return c.json(result);
 });
 
 /** Lists the server's tools and stores them; new tools start disabled, vanished ones are marked missing. */

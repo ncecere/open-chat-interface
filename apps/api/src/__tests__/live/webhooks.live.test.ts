@@ -347,6 +347,14 @@ describe.skipIf(!available)('live: signed webhooks', () => {
     );
     expect(test).toMatchObject({ ok: true, status: 200 });
     expect(received[0]!.headers['oci-webhook-event']).toBe('webhook.test');
+    // Audited, as every Test button is, under its own name (#287).
+    const tests = await pool.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, 'webhook.test.send'));
+    expect(tests.map((entry) => [entry.targetId, entry.metadata])).toEqual([
+      [created.id, { url, ok: true, status: 200 }],
+    ]);
 
     const rotated = await ok<WebhookWithSecret>(
       call('POST', `/api/admin/webhooks/${created.id}/rotate`),
