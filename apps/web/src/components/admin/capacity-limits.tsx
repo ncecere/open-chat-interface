@@ -115,6 +115,9 @@ export function CapacityLimitsDialog({
     event.preventDefault();
     setError(null);
     const limits = {} as CapacityLimits;
+    // Every field is checked, and every problem listed at once, as Add model
+    // does (#129): one per save made correcting three fields take three (#226).
+    const problems: string[] = [];
     for (const { key, label } of FIELDS) {
       const raw = values[key].replace(/[,\s]/g, '');
       if (!raw) {
@@ -123,10 +126,14 @@ export function CapacityLimitsDialog({
       }
       const parsed = Number(raw);
       if (!Number.isInteger(parsed) || parsed < 1) {
-        setError(`${label} must be a whole number of at least 1, or empty for no limit.`);
-        return;
+        problems.push(`${label} must be a whole number of at least 1, or empty for no limit.`);
+        continue;
       }
       limits[key] = parsed;
+    }
+    if (problems.length > 0) {
+      setError(problems.join('\n'));
+      return;
     }
     save.mutate(limits);
   }
@@ -167,7 +174,7 @@ export function CapacityLimitsDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           >
             {error}
           </p>
