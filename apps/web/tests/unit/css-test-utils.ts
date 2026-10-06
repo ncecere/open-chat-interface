@@ -14,7 +14,8 @@ import { compile } from 'tailwindcss';
 
 /** A fresh compiler each time: one accumulates every class it has built. */
 function tailwind() {
-  return compile('@tailwind utilities;', {
+  // The spacing scale, so `top-6` and `size-8` are generated as in the app.
+  return compile('@theme { --spacing: 0.25rem; } @tailwind utilities;', {
     base: process.cwd(),
     loadStylesheet: async () => {
       throw new Error('No stylesheet imports in tests');
@@ -40,6 +41,8 @@ export async function styleFor(
   for (const [, selector, body] of css.matchAll(/^([.][^{\n]+)\{([^{}]*)\}/gm)) {
     // Anything after the escaped class name is the variant's condition.
     const conditions = selector!.trim().replace(/^\.(?:\\.|[^\s:[\\])+/, '');
+    // A rule for descendants or siblings (`[&_svg]:size-4`) is not the element's own.
+    if (/[\s>+~]/.test(conditions)) continue;
     const parts = conditions.match(/:[a-z-]+|\[[^\]]+\]/g) ?? [];
     if (!parts.every((part) => states.includes(part as ElementState))) continue;
     for (const declaration of body!.split(';')) {
@@ -149,4 +152,18 @@ export function contrast(first: string, second: string): number {
   };
   const [lighter, darker] = [luminance(first), luminance(second)].sort((x, y) => y - x);
   return (lighter! + 0.05) / (darker! + 0.05);
+}
+
+/**
+ * A length from generated CSS in pixels (16px rem): `12px`, `4.25rem`, `0`,
+ * or Tailwind's spacing scale, `var(--spacing)` and `calc(var(--spacing) * N)`.
+ */
+export function toPx(value: string | undefined): number {
+  if (value === undefined) return 0;
+  if (value === 'var(--spacing)') return 4;
+  const spacing = value.match(/^calc\(var\(--spacing\) \* (-?[\d.]+)\)$/);
+  if (spacing) return Number(spacing[1]) * 4;
+  const length = value.match(/^(-?[\d.]+)(px|rem)?$/);
+  if (!length) throw new Error(`Unsupported length ${value}`);
+  return Number(length[1]) * (length[2] === 'rem' ? 16 : 1);
 }

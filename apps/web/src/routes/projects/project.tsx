@@ -193,7 +193,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
 }
 
 function PageFrame({ children }: { children: ReactNode }) {
-  return <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-16 md:pt-12">{children}</div>;
+  return <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-4 md:pt-6">{children}</div>;
 }
 
 function ProjectView({

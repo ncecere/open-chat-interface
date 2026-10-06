@@ -191,10 +191,10 @@ export const MessageList = memo(function MessageList({
     );
   };
 
-  // Room at the top for the top bar's floating controls, which the column runs under.
+  // The shell keeps the top bar's floating controls clear of the scroller (#166).
   // Each row carries the space below it, so a row's measured height includes it.
   return (
-    <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 pb-2 pt-[4.5rem]">
+    <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 pb-2 pt-4">
       {history && <EarlierMessages history={history} scrollRef={scrollRef} />}
       <div
         ref={rowsRef}
