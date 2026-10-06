@@ -206,6 +206,26 @@ describe('the model form and inline rename (#79)', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
+  it('lists a bad slug and an output with no room for input together (#129)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(button('Add model'));
+    await typeInto(field('upstream-model-id'), 'walk2-upstream');
+    await typeInto(field('model-display-name'), 'Walk2 model');
+    await typeInto(field('model-slug'), 'Walk2 Bad Slug');
+    await typeInto(field('model-context-window'), '8,000');
+    await typeInto(field('model-max-output'), '9000');
+    const add = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (candidate) => candidate.textContent?.trim() === 'Add model',
+    );
+    await click(add!);
+    const [alert] = alerts(dialog() as HTMLElement);
+    expect(alert?.split('\n')).toEqual([
+      'OCI slug: Slug must be lowercase alphanumeric with dashes',
+      'The output limit must leave room for input: keep it below 7,488 tokens (the context window, less 512).',
+    ]);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('renames on Enter, once, and puts the name back on Escape', async () => {
     ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
     await click(

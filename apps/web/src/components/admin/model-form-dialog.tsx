@@ -277,8 +277,17 @@ export function ModelFormDialog({
       outputPriceMicros: toPriceMicros(draft.outputPrice),
     });
     if (!parsed.success) problems.push(...modelFieldProblems(parsed.error.issues));
-    const limits =
-      problems.length === 0 ? modelLimitsProblem(contextWindow, maxOutputTokens) : null;
+    // The room-for-input rule is checked alongside the others, not only once
+    // they pass, so a bad slug and a too-large output are listed together
+    // (#129). It is skipped only when either limit is itself invalid.
+    const limitFieldInvalid =
+      Number.isNaN(contextWindow) ||
+      Number.isNaN(maxOutputTokens) ||
+      (!parsed.success &&
+        parsed.error.issues.some((issue) =>
+          ['contextWindow', 'maxOutputTokens'].includes(String(issue.path[0])),
+        ));
+    const limits = limitFieldInvalid ? null : modelLimitsProblem(contextWindow, maxOutputTokens);
     if (limits) problems.push(limits);
     if (!parsed.success || problems.length > 0) {
       setError(problems.length > 0 ? problems.join('\n') : 'Check the model fields.');
