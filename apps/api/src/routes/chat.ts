@@ -97,12 +97,23 @@ chatRoutes.get('/:threadId/stream', async (c) => {
   });
 });
 
-/** Explicit stop request; also reaches a producer running in another API process via Redis. */
+/**
+ * Explicit stop request; also reaches a producer running in another API process via Redis.
+ *
+ * The run is looked up first, by thread and person: a local producer is
+ * matched on both, and the run's record in Redis names its owner, so only
+ * that person's Stop signals it, without the database (#351). The thread is
+ * read in PostgreSQL only when there is no run to stop, to tell a thread that
+ * is not theirs (404) from one with nothing running. Before, the thread came
+ * first, and a Stop pressed during a database outage failed although the
+ * producer was alive and reachable.
+ */
 chatRoutes.delete('/:threadId/stream', async (c) => {
   const user = currentUser(c);
-  const thread = await getOwnedThread(c.req.param('threadId'), user.id);
-  const cancelled = await cancelActiveChatRun(thread.id, user.id);
-  return c.json({ cancelled });
+  const threadId = c.req.param('threadId');
+  if (await cancelActiveChatRun(threadId, user.id)) return c.json({ cancelled: true });
+  await retryTurnStep(turnDeadline(c.req.raw), 'stop', () => getOwnedThread(threadId, user.id));
+  return c.json({ cancelled: false });
 });
 
 type StoredMessage = Awaited<ReturnType<typeof listConversation>>['messages'][number];

@@ -45,6 +45,17 @@ export function isNewTurnRequest(request: Request): boolean {
   return path === '/api/chat' || path === '/api/chat/';
 }
 
+/**
+ * DELETE /api/chat/:id/stream: the person pressed Stop (#351). It changes
+ * nothing in the database, so its session lookup waits out an outage the same
+ * way a new message does: a Stop pressed in a blip of a few seconds then
+ * reaches the producer instead of failing and being lost.
+ */
+export function isStopRequest(request: Request): boolean {
+  if (request.method.toUpperCase() !== 'DELETE') return false;
+  return /^\/api\/chat\/[^/]+\/stream\/?$/.test(new URL(request.url).pathname);
+}
+
 /** When this turn stops waiting for the database (`Date.now()` time). */
 export function turnDeadline(request: Request): number {
   let deadline = deadlines.get(request);
@@ -85,7 +96,7 @@ export function retryTurnStep<T>(
     onRetry: ({ attempt, delayMs, error }) =>
       logger.warn(
         { step, attempt, delayMs, err: error instanceof Error ? error.message : String(error) },
-        'Database unreachable while starting a reply; retrying',
+        'Database unreachable while handling a chat request; retrying',
       ),
   });
 }
