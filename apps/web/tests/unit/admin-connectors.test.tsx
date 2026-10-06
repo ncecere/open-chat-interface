@@ -117,6 +117,16 @@ describe('Connectors admin page', () => {
     );
     expect(buttonNames()).not.toContain('Test connection');
     expect(buttonNames()).not.toContain('Refresh tools');
+    // Both list the same tools; each tool's controls name their connector (#260).
+    expect(buttonNames()).toEqual(
+      expect.arrayContaining([
+        'Enable create_page in Docs',
+        'Enable create_page in Wiki',
+        'Kind of create_page in Docs',
+        'Kind of create_page in Wiki',
+      ]),
+    );
+    expect(new Set(buttonNames()).size).toBe(buttonNames().length);
   });
 
   it('lists connectors with credentials as set or not set, and their tools', async () => {
@@ -156,7 +166,7 @@ describe('Connectors admin page', () => {
 
   it('asks for confirmation before marking a server-declared write tool read', async () => {
     await render();
-    await click(button('Kind of create_page'));
+    await click(button('Kind of create_page in Docs'));
     const read = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
       option.textContent?.startsWith('Read'),
     )!;

@@ -155,6 +155,8 @@ function CredentialEditor({
               type="button"
               size="sm"
               disabled={disabled}
+              // Username and password each have these; the name says which (#260).
+              aria-label={`Set or replace the ${label}`}
               onClick={() => onActionChange('replace')}
             >
               Set or replace
@@ -164,6 +166,7 @@ function CredentialEditor({
               size="sm"
               variant="outline"
               disabled={disabled}
+              aria-label={`Clear stored value of the ${label}`}
               onClick={() => onActionChange('clear')}
             >
               Clear stored value
@@ -199,6 +202,7 @@ function CredentialEditor({
             variant="link"
             className="mt-2 h-auto p-0"
             disabled={disabled}
+            aria-label={`Keep stored value instead for the ${label}`}
             onClick={() => onActionChange('keep')}
           >
             Keep stored value instead
@@ -215,6 +219,7 @@ function CredentialEditor({
             variant="link"
             className="mt-1 h-auto p-0"
             disabled={disabled}
+            aria-label={`Keep stored value of the ${label}`}
             onClick={() => onActionChange('keep')}
           >
             Keep stored value

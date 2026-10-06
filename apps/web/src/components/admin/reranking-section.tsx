@@ -248,6 +248,7 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
             : null
         }
         successMessage={saved ? 'Reranking settings saved.' : null}
+        subject="the reranking settings"
       />
     </form>
   );

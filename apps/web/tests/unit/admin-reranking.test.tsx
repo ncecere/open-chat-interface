@@ -75,6 +75,17 @@ const text = () => document.body.textContent ?? '';
 const input = (id: string) => document.getElementById(id) as HTMLInputElement;
 
 describe('Providers & Models → Embeddings → Reranking', () => {
+  it('names the embeddings and reranking Save changes buttons apart (#260)', async () => {
+    ({ root } = await renderAdmin(<EmbeddingsSection />));
+    const saves = [...document.querySelectorAll('button[type="submit"]')].map((button) =>
+      button.getAttribute('aria-label'),
+    );
+    expect(saves).toEqual([
+      'Save changes to the embeddings settings',
+      'Save changes to the reranking settings',
+    ]);
+  });
+
   it('sits on the Embeddings tab and says it works without pgvector', async () => {
     ({ root } = await renderAdmin(<EmbeddingsSection />));
     expect(text()).toContain('pgvector is not installed on the database server');

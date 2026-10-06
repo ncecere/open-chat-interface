@@ -105,8 +105,10 @@ function ToolRow({ connector, tool }: { connector: AdminConnector; tool: Connect
       </div>
       <div className="flex shrink-0 items-center gap-3">
         <div className="w-56">
+          {/* Named for the connector too: two connectors to the same kind of
+              server list the same tools (#260). */}
           <Select
-            aria-label={`Kind of ${label}`}
+            aria-label={`Kind of ${label} in ${connector.name}`}
             value={tool.kind}
             onChange={(next) => {
               if (next === 'read' && tool.serverKind === 'write') setConfirmRead(true);
@@ -117,7 +119,7 @@ function ToolRow({ connector, tool }: { connector: AdminConnector; tool: Connect
         </div>
         <Switch
           id={id}
-          aria-label={`Enable ${label}`}
+          aria-label={`Enable ${label} in ${connector.name}`}
           checked={tool.enabled}
           disabled={tool.missing && !tool.enabled}
           onCheckedChange={(enabled) => update.mutate({ enabled })}

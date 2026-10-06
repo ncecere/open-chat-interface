@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminUsersPage } from '../../src/routes/admin/users';
-import { button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
+import { button, buttonNames, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
 
 // The bulk bar on the real Users page, with its real selection hook (#145).
 
@@ -62,6 +62,13 @@ async function selectBoth() {
   }
   expect(document.body.textContent).toContain('2 accounts selected');
 }
+
+it('names each account’s Limits button for the account (#260)', async () => {
+  ({ root } = await renderAdmin(<AdminUsersPage />));
+  expect(buttonNames().filter((name) => name.startsWith('Limits'))).toEqual(
+    users.map((user) => `Limits for ${user.email}`),
+  );
+});
 
 it('counts only the accounts that will change when making administrators', async () => {
   await selectBoth();

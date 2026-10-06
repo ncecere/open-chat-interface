@@ -5,7 +5,15 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { QuotaOverrideDialog } from '../../src/components/admin/quota-override-dialog';
 import { Dialog } from '../../src/components/ui/dialog';
 import { ApiError } from '../../src/lib/api-client';
-import { alerts, button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
+import {
+  alerts,
+  button,
+  buttonNames,
+  cleanup,
+  click,
+  dialog,
+  renderAdmin,
+} from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -91,4 +99,16 @@ it('shows role defaults with thousands separators, as the rest of the admin does
     (input) => input.value,
   );
   expect(inputs).toContain('1000000');
+  // Each budget's Save names the budget, and its fields sit in a group named for it (#260).
+  expect(buttonNames(dialog()!)).toEqual(
+    expect.arrayContaining([
+      'Save override for Walk monthly messages',
+      'Save override for Walk spend',
+    ]),
+  );
+  expect(
+    [...dialog()!.querySelectorAll('fieldset[aria-labelledby]')].map(
+      (group) => document.getElementById(group.getAttribute('aria-labelledby') ?? '')?.textContent,
+    ),
+  ).toEqual(['Walk monthly messages', 'Walk spend']);
 });
