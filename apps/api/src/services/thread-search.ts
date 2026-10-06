@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, schema, sql } from '@oci/db';
 import {
+  plainTextOfMarkdown,
   SEARCH_HIGHLIGHT_END,
   SEARCH_HIGHLIGHT_START,
   THREAD_SEARCH_DEFAULT_LIMIT,
@@ -183,9 +184,14 @@ type SearchRow = {
   matches: { messageId: string; role: 'user' | 'assistant'; snippet: string }[];
 };
 
-/** Collapses the line breaks ts_headline keeps, so a snippet reads as one line. */
-function tidySnippet(snippet: string): string {
-  return snippet.replace(/\s+/g, ' ').trim();
+/**
+ * A snippet as one line of readable text. The searchable text is the message's
+ * Markdown, so ts_headline's fragments carried its syntax ("1. **360-degree
+ * head rotation**: …", #206); that is removed first, while the line breaks it
+ * relies on are still there, then the line breaks are collapsed.
+ */
+export function tidySnippet(snippet: string): string {
+  return plainTextOfMarkdown(snippet).replace(/\s+/g, ' ').trim();
 }
 
 export type ThreadRow = typeof schema.thread.$inferSelect;

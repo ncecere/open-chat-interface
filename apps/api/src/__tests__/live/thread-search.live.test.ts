@@ -185,6 +185,13 @@ describe.skipIf(!available)('live Postgres: conversation search', () => {
       ),
     ]);
 
+    await createThread('owls', 'Bird notes');
+    await addMessage('owlsAnswer', 'owls', 'assistant', [
+      text(
+        '# Ten Facts About Owls\n\n1. **360-degree head rotation**: Owls can rotate their heads 270 degrees.\n2. **Silent Flight**: Their feathers muffle sound.',
+      ),
+    ]);
+
     for (let index = 0; index < 55; index += 1) {
       await createThread(`bulk${index}`, `Bulk ${index}`);
       await addMessage(`bulkMessage${index}`, `bulk${index}`, 'user', [
@@ -213,6 +220,16 @@ describe.skipIf(!available)('live Postgres: conversation search', () => {
     ]);
     // Snippets are one line even when the message has paragraphs.
     expect(result?.matches[0]?.snippet).not.toMatch(/\n/);
+  });
+
+  it('shows snippets as readable text, not Markdown (#206)', async () => {
+    const [result] = await results('rotat owl');
+    expect(result?.thread.id).toBe(ids.owls);
+    const snippet = result?.matches[0]?.snippet ?? '';
+    expect(snippet).toContain(
+      `360-degree head ${SEARCH_HIGHLIGHT_START}rotation${SEARCH_HIGHLIGHT_END}: ${SEARCH_HIGHLIGHT_START}Owls${SEARCH_HIGHLIGHT_END} can ${SEARCH_HIGHLIGHT_START}rotate${SEARCH_HIGHLIGHT_END}`,
+    );
+    expect(snippet).not.toMatch(/[*#]/);
   });
 
   it('matches titles, including a title-only match with no message snippets', async () => {

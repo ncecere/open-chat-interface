@@ -3,6 +3,7 @@ export * from './branding.js';
 export * from './constants.js';
 export * from './documents.js';
 export * from './errors.js';
+export * from './markdown-plain.js';
 export * from './model-labs.js';
 export * from './quota-labels.js';
 export * from './reasoning.js';
