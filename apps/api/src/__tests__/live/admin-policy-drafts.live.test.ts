@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { eq, schema } from '@oci/db';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -89,6 +90,45 @@ describe.skipIf(!available)('live: acceptable-use policy drafts', () => {
     });
     const [entry] = await audit('policy.update');
     expect(entry?.metadata).toMatchObject({ title: 'Walk AUP (reviewed)' });
+  });
+
+  it('records the title as it was and became, and whether the text changed (#284)', async () => {
+    const id = await create(false, 'Fix5 AUP draft');
+    const entryFor = async () =>
+      (await audit('policy.update')).filter((entry) => entry.targetId === id);
+    const digest = (text: string) => createHash('sha256').update(text).digest('hex');
+
+    // The title only: the text is unchanged, and not copied into the log.
+    await send('PATCH', `/${id}`, { title: 'Fix5 AUP draft edited', body: 'Be kind.' });
+    let [entry] = await entryFor();
+    expect(entry?.metadata).toEqual({
+      version: expect.any(Number),
+      title: 'Fix5 AUP draft edited',
+      textChanged: false,
+      changes: [{ key: 'title', before: 'Fix5 AUP draft', after: 'Fix5 AUP draft edited' }],
+    });
+
+    // The text: its length and digest before and after, not the wording.
+    const longer = `Be kind. ${'Read the rules. '.repeat(500)}`.trim();
+    await send('PATCH', `/${id}`, { title: 'Fix5 AUP draft edited', body: longer });
+    const entries = await entryFor();
+    expect(entries).toHaveLength(2);
+    entry = entries.find((row) => (row.metadata as { textChanged?: boolean }).textChanged);
+    expect(entry?.metadata).toMatchObject({
+      textChanged: true,
+      changes: [
+        {
+          key: 'body',
+          before: { characters: 8, sha256: digest('Be kind.') },
+          after: { characters: longer.length, sha256: digest(longer) },
+        },
+      ],
+    });
+    expect(JSON.stringify(entry?.metadata)).not.toContain('Read the rules.');
+
+    // Saving the same wording again records nothing.
+    await send('PATCH', `/${id}`, { title: 'Fix5 AUP draft edited', body: longer });
+    expect(await entryFor()).toHaveLength(2);
   });
 
   it('deletes a draft and keeps what it was in the audit entry', async () => {

@@ -195,7 +195,13 @@ export async function publishPolicy(policyId: string): Promise<boolean> {
 }
 
 export type DraftChange =
-  | { outcome: 'changed'; version: number; title: string }
+  | {
+      outcome: 'changed';
+      version: number;
+      title: string;
+      /** The wording before an edit, so its audit entry can say what changed (#284). */
+      previous?: { title: string; body: string };
+    }
   | { outcome: 'not-found' }
   | { outcome: 'published' };
 
@@ -206,6 +212,7 @@ async function findPolicy(policyId: string) {
       id: schema.usagePolicy.id,
       version: schema.usagePolicy.version,
       title: schema.usagePolicy.title,
+      body: schema.usagePolicy.body,
       publishedAt: schema.usagePolicy.publishedAt,
     })
     .from(schema.usagePolicy)
@@ -238,7 +245,12 @@ export async function updatePolicyDraft(
     .where(and(eq(schema.usagePolicy.id, policyId), isNull(schema.usagePolicy.publishedAt)))
     .returning({ id: schema.usagePolicy.id });
   if (updated.length === 0) return { outcome: 'published' };
-  return { outcome: 'changed', version: policy.version, title: params.title };
+  return {
+    outcome: 'changed',
+    version: policy.version,
+    title: params.title,
+    previous: { title: policy.title, body: policy.body },
+  };
 }
 
 /** Deletes a draft. Published versions stay, as the record of what was agreed to. */

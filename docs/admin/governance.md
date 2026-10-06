@@ -505,6 +505,11 @@ you **Publish** it, which asks for confirmation first. Once published, the
 wording is fixed. **View** shows the full text of any version, drafts and
 published ones alike, to administrators and auditors.
 
+Each edit of a draft is audited as `policy.update`, with the title as it was
+and became and `textChanged`. A changed text is recorded by its length and
+SHA-256 digest before and after, never by its wording, which can be long. A
+save that changes nothing is not recorded.
+
 ### What is recorded
 
 The version, the moment, and the address it came from. Enough to answer "what

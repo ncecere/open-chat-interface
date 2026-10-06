@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { updatePolicyDraftSchema, upsertUsagePolicySchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { conflict, notFound } from '../../lib/errors.js';
@@ -12,6 +13,7 @@ import {
   publishPolicy,
   updatePolicyDraft,
 } from '../../services/onboarding.js';
+import { diffUpdate, type SettingChange } from '../../services/settings-diff.js';
 
 export const policyRoutes = new Hono<AppBindings>();
 
@@ -67,7 +69,7 @@ policyRoutes.post('/:id/publish', async (c) => {
   return c.json({ ok: true });
 });
 
-function draftOutcome(result: DraftChange): { version: number; title: string } {
+function draftOutcome(result: DraftChange) {
   if (result.outcome === 'not-found') throw notFound('Policy version not found');
   if (result.outcome === 'published') {
     throw conflict(
@@ -77,21 +79,52 @@ function draftOutcome(result: DraftChange): { version: number; title: string } {
   return result;
 }
 
+/** The text as a marker: its length and digest, which tell whether it changed (#284). */
+const textMarker = (text: string) => ({
+  characters: text.length,
+  sha256: createHash('sha256').update(text).digest('hex'),
+});
+
+/**
+ * What an edit changed, as it was and became (#221, #258): the title in full,
+ * and the text, which can run to 50,000 characters, only as its length and
+ * digest, so the entry says whether the wording changed without copying the
+ * policy into the audit log and every webhook that receives it (#284).
+ */
+function policyChanges(
+  before: { title: string; body: string },
+  after: { title: string; body: string },
+): SettingChange[] {
+  const changes = diffUpdate({ title: before.title }, { title: after.title });
+  if (before.body !== after.body)
+    changes.push({ key: 'body', before: textMarker(before.body), after: textMarker(after.body) });
+  return changes;
+}
+
 /** Rewords a draft. */
 policyRoutes.patch('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
   const input = await parseBody(c, updatePolicyDraftSchema);
   const changed = draftOutcome(await updatePolicyDraft(id, input));
+  const previous = changed.previous ?? { title: changed.title, body: input.body };
+  const changes = policyChanges(previous, { title: changed.title, body: input.body });
 
-  await recordAudit({
-    actorUserId: actor.id,
-    actorEmail: actor.email,
-    action: 'policy.update',
-    targetType: 'usage_policy',
-    targetId: id,
-    metadata: { version: changed.version, title: changed.title },
-  });
+  // A save that changed nothing is not recorded, as for webhooks (#258, #287).
+  if (changes.length > 0)
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'policy.update',
+      targetType: 'usage_policy',
+      targetId: id,
+      metadata: {
+        version: changed.version,
+        title: changed.title,
+        textChanged: changes.some((change) => change.key === 'body'),
+        changes,
+      },
+    });
 
   return c.json({ ok: true });
 });
