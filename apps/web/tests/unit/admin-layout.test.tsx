@@ -9,9 +9,16 @@ import {
 } from '@tanstack/react-router';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminLayout } from '../../src/components/admin/admin-layout';
+import { NotFoundPage } from '../../src/components/ui/not-found-page';
 import { button, click, dialog, pressEscape, settle } from './admin-test-utils';
+
+// The not-found page asks who is signed in.
+vi.mock('../../src/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/lib/api-client')>()),
+  api: { get: vi.fn(async () => ({ user: { id: 'viewer', role: 'admin' } })) },
+}));
 
 let root: Root | undefined;
 
@@ -23,6 +30,7 @@ async function renderLayout(path: string, role: 'admin' | 'auditor' = 'admin') {
     id: 'admin',
     beforeLoad: () => ({ session: { user: { id: 'viewer', role } } }),
     component: AdminLayout,
+    notFoundComponent: () => <NotFoundPage admin />,
   });
   const page = (title: string) => () => <h1>{title}</h1>;
   const router = createRouter({
@@ -98,6 +106,21 @@ describe('admin layout navigation', () => {
     expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
     expect(link(container, 'Back to chat').getAttribute('href')).toBe('/');
     expect(container.textContent).toContain('Administration');
+  });
+
+  // #273: the phone header named an unknown address "Overview", and "Go to
+  // Overview" on the not-found page was marked as the current page.
+  it('names an unknown address "Page not found" and marks no link current', async () => {
+    const { container } = await renderLayout('/admin/no-such-page');
+    expect(container.querySelector('main h1')?.textContent).toBe('Page not found');
+    const header = container.querySelector('header')!;
+    expect(header.textContent).toContain('Administration');
+    expect(header.textContent).toContain('Page not found');
+    expect(header.textContent).not.toContain('Overview');
+    expect(link(container.querySelector('main')!, 'Go to Overview').getAttribute('href')).toBe(
+      '/admin',
+    );
+    expect(container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
   it('keeps the skip link and a focusable main scroll region', async () => {

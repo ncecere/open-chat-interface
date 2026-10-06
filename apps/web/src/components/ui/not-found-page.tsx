@@ -16,17 +16,27 @@ export function NotFoundPage({ admin = false }: { admin?: boolean }) {
   // Signed in inside the admin and the chat shell; /me answers null when not.
   const { data: me } = useCurrentUser();
   const signedOut = !admin && me === null;
+  // The router marks a link active, with aria-current="page", when the address
+  // starts with its target: /admin for every admin address, / for every
+  // address. Only an exact match is this page, and here none ever is (#273).
+  const exact = { exact: true };
   return (
     <UnavailableState
       title="Page not found"
       actions={
         <Button asChild>
           {admin ? (
-            <Link to="/admin">Go to Overview</Link>
+            <Link to="/admin" activeOptions={exact}>
+              Go to Overview
+            </Link>
           ) : signedOut ? (
-            <Link to="/auth/login">Sign in</Link>
+            <Link to="/auth/login" activeOptions={exact}>
+              Sign in
+            </Link>
           ) : (
-            <Link to="/">New chat</Link>
+            <Link to="/" activeOptions={exact}>
+              New chat
+            </Link>
           )}
         </Button>
       }

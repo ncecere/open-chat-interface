@@ -168,7 +168,11 @@ export function AdminLayout() {
               <p className="truncate text-[0.6875rem] font-medium uppercase tracking-wider text-[var(--text-muted)]">
                 {current?.section?.label ?? 'Administration'}
               </p>
-              <p className="truncate text-sm font-semibold">{current?.item.label ?? 'Overview'}</p>
+              {/* Every admin page is in the menu, so an address that matches
+                  none of it is the not-found page, not Overview (#273). */}
+              <p className="truncate text-sm font-semibold">
+                {current?.item.label ?? 'Page not found'}
+              </p>
             </div>
           </header>
 

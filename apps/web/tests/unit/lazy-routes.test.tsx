@@ -468,6 +468,8 @@ describe('real router lazy admin and settings routes', () => {
     expect(layout?.textContent).toContain('There is no administration page at /admin/invitations.');
     expect(control('Go to Overview', 'a').getAttribute('href')).toBe('/admin');
     expect(container.textContent).not.toMatch(/^Not Found$/m);
+    // #273: "Go to Overview" claimed to be the current page.
+    expect(control('Go to Overview', 'a').hasAttribute('aria-current')).toBe(false);
   });
 
   it('shows the same page, in a main landmark, at an unknown address (#131)', async () => {
@@ -475,6 +477,7 @@ describe('real router lazy admin and settings routes', () => {
     const main = container.querySelector('main');
     expect(main?.querySelector('h1')?.textContent).toBe('Page not found');
     expect(control('New chat', 'a').getAttribute('href')).toBe('/');
+    expect(control('New chat', 'a').hasAttribute('aria-current')).toBe(false);
   });
 
   it('offers a signed-out visitor Sign in, not New chat, at an unknown address (#197)', async () => {
