@@ -10,6 +10,7 @@ import { MessageActions } from '~/components/chat/message-actions';
 import { MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
+  failureOf,
   interruptionOf,
   metadataOf,
   replyLayoutOf,
@@ -18,6 +19,7 @@ import {
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
 import { ProjectSearchNote } from '~/components/chat/project-search-note';
+import { ReplyFailureNote } from '~/components/chat/reply-outcome-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
 import { WorkBlock } from '~/components/chat/reply-work';
 import { replySearchOf, searchGroundingOf } from '~/components/chat/search-grounding';
@@ -102,6 +104,7 @@ export const MessageRow = memo(function MessageRow({
   const grounding = searchGroundingOf(message);
   const metadata = metadataOf(message);
   const interruption = interruptionOf(message);
+  const failure = streaming ? null : failureOf(message);
   const capacity = capacityWaitOf(message);
 
   return (
@@ -135,6 +138,7 @@ export const MessageRow = memo(function MessageRow({
           {interruption}
         </p>
       )}
+      {failure && <ReplyFailureNote reason={failure} onRetry={onRetry} latest={Boolean(onRetry)} />}
       {(replySwitch || !streaming) && (
         <div className="flex flex-wrap items-center gap-1">
           {replySwitch && <ReplySwitcher {...replySwitch} />}

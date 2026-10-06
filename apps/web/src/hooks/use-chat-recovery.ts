@@ -156,10 +156,9 @@ export function useChatRecovery(options: {
         else {
           setWatch(null);
           if (before.runId) before.clearRun(before.runId);
+          // A saved failed reply says so itself, with its reason and Retry
+          // (ReplyFailureNote); a second notice here said neither (#133).
           latest.current.chat.clearError();
-          const lastReply = snapshot.messages.findLast((message) => message.role === 'assistant');
-          if (lastReply && messageStatus(lastReply) === 'error')
-            setError('The saved response ended with an error. You can retry the message.');
         }
       } catch (failure) {
         if (

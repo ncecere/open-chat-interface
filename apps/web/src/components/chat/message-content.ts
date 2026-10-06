@@ -32,6 +32,17 @@ export function interruptionOf(message: UIMessage): string | null {
   return message.role === 'assistant' && status === 'cancelled' ? errorMessage : null;
 }
 
+/**
+ * Why a saved reply failed, or null if it did not (#133). The server stores a
+ * failed reply with status `error` and a reason it wrote itself (never the
+ * provider's text); without this the reply showed as an empty space.
+ */
+export function failureOf(message: UIMessage): string | null {
+  const { status, errorMessage } = metadataOf(message);
+  if (message.role !== 'assistant' || status !== 'error') return null;
+  return errorMessage ?? 'The reply could not be generated.';
+}
+
 export function contextLimitedOf(message: UIMessage): boolean {
   return message.parts.some(
     (part) =>

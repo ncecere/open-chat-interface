@@ -299,17 +299,15 @@ describe('canonical chat recovery with the real AI SDK', () => {
     expect(chatPosts()).toHaveLength(0);
   });
 
-  it('retains a saved terminal error row and displays only the generic recovery notice', async () => {
+  it('retains a saved terminal error row and adds no reasonless notice of its own (#133)', async () => {
     const saved = history(messages('Saved partial response', 'error'));
     saved.messages[1]!.metadata = { status: 'error', error: 'Secret upstream traceback' };
     network.mockResolvedValue(new Response(null, { status: 204 }));
     getHistory.mockResolvedValue(saved);
     await mount(initialPending());
     expect(session.messages).toEqual(saved.messages);
-    expect(session.recovery.error).toBe(
-      'The saved response ended with an error. You can retry the message.',
-    );
-    expect(session.recovery.error).not.toContain('Secret');
+    // The row itself says it failed, with its stored reason (ReplyFailureNote).
+    expect(session.recovery.error).toBeNull();
     expect(session.error).toBeUndefined();
     expect(session.streaming).toBe(false);
     await advance(10_000);
