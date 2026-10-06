@@ -7,13 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from five QA walks of v0.11.0 (issues #35–#289). One migration, `0042`,
-runs with `migrate` as usual. Two new post-deploy steps, `0007` and `0008`, index
-the audit log so a person's trail includes bulk actions done to them (#216): run
-`migrate --post` after every replica runs the new release, as for any release.
-Until they run, the trail is complete but slower on a large audit log. The
-PostgreSQL driver patch (`patches/postgres@3.4.9.patch`) is applied by
-`pnpm install`.
+Fixes from six QA walks of v0.11.0 (issues #35–#308). Two migrations, `0042`
+and `0043` (code artifacts, #298), run with `migrate` as usual. Three new
+post-deploy steps run with `migrate --post` after every replica runs the new
+release, as for any release: `0007` and `0008` index the audit log so a
+person's trail includes bulk actions done to them (#216; until they run, the
+trail is complete but slower on a large audit log), and `0009` enables code
+artifacts (#298; until it runs, code stays in the reply, so a replica of the
+previous release never sees the new kind). The PostgreSQL driver patch
+(`patches/postgres@3.4.9.patch`) is applied by `pnpm install`.
 
 ### Added
 
@@ -110,6 +112,29 @@ PostgreSQL driver patch (`patches/postgres@3.4.9.patch`) is applied by
 - **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
+
+### Fixed after a sixth QA walk (#292–#308)
+
+- **Chat:** an edited question keeps its files, shown in the edit box (#296);
+  code asked for as an artifact is saved as code in its language, not an HTML
+  page (#298; migration `0043` and post-deploy step `0009`); uploads left
+  unsent are discarded, and a daily sweep removes old ones (#297); moving a
+  conversation and deleting a project say so (#294).
+- **Administration:** every admin form asks before leaving unsaved edits
+  (#300); validation errors sit under their field, all at once, on every form
+  (#301, #302); role changes and bans take the administrator lock, so one
+  administrator always remains (#304); a role with no models says so (#303);
+  times, dropdowns, "Conversations" and the running icon are consistent
+  (#305).
+- **Accessibility:** switches, selects and fields keep focus while saving
+  (#292); controls stay uniquely named when replies open alike (#293); field
+  hints are tied to their controls (#295); Customization's trait buttons say
+  what they do (#299).
+- **Outages:** ordinary requests are not held behind a draining API replica
+  (#306); sign-in, sign-up and password reset keep their "temporarily
+  unavailable" card while they re-check (#307); read-only refusals clear when
+  read-only ends (#308); the database client retries a lost database within
+  2 s instead of up to 20 s.
 
 ### Fixed after a fifth QA walk (#268–#289)
 
