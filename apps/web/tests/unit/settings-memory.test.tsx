@@ -116,6 +116,38 @@ describe('Settings → Memory', () => {
     expect(api.delete).toHaveBeenCalledWith('/memory/m2');
   });
 
+  // Edit and the form replace each other, removing the control that had
+  // focus, so focus fell to the body (as Edit name did, #270).
+  it('puts focus in the editor on Edit, and back on Edit after Cancel, Escape or Save', async () => {
+    await render();
+    const edit = () => findButton('Edit memory: Teaches chemistry')!;
+    const editor = () =>
+      document.querySelector<HTMLTextAreaElement>('[data-testid="memory-entry"] textarea');
+    edit().focus();
+    await click(edit());
+    expect(document.activeElement).toBe(editor());
+
+    findButton('Cancel')!.focus();
+    await click(findButton('Cancel')!);
+    expect(editor()).toBeNull();
+    expect(document.activeElement).toBe(edit());
+
+    await click(edit());
+    await act(async () => {
+      editor()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(editor()).toBeNull();
+    expect(document.activeElement).toBe(edit());
+
+    await click(edit());
+    await type(editor()!, 'Teaches organic chemistry');
+    findButton('Save')!.focus();
+    await click(findButton('Save')!);
+    expect(api.patch).toHaveBeenCalledWith('/memory/m1', { content: 'Teaches organic chemistry' });
+    expect(editor()).toBeNull();
+    expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Edit memory: /);
+  });
+
   it('asks before deleting everything', async () => {
     await render();
     await click(findButton('Delete all…')!);
