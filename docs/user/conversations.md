@@ -244,8 +244,9 @@ under its project, not in the date groupings.
 - **Rename** one with its pencil; see
   [Renaming a conversation](#renaming-a-conversation).
 - **Archive** one to remove it from the list without deleting it. A notice
-  confirms it, with **Undo**; archived conversations remain under
-  [Settings → History](settings.md#history).
+  confirms it, with **Undo**, for ten seconds; it stays while the pointer is
+  over it or Undo has focus (Alt+T moves focus to notices). Archived
+  conversations remain under [Settings → History](settings.md#history).
 - **Search** finds conversations by title and by what was said in them,
   including those in projects. See
   [Finding a conversation](#finding-a-conversation).
