@@ -10,6 +10,7 @@ import { AdminUsersPage } from '../../src/routes/admin/users';
 import {
   alerts,
   button,
+  buttonNames,
   cleanup,
   click,
   dialog,
@@ -238,6 +239,20 @@ describe('Compliance admin page', () => {
     expect(alerts().join(' ')).toContain('No account has that address.');
     await typeInto(document.getElementById('hold-email') as HTMLInputElement, 'sam@example.test');
     expect(alerts().join(' ')).not.toContain('No account has that address.');
+  });
+
+  it('names each hold’s Lift button for the person (#220)', async () => {
+    current = status({
+      holds: [
+        activeHold,
+        { ...activeHold, id: 'h2', userId: 'user-3', userEmail: 'sam@example.test' },
+      ],
+    });
+    await render();
+    expect(buttonNames()).toEqual(
+      expect.arrayContaining(['Lift hold on dana@example.test', 'Lift hold on sam@example.test']),
+    );
+    expect(buttonNames()).not.toContain('Lift');
   });
 
   it('is read-only for auditors', async () => {

@@ -403,6 +403,8 @@ function HoldList({ holds }: { holds: LegalHold[] }) {
                   type="button"
                   size="sm"
                   variant="secondary"
+                  // One per hold; each names the person (#220).
+                  aria-label={`Lift hold on ${hold.userEmail}`}
                   onClick={() => {
                     setLiftReason('');
                     setLifting(hold);

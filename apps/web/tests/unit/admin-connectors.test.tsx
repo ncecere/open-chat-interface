@@ -8,6 +8,7 @@ import { formatDateTime } from '../../src/lib/utils';
 import { AdminConnectorsPage, connectorDeleteText } from '../../src/routes/admin/connectors';
 import {
   button,
+  buttonNames,
   cleanup,
   click,
   dialog,
@@ -103,6 +104,21 @@ const render = async (role: 'admin' | 'auditor' = 'admin', path = '/admin/connec
 };
 
 describe('Connectors admin page', () => {
+  it("names each connector's test and refresh buttons for the connector (#220)", async () => {
+    connectors = [connector(), connector({ id: 'c2', name: 'Wiki', slug: 'wiki' })];
+    await render();
+    expect(buttonNames()).toEqual(
+      expect.arrayContaining([
+        'Test connection to Docs',
+        'Refresh tools from Docs',
+        'Test connection to Wiki',
+        'Refresh tools from Wiki',
+      ]),
+    );
+    expect(buttonNames()).not.toContain('Test connection');
+    expect(buttonNames()).not.toContain('Refresh tools');
+  });
+
   it('lists connectors with credentials as set or not set, and their tools', async () => {
     await render();
     const text = document.body.textContent ?? '';

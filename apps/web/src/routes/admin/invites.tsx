@@ -368,7 +368,13 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`Revoke invitation${invite.email ? ` for ${invite.email}` : ''}`}
+            // A shareable invitation has no address; its role and creation
+            // time tell it apart from the others (#220).
+            aria-label={
+              invite.email
+                ? `Revoke invitation for ${invite.email}`
+                : `Revoke shareable ${invite.role} invitation created ${formatDateTime(invite.createdAt)}`
+            }
             onClick={onRevoke}
           >
             <Trash2 />

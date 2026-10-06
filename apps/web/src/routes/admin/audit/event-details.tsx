@@ -102,6 +102,8 @@ export function DetailsButton({
       className="px-2"
       aria-expanded={expanded}
       aria-controls={detailsId}
+      // Every row has one; each names its event (#220).
+      aria-label={`Details of ${entry.action} by ${actorLabel(entry)}, ${formatTimestamp(entry.createdAt)}`}
       onClick={onToggle}
     >
       Details

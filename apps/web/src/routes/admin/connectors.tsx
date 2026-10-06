@@ -227,6 +227,8 @@ function ConnectorCard({
               variant="secondary"
               size="sm"
               disabled={test.isPending}
+              // Each connector's buttons name it, as Edit and Delete do (#220).
+              aria-label={`Test connection to ${connector.name}`}
               onClick={() => test.mutate()}
             >
               {test.isPending && <Spinner />}
@@ -236,6 +238,7 @@ function ConnectorCard({
               variant="secondary"
               size="sm"
               disabled={refresh.isPending}
+              aria-label={`Refresh tools from ${connector.name}`}
               onClick={() => refresh.mutate()}
             >
               {refresh.isPending && <Spinner />}
@@ -246,6 +249,7 @@ function ConnectorCard({
                 variant="secondary"
                 size="sm"
                 disabled={connect.isPending}
+                aria-label={`Connect your account to ${connector.name}`}
                 onClick={() => connect.mutate()}
               >
                 {connect.isPending && <Spinner />}

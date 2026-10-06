@@ -11,6 +11,7 @@ import {
 } from '../../src/routes/admin/webhooks';
 import {
   button,
+  buttonNames,
   cleanup,
   click,
   dialog,
@@ -109,6 +110,23 @@ describe('Webhooks admin page', () => {
     expect(text).toContain(`secret set ${formatDateTime('2026-10-01T09:00:00.000Z')}`);
     expect(text).toContain(`Last failure ${formatDateTime('2026-10-01T11:00:00.000Z')}`);
     expect(text).not.toContain(new Date('2026-10-01T09:00:00.000Z').toLocaleString());
+  });
+
+  it("names each endpoint's test, rotate and deliveries buttons for its URL (#220)", async () => {
+    webhooks = [endpoint(), endpoint({ id: 'w2', url: 'https://siem.example.test/in' })];
+    await render();
+    expect(buttonNames()).toEqual(
+      expect.arrayContaining([
+        'Send test to https://hooks.example.test/oci',
+        'Rotate secret for https://hooks.example.test/oci',
+        'Show deliveries to https://hooks.example.test/oci',
+        'Send test to https://siem.example.test/in',
+        'Rotate secret for https://siem.example.test/in',
+        'Show deliveries to https://siem.example.test/in',
+      ]),
+    );
+    for (const bare of ['Send test', 'Rotate secret', 'Show deliveries'])
+      expect(buttonNames()).not.toContain(bare);
   });
 
   it('adds an endpoint and shows its secret once', async () => {
