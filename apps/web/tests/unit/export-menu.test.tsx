@@ -181,6 +181,10 @@ describe('export helpers', () => {
   it('offers a spreadsheet only for Markdown with a table outside code', () => {
     expect(exportFormatsFor(TABLE_REPLY)).toEqual(['docx', 'pdf', 'pptx', 'xlsx']);
     expect(exportFormatsFor('```\n| a |\n|---|\n```')).toEqual(['docx', 'pdf', 'pptx']);
+    // A header with text before it on its line has a cell too many: no table (#150).
+    expect(exportFormatsFor('Planets: | Planet | km |\n| --- | --- |\n| Earth | 12,742 |')).toEqual(
+      ['docx', 'pdf', 'pptx'],
+    );
   });
 
   it('reads a bare file name from Content-Disposition', () => {
