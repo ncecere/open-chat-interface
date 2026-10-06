@@ -2,7 +2,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
-import { BroadcastBanner } from '~/components/layout/broadcast-banner';
+import { BroadcastBanner, useBroadcastsSettled } from '~/components/layout/broadcast-banner';
 import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
@@ -43,6 +43,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const previousPathname = useRef(pathname);
   const commandPalette = useCommandPalette();
+  // The page waits for the first word on announcements, so a banner does not
+  // push it down after it has painted (#167).
+  const bannersSettled = useBroadcastsSettled();
 
   useEffect(() => {
     const query = window.matchMedia(DOCKED_SIDEBAR);
@@ -120,7 +123,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               id="main-content"
               // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access per WCAG 2.1.1, and this doubles as the skip-link target
               tabIndex={0}
-              className="scrollbar-thin min-h-0 flex-1 overflow-y-auto"
+              aria-busy={!bannersSettled}
+              className={cn(
+                'scrollbar-thin min-h-0 flex-1 overflow-y-auto',
+                !bannersSettled && 'invisible',
+              )}
             >
               {children}
             </div>

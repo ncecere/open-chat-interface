@@ -1,13 +1,15 @@
 // @vitest-environment happy-dom
+import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppShell } from '../../src/components/layout/app-shell';
 import { ThemeProvider } from '../../src/providers/theme-provider';
-import { cleanup, renderAdmin } from './admin-test-utils';
+import { cleanup, renderAdmin, settle } from './admin-test-utils';
 import { styleFor, toPx } from './css-test-utils';
 
 /**
- * #166: the top bar's floating controls hid a conversation's first lines.
+ * #166: the top bar's floating controls hid a conversation's first lines;
+ * #167: the announcement banner moved the page after it had painted.
  * The real shell is rendered; its classes are compiled by the project's
  * Tailwind to place the controls and the start of the scrolling page.
  */
@@ -101,4 +103,52 @@ it.each([
   for (const group of controls) {
     expect(pageTop).toBeGreaterThanOrEqual(await controlsBottom(group));
   }
+});
+
+/**
+ * #167: the announcement banner arrived after the page had painted and
+ * pushed it down (CLS 0.08-0.13). The page is laid out hidden until the
+ * first answer about announcements, then shown with the banner in place.
+ */
+it('shows the page only once announcements are known, so a banner does not move it', async () => {
+  viewport(true);
+  let answer!: (value: unknown) => void;
+  const fallback = api.get.getMockImplementation()!;
+  api.get.mockImplementation((path: string) =>
+    path === '/me/broadcasts'
+      ? new Promise((resolve) => {
+          answer = resolve;
+        })
+      : fallback(path),
+  );
+  ({ root } = await renderAdmin(
+    <ThemeProvider>
+      <AppShell>
+        <p>Page</p>
+      </AppShell>
+    </ThemeProvider>,
+    { path: '/' },
+  ));
+  const scroller = document.getElementById('main-content')!;
+  const visibility = async () => (await styleFor(scroller.className)).visibility ?? 'visible';
+  expect(await visibility()).toBe('hidden');
+  expect(scroller.getAttribute('aria-busy')).toBe('true');
+
+  await act(async () =>
+    answer({
+      broadcasts: [
+        {
+          id: 'b1',
+          title: 'Maintenance on Sunday',
+          body: 'Read-only from 06:00.',
+          level: 'warning',
+          dismissable: true,
+        },
+      ],
+    }),
+  );
+  await settle();
+  expect(document.querySelector('[data-banners]')?.textContent).toContain('Maintenance on Sunday');
+  expect(await visibility()).toBe('visible');
+  expect(scroller.getAttribute('aria-busy')).toBe('false');
 });

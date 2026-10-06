@@ -43,6 +43,37 @@ function useUnexpired(broadcasts: ActiveBroadcast[]): ActiveBroadcast[] {
   );
 }
 
+function useBroadcasts() {
+  return useQuery({
+    queryKey: ['me', 'broadcasts'],
+    queryFn: () => api.get<{ broadcasts: ActiveBroadcast[] }>('/me/broadcasts'),
+    // Long enough not to poll noisily, short enough that an announcement
+    // published now reaches an open tab without a reload.
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
+}
+
+/** However slow the request, the page is shown after this long. */
+const MAX_WAIT_MS = 3_000;
+
+/**
+ * Whether the first answer about announcements is in (or failed, or took
+ * too long). The chat shell lays its page out hidden until then: a banner
+ * arriving after the page had painted pushed it down by its own height, a
+ * layout shift of 0.08-0.13 (#167). Refetches never hide it again.
+ */
+export function useBroadcastsSettled(): boolean {
+  const { isPending } = useBroadcasts();
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isPending) return;
+    const timer = setTimeout(() => setTimedOut(true), MAX_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [isPending]);
+  return !isPending || timedOut;
+}
+
 /**
  * Instance announcements, shown above the application.
  *
@@ -53,14 +84,7 @@ function useUnexpired(broadcasts: ActiveBroadcast[]): ActiveBroadcast[] {
 export function BroadcastBanner() {
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({
-    queryKey: ['me', 'broadcasts'],
-    queryFn: () => api.get<{ broadcasts: ActiveBroadcast[] }>('/me/broadcasts'),
-    // Long enough not to poll noisily, short enough that an announcement
-    // published now reaches an open tab without a reload.
-    refetchInterval: 5 * 60_000,
-    staleTime: 60_000,
-  });
+  const { data } = useBroadcasts();
 
   const dismiss = useMutation({
     mutationFn: (id: string) => api.post(`/me/broadcasts/${id}/dismiss`),
