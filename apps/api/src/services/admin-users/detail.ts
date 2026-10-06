@@ -1,7 +1,7 @@
 import { and, count, desc, eq, gt, isNull, schema } from '@oci/db';
 import { db } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
-import { auditEntryAbout } from '../audit-subject.js';
+import { actorAccountEmail, auditEntryAbout } from '../audit-subject.js';
 import { activeLegalHold } from '../compliance/holds.js';
 import { toAdminUser } from './listing.js';
 
@@ -54,7 +54,7 @@ export async function getUserDetail(targetId: string) {
         .limit(10),
       // Include actions both by and against this account, bulk ones too (#216).
       db
-        .select()
+        .select({ entry: schema.auditLog, accountEmail: actorAccountEmail })
         .from(schema.auditLog)
         .where(auditEntryAbout(targetId))
         .orderBy(desc(schema.auditLog.createdAt))
@@ -87,8 +87,9 @@ export async function getUserDetail(targetId: string) {
       ...thread,
       updatedAt: thread.updatedAt.toISOString(),
     })),
-    audit: auditEntries.map(({ seq: _seq, ...entry }) => ({
+    audit: auditEntries.map(({ entry: { seq: _seq, ...entry }, accountEmail }) => ({
       ...entry,
+      actorEmail: entry.actorEmail ?? accountEmail,
       createdAt: entry.createdAt.toISOString(),
     })),
   };

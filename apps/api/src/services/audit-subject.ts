@@ -48,3 +48,13 @@ export function auditEntryAboutEmail(pattern: string): SQL {
     )`,
   ) as SQL;
 }
+
+/**
+ * The email of an entry's actor account, for entries recorded with only its
+ * ID (tool calls before #280): the account's current email, or null once it
+ * is deleted. Shown in the log in place of the raw ID; the recorded email,
+ * when there is one, always comes first.
+ */
+export const actorAccountEmail = sql<
+  string | null
+>`(select ${schema.user.email} from ${schema.user} where ${schema.user.id} = ${log.actorUserId})`;

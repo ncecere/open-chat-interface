@@ -5,7 +5,11 @@ import { db } from '../../db/index.js';
 import { containsPattern, prefixPattern } from '../../lib/like.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { parseQuery } from '../../middleware/validate.js';
-import { auditEntryAbout, auditEntryAboutEmail } from '../../services/audit-subject.js';
+import {
+  actorAccountEmail,
+  auditEntryAbout,
+  auditEntryAboutEmail,
+} from '../../services/audit-subject.js';
 
 export const auditRoutes = new Hono<AppBindings>();
 
@@ -71,7 +75,7 @@ auditRoutes.get('/', async (c) => {
 
   const [rows, [totals]] = await Promise.all([
     db
-      .select()
+      .select({ entry: schema.auditLog, accountEmail: actorAccountEmail })
       .from(schema.auditLog)
       .where(where)
       // A stable tiebreak keeps pagination from repeating a row when several
@@ -83,7 +87,12 @@ auditRoutes.get('/', async (c) => {
   ]);
 
   return c.json({
-    entries: rows.map((entry) => ({ ...entry, createdAt: entry.createdAt.toISOString() })),
+    entries: rows.map(({ entry, accountEmail }) => ({
+      ...entry,
+      // Entries recorded with only an ID name the account (#280).
+      actorEmail: entry.actorEmail ?? accountEmail,
+      createdAt: entry.createdAt.toISOString(),
+    })),
     total: totals?.value ?? 0,
   });
 });
@@ -113,7 +122,7 @@ auditRoutes.get('/export', async (c) => {
   const where = buildWhere(filters);
 
   const rows = await db
-    .select()
+    .select({ entry: schema.auditLog, accountEmail: actorAccountEmail })
     .from(schema.auditLog)
     .where(where)
     .orderBy(desc(schema.auditLog.createdAt), desc(schema.auditLog.id))
@@ -124,10 +133,10 @@ auditRoutes.get('/export', async (c) => {
   const header =
     'timestamp,actor_email,actor_user_id,action,target_type,target_id,ip_address,metadata';
   const body = rows
-    .map((row) =>
+    .map(({ entry: row, accountEmail }) =>
       [
         row.createdAt.toISOString(),
-        row.actorEmail,
+        row.actorEmail ?? accountEmail,
         row.actorUserId,
         row.action,
         row.targetType,
