@@ -14,6 +14,7 @@ import { focusComposerSoon } from '~/lib/focus-after-navigation';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { loopTab } from '~/lib/tab-loop';
 import { cn } from '~/lib/utils';
+import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 interface SidebarProps {
   open: boolean;
@@ -30,6 +31,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const createThread = useCreateThread();
+  const { setTemporary } = useTemporaryChat();
   // After a reload that removed an unused conversation, not listed (#266).
   useConfirmRemovedConversation();
 
@@ -38,6 +40,10 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
   }, [mobile, open]);
 
   async function handleNewChat() {
+    // New Chat is an ordinary chat, as the top bar's "+" and the shortcut are:
+    // the button alone kept temporary mode, so work started here was deleted
+    // after 24 hours (#340).
+    setTemporary(false);
     await navigate({ to: '/' });
     if (mobile) onToggle();
     // After the drawer's own focus return, so the message box wins (#251).
