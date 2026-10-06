@@ -15,6 +15,7 @@ vi.mock('streamdown', () => ({
     sanitize: 'sanitize',
     harden: ['harden', { allowedLinkPrefixes: ['*'] }],
   },
+  defaultRemarkPlugins: { gfm: 'gfm' },
 }));
 vi.mock('@streamdown/code', () => ({ code: {} }));
 vi.mock('@streamdown/math', () => ({ createMathPlugin: () => ({}) }));

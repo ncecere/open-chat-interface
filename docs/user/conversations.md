@@ -43,6 +43,12 @@ This is worth reaching for more often than people do. Asking "what if we did it
 the other way?" as a fork means you end up with both answers side by side in
 the sidebar rather than one overwritten by the other.
 
+## How messages are formatted
+
+Replies and your own messages are shown as Markdown: headings, lists, tables,
+links and highlighted code blocks. A single line break starts a new line, so a
+poem or an address keeps its lines; a blank line starts a new paragraph.
+
 ## How a reply shows the model's work
 
 Some models work through a problem before answering, and some use tools (a

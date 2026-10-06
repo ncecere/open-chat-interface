@@ -1,5 +1,6 @@
 import { type ComponentProps, lazy, memo, Suspense } from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
+import { remarkSoftBreaks } from '~/components/chat/markdown-soft-breaks';
 import {
   installStreamdownOverlayFocus,
   installStreamdownScrollRegions,
@@ -24,7 +25,7 @@ const loadRenderer = () =>
 const StreamdownMarkdown = lazy(() =>
   loadRenderer().then(
     ([
-      { Streamdown, defaultRehypePlugins },
+      { Streamdown, defaultRehypePlugins, defaultRemarkPlugins },
       { code },
       { createMathPlugin },
       { createEditorialMermaidPlugin },
@@ -34,6 +35,9 @@ const StreamdownMarkdown = lazy(() =>
       // Its wide tables and code blocks scroll; make them reachable by keyboard.
       installStreamdownScrollRegions();
       const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
+      // Streamdown's own (GFM, code metadata), then single line breaks kept (#207).
+      // One array for every message: Streamdown re-parses when its identity changes.
+      const remarkPlugins = [...Object.values(defaultRemarkPlugins ?? {}), remarkSoftBreaks];
       // Single-dollar inline math is off by default, but models commonly emit it.
       // Mermaid itself loads only when a diagram is first rendered.
       const plugins = {
@@ -47,6 +51,7 @@ const StreamdownMarkdown = lazy(() =>
           <Streamdown
             plugins={plugins}
             className={cn(MARKDOWN_BASE, className)}
+            remarkPlugins={remarkPlugins}
             // The reference interface shows plain code without a gutter.
             lineNumbers={false}
             // Links are real links that warn before leaving the instance (#174),
