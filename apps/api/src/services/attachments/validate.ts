@@ -23,6 +23,46 @@ function sanitizeFilename(name: string): string {
   return printable.slice(0, 200) || 'file';
 }
 
+/** Kinds of file people know by name, for refusals; a MIME type means little to most (#180). */
+const FILE_KINDS: Array<[pattern: RegExp, kind: string]> = [
+  [
+    /^application\/(x-msdownload|x-msdos-program|vnd\.microsoft\.portable-executable|x-dosexec)$/,
+    'a Windows program',
+  ],
+  [/^application\/(x-executable|x-elf|x-mach-binary|x-sharedlib)$/, 'a program'],
+  [/^application\/(zip|x-zip-compressed)$/, 'a ZIP archive'],
+  [
+    /^application\/(x-7z-compressed|x-rar-compressed|vnd\.rar|gzip|x-gzip|x-tar|x-bzip2|x-xz|zstd)$/,
+    'a compressed archive',
+  ],
+  [/^application\/pdf$/, 'a PDF'],
+  [
+    /^application\/(msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/,
+    'a Word document',
+  ],
+  [
+    /^application\/(vnd\.ms-excel|vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet)$/,
+    'a spreadsheet',
+  ],
+  [
+    /^application\/(vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.presentationml\.presentation)$/,
+    'a presentation',
+  ],
+  [/^video\//, 'a video'],
+  [/^audio\//, 'an audio file'],
+];
+
+/** "a PNG image", "a Windows program", or null for a type with no common name. */
+export function fileKind(mimeType: string): string | null {
+  for (const [pattern, kind] of FILE_KINDS) if (pattern.test(mimeType)) return kind;
+  const image = /^image\/(?:x-|vnd\.)?([\w.+-]+)$/.exec(mimeType)?.[1];
+  if (image) {
+    const name = image.replace(/\+xml$/, '').toUpperCase();
+    return `${/^[AEFILMNORSX]/.test(name) ? 'an' : 'a'} ${name} image`;
+  }
+  return null;
+}
+
 const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 function decodeText(bytes: Buffer): string | null {
@@ -87,8 +127,11 @@ export async function validateUpload(params: {
   }
 
   if (!params.allowedMimeTypes.includes(mimeType)) {
+    const kind = fileKind(mimeType);
     throw validationFailed(
-      `${filename} is ${/^[aeiou]/i.test(mimeType) ? 'an' : 'a'} ${mimeType} file, which is not allowed here`,
+      kind
+        ? `${filename} is ${kind}, which is not allowed here`
+        : `${filename} is a type of file that is not allowed here`,
     );
   }
 

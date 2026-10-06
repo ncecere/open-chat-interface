@@ -24,7 +24,7 @@ const refused = {
   mimeType: 'image/png',
   sizeBytes: 2048,
   status: 'error',
-  error: 'zip-disguised.png is an application/zip file, which is not allowed here',
+  error: 'zip-disguised.png is a ZIP archive, which is not allowed here',
   previewUrl: 'blob:preview',
 } as PendingAttachment;
 
@@ -32,9 +32,8 @@ it('says why an upload was refused in visible, announced text', async () => {
   await act(async () => root.render(<AttachmentChips items={[refused]} onRemove={() => {}} />));
 
   const alert = container.querySelector('[role="alert"]');
-  expect(alert?.textContent).toContain(
-    'zip-disguised.png: zip-disguised.png is an application/zip file',
-  );
+  // Named once: the reason already starts with the file's name (#180).
+  expect(alert?.textContent).toBe('zip-disguised.png is a ZIP archive, which is not allowed here');
   // The chip points at its reason, and a refused "image" shows no preview.
   const chip = container.querySelector('[aria-describedby="attachment-error-local-1"]');
   expect(chip).not.toBeNull();
