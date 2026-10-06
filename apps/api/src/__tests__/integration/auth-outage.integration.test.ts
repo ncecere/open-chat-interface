@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { createApp } from '../../app.js';
-import { withReadRetry } from '../../middleware/read-retry.js';
+
+// An address where nothing listens, whatever the environment provides: CI
+// runs this suite with DATABASE_URL pointing at a real PostgreSQL, and
+// test/setup.ts only fills it in when it is unset. Set before the app and
+// its database module load.
+const UNREACHABLE = 'postgres://oci_test:oci_test@127.0.0.1:1/oci_test';
+process.env.DATABASE_URL = UNREACHABLE;
+process.env.CONTROL_DATABASE_URL = UNREACHABLE;
+const { createApp } = await import('../../app.js');
+const { withReadRetry } = await import('../../middleware/read-retry.js');
 
 /**
  * The sign-in page's requests with no database at all (#288): DATABASE_URL
- * points at port 1 in this suite, as a stopped PostgreSQL looks to a replica
+ * points at port 1 (set below), as a stopped PostgreSQL looks to a replica
  * that starts or reconnects during the outage. Through the API's real
  * pipeline (app.ts, and the read retry server.ts puts around it) and the real
  * Better Auth handler. Each answers as a lost connection, which the sign-in
