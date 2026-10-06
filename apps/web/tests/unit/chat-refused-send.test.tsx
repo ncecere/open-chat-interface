@@ -94,3 +94,35 @@ it('does not overwrite something typed while the refused send was in flight', as
 
   expect(session.draft).toBe('Something new');
 });
+
+it('puts the text back when a restarting server still refuses it after the retries (#161)', async () => {
+  // A draining replica refuses before reading the turn (503 with Retry-After);
+  // the page sends it again twice, then shows the refusal.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const fetch = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'This server is restarting. Send your message again in a moment.',
+          },
+        }),
+        { status: 503, headers: { 'content-type': 'application/json', 'retry-after': '1' } },
+      ),
+  );
+  vi.stubGlobal('fetch', fetch);
+  await act(() => root.render(<Harness />));
+  await act(() => session.setDraft('Walk3 drain send: reply with one word.'));
+  await act(async () => {
+    const sending = session.send();
+    for (let index = 0; index < 3; index++) await vi.advanceTimersByTimeAsync(1_000);
+    await sending;
+  });
+  vi.useRealTimers();
+
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(session.draft).toBe('Walk3 drain send: reply with one word.');
+  expect(session.messages.map((message) => message.id)).toEqual(['saved-user', 'saved-reply']);
+  expect(session.error?.message).toContain('restarting');
+});

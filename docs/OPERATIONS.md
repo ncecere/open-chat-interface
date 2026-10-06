@@ -1295,7 +1295,9 @@ replies. On the first `SIGTERM` (or `SIGINT`) it:
 2. Refuses new chat turns (`POST /api/chat`, and continuing after tool
    approvals) with `503`, `Retry-After: 1` and `Connection: close`, before
    reading them, so nothing is stored. The web app sends the turn again, up to
-   twice, and the person sees nothing unless every attempt is refused. Every
+   twice, and the person sees nothing unless every attempt is refused; then
+   it says the server is restarting and puts the message back in the
+   composer, as for any other refused send. Every
    other request is answered as usual, with `Connection: close`, so a proxy's
    pooled connections stop carrying new requests to the replica.
 3. Stops its background jobs: no new runs start on it (another replica's tick

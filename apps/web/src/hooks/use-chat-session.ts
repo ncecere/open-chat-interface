@@ -112,7 +112,12 @@ export function useChatSession(options: {
       }
       // Refused before it was saved (429, 409, 422, 403…): nothing of this
       // message exists on the server, so it must not vanish from the composer.
-      if (sending && response.status >= 400 && response.status < 500 && scope.request === request) {
+      // So is a 503 still there after the drain retries (#161): a draining
+      // replica answers it before reading the turn, the proxy when no replica
+      // is ready, and the chat route itself never does (it answers 500).
+      const refusedStatus =
+        (response.status >= 400 && response.status < 500) || response.status === 503;
+      if (sending && refusedStatus && scope.request === request) {
         const refused = readRefusedSubmission(init?.body);
         if (refused) refuseSubmission.current(refused);
       }
