@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
 import {
   ERROR_CODES,
+  isDeclinedArtifactPart,
   isToolPart,
   MAX_ARTIFACT_TITLE_LENGTH,
   MY_SHARE_LINKS_PAGE_SIZE,
@@ -321,6 +322,8 @@ export function sanitizePublicParts(parts: unknown): PublicMessagePart[] {
     }
 
     if (isToolPart(candidate)) {
+      // Declined as reply content (#201): not a step, and nothing failed.
+      if (isDeclinedArtifactPart(candidate)) return [];
       const step = summarizeToolPart(candidate);
       // Steps still running or waiting on the owner's answer say nothing useful publicly.
       if (step.state === 'running' || step.state === 'awaiting-approval') return [];

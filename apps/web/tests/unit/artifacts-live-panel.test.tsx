@@ -285,12 +285,15 @@ describe('opening artifacts automatically', () => {
   });
 
   it('does not reopen what the person closed during the reply', async () => {
-    await startLiveReply({ title: 'Sign-Up Page', content: '<p>' });
+    // The panel opens once the new artifact's kind is known (#201).
+    await startLiveReply({ title: 'Sign-Up Page', kind: 'html', content: '<p>' });
     await click(docked()!.querySelector<HTMLElement>('[data-panel-close]')!);
     expect(docked()).toBeNull();
     await stream([
       prompt,
-      reply(createPart('input-streaming', { title: 'Sign-Up Page', content: '<p>x' })),
+      reply(
+        createPart('input-streaming', { title: 'Sign-Up Page', kind: 'html', content: '<p>x' }),
+      ),
     ]);
     listed = [created()];
     await stream(

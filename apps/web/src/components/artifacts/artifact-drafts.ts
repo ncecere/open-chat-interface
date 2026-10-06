@@ -3,6 +3,7 @@ import {
   ARTIFACT_TOOL_IDS,
   type ArtifactKind,
   artifactOfToolPart,
+  isDeclinedArtifactPart,
   isToolPart,
   toolIdOfPart,
 } from '@oci/shared';
@@ -42,7 +43,8 @@ const text = (value: unknown) => (typeof value === 'string' ? value : null);
 
 /** The draft of one tool part, or null when it is not an artifact tool call. */
 export function artifactDraftOf(messageId: string, part: unknown): ArtifactDraft | null {
-  if (!isToolPart(part)) return null;
+  // Declined as reply content (#201): there is no artifact, not even a failed one.
+  if (!isToolPart(part) || isDeclinedArtifactPart(part)) return null;
   const tool = toolIdOfPart(part);
   if (!(ARTIFACT_TOOL_IDS as readonly string[]).includes(tool)) return null;
   const input = (part.input ?? {}) as Record<string, unknown>;

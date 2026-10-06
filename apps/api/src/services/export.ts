@@ -3,6 +3,7 @@ import {
   ARTIFACT_KIND_LABELS,
   type ArtifactKind,
   artifactOfToolPart,
+  isDeclinedArtifactPart,
   isToolPart,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
@@ -115,7 +116,10 @@ export function orderedReplyLines(
   };
   for (const part of parts) {
     if (isToolPart(part)) {
-      if (!skip(part)) add('tools', `_${summarizeToolPart(part).summary}_`);
+      // An artifact attempt declined because its content belongs in the
+      // reply is not a step the reader needs (#201).
+      if (!skip(part) && !isDeclinedArtifactPart(part))
+        add('tools', `_${summarizeToolPart(part).summary}_`);
     } else if (part.type === 'text' && typeof part.text === 'string' && part.text.trim())
       add('text', part.text.trim());
   }
