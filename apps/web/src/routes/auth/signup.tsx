@@ -4,6 +4,7 @@ import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
+import { AuthStatusUnavailable } from '~/components/auth/status-unavailable';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -15,7 +16,9 @@ import { authClient } from '~/lib/auth-client';
 export function SignupPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: status, isLoading } = useAuthStatus();
+  // Only the first load waits; an outage is said as one, not as registration
+  // being closed, and stays said while it is re-checked (#288, #307).
+  const { data: status, firstLoad, unavailable, refetch } = useAuthStatus();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -62,7 +65,7 @@ export function SignupPage() {
         </div>
 
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
-          {isLoading ? (
+          {firstLoad ? (
             <div className="flex justify-center py-8">
               <Spinner className="size-5" />
             </div>
@@ -79,6 +82,8 @@ export function SignupPage() {
                 <Link to="/auth/login">Return to sign in</Link>
               </Button>
             </div>
+          ) : unavailable ? (
+            <AuthStatusUnavailable title="Registration temporarily unavailable" refetch={refetch} />
           ) : !registrationAvailable ? (
             <div className="space-y-4 text-center">
               <h1 className="text-lg font-semibold">Registration unavailable</h1>

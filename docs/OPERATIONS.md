@@ -1699,9 +1699,11 @@ Patroni cluster under load; the design and the results are in
   means a replica is draining, and proxies take `503` replicas out of
   rotation). Sign-in, sign-up and password reset (Better Auth's endpoints,
   and the authentication settings they read) answer the same way, and the
-  sign-in and reset pages then say the service is temporarily unavailable
-  and to try again, not that the password is wrong or that resets are
-  turned off.
+  sign-in, sign-up and reset pages then say the service is temporarily
+  unavailable and to try again, not that the password is wrong or that
+  resets or registration are turned off. The pages check again every 5 s and
+  keep saying so (with **Try again**) while each check is out; the sign-in
+  form stays as it is.
 - **Replies** being written keep streaming (they go through Redis); their final
   save waits out the failover for up to 30 s. If the database is away for
   longer, the reply is saved once it is back by the recovery described in

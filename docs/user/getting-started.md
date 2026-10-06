@@ -57,7 +57,8 @@ with the new password.
 
 If the page says **password reset is temporarily unavailable**, the service
 could not be reached just then; the form comes back by itself once it can be,
-or choose **Try again**.
+or choose **Try again**. The account registration page says **registration
+temporarily unavailable** in the same situation.
 
 ## The introduction
 

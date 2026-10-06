@@ -39,7 +39,9 @@ const SSO_ERROR_TEXT: Record<string, string> = {
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: status, isLoading } = useAuthStatus();
+  // Only the first load waits: a 5 s re-check during an outage keeps the form
+  // (it was swapped for a spinner, typing and all, #307).
+  const { data: status, firstLoad } = useAuthStatus();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -164,7 +166,7 @@ export function LoginPage() {
           </p>
         </div>
 
-        {isLoading ? (
+        {firstLoad ? (
           <div className="flex justify-center py-8">
             <Spinner className="size-5" />
           </div>
