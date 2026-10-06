@@ -13,12 +13,19 @@ import {
 import { Field } from '~/components/ui/field';
 import { Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { useCompactionPending, useCompactThread } from '~/hooks/use-compaction';
+import {
+  useCompactionPending,
+  useCompactionSummarisable,
+  useCompactThread,
+} from '~/hooks/use-compaction';
 import { apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 export const COMPACT_ACTION_LABEL = 'Summarise earlier messages now';
 export const COMPACTION_PENDING_TEXT = 'Summarising earlier messages…';
+/** As the API refuses it (NOTHING_TO_COMPACT), said before anyone fills in the dialog (#153). */
+export const NOTHING_TO_SUMMARISE_TEXT =
+  'There is nothing to summarise yet. A conversation needs at least two turns before the earlier ones can be summarised.';
 
 /**
  * The conversation's "Summarise earlier messages now" control. While a
@@ -28,13 +35,20 @@ export const COMPACTION_PENDING_TEXT = 'Summarising earlier messages…';
 export function CompactConversationControl({ threadId }: { threadId: string }) {
   const [open, setOpen] = useState(false);
   const pending = useCompactionPending(threadId);
+  const summarisable = useCompactionSummarisable(threadId) || pending;
   return (
     <>
       <Button
         variant="ghost"
         size="icon-sm"
         aria-label={COMPACT_ACTION_LABEL}
-        title={pending ? COMPACTION_PENDING_TEXT : COMPACT_ACTION_LABEL}
+        title={
+          pending
+            ? COMPACTION_PENDING_TEXT
+            : summarisable
+              ? COMPACT_ACTION_LABEL
+              : 'Nothing to summarise yet'
+        }
         aria-haspopup="dialog"
         data-compaction-pending={pending || undefined}
         onClick={() => setOpen(true)}
@@ -54,6 +68,7 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
       <CompactThreadDialog
         threadId={threadId}
         pending={pending}
+        summarisable={summarisable}
         open={open}
         onOpenChange={setOpen}
       />
@@ -70,11 +85,14 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
 export function CompactThreadDialog({
   threadId,
   pending = false,
+  summarisable = true,
   open,
   onOpenChange,
 }: {
   threadId: string;
   pending?: boolean;
+  /** False when there is nothing to summarise yet: the dialog says so instead of asking. */
+  summarisable?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -84,17 +102,25 @@ export function CompactThreadDialog({
         <DialogHeader>
           <DialogTitle>{COMPACT_ACTION_LABEL}</DialogTitle>
           <DialogDescription>
-            The earlier messages are summarised in the background, and the model receives the
-            summary in their place. You can keep writing meanwhile. Every message stays here as it
-            is. The summary counts towards your usage.
+            {summarisable
+              ? 'The earlier messages are summarised in the background, and the model receives the summary in their place. You can keep writing meanwhile. Every message stays here as it is. The summary counts towards your usage.'
+              : NOTHING_TO_SUMMARISE_TEXT}
           </DialogDescription>
         </DialogHeader>
-        {/* Mounted only while open, so each attempt starts empty. */}
-        <CompactThreadForm
-          threadId={threadId}
-          pending={pending}
-          onDone={() => onOpenChange(false)}
-        />
+        {summarisable ? (
+          // Mounted only while open, so each attempt starts empty.
+          <CompactThreadForm
+            threadId={threadId}
+            pending={pending}
+            onDone={() => onOpenChange(false)}
+          />
+        ) : (
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

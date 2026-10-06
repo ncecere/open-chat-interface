@@ -65,6 +65,12 @@ export const compactionStateSchema = z.object({
   compaction: conversationCompactionSchema.nullable(),
   pending: z.boolean(),
   failure: compactionFailureSchema.nullable(),
+  /**
+   * Whether asking for a summary now has anything to summarise (two turns
+   * since the previous cut; #153). Absent from servers before it was added,
+   * which offered the control regardless.
+   */
+  summarisable: z.boolean().optional(),
 });
 
 export type CompactionState = z.infer<typeof compactionStateSchema>;

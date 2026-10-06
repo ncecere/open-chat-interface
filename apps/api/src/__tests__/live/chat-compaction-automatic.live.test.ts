@@ -263,6 +263,8 @@ describe.skipIf(!available)('live conversation compaction', () => {
         }),
         pending: false,
         failure: null,
+        // Turns after the cut and the new one: another summary could be made.
+        summarisable: true,
       });
 
       // The next turn: the summary in the system prompt, the kept turns
@@ -312,6 +314,7 @@ describe.skipIf(!available)('live conversation compaction', () => {
         compaction: null,
         pending: true,
         failure: null,
+        summarisable: true,
       });
 
       // While it runs: retry, switch replies and send, all at once, no 409.

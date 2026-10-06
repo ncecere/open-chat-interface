@@ -1,4 +1,4 @@
-import { and, desc, eq, schema, sql } from '@oci/db';
+import { and, desc, eq, gte, schema, sql } from '@oci/db';
 import type { ConversationCompaction } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { getSetting } from '../settings.js';
@@ -68,4 +68,30 @@ export async function latestReplyModel(threadId: string): Promise<string | null>
     .orderBy(desc(schema.message.position), desc(schema.message.createdAt))
     .limit(1);
   return row?.modelSlug ?? null;
+}
+
+/**
+ * Whether "Summarise earlier messages now" has anything to summarise: at
+ * least two turns (questions) since the previous summary's cut, so the newest
+ * turn can stay whole and an earlier one be summarised. The request refuses
+ * with NOTHING_TO_COMPACT otherwise; the state reports it too, so the control
+ * can say so before anyone fills in the dialog (#153).
+ */
+export async function hasTurnsToSummarise(
+  threadId: string,
+  userId: string,
+  previous: { firstKeptPosition: number } | null,
+): Promise<boolean> {
+  const [turns] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.message)
+    .where(
+      and(
+        eq(schema.message.threadId, threadId),
+        eq(schema.message.userId, userId),
+        eq(schema.message.role, 'user'),
+        previous ? gte(schema.message.position, previous.firstKeptPosition) : undefined,
+      ),
+    );
+  return Number(turns?.count ?? 0) >= 2;
 }

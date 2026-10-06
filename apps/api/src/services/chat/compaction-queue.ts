@@ -20,6 +20,7 @@ import {
   serializeCompaction,
 } from './compaction.js';
 import { compactionDue } from './compaction-plan.js';
+import { hasTurnsToSummarise } from './compaction-records.js';
 import { messageCost } from './context-budget.js';
 import { historyParts } from './message-parts.js';
 
@@ -188,6 +189,7 @@ export async function compactionState(threadId: string, userId: string): Promise
     compaction: compaction ? serializeCompaction(compaction) : null,
     pending: pending !== undefined,
     failure: failure ? { ...failure, failedAt: failure.failedAt.toISOString() } : null,
+    summarisable: await hasTurnsToSummarise(threadId, userId, compaction),
   };
 }
 

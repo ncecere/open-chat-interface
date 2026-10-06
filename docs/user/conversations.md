@@ -192,7 +192,9 @@ summary the model receives.
   for example "keep every figure in the budget". The dialog closes at once;
   while the summary is made, the icon shows **Summarising earlier messages…**
   and you can keep writing. Asking again meanwhile does not make a second one.
-  It uses the model of the latest reply.
+  It uses the model of the latest reply. A conversation needs at least two
+  turns (since the last summary) first; until then the dialog says there is
+  nothing to summarise yet.
 - **If a summary you asked for fails,** a quiet note under the conversation
   says so and why: your usage allowance ran out, the model returned an error,
   the model took too long, or there was nothing to summarise by then. Select

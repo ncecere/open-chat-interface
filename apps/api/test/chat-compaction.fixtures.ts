@@ -261,6 +261,7 @@ export function compactionHelpers(suite: CompactionSuite) {
       compaction: { id: string; reason: string; firstKeptMessageId: string } | null;
       pending: boolean;
       failure: { reason: string; instructions: string | null; failedAt: string } | null;
+      summarisable: boolean;
     };
   }
   /** Every stored message, field by field, to prove compaction changes none. */
