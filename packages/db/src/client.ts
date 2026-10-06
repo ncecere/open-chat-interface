@@ -23,6 +23,26 @@ export interface DatabaseOptions {
  */
 const CONNECT_TIMEOUT_SECONDS = 10;
 
+/** The longest wait, in seconds, before a pooled connection that failed tries again. */
+const MAX_RECONNECT_DELAY_SECONDS = 2;
+
+/**
+ * Seconds a connection waits before trying to connect again after a failed
+ * attempt: postgres.js's own curve (`3^n / 100` s with jitter, n counting
+ * failures since the pool last connected), but capped at 2 s instead of 20.
+ * The count is shared by the whole pool and only reset by a connection that
+ * succeeds, so a database away for half a minute pushed every attempt to a
+ * 10-20 s wait: requests that would fail at once (the name does not resolve,
+ * the port refuses) took 12-16 s to answer, and once the database was back
+ * the first requests still waited out that delay before connecting. The
+ * attempts only happen while queries are waiting, at most one per pooled
+ * connection every 1-2 s, which a database that is down or failing over
+ * absorbs easily.
+ */
+export function reconnectDelaySeconds(failures: number): number {
+  return (0.5 + Math.random() / 2) * Math.min(3 ** failures / 100, MAX_RECONNECT_DELAY_SECONDS);
+}
+
 /**
  * postgres.js reconnects on its own: a connection that drops is discarded and
  * the next query opens a new one, so after a failover the pool recovers
@@ -44,6 +64,7 @@ export function createDatabase(connectionString: string, options?: DatabaseOptio
     max: options?.max ?? 10,
     prepare: false,
     connect_timeout: CONNECT_TIMEOUT_SECONDS,
+    backoff: reconnectDelaySeconds,
     // Postgres NOTICEs print raw to stderr and are not errors. Migrations emit
     // one on every restart, which buries genuine failures in container logs.
     onnotice: () => {},
@@ -75,6 +96,7 @@ export function createControlClient(
     max: options.max ?? 1,
     prepare: false,
     connect_timeout: CONNECT_TIMEOUT_SECONDS,
+    backoff: reconnectDelaySeconds,
     onnotice: () => {},
     ...(options.applicationName
       ? { connection: { application_name: options.applicationName } }

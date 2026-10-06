@@ -1703,6 +1703,10 @@ Patroni cluster under load; the design and the results are in
 
 - **Reads** caught by the failover are run again within the request, once,
   and answered normally (a little slower).
+- **New connections** are tried again after a failure with a growing pause,
+  at most 2 s (postgres.js's default grows to 20 s). However long the
+  database is away, a request fails within a few seconds rather than
+  waiting out that pause, and once it is back requests reconnect within 2 s.
 - **Writes** caught by it are not repeated: they answer **`500`** with
   `"retryable": true` in the error body and the header `X-OCI-Retryable:
   database-connection`. The change may or may not have been saved; send it
