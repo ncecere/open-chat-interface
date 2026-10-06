@@ -90,7 +90,8 @@ describe('Trash', () => {
     await click(button('Delete Budget review now'));
     expect(api.delete).not.toHaveBeenCalled();
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Delete this conversation now?');
-    expect(dialog()?.textContent).toContain('Budget review and its 4 messages');
+    // Quoted, so a title's own punctuation does not run into the sentence (#254).
+    expect(dialog()?.textContent).toContain('“Budget review” and its 4 messages');
     expect(dialog()?.textContent).toContain('This cannot be undone.');
     // Cancel comes first, so Enter straight away does not delete.
     expect(dialog()?.querySelector('button')?.textContent).toBe('Cancel');

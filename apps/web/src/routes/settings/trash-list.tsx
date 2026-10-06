@@ -147,8 +147,10 @@ export function TrashList() {
         title="Delete this conversation now?"
         description={
           <>
-            {purging?.title} and its {messages(purging?.messageCount ?? 0)} are deleted permanently,
-            with its files and artifacts. This cannot be undone.
+            {/* Quoted, as the project dialog does: a title's own full stop ran
+                into "and its 2 messages" (#254). */}
+            “{purging?.title}” and its {messages(purging?.messageCount ?? 0)} are deleted
+            permanently, with its files and artifacts. This cannot be undone.
           </>
         }
         confirmLabel="Delete now"

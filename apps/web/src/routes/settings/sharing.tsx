@@ -146,6 +146,7 @@ export function SettingsSharingPage() {
   const list = pages.flatMap((page) => page.links);
   const first = pages[0];
   const active = first?.active ?? 0;
+  const total = first?.total ?? 0;
   const sharingOff = me?.features.shareLinks === false;
 
   async function refresh() {
@@ -209,8 +210,10 @@ export function SettingsSharingPage() {
               Your shared links
             </h2>
             <div className="flex items-center gap-3">
+              {/* Counts without a double negative; "0 of 1 not revoked" (#254).
+                  `active` is every link not revoked, expired ones included. */}
               <span className="text-sm text-[var(--text-muted)]">
-                {active} of {first?.total ?? 0} not revoked
+                {total} {total === 1 ? 'link' : 'links'} · {total - active} revoked
               </span>
               <Button
                 type="button"
@@ -262,9 +265,10 @@ export function SettingsSharingPage() {
         title="Revoke this link?"
         description={
           <>
-            The link to {revoking?.threadTitle || 'this conversation'} stops working at once. Anyone
-            who opened it before keeps what they saved or copied. A revoked link cannot be turned
-            back on; you can make a new one from the conversation.
+            {/* The title quoted, so it does not run into the sentence (#254). */}
+            The link to {revoking?.threadTitle ? `“${revoking.threadTitle}”` : 'this conversation'}{' '}
+            stops working at once. Anyone who opened it before keeps what they saved or copied. A
+            revoked link cannot be turned back on; you can make a new one from the conversation.
           </>
         }
         confirmLabel="Revoke link"

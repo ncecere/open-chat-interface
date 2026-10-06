@@ -34,6 +34,7 @@ export function StorageMeter() {
   if (!data) return null;
 
   const hasByteLimit = data.maxTotalBytes !== null && data.maxTotalBytes > 0;
+  const hasLimit = hasByteLimit || Boolean(data.maxFileCount);
   const percentUsed = hasByteLimit
     ? Math.min(100, (data.liveBytes / (data.maxTotalBytes as number)) * 100)
     : 0;
@@ -94,9 +95,14 @@ export function StorageMeter() {
           : 'No storage limit applies to your role.'}
         {/* Files you deleted (gone for good, only waiting to be removed from
             storage) and those of conversations in the trash. There is no trash
-            for files, so this does not say they are in one (#179). */}
+            for files, so this does not say they are in one (#179). With no
+            limit, it does not speak of one (#254). */}
         {data.pendingFileCount > 0 &&
-          ` ${formatBytes(data.pendingBytes)} of deleted files, and of conversations in the trash, no longer counts against your limit.`}
+          ` ${formatBytes(data.pendingBytes)} of deleted files, and of conversations in the trash, ${
+            hasLimit
+              ? 'no longer counts against your limit.'
+              : 'is not counted in the storage used.'
+          }`}
       </p>
     </div>
   );

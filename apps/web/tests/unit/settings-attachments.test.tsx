@@ -29,10 +29,12 @@ const file = (id: string, filename: string, project: { id: string; name: string 
 
 let files: ReturnType<typeof file>[];
 let deletedBytes = 0;
+let maxTotalBytes: number | null = null;
 let features: Record<string, boolean>;
 let root: Root | undefined;
 beforeEach(() => {
   deletedBytes = 0;
+  maxTotalBytes = null;
   features = { attachments: true, projects: true };
   files = [
     file('a1', 'chat-notes.txt', null),
@@ -54,7 +56,7 @@ beforeEach(() => {
           projectFiles: { bytes: 198 * 1024, count: 1 },
           artifacts: { bytes: 100 * 1024, count: 3 },
         },
-        maxTotalBytes: null,
+        maxTotalBytes,
         maxFileCount: null,
         maxFileBytes: null,
       };
@@ -159,10 +161,24 @@ describe('Settings → Attachments', () => {
     expect(api.delete).toHaveBeenCalledTimes(3);
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain(
+        // No limit applies to this role, so none is spoken of (#254).
+        '6 KB of deleted files, and of conversations in the trash, is not counted in the storage used.',
+      ),
+    );
+    expect(document.body.textContent).toContain('No storage limit applies to your role.');
+    expect(document.body.textContent).not.toContain('against your limit');
+    expect(document.body.textContent).not.toContain('is in the trash');
+  });
+
+  it('says deleted files no longer count against a limit the role has (#254)', async () => {
+    maxTotalBytes = 10 * 1024 * 1024;
+    deletedBytes = 6 * 1024;
+    await render();
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain(
         '6 KB of deleted files, and of conversations in the trash, no longer counts against your limit.',
       ),
     );
-    expect(document.body.textContent).not.toContain('is in the trash');
   });
 
   it.each([

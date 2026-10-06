@@ -267,7 +267,9 @@ function DeleteAll({ count }: { count: number }) {
       {confirming ? (
         <>
           <p className="text-sm text-[var(--text-secondary)]">
-            Delete all {count} {count === 1 ? 'memory' : 'memories'}? This cannot be undone.
+            {/* Not "Delete all 1 memory?" (#254). */}
+            {count === 1 ? 'Delete your one memory?' : `Delete all ${count} memories?`} This cannot
+            be undone.
           </p>
           <Button
             variant="danger"

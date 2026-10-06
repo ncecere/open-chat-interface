@@ -129,7 +129,8 @@ describe('Settings → Sharing', () => {
     expect(binned.querySelector('a')).toBeNull();
     expect(binned.textContent).toContain('in the trash or expired');
 
-    expect(document.body.textContent).toContain('4 of 5 not revoked');
+    // Not "4 of 5 not revoked" (#254).
+    expect(document.body.textContent).toContain('5 links · 1 revoked');
     expect(document.body.textContent).not.toContain('turned off for your account');
   });
 
@@ -143,7 +144,9 @@ describe('Settings → Sharing', () => {
     await render();
     await click(button('Revoke the link to Conversation snap'));
     expect(dialog()?.textContent).toContain('Revoke this link?');
-    expect(dialog()?.textContent).toContain('Conversation snap stops working at once');
+    expect(dialog()?.textContent).toContain(
+      'The link to “Conversation snap” stops working at once',
+    );
     expect(api.delete).not.toHaveBeenCalled();
 
     await click(button('Revoke link'));
