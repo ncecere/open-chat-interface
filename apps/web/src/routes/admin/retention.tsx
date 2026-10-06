@@ -150,7 +150,7 @@ function RetentionForm({
           <Field
             label="Reporting timezone"
             htmlFor="display-timezone"
-            hint="Where a day starts and ends on the Usage page. Limits reset on their own policy's timezone, which this does not change."
+            hint="Where a day starts and ends on the Usage page, and the date models are told. Limits reset on their own policy's timezone, which this does not change."
           >
             <Input
               id="display-timezone"
