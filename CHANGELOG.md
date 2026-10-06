@@ -7,7 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from six QA walks of v0.11.0 (issues #35–#308). Two migrations, `0042`
+Fixes from seven QA walks of v0.11.0 (issues #35–#331). Two migrations, `0042`
 and `0043` (code artifacts, #298), run with `migrate` as usual. Three new
 post-deploy steps run with `migrate --post` after every replica runs the new
 release, as for any release: `0007` and `0008` index the audit log so a
@@ -112,6 +112,33 @@ previous release never sees the new kind). The PostgreSQL driver patch
 - **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
+
+### Fixed after a seventh QA walk (#310–#331)
+
+- **Messages during a database outage:** a new message waits up to 10 s for
+  the database to come back; if it still cannot be saved, its text goes back
+  into the message box instead of showing as sent, and an uncertain failure
+  is checked against the saved messages (#326).
+- **Forms, everywhere:** every form shows the server's errors at their field,
+  reports every problem in one save, uses the app's own messages instead of
+  the browser's validation bubbles, and asks before leaving an unsaved edit,
+  admin and Settings alike; guard tests keep it that way (#310, #314, #317,
+  #318, #320, #321, #322).
+- **Accounts and email:** Forgot password and Resend verification take the
+  same time whether or not an account exists (#328); System health warns when
+  email cannot be sent, and a failed reset or verification email is retried
+  after 1 and 5 minutes (#327); an unverified sign-in says a link was sent,
+  and resends are limited (#330); an expired or broken verification link says
+  so (#329).
+- **Chat:** saved conversations show formatted replies from the first paint
+  on slow connections (#311); short formatted answers stay in the reply
+  (#313); the greeting uses the name you gave (#315); unsent files are named
+  as such (#316); the artifact panel title wraps (#312).
+- **Administration:** audit entries for role changes and bans name the
+  account and record what they replaced (#323); Recent activity says who did
+  what to whom (#324); the Users table fits at 768 and 1024 px (#319); the
+  SSO switch keeps one name (#325); read-only mode disables every write
+  control (#331).
 
 ### Fixed after a sixth QA walk (#292–#308)
 
