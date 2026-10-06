@@ -407,6 +407,17 @@ export async function sendTestDelivery(
     lastError: result.ok ? null : result.error,
     deliveredAt: result.ok ? attemptedAt : null,
   });
+  // A test is a real delivery to the endpoint, so the endpoint's summary
+  // reflects it as it would any other: otherwise it said "Nothing delivered
+  // yet" beside a log showing the test succeeded (#144).
+  await db
+    .update(schema.webhookEndpoint)
+    .set(
+      result.ok
+        ? { lastSuccessAt: attemptedAt }
+        : { lastFailureAt: attemptedAt, lastError: result.error },
+    )
+    .where(eq(schema.webhookEndpoint.id, endpoint.id));
   webhookDeliveries.inc({ outcome: result.ok ? 'succeeded' : 'failed' });
   return { ok: result.ok, status: result.status, error: result.ok ? null : result.error };
 }
