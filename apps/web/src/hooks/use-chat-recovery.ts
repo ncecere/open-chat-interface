@@ -22,6 +22,22 @@ export interface ChatConnectionScope {
 }
 const live = (status: string) => status === 'streaming' || status === 'submitted';
 
+const CHECK_INTERVAL_MS = 2000;
+const MAX_CHECK_INTERVAL_MS = 15_000;
+/**
+ * A check that failed because the server could not be reached or answered
+ * with a passing error (the API crashed or restarted, a proxy's 502/503/504,
+ * a dropped network): the reply may still be saved there, so keep checking
+ * (#229). A refused or malformed answer is not transient.
+ */
+const transientFailure = (failure: unknown) =>
+  failure instanceof TypeError ||
+  (failure instanceof ApiError && (failure.status >= 500 || [408, 429].includes(failure.status)));
+export const RECOVERY_RETRYING_TEXT =
+  'Could not reach the server to check for the reply. Checking again automatically.';
+export const RECOVERY_FAILED_TEXT =
+  'Could not read the saved messages. Use Reload saved messages to check again.';
+
 /** Reconnect once; recover from canonical storage without resending or losing the composer. */
 export function useChatRecovery(options: {
   threadId: string;
@@ -40,6 +56,9 @@ export function useChatRecovery(options: {
   );
   const [attempt, setAttempt] = useState(0);
   const attemptRef = useRef(0);
+  // Checks failed in a row while the server was unreachable: the next waits
+  // longer, up to MAX_CHECK_INTERVAL_MS, until one succeeds (#229).
+  const failuresRef = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,10 +120,10 @@ export function useChatRecovery(options: {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
-    const schedule = () => {
+    const schedule = (delay = CHECK_INTERVAL_MS) => {
       timer = setTimeout(() => {
         void refresh();
-      }, 2000);
+      }, delay);
     };
     async function refresh() {
       const before = latest.current;
@@ -155,6 +174,7 @@ export function useChatRecovery(options: {
           schedule();
           return;
         }
+        failuresRef.current = 0;
         latest.current.onCanonicalMessages?.(snapshot.messages);
         const pending = hasPendingReply(snapshot.messages);
         setRemotePending(pending);
@@ -181,7 +201,17 @@ export function useChatRecovery(options: {
           setUnavailable(true);
           setRemotePending(false);
           setError('Conversation unavailable');
-        } else setError('Could not refresh saved messages. Retry to check the response.');
+        } else if (transientFailure(failure)) {
+          // One failed check while the API is down used to end recovery for
+          // good, leaving "A reply is pending" and Stop on screen after the
+          // server had saved the reply (#229). Keep the run and the watch,
+          // and check again with backoff until the server answers.
+          failuresRef.current++;
+          setError(RECOVERY_RETRYING_TEXT);
+          schedule(Math.min(CHECK_INTERVAL_MS * 2 ** failuresRef.current, MAX_CHECK_INTERVAL_MS));
+          return;
+        } else setError(RECOVERY_FAILED_TEXT);
+        failuresRef.current = 0;
         setWatch(null);
         setStopRequested(false);
         if (before.runId) before.clearRun(before.runId);

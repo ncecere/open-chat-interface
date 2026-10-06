@@ -131,6 +131,9 @@ which model produced it, so the conversation stays readable afterwards.
 
 A live reply can usually reconnect, but its replay cache has a size limit and
 expires. If replay fails, the app checks saved history for a known pending reply.
+If the server cannot be reached (for example while it restarts), the page says
+so and keeps checking, less often the longer it lasts (at most every 15
+seconds), and shows the saved reply once the server answers.
 You can also choose **Reload saved messages**. This does not resend a failed
 request; copy any unsaved message text before replacing local history. A draft
 you are typing stays in the composer during recovery.
