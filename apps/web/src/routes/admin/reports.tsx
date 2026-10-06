@@ -20,7 +20,7 @@ import { FullPageSpinner } from '~/components/ui/spinner';
 import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { useSetupCheck } from '~/hooks/use-setup-status';
 import { api, apiErrorProblems } from '~/lib/api-client';
-import { formatRelativeTime } from '~/lib/utils';
+import { formatRelativeTime, plural } from '~/lib/utils';
 
 interface ScheduledReport {
   id: string;
@@ -345,7 +345,8 @@ export function AdminReportsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm">{report.name}</p>
                   <p className="text-[var(--text-muted)] text-xs">
-                    {report.cadence} · {report.windowDays} days · {report.recipients.join(', ')}
+                    {report.cadence} · {plural(report.windowDays, 'day')} ·{' '}
+                    {report.recipients.join(', ')}
                   </p>
                   <p className="mt-0.5 text-[var(--text-muted)] text-xs">{nextRunText(report)}</p>
                   {report.lastRunAt && (

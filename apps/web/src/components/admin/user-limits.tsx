@@ -19,7 +19,7 @@ import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
-import { formatBytes, formatDateTime, formatTimeUntil } from '~/lib/utils';
+import { formatBytes, formatDateTime, formatTimeUntil, plural } from '~/lib/utils';
 
 export interface UserLimits {
   usage: UsageSummary;
@@ -40,7 +40,7 @@ export function formatQuotaAmount(value: number, metric: QuotaMetric): string {
 function windowLabel(allowance: UsageAllowance): string {
   switch (allowance.windowKind) {
     case 'rolling':
-      return `Rolling ${allowance.windowHours ?? 24} hours`;
+      return `Rolling ${plural(allowance.windowHours ?? 24, 'hour')}`;
     case 'daily':
       return 'Daily';
     case 'weekly':

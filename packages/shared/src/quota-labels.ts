@@ -17,11 +17,14 @@ export function quotaLimitName(metric: QuotaMetric): string {
   }
 }
 
-/** "today", "this week", "the last 24 hours". */
+/** "today", "this week", "the last 24 hours", "the last hour". */
 export function quotaWindowPhrase(windowKind: QuotaWindowKind, windowHours: number | null): string {
   switch (windowKind) {
-    case 'rolling':
-      return `the last ${windowHours ?? 24} hours`;
+    case 'rolling': {
+      // "the last hour", not "the last 1 hours" (#286).
+      const hours = windowHours ?? 24;
+      return hours === 1 ? 'the last hour' : `the last ${hours} hours`;
+    }
     case 'daily':
       return 'today';
     case 'weekly':

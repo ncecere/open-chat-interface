@@ -311,9 +311,9 @@ export function AdminPoliciesPage() {
         )}
 
         <Notice title="Versions are kept, not edited">
-          An acceptance records agreement to specific wording, so a published version is never
-          changed in place and cannot be deleted once somebody has accepted it. Publishing a new
-          version asks everyone to accept again.
+          An acceptance records agreement to specific wording, so a published version can never be
+          changed or deleted, even before anybody has accepted it. Publishing a new version asks
+          everyone to accept again.
         </Notice>
       </div>
 

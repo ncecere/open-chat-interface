@@ -402,6 +402,12 @@ describe('user limits', () => {
     expect(text).not.toContain('e2e-catalog-beta');
   });
 
+  it('names a one-hour rolling window "Rolling 1 hour" (#286)', async () => {
+    allowances = [{ ...budget, windowKind: 'rolling', windowHours: 1 }];
+    ({ root } = await renderDetail());
+    expect(document.body.textContent).toContain('Daily budget · Rolling 1 hour');
+  });
+
   it('reports unlimited storage and the file allowance', async () => {
     ({ root } = await renderDetail());
 

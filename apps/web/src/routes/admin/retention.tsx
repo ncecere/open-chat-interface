@@ -18,6 +18,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorProblems } from '~/lib/api-client';
+import { plural } from '~/lib/utils';
 
 /** The form's names for the fields, as the API names them (#127). */
 const RETENTION_LABELS = {
@@ -173,7 +174,9 @@ function RetentionForm({
             label="Reporting timezone"
             htmlFor="display-timezone"
             error={problemsAt(problems, 'displayTimezone')}
-            hint="Where a day starts and ends on the Usage page, and the date models are told. Limits reset on their own policy's timezone, which this does not change."
+            // Since #248 a model is told the person's own date, from their
+            // browser; this zone is only the fallback (#286).
+            hint="Where a day starts and ends on the Usage page, and the zone of the date models are told when a person's browser does not give its own. Limits reset on their own policy's timezone, which this does not change."
           >
             <Input
               id="display-timezone"
@@ -270,9 +273,9 @@ function RetentionForm({
 
         {draft.threadRetentionDays !== null && (
           <Notice tone="warning" title="Conversations will be removed automatically">
-            Conversations with no activity for {draft.threadRetentionDays} days move to the trash,
-            then are destroyed {draft.trashRetentionDays} days later. Shared conversations are not
-            exempt, so their links stop working when they are removed.
+            Conversations with no activity for {plural(draft.threadRetentionDays, 'day')} move to
+            the trash, then are destroyed {plural(draft.trashRetentionDays, 'day')} later. Shared
+            conversations are not exempt, so their links stop working when they are removed.
           </Notice>
         )}
       </EditableFieldset>

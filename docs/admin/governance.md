@@ -494,8 +494,11 @@ Consequences:
   accepted a version that did not exist when they last signed in.
 - **Somebody re-prompted is told the policy changed**, rather than being shown it
   as though it were new.
-- **A version somebody accepted cannot be deleted.** The database refuses,
-  because deleting it would destroy the record of what they agreed to.
+- **A published version cannot be changed or deleted**, even before anybody
+  has accepted it: people may be accepting it at that moment. The database
+  also refuses to delete a version somebody accepted, because that would
+  destroy the record of what they agreed to. Only a [draft](#drafts) can be
+  reworded or deleted.
 
 ### Drafts
 

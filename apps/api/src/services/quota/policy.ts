@@ -80,8 +80,11 @@ export function formatMicros(micros: number): string {
 /** Human-readable window description used in limit messages. */
 export function describeWindow(policy: EvaluablePolicy): string {
   switch (policy.windowKind) {
-    case 'rolling':
-      return `the last ${policy.windowHours ?? 24} hours`;
+    case 'rolling': {
+      // "the last hour", not "the last 1 hours" (#286).
+      const hours = policy.windowHours ?? 24;
+      return hours === 1 ? 'the last hour' : `the last ${hours} hours`;
+    }
     case 'daily':
       return 'today';
     case 'weekly':
