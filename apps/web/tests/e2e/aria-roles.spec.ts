@@ -30,7 +30,35 @@ async function violations(page: Page, selector: string) {
   );
 }
 
+/**
+ * The picker only renders with a model to pick, and CI's seeded database has
+ * none (the test passed only after another spec had added one). One stubbed
+ * model keeps it independent of what ran before.
+ */
+const MODELS = {
+  models: [
+    {
+      id: 'model-aria',
+      slug: 'aria-model',
+      displayName: 'ARIA Model',
+      description: 'Stub for the picker',
+      providerId: 'provider-test',
+      providerKind: 'openai-compatible',
+      providerLabel: 'Test Gateway',
+      upstreamModelId: 'aria-model',
+      capabilities: ['vision'],
+      labId: 'openai',
+      contextWindow: 128000,
+      maxOutputTokens: 8192,
+      supportedEfforts: [],
+      isDefault: true,
+      sortOrder: 0,
+    },
+  ],
+};
+
 test('the model picker, attachments filter and Select popups have valid ARIA', async ({ page }) => {
+  await page.route('**/api/models', (route) => route.fulfill({ json: MODELS }));
   await signIn(page);
   await page.getByRole('combobox', { name: /^Select model/ }).click();
   await expect(page.getByRole('listbox', { name: 'Models' })).toBeVisible();
