@@ -177,16 +177,20 @@ export function Notice({
   tone = 'info',
   title,
   children,
+  id,
 }: {
   tone?: 'info' | 'warning';
   title: string;
   children: ReactNode;
+  /** For a control the notice explains, to point at it (`aria-describedby`). */
+  id?: string;
 }) {
   const warning = tone === 'warning';
   const Icon = warning ? AlertTriangle : Info;
 
   return (
     <div
+      id={id}
       role={warning ? 'alert' : 'status'}
       className={`flex gap-3 rounded-xl border p-4 text-sm ${
         warning

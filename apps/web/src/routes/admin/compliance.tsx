@@ -2,7 +2,7 @@ import type { ComplianceRun, ComplianceSchedule, ComplianceStatus, LegalHold } f
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { FileLock, Scale } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useId, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
@@ -97,6 +97,7 @@ function scheduleLabel(status: ComplianceStatus): string {
 function Overview({ status }: { status: ComplianceStatus }) {
   const latest = status.runs[0];
   const held = status.holds.filter((hold) => !hold.liftedAt).length;
+  const blockedId = useId();
 
   return (
     <div className="flex flex-col gap-4">
@@ -133,7 +134,7 @@ function Overview({ status }: { status: ComplianceStatus }) {
       </dl>
 
       {status.issues.length > 0 && (
-        <Notice tone="warning" title="The export cannot run yet">
+        <Notice id={blockedId} tone="warning" title="The export cannot run yet">
           <ul className="list-disc pl-4">
             {status.issues.map((issue) => (
               <li key={issue}>{issue}</li>
@@ -153,7 +154,7 @@ function Overview({ status }: { status: ComplianceStatus }) {
         queryKey={COMPLIANCE_QUERY_KEY}
         label="Export now"
         running={status.running}
-        blocked={status.issues.length > 0}
+        blockedBy={status.issues.length > 0 ? blockedId : null}
         runningText="An export is running. This page updates when it finishes."
         startedText="Export started."
         errorMessage="The export could not be started."

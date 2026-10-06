@@ -6,7 +6,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DatabaseBackup } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useId, useState } from 'react';
 import {
   AdminPageHeader,
   LoadError,
@@ -93,6 +93,7 @@ export function filesSummary(files: NonNullable<BackupRun['files']>): string {
 
 function Overview({ status }: { status: BackupStatus }) {
   const latest = status.runs[0];
+  const blockedId = useId();
 
   return (
     <div className="flex flex-col gap-4">
@@ -121,7 +122,7 @@ function Overview({ status }: { status: BackupStatus }) {
       </dl>
 
       {status.issues.length > 0 && (
-        <Notice tone="warning" title="Backups cannot run yet">
+        <Notice id={blockedId} tone="warning" title="Backups cannot run yet">
           <ul className="list-disc pl-4">
             {status.issues.map((issue) => (
               <li key={issue}>{issue}</li>
@@ -147,7 +148,7 @@ function Overview({ status }: { status: BackupStatus }) {
         queryKey={BACKUPS_QUERY_KEY}
         label="Back up now"
         running={status.running}
-        blocked={status.issues.length > 0}
+        blockedBy={status.issues.length > 0 ? blockedId : null}
         runningText="A backup is running. This page updates when it finishes."
         startedText="Backup started."
         errorMessage="The backup could not be started."

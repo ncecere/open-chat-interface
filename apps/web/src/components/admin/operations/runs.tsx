@@ -1,6 +1,6 @@
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, type LucideIcon, Play, TriangleAlert } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { EmptyState, MutationError } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
@@ -55,7 +55,7 @@ export function RunNowControl({
   queryKey,
   label,
   running,
-  blocked,
+  blockedBy,
   runningText,
   startedText,
   errorMessage,
@@ -65,13 +65,18 @@ export function RunNowControl({
   label: string;
   /** A run is in progress. */
   running: boolean;
-  /** The job cannot run as configured (the page explains why). */
-  blocked: boolean;
+  /**
+   * The id of the page's explanation of why the job cannot run as configured,
+   * or null when it can. The disabled button points at it, so a screen reader
+   * hears the reason, not just "dimmed" (#157, #261).
+   */
+  blockedBy: string | null;
   runningText: string;
   startedText: string;
   errorMessage: string;
 }) {
   const queryClient = useQueryClient();
+  const statusId = useId();
   const run = useMutation({
     mutationFn: () => api.post<{ started: boolean }>(endpoint),
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
@@ -83,13 +88,16 @@ export function RunNowControl({
           <Button
             type="button"
             variant="secondary"
-            disabled={run.isPending || running || blocked}
+            disabled={run.isPending || running || blockedBy !== null}
+            aria-describedby={
+              blockedBy !== null && !running ? blockedBy : running ? statusId : undefined
+            }
             onClick={() => run.mutate()}
           >
             {run.isPending ? <Spinner /> : <Play />}
             {label}
           </Button>
-          <p aria-live="polite" className="text-sm text-[var(--text-muted)]">
+          <p id={statusId} aria-live="polite" className="text-sm text-[var(--text-muted)]">
             {running ? runningText : run.isSuccess ? startedText : ''}
           </p>
         </div>

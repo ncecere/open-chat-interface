@@ -159,6 +159,20 @@ describe('Backups admin page', () => {
     expect(document.body.textContent).toContain('Backups cannot run yet');
     expect(document.body.textContent).toContain('S3 bucket is required.');
     expect(button('Back up now').disabled).toBe(true);
+    // The disabled button points at the reason, not just "dimmed" (#261).
+    const reason = document.getElementById(button('Back up now').getAttribute('aria-describedby')!);
+    expect(reason?.textContent).toContain('Backups cannot run yet');
+    expect(reason?.textContent).toContain('S3 bucket is required.');
+  });
+
+  it('points Back up now at the running backup while it is disabled for it (#261)', async () => {
+    current = status({ running: true });
+    await render();
+    const run = button('Back up now');
+    expect(run.disabled).toBe(true);
+    expect(document.getElementById(run.getAttribute('aria-describedby')!)?.textContent).toBe(
+      'A backup is running. This page updates when it finishes.',
+    );
   });
 
   it('saves only what changed, with a new secret only when typed', async () => {
