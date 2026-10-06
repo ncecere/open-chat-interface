@@ -72,7 +72,8 @@ until the hold is lifted.
   The server ends every session for the account as part of the ban, so they are
   signed out straight away: an open app goes to the sign-in page, which says
   they were signed out, and signing in says the account has been suspended
-  (not the reason). You cannot ban yourself. **Unban** lifts it; they can then
+  (not the reason). You cannot ban yourself. **Unban** lifts it and clears the reason (through the API too, with just
+  `{"banned": false}`; the audit entry keeps the reason it lifted); they can then
   sign in again.
 - **Removing the last administrator** is refused, whether by changing their
   role, banning them or deleting them, singly or in bulk: at least one
