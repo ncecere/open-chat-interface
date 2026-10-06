@@ -26,7 +26,8 @@ export const STORAGE_POLICY_MAX_FILE_BYTES = 1_073_741_824;
 
 export const upsertStoragePolicySchema = z
   .object({
-    role: z.enum(USER_ROLES),
+    /** Optional: the URL names the role; when sent, it must be the same one (#141). */
+    role: z.enum(USER_ROLES).optional(),
     maxTotalBytes: z
       .number()
       .int()

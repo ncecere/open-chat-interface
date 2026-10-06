@@ -1,12 +1,14 @@
 import { and, eq, schema } from '@oci/db';
 import {
+  USER_ROLES,
+  type UserRole,
   updateRateLimitSettingsSchema,
   updateRetentionSettingsSchema,
   upsertStoragePolicySchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
-import { notFound } from '../../lib/errors.js';
+import { notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
@@ -28,16 +30,33 @@ lifecycleRoutes.get('/storage-policies', async (c) => {
   return c.json({ policies: await listStoragePolicies() });
 });
 
+/** The role a storage-policy URL names; 404 for anything that is not a role. */
+function roleFromPath(value: string): UserRole {
+  if (!(USER_ROLES as readonly string[]).includes(value)) throw notFound('Unknown role');
+  return value as UserRole;
+}
+
 lifecycleRoutes.put('/storage-policies/:role', async (c) => {
   const actor = currentUser(c);
+  // The URL names the role. The body may repeat it, but a body naming another
+  // role is refused rather than quietly updating that one instead (#141).
+  const role = roleFromPath(c.req.param('role'));
   const input = await parseBody(c, upsertStoragePolicySchema);
+  if (input.role !== undefined && input.role !== role) {
+    throw validationFailed('The role in the body must match the URL.', [
+      {
+        path: ['role'],
+        message: `This URL updates the ${role} allowance; leave role out or send "${role}".`,
+      },
+    ]);
+  }
   const organizationId = await getDefaultOrganizationId();
 
   await db
     .insert(schema.storagePolicy)
     .values({
       organizationId,
-      role: input.role,
+      role,
       maxTotalBytes: input.maxTotalBytes ?? null,
       maxFileCount: input.maxFileCount ?? null,
       maxFileBytes: input.maxFileBytes ?? null,
@@ -59,7 +78,7 @@ lifecycleRoutes.put('/storage-policies/:role', async (c) => {
     actorEmail: actor.email,
     action: 'storage.policy.update',
     targetType: 'storage_policy',
-    targetId: input.role,
+    targetId: role,
     metadata: {
       maxTotalBytes: input.maxTotalBytes ?? null,
       maxFileCount: input.maxFileCount ?? null,
@@ -73,7 +92,7 @@ lifecycleRoutes.put('/storage-policies/:role', async (c) => {
 
 lifecycleRoutes.delete('/storage-policies/:role', async (c) => {
   const actor = currentUser(c);
-  const role = c.req.param('role');
+  const role = roleFromPath(c.req.param('role'));
   const organizationId = await getDefaultOrganizationId();
 
   const removed = await db
@@ -81,7 +100,7 @@ lifecycleRoutes.delete('/storage-policies/:role', async (c) => {
     .where(
       and(
         eq(schema.storagePolicy.organizationId, organizationId),
-        eq(schema.storagePolicy.role, role as never),
+        eq(schema.storagePolicy.role, role),
       ),
     )
     .returning({ id: schema.storagePolicy.id });
