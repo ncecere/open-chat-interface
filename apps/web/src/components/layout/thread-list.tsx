@@ -7,6 +7,7 @@ import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
 import { useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
+import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
 /** Groups by local calendar date, matching the reference's Today/Yesterday buckets. */
@@ -33,6 +34,9 @@ function groupThreads(threads: ThreadSummary[]) {
   return groups.filter((group) => group.threads.length > 0);
 }
 
+const ROW_ACTION =
+  'rounded p-1 text-[var(--text-muted)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+
 /** One conversation in the sidebar, with its pin, rename and archive actions. */
 export function ThreadRow({
   thread,
@@ -44,8 +48,11 @@ export function ThreadRow({
   /** Shown lightly after the title of a pinned project conversation. */
   projectName?: string;
 }) {
-  const update = useUpdateThread();
+  const update = useUpdateThread({ reportErrors: true });
   const [renaming, setRenaming] = useState(false);
+  // Off while read-only, with the reason, as the message actions are (#159).
+  const readOnly = useReadOnlyStatus();
+  const lockedTitle = readOnly.active ? readOnlyShortReason(readOnly) : undefined;
 
   return (
     <div
@@ -102,8 +109,10 @@ export function ThreadRow({
         <button
           type="button"
           aria-label={`${thread.pinned ? 'Unpin' : 'Pin'} thread: ${thread.title}`}
+          disabled={readOnly.active}
+          title={lockedTitle}
           onClick={() => update.mutate({ id: thread.id, pinned: !thread.pinned })}
-          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className={ROW_ACTION}
         >
           {thread.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
         </button>
@@ -111,14 +120,18 @@ export function ThreadRow({
           type="button"
           aria-label={`Rename thread: ${thread.title}`}
           aria-haspopup="dialog"
+          disabled={readOnly.active}
+          title={lockedTitle}
           onClick={() => setRenaming(true)}
-          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className={ROW_ACTION}
         >
           <Pencil className="size-3.5" />
         </button>
         <button
           type="button"
           aria-label={`Archive thread: ${thread.title}`}
+          disabled={readOnly.active}
+          title={lockedTitle}
           onClick={() =>
             update.mutate(
               { id: thread.id, archived: true },
@@ -136,7 +149,7 @@ export function ThreadRow({
               },
             )
           }
-          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className={ROW_ACTION}
         >
           <Archive className="size-3.5" />
         </button>

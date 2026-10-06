@@ -1,6 +1,7 @@
 import type { ReasoningEffort, ThreadSummary } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '~/lib/api-client';
+import { toast } from 'sonner';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import {
   invalidateConversationLists,
   SIDEBAR_THREADS_KEY,
@@ -68,16 +69,39 @@ export function useBranchMessage() {
   });
 }
 
-export function useUpdateThread() {
+type ThreadPatch = { id: string } & Partial<ThreadSummary>;
+
+/** "The conversation could not be pinned", for the change that failed. */
+function failedChange(patch: ThreadPatch): string {
+  if (patch.pinned !== undefined) return patch.pinned ? 'pinned' : 'unpinned';
+  if (patch.archived !== undefined) return patch.archived ? 'archived' : 'restored';
+  if (patch.title !== undefined) return 'renamed';
+  return 'changed';
+}
+
+/**
+ * Changes a conversation. With `reportErrors`, a refusal is shown as a toast
+ * (the sidebar's Pin and Archive have nowhere else to say it); read-only
+ * maintenance gives its reason and expected end rather than nothing at all
+ * (#159). Set here rather than per call, so it fires even if the row has gone.
+ */
+export function useUpdateThread({ reportErrors = false }: { reportErrors?: boolean } = {}) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, ...patch }: { id: string } & Partial<ThreadSummary>) =>
+    mutationFn: ({ id, ...patch }: ThreadPatch) =>
       api.patch<{ thread?: ThreadSummary }>(`/threads/${id}`, patch),
     onSuccess: (result) => {
       if (result?.thread) updateCachedConversation(queryClient, result.thread);
       return invalidateConversationLists(queryClient);
     },
+    onError: reportErrors
+      ? (error, patch) =>
+          toast.error(`The conversation could not be ${failedChange(patch)}`, {
+            id: `thread-change-${patch.id}`,
+            description: apiErrorMessage(error, 'Try again.'),
+          })
+      : undefined,
   });
 }
 

@@ -5,7 +5,7 @@ import { type KeyboardEvent, useEffect, useId, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
 import { useCurrentUser } from '~/hooks/use-current-user';
-import { api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { SUGGESTED_TRAITS, withTrait } from '~/lib/traits';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
@@ -352,7 +352,8 @@ export function SettingsCustomizationPage() {
           </span>
           {save.isError && (
             <span role="alert" className="text-xs text-[var(--danger)]">
-              Your preferences could not be saved. Try again.
+              {/* A read-only refusal gives its reason, not "Try again" (#159). */}
+              {apiErrorMessage(save.error, 'Your preferences could not be saved. Try again.')}
             </span>
           )}
           <Button
