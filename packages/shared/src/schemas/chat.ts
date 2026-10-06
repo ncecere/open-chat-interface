@@ -80,6 +80,12 @@ export const attachmentSchema = z.object({
  */
 export const storedFileSchema = attachmentSchema.extend({
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
+  /**
+   * A chat file not sent with any message (#297): in a composer now. The
+   * composer discards its uploads when it is left, and uploads unsent for a
+   * day are deleted.
+   */
+  unsent: z.boolean().default(false),
 });
 
 /** GET /api/threads?view=history: one page, newest activity first. */

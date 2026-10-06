@@ -35,7 +35,7 @@ vi.mock('../../src/providers/temporary-chat-provider', () => ({
   useTemporaryChat: () => ({ temporary: false }),
 }));
 vi.mock('../../src/hooks/use-attachments', () => ({
-  useAttachments: () => ({ items: [], upload: vi.fn(), remove: vi.fn() }),
+  useAttachments: () => ({ items: [], upload: vi.fn(), remove: vi.fn(), handOver: vi.fn() }),
 }));
 vi.mock('../../src/components/chat/composer', () => ({
   Composer: (props: ComponentProps<typeof Composer>) => {

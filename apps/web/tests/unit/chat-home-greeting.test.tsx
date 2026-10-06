@@ -44,6 +44,7 @@ vi.mock('../../src/hooks/use-attachments', () => ({
     items: [{ localId: 'local', status: 'ready', attachment: mocks.file }],
     upload: vi.fn(),
     remove: vi.fn(),
+    handOver: vi.fn(),
   }),
 }));
 vi.mock('../../src/components/chat/composer', () => ({

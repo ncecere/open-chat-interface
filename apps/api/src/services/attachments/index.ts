@@ -1,8 +1,10 @@
-import { and, desc, eq, isNull, schema } from '@oci/db';
+import { and, desc, eq, isNull, lte, schema } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
 import { recordDeletions } from '../compliance/deletions.js';
+import { notOnLegalHold } from '../compliance/holds.js';
+import { destroyAttachments } from '../lifecycle/destroy.js';
 import { assertRoleFeature } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { adjustStorageUsage } from '../storage/usage.js';
@@ -48,6 +50,7 @@ export async function listAttachments(userId: string) {
       mimeType: schema.attachment.mimeType,
       sizeBytes: schema.attachment.sizeBytes,
       createdAt: schema.attachment.createdAt,
+      messageId: schema.attachment.messageId,
       projectId: schema.attachment.projectId,
       projectName: schema.project.name,
     })
@@ -121,34 +124,99 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
             .where(eq(schema.message.id, row.messageId));
         }
       }
-      await tx
-        .update(schema.attachment)
-        .set({ deletedAt: new Date(), deletedReason: 'user' })
-        .where(eq(schema.attachment.id, id));
-      await recordDeletions(tx, [
-        {
-          action: 'attachment.trash',
-          actorUserId: userId,
-          id,
-          ownerUserId: userId,
-          reason: 'user',
-          details: {
-            threadId: thread?.id ?? null,
-            messageId: row.messageId,
-            sizeBytes: row.sizeBytes,
-          },
-        },
-      ]);
-      await adjustStorageUsage(tx, {
-        organizationId: row.organizationId,
-        userId,
-        liveBytes: -row.sizeBytes,
-        liveFiles: -1,
-        pendingBytes: row.sizeBytes,
-        pendingFiles: 1,
-      });
+      await trashRow(tx, row, thread?.id ?? null);
       return false;
     });
     if (!retry) return;
   }
+}
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Moves one locked chat file to the trash, by its owner. */
+async function trashRow(
+  tx: Transaction,
+  row: typeof schema.attachment.$inferSelect,
+  threadId: string | null,
+) {
+  await tx
+    .update(schema.attachment)
+    .set({ deletedAt: new Date(), deletedReason: 'user' })
+    .where(eq(schema.attachment.id, row.id));
+  await recordDeletions(tx, [
+    {
+      action: 'attachment.trash',
+      actorUserId: row.userId,
+      id: row.id,
+      ownerUserId: row.userId,
+      reason: 'user',
+      details: { threadId, messageId: row.messageId, sizeBytes: row.sizeBytes },
+    },
+  ]);
+  await adjustStorageUsage(tx, {
+    organizationId: row.organizationId,
+    userId: row.userId,
+    liveBytes: -row.sizeBytes,
+    liveFiles: -1,
+    pendingBytes: row.sizeBytes,
+    pendingFiles: 1,
+  });
+}
+
+/** Never-sent chat uploads: not part of a message or a project, not in the trash. */
+function unsent() {
+  return and(
+    isNull(schema.attachment.messageId),
+    isNull(schema.attachment.projectId),
+    isNull(schema.attachment.deletedAt),
+  );
+}
+
+/**
+ * Moves an upload that was never sent to the trash, as its × in the composer
+ * does (#297). The composer discards its uploads when it is left without
+ * sending them (New Chat, another conversation); they stayed stored, counted
+ * and listed as if sent. A file sent meanwhile (a send accepted after all:
+ * sending locks the file as this does) is kept. Returns whether it went.
+ */
+export async function discardUnsentAttachment(id: string, userId: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(schema.attachment)
+      .where(
+        and(
+          eq(schema.attachment.id, id),
+          eq(schema.attachment.userId, userId),
+          eq(schema.attachment.uploadPending, false),
+          unsent(),
+        ),
+      )
+      .for('update');
+    if (!row) return false;
+    await trashRow(tx, row, null);
+    return true;
+  });
+}
+
+/** How long an upload may stay unsent before the cleanup job deletes it (#297). */
+export const UNSENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes uploads never sent with a message for a day (#297): left when a
+ * page closed or an upload finished after its composer was gone, so the
+ * composer could not discard them, and unfinished uploads a crash left
+ * behind. Nothing refers to them, so they skip the trash; the delete trigger
+ * releases their storage and queues their objects. Kept under legal hold.
+ */
+export async function purgeUnsentUploads(now = new Date()): Promise<number> {
+  const removed = await destroyAttachments(
+    and(
+      unsent(),
+      lte(schema.attachment.createdAt, new Date(now.getTime() - UNSENT_UPLOAD_TTL_MS)),
+      notOnLegalHold(schema.attachment.userId),
+    ),
+    { reason: 'unused_expiry', actorUserId: null, skipLocked: true, all: true },
+  );
+  return removed.length;
 }

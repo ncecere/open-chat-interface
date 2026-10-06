@@ -153,7 +153,11 @@ export function useChatSession(options: {
   // home page or a branch, or the model it last used.
   const [chosenSlug, setChosenSlug] = useState<string | null>(options.initialModelSlug ?? null);
   const attachments = useAttachments();
-  const { items: attachmentItems, consume: consumeAttachments } = attachments;
+  const {
+    items: attachmentItems,
+    consume: consumeAttachments,
+    handOver: handOverAttachments,
+  } = attachments;
 
   // Then the person's own default, then the instance default (v0.10). Derived
   // rather than stored, so a default that arrives after the catalog still
@@ -353,6 +357,8 @@ export function useChatSession(options: {
         },
       }));
 
+      // Being sent: not discarded if the person leaves before it is accepted (#297).
+      handOverAttachments(localAttachments.map((file) => file.id));
       setDraft('');
       const excluded = excludedProjectFileIds;
       setExcludedProjectFileIds([]);
@@ -378,6 +384,7 @@ export function useChatSession(options: {
       excludedProjectFileIds,
       selectedModel,
       attachmentItems,
+      handOverAttachments,
       carriedAttachments,
       sendMessage,
       setMessages,

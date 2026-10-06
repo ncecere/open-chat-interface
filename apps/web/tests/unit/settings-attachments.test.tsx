@@ -16,7 +16,12 @@ vi.mock('../../src/lib/api-client', async (importOriginal) => ({
   api,
 }));
 
-const file = (id: string, filename: string, project: { id: string; name: string } | null) => ({
+const file = (
+  id: string,
+  filename: string,
+  project: { id: string; name: string } | null,
+  unsent = false,
+) => ({
   id,
   filename,
   mimeType: 'text/plain',
@@ -25,6 +30,7 @@ const file = (id: string, filename: string, project: { id: string; name: string 
   thumbnailUrl: null,
   createdAt: '2026-09-01T10:00:00.000Z',
   project,
+  unsent,
 });
 
 let files: ReturnType<typeof file>[];
@@ -97,6 +103,17 @@ describe('Settings → Attachments', () => {
       'Artifacts100 KB · 3 artifacts',
     ]);
     expect(document.body.textContent).toContain('300 KB · 2 files');
+  });
+
+  it('marks a file attached in a composer and not sent, unlike sent ones (#297)', async () => {
+    files = [file('a1', 'chat-notes.txt', null), file('a3', 'draft.txt', null, true)];
+    await render();
+    const details = (name: string) =>
+      [...document.querySelectorAll('a')]
+        .find((link) => link.textContent === name)
+        ?.parentElement?.querySelector('p')?.textContent;
+    expect(details('draft.txt')).toMatch(/^Not sent · text\/plain/);
+    expect(details('chat-notes.txt')).toMatch(/^text\/plain/);
   });
 
   it('lists project files with their project, to be managed there', async () => {

@@ -256,6 +256,8 @@ export function AttachmentList({
                           ·{' '}
                         </>
                       )}
+                      {/* In a composer and not sent (yet), unlike the rest (#297). */}
+                      {attachment.unsent && 'Not sent · '}
                       {attachment.mimeType} · {formatBytes(attachment.sizeBytes)}
                       <span className="sm:hidden"> · {formatCreatedAt(attachment.createdAt)}</span>
                     </p>

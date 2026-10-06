@@ -5,6 +5,7 @@ import { logger } from '../../lib/logger.js';
 import { redisHealthCheck } from '../../lib/redis-requirement.js';
 import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
+import { UNSENT_UPLOAD_TTL_MS } from '../../services/attachments/index.js';
 import { cacheBusHealthCheck } from '../../services/cache-bus/index.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
 import { encryptionHealthCheck } from '../../services/encryption/rotation.js';
@@ -151,15 +152,19 @@ async function storageCheck(): Promise<Check> {
   const [orphans] = await db
     .select({ total: count() })
     .from(schema.attachment)
-    // Never attached to a message and older than a day: an upload whose
-    // request was abandoned, still occupying storage. Project files belong to
-    // their project instead of a message and are not stale.
+    // Never attached to a message and older than the hourly cleanup allows
+    // (#297): an abandoned upload it has not removed, still occupying storage.
+    // Younger ones are ordinary drafts. Project files belong to their project
+    // instead of a message and are not stale.
     .where(
       and(
         isNull(schema.attachment.messageId),
         isNull(schema.attachment.projectId),
         isNull(schema.attachment.deletedAt),
-        lt(schema.attachment.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+        lt(
+          schema.attachment.createdAt,
+          new Date(Date.now() - UNSENT_UPLOAD_TTL_MS - 2 * 60 * 60 * 1000),
+        ),
       ),
     );
 

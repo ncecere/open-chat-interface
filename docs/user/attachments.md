@@ -17,6 +17,11 @@ A file that is refused, or that could not be uploaded, stays above the composer
 in red with the reason beneath it, so you can see which one it was. Remove it
 with its ×, or choose **New Chat** to start again with an empty composer.
 
+A file you attach but do not send is discarded when you remove it with its ×,
+choose **New Chat**, or open another conversation, and it stops counting
+towards your storage. One left behind any other way (closing the tab, say) is
+deleted after a day.
+
 ## The model has to be able to read it
 
 Images require a model with **vision**. Otherwise the model receives an

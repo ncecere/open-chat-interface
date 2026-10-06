@@ -285,9 +285,10 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. |
+| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. `unsent` marks a chat file not sent with any message. |
 | POST | `/api/attachments` | — |
 | DELETE | `/api/attachments/:id` | — |
+| DELETE | `/api/attachments/:id/unsent` | Discards an upload the composer leaves unsent (moves it to the trash, as `DELETE /api/attachments/:id` does). A file sent with a message meanwhile is kept. Returns `removed`. |
 | GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. |
 | GET | `/api/attachments/usage` | Consumption and the role's allowance, for the storage meter in settings. |
 

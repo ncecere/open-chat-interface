@@ -84,7 +84,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   // A model picked here applies to the conversation it starts; otherwise the
   // person's own default (Settings → Models), then the instance default.
   const [modelSlug, setModelSlug] = useState<string | null>(null);
-  const { items: attachmentItems, upload, remove } = useAttachments();
+  const { items: attachmentItems, upload, remove, handOver: handOverUploads } = useAttachments();
   useEffect(() => forgetBrowserModel(), []);
   // A new chat is there to be typed in: the cursor starts in the box, however
   // the person arrived (#251). Not on a touch-only device (see touchOnly).
@@ -137,9 +137,20 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
       }
 
       sessionStorage.setItem(PENDING_THREAD_KEY, thread.id);
+      // The conversation sends them: this page must not discard them as it goes (#297).
+      handOverUploads(readyAttachments.map((file) => file.id));
       await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
     },
-    [createThread, temporary, projectId, effort, webSearch, attachmentItems, navigate],
+    [
+      createThread,
+      temporary,
+      projectId,
+      effort,
+      webSearch,
+      attachmentItems,
+      handOverUploads,
+      navigate,
+    ],
   );
 
   const startThread = useCallback(

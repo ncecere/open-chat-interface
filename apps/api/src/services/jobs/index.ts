@@ -1,6 +1,7 @@
 import { conflict, notFound } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { runsBackgroundJobs } from '../../lib/role.js';
+import { purgeUnsentUploads } from '../attachments/index.js';
 import { BACKUP_JOB, runScheduledBackup, startManualBackup } from '../backups/run.js';
 import { processCompactionQueue } from '../chat/compaction-queue.js';
 import { recoverInterruptedReplies } from '../chat/run-recovery.js';
@@ -140,10 +141,11 @@ export function lifecycleJobs(): JobDefinition[] {
     },
     {
       // Conversations started but never written in, left when a hand-over
-      // from the home page failed (v0.10.2). A day old before they go.
+      // from the home page failed (v0.10.2), and uploads never sent (#297).
+      // A day old before they go.
       name: 'threads.purge-unused',
       intervalMs: HOUR,
-      run: () => purgeUnusedThreads(),
+      run: async () => (await purgeUnusedThreads()) + (await purgeUnsentUploads()),
     },
     {
       name: 'trash.purge-expired',

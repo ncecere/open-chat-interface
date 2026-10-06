@@ -6,6 +6,7 @@ import { type AppBindings, currentUser, requireAuth } from '../middleware/contex
 import {
   assertAttachmentUseAllowed,
   deleteAttachment,
+  discardUnsentAttachment,
   getOwnedAttachment,
   listAttachments,
   uploadAttachment,
@@ -45,6 +46,8 @@ attachmentRoutes.get('/', async (c) => {
       createdAt: row.createdAt.toISOString(),
       // A project file is managed (and deleted) from its project.
       project: row.projectId ? { id: row.projectId, name: row.projectName ?? 'Project' } : null,
+      // Uploaded in a chat and not sent (yet): in a composer now (#297).
+      unsent: !row.projectId && !row.messageId,
     })),
   });
 });
@@ -131,6 +134,16 @@ attachmentRoutes.get('/:id/content', async (c) => {
     'cache-control': 'private, max-age=3600',
     'x-content-type-options': 'nosniff',
   });
+});
+
+/**
+ * Discards an upload the composer is leaving behind unsent (#297): New Chat,
+ * or another conversation, with files attached and not sent. A file sent
+ * meanwhile is kept (`removed: false`).
+ */
+attachmentRoutes.delete('/:id/unsent', async (c) => {
+  const user = currentUser(c);
+  return c.json({ removed: await discardUnsentAttachment(c.req.param('id'), user.id) });
 });
 
 attachmentRoutes.delete('/:id', async (c) => {

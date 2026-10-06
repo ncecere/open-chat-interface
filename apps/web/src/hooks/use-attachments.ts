@@ -20,6 +20,8 @@ interface AttachmentResource {
   controller?: AbortController;
   previewUrl?: string;
   attachmentId?: string;
+  /** Sent, or handed to the conversation that sends it: never discarded here. */
+  handedOver?: boolean;
 }
 
 /** An upload that got no answer: the server was out of reach or the file unreadable. */
@@ -31,8 +33,14 @@ class UploadNotSent extends Error {
   }
 }
 
-function deleteAttachment(id: string) {
-  return api.delete(`/attachments/${id}`).catch(() => undefined);
+/**
+ * Discards an upload the composer will not send (#297): one removed with its
+ * ×, or left behind when the composer goes (New Chat, another conversation),
+ * which stayed stored and counted as if sent. The server keeps a file that
+ * was sent meanwhile. `keepalive`, so it outlives a page being left.
+ */
+function discardAttachment(id: string) {
+  return api.delete(`/attachments/${id}/unsent`, { keepalive: true }).catch(() => undefined);
 }
 
 /**
@@ -60,6 +68,9 @@ export function useAttachments() {
       for (const resource of resources.current.values()) {
         resource.controller?.abort();
         if (resource.previewUrl) URL.revokeObjectURL(resource.previewUrl);
+        // Left unsent: the composer is going, and the file with it (#297).
+        if (resource.attachmentId && !resource.handedOver)
+          void discardAttachment(resource.attachmentId);
       }
       resources.current.clear();
     },
@@ -157,7 +168,7 @@ export function useAttachments() {
           if (!uploaded) throw new Error('Upload returned no attachment');
 
           if (resources.current.get(entry.localId) !== resource) {
-            await Promise.all(attachments.map((attachment) => deleteAttachment(attachment.id)));
+            await Promise.all(attachments.map((attachment) => discardAttachment(attachment.id)));
             return;
           }
 
@@ -216,16 +227,31 @@ export function useAttachments() {
     if (resource?.previewUrl) URL.revokeObjectURL(resource.previewUrl);
     setItems((current) => current.filter((item) => item.localId !== localId));
 
-    if (resource?.attachmentId) await deleteAttachment(resource.attachmentId);
+    if (resource?.attachmentId) await discardAttachment(resource.attachmentId);
   }, []);
 
   const clear = useCallback(() => {
     for (const resource of resources.current.values()) {
       resource.controller?.abort();
       if (resource.previewUrl) URL.revokeObjectURL(resource.previewUrl);
+      if (resource.attachmentId && !resource.handedOver)
+        void discardAttachment(resource.attachmentId);
     }
     resources.current.clear();
     setItems([]);
+  }, []);
+
+  /**
+   * These files (all, without `ids`) are being sent: the composer no longer
+   * discards them when it goes (#297). Their chips stay until `consume`. A
+   * send that is refused leaves them to the server's daily cleanup if they
+   * are then abandoned.
+   */
+  const handOver = useCallback((ids?: string[]) => {
+    for (const resource of resources.current.values()) {
+      if (resource.attachmentId && (!ids || ids.includes(resource.attachmentId)))
+        resource.handedOver = true;
+    }
   }, []);
 
   // Acceptance transfers only these files to saved history. Never abort another
@@ -256,6 +282,7 @@ export function useAttachments() {
     remove,
     clear,
     consume,
+    handOver,
     readyIds,
     uploading: items.some((item) => item.status === 'uploading'),
   };
