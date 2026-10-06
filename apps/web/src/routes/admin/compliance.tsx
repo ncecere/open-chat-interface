@@ -118,13 +118,17 @@ function Overview({ status }: { status: ComplianceStatus }) {
               ? 'Audit events and conversation content'
               : 'Audit events only'}
           </dd>
+          {/* Under the export it describes, and only once there is one: the
+              manifests' throughSeq, which "#0" before any export was not (#224). */}
+          {status.cursor.audit > 0 && (
+            <dd className="text-xs text-[var(--text-muted)]">
+              Audit log through sequence {status.cursor.audit}
+            </dd>
+          )}
         </div>
         <div>
           <dt className="text-xs text-[var(--text-muted)]">People on legal hold</dt>
           <dd className="mt-1 font-semibold">{held}</dd>
-          <dd className="text-xs text-[var(--text-muted)]">
-            Audit events exported through #{status.cursor.audit}
-          </dd>
         </div>
       </dl>
 

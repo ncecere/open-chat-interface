@@ -164,7 +164,11 @@ describe('Compliance admin page', () => {
     const text = document.body.textContent ?? '';
     expect(text).toContain('Daily at 02:00 UTC');
     expect(text).toContain('Audit events only');
-    expect(text).toContain('Audit events exported through #412');
+    // Under the last export, in the manifests' terms (#224).
+    const exported = [...document.querySelectorAll('dt')].find(
+      (term) => term.textContent === 'Last successful export',
+    )?.parentElement;
+    expect(exported?.textContent).toContain('Audit log through sequence 412');
     expect(text).toContain('The latest export failed');
     expect(text).toContain('Export failed: Access Denied');
     expect(text).toContain('400 audit events');
@@ -239,6 +243,15 @@ describe('Compliance admin page', () => {
     expect(alerts().join(' ')).toContain('No account has that address.');
     await typeInto(document.getElementById('hold-email') as HTMLInputElement, 'sam@example.test');
     expect(alerts().join(' ')).not.toContain('No account has that address.');
+  });
+
+  it('shows no export position before anything has been exported (#224)', async () => {
+    current = status({ lastSuccessAt: null, cursor: { audit: 0, messages: null } });
+    await render();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('None yet');
+    expect(text).not.toContain('#0');
+    expect(text).not.toContain('through sequence');
   });
 
   it('names each hold’s Lift button for the person (#220)', async () => {
