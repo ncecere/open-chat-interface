@@ -1397,6 +1397,7 @@ spec:
       readinessProbe:
         httpGet: { path: /api/health/ready, port: 3000 }
         periodSeconds: 2
+        timeoutSeconds: 2
         failureThreshold: 1
       livenessProbe:
         httpGet: { path: /api/health/live, port: 3000 }
@@ -1651,7 +1652,10 @@ Patroni cluster under load; the design and the results are in
   connects again and runs.
 - **Readiness** stays `200` (`"status": "degraded"`) for the first 30 s the
   database is unreachable, so a failover does not take every replica out of
-  rotation at once; after that it answers `503`.
+  rotation at once; after that it answers `503`. Its database check gives up
+  after 1 s and counts as failing, so readiness answers within about a second
+  even when the database's address drops packets or its name is slow to
+  fail to resolve; give probes a timeout of at least 2 s.
 - **Migrations** are one transaction; a failover rolls the attempt back and
   rerunning the migrate job starts cleanly.
 
