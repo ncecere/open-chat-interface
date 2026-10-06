@@ -22,6 +22,15 @@ interface AttachmentResource {
   attachmentId?: string;
 }
 
+/** An upload that got no answer: the server was out of reach or the file unreadable. */
+class UploadNotSent extends Error {
+  constructor(filename: string) {
+    super(
+      `${filename} was not uploaded: the server could not be reached, or the file could not be read. Try again.`,
+    );
+  }
+}
+
 function deleteAttachment(id: string) {
   return api.delete(`/attachments/${id}`).catch(() => undefined);
 }
@@ -120,11 +129,16 @@ export function useAttachments() {
         body.append('files', file);
 
         try {
+          // fetch itself rejects only when no answer came: the server could not
+          // be reached, or the browser could not read the file. Its own text
+          // ("Failed to fetch") means nothing to people (#208).
           const response = await fetch('/api/attachments', {
             method: 'POST',
             body,
             credentials: 'same-origin',
             signal: controller.signal,
+          }).catch(() => {
+            throw new UploadNotSent(file.name);
           });
 
           if (!response.ok) {
@@ -134,7 +148,7 @@ export function useAttachments() {
             throw new ApiError(
               response.status,
               'UPLOAD_FAILED',
-              payload?.error?.message ?? 'Upload failed',
+              payload?.error?.message ?? `${file.name} could not be uploaded. Try again.`,
             );
           }
 
@@ -164,7 +178,10 @@ export function useAttachments() {
                 ? {
                     ...item,
                     status: 'error',
-                    error: error instanceof Error ? error.message : 'Upload failed',
+                    error:
+                      error instanceof ApiError || error instanceof UploadNotSent
+                        ? error.message
+                        : `${file.name} could not be uploaded. Try again.`,
                   }
                 : item,
             ),

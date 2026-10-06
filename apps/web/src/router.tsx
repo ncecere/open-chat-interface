@@ -12,6 +12,7 @@ import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
 import { NotFoundPage } from '~/components/ui/not-found-page';
 import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
+import { useNewChatKey } from '~/hooks/use-new-chat-key';
 import {
   validateModelsSearch,
   validateRolesSearch,
@@ -154,7 +155,9 @@ const chatHomeRoute = createRoute({
   validateSearch: validateChatHomeSearch,
   component: function ChatHomeRoute() {
     const { project } = chatHomeRoute.useSearch();
-    return <ChatHomePage projectId={project} />;
+    // A fresh page for each New Chat, here or in another project (#208).
+    const fresh = useNewChatKey();
+    return <ChatHomePage key={`${project ?? ''}:${fresh}`} projectId={project} />;
   },
 });
 
