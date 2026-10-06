@@ -1,4 +1,5 @@
 import { logger } from '../lib/logger.js';
+import { noteRedisFailure, sharedRedis } from './chat-streams.js';
 
 /**
  * Account emails (a password reset, an email verification) go out after the
@@ -43,14 +44,60 @@ const latest = new Map<string, { request: symbol; timer?: ReturnType<typeof setT
 
 type Send = () => Promise<{ delivered: boolean; notConfigured?: boolean }>;
 
+/**
+ * Emails of one kind to one account are sent at most once in this many
+ * seconds (#330). Accepting an invitation, signing in before verifying and
+ * pressing Resend each sent a verification link: three in 25 seconds, all
+ * valid for an hour. The later requests are answered as before (the answer
+ * never says whether anything was sent) but send nothing while a link
+ * delivered within the window is still fresh. Counted from delivery, so a
+ * failed send does not hold back the next request.
+ */
+export const ACCOUNT_EMAIL_COOLDOWN_SECONDS = 60;
+const COOLDOWN_PREFIX = 'oci:account-email:delivered';
+/** Per replica when Redis is unavailable, as the rate limits fall back. */
+const localDelivered = new Map<string, number>();
+
+async function deliveredRecently(key: string): Promise<boolean> {
+  const redis = await sharedRedis().catch(() => null);
+  if (redis) {
+    try {
+      return (await redis.exists(`${COOLDOWN_PREFIX}:${key}`)) === 1;
+    } catch (error) {
+      noteRedisFailure(error);
+    }
+  }
+  return (localDelivered.get(key) ?? 0) > Date.now();
+}
+
+async function noteDelivered(key: string, seconds: number): Promise<void> {
+  const now = Date.now();
+  localDelivered.set(key, now + seconds * 1000);
+  if (localDelivered.size > 10_000)
+    for (const [candidate, until] of localDelivered)
+      if (until <= now) localDelivered.delete(candidate);
+  const redis = await sharedRedis().catch(() => null);
+  if (!redis) return;
+  try {
+    await redis.set(`${COOLDOWN_PREFIX}:${key}`, '1', 'EX', seconds);
+  } catch (error) {
+    noteRedisFailure(error);
+  }
+}
+
 /** Starts `send` without waiting for it. Never throws, and never rejects unhandled. */
-export function sendAfterResponse(kind: string, userId: string, send: Send): void {
+export function sendAfterResponse(
+  kind: string,
+  userId: string,
+  send: Send,
+  options: { cooldownSeconds?: number } = {},
+): void {
   const key = `${kind}:${userId}`;
   const previous = latest.get(key);
   if (previous?.timer) clearTimeout(previous.timer);
   const request = Symbol(key);
   latest.set(key, { request });
-  attempt({ key, request, kind, userId, send, retry: 0 });
+  attempt({ key, request, kind, userId, send, retry: 0, cooldown: options.cooldownSeconds ?? 0 });
 }
 
 function attempt(job: {
@@ -60,12 +107,19 @@ function attempt(job: {
   userId: string;
   send: Send;
   retry: number;
+  cooldown: number;
 }): void {
   const { key, request, kind, userId } = job;
   const task = (async () => {
     let outcome: Awaited<ReturnType<Send>> = { delivered: false };
     try {
-      outcome = await job.send();
+      if (job.cooldown > 0 && (await deliveredRecently(key))) {
+        logger.info({ userId, kind }, 'Account email skipped: one was delivered a moment ago');
+        outcome = { delivered: true };
+      } else {
+        outcome = await job.send();
+        if (outcome.delivered && job.cooldown > 0) await noteDelivered(key, job.cooldown);
+      }
     } catch (error) {
       logger.error({ error, userId, kind }, 'Account email could not be sent');
     }

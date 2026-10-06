@@ -96,6 +96,34 @@ it('offers resend when sign-in is refused for an unverified account', async () =
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
+it('says the refused sign-in sent a new link, and holds Resend for a minute (#330)', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    mocks.signin.mockResolvedValue({
+      error: { code: 'EMAIL_NOT_VERIFIED', message: 'Email not verified' },
+    });
+    await act(() => root.render(withClient(<LoginPage />)));
+    await submit();
+    const alert = container.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).not.toBe('Email not verified');
+    expect(alert).toContain('A verification link is on its way to person@example.test');
+    expect(alert).toContain('check your spam folder');
+
+    const resend = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Resend verification email',
+    )!;
+    // Pressing it now only sent a duplicate of the link just sent.
+    expect(resend.disabled).toBe(true);
+    expect(
+      container.querySelector(`#${resend.getAttribute('aria-describedby')}`)?.textContent,
+    ).toBe('A link was just sent. You can ask for another in a minute if it does not arrive.');
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(resend.disabled).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('words a wrong email or password as the user guide does (#97)', async () => {
   mocks.signin.mockResolvedValue({
     error: { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' },

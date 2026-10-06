@@ -67,6 +67,10 @@ users can **Resend verification email** from the signup or invitation confirmati
 or after an unverified sign-in is refused. They do not need a new account or
 invitation. The link in a verification email works for 1 hour, and the email
 says so; after that, the same **Resend verification email** sends a new one. A resend confirmation is not proof that a message reached the inbox.
+Signing in with the right password before verifying sends a new link and says
+so. One account is sent at most one verification email a minute: a request
+within a minute of a delivered one is answered as usual but sends nothing, and
+the button waits a minute before offering another.
 
 Already-verified administrators retain the local recovery path when settings
 cannot be read. If needed, use the operator-only

@@ -1,6 +1,9 @@
 import { eq, schema } from '@oci/db';
 import { db } from '../db/index.js';
-import { sendAfterResponse } from '../services/account-email-delivery.js';
+import {
+  ACCOUNT_EMAIL_COOLDOWN_SECONDS,
+  sendAfterResponse,
+} from '../services/account-email-delivery.js';
 import { sendVerificationEmail, VERIFY_LINK_TTL_SECONDS } from '../services/email.js';
 import { isEmailVerificationEnforced } from './policy.js';
 
@@ -23,12 +26,17 @@ export async function deliverVerificationEmail(
   // mail server, not a slow or unreachable one. A failure is never returned:
   // the resend endpoint must not reveal whether an address exists through an
   // account-specific delivery error. The account stays unverified and can ask
-  // again.
-  sendAfterResponse('email-verification', user.id, () =>
-    sendVerificationEmail({
-      to: user.email,
-      url,
-      expiresInSeconds: VERIFY_LINK_TTL_SECONDS,
-    }),
+  // again. Not again within a minute of one delivered (#330): accepting an
+  // invitation, a refused sign-in and Resend each sent one, seconds apart.
+  sendAfterResponse(
+    'email-verification',
+    user.id,
+    () =>
+      sendVerificationEmail({
+        to: user.email,
+        url,
+        expiresInSeconds: VERIFY_LINK_TTL_SECONDS,
+      }),
+    { cooldownSeconds: ACCOUNT_EMAIL_COOLDOWN_SECONDS },
   );
 }
