@@ -79,7 +79,12 @@ properly before computing the ratio.
   command palette) is marked with the `--accent-bright` ring from
   `components/ui/item-focus.ts`, not a background change alone, which is
   invisible in light.
-- A dialog traps focus and restores it on dismissal, which Radix handles.
+- A dialog traps focus and returns it to its opener on dismissal. Radix only
+  does this for a `DialogTrigger`; `DialogContent` (and the command palette)
+  use `hooks/use-focus-return.ts`, which also maps a Select or menu item to
+  its trigger. When an action removes the focused control's row, focus moves
+  to the next row, else the previous one, else the section heading
+  (`lib/focus-return.ts`; mark non-`li` rows with `data-focus-row`).
 
 `tests/e2e/accessibility-*.spec.ts` scan for regressions. They are a net, not
 proof.

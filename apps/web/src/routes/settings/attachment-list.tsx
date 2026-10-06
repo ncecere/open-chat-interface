@@ -200,6 +200,8 @@ export function AttachmentList({
             return (
               <div
                 key={attachment.id}
+                // Where focus goes when the file before it is deleted (#128).
+                data-focus-row=""
                 className={cn(
                   'grid min-h-14 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] px-4 py-2 last:border-b-0 sm:grid-cols-[1.25rem_minmax(0,1fr)_8rem_2rem]',
                   isSelected && 'bg-[var(--accent-soft)]/45',

@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Search } from 'lucide-react';
 import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
 import { Spinner } from '~/components/ui/spinner';
+import { useFocusReturn } from '~/hooks/use-focus-return';
 import { cn } from '~/lib/utils';
 import type { CommandPaletteProps } from './types';
 import { useCommandPaletteState } from './use-command-palette-state';
@@ -26,6 +27,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     threadAnnouncement,
     consumeKeepFocus,
   } = useCommandPaletteState(props);
+  const focusReturn = useFocusReturn();
   let optionIndex = -1;
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -40,11 +42,14 @@ export function CommandPalette(props: CommandPaletteProps) {
           )}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
+            focusReturn.onOpenAutoFocus();
             event.preventDefault();
             inputRef.current?.focus();
           }}
           onCloseAutoFocus={(event) => {
             if (consumeKeepFocus()) event.preventDefault();
+            // Back to the composer or the Search button that opened it (#128).
+            focusReturn.onCloseAutoFocus(event);
           }}
         >
           <DialogPrimitive.Title className="sr-only">Search</DialogPrimitive.Title>

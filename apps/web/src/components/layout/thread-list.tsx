@@ -7,6 +7,7 @@ import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
 import { useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
+import { keepFocusWhenRemoved } from '~/lib/focus-return';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
@@ -56,6 +57,8 @@ export function ThreadRow({
 
   return (
     <div
+      // A row focus can move to when a neighbour is archived (#128).
+      data-focus-row=""
       className={cn(
         'group relative flex items-center rounded-lg transition-colors',
         active ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--bg-control)]',
@@ -132,7 +135,10 @@ export function ThreadRow({
           aria-label={`Archive thread: ${thread.title}`}
           disabled={readOnly.active}
           title={lockedTitle}
-          onClick={() =>
+          onClick={(event) => {
+            // The row leaves the list: focus moves to the next row, not the body (#128).
+            const row = event.currentTarget.closest<HTMLElement>('[data-focus-row]');
+            if (row) keepFocusWhenRemoved(row);
             update.mutate(
               { id: thread.id, archived: true },
               {
@@ -147,8 +153,8 @@ export function ThreadRow({
                     },
                   }),
               },
-            )
-          }
+            );
+          }}
           className={ROW_ACTION}
         >
           <Archive className="size-3.5" />

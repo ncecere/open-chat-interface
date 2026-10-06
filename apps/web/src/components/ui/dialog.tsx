@@ -1,6 +1,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { type ComponentProps, useRef } from 'react';
+import type { ComponentProps } from 'react';
+import { useFocusReturn } from '~/hooks/use-focus-return';
 import { cn } from '~/lib/utils';
 
 export const Dialog = DialogPrimitive.Root;
@@ -28,21 +29,9 @@ export function DialogContent({
    */
   confirmDiscard?: boolean;
 }) {
-  /**
-   * WCAG 2.4.3 Focus Order.
-   *
-   * These dialogs open from component state rather than a DialogTrigger, so
-   * Radix has no trigger to hand focus back to and it falls to the body.
-   * Remembering the element that was focused at open time and restoring it
-   * keeps a keyboard user where they were.
-   *
-   * The opener is read in onOpenAutoFocus, which Radix fires on every open
-   * before it moves focus into the dialog. An effect cannot do this: this
-   * component stays mounted while the dialog is closed, and a child's effects
-   * (Radix's FocusScope) run before a parent's, so an effect sees either the
-   * page-load focus or an element inside the dialog, never the opener.
-   */
-  const openerRef = useRef<HTMLElement | null>(null);
+  // Focus goes back to whatever opened the dialog, or near it if it has gone
+  // (WCAG 2.4.3; #41, #128).
+  const focusReturn = useFocusReturn();
 
   return (
     <DialogPrimitive.Portal>
@@ -65,20 +54,12 @@ export function DialogContent({
             event.preventDefault();
         }}
         onOpenAutoFocus={(event) => {
-          const active = document.activeElement;
-          openerRef.current =
-            active instanceof HTMLElement && active !== document.body ? active : null;
+          focusReturn.onOpenAutoFocus();
           onOpenAutoFocus?.(event);
         }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
-          if (event.defaultPrevented) return;
-
-          const opener = openerRef.current;
-          if (opener?.isConnected) {
-            event.preventDefault();
-            opener.focus();
-          }
+          focusReturn.onCloseAutoFocus(event);
         }}
         {...props}
       >
