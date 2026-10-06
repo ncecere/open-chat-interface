@@ -243,6 +243,8 @@ describe('post-deploy folder', () => {
       ['0004_message_web_search_created_at_index', '0.11.0', 'message_web_search_created_at_idx'],
       ['0005_message_cancelled_created_at_index', '0.11.0', 'message_cancelled_created_at_idx'],
       ['0006_thread_created_at_index', '0.11.0', 'thread_created_at_idx'],
+      ['0007_audit_log_target_index', '0.11.0', 'audit_log_target_idx'],
+      ['0008_audit_log_user_ids_index', '0.11.0', 'audit_log_user_ids_idx'],
     ]);
     expect(steps.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);

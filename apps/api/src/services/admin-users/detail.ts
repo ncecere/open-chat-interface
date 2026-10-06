@@ -1,6 +1,7 @@
-import { and, count, desc, eq, gt, isNull, or, schema } from '@oci/db';
+import { and, count, desc, eq, gt, isNull, schema } from '@oci/db';
 import { db } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
+import { auditEntryAbout } from '../audit-subject.js';
 import { activeLegalHold } from '../compliance/holds.js';
 import { toAdminUser } from './listing.js';
 
@@ -51,13 +52,11 @@ export async function getUserDetail(targetId: string) {
         .where(and(eq(schema.thread.userId, targetId), isNull(schema.thread.deletedAt)))
         .orderBy(desc(schema.thread.updatedAt))
         .limit(10),
-      // Include actions both by and against this account.
+      // Include actions both by and against this account, bulk ones too (#216).
       db
         .select()
         .from(schema.auditLog)
-        .where(
-          or(eq(schema.auditLog.actorUserId, targetId), eq(schema.auditLog.targetId, targetId)),
-        )
+        .where(auditEntryAbout(targetId))
         .orderBy(desc(schema.auditLog.createdAt))
         .limit(25),
       activeLegalHold(targetId),

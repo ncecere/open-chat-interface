@@ -179,6 +179,8 @@ export async function pruneAuditLog(now: Date = new Date()): Promise<number> {
             and (${schema.legalHold.userId} = ${schema.auditLog.actorUserId}
               or (${schema.auditLog.targetType} = 'user'
                 and ${schema.legalHold.userId} = ${schema.auditLog.targetId})
+              /* A bulk action that named the held account (#216). */
+              or ((${schema.auditLog.metadata} -> 'userIds') ? ${schema.legalHold.userId})
               or ${schema.legalHold.userId} = ${schema.auditLog.metadata}->'deletion'->>'ownerUserId'))`,
       ),
     )

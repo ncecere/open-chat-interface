@@ -45,8 +45,9 @@ oddly.
 It shows their totals, storage, **active sessions with the address and client
 each came from** (the ten newest, with the total above them, such as "Showing
 the 10 most recent of 616 active sessions"), their limits, recent conversation titles, and their audit
-trail — matched both as actor and as target, so something done *to* them appears
-beside things they did. **See every event for this account** opens the audit log
+trail — matched as actor, as target and among the accounts a bulk action named,
+so something done *to* them appears beside things they did. Searching the audit
+log for their email finds the same entries. **See every event for this account** opens the audit log
 filtered to their address.
 
 Conversation **titles only**. An administrator managing an account has no reason

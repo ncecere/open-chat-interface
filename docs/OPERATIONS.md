@@ -1166,6 +1166,17 @@ serve the usage page's Overview tab (at 4 million messages about 41 MB,
 v0.10, and the Overview tab keeps its single pass over messages until step
 0005 has finished.
 
+#### Audit trail indexes (post-deploy steps 0007 and 0008)
+
+An account's audit trail (its page's Recent activity and "Events by or
+about" it in the audit log) also lists the bulk actions that named it, which
+keep the accounts in `metadata.userIds` rather than `target_id`. Steps 0007
+and 0008 build `audit_log_target_idx` on `audit_log(target_id)` and the GIN
+index `audit_log_user_ids_idx` on `metadata -> 'userIds'` (small: only bulk
+entries carry the key), so the trail is three index scans rather than a pass
+over the whole log. Until `migrate --post` has built them the trail is
+complete but read by scanning the table.
+
 #### Usage rollups (migration 0040, background migration 0.11.usage-rollups)
 
 Migration 0040 adds a nullable column `usage_event.in_rollup` (no default, so
