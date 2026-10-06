@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import { and, eq, isNull, lte, schema } from '@oci/db';
 import { COMPLIANCE_EXPORT_FORMAT } from '@oci/shared';
 import { db } from '../../db/index.js';
+import { errorText } from '../../lib/log-redaction.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
@@ -321,9 +322,7 @@ export async function performComplianceExport(options: {
     );
   } catch (error) {
     const message = (
-      error instanceof ComplianceExportError
-        ? error.message
-        : `Export failed: ${error instanceof Error ? error.message : String(error)}`
+      error instanceof ComplianceExportError ? error.message : `Export failed: ${errorText(error)}`
     ).slice(0, 1_000);
     const cleaned = written.target ? await deleteObjects(written.target, written.keys) : true;
     await db

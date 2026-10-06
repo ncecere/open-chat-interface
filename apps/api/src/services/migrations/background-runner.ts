@@ -5,6 +5,7 @@ import type postgres from 'postgres';
 import { loadEnv } from '../../config/env.js';
 import { sql as appSql } from '../../db/index.js';
 import { isDraining } from '../../lib/drain.js';
+import { errorText } from '../../lib/log-redaction.js';
 import { logger } from '../../lib/logger.js';
 import { databasePressure } from './throttle.js';
 
@@ -73,8 +74,9 @@ export interface RunOptions {
   maxAttempts?: number;
 }
 
-function errorText(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 1_000);
+/** Stored and shown, so without a failed query's parameters (#264). */
+function failureText(error: unknown): string {
+  return errorText(error).slice(0, 1_000);
 }
 
 function settings(options: RunOptions) {
@@ -159,7 +161,7 @@ async function deferThrottled(s: Settings, name: string, reason: string): Promis
 
 /** A failed batch: back off (doubling), and after the last attempt mark it failed. */
 async function recordFailure(s: Settings, name: string, error: unknown): Promise<void> {
-  const message = errorText(error);
+  const message = failureText(error);
   const [row] = await s.client<{ status: string; attempts: number }[]>`
     update background_migration set
       attempts = attempts + 1,
@@ -263,7 +265,7 @@ async function runClaimed(
     } catch (error) {
       await recordFailure(s, definition.name, error).catch((failure) =>
         logger.error(
-          { migration: definition.name, error: errorText(failure) },
+          { migration: definition.name, error: failureText(failure) },
           'Could not record a failed batch',
         ),
       );

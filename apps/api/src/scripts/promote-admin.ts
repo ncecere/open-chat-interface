@@ -1,5 +1,6 @@
 import { eq, schema } from '@oci/db';
 import { db, sql } from '../db/index.js';
+import { errorText } from '../lib/log-redaction.js';
 import { recordAudit } from '../services/audit.js';
 
 /**
@@ -43,6 +44,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Promotion failed:', error);
+  // The message, without a failed query's parameters (#264).
+  console.error(`Promotion failed: ${errorText(error)}`);
   process.exit(1);
 });

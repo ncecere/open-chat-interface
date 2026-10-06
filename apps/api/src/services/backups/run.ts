@@ -2,6 +2,7 @@ import { eq, schema, sql } from '@oci/db';
 import { BACKUP_FILE_SAMPLE_SIZE, BACKUP_STORAGE_PREFIX } from '@oci/shared';
 import { controlDatabaseUrl } from '../../db/control.js';
 import { db } from '../../db/index.js';
+import { errorText } from '../../lib/log-redaction.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
@@ -261,9 +262,7 @@ export async function performBackup(options: {
     });
   } catch (error) {
     const message =
-      error instanceof BackupError
-        ? error.message
-        : `Backup failed: ${error instanceof Error ? error.message : String(error)}`;
+      error instanceof BackupError ? error.message : `Backup failed: ${errorText(error)}`;
     const safe = scrubSecret(message, passwordOf(options.databaseUrl)).slice(0, 1_000);
     await cleanupObjects(settings, written);
     await db

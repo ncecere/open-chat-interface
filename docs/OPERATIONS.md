@@ -1540,6 +1540,25 @@ The `oci-web` Deployment is the API one under
 `OCI_ROLE=web`. During an upgrade, replace workers like any other replica;
 jobs that stop mid-batch are safe to run again.
 
+## Logs
+
+The API and the worker write one JSON object per line to standard output
+(`LOG_LEVEL`, default `info`). Lines carry identifiers (a run, thread, job or
+connector id, a request path) and causes (an error's type, message, code,
+stack and `cause` chain), not the values a database query was run with: when
+a query fails, its statement is kept (cut to 500 characters) and its
+parameters are replaced by `[redacted]`, so a database outage or failover
+does not copy reply text or session tokens into your log store. PostgreSQL's
+`detail`, which repeats row values (`Key (email)=(...) already exists`), is
+redacted too; the constraint, table and column names stay. PostgreSQL's own
+message can still quote the one value it rejects (`invalid input syntax for
+type uuid: "..."`).
+
+The same applies to Better Auth's messages, which go through the same logger
+(marked `"component": "better-auth"`), and to the error text stored and shown
+for a failed job run, background migration, backup, compliance export or file
+embedding.
+
 ## Service objectives and alerts
 
 From v0.11 OCI publishes service objectives, measured from its own metrics

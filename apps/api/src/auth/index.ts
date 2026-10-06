@@ -17,6 +17,7 @@ import { getDefaultOrganizationId } from '../services/organization.js';
 import { getSetting } from '../services/settings.js';
 import { recordAuthEvent } from './audit.js';
 import { deliverVerificationEmail } from './email-verification.js';
+import { logBetterAuth } from './log.js';
 import { ac, roles } from './permissions.js';
 import { enforceAuthRequestPolicy, enforceSelfServicePolicy } from './policy.js';
 import { applySsoProvisioning, SsoRoleRequiredError } from './provisioning.js';
@@ -81,6 +82,11 @@ export const auth = betterAuth({
   // Internal/self-hosted IdPs must be explicitly allowlisted to permit OIDC
   // discovery while retaining Better Auth's private-network SSRF protection.
   trustedOrigins: configuredTrustedOrigins(),
+  // Through the application logger and its redaction: Better Auth's console
+  // logger printed a failed session lookup with the raw session token (#264).
+  // No `level` here: setting one also makes Better Auth echo API errors to its
+  // console logger.
+  logger: { log: logBetterAuth },
 
   database: drizzleAdapter(db, {
     provider: 'pg',
