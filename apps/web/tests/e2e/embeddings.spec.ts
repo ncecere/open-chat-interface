@@ -53,10 +53,14 @@ test('the Embeddings tab has a Reranking section with the resolved endpoint', as
   await expect(page.getByRole('heading', { name: 'Reranking', exact: true })).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Rerank project search results' })).toBeVisible();
   await expect(page.getByText('Works with or without pgvector', { exact: false })).toBeVisible();
-  // A saved provider that can no longer rerank shows no endpoint either.
-  await expect(page.locator('#reranking-endpoint')).toHaveValue(
-    status.endpoint ?? 'Choose a provider',
-  );
+  // A saved provider that can no longer rerank shows no endpoint either. With
+  // none, the field is empty and says why in its placeholder, not a value that
+  // reads as an endpoint (#157).
+  const endpoint = page.locator('#reranking-endpoint');
+  await expect(endpoint).toHaveValue(status.endpoint ?? '');
+  if (!status.endpoint) {
+    await expect(endpoint).toHaveAttribute('placeholder', 'Shown once a provider is chosen');
+  }
 });
 
 test('System health has a row for meaning-based search', async ({ page }) => {
