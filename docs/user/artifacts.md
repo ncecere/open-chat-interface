@@ -163,7 +163,8 @@ without it.
   can open, copy and download them but not see other versions.
 - **Exports**: the full export (Settings → Your data) includes every artifact
   with all its versions in each conversation's JSON file; the Markdown files
-  and a single conversation's Markdown download name them.
+  and a single conversation's Markdown download name them, with the version
+  each reply made and, when there is a newer one, the latest version.
 - **Storage**: artifacts count towards your storage allowance (each version
   counts). Moving a conversation to the trash frees that space; restoring it
   needs room for it again.

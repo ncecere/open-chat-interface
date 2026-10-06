@@ -31,7 +31,7 @@ import {
   requestCompaction,
 } from '../services/chat/compaction-queue.js';
 import { consumeFileExport, exportReply } from '../services/documents/export.js';
-import { exportFilename, exportThreadMarkdown } from '../services/export.js';
+import { exportFilename, exportThreadMarkdown, exportTimeZone } from '../services/export.js';
 import {
   emptyTrash,
   listTrashedThreads,
@@ -222,11 +222,13 @@ threadRoutes.get('/:id/export', async (c) => {
   const thread = await getOwnedThread(c.req.param('id'), user.id);
   // Shares the hourly allowance with document exports (file output, v0.9).
   await consumeFileExport(user.id);
-  const markdown = await exportThreadMarkdown(thread.id, user.id);
+  // Dated in the person's own zone, which the download link sends (#211).
+  const timeZone = exportTimeZone(c.req.query('timeZone'));
+  const markdown = await exportThreadMarkdown(thread.id, user.id, timeZone);
 
   return c.body(markdown, 200, {
     'content-type': 'text/markdown; charset=utf-8',
-    'content-disposition': `attachment; filename="${exportFilename(thread.title)}"`,
+    'content-disposition': `attachment; filename="${exportFilename(thread.title, timeZone)}"`,
     'cache-control': 'no-store',
   });
 });

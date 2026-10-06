@@ -353,6 +353,15 @@ describe('renaming from the top bar', () => {
     expect(findButton('Rename conversation')).toBeTruthy();
   });
 
+  it('asks for the download dated in the person’s own time zone (#211)', async () => {
+    await render('/chat/t1');
+    const link = document.querySelector('[aria-label="Download this conversation"]');
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(link?.getAttribute('href')).toBe(
+      `/api/threads/t1/export?timeZone=${encodeURIComponent(zone)}`,
+    );
+  });
+
   it('offers no conversation actions for one that does not exist (#103)', async () => {
     const { client } = await render('/chat/walk-does-not-exist');
     const action = (label: string) => document.querySelector(`[aria-label="${label}"]`);

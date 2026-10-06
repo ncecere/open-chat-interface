@@ -424,7 +424,7 @@ Generated from 44 route files.
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
 | GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start), whether a background summary is queued or being made (`pending`), and the last failure of a summary the person asked for (`failure`, v0.10). |
 | DELETE | `/api/threads/:id/compaction/failure` | Dismisses the report of a failed summary (v0.10) and returns the state as GET does. |
-| GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
+| GET | `/api/threads/:id/export` | Downloads one conversation as Markdown, dated in `?timeZone=` (an IANA zone, such as the browser's; UTC when absent or unknown). |
 | POST | `/api/threads/:id/forks` | — |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |
 | GET | `/api/threads/:id/messages/:messageId/export` | Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX. |

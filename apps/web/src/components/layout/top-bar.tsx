@@ -107,8 +107,14 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
             title="Download as Markdown"
           >
             {/* A plain link so the browser handles the download; the response
-                carries its own filename. */}
-            <a href={`/api/threads/${threadId}/export`} download>
+                carries its own filename. Dated in the person's own time zone,
+                not the server's UTC (#211). */}
+            <a
+              href={`/api/threads/${threadId}/export?timeZone=${encodeURIComponent(
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+              )}`}
+              download
+            >
               <Download />
             </a>
           </Button>

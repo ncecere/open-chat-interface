@@ -135,6 +135,35 @@ describe.skipIf(!available)('live Postgres: conversation export', () => {
     expect(response.status).toBe(404);
   });
 
+  it('dates the download in the person’s own time zone, which the link sends (#211)', async () => {
+    // Started and exported on the evening of 5 October in New York: already
+    // 6 October in UTC.
+    const [evening] = await live.db.execute<{ id: string }>(sql`
+      insert into thread (organization_id, user_id, title, created_at)
+      values (${state.organizationId}, ${ownerId}, 'Evening chat', '2026-10-06T01:40:00Z')
+      returning id
+    `);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-06T01:55:00Z'));
+    try {
+      const response = await appFor(ownerId).request(
+        `/api/threads/${evening!.id}/export?timeZone=America%2FNew_York`,
+      );
+      expect(response.headers.get('content-disposition')).toContain('evening-chat-2026-10-05.md');
+      expect(await response.text()).toContain(
+        'Exported from Acme Research on 2026-10-05 · started 2026-10-05',
+      );
+      // An unknown zone, like none, is UTC.
+      const utc = await appFor(ownerId).request(
+        `/api/threads/${evening!.id}/export?timeZone=Not%2FA_Zone`,
+      );
+      expect(utc.headers.get('content-disposition')).toContain('evening-chat-2026-10-06.md');
+      expect(await utc.text()).toContain('on 2026-10-06 · started 2026-10-06');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refuses to export a conversation that is in the trash', async () => {
     await live.db.execute(sql`update thread set deleted_at = now() where id = ${threadId}`);
 
