@@ -7,7 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from five QA walks of v0.11.0 (issues #35–#287). One migration, `0042`,
+Fixes from five QA walks of v0.11.0 (issues #35–#289). One migration, `0042`,
 runs with `migrate` as usual. Two new post-deploy steps, `0007` and `0008`, index
 the audit log so a person's trail includes bulk actions done to them (#216): run
 `migrate --post` after every replica runs the new release, as for any release.
@@ -111,7 +111,7 @@ PostgreSQL driver patch (`patches/postgres@3.4.9.patch`) is applied by
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
 
-### Fixed after a fifth QA walk (#268–#287)
+### Fixed after a fifth QA walk (#268–#289)
 
 - **Security:** Better Auth's admin endpoints (`/api/auth/admin/*`) are
   closed: they changed roles, bans, emails and passwords, and impersonated
@@ -134,6 +134,10 @@ PostgreSQL driver patch (`patches/postgres@3.4.9.patch`) is applied by
   unique across a conversation, and reply headings start at h2 (#271);
   Settings' side column is in landmarks (#272); the admin not-found page
   (#273); long Select lists scroll by keyboard (#274).
+- **Outages:** during a database outage, sign-in and password reset say the
+  service is temporarily unavailable instead of blaming the person, and come
+  back by themselves (#288); the web proxy logs one line per failed request
+  instead of one per retry (#289).
 
 ### Fixed after a fourth QA walk (#239–#266)
 
