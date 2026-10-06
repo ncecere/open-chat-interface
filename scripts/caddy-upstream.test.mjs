@@ -19,6 +19,9 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const CADDY_IMAGE = 'caddy:2-alpine';
+// Needs Docker. Skipped on a machine without it; CI always runs it.
+const dockerAvailable = spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0;
+const needsDocker = { skip: !dockerAvailable && !process.env.CI && 'Docker is not available' };
 const caddyfile = join(dirname(fileURLToPath(import.meta.url)), '..', 'docker', 'Caddyfile');
 
 /** A stand-in API replica: names itself, and answers 503 as a draining one would. */
@@ -132,32 +135,36 @@ function fixture(t) {
   return { startReplica, startWeb, request, logSince };
 }
 
-test('an unreachable API logs one line per failed request, not one per retry (#289)', async (t) => {
-  const { startWeb, request, logSince } = fixture(t);
-  // No replica at all: the name `api` does not resolve, as with the API stopped.
-  await startWeb();
-  const since = logSince();
+test(
+  'an unreachable API logs one line per failed request, not one per retry (#289)',
+  needsDocker,
+  async (t) => {
+    const { startWeb, request, logSince } = fixture(t);
+    // No replica at all: the name `api` does not resolve, as with the API stopped.
+    await startWeb();
+    const since = logSince();
 
-  for (let i = 0; i < 3; i++) {
-    const { status, seconds } = await request('/api/health/live');
-    assert.equal(status, 502);
-    // The proxy still keeps trying for lb_try_duration before giving up.
-    assert.ok(seconds >= 4.5, `gave up after ${seconds.toFixed(1)} s`);
-  }
-  await sleep(500);
+    for (let i = 0; i < 3; i++) {
+      const { status, seconds } = await request('/api/health/live');
+      assert.equal(status, 502);
+      // The proxy still keeps trying for lb_try_duration before giving up.
+      assert.ok(seconds >= 4.5, `gave up after ${seconds.toFixed(1)} s`);
+    }
+    await sleep(500);
 
-  const lines = since();
-  const perRequest = lines.filter((line) => line.includes('"logger":"http.log.error"'));
-  const lookups = lines.filter((line) => line.includes('failed getting dynamic upstreams'));
-  // Each failed request is still logged, so the outage stays visible...
-  assert.equal(perRequest.length, 3, lines.join('\n'));
-  // ...but the failed lookup behind it once per 10 s, not on every retry
-  // (it was 141 lines for these three requests). 15 s spans at most 3 periods.
-  assert.ok(lookups.length >= 1 && lookups.length <= 3, `${lookups.length} lookup lines`);
-  assert.ok(lines.length <= 6, `${lines.length} lines:\n${lines.join('\n')}`);
-});
+    const lines = since();
+    const perRequest = lines.filter((line) => line.includes('"logger":"http.log.error"'));
+    const lookups = lines.filter((line) => line.includes('failed getting dynamic upstreams'));
+    // Each failed request is still logged, so the outage stays visible...
+    assert.equal(perRequest.length, 3, lines.join('\n'));
+    // ...but the failed lookup behind it once per 10 s, not on every retry
+    // (it was 141 lines for these three requests). 15 s spans at most 3 periods.
+    assert.ok(lookups.length >= 1 && lookups.length <= 3, `${lookups.length} lookup lines`);
+    assert.ok(lines.length <= 6, `${lines.length} lines:\n${lines.join('\n')}`);
+  },
+);
 
-test('a request whose replica died goes to another replica', async (t) => {
+test('a request whose replica died goes to another replica', needsDocker, async (t) => {
   const { startReplica, startWeb, request } = fixture(t);
   const first = startReplica();
   const second = startReplica();
@@ -182,20 +189,24 @@ test('a request whose replica died goes to another replica', async (t) => {
   }
 });
 
-test('a single replica marked down by a 503 is tried again within lb_try_duration (#117)', async (t) => {
-  const { startReplica, startWeb, request } = fixture(t);
-  const only = startReplica();
-  await startWeb();
-  for (let attempt = 0; attempt < 40; attempt++) {
-    if ((await request('/api/anything')).status === 200) break;
-    await sleep(100);
-  }
+test(
+  'a single replica marked down by a 503 is tried again within lb_try_duration (#117)',
+  needsDocker,
+  async (t) => {
+    const { startReplica, startWeb, request } = fixture(t);
+    const only = startReplica();
+    await startWeb();
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if ((await request('/api/anything')).status === 200) break;
+      await sleep(100);
+    }
 
-  // A draining replica refuses a new turn: marked down for fail_duration (3 s).
-  assert.equal((await request('/api/draining')).status, 503);
-  // With nowhere else to go, the next request waits out the mark and is served.
-  const { status, body, seconds } = await request('/api/anything');
-  assert.equal(status, 200, body);
-  assert.equal(body, `replica=${only}`);
-  assert.ok(seconds >= 2 && seconds < 4.5, `served after ${seconds.toFixed(1)} s`);
-});
+    // A draining replica refuses a new turn: marked down for fail_duration (3 s).
+    assert.equal((await request('/api/draining')).status, 503);
+    // With nowhere else to go, the next request waits out the mark and is served.
+    const { status, body, seconds } = await request('/api/anything');
+    assert.equal(status, 200, body);
+    assert.equal(body, `replica=${only}`);
+    assert.ok(seconds >= 2 && seconds < 4.5, `served after ${seconds.toFixed(1)} s`);
+  },
+);
