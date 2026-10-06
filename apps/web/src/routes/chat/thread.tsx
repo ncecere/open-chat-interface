@@ -383,14 +383,20 @@ function ThreadConversation({
               />
               <CompactionFailureNotice threadId={threadId} />
 
-              {(session.error || session.recovery.error || waitingOnServer || replies.error) && (
+              {(session.error ||
+                session.notice ||
+                session.recovery.error ||
+                waitingOnServer ||
+                replies.error) && (
                 <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
-                  {(session.recovery.error || session.error || replies.error) && (
+                  {(session.notice || session.recovery.error || session.error || replies.error) && (
                     <p
                       role="alert"
                       className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
                     >
-                      {session.recovery.error ||
+                      {/* A message that turned out not to be saved (#326). */}
+                      {session.notice ||
+                        session.recovery.error ||
                         (session.error && chatErrorText(session.error)) ||
                         replies.error ||
                         'Something went wrong generating a response.'}

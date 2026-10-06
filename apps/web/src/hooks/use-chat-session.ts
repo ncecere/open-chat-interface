@@ -27,6 +27,33 @@ import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approva
 
 const EMPTY_MODELS: CatalogModel[] = [];
 
+/** The API's answer to a failed send: `no` when the message cannot have been stored (#326). */
+const MESSAGE_SAVED_HEADER = 'X-OCI-Message-Saved';
+/**
+ * Said when the saved messages show that a message whose send failed was not
+ * stored (#326). Not why: a lost database, a proxy's 502 or a dropped
+ * connection end the same way.
+ */
+export const UNSAVED_MESSAGE_TEXT =
+  'Your message could not be saved, so it is back in the message box. Send it again.';
+
+/**
+ * A user message among the saved ones that was not there before the send,
+ * with the same text (the server stores each text part trimmed, and may give
+ * the message an ID of its own).
+ */
+function savedAsNew(saved: UIMessage[], sent: { text: string; known: Set<string> }): boolean {
+  const text = sent.text.trim();
+  return saved.some(
+    (message) =>
+      message.role === 'user' &&
+      !sent.known.has(message.id) &&
+      message.parts
+        .flatMap((part) => (part.type === 'text' ? [part.text.trim()] : []))
+        .join('\n') === text,
+  );
+}
+
 /**
  * This browser's time zone, sent with each turn so the model is told today's
  * date where the person is, not where the instance is (#248). Read per send:
@@ -77,6 +104,8 @@ export function useChatSession(options: {
   // on the server): no saved messages to reload, and a conversation whose
   // only message it was is still unused (#234).
   const [refused, setRefused] = useState(false);
+  // Said when a message whose send failed turned out not to be saved (#326).
+  const [notice, setNotice] = useState<string | null>(null);
   const requestRecovery = useRef<() => void>(() => {});
   // Turns handed back by a server shutting down, sent again in a row (v0.11).
   const handoffRetries = useRef(0);
@@ -90,6 +119,12 @@ export function useChatSession(options: {
   const refuseSubmission = useRef<
     (refused: NonNullable<ReturnType<typeof readRefusedSubmission>>) => void
   >(() => {});
+  const checkSubmission = useRef<
+    (sent: NonNullable<ReturnType<typeof readRefusedSubmission>>) => void
+  >(() => {});
+  // A message whose send failed after it may have been stored (#326): its
+  // text, and the messages on screen before it.
+  const unconfirmed = useRef<{ text: string; known: Set<string> } | null>(null);
   const clearRun = useCallback(
     (id: string) => setRunId((current) => (current === id ? null : current)),
     [],
@@ -102,6 +137,8 @@ export function useChatSession(options: {
         scope.runId = null;
         setRunId(null);
         setRefused(false);
+        setNotice(null);
+        unconfirmed.current = null;
       }
       let signal = init?.signal;
       if (init?.method?.toUpperCase() === 'GET') {
@@ -111,10 +148,22 @@ export function useChatSession(options: {
       }
       // A server shutting down refuses a new turn before storing it; send it
       // again (to a replica that is ready) before showing an error.
-      const response = await fetchRetryingDrain((url, options) => fetch(url, options), input, {
-        ...init,
-        signal,
-      });
+      let response: Response;
+      try {
+        response = await fetchRetryingDrain((url, options) => fetch(url, options), input, {
+          ...init,
+          signal,
+        });
+      } catch (failure) {
+        // The connection was lost with no answer: the message may have been
+        // stored before it was. Find out from the saved messages, as for a
+        // failed answer below (#326). Not for Stop or leaving (an abort).
+        if (sending && scope.active && !signal?.aborted && scope.request === request) {
+          const sent = readRefusedSubmission(init?.body);
+          if (sent) checkSubmission.current(sent);
+        }
+        throw failure;
+      }
       // The SDK cannot abort a reconnect before its headers arrive. Do not let
       // that late response create another browser reader after navigation.
       if (!scope.active || signal?.aborted) {
@@ -134,11 +183,17 @@ export function useChatSession(options: {
       // So is a 503 still there after the drain retries (#161): a draining
       // replica answers it before reading the turn, the proxy when no replica
       // is ready, and the chat route itself never does (it answers 500).
+      // So is a 500 the server marks as failed before the message could be
+      // stored: a database outage longer than its wait (#326).
+      const notSaved = response.headers.get(MESSAGE_SAVED_HEADER) === 'no';
       const refusedStatus =
-        (response.status >= 400 && response.status < 500) || response.status === 503;
-      if (sending && refusedStatus && scope.request === request) {
-        const refused = readRefusedSubmission(init?.body);
-        if (refused) refuseSubmission.current(refused);
+        (response.status >= 400 && response.status < 500) || response.status === 503 || notSaved;
+      if (sending && !response.ok && scope.request === request) {
+        const sent = readRefusedSubmission(init?.body);
+        if (sent && refusedStatus) refuseSubmission.current(sent);
+        // Any other failure may have come after the message was stored: find
+        // out from the saved messages, once they can be read (#326).
+        else if (sent) checkSubmission.current(sent);
       }
       return response;
     },
@@ -283,6 +338,17 @@ export function useChatSession(options: {
     chat.setMessages((current) => current.filter((message) => message.id !== clientMessageId));
     setRefused(true);
   };
+  const reconcileSubmission = (saved: UIMessage[]) => {
+    const sent = unconfirmed.current;
+    unconfirmed.current = null;
+    if (!sent || savedAsNew(saved, sent)) return;
+    // The reload dropped the unsaved bubble; its text goes back to the
+    // composer. The check can take a while with the server unreachable, so
+    // anything typed meanwhile is kept after it rather than either being lost.
+    setDraft((current) => (current.trim() ? `${sent.text}\n\n${current}` : sent.text));
+    setRefused(true);
+    setNotice(UNSAVED_MESSAGE_TEXT);
+  };
   acceptSubmission.current = (submission, promptId) => {
     consumeFiles(submission.attachmentIds);
     if (promptId && promptId !== submission.clientMessageId)
@@ -295,9 +361,20 @@ export function useChatSession(options: {
     runId,
     clearRun,
     scope,
-    onCanonicalMessages: reconcileFiles,
+    onCanonicalMessages: (saved) => {
+      reconcileFiles(saved);
+      reconcileSubmission(saved);
+    },
   });
   requestRecovery.current = recovery.waitForServer;
+  // Saved or not, the next canonical reload says (it keeps trying while the
+  // server is unreachable). Until then the bubble stays, as sent.
+  checkSubmission.current = ({ clientMessageId, text }) => {
+    const known = new Set(chat.messages.map((message) => message.id));
+    known.delete(clientMessageId);
+    unconfirmed.current = { text, known };
+    recovery.recover();
+  };
   useEffect(() => {
     scope.active = true;
     const lifetime = ++scope.lifetime;
@@ -413,6 +490,8 @@ export function useChatSession(options: {
     recovery,
     /** The last message sent was refused before it was saved (#234). */
     refused,
+    /** Why the last message is back in the composer, when no error says so (#326). */
+    notice,
     draft,
     setDraft,
     excludedProjectFileIds,

@@ -410,11 +410,18 @@ it.each([false, true])(
     await mount(carried ? { carriedAttachments: [A] } : {});
     if (!carried) await uploadReady(A);
     const uncertain = await startSend();
+    // A failed send that may have been stored reloads the saved messages by
+    // itself (#326); they hold it, so it stays sent and its text stays out of
+    // the composer.
+    canonical = [{ ...storedUser, parts: [{ type: 'text', text: 'Question' }, card(A)] }];
     await act(async () => {
       uncertain.gate.resolve(new Response('Gateway lost the upstream response', { status: 502 }));
       await uncertain.completion;
     });
-    expect(session.status).toBe('error');
+    // The saved messages answered, so the failure is no longer shown (#133).
+    expect(session.status).toBe('ready');
+    expect(session.draft).toBe('');
+    expect(session.notice).toBeNull();
     await uploadReady(B);
     canonical = [
       { ...storedUser, parts: [{ type: 'text', text: 'Question' }, card(A)] },
