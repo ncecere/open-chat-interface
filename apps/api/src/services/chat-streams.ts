@@ -29,6 +29,7 @@ export {
   cancelActiveChatRun,
   capturedChatRunFrames,
   chatRunProducerActive,
+  chatRunProducerQuietIn,
   finalizeInterruptedChatRun,
   isChatRunCancellationRequested,
   registerLocalChatRun,

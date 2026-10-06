@@ -37,6 +37,14 @@ export async function chatRunProducerActive(
   return withStore((store) => store.producerActive(runId, windowMs));
 }
 
+/** Milliseconds until the producer counts as silent; null when Redis is unavailable. */
+export async function chatRunProducerQuietIn(
+  runId: string,
+  windowMs: number,
+): Promise<number | null> {
+  return withStore((store) => store.producerQuietInMs(runId, windowMs));
+}
+
 export async function capturedChatRunFrames(runId: string): Promise<string[] | null> {
   return withStore((store) => store.capturedFrames(runId));
 }

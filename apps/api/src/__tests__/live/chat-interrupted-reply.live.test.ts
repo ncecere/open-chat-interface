@@ -359,6 +359,31 @@ describe.skipIf(!available)('live recovery of a reply whose producer died', () =
     expect((await stored(claimId)).status).toBe('streaming');
   });
 
+  it('counts down to when recovery can happen, waiting for Redis as well as the claim (#163)', async () => {
+    // As a crash leaves it: the claim (refreshed every 10 s) silent for 15 s,
+    // so 5 s from stale by itself; the Redis heartbeat (every 5 s, 20 s TTL)
+    // with 12 s to live, and the last event 2 s old (18 s from stale).
+    const { identity, threadId, claimId } = await orphan({ silentFor: 15_000, eventsAgo: 2_000 });
+    await redis.set(`oci:chat-stream:run:${identity.runId}:alive`, '1', 'PX', 12_000);
+    textModel('Unused');
+    const response = await app.request('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        threadId,
+        modelSlug: 'test-model',
+        messages: [{ role: 'user', parts: [{ type: 'text', text: 'Walk3 probe' }] }],
+      }),
+    });
+    expect(response.status).toBe(409);
+    const seconds = Number(response.headers.get('retry-after'));
+    // Not the claim's 5 s, after which the client was refused again and again.
+    expect(seconds).toBeGreaterThanOrEqual(17);
+    expect(seconds).toBeLessThanOrEqual(18);
+    expect(await response.text()).toContain(`Send your message again in ${seconds} seconds.`);
+    expect((await stored(claimId)).status).toBe('streaming');
+  });
+
   it('sweeps interrupted replies nobody is reading, and frees their slot', async () => {
     const { recoverInterruptedReplies } = await import('../../services/chat/run-recovery.js');
     const dead = await orphan();

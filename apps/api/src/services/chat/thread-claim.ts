@@ -4,7 +4,7 @@ import { db } from '../../db/index.js';
 import { AppError, conflict, notFound } from '../../lib/errors.js';
 import { nextPosition } from '../threads.js';
 import { denyOpenApprovals } from './pending-approvals.js';
-import { recoverStaleClaim, runLiveness } from './run-recovery.js';
+import { claimProducerQuietInMs, recoverStaleClaim, runLiveness } from './run-recovery.js';
 import type { TurnContext } from './turn-context.js';
 
 export type ChatTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -58,12 +58,18 @@ class ActiveClaim extends Error {
  * (and a margin) is almost certainly a server that stopped, whose reply is
  * recovered once it has been silent for `staleMs`. Saying "already being
  * generated" then is wrong, and for up to 20 s after a crash (#121).
+ *
+ * Recovery also waits until the producer is silent in Redis (its heartbeat,
+ * refreshed twice as often as the claim, and its last event), so the seconds
+ * given are the later of the two (`redisQuietInMs`); counting from the claim
+ * alone ran out up to ten seconds early and then repeated "1 second" (#163).
  */
-export function claimRefusal(updatedAt: Date, now = Date.now()) {
+export function claimRefusal(updatedAt: Date, now = Date.now(), redisQuietInMs = 0) {
   const silentMs = now - updatedAt.getTime();
   const interruptedAfterMs = 2 * runLiveness.heartbeatMs + 2_000;
   if (silentMs <= interruptedAfterMs) return conflict(GENERATING_MESSAGE);
-  const seconds = Math.max(1, Math.ceil((runLiveness.staleMs - silentMs) / 1000));
+  const waitMs = Math.max(runLiveness.staleMs - silentMs, redisQuietInMs);
+  const seconds = Math.max(1, Math.ceil(waitMs / 1000));
   return new AppError(
     ERROR_CODES.CONFLICT,
     `The previous reply in this conversation was interrupted and is being recovered. Send your message again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
@@ -89,7 +95,15 @@ export async function claimThread(context: TurnContext, runId: string): Promise<
       threadId: context.thread.id,
       userId: context.user.id,
     }).catch(() => false);
-    if (!recovered) throw claimRefusal(error.updatedAt);
+    if (!recovered)
+      throw claimRefusal(
+        error.updatedAt,
+        Date.now(),
+        await claimProducerQuietInMs({
+          messageId: error.messageId,
+          threadId: context.thread.id,
+        }).catch(() => 0),
+      );
     try {
       return await claimOnce(context, runId);
     } catch (retry) {

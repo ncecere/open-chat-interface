@@ -436,6 +436,35 @@ export class ChatStreamStore {
   }
 
   /**
+   * How long until producerActive(runId, windowMs) turns false if the producer
+   * stays silent: the heartbeat's remaining lifetime or the time until the
+   * last captured event is `windowMs` old, whichever is later; 0 when it
+   * already is. The 409 for an interrupted reply counts down with it (#163).
+   */
+  async producerQuietInMs(runId: string, windowMs: number): Promise<number> {
+    const remaining = await this.redis.eval(
+      `
+      local wait = 0
+      local ttl = redis.call('PTTL', KEYS[1])
+      if ttl > 0 then wait = ttl end
+      local last = redis.call('XREVRANGE', KEYS[2], '+', '-', 'COUNT', 1)
+      if #last > 0 then
+        local at = tonumber(string.match(last[1][1], '^(%d+)'))
+        local now = redis.call('TIME')
+        local nowMs = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+        if at and tonumber(ARGV[1]) - (nowMs - at) > wait then wait = tonumber(ARGV[1]) - (nowMs - at) end
+      end
+      return wait
+    `,
+      2,
+      this.keys.alive(runId),
+      this.keys.events(runId),
+      Math.max(1, Math.floor(windowMs)),
+    );
+    return Math.max(0, Number(remaining) || 0);
+  }
+
+  /**
    * Every frame captured for a run so far, in order (starting from the saved
    * snapshot when the oldest events were trimmed), or null when any is missing.
    */
