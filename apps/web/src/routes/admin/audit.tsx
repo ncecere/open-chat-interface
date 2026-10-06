@@ -1,10 +1,9 @@
 import { Download, ScrollText, Search, X } from 'lucide-react';
-import { AdminPageHeader, EmptyState } from '~/components/admin/admin-ui';
+import { AdminPageHeader, EmptyState, LoadError } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { apiErrorMessage } from '~/lib/api-client';
 import { DesktopEventTable, MobileEventList } from './audit/event-list';
 import { PAGE_SIZE, RANGES, useAuditLog } from './audit/use-audit-log';
 
@@ -127,17 +126,8 @@ export function AdminAuditPage() {
           <Spinner className="size-6" />
         </div>
       ) : audit.isError || !entries ? (
-        <div className="mt-6 flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--border-subtle)] p-12 text-center">
-          <p className="text-sm font-medium text-[var(--text-primary)]">
-            Audit events could not be loaded.
-          </p>
-          <p className="text-xs text-[var(--text-muted)]">
-            {apiErrorMessage(audit.error, 'Please try again.')}
-          </p>
-          <Button variant="secondary" size="sm" onClick={() => void audit.refetch()}>
-            Try again
-          </Button>
-        </div>
+        // The shared load error: announced, with Try again, as on Users (#245).
+        <LoadError title="Audit events could not be loaded." query={audit} className="mt-6" />
       ) : entries.length === 0 && !hasFilters ? (
         <div className="mt-6">
           <EmptyState icon={ScrollText} title="No audit events yet.">

@@ -38,8 +38,14 @@ export function AdminUsersPage() {
     <div>
       <AdminPageHeader
         title="Users"
+        // Nothing while the list has failed: "Loading accounts..." stayed
+        // beside the error, saying two things at once (#245).
         description={
-          data ? `${data.total} account${data.total === 1 ? '' : 's'}` : 'Loading accounts...'
+          data
+            ? `${data.total} account${data.total === 1 ? '' : 's'}`
+            : isLoading
+              ? 'Loading accounts...'
+              : undefined
         }
       />
 

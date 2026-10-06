@@ -2,6 +2,7 @@ import { type MemoryEntry, type MemoryState, normalizeMemoryContent } from '@oci
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Brain } from 'lucide-react';
 import { type FormEvent, useId, useLayoutEffect, useRef, useState } from 'react';
+import { LoadError } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
 import { Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
@@ -405,9 +406,8 @@ export function SettingsMemoryPage() {
           <Spinner className="mx-auto size-6" />
         </div>
       ) : memory.isError || !memory.data ? (
-        <p role="alert" className="mt-8 text-sm text-[var(--danger)]">
-          Memory could not be loaded. Reload the page to try again.
-        </p>
+        // Announced, with Try again, as every list's load error (#245).
+        <LoadError title="Memory could not be loaded." query={memory} className="mt-8" />
       ) : (
         <MemoryContent state={memory.data} />
       )}

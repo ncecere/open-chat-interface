@@ -2,6 +2,7 @@ import type { UserConnector } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearch } from '@tanstack/react-router';
 import { CheckCircle2, Plug } from 'lucide-react';
+import { LoadError } from '~/components/admin/admin-ui';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
@@ -123,9 +124,8 @@ export function SettingsConnectorsPage() {
           <Spinner className="mx-auto size-6" />
         </div>
       ) : connectors.isError ? (
-        <p role="alert" className="mt-8 text-sm text-[var(--danger)]">
-          Connectors could not be loaded. Reload the page to try again.
-        </p>
+        // Announced, with Try again, as every list's load error (#245).
+        <LoadError title="Connectors could not be loaded." query={connectors} className="mt-8" />
       ) : list.length === 0 ? (
         <div className="mt-10 flex flex-col items-center gap-3 text-center">
           <Plug className="size-8 text-[var(--text-muted)]" aria-hidden="true" />

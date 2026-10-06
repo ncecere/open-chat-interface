@@ -186,7 +186,10 @@ export function AttachmentList({
         </div>
       ) : isError ? (
         <div className="flex min-h-32 flex-col items-center justify-center gap-3 px-6 text-center">
-          <p className="text-sm text-[var(--text-secondary)]">Attachments could not be loaded.</p>
+          {/* Announced, as every list's load error is (#245). */}
+          <p role="alert" className="text-sm text-[var(--text-secondary)]">
+            Attachments could not be loaded.
+          </p>
           <Button variant="secondary" size="sm" onClick={onRetry}>
             Try again
           </Button>

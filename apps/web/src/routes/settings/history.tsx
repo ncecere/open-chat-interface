@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { type MouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { LoadError } from '~/components/admin/admin-ui';
 import { YourDataButtons } from '~/components/settings/your-data';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -234,9 +235,12 @@ function ConversationList({ archived }: { archived: boolean }) {
           <Spinner className="mx-auto size-6" />
         </div>
       ) : history.isError ? (
-        <p role="alert" className="mt-8 text-sm text-[var(--danger)]">
-          Your conversations could not be loaded. Reload the page to try again.
-        </p>
+        // Announced, with Try again, as every other list's load error (#245).
+        <LoadError
+          title="Your conversations could not be loaded."
+          query={history}
+          className="mt-8"
+        />
       ) : threads.length === 0 ? (
         <p className="mt-10 text-sm text-[var(--text-muted)]">
           {search
