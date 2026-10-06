@@ -391,6 +391,22 @@ describe('Roles & access', () => {
     expect(updateRateLimitSettingsSchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
   });
 
+  it('shows each refused instance-wide limit at its field, with its range (#321’s sweep)', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />));
+    await typeInto(input('rate-auth'), '5000');
+    await typeInto(input('reserve-tokens'), '0');
+    const errorAt = (id: string) => {
+      const control = input(id);
+      if (control.getAttribute('aria-invalid') !== 'true') return null;
+      expect(control.getAttribute('aria-describedby')?.split(' ')).toContain(`${id}-error`);
+      return document.getElementById(`${id}-error`)?.textContent ?? null;
+    };
+    expect(errorAt('rate-auth')).toBe('Enter a whole number from 1 to 1,000.');
+    expect(errorAt('reserve-tokens')).toBe('Enter a whole number from 1 to 10,000,000.');
+    expect(errorAt('reserve-cost')).toBeNull();
+    expect(button('Save instance-wide limits').disabled).toBe(true);
+  });
+
   it('reports a rejected save next to the form', async () => {
     const { ApiError } = await import('../../src/lib/api-client');
     api.put.mockRejectedValue(new ApiError(400, 'VALIDATION_FAILED', 'Too high.'));

@@ -211,11 +211,18 @@ describe('Backups admin page', () => {
     await typeInto(daily(), '0');
     await typeInto(document.getElementById('backups-keep-weekly') as HTMLInputElement, '200');
     await click(button('Save changes'));
-    expect(alerts()).toContain(
-      'Daily backups kept must be at least 1. Weekly backups kept must be at most 104.',
-    );
+    // Each at its own field, marked invalid and described by it (#317's sweep).
+    const errorAt = (id: string) => {
+      const control = document.getElementById(id)!;
+      if (control.getAttribute('aria-invalid') !== 'true') return null;
+      expect(control.getAttribute('aria-describedby')).toContain(`${id}-error`);
+      return document.getElementById(`${id}-error`)?.textContent ?? null;
+    };
+    expect(errorAt('backups-keep-daily')).toBe('Daily backups kept must be at least 1.');
+    expect(errorAt('backups-keep-weekly')).toBe('Weekly backups kept must be at most 104.');
     await typeInto(daily(), '7');
-    expect(alerts()).toContain('Weekly backups kept must be at most 104.');
+    expect(errorAt('backups-keep-daily')).toBeNull();
+    expect(errorAt('backups-keep-weekly')).toBe('Weekly backups kept must be at most 104.');
     expect(alerts().join(' ')).not.toContain('Daily backups kept');
   });
 

@@ -11,7 +11,7 @@ import { LoadError, MutationError, SettingsSection } from '~/components/admin/ad
 import { ConfigSourceBadge, useConfigSources } from '~/components/admin/config-source';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
@@ -42,10 +42,23 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
 
   // Dollars become integer micro-dollars so no amount is stored as a float.
   const costMicros = Math.round(Number(costDollars || 0) * MICROS_PER_DOLLAR);
-  const valid =
-    isWholeNumberIn(Number(auth), 1_000) &&
-    isWholeNumberIn(costMicros, 100_000_000) &&
-    isWholeNumberIn(Number(tokens), 10_000_000);
+  // Each field's problem under it, giving its range, as Rate limits does
+  // (#302, #321); one sentence below all three named none of them.
+  const errors = {
+    auth:
+      auth.trim() && isWholeNumberIn(Number(auth), 1_000)
+        ? null
+        : 'Enter a whole number from 1 to 1,000.',
+    cost:
+      costDollars.trim() && isWholeNumberIn(costMicros, 100_000_000)
+        ? null
+        : 'Enter an amount from $0.01 to $100.00.',
+    tokens:
+      tokens.trim() && isWholeNumberIn(Number(tokens), 10_000_000)
+        ? null
+        : 'Enter a whole number from 1 to 10,000,000.',
+  };
+  const valid = !errors.auth && !errors.cost && !errors.tokens;
 
   const patch: {
     authAttemptsPerMinute?: number;
@@ -88,6 +101,7 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
         <Field
           label="Sign-in attempts per minute"
           htmlFor="rate-auth"
+          error={errors.auth}
           hint="Failed sign-ins per account. An address has its own, larger allowance."
         >
           <Input
@@ -96,7 +110,11 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
             min="1"
             step="1"
             value={auth}
-            aria-describedby={sources ? 'rate-auth-source' : undefined}
+            {...invalidFieldProps(
+              'rate-auth',
+              errors.auth,
+              sources ? 'rate-auth-source' : undefined,
+            )}
             onChange={edit(setAuth)}
           />
           <ConfigSourceBadge id="rate-auth-source" source={sources?.authAttemptsPerMinute} />
@@ -104,6 +122,7 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
         <Field
           label="Budget held per response"
           htmlFor="reserve-cost"
+          error={errors.cost}
           hint="In US dollars, released when the response finishes."
         >
           <Input
@@ -112,7 +131,11 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
             min="0.01"
             step="0.01"
             value={costDollars}
-            aria-describedby={sources ? 'reserve-cost-source' : undefined}
+            {...invalidFieldProps(
+              'reserve-cost',
+              errors.cost,
+              sources ? 'reserve-cost-source' : undefined,
+            )}
             onChange={edit(setCostDollars)}
           />
           <ConfigSourceBadge id="reserve-cost-source" source={sources?.reserve.costMicros} />
@@ -120,6 +143,7 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
         <Field
           label="Tokens held per response"
           htmlFor="reserve-tokens"
+          error={errors.tokens}
           hint="Used by token budgets in the same way."
         >
           <Input
@@ -128,7 +152,11 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
             min="1"
             step="100"
             value={tokens}
-            aria-describedby={sources ? 'reserve-tokens-source' : undefined}
+            {...invalidFieldProps(
+              'reserve-tokens',
+              errors.tokens,
+              sources ? 'reserve-tokens-source' : undefined,
+            )}
             onChange={edit(setTokens)}
           />
           <ConfigSourceBadge id="reserve-tokens-source" source={sources?.reserve.tokens} />
@@ -139,12 +167,6 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
         A reservation is held while a response generates, then replaced by what was actually used,
         so simultaneous responses cannot collectively pass a budget. It is never charged.
       </p>
-
-      {!valid && (
-        <p role="alert" className="text-[var(--danger)] text-sm">
-          Enter positive amounts for every instance-wide limit.
-        </p>
-      )}
 
       <EditOnly>
         <div className="flex items-center justify-end gap-3">
