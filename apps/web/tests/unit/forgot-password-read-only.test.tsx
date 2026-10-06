@@ -146,9 +146,11 @@ it('still answers the same way for any address when the reset is accepted', asyn
   serve(OFF, () => Response.json({ status: true }));
   await render();
   await send('nobody@northbrook.edu');
+  // It does not claim the email was sent, which was not known (#327).
   expect(container.textContent).toContain(
-    'If an account exists, a password reset link has been sent.',
+    'If an account uses this address, a password reset link is on its way.',
   );
+  expect(container.textContent).not.toContain('has been sent');
 });
 
 it('shows a refusal that is not about the account, such as the rate limit', async () => {

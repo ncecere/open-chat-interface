@@ -227,8 +227,10 @@ export function AcceptInvitePage() {
               <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
               <h1 className="text-lg font-semibold">Account created</h1>
               <p className="text-sm text-[var(--text-muted)]">
+                {/* Not "check your email" alone: the email may be delayed or not
+                    go out at all while mail is failing (#327). */}
                 {verificationRequired
-                  ? 'Check your email to verify your address before signing in.'
+                  ? `We are sending a verification link to ${email}. Open it before signing in. It can take a few minutes, so check your spam folder too; if nothing arrives, use Resend verification email or ask an administrator to check email delivery.`
                   : 'Your invitation has been accepted. You can sign in now.'}
               </p>
               {verificationRequired && <ResendVerification email={email} />}

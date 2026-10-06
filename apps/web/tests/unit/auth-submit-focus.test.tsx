@@ -133,7 +133,7 @@ describe('forgot password', () => {
     expect(focused().tagName).toBe('H1');
     expect(focused().textContent).toBe('Check your email');
     const message = document.getElementById(focused().getAttribute('aria-describedby')!);
-    expect(message?.textContent).toContain('If an account exists');
+    expect(message?.textContent).toContain('If an account uses this address');
   });
 
   it('starts as usual when opened: nothing is focused before a submit', async () => {

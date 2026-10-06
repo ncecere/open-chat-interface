@@ -7,6 +7,7 @@ import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { UNSENT_UPLOAD_TTL_MS } from '../../services/attachments/index.js';
 import { cacheBusHealthCheck } from '../../services/cache-bus/index.js';
+import { emailHealthCheck } from '../../services/email-delivery-status.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
 import { encryptionHealthCheck } from '../../services/encryption/rotation.js';
 import { liveReplicas, workersHealthCheck } from '../../services/jobs/workers.js';
@@ -132,20 +133,6 @@ async function jobCheck(): Promise<Check> {
   return { id: 'jobs', label: 'Background jobs', status: 'ok', detail: 'No recent failures' };
 }
 
-async function emailCheck(): Promise<Check> {
-  const smtp = await getSetting('smtp');
-  const configured = Boolean(smtp.host && smtp.port && smtp.fromAddress);
-
-  return {
-    id: 'email',
-    label: 'Email delivery',
-    status: configured ? 'ok' : 'warn',
-    detail: configured
-      ? `Sending through ${smtp.host}`
-      : 'Not configured. Invitations and password resets cannot be sent.',
-  };
-}
-
 async function storageCheck(): Promise<Check> {
   const storage = await getSetting('storage');
 
@@ -260,7 +247,8 @@ healthRoutes.get('/', async (c) => {
     providerCheck(),
     modelCheck(),
     jobCheck(),
-    emailCheck(),
+    // Not configured, failing (the latest send failed, #327), or sending.
+    guarded('email', 'Email delivery', emailHealthCheck),
     storageCheck(),
     connectorCheck(),
     embeddingsCheck(),

@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { decryptSecret } from '../lib/crypto.js';
 import { logger } from '../lib/logger.js';
 import { currentAppName } from './branding.js';
+import { deliveryFailureReason, recordEmailOutcome } from './email-delivery-status.js';
 import { getSetting } from './settings.js';
 
 export interface OutboundEmail {
@@ -84,12 +85,15 @@ export function fromHeader(
  * SMTP is optional. Missing configuration or failed delivery returns false;
  * logs include delivery metadata, never message bodies or verification tokens.
  */
-export async function sendEmail(email: OutboundEmail): Promise<{ delivered: boolean }> {
+export async function sendEmail(
+  email: OutboundEmail,
+): Promise<{ delivered: boolean; notConfigured?: boolean }> {
   const smtp = await getSetting('smtp');
   if (!smtp.host || !smtp.port || !smtp.fromAddress) {
     // URLs can contain invite/reset tokens, so never log the message body.
     logger.warn({ to: email.to, subject: email.subject }, 'SMTP not configured — email not sent');
-    return { delivered: false };
+    // Not a delivery failure: System health says "Not configured" (#327).
+    return { delivered: false, notConfigured: true };
   }
 
   try {
@@ -116,9 +120,12 @@ export async function sendEmail(email: OutboundEmail): Promise<{ delivered: bool
       ...(email.html ? { html: email.html } : {}),
     });
     logger.info({ to: email.to, subject: email.subject }, 'Email delivered');
+    // For System health, which said "Sending" through an outage (#327).
+    await recordEmailOutcome({ delivered: true });
     return { delivered: true };
   } catch (error) {
     logger.error({ error, to: email.to, subject: email.subject }, 'Email delivery failed');
+    await recordEmailOutcome({ delivered: false, reason: deliveryFailureReason(error) });
     return { delivered: false };
   }
 }
@@ -156,10 +163,13 @@ export async function sendTestEmail(to: string): Promise<{ ok: boolean; message:
       text: `This is a test message from ${appName}'s Email delivery settings. If you can read it, email delivery works.`,
     });
     logger.info({ to }, 'Test email delivered');
+    // A test that works clears System health's delivery warning (#327).
+    await recordEmailOutcome({ delivered: true });
     return { ok: true, message: `Sent to ${to}. Check that it arrived.` };
   } catch (error) {
     logger.warn({ error, to }, 'Test email failed');
-    const reason = error instanceof Error ? error.message.slice(0, 300) : 'Unknown error';
+    const reason = deliveryFailureReason(error);
+    await recordEmailOutcome({ delivered: false, reason });
     return { ok: false, message: `The mail server refused or could not be reached: ${reason}` };
   }
 }

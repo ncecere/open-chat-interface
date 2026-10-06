@@ -48,6 +48,9 @@ function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?
   );
 }
 
+export const RESET_SENT_MESSAGE =
+  'If an account uses this address, a password reset link is on its way. It can take a few minutes, so check your spam folder too. If nothing arrives, this service may not be able to send email right now: ask an administrator.';
+
 export function ForgotPasswordPage() {
   const { data: status, unavailable, refetch } = useAuthStatus();
   const [email, setEmail] = useState('');
@@ -120,8 +123,11 @@ export function ForgotPasswordPage() {
           <AuthOutcomeHeading focus={submitted} describedBy="reset-sent-message">
             Check your email
           </AuthOutcomeHeading>
+          {/* "Has been sent" was not known when it said so, and an empty inbox
+              then had no explanation (#327). Still the same words whether or
+              not an account exists (#328). */}
           <p id="reset-sent-message" className="text-sm text-[var(--text-muted)]">
-            If an account exists, a password reset link has been sent.
+            {RESET_SENT_MESSAGE}
           </p>
           <Button asChild className="w-full">
             <Link to="/auth/login">Return to sign in</Link>

@@ -93,8 +93,10 @@ export function SignupPage() {
               <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
               <h1 className="text-lg font-semibold">Check your email</h1>
               <p className="text-sm text-[var(--text-muted)]">
-                Follow the verification link before signing in. If it does not arrive, you can
-                request another email below.
+                {/* It can be delayed, or not go out while mail is failing (#327). */}
+                Follow the verification link we are sending you before signing in. It can take a few
+                minutes, so check your spam folder too. If it does not arrive, request another
+                below, or ask an administrator to check email delivery.
               </p>
               <ResendVerification email={email} />
               <Button asChild variant="primary" className="w-full">
