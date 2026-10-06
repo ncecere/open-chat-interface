@@ -29,10 +29,12 @@ import {
 import { returnPathFromSearch, signInSearch } from '~/lib/return-path';
 import { noteSessionConfirmed, onSessionEnded, SIGNED_OUT_PARAM } from '~/lib/session-ended';
 import { redirectRemovedConversation } from '~/lib/unused-conversation-route';
+import { failedVerificationCode, VERIFY_EMAIL_PAGE } from '~/lib/verify-email-link';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
 import { SignupPage } from '~/routes/auth/signup';
+import { VerifyEmailPage } from '~/routes/auth/verify-email';
 import { ChatHomePage } from '~/routes/chat/home';
 import { ChatThreadPage } from '~/routes/chat/thread';
 import { PublicSharePage } from '~/routes/share/public-share';
@@ -108,6 +110,12 @@ const acceptInviteRoute = createRoute({
   component: AcceptInvitePage,
 });
 
+const verifyEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: VERIFY_EMAIL_PAGE,
+  component: VerifyEmailPage,
+});
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth/login',
@@ -132,6 +140,9 @@ const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'authenticated',
   beforeLoad: async ({ location }) => {
+    // A verification link that did not work comes back to `/` (#329).
+    const failed = failedVerificationCode(location.pathname, location.searchStr);
+    if (failed) throw redirect({ href: `${VERIFY_EMAIL_PAGE}?error=${failed}`, replace: true });
     const session = await loadSession();
     // Sign-in comes back to this page afterwards (#225).
     if (!session)
@@ -503,6 +514,7 @@ const routeTree = rootRoute.addChildren([
   forgotPasswordRoute,
   resetPasswordRoute,
   acceptInviteRoute,
+  verifyEmailRoute,
   publicShareRoute,
   authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute, projectRoute]),
   settingsRoute.addChildren([...settingsTabRoutes, ...retiredSettingsRoutes]),

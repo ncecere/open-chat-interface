@@ -26,7 +26,7 @@ import { authReadOnlyRefusal, passwordResetPausedMessage } from '~/lib/read-only
  * were centred, so each sat at its own height), and a subtitle under the
  * wordmark as on sign-in (#112).
  */
-function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?: string }) {
+export function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?: string }) {
   const { data: status } = useAuthStatus();
   return (
     <main className="flex min-h-dvh justify-center px-4 pt-[12vh] pb-12">
