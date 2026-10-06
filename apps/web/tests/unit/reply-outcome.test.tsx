@@ -112,6 +112,24 @@ describe('a reply the person stopped (#154)', () => {
     expect(reply().querySelector('button[aria-label="Retry"]')).not.toBeNull();
   });
 
+  it('says it was stopped before it answered, under reasoning the model had shown (#253)', async () => {
+    await render({
+      messages: [
+        question,
+        saved('cancelled', null, [
+          { type: 'reasoning', text: 'Let me create this as a Markdown artifact…' },
+        ]),
+      ],
+      streaming: false,
+      onRetry: vi.fn(),
+    });
+    // The reasoning block is on screen, above the note.
+    expect(reply().textContent).toMatch(/^Reasoning/);
+    expect(reply().querySelector('[role="note"]')?.textContent).toBe(
+      'You stopped this reply before it started answering.',
+    );
+  });
+
   it('keeps the text of a reply stopped part-way, and says it was stopped', async () => {
     await render({
       messages: [question, saved('cancelled', null, [{ type: 'text', text: 'The first lines' }])],

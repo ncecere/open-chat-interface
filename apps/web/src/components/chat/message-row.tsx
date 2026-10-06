@@ -15,6 +15,7 @@ import {
   interruptionOf,
   metadataOf,
   replyLayoutOf,
+  stoppedNoteOf,
   stoppedOf,
   textOf,
   type WorkEntry,
@@ -146,7 +147,7 @@ export const MessageRow = memo(function MessageRow({
       {failure && <ReplyFailureNote reason={failure} onRetry={onRetry} latest={Boolean(onRetry)} />}
       {stopped && (
         <p role="note" className="mb-1 text-xs text-[var(--text-muted)]">
-          {text.trim() ? 'You stopped this reply.' : 'You stopped this reply before it began.'}
+          {stoppedNoteOf(message, text)}
         </p>
       )}
       {(replySwitch || !streaming) && (

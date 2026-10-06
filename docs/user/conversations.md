@@ -141,8 +141,9 @@ you are typing stays in the composer during recovery.
 A pending reply may still be running. You can wait or request **Stop**; a local
 reader closing is not proof that the server stopped. After **Stop** the page
 says **Stopping the reply…** until the server has saved it; the reply keeps
-what was written and says you stopped it (or that you stopped it before it
-began). Moving to another
+what was written and says you stopped it: before it started answering, when
+it had only shown its reasoning or used a tool, or before it began, when
+nothing was written yet. Moving to another
 conversation closes its browser reader without cancelling the server response.
 
 Load failures show a retry or unavailable state rather than an empty chat.

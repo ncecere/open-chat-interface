@@ -1,3 +1,4 @@
+import { isToolPart } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import type { SearchGroundingView, SourceLink } from '~/components/chat/search-grounding';
 
@@ -51,6 +52,22 @@ export function failureOf(message: UIMessage): string | null {
 export function stoppedOf(message: UIMessage): boolean {
   const { status, errorMessage } = metadataOf(message);
   return message.role === 'assistant' && status === 'cancelled' && !errorMessage;
+}
+
+/**
+ * What a reply the person stopped says. With text, that it was stopped; with
+ * none, that it was stopped before it began (#154), unless the model had
+ * already shown its reasoning or used a tool: under reasoning the person had
+ * watched being written, "before it began" contradicted the screen (#253).
+ */
+export function stoppedNoteOf(message: UIMessage, text: string): string {
+  if (text.trim()) return 'You stopped this reply.';
+  const worked = message.parts.some(
+    (part) => (part.type === 'reasoning' && part.text.trim().length > 0) || isToolPart(part),
+  );
+  return worked
+    ? 'You stopped this reply before it started answering.'
+    : 'You stopped this reply before it began.';
 }
 
 export function contextLimitedOf(message: UIMessage): boolean {
