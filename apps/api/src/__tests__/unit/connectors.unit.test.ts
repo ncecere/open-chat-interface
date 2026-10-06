@@ -286,9 +286,16 @@ describe('results', () => {
     // Real answers, read by the real MCP client: JSON that is not JSON-RPC,
     // and an HTML page, both with HTTP 200.
     const pages = createServer((request, response) => {
-      const html = request.url === '/html';
-      response.writeHead(200, { 'content-type': html ? 'text/html' : 'application/json' });
-      response.end(html ? '<html>Hello</html>' : '{"ok":true}');
+      const answers: Record<string, [string, string]> = {
+        '/html': ['text/html', '<html>Hello</html>'],
+        // The MCP client refuses these as an unexpected content type, and as
+        // JSON it cannot parse.
+        '/plain': ['text/plain', 'Hello'],
+        '/broken': ['application/json', '{not json'],
+      };
+      const [type, body] = answers[request.url ?? ''] ?? ['application/json', '{"ok":true}'];
+      response.writeHead(200, { 'content-type': type });
+      response.end(body);
     });
     await new Promise<void>((resolve) => pages.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${(pages.address() as AddressInfo).port}`;
@@ -306,6 +313,22 @@ describe('results', () => {
     };
     try {
       expect(await failure('/json')).toBe(
+        'Walk3 answered, but not as an MCP server. Check that the URL is the server’s MCP endpoint.',
+      );
+      // A body that is not JSON at all: the server answered, so it is not
+      // "could not be reached".
+      expect(await failure('/broken')).toBe(
+        'Walk3 answered, but not as an MCP server. Check that the URL is the server’s MCP endpoint.',
+      );
+      expect(await failure('/plain')).toBe(
+        'Walk3 answered, but not as an MCP server (HTTP 200). Check that the URL is the server’s MCP endpoint.',
+      );
+      // The client's own parse failure, which carries no status.
+      const parse = Object.assign(new Error('Failed to parse server response'), {
+        name: 'MCPClientError',
+        cause: new Error('stream ended'),
+      });
+      expect(connectorFailure('Walk3', parse, undefined).message).toBe(
         'Walk3 answered, but not as an MCP server. Check that the URL is the server’s MCP endpoint.',
       );
       expect(await failure('/html')).toBe(

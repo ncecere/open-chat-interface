@@ -59,7 +59,8 @@ const notMcp = (error: unknown): boolean => {
   let current: unknown = error;
   for (let depth = 0; depth < 6 && current; depth++) {
     const { name, message } = current as { name?: unknown; message?: unknown };
-    if (name === 'ZodError') return true;
+    // A body that is not JSON (the client lets JSON.parse's error through).
+    if (name === 'ZodError' || name === 'SyntaxError') return true;
     if (
       name === 'MCPClientError' &&
       typeof message === 'string' &&
