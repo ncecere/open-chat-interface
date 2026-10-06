@@ -1,5 +1,5 @@
 import type { ReasoningEffort, ThreadSummary } from '@oci/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import {
@@ -102,6 +102,49 @@ export function useUpdateThread({ reportErrors = false }: { reportErrors?: boole
             description: apiErrorMessage(error, 'Try again.'),
           })
       : undefined,
+  });
+}
+
+async function setArchived(queryClient: QueryClient, id: string, archived: boolean) {
+  const result = await api.patch<{ thread?: ThreadSummary }>(`/threads/${id}`, { archived });
+  if (result?.thread) updateCachedConversation(queryClient, result.thread);
+  await invalidateConversationLists(queryClient);
+}
+
+/**
+ * Archives a conversation and says so, with Undo (#101). The notice comes from
+ * the mutation's own onSuccess, not a per-call `mutate(…, { onSuccess })`:
+ * archiving refreshes the lists, which removes the sidebar row that asked, and
+ * TanStack Query skips the per-call callbacks of a caller that has unmounted,
+ * so a notice placed there never appeared (#125). Undo is a plain request for
+ * the same reason: the row's own hook is gone by the time anyone selects it.
+ */
+export function useArchiveThread() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string; title: string }) => setArchived(queryClient, id, true),
+    onSuccess: (_result, { id, title }) => {
+      toast.success('Conversation archived', {
+        id: `archived-${id}`,
+        description: title,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            setArchived(queryClient, id, false).catch(() =>
+              toast.error('Could not restore the conversation. Try again from Settings → History.'),
+            );
+          },
+        },
+      });
+    },
+    // A refused archive says why, e.g. the read-only reason (#159), as the
+    // other row actions do through useUpdateThread({ reportErrors }).
+    onError: (error, { id }) =>
+      toast.error('The conversation could not be archived', {
+        id: `thread-change-${id}`,
+        description: apiErrorMessage(error, 'Try again.'),
+      }),
   });
 }
 

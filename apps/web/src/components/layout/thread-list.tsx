@@ -2,11 +2,10 @@ import type { ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ChevronDown, Folder, GitFork, Pencil, Pin, PinOff } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
-import { useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
+import { useArchiveThread, useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
@@ -50,6 +49,7 @@ export function ThreadRow({
   projectName?: string;
 }) {
   const update = useUpdateThread({ reportErrors: true });
+  const archive = useArchiveThread();
   const [renaming, setRenaming] = useState(false);
   // Off while read-only, with the reason, as the message actions are (#159).
   const readOnly = useReadOnlyStatus();
@@ -139,21 +139,8 @@ export function ThreadRow({
             // The row leaves the list: focus moves to the next row, not the body (#128).
             const row = event.currentTarget.closest<HTMLElement>('[data-focus-row]');
             if (row) keepFocusWhenRemoved(row);
-            update.mutate(
-              { id: thread.id, archived: true },
-              {
-                // Said, with a way back, rather than the row just vanishing (#101).
-                onSuccess: () =>
-                  toast.success('Conversation archived', {
-                    id: `archived-${thread.id}`,
-                    description: thread.title,
-                    action: {
-                      label: 'Undo',
-                      onClick: () => update.mutate({ id: thread.id, archived: false }),
-                    },
-                  }),
-              },
-            );
+            // Said, with a way back, rather than the row just vanishing (#101, #125).
+            archive.mutate({ id: thread.id, title: thread.title });
           }}
           className={ROW_ACTION}
         >
