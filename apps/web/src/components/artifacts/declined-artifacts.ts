@@ -18,6 +18,12 @@ import type { UIMessage } from 'ai';
  * while, as written so far, it would be declined: it appears once it is long
  * enough to be kept, or once it is saved (when the person asked for an
  * artifact, the floor gives way and a short one appears when saved).
+ *
+ * A short static HTML page is declined too (#313), but only once it is
+ * declined is it left out: a page writes its head and styles first, so a page
+ * that will be kept looks short for most of its writing, and holding it back
+ * would delay every page's live preview (code not asked for is likewise
+ * shown while written and left out once declined, #298).
  */
 function mayBeDeclined(part: unknown): boolean {
   if (!isToolPart(part) || toolIdOfPart(part) !== 'create_artifact') return false;

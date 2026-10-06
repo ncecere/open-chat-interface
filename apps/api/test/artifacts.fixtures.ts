@@ -95,6 +95,46 @@ export const HTML_PAGE = [
 ].join('\n');
 export const SVG_IMAGE =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><title>Dot</title><circle r="4" cx="5" cy="5"/></svg>';
+/**
+ * What Claude Haiku 4.5 (thinking) saved as an HTML artifact for "a small
+ * table of three planets and their moons" (#313): a styled table, under 200
+ * characters of visible text in about 1.4 KB of page.
+ */
+export const PLANETS_PAGE = [
+  '<!DOCTYPE html>',
+  '<html lang="en">',
+  '<head>',
+  '<meta charset="UTF-8">',
+  '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+  '<title>Planets and Their Moons</title>',
+  '<style>',
+  '  body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh;',
+  '    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);',
+  '    display: flex; align-items: center; justify-content: center; }',
+  '  .card { background: #fff; border-radius: 12px; padding: 2rem;',
+  '    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); }',
+  '  h1 { color: #4b2c83; text-align: center; margin-top: 0; }',
+  '  table { border-collapse: collapse; width: 100%; }',
+  '  th { background: #667eea; color: #fff; padding: 12px 16px; text-align: left; }',
+  '  td { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }',
+  '  tr:hover td { background: #f5f3ff; }',
+  '</style>',
+  '</head>',
+  '<body>',
+  '<div class="card">',
+  '  <h1>Planets and Their Moons</h1>',
+  '  <table>',
+  '    <thead><tr><th>Planet</th><th>Moons</th><th>Notable moons</th></tr></thead>',
+  '    <tbody>',
+  '      <tr><td>Earth</td><td>1</td><td>The Moon</td></tr>',
+  '      <tr><td>Mars</td><td>2</td><td>Phobos &amp; Deimos</td></tr>',
+  '      <tr><td>Jupiter</td><td>95</td><td>Io, Europa, Ganymede, Callisto</td></tr>',
+  '    </tbody>',
+  '  </table>',
+  '</div>',
+  '</body>',
+  '</html>',
+].join('\n');
 export const MERMAID = 'flowchart LR\n  A[Start] --> B[Middle]\n  B --> C[End]';
 export const REPLY = [
   'Here is the page:',

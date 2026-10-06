@@ -4,6 +4,7 @@ import {
   type ArtifactSummary,
   CODE_MARKDOWN_REFUSAL,
   MIN_MARKDOWN_ARTIFACT_CHARS,
+  SHORT_HTML_REFUSAL,
   SHORT_MARKDOWN_REFUSAL,
 } from '@oci/shared';
 import type { Root } from 'react-dom/client';
@@ -170,6 +171,23 @@ describe('an artifact attempt declined as reply content (#201)', () => {
         ANSWER,
       ),
     ]);
+    expect(visibleTrace()).toEqual(NOTHING);
+    expect(container.textContent).toContain('Here they are:');
+  });
+
+  it('leaves out a short HTML page declined the same way (#313)', async () => {
+    const page = {
+      ...call('c6', 'Three Primary Colours Table', '<!doctype html><table></table>'),
+      kind: 'html',
+    };
+    const finished = reply(declined(page, SHORT_HTML_REFUSAL) as never, ANSWER);
+    await mount();
+    await stream([prompt]);
+    await stream([prompt, finished]);
+    await stream([prompt, finished], false);
+    expect(visibleTrace()).toEqual(NOTHING);
+    await cleanup(root!);
+    await mount([prompt, finished]);
     expect(visibleTrace()).toEqual(NOTHING);
     expect(container.textContent).toContain('Here they are:');
   });

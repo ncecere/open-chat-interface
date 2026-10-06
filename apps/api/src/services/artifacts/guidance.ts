@@ -13,6 +13,14 @@ export const PROGRAM_CODE_IN_CHAT =
   'Program code in any language (examples, functions, implementations, scripts, configuration) belongs in ordinary fenced code blocks in your reply, one block per language or file, never in an artifact, unless the person asks for an artifact.';
 
 /**
+ * With Markdown documents held to a floor (#149, #313), a model asked for "a
+ * small table" made it a styled HTML page instead, and the reply only
+ * described it (#313). A table is an answer too.
+ */
+export const TABLES_IN_CHAT =
+  'Tables, lists and short answers belong in your reply, a table as a Markdown table, never as an HTML page or other artifact unless the person asks for an artifact; an HTML artifact is for a substantial page or something interactive.';
+
+/**
  * Asked for code "as an artifact", a model with only HTML, SVG, Mermaid and
  * Markdown wrapped the script in an HTML page (#298): its preview dropped
  * text in angle brackets and it downloaded as `.html`. Code has a kind of its
@@ -83,8 +91,9 @@ export async function artifactGuidance(context: {
     'Artifacts: content the person will want to see rendered, such as an HTML page or small app, an SVG image or diagram, or a Mermaid diagram,',
     'is shown to the person as an artifact they can open, preview, copy and download.',
     context.tools
-      ? 'Create one with the create_artifact tool and revise it with update_artifact, preferring small find-and-replace edits; or write it as a single fenced code block (```html, ```svg or ```mermaid). Use a Markdown artifact only for a long prose document the person asked for, such as a report, letter or plan; tables, lists and short answers go in your reply, and anything you put in an artifact is not repeated in your reply, which still says in a sentence or two what the artifact holds (never only "Done").'
+      ? 'Create one with the create_artifact tool and revise it with update_artifact, preferring small find-and-replace edits; or write it as a single fenced code block (```html, ```svg or ```mermaid). Use a Markdown artifact only for a long prose document the person asked for, such as a report, letter or plan. Anything you put in an artifact is not repeated in your reply, which still says in a sentence or two what the artifact holds (never only "Done").'
       : 'Write each one as a single fenced code block (```html, ```svg or ```mermaid); HTML should be a complete document.',
+    TABLES_IN_CHAT,
     PROGRAM_CODE_IN_CHAT,
     context.tools && (await codeArtifactsReady()) ? CODE_ARTIFACTS : CODE_ARTIFACTS_WITHOUT_TOOLS,
     'Never link to an artifact in your text: a card for it appears below your reply on its own.',
