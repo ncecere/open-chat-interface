@@ -174,6 +174,23 @@ describe.skipIf(!available)('live: role changes, bans and revocations apply at o
     expect(signedIn.user.id).toBe(stolen.id);
   });
 
+  it('tells a banned person their account is suspended, not to "contact support" (#165)', async () => {
+    const { BANNED_USER_MESSAGE } = await import('../../auth/index.js');
+    const banned = await signedInAdmin();
+    const [{ email }] = (await pool.db.execute<{ email: string }>(
+      sql`update "user" set banned = true where id = ${banned.id} returning email`,
+    )) as unknown as [{ email: string }];
+    const response = await app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin },
+      body: JSON.stringify({ email, password: PASSWORD }),
+    });
+    expect(response.status).toBe(403);
+    const body = (await response.json()) as { code: string; message: string };
+    expect(body).toEqual({ code: 'BANNED_USER', message: BANNED_USER_MESSAGE });
+    expect(body.message).not.toMatch(/support/i);
+  });
+
   it('costs one indexed read per request', async () => {
     const admin = await signedInAdmin();
     for (let index = 0; index < 20; index++) await get('/api/probe', admin.cookie);

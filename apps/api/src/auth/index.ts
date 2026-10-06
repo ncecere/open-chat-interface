@@ -20,6 +20,10 @@ import { assertSsoLinkAllowed } from './sso-linking.js';
 
 const env = loadEnv();
 
+/** Signing in with a banned account (docs/user/getting-started.md). */
+export const BANNED_USER_MESSAGE =
+  'This account has been suspended, so it cannot sign in. If you think this is a mistake, ask an administrator of this service.';
+
 /**
  * The claims a role mapping can be written against.
  *
@@ -278,6 +282,9 @@ export const auth = betterAuth({
       roles,
       defaultRole: 'user',
       adminRoles: ['admin'],
+      // Better Auth's default sends people to a "support" this instance does
+      // not have (#165).
+      bannedUserMessage: BANNED_USER_MESSAGE,
     }),
     sso({
       /**

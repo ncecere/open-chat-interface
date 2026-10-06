@@ -24,6 +24,7 @@ import {
   validateChatThreadSearch,
   validateProjectSearch,
 } from '~/lib/chat-search-params';
+import { noteSessionConfirmed, onSessionEnded, SIGNED_OUT_PARAM } from '~/lib/session-ended';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
@@ -53,6 +54,7 @@ let confirmedSession: SessionSnapshot | null = null;
 export async function loadSession(): Promise<SessionSnapshot | null> {
   try {
     confirmedSession = await api.get<SessionSnapshot>('/me');
+    noteSessionConfirmed();
     return confirmedSession;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
@@ -521,6 +523,18 @@ export const router = createRouter({
   defaultPreload: 'intent',
   defaultPendingComponent: FullPageSpinner,
   defaultErrorComponent: RouteLoadError,
+});
+
+/**
+ * A session ended while the app was open (a ban, Sign out everywhere): leave
+ * the stale page for sign-in, which says the person was signed out (#165).
+ * The public pages need no session.
+ */
+onSessionEnded(() => {
+  confirmedSession = null;
+  const { pathname } = router.state.location;
+  if (pathname.startsWith('/auth/') || pathname.startsWith('/share/')) return;
+  void router.navigate({ to: '/auth/login', search: { [SIGNED_OUT_PARAM]: '1' } as never });
 });
 
 declare module '@tanstack/react-router' {

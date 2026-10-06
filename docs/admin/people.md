@@ -61,8 +61,10 @@ until the hold is lifted.
   granting or removing administrator access.
 - **Ban** asks for an optional reason, shown to administrators on the account.
   The server ends every session for the account as part of the ban, so they are
-  signed out straight away. You cannot ban yourself. **Unban** lifts it; they
-  can then sign in again.
+  signed out straight away: an open app goes to the sign-in page, which says
+  they were signed out, and signing in says the account has been suspended
+  (not the reason). You cannot ban yourself. **Unban** lifts it; they can then
+  sign in again.
 - **Sign out everywhere** ends every session, and appears only when there is
   one to end. This is the right response to a suspected compromise; changing the
   password alone leaves existing sessions working. They can sign in again

@@ -22,7 +22,7 @@ the sign-in address brings the form back.
 
 ### If you are refused
 
-Two refusals mean different things:
+Three refusals mean different things:
 
 - **"Your account is not authorised to use this application"**, or wording your
   administrator chose, means you authenticated correctly but are not in a group
@@ -31,6 +31,13 @@ Two refusals mean different things:
 - **"Check your email and password"** means the credentials themselves were
   wrong. Note that a nonexistent account and a wrong password produce the same
   message, deliberately, so this does not confirm whether an account exists.
+- **"This account has been suspended"** means an administrator has suspended
+  (banned) the account. Ask them if you think it is a mistake.
+
+If your session ends while the app is open (an administrator suspends the
+account or signs it out everywhere, or you sign out every other device from
+somewhere else), the next thing you do takes you to the sign-in page, which
+says you were signed out.
 
 ### If you forget your password
 

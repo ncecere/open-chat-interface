@@ -1,5 +1,6 @@
 import type { ApiErrorBody, ReadOnlyStatus } from '@oci/shared';
 import { noteReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
+import { noteUnauthorized } from '~/lib/session-ended';
 
 export class ApiError extends Error {
   constructor(
@@ -65,6 +66,8 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
   });
 
   if (!response.ok) {
+    // A session that ended while the page was open: to sign-in (#165).
+    if (response.status === 401) noteUnauthorized();
     let code = 'INTERNAL_ERROR';
     let message = response.statusText || 'Request failed';
     let details: unknown;
