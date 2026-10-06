@@ -227,7 +227,13 @@ export function AdminPoliciesPage() {
         {policies.length > 0 && (
           <RowList>
             {policies.map((policy) => (
-              <Row key={policy.id}>
+              // On a phone the actions sit below the title: side by side, the
+              // non-shrinking actions took the whole width and the title
+              // collapsed to nothing while Publish ran out of the card (#168).
+              <Row
+                key={policy.id}
+                className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4"
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate font-medium">{policy.title}</p>
@@ -248,7 +254,7 @@ export function AdminPoliciesPage() {
                   </p>
                 </div>
 
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
