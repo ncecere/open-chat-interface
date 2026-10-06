@@ -41,7 +41,7 @@ export function VerifyEmailPage() {
             onChange={(event) => setEmail(event.target.value)}
           />
         </div>
-        <ResendVerification email={email} />
+        <ResendVerification email={email} emailFieldId="verify-email-address" />
       </div>
     </AuthCard>
   );
