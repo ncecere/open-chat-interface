@@ -2,6 +2,7 @@ import { type ComponentProps, lazy, memo, Suspense } from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
 import { DEMOTED_HEADINGS } from '~/components/chat/markdown-headings';
 import { remarkSoftBreaks } from '~/components/chat/markdown-soft-breaks';
+import { TASK_LIST_COMPONENTS } from '~/components/chat/markdown-task-list';
 import {
   installStreamdownOverlayFocus,
   installStreamdownScrollRegions,
@@ -58,7 +59,7 @@ const StreamdownMarkdown = lazy(() =>
             lineNumbers={false}
             // Links are real links that warn before leaving the instance (#174),
             // not Streamdown's link-safety buttons; headings sit below the
-            // page's h1 (#212).
+            // page's h1 (#212); a task list's checkboxes are named (#240).
             components={MESSAGE_COMPONENTS}
             // Share pages pass their own URL policy and keep the visible marker.
             {...(!skipHtml && !urlTransform && ownerRehypePlugins
@@ -80,7 +81,7 @@ const StreamdownMarkdown = lazy(() =>
 /** "Copy Code" was the one title-cased tooltip among the reply's controls (#194). */
 const TRANSLATIONS = { copyCode: 'Copy code' };
 
-const MESSAGE_COMPONENTS = { a: MessageLink, ...DEMOTED_HEADINGS };
+const MESSAGE_COMPONENTS = { a: MessageLink, ...DEMOTED_HEADINGS, ...TASK_LIST_COMPONENTS };
 
 type Pluggable = NonNullable<
   ComponentProps<typeof import('streamdown').Streamdown>['rehypePlugins']
@@ -242,6 +243,8 @@ export const MARKDOWN_PROSE = cn(
   '[&_[data-streamdown=table-cell]]:max-w-[22rem]',
   '[&_hr]:border-[var(--border-subtle)]',
   '[&_li::marker]:text-[var(--accent-bright)]',
+  // A task list item shows its checkbox, not a bullet as well (#240).
+  '[&_li.task-list-item]:list-none [&_.task-list-item_input]:mr-2',
 );
 
 // Cache at the wrapper boundary, before normalization and the lazy renderer.

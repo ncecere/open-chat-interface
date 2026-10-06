@@ -139,3 +139,15 @@ for (const width of [390, 768, 1440]) {
     }
   });
 }
+
+test("a reply's task-list checkboxes are named by their items (#240)", async ({ page }) => {
+  await openShare(page, '- [x] Draft the survey questions\n- [ ] Conduct interviews');
+  const reply = page.getByRole('article', { name: /Assistant message/ });
+  await expect(reply.getByRole('checkbox', { name: 'Draft the survey questions' })).toBeChecked();
+  await expect(reply.getByRole('checkbox', { name: 'Conduct interviews' })).not.toBeChecked();
+  // The checkbox stands in for the bullet; the item does not show both.
+  const markers = await reply
+    .locator('li')
+    .evaluateAll((items) => items.map((item) => getComputedStyle(item).listStyleType));
+  expect(markers).toEqual(['none', 'none']);
+});
