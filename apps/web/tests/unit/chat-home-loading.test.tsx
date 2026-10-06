@@ -102,3 +102,11 @@ it('still says so when the instance really has no models', async () => {
   expect(text()).toContain('No models are available yet');
   expect(text()).toContain('No models available');
 });
+
+it('tells someone whose role has no models to ask, not that the instance is not set up (#303)', async () => {
+  await render();
+  await respond('/me', ME);
+  await respond('/models', { models: [], hiddenFromRole: true });
+  expect(text()).toContain('No models are available to your role. Ask an administrator.');
+  expect(text()).not.toContain('add a provider');
+});

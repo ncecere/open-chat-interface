@@ -67,6 +67,21 @@ export async function listAvailableModels(role: UserRole): Promise<CatalogModel[
     });
 }
 
+/**
+ * Whether anyone could chat at all: an enabled model on an enabled provider.
+ * A person whose role sees none of them is told their role has no models,
+ * not that the instance has none (#303).
+ */
+export async function hasUsableModels(): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.model.id })
+    .from(schema.model)
+    .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id))
+    .where(and(eq(schema.model.enabled, true), eq(schema.provider.enabled, true)))
+    .limit(1);
+  return Boolean(row);
+}
+
 interface ResolvedModel {
   /** Catalog and provider ids, for provider capacity (v0.11). */
   modelId?: string;

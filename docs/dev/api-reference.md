@@ -381,7 +381,7 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/models` | — |
+| GET | `/api/models` | The models the person's role may use, and whether an empty list is the role's doing. |
 
 ## `routes/portability.ts`
 

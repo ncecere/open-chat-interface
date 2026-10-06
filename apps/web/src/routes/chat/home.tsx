@@ -8,7 +8,7 @@ import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
-import { useModels } from '~/hooks/use-models';
+import { useModels, useModelsHiddenFromRole } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
@@ -41,6 +41,7 @@ const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
 export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const { data } = useCurrentUser();
   const modelsQuery = useModels();
+  const hiddenFromRole = useModelsHiddenFromRole();
   const models = modelsQuery.data ?? EMPTY_MODELS;
   // Until the models and the person's features arrive, nothing is said about
   // them: "No models are available yet" was shown for as long as the request
@@ -254,8 +255,11 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
 
           {modelsQuery.isSuccess && models.length === 0 && (
             <p className="mt-8 rounded-xl bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
-              No models are available yet. An administrator needs to add a provider and enable a
-              model in the catalog.
+              {/* Kept from every model by their role, the person needs to ask, not
+                  wait for the instance to be set up (#303). */}
+              {hiddenFromRole
+                ? 'No models are available to your role. Ask an administrator.'
+                : 'No models are available yet. An administrator needs to add a provider and enable a model in the catalog.'}
             </p>
           )}
           {modelsQuery.isError && (

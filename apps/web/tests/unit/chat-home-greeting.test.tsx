@@ -27,7 +27,10 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate }));
-vi.mock('../../src/hooks/use-models', () => ({ useModels: () => ({ data: mocks.models }) }));
+vi.mock('../../src/hooks/use-models', () => ({
+  useModels: () => ({ data: mocks.models }),
+  useModelsHiddenFromRole: () => false,
+}));
 vi.mock('../../src/hooks/use-current-user', () => ({
   useCurrentUser: () => ({
     data: { user: { name: 'Priya Walk' }, features: { webSearch: false } },
