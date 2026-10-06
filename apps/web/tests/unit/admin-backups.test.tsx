@@ -187,6 +187,23 @@ describe('Backups admin page', () => {
     expect(button('Save changes').disabled).toBe(true);
   });
 
+  it('keeps the error about a field still wrong while another is corrected (#257)', async () => {
+    await render();
+    api.patch.mockRejectedValueOnce(
+      validationFailure(updateBackupSettingsSchema, { keepDaily: 0, keepWeekly: 200 }),
+    );
+    const daily = () => document.getElementById('backups-keep-daily') as HTMLInputElement;
+    await typeInto(daily(), '0');
+    await typeInto(document.getElementById('backups-keep-weekly') as HTMLInputElement, '200');
+    await click(button('Save changes'));
+    expect(alerts()).toContain(
+      'Daily backups kept must be at least 1. Weekly backups kept must be at most 104.',
+    );
+    await typeInto(daily(), '7');
+    expect(alerts()).toContain('Weekly backups kept must be at most 104.');
+    expect(alerts().join(' ')).not.toContain('Daily backups kept');
+  });
+
   it('turns copying files on and chooses how many are checked', async () => {
     current = status({
       settings: { ...status().settings, copyFiles: false },

@@ -30,8 +30,8 @@ import { Badge } from '~/components/ui/badge';
 import { Field } from '~/components/ui/field';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
@@ -172,17 +172,21 @@ function SettingsForm({
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
+  // The errors are about the values sent: correcting a field clears its own
+  // (#217), and the others stay while their fields are still wrong (#257).
+  const [problems, setProblems] = useFieldProblems(draft);
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) =>
       api.patch<BackupStatus>('/admin/backups/settings', patch),
+    onMutate: () => setProblems([]),
     onSuccess: async (next) => {
       queryClient.setQueryData(BACKUPS_QUERY_KEY, next);
       setSaved(true);
       await queryClient.invalidateQueries({ queryKey: ['admin', 'health'] });
     },
+    onError: (cause) =>
+      setProblems(apiErrorProblems(cause, 'Backup settings could not be saved.', BACKUP_LABELS)),
   });
-  // The error is about the values sent; correcting them clears it (#217).
-  useClearOnEdit(draft, () => save.reset());
   const patch = backupChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);
@@ -282,11 +286,7 @@ function SettingsForm({
       <SaveRow
         hasChanges={hasChanges}
         isPending={save.isPending}
-        errorMessage={
-          save.error
-            ? apiErrorMessage(save.error, 'Backup settings could not be saved.', BACKUP_LABELS)
-            : null
-        }
+        errorMessage={problemsText(problems)}
         successMessage={saved && !hasChanges ? 'Backup settings saved.' : null}
       />
     </form>

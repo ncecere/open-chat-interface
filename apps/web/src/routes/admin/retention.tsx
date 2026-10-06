@@ -16,8 +16,8 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 
 /** The form's names for the fields, as the API names them (#127). */
 const RETENTION_LABELS = {
@@ -50,12 +50,13 @@ function RetentionForm({
 }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(settings);
-  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => setDraft(settings), [settings]);
-  // The error is about the values sent; correcting them clears it (#217).
-  useClearOnEdit(draft, () => setError(null));
+  // The errors are about the values sent: correcting a field clears its own
+  // (#217), and the others stay while their fields are still wrong (#257).
+  const [problems, setProblems] = useFieldProblems(draft);
+  const error = problemsText(problems);
 
   const patch = changedRetention(settings, draft);
   const hasChanges = Object.keys(patch).length > 0;
@@ -64,7 +65,7 @@ function RetentionForm({
   const save = useMutation({
     mutationFn: () => api.put<RetentionSettings>('/admin/lifecycle/retention', patch),
     onSuccess: async () => {
-      setError(null);
+      setProblems([]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2_500);
       await Promise.all([
@@ -73,7 +74,7 @@ function RetentionForm({
       ]);
     },
     onError: (cause) =>
-      setError(apiErrorMessage(cause, 'Retention could not be saved.', RETENTION_LABELS)),
+      setProblems(apiErrorProblems(cause, 'Retention could not be saved.', RETENTION_LABELS)),
   });
 
   function submit(event: FormEvent) {
