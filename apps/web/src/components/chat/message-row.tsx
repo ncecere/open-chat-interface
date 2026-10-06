@@ -119,7 +119,7 @@ export const MessageRow = memo(function MessageRow({
         ) : (
           <>
             <div className="max-w-[85%] rounded-2xl border border-[var(--border-user-message)] bg-[var(--bg-user-message)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)]">
-              <Markdown>{text}</Markdown>
+              <Markdown math={false}>{text}</Markdown>
               <MessageAttachments message={message} />
             </div>
             <MessageActions

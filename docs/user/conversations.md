@@ -69,6 +69,13 @@ Replies and your own messages are shown as Markdown: headings, lists, tables,
 links and highlighted code blocks. A single line break starts a new line, so a
 poem or an address keeps its lines; a blank line starts a new paragraph.
 
+**Maths and dollar signs.** In a reply, LaTeX between dollar signs is typeset:
+`$x^2$` inline, `$$ … $$` as a display formula. Amounts of money stay as
+written: "$5 for students, $10 for staff" shows both dollar signs. A `$` counts
+as maths only when it touches the formula on both sides and the closing `$` is
+not followed by a digit, so write `\$` if you ever need to force a dollar sign.
+Your own messages are shown as typed, with no maths at all.
+
 ## How a reply shows the model's work
 
 Some models work through a problem before answering, and some use tools (a
