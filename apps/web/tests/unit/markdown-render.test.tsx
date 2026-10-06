@@ -61,7 +61,8 @@ it('does not cache past changed HTML safety, URL policy or styling', async () =>
       children: 'Same text',
       skipHtml: true,
       urlTransform: nextTransform,
-      className: 'new-style',
+      // After the classes every rendering needs (#186).
+      className: expect.stringMatching(/ new-style$/),
     }),
   );
 });

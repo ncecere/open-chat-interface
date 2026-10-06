@@ -46,7 +46,7 @@ const StreamdownMarkdown = lazy(() =>
         default: ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
           <Streamdown
             plugins={plugins}
-            className={className}
+            className={cn(MARKDOWN_BASE, className)}
             // The reference interface shows plain code without a gutter.
             lineNumbers={false}
             // Links are real links that warn before leaving the instance (#174),
@@ -133,7 +133,7 @@ const StreamdownCode = lazy(() =>
           mode="static"
           controls={false}
           lineNumbers={false}
-          className={className}
+          className={cn(MARKDOWN_BASE, className)}
         >
           {codeFence(source, language)}
         </Streamdown>
@@ -188,7 +188,18 @@ export interface MarkdownProps {
 }
 
 /**
- * Shared prose styling so chat and public shares render identically.
+ * What every rendering needs, whatever its prose styling (a user's message,
+ * a reply, a share page): without the gutter, Shiki's one span per line must
+ * be a block again, or every line of a code block collapses onto one row.
+ * This lived in the reply's prose classes only, so the share page (which had
+ * its own) and user messages showed code on one line (#186).
+ */
+const MARKDOWN_BASE = '[&_pre_code]:block [&_pre_code>span]:block';
+
+/**
+ * Shared prose styling so chat and public shares render identically (#186:
+ * the share page had its own copy, which styled block code as inline code).
+ * Only inline code gets the inline-code look.
  *
  * Streamdown wraps every fence in its own bordered container and inner scroll
  * pane. Adding a third border around `pre` produced a visibly nested box, so
@@ -206,9 +217,6 @@ export const MARKDOWN_PROSE = cn(
   // The scroll pane sits inside the container's own border; a second one reads
   // as a nested box rather than the single flat panel the reference shows.
   '[&>div>div.overflow-x-auto]:!border-0 [&>div>div.overflow-x-auto]:!rounded-none',
-  // Shiki emits one span per line. Without the gutter they need to be blocks
-  // again, or every line collapses onto one row.
-  '[&_pre_code]:block [&_pre_code>span]:block',
   // Squeezed to the reply's width, a table with many columns left a prose
   // column one word wide (rows 200+ px tall in the QA walk). A table may be as
   // wide as its content, never narrower than the reply, with long cells

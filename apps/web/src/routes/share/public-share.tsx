@@ -6,7 +6,7 @@ import { PublicArtifactsProvider } from '~/components/artifacts/artifacts-provid
 import { CreatedArtifactCards, ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { Wordmark } from '~/components/brand/wordmark';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
-import { Markdown } from '~/components/chat/markdown';
+import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { partGroupsOf } from '~/components/chat/message-content';
 import { WorkDisclosure } from '~/components/chat/reply-work';
 import { type WorkStep, workSummary } from '~/components/chat/work-summary';
@@ -16,7 +16,6 @@ import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { ApiError, api } from '~/lib/api-client';
 import { usePageTitle } from '~/lib/document-title';
-import { cn } from '~/lib/utils';
 
 interface PublicTextPart {
   type: 'text';
@@ -220,24 +219,6 @@ function SharedWork({ steps }: { steps: PublicToolStepPart[] }) {
   );
 }
 
-const SHARED_PROSE = cn(
-  'prose-headings:font-semibold prose-headings:text-[var(--text-primary)]',
-  '[&_a]:text-[var(--accent-bright)] [&_a]:underline-offset-2',
-  '[&_strong]:text-[var(--text-primary)]',
-  '[&_code]:rounded [&_code]:bg-[var(--bg-control)] [&_code]:px-1 [&_code]:py-0.5',
-  // The code block's body scrolls (and is a keyboard-reachable region); a
-  // second, nested scroller on the pre could not be reached by keyboard.
-  '[&_pre]:max-w-full [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
-  // Squeezed to the reply's width, a table with many columns left a prose
-  // column one word wide (rows 200+ px tall in the QA walk). A table may be as
-  // wide as its content, never narrower than the reply, with long cells
-  // wrapping at a readable width; a wide one scrolls (a focusable region).
-  '[&_[data-streamdown=table]]:w-max [&_[data-streamdown=table]]:min-w-full',
-  '[&_[data-streamdown=table-cell]]:max-w-[22rem]',
-  '[&_hr]:border-[var(--border-subtle)]',
-  '[&_li::marker]:text-[var(--accent-bright)]',
-);
-
 function SharedMessage({ message }: { message: PublicShareResponse['messages'][number] }) {
   const text = message.parts
     .filter((part): part is PublicTextPart => part.type === 'text')
@@ -285,7 +266,9 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
               range={{ start: group.start, end: group.end }}
               skipHtml
               urlTransform={publicMarkdownUrl}
-              className={SHARED_PROSE}
+              // The owner's prose styling (#186): this page had a copy of its
+              // own that gave block code the inline-code look.
+              className={MARKDOWN_PROSE}
             />
           </div>
         ) : null,
