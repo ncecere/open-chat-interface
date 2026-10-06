@@ -31,6 +31,7 @@ vi.mock('../../db/index.js', () => {
 });
 
 import {
+  jobsOnWorkers,
   liveReplicas,
   NO_WORKER_MESSAGE,
   replicaHeartbeat,
@@ -142,6 +143,34 @@ describe('replica heartbeats (v0.11 worker role)', () => {
     await vi.advanceTimersByTimeAsync(replicaHeartbeat.intervalMs);
     mocks.redis = null;
     await failing();
+  });
+});
+
+describe('the jobs the workers run (#256)', () => {
+  it('comes from the heartbeats of replicas that run jobs, or is unknown', async () => {
+    const redis = fakeRedis();
+    mocks.redis = redis;
+    expect(await jobsOnWorkers()).toBeNull();
+    // A web replica's heartbeat leaves its list out: it runs no jobs.
+    const web = startReplicaHeartbeat('web', [{ name: 'web.only', intervalMs: 1 }]);
+    await vi.waitFor(async () => expect(await liveReplicas()).toHaveLength(1));
+    expect((await liveReplicas())?.[0]?.jobs).toBeUndefined();
+    await web();
+    const worker = startReplicaHeartbeat('worker', [
+      { name: 'storage.recompute-usage', intervalMs: 86_400_000 },
+    ]);
+    await vi.waitFor(async () => expect(await liveReplicas()).toHaveLength(1));
+    expect(await jobsOnWorkers()).toEqual([
+      { name: 'storage.recompute-usage', intervalMs: 86_400_000 },
+    ]);
+    // A worker too old to say makes the list unknown, not partial.
+    redis.scores.set('old', Date.now());
+    redis.values.set(
+      'oci:{replicas}:replica:old',
+      JSON.stringify({ id: 'old', role: 'all', host: 'c' }),
+    );
+    expect(await jobsOnWorkers()).toBeNull();
+    await worker();
   });
 });
 

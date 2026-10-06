@@ -302,7 +302,11 @@ healthRoutes.get('/', async (c) => {
     // Configured by environment only; shown read-only.
     observability: observabilityStatus(),
     // Replicas heard from in the last minute (null without Redis), v0.11.
-    replicas: { role: processRole(), live: replicas },
+    // Without each worker's job list: the Background jobs section shows those (#256).
+    replicas: {
+      role: processRole(),
+      live: replicas?.map(({ jobs: _jobs, ...rest }) => rest) ?? null,
+    },
     recentJobs: recentJobs.map((job) => ({
       ...job,
       startedAt: job.startedAt.toISOString(),

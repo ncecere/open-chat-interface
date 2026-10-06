@@ -172,6 +172,14 @@ started, how long it took, how many items it processed, and any error. A job
 that has not run since the instance was set up says **Not run yet**. **Run**
 starts one now.
 
+Which jobs are scheduled depends on the settings of the replicas that run
+jobs (`OCI_ROLE=worker` or `all`), so the list shows theirs, as each reports
+it in its heartbeat, rather than the settings of the replica serving the page.
+On a deployment whose worker leaves `RUN_MIGRATIONS` off, for example,
+`migrations.post-deploy` is not listed: post-deploy work is applied by
+`migrate --post`, and asking to run that job says so instead of queuing a run
+that no replica would take.
+
 Jobs run on their own schedule. Running one by hand is for after you have
 changed a setting it depends on and would rather not wait — retention, say, or
 storage reconciliation.

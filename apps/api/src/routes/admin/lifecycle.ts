@@ -12,7 +12,7 @@ import { notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
-import { latestJobRuns, lifecycleJobs, runOrQueueJobNow } from '../../services/jobs/index.js';
+import { latestJobRuns, runOrQueueJobNow, scheduledJobs } from '../../services/jobs/index.js';
 import {
   getConfigSources,
   getRateLimitSettings,
@@ -187,7 +187,9 @@ lifecycleRoutes.put('/rate-limits', async (c) => {
  * few dozen had no row and no Run button most of the day (#215).
  */
 lifecycleRoutes.get('/jobs', async (c) => {
-  const registered = lifecycleJobs();
+  // Where jobs run, not this replica's own list: a `web` replica listed a
+  // post-deploy job no worker had (#256).
+  const registered = await scheduledJobs();
   const runs = await latestJobRuns(registered.map((job) => job.name));
   const byName = new Map(runs.map((run) => [run.jobName, run]));
 
