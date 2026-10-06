@@ -313,6 +313,16 @@ describe('project page', () => {
     expect(api.delete).toHaveBeenCalledExactlyOnceWith('/projects/project-1');
   });
 
+  it('words the delete confirmation to fit what the project holds (#210)', async () => {
+    projectResponse = async () => ({ project: { ...PROJECT, threadCount: 0, fileCount: 1 } });
+    await render('settings');
+    await click(button('Delete project'));
+    expect(dialog()!.textContent).toContain(
+      'It has no conversations. Its file is deleted permanently.',
+    );
+    expect(dialog()!.textContent).not.toContain('0 conversations');
+  });
+
   it('explains when the role cannot use projects, without requesting the project', async () => {
     features = { projects: false, attachments: true };
     await render();
