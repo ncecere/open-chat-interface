@@ -10,9 +10,14 @@
  *
  * - on open, focus moves to the overlay itself (so it is announced);
  * - Tab and Shift+Tab cycle through the overlay's controls only;
- * - on close, focus returns to the element that had it when the overlay opened.
- *
- * Escape is still handled by Streamdown.
+ * - on close, focus returns to the element that had it when the overlay opened;
+ * - Escape closes it from anywhere inside (#155). Streamdown listens for
+ *   Escape on the document, but its inner wrapper stops every keydown from
+ *   bubbling, so once focus was on a control or link inside (which the Tab
+ *   trap makes the usual case) Escape did nothing. This listener is on the
+ *   overlay itself, below that wrapper's React handler, and closes the view
+ *   the way a click on its backdrop does;
+ * - it is named for what it shows, not for the button that opened it.
  */
 
 const OVERLAY_SELECTOR = '[data-streamdown="table-fullscreen"]';
@@ -55,7 +60,13 @@ export function installStreamdownOverlayFocus(doc: Document = document): void {
         : null,
     );
     if (!overlay.hasAttribute('tabindex')) overlay.setAttribute('tabindex', '-1');
+    overlay.setAttribute('aria-label', 'Table, full screen');
     overlay.addEventListener('keydown', trapTab(overlay));
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      // Streamdown closes the view on a click whose target is the backdrop.
+      overlay.click();
+    });
     overlay.focus();
   };
 
