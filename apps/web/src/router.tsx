@@ -554,10 +554,12 @@ onSessionEnded(() => {
   confirmedSession = null;
   const { pathname, href } = router.state.location;
   if (pathname.startsWith('/auth/') || pathname.startsWith('/share/')) return;
-  // Signing in again comes back to the page that was open (#225).
+  // Signing in again comes back to the page that was open (#225). The flag is
+  // a number: the router writes a string that reads as JSON in quotes, so '1'
+  // showed as `?signed-out=%221%22` in the address bar (#237).
   void router.navigate({
     to: '/auth/login',
-    search: { [SIGNED_OUT_PARAM]: '1', ...signInSearch(href) } as never,
+    search: { [SIGNED_OUT_PARAM]: 1, ...signInSearch(href) } as never,
   });
 });
 

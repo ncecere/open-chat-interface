@@ -111,8 +111,10 @@ it('goes to sign-in, saying so, when a request finds the session ended', async (
   });
   await settle();
   expect(location().pathname).toBe('/auth/login');
-  // Signing in again comes back to the conversation (#225).
-  expect(location().search).toEqual({ 'signed-out': '1', redirect: '/chat/a' });
+  // Signing in again comes back to the conversation (#225), and the address
+  // bar reads `signed-out=1`, not `signed-out=%221%22` (#237).
+  expect(location().search).toEqual({ 'signed-out': 1, redirect: '/chat/a' });
+  expect(location().href).toBe('/auth/login?signed-out=1&redirect=%2Fchat%2Fa');
   expect(container.querySelector('[data-shell]')).toBeNull();
 });
 
@@ -126,7 +128,7 @@ it('does the same when sending a message finds it ended', async () => {
   });
   await settle();
   expect(location().pathname).toBe('/auth/login');
-  expect(location().search).toEqual({ 'signed-out': '1', redirect: '/chat/a' });
+  expect(location().href).toBe('/auth/login?signed-out=1&redirect=%2Fchat%2Fa');
 });
 
 it('says nothing to someone who was never signed in', async () => {
