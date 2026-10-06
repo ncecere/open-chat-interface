@@ -193,8 +193,14 @@ export interface MarkdownProps {
  * be a block again, or every line of a code block collapses onto one row.
  * This lived in the reply's prose classes only, so the share page (which had
  * its own) and user messages showed code on one line (#186).
+ *
+ * A long unbroken word (a hash, a key, a run of letters) wraps inside the
+ * column, as links already did, instead of pushing the conversation or the
+ * share page sideways (#187). `anywhere` rather than `break-word`, so the word
+ * no longer sets the column's minimum width either. Code blocks keep their
+ * lines (`pre` does not wrap) unless the person turned code wrapping on.
  */
-const MARKDOWN_BASE = '[&_pre_code]:block [&_pre_code>span]:block';
+const MARKDOWN_BASE = 'wrap-anywhere [&_pre_code]:block [&_pre_code>span]:block';
 
 /**
  * Shared prose styling so chat and public shares render identically (#186:
@@ -236,7 +242,11 @@ export const Markdown = memo(function Markdown({
   urlTransform,
 }: MarkdownProps) {
   return (
-    <Suspense fallback={<div className={cn('whitespace-pre-wrap', className)}>{children}</div>}>
+    <Suspense
+      fallback={
+        <div className={cn('whitespace-pre-wrap wrap-anywhere', className)}>{children}</div>
+      }
+    >
       <StreamdownMarkdown className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
         {children}
       </StreamdownMarkdown>

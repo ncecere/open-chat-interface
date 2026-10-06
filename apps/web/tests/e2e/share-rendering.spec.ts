@@ -109,3 +109,33 @@ test('a shared reply keeps its code blocks multi-line and highlighted (#186)', a
   const inline = reply.locator('p code', { hasText: 'reverse()' });
   expect(await inline.evaluate((code) => getComputedStyle(code).paddingLeft)).not.toBe('0px');
 });
+
+const TOKEN = 'ABCDEFGHIJ'.repeat(9);
+
+for (const width of [390, 768, 1440]) {
+  test(`a long unbroken word wraps inside the reply at ${width} px (#187)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openShare(page, `The key is ${TOKEN} and it never breaks.\n\nA hash: \`${TOKEN}\``);
+    const reply = page.getByRole('article', { name: /Assistant message/ });
+    // Rendered, not the plain-text fallback shown while the renderer loads.
+    await expect(reply.locator('p', { hasText: 'The key is' })).toBeVisible();
+    await expect(reply.locator('p')).toHaveCount(2);
+    // The page itself does not scroll sideways.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(0);
+    // Every paragraph stays inside the reply's column.
+    const column = (await reply.boundingBox())!;
+    for (const paragraph of await reply.locator('p').all()) {
+      const box = (await paragraph.boundingBox())!;
+      const right = await paragraph.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return Math.max(...[...range.getClientRects()].map((rect) => rect.right));
+      });
+      expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
+      expect(right).toBeLessThanOrEqual(column.x + column.width + 0.5);
+    }
+  });
+}
