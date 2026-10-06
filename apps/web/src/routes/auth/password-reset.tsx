@@ -1,13 +1,15 @@
 import { Link } from '@tanstack/react-router';
-import { CheckCircle2, KeyRound, Mail } from 'lucide-react';
+import { CheckCircle2, KeyRound, Lock, Mail } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
+import { useReadOnlyPolling } from '~/components/layout/read-only-banner';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
+import { authReadOnlyRefusal, passwordResetPausedMessage } from '~/lib/read-only';
 
 /**
  * The auth pages' frame: the same distance from the top on every page (they
@@ -41,20 +43,49 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Read-only maintenance refuses resets (#138): say so before and after a
+  // send. The status is public, like the banner's.
+  const readOnly = useReadOnlyPolling();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    setError(null);
     setSubmitting(true);
-    await authClient.requestPasswordReset({ email, redirectTo: '/auth/reset-password' });
-    // Always use the same result to avoid disclosing whether an account exists.
-    setSent(true);
+    const result = await authClient.requestPasswordReset({
+      email,
+      redirectTo: '/auth/reset-password',
+    });
     setSubmitting(false);
+    // A refusal (read-only, rate limit, server error) does not depend on
+    // whether the account exists, so it can be shown. Read-only switches the
+    // page to the paused state through the store.
+    if (result.error) {
+      if (!authReadOnlyRefusal(result.error))
+        setError(result.error.message || 'The reset link could not be sent. Try again.');
+      return;
+    }
+    // The same result whether or not an account exists, to avoid disclosing it.
+    setSent(true);
   }
 
-  const offered = !sent && Boolean(status?.localAuthEnabled && status.smtpConfigured);
+  const available = Boolean(status?.localAuthEnabled && status.smtpConfigured);
+  const paused = available && !sent && readOnly.active;
+  const offered = available && !sent && !paused;
   return (
     <AuthCard subtitle={offered ? 'We will email you a secure reset link.' : undefined}>
-      {sent ? (
+      {paused ? (
+        <div className="space-y-4 text-center">
+          <Lock className="mx-auto size-8 text-[var(--text-muted)]" aria-hidden="true" />
+          <h1 className="text-lg font-semibold">Password reset paused</h1>
+          <p role="status" className="text-sm text-[var(--text-muted)]">
+            {passwordResetPausedMessage(readOnly)}
+          </p>
+          <Button asChild className="w-full">
+            <Link to="/auth/login">Return to sign in</Link>
+          </Button>
+        </div>
+      ) : sent ? (
         <div className="space-y-4 text-center">
           <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
           <h1 className="text-lg font-semibold">Check your email</h1>
@@ -91,6 +122,14 @@ export function ForgotPasswordPage() {
               onChange={(event) => setEmail(event.target.value)}
             />
           </div>
+          {error && (
+            <p
+              role="alert"
+              className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
+            >
+              {error}
+            </p>
+          )}
           <Button type="submit" variant="primary" disabled={submitting} className="w-full">
             {submitting ? <Spinner /> : <Mail />} Send reset link
           </Button>

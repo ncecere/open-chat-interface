@@ -27,7 +27,8 @@ chat, in Settings and in administration. The message box, upload, edit, fork
 and retry buttons are off, with the reason, and so are the controls and Save
 buttons of administration pages. In personal Settings a save is refused with
 the same explanation. Somebody who sends just as read-only starts gets that
-explanation too, not an error.
+explanation too, not an error. **Forgot your password?** says password resets
+are paused, with the reason and the expected end, and that no email was sent.
 
 A person signing in for the first time can still accept the acceptable use
 policy, which is part of signing in. Single sign-on can still create an account
