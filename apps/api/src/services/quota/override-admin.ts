@@ -51,6 +51,19 @@ export async function listUserOverrides(userId: string) {
   return { overrides: entries };
 }
 
+/** An override as its audit entries record it. */
+function overrideValues(row: {
+  limitValue: number | string;
+  expiresAt: Date | null;
+  reason: string | null;
+}) {
+  return {
+    limitValue: Number(row.limitValue),
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    reason: row.reason,
+  };
+}
+
 export async function setUserOverride(
   actor: Actor,
   userId: string,
@@ -77,6 +90,22 @@ export async function setUserOverride(
       { path: ['expiresAt'], message: 'Choose a date later than now.' },
     ]);
   }
+
+  // The override this replaces, if any, so the entry says what it was (#221).
+  const [previous] = await db
+    .select({
+      limitValue: schema.quotaPolicyOverride.limitValue,
+      expiresAt: schema.quotaPolicyOverride.expiresAt,
+      reason: schema.quotaPolicyOverride.reason,
+    })
+    .from(schema.quotaPolicyOverride)
+    .where(
+      and(
+        eq(schema.quotaPolicyOverride.policyId, input.policyId),
+        eq(schema.quotaPolicyOverride.userId, userId),
+      ),
+    )
+    .limit(1);
 
   await db
     .insert(schema.quotaPolicyOverride)
@@ -112,6 +141,7 @@ export async function setUserOverride(
       limitValue: input.limitValue,
       expiresAt: expiresAt?.toISOString() ?? null,
       reason: input.reason ?? null,
+      previous: previous ? overrideValues(previous) : null,
     },
   });
 
@@ -127,9 +157,14 @@ export async function clearUserOverride(actor: Actor, userId: string, policyId: 
         eq(schema.quotaPolicyOverride.policyId, policyId),
       ),
     )
-    .returning({ id: schema.quotaPolicyOverride.id });
+    .returning({
+      limitValue: schema.quotaPolicyOverride.limitValue,
+      expiresAt: schema.quotaPolicyOverride.expiresAt,
+      reason: schema.quotaPolicyOverride.reason,
+    });
 
-  if (removed.length === 0) throw notFound('Override not found');
+  const [cleared] = removed;
+  if (!cleared) throw notFound('Override not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -137,7 +172,8 @@ export async function clearUserOverride(actor: Actor, userId: string, policyId: 
     action: 'quota.override.clear',
     targetType: 'user',
     targetId: userId,
-    metadata: { policyId },
+    // What was removed, as other deletes record (#148, #221).
+    metadata: { policyId, previous: overrideValues(cleared) },
   });
 
   return { ok: true };

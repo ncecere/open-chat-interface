@@ -154,7 +154,15 @@ describe.skipIf(!available)('live: partial administrative updates', () => {
       .where(
         and(eq(schema.auditLog.action, 'model.update'), eq(schema.auditLog.targetId, model!.id)),
       );
-    expect(audit?.metadata).toEqual({ fields: ['contextWindow', 'maxOutputTokens'] });
+    // With what each was before (#221).
+    expect(audit?.metadata).toEqual({
+      slug: 'limits-model',
+      fields: ['contextWindow', 'maxOutputTokens'],
+      changes: [
+        { key: 'contextWindow', before: null, after: 200_000 },
+        { key: 'maxOutputTokens', before: null, after: 64_000 },
+      ],
+    });
 
     // Blank in the form: unknown again, so the fallback applies.
     await send(app, 'PATCH', `/models/${model!.id}`, {

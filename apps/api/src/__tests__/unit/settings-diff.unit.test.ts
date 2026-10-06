@@ -23,6 +23,15 @@ describe('diffSettings', () => {
     expect(JSON.stringify(changes)).not.toContain('secret-');
   });
 
+  it('redacts a token but records a token count (#221)', () => {
+    expect(diffSettings({ accessToken: 'a' }, { accessToken: 'b' })).toEqual([
+      { key: 'accessToken', before: '[set]', after: '[set]' },
+    ]);
+    expect(diffSettings({ maxOutputTokens: null }, { maxOutputTokens: 64_000 })).toEqual([
+      { key: 'maxOutputTokens', before: null, after: 64_000 },
+    ]);
+  });
+
   it('distinguishes clearing a secret from replacing it', () => {
     expect(diffSettings({ apiKey: 'k' }, { apiKey: '' })).toEqual([
       { key: 'apiKey', before: '[set]', after: '[unset]' },

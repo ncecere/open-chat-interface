@@ -50,11 +50,15 @@ slower than asking a narrower question.
 ### Configuration changes
 
 A settings entry records what a value **was** as well as what it became, so
-"who disabled sign-on last Tuesday, and what was it before" has an answer. A
-storage allowance entry does the same. A deletion records what was removed: a
+"who disabled sign-on last Tuesday, and what was it before" has an answer. So
+do the entries for a storage allowance, a model edit (a rename names both names,
+a switch which way it went), a usage budget edit (its limit, window, roles and
+models), a person's limit override (the override it replaced), a bulk role
+change (each account's previous role) and read-only mode (the reason and
+expected end before, and the end as saved). A deletion records what was removed: a
 deleted usage budget keeps its measure, limit, window, roles, models and how
-many per-user overrides went with it, and a deleted storage allowance its
-values. **Sign out everywhere** records how many sessions it ended.
+many per-user overrides went with it, a deleted storage allowance its values,
+and a cleared override its limit. **Sign out everywhere** records how many sessions it ended.
 
 Secret values record only whether they are set, cleared, or replaced. The value
 never enters the log.

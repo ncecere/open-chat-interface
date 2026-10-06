@@ -325,7 +325,14 @@ export async function updateMaintenance(
       active: { before: before.active, after: after.active },
       source: after.source,
       reason: after.reason ?? next.reason ?? null,
-      until: after.until,
+      // The expected end as saved. The status's own `until` is null for an
+      // end already past, which recorded a saved end as none (#221).
+      until: after.source === 'schedule' ? after.until : (next.until ?? null),
+      previous: {
+        readOnly: current.readOnly === true,
+        reason: current.reason ?? null,
+        until: current.until ?? null,
+      },
       window: next.window ? { startsAt: next.window.startsAt, endsAt: next.window.endsAt } : null,
       keepRunningJobs: keepRunningJobs(next),
     },
