@@ -37,7 +37,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
-import { cn } from '~/lib/utils';
+import { cn, formatDateTime } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
 
 const LEVEL_LABELS: Record<BroadcastLevel, string> = {
@@ -71,6 +71,30 @@ function audienceOf(broadcast: Broadcast): string {
     broadcast.dismissalCount > 0 ? ` · dismissed by ${broadcast.dismissalCount}` : '',
     broadcast.dismissable ? '' : ' · cannot be dismissed',
   ].join('');
+}
+
+/**
+ * When an announcement shows, as one line, or null when it has no start or
+ * end. The list said "scheduled" without saying when, and auditors cannot
+ * open Edit to find out (#227).
+ */
+export function broadcastWindow(broadcast: Pick<Broadcast, 'startsAt' | 'endsAt'>): string | null {
+  const { startsAt, endsAt } = broadcast;
+  if (startsAt && endsAt) return `${formatDateTime(startsAt)} – ${formatDateTime(endsAt)}`;
+  if (startsAt) return `From ${formatDateTime(startsAt)}`;
+  if (endsAt) return `Until ${formatDateTime(endsAt)}`;
+  return null;
+}
+
+/** Its state: showing now, a draft, ended, or scheduled to start later (#227). */
+export function broadcastState(
+  broadcast: Pick<Broadcast, 'active' | 'published' | 'endsAt'>,
+  now = Date.now(),
+): 'showing' | 'draft' | 'ended' | 'scheduled' {
+  if (broadcast.active) return 'showing';
+  if (!broadcast.published) return 'draft';
+  if (broadcast.endsAt && Date.parse(broadcast.endsAt) <= now) return 'ended';
+  return 'scheduled';
 }
 
 function toLocalInput(iso: string | null): string {
@@ -382,12 +406,13 @@ export function AdminBroadcastsPage() {
                   <Badge variant={LEVEL_VARIANTS[broadcast.level]}>
                     {LEVEL_LABELS[broadcast.level]}
                   </Badge>
-                  {broadcast.active ? (
-                    <Badge variant="accent">showing</Badge>
-                  ) : (
-                    <Badge variant="outline">{broadcast.published ? 'scheduled' : 'draft'}</Badge>
-                  )}
+                  <Badge variant={broadcast.active ? 'accent' : 'outline'}>
+                    {broadcastState(broadcast)}
+                  </Badge>
                 </div>
+                {broadcastWindow(broadcast) && (
+                  <p className="text-[var(--text-muted)] text-xs">{broadcastWindow(broadcast)}</p>
+                )}
                 <p
                   className="truncate text-[var(--text-muted)] text-xs"
                   title={audienceOf(broadcast)}

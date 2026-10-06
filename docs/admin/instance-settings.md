@@ -206,3 +206,7 @@ incident.
 
 Audience can be limited by role, which is how a message meant for staff avoids
 students.
+
+The list marks each announcement *showing*, *scheduled* (published, starting
+later), *ended* (past its end) or *draft*, and gives its start and end when it
+has them.

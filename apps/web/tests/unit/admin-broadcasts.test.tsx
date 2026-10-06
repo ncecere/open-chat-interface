@@ -2,7 +2,12 @@
 import type { Broadcast } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { AdminBroadcastsPage } from '../../src/routes/admin/broadcasts';
+import { formatDateTime } from '../../src/lib/utils';
+import {
+  AdminBroadcastsPage,
+  broadcastState,
+  broadcastWindow,
+} from '../../src/routes/admin/broadcasts';
 import {
   alerts,
   button,
@@ -78,6 +83,36 @@ it('clears "the end time must be after the start time" once Ends is moved later 
   expect(alerts(dialog()!).join(' ')).toContain('The end time must be after the start time.');
   await typeInto(ends, '2026-10-24T10:00');
   expect(alerts(dialog()!)).toEqual([]);
+});
+
+it('says when a scheduled announcement shows, to auditors too (#227)', async () => {
+  const startsAt = new Date(Date.now() + 15 * 86_400_000).toISOString();
+  const endsAt = new Date(Date.now() + 17 * 86_400_000).toISOString();
+  api.get.mockImplementation(async () => ({
+    broadcasts: [{ ...broadcast, active: false, startsAt, endsAt }],
+  }));
+  ({ root } = await renderAdmin(<AdminBroadcastsPage />, { role: 'auditor' }));
+  const text = document.body.textContent ?? '';
+  expect(text).toContain('scheduled');
+  expect(text).toContain(`${formatDateTime(startsAt)} – ${formatDateTime(endsAt)}`);
+});
+
+it('names the window and state of every kind of announcement (#227)', () => {
+  const now = Date.parse('2026-10-05T12:00:00Z');
+  const at = (iso: string) => formatDateTime(iso);
+  expect(broadcastWindow({ startsAt: null, endsAt: null })).toBeNull();
+  expect(broadcastWindow({ startsAt: '2026-10-20T10:00:00Z', endsAt: null })).toBe(
+    `From ${at('2026-10-20T10:00:00Z')}`,
+  );
+  expect(broadcastWindow({ startsAt: null, endsAt: '2026-10-22T10:00:00Z' })).toBe(
+    `Until ${at('2026-10-22T10:00:00Z')}`,
+  );
+  const published = { active: false, published: true };
+  expect(broadcastState({ ...published, endsAt: '2026-10-22T10:00:00Z' }, now)).toBe('scheduled');
+  // Published, past its end: no longer "scheduled".
+  expect(broadcastState({ ...published, endsAt: '2026-10-01T10:00:00Z' }, now)).toBe('ended');
+  expect(broadcastState({ active: false, published: false, endsAt: null }, now)).toBe('draft');
+  expect(broadcastState({ active: true, published: true, endsAt: null }, now)).toBe('showing');
 });
 
 it('lets an auditor read each announcement’s message, formatted as shown (#87)', async () => {
