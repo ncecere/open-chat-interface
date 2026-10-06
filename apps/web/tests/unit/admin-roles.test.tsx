@@ -241,9 +241,22 @@ describe('Roles & access', () => {
       'rate-user-upload-source rate-user-upload-error',
     );
     expect(document.getElementById('rate-user-upload-error')?.textContent).toBe(
-      'Enter a whole number of 1 or more.',
+      'Enter a whole number from 1 to 10,000.',
     );
     expect(button('Save rate limits').disabled).toBe(true);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('gives the allowed range when a rate limit is over its maximum (#321)', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />));
+    await typeInto(input('rate-user-upload'), '20000');
+    await typeInto(input('rate-user-concurrent'), '101');
+    expect(document.getElementById('rate-user-upload-error')?.textContent).toBe(
+      'Enter a whole number from 1 to 10,000.',
+    );
+    expect(document.getElementById('rate-user-concurrent-error')?.textContent).toBe(
+      'Enter a whole number from 1 to 100.',
+    );
     expect(api.put).not.toHaveBeenCalled();
   });
 
