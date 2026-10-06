@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QuotaPolicyDialog } from '../../src/components/admin/quota-policy-dialog';
 import { Dialog } from '../../src/components/ui/dialog';
 import { AdminInvitesPage } from '../../src/routes/admin/invites';
+import { AdminPoliciesPage } from '../../src/routes/admin/policies';
 import { AdminReportsPage } from '../../src/routes/admin/reports';
 import { AuthenticationSettingsForm } from '../../src/routes/admin/settings/authentication-settings';
 import { SmtpSettingsForm } from '../../src/routes/admin/settings/smtp-settings';
@@ -16,6 +17,7 @@ import {
   dialog,
   renderAdmin,
   typeInto,
+  typeIntoTextarea,
   validationFailure,
 } from './admin-test-utils';
 
@@ -230,4 +232,24 @@ it('Usage budgets › New budget: an empty name and a negative limit are both at
   await typeInto(input('policy-name'), 'Fix7 budget');
   expect(fieldError('policy-name')).toBeNull();
   expect(fieldError('policy-limit')).toBe('Limit must be more than 0.');
+});
+
+it('Acceptable use › New version: a blank title and policy text are each at their field (#322)', async () => {
+  api.get.mockResolvedValue({ policies: [] });
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await click(button('New version'));
+  await click(document.getElementById('policy-publish')!);
+  await typeInto(input('policy-title'), ' ');
+  await typeIntoTextarea(document.getElementById('policy-body') as HTMLTextAreaElement, '   ');
+  await submitIn('Save draft');
+
+  expect(fieldError('policy-title')).toBe('Title is required.');
+  expect(fieldError('policy-body')).toBe('Policy text is required.');
+  // Nothing at the foot of the dialog.
+  expect(alerts(dialog()!)).toEqual(['Title is required.', 'Policy text is required.']);
+  expect(api.post).not.toHaveBeenCalled();
+  // The publish switch is described by its hint (#310).
+  expect(document.getElementById('policy-publish')?.getAttribute('aria-describedby')).toBe(
+    'policy-publish-hint',
+  );
 });
