@@ -164,3 +164,89 @@ describe('unit: attachment content validation', () => {
     ).resolves.toMatchObject({ filename: 'report.txt' });
   });
 });
+
+describe('unit: what to do instead of a refused office file (#365)', () => {
+  const instanceDefault = [
+    'image/png',
+    'application/pdf',
+    'text/plain',
+    'text/markdown',
+    'text/csv',
+    'application/json',
+  ];
+
+  /** A real workbook, Word document and presentation, made by the app's own exporters. */
+  async function officeFile(format: 'xlsx' | 'docx' | 'pptx') {
+    const { prepareDocument, renderDocument } = await import('../../services/documents/render.js');
+    const model = await prepareDocument(
+      format,
+      'Budget',
+      '# Budget\n\n| a | b |\n| - | - |\n| 1 | 2 |',
+    );
+    return Buffer.from(await renderDocument(format, model));
+  }
+
+  it('a spreadsheet: export as CSV, or paste the cells', async () => {
+    await expect(
+      validate({
+        filename: 'walk9-budget.xlsx',
+        declaredMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        bytes: await officeFile('xlsx'),
+        allowedMimeTypes: instanceDefault,
+      }),
+    ).rejects.toMatchObject({
+      status: 422,
+      message:
+        'walk9-budget.xlsx is a spreadsheet, which is not allowed here. You can attach images, PDFs and text files. Export the sheet as CSV (one file for each sheet) and attach that, or paste the cells into your message.',
+    });
+  });
+
+  it('suggests only what this instance accepts', async () => {
+    const xlsx = await officeFile('xlsx');
+    await expect(
+      validate({ filename: 'b.xlsx', bytes: xlsx, allowedMimeTypes: ['text/plain', 'image/png'] }),
+    ).rejects.toMatchObject({
+      message:
+        'b.xlsx is a spreadsheet, which is not allowed here. You can attach images and text files. Paste the cells into your message.',
+    });
+  });
+
+  it('a Word document or a presentation: save as PDF, or paste the text', async () => {
+    for (const [format, kind] of [
+      ['docx', 'a Word document'],
+      ['pptx', 'a presentation'],
+    ] as const) {
+      await expect(
+        validate({
+          filename: `plan.${format}`,
+          bytes: await officeFile(format),
+          allowedMimeTypes: instanceDefault,
+        }),
+      ).rejects.toMatchObject({
+        message: `plan.${format} is ${kind}, which is not allowed here. You can attach images, PDFs and text files. Save or export it as a PDF and attach that, or paste the text into your message.`,
+      });
+    }
+    await expect(
+      validate({
+        filename: 'plan.docx',
+        bytes: await officeFile('docx'),
+        allowedMimeTypes: ['text/plain'],
+      }),
+    ).rejects.toMatchObject({
+      message:
+        'plan.docx is a Word document, which is not allowed here. You can attach text files. Paste the text into your message.',
+    });
+  });
+
+  it('gives no hint for kinds with nothing to convert to, and an allowed CSV still attaches', async () => {
+    const { conversionHint } = await import('../../services/attachments/validate.js');
+    expect(conversionHint('application/zip', instanceDefault)).toBeNull();
+    const csv = await validate({
+      filename: 'budget.csv',
+      declaredMimeType: 'text/csv',
+      bytes: Buffer.from('item,amount\nrent,1200\n'),
+      allowedMimeTypes: instanceDefault,
+    });
+    expect(csv.mimeType).toBe('text/csv');
+  });
+});

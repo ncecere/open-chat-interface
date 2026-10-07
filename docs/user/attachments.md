@@ -9,6 +9,12 @@ By default an instance accepts PNG, JPEG, WebP, and GIF images, PDFs, and plain
 text, up to 20 MB each and ten files per message. Your administrator can change
 all of that, so an instance may accept more or fewer types.
 
+**Spreadsheets (`.xlsx`, `.xls`), Word documents and presentations are not
+accepted by default.** CSV files are: in Excel or Sheets use **Save as / Download
+as CSV** (one file for each sheet) and attach that, or paste the cells into your
+message. For a Word document or a presentation, save or export it as a PDF, or
+paste the text. The red note under a refused file says the same.
+
 Files are checked by their **contents**, not their extension. Renaming a file to
 `.png` will not get it accepted, and a genuine PNG with the wrong extension will
 be.

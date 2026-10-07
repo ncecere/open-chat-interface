@@ -84,6 +84,29 @@ export function allowedKindsSentence(allowedMimeTypes: string[]): string | null 
   return `You can attach ${list}.`;
 }
 
+const SPREADSHEET = /spreadsheetml|^application\/vnd\.ms-excel$/;
+const DOCUMENT = /wordprocessingml|presentationml|^application\/(msword|vnd\.ms-powerpoint)$/;
+
+/**
+ * What to do instead with a spreadsheet, a Word document or a presentation
+ * that is refused (#365), using only what this instance accepts: the refusal
+ * said what cannot be attached, and the next step is the person's to guess.
+ */
+export function conversionHint(mimeType: string, allowedMimeTypes: string[]): string | null {
+  const allows = (pattern: RegExp) => allowedMimeTypes.some((type) => pattern.test(type));
+  if (SPREADSHEET.test(mimeType)) {
+    if (allows(/^text\/csv$/))
+      return 'Export the sheet as CSV (one file for each sheet) and attach that, or paste the cells into your message.';
+    return 'Paste the cells into your message.';
+  }
+  if (DOCUMENT.test(mimeType)) {
+    if (allows(/^application\/pdf$/))
+      return 'Save or export it as a PDF and attach that, or paste the text into your message.';
+    return 'Paste the text into your message.';
+  }
+  return null;
+}
+
 /** A size limit as people set it: "20 MB", "1.5 MB", "512 KB", without a stray ".0". */
 function limitText(bytes: number): string {
   const [unit, size] = bytes >= 1024 * 1024 ? ['MB', 1024 * 1024] : ['KB', 1024];
@@ -166,6 +189,7 @@ export async function validateUpload(params: {
           ? `${filename} is ${kind}, which is not allowed here.`
           : `${filename} is a type of file that is not allowed here.`,
         allowed,
+        conversionHint(mimeType, params.allowedMimeTypes),
       ]
         .filter(Boolean)
         .join(' '),
