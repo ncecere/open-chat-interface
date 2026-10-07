@@ -11,14 +11,15 @@ Fixes from nine QA walks of v0.11.0 (issues #35–#376). Four migrations,
 `0042`, `0043` (code artifacts, #298), `0044` (two columns that let a failed
 scheduled report be tried again, #352; no table rewrite) and `0045` (a delete
 trigger that keeps a stored file while another conversation still uses it,
-#358; no schema change), run with `migrate` as usual. Seven post-deploy steps
+#358; no schema change), run with `migrate` as usual. Six post-deploy steps
 run with `migrate --post` after every replica runs the new release, as for any
 release: `0007`, `0008` and `0010` index the audit log (#216, #342), `0009`
 enables code artifacts (#298; until it runs, code stays in the reply, so a
 replica of the previous release never sees the new kind), `0011` and `0012`
 index stored files for the delete trigger (#358; until they run, deleting a
-file scans the attachments table), and `0013` indexes message text without
-accents (#362; until it runs, search stays exact about accents). A background
+file scans the attachments table). Message-text search stays exact about
+accents unless you build the optional index by hand (#362; see
+`docs/OPERATIONS.md`, "Accent-insensitive conversation search"). A background
 migration, `0.11.attachment-own-rows` (visible on System health), gives forks
 and edits that already share their original's files their own copies (#358);
 until it finishes, every delete protects them anyway. **Upgrade note for the
@@ -142,10 +143,19 @@ files again; the SQL to reset the migration afterwards is in
   confirms like other destructive dialogs, with focus on Cancel (#356);
   read-only controls stay focusable and give their reason (#357).
 - **Chat:** right-to-left text is laid out from the right (#360); file names
-  keep Japanese, Arabic, Russian and other letters (#361); conversation search
-  ignores accents (#362); Summarise uses the picker's model (#363); a refused
+  keep Japanese, Arabic, Russian and other letters (#361); conversation titles
+  in search, the sidebar and Settings → History ignore accents, and message text
+  does too once the optional index is built (#362, next item); Summarise uses the picker's model (#363); a refused
   spreadsheet says what to do (#365); the model reads the latest version of a
   document the person edited (#366).
+- **Accent-insensitive search is partly optional** (#362). Titles ignore accents
+  with no setup. Message text stays exact about accents (`bibliotheque` does not
+  find "bibliothèque" in a reply) unless an operator builds an optional index by
+  hand: `packages/db/optional/message_text_search_folded_index.sql`, not run by
+  `migrate --post`, about 1 to 1.5 ms per message (100,000 messages: about 2.5
+  minutes). The API starts using it by itself once it exists and is valid.
+  Product decision: it was a post-deploy step (`0013`) in earlier builds of this
+  release, but its build time made upgrades of large databases wait minutes.
 - **The acceptable use policy is enforced by the API** (#367). Until a person
   has accepted the published version, every write that uses the instance (chat,
   uploads, new conversations and projects, tool approvals, memory, imports,

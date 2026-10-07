@@ -1188,21 +1188,49 @@ password-reset request or a refused sign-in has no signed-in actor, only an
 `audit_log_actor_email_idx` on `lower(actor_email)` for entries without an
 actor account, which answers that match.
 
-#### Accent-insensitive conversation search (post-deploy step 0013)
+#### Accent-insensitive conversation search (optional index)
 
-Conversation search ignores accents (#362): `bibliotheque` finds
+Conversation search can ignore accents (#362): `bibliotheque` finds
 "bibliothèque". PostgreSQL's `unaccent` is an extension, so no extension is
 needed: the text is folded with `translate()`, which replaces each precomposed
-Latin letter with diacritics by its base letter. Step 0013 builds a second GIN
-index, `message_text_search_folded_idx`, over the folded message text
-(`CREATE INDEX CONCURRENTLY`, so writes to `message` continue; it reads every
-message once and is about the size of `message_text_search_idx`). Until the
-step has finished, search keeps using `message_text_search_idx` and is exact
-about accents, as before; once it has, every replica switches (within about 30
-seconds). `message_text_search_idx` stays: a replica of the previous release
-still uses it, and it can be dropped by hand after the upgrade is final. The
-conversation list's title filter folds accents on the fly and needs no step.
-Project file search (the keyword side) is not folded.
+Latin letter with diacritics by its base letter (other scripts are untouched).
+
+**On by default, at no cost:** conversation titles. The search box and ⌘K, the
+sidebar and the History filter in Settings match titles ignoring accents and
+capitals. Nothing is built for this: titles are not indexed.
+
+**Off by default: message text.** Search inside messages is exact about
+accents, as in v0.10 (`bibliotheque` does not find "bibliothèque" in a reply).
+It needs a second GIN index, `message_text_search_folded_idx`, over the folded
+message text, and building it reads and folds every message. That is slow: about
+1 to 1.5 ms per message. On a laptop, 100,000 messages of about 1.6 KB took
+2 min 28 s (80 MB of index; the existing `message_text_search_idx` takes 16 s for
+the same rows), so expect about 25 minutes per million messages. Because an
+upgrade must not wait for that (it was a post-deploy step, `0013`, in earlier
+builds of this release, and made the rolling-upgrade test's 300,000-message
+database take 339 s), it is not run by `migrate --post` and is not listed in the
+post-deploy steps.
+
+To turn message accent-insensitivity on, run the file by hand during a quiet
+period (`CONCURRENTLY`, so reads and writes of `message` continue, but expect
+extra load while it runs). It must not run in a transaction (no `psql -1`) and
+needs no statement timeout:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SET statement_timeout = 0" \
+  -f packages/db/optional/message_text_search_folded_index.sql
+```
+
+The file is also in the API image at
+`/app/packages/db/optional/message_text_search_folded_index.sql`. There is
+nothing to configure: the API looks the index up by name and uses it once it
+exists and is valid, within about 30 seconds on every replica, with no restart.
+An index left INVALID by a cancelled build is ignored (search stays exact); drop
+it with `DROP INDEX CONCURRENTLY IF EXISTS message_text_search_folded_idx` and
+run the file again. Dropping the index turns message search back to exact
+within the same time. `message_text_search_idx` stays either way: it answers
+search while the folded index is missing, and a replica of the previous release
+uses it. Project file search (the keyword side) is not folded.
 
 #### Code artifacts (migration 0043, post-deploy step 0009)
 

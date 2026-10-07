@@ -387,11 +387,15 @@ lines underneath, matched words highlighted, best match first.
 
 - Every word you type must appear, and each matches the start of a word:
   `migr plan` finds "migration planning". Punctuation and symbols are ignored.
-- Accents and capitals do not matter: `bibliotheque` finds "Bibliothèque" and
-  `busqueda` finds "Búsqueda". This applies to Latin letters; words in other
-  scripts (Arabic, Japanese, Cyrillic) match as written. The conversation list
-  filter in Settings → History ignores accents too. Search of a project's
-  files is separate and is not covered by this.
+- Capitals do not matter. Accents do not matter in conversation titles:
+  `bibliotheque` finds a conversation titled "Bibliothèque" and `busqueda` finds
+  "Búsqueda", in search, the sidebar and the conversation list filter in
+  Settings → History. This applies to Latin letters; words in other scripts
+  (Arabic, Japanese, Cyrillic) match as written. In the text of messages,
+  accents matter unless your administrator has turned on accent-insensitive
+  message search (see the operations guide): then `bibliotheque` also finds
+  "bibliothèque" in a reply. Search of a project's files is separate and is not
+  covered by this.
 - Search covers titles, your messages and the replies you were shown. It does
   not search reasoning, web search sources, or the contents of attached files.
 - Archived conversations are included and marked **Archived**. Conversations
