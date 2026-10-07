@@ -34,7 +34,8 @@ The archive contains:
 - `README.txt` — a short description of the above.
 
 Active and archived conversations are included. Conversations in the trash,
-temporary chats and deleted files are not.
+temporary chats and deleted files are not; a message that showed a file you
+deleted still names it, marked `removed`, in its conversation's JSON.
 
 You can run one export at a time, and a few per hour. Very large exports are
 capped: past 2 GB of attached files, further files are listed in

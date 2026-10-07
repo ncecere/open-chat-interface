@@ -90,7 +90,7 @@ describe('Settings → Attachments', () => {
     await render();
     const text = document.body.textContent ?? '';
     expect(text).toContain(
-      'Deleting a chat file removes it from the conversation it is listed with, which stays, and models can no longer read it there.',
+      'Deleting a chat file deletes it: the conversation it is listed with keeps its name, shown as removed, and models can no longer read it.',
     );
     expect(text).not.toContain('unexpected behavior');
   });
@@ -178,7 +178,9 @@ describe('Settings → Attachments', () => {
     await click(button('Delete (1)'));
     // Permanent, so it asks first (#101).
     expect(api.delete).not.toHaveBeenCalled();
-    expect(dialog()?.textContent).toContain('This cannot be undone.');
+    expect(dialog()?.textContent).toContain(
+      'It stays visible in the conversation it was attached to, marked as removed. This cannot be undone.',
+    );
     await click(
       [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Delete')!,
     );
@@ -199,7 +201,7 @@ describe('Settings → Attachments', () => {
     await click(document.querySelector('[aria-label="Select all visible attachments"]')!);
     await click(button('Delete (2)'));
     expect(dialog()?.textContent).toContain(
-      'Those that were sent are removed from the conversations they were attached to',
+      'Those that were sent are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed.',
     );
   });
 
@@ -214,9 +216,9 @@ describe('Settings → Attachments', () => {
     await click(button('Delete (3)'));
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Delete 3 files?');
     expect(dialog()?.textContent).toContain(
-      'They are removed from the conversations they were attached to, and models can no longer read them there.',
+      'The files are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed.',
     );
-    expect(dialog()?.textContent).not.toContain('It is removed');
+    expect(dialog()?.textContent).not.toContain('The file is deleted');
     await click(
       [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Delete')!,
     );

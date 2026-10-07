@@ -85,7 +85,9 @@ already stored); an upload after it may be.
 If a file is gone (you deleted it in **Settings → Attachments**, for example, or
 it was lost to a deletion before copies were kept), the conversation shows it as
 removed: its name struck through with **No longer
-available**, not as a file that will not open. The model is told by name that
+available**, not as a file that will not open. It stays there when you delete it
+in Settings; only files deleted before this change are missing altogether, as they
+were dropped from their messages then. The model is told by name that
 the file cannot be read and is asked not to guess at it, so it says so instead
 of answering as if it had read the file. Remove the chip in the edit box if you
 do not want to carry it into an edit.

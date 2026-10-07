@@ -36,16 +36,20 @@ export async function unavailableFileIds(userId: string, messages: Row[]): Promi
   return new Set(wanted.filter((id) => !found.has(id)));
 }
 
-/** The message's parts with `available: false` on each file in `gone`. */
+/**
+ * The message's parts with `available: false` on each file in `gone` and on
+ * each part the server stored as removed by its owner (`removed: true`, #378).
+ */
 export function markUnavailableFiles<T extends { parts: unknown }>(
   message: T,
   gone: ReadonlySet<string>,
 ): T {
-  if (gone.size === 0 || !Array.isArray(message.parts)) return message;
+  if (!Array.isArray(message.parts)) return message;
   let changed = false;
   const parts = message.parts.map((part) => {
     if (part?.type !== 'data-attachment' || typeof part.data?.id !== 'string') return part;
-    if (!gone.has(part.data.id)) return part;
+    if (!gone.has(part.data.id) && part.data.removed !== true) return part;
+    if (part.data.available === false) return part;
     changed = true;
     return { ...part, data: { ...part.data, available: false } };
   });

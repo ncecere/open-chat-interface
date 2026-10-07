@@ -137,7 +137,12 @@ files again; the SQL to reset the migration afterwards is in
   temporary-chat expiry, bulk delete, projects and legal holds. A copy counts
   against the person's storage allowance (#358). A file that is gone shows as
   removed, and the model is told by name instead of inventing its content
-  (#359); the full export lists the files of forks and edits (#364).
+  (#359); the full export lists the files of forks and edits (#364). Deleting
+  a file in Settings no longer strips it from its message: the part stays,
+  marked removed, with its name, type and size, so the chip reads "No longer
+  available", the model is told by name on every later turn, a fork's own copy
+  is unaffected, and the exports list it as removed (#378). Messages whose file
+  was deleted before this release were already stripped and cannot be recovered.
 - **Accessibility:** the keyboard focus ring on filled buttons is visible from
   the first frame, in every theme and accent (#355); "Turn on read-only mode"
   confirms like other destructive dialogs, with focus on Cancel (#356);

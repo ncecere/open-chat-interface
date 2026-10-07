@@ -122,13 +122,13 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
           .from(schema.message)
           .where(eq(schema.message.id, row.messageId));
         if (message) {
-          const parts = message.parts.filter((part) => {
-            if (part.type !== 'data-attachment') return true;
-            const data = part.data;
-            return (
-              typeof data !== 'object' || data === null || (data as { id?: unknown }).id !== id
-            );
-          });
+          // The part stays, marked removed (#378). Dropping it left no trace in
+          // the conversation and told the model nothing, so it answered about
+          // the file from imagination. Only this message's part is marked: a
+          // fork's or an edit's copy is its own row with its own id (#358).
+          const parts = message.parts.map((part) =>
+            part.type === 'data-attachment' ? markPartRemoved(part, row) : part,
+          );
           await tx
             .update(schema.message)
             .set({ parts })
@@ -143,6 +143,33 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
 }
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The part of a file its owner removed, if it is that file's: `removed: true`
+ * with the name, type and size kept, so the chip, the model's notice and the
+ * exports still have them after the trash purges the row and its object.
+ * Reads also compute `available: false` from the row, which covers files that
+ * go some other way (expiry, a purge); this marker is the one that survives
+ * with the message.
+ */
+function markPartRemoved<P extends { data?: unknown }>(
+  part: P,
+  row: typeof schema.attachment.$inferSelect,
+): P {
+  const data = part.data;
+  if (typeof data !== 'object' || data === null || (data as { id?: unknown }).id !== row.id)
+    return part;
+  return {
+    ...part,
+    data: {
+      ...data,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      removed: true,
+    },
+  };
+}
 
 /** Moves one locked chat file to the trash, by its owner. */
 async function trashRow(

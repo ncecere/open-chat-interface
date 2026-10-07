@@ -62,8 +62,10 @@ interface ExportMessage {
 function attachmentsFromParts(parts: Record<string, unknown>[]): string[] {
   return parts.flatMap((part) => {
     if (part.type !== 'data-attachment') return [];
-    const data = part.data as { filename?: unknown } | undefined;
-    return typeof data?.filename === 'string' ? [data.filename] : [];
+    const data = part.data as { filename?: unknown; removed?: unknown } | undefined;
+    if (typeof data?.filename !== 'string') return [];
+    // A file its owner deleted stays in the list, said as removed (#378).
+    return [data.removed === true ? `${data.filename} (removed)` : data.filename];
   });
 }
 

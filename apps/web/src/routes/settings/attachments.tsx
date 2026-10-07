@@ -119,17 +119,19 @@ function emptyHint(features: CurrentFeatures | undefined): string | undefined {
 /**
  * What deleting does, for the files chosen. A file marked "Not sent" (#297)
  * was never in a conversation, and the dialog said it would be removed from
- * the conversations it was attached to (#316).
+ * the conversations it was attached to (#316). It is not removed from them:
+ * the conversation keeps the file's name, shown as removed, and the model is
+ * told it is gone (#378).
  */
 function deleteDescription(count: number, unsent: number): string {
   if (count <= 1)
     return unsent
       ? 'It was never sent. This cannot be undone.'
-      : 'It is removed from the conversation it was attached to, and models can no longer read it there. This cannot be undone.';
+      : 'The file is deleted and models can no longer read it. It stays visible in the conversation it was attached to, marked as removed. This cannot be undone.';
   if (unsent === count) return 'They were never sent. This cannot be undone.';
   return unsent
-    ? 'Those that were sent are removed from the conversations they were attached to, and models can no longer read them there. This cannot be undone.'
-    : 'They are removed from the conversations they were attached to, and models can no longer read them there. This cannot be undone.';
+    ? 'Those that were sent are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed. This cannot be undone.'
+    : 'The files are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed. This cannot be undone.';
 }
 
 export function SettingsAttachmentsPage() {
@@ -204,6 +206,8 @@ export function SettingsAttachmentsPage() {
         return next;
       });
       void queryClient.invalidateQueries({ queryKey: ['attachments'] });
+      // A conversation already loaded shows its file as removed now (#378).
+      void queryClient.invalidateQueries({ queryKey: ['thread'] });
     },
   });
 
@@ -251,10 +255,10 @@ export function SettingsAttachmentsPage() {
     <div>
       <h1 className="text-2xl font-bold">Attachments</h1>
       <p className="mt-1 max-w-4xl text-sm leading-5 text-[var(--text-secondary)]">
-        Files you uploaded in chats and to projects. Deleting a chat file removes it from the
-        conversation it is listed with, which stays, and models can no longer read it there. A fork
-        or an edit has its own copy of each file, listed and counted separately. Project files are
-        managed from their project.
+        Files you uploaded in chats and to projects. Deleting a chat file deletes it: the
+        conversation it is listed with keeps its name, shown as removed, and models can no longer
+        read it. A fork or an edit has its own copy of each file, listed and counted separately.
+        Project files are managed from their project.
       </p>
 
       <StorageMeter />

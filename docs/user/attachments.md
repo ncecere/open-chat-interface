@@ -90,10 +90,18 @@ attachment-feature restrictions also apply to historical files; a file-free
 conversation can still be used when file access is disabled.
 
 A file that is gone (for example one you deleted in **Settings → Attachments**)
-is shown in its conversation as removed: its name struck through, with **No
-longer available**, and not as a file that will not open. The model is told by
-name that it cannot read the file and must not guess its contents, so it says
-the file is unavailable rather than inventing an answer from it.
+stays in its conversation as removed: its
+name struck through, with **No longer available**, and not as a file that will
+not open. Deleting a file never makes it vanish from the message it was sent
+with. The model is told by name, on every later turn, that it cannot read the
+file and must not guess its contents, so it says the file is unavailable rather
+than inventing an answer from it. Deleting one copy marks only that
+conversation's file: a fork's or an edit's own copy is unaffected. Removing a
+file in the composer before you send it simply removes it: nothing was sent.
+A conversation's Markdown export lists such a file as "(removed)", its JSON
+export keeps the message's part marked `removed`, and a shared page never shows
+files anyway. A file deleted before this change was dropped
+from its message at the time and cannot be brought back as a removed file.
 
 If a file is being changed or deleted while a reply is prepared, the request may
 be refused as unavailable or busy. Retry after the file operation finishes;

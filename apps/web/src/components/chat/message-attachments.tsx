@@ -12,7 +12,16 @@ export interface AttachmentCard {
    * conversation; absent means available, as for a file just sent.
    */
   available?: boolean;
+  /**
+   * Stored on the part when its owner deleted the file (#378); the part stays
+   * so the conversation still shows the file, as removed.
+   */
+  removed?: boolean;
 }
+
+/** A file that can no longer be opened: removed by its owner, expired or lost (#359, #378). */
+export const isRemovedFile = (card: Pick<AttachmentCard, 'available' | 'removed'>) =>
+  card.available === false || card.removed === true;
 
 /** Attachment metadata the server records alongside a sent user turn. */
 export function attachmentsOf(message: UIMessage): AttachmentCard[] {
@@ -30,7 +39,7 @@ export function MessageAttachments({ message }: { message: UIMessage }) {
   return (
     <div className="mt-3 flex flex-wrap gap-2">
       {cards.map((card) =>
-        card.available === false ? (
+        isRemovedFile(card) ? (
           <RemovedFile key={card.id} filename={card.filename} />
         ) : card.mimeType.startsWith('image/') ? (
           <a key={card.id} href={card.url} target="_blank" rel="noreferrer" title={card.filename}>
