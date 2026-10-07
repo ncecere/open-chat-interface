@@ -1,10 +1,11 @@
 import type { OnboardingState } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { IntroductionWizard } from '~/components/onboarding/introduction-wizard';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
+import { onPolicyRequired } from '~/lib/policy-required';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 /**
@@ -84,6 +85,17 @@ function PolicyGate({ policy }: { policy: NonNullable<OnboardingState['pendingPo
  * never flashes into view before a required policy appears.
  */
 export function OnboardingGate({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  // The server refuses a write until the published policy is accepted (#367):
+  // a tab opened before a new version came out, whose answer here is up to
+  // five minutes old, looks again and shows the acceptance page.
+  useEffect(
+    () =>
+      onPolicyRequired(() => {
+        void queryClient.invalidateQueries({ queryKey: ['me', 'onboarding'] });
+      }),
+    [queryClient],
+  );
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'onboarding'],
     queryFn: () => api.get<OnboardingState>('/me/onboarding'),

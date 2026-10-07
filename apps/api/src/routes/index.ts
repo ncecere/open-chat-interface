@@ -3,6 +3,7 @@ import { auth } from '../auth/index.js';
 import { loadEnv } from '../config/env.js';
 import { authRateLimitMiddleware } from '../middleware/auth-rate-limit.js';
 import type { AppBindings } from '../middleware/context.js';
+import { policyAcceptanceGuard } from '../middleware/policy-acceptance.js';
 import { readOnlyGuard } from '../middleware/read-only.js';
 import { adminRoutes } from './admin/index.js';
 import { artifactRoutes } from './artifacts.js';
@@ -30,6 +31,9 @@ export function createApiRoutes() {
   // refused before anything else is done with it, and a route added later is
   // refused by default (middleware/read-only.ts has the allowlist).
   api.use('*', readOnlyGuard);
+  // The acceptable use policy (#367): a person who has not accepted the
+  // published version cannot write, except what its allowlist names.
+  api.use('*', policyAcceptanceGuard);
 
   api.route('/health', healthRoutes);
   // Unauthenticated: whether writes are refused now, for the banner.

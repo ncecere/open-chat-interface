@@ -1,5 +1,6 @@
 import type { ApiErrorBody, ReadOnlyStatus } from '@oci/shared';
 import type { FieldProblem } from '~/hooks/use-clear-on-edit';
+import { notePolicyRequired, POLICY_ACCEPTANCE_REQUIRED } from '~/lib/policy-required';
 import { noteReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
 import { noteUnauthorized } from '~/lib/session-ended';
 import { type FieldLabels, validationProblems, validationText } from '~/lib/validation-issues';
@@ -126,6 +127,10 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
         const status = (details as { readOnly?: ReadOnlyStatus } | undefined)?.readOnly;
         if (status) message = readOnlyMessage(status);
       }
+      // A write refused until the acceptable use policy is accepted (#367):
+      // the gate looks again and shows the acceptance page.
+      if (response.status === 403 && (code as string) === POLICY_ACCEPTANCE_REQUIRED)
+        notePolicyRequired();
     } catch {
       // Non-JSON error responses keep the status text.
     }

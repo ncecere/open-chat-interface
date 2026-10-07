@@ -21,6 +21,7 @@ import {
   readRefusedSubmission,
 } from '~/lib/chat-submission';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { startingModel } from '~/lib/starting-model';
 import { requestStop } from '~/lib/stop-request';
@@ -189,6 +190,8 @@ export function useChatSession(options: {
       const notSaved = response.headers.get(MESSAGE_SAVED_HEADER) === 'no';
       const refusedStatus =
         (response.status >= 400 && response.status < 500) || response.status === 503 || notSaved;
+      // Not accepted the acceptable use policy yet (#367): show the acceptance page.
+      if (!response.ok) void notePolicyRequiredResponse(response);
       if (sending && !response.ok && scope.request === request) {
         const sent = readRefusedSubmission(init?.body);
         if (sent && refusedStatus) refuseSubmission.current(sent);

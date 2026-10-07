@@ -527,6 +527,34 @@ and became and `textChanged`. A changed text is recorded by its length and
 SHA-256 digest before and after, never by its wording, which can be long. A
 save that changes nothing is not recorded.
 
+### Enforced by the server, not only the browser
+
+Until a person has accepted the version in force, the **API** refuses
+everything that uses the instance, whatever is calling it: starting or
+continuing a chat, uploads, creating conversations and projects, approving a
+tool, memory, imports and settings. The answer is `403` with the error code
+`POLICY_ACCEPTANCE_REQUIRED` and a message naming the version. The web app
+turns that answer into the acceptance page, even in a tab that was already
+open when the version was published.
+
+Still available before accepting: reading (including `/api/me`, the policy
+itself, their own conversations and exports), accepting the policy, signing in
+and out, signing out other devices, withdrawing a shared link, and deleting
+their own account. Nothing is locked: accepting is always possible.
+
+- **It applies to every role**, administrators and auditors included, as the
+  browser's page does (the page asks an administrator first, too). The
+  **administration API** itself stays open to an administrator who has not
+  accepted (publishing, drafts, people, settings), so a new version cannot lock
+  out the people who run the instance or the automation that manages it; what
+  they do as a *user* (chat, uploads) waits for their acceptance like anyone's.
+- **A script or integration that calls the API with a person's session** and has
+  never accepted will now get `403` on writes. Have that account accept the
+  policy once (sign in as it and press **I accept**).
+- **No policy published, or only drafts:** nothing is refused.
+- The policy in force is looked up at most every 15 seconds per replica and
+  cleared at once on every replica when a version is published.
+
 ### What is recorded
 
 The version, the moment, and the address it came from. Enough to answer "what

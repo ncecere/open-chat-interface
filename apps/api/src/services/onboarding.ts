@@ -3,6 +3,7 @@ import type { OnboardingState, UsagePolicy } from '@oci/shared';
 import { db } from '../db/index.js';
 import { validationFailed } from '../lib/errors.js';
 import { getDefaultOrganizationId } from './organization.js';
+import { invalidatePolicyCache } from './policy-gate.js';
 
 /** The policy currently in force, or null when none has been published. */
 export async function currentPolicy() {
@@ -173,6 +174,8 @@ export async function createPolicyVersion(params: {
     .returning({ id: schema.usagePolicy.id });
 
   if (!created) throw new Error('Failed to create the policy version');
+  // A published version changes who may use the instance at once (#367).
+  if (params.publish) invalidatePolicyCache();
   return { id: created.id, version };
 }
 
@@ -191,6 +194,7 @@ export async function publishPolicy(policyId: string): Promise<boolean> {
     )
     .returning({ id: schema.usagePolicy.id });
 
+  if (published.length > 0) invalidatePolicyCache();
   return published.length > 0;
 }
 
