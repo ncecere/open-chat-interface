@@ -2,6 +2,7 @@ import { type ProjectSearchData, projectSearchDataSchema } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { ChevronDown, ChevronRight, FileSearch } from 'lucide-react';
 import { useId, useState } from 'react';
+import { FOCUS_RING } from '~/components/ui/focus-ring';
 
 /**
  * Reads the `data-project-search` part a reply carries when its project's
@@ -114,7 +115,7 @@ export function ProjectSearchNote({ message }: { message: UIMessage }) {
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             onClick={() => setOpen((value) => !value)}
-            className="mt-1 ml-5 inline-flex items-center gap-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--text-faint)]"
+            className={`mt-1 ml-5 inline-flex items-center gap-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${FOCUS_RING}`}
           >
             <Chevron className="size-3" aria-hidden="true" />
             {open ? 'Hide passages used' : 'Show passages used'}

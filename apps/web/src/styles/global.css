@@ -38,6 +38,19 @@
     color: var(--text-primary);
   }
 
+  /*
+   * The ring's colour is set on every element, not only when focused (#355).
+   * Unfocused, an outline's colour is currentcolor, and the many controls with
+   * `transition-colors` (which includes outline-color) faded the ring in from
+   * their text colour over 150 ms: a ring that began as near-white on a
+   * near-white page. With the same colour in both states there is no fade.
+   */
+  *,
+  ::before,
+  ::after {
+    outline-color: var(--accent-bright);
+  }
+
   :focus-visible {
     outline: 2px solid var(--accent-bright);
     outline-offset: 2px;
