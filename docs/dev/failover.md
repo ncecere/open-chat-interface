@@ -67,7 +67,7 @@ Each test terminates every backend of its own throwaway database with
 | `failover-requests.live.test.ts` | A read, a write, a transaction | **Failed**: the read answered `500`; the write's `500` was not marked retryable | Read `200`; write `500` + `X-OCI-Retryable`; transaction rejects promptly, pool reconnects |
 | `postgres-transaction-failover.live.test.ts` | `sql.begin` and Drizzle transactions (mid-statement, between statements), a reserved connection; more rounds than the pool has connections | **Failed**: uncaught `TypeError`s, then a pool that never answered again (also with pristine postgres.js 3.4.9) | Rejects with a connection error; nothing uncaught; pool serves the next queries |
 | `worker-role.live.test.ts` | The worker's `LISTEN` connection | (new) | Hears requests again after the failover |
-| `portability-import.live.test.ts` | An import meeting `57P01`, and a worker stopping mid-import | **Failed**: the import was marked failed, or the rest counted as failed conversations | Requeued, resumed, every conversation imported once |
+| `portability-import-jobs.live.test.ts` | An import meeting `57P01`, and a worker stopping mid-import | **Failed**: the import was marked failed, or the rest counted as failed conversations | Requeued, resumed, every conversation imported once |
 
 ### Weekly: the Patroni drill
 

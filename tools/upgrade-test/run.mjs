@@ -25,24 +25,54 @@
  *
  * Exit codes: 0 pass, 1 verdict failed, 2 the test itself could not run.
  */
+
 import { fork } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { buildInjectedImage, CASES } from './inject.mjs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { buildInjectedImage } from './inject.mjs';
 import {
-  ADMIN,
-  Client,
+  bases,
+  env,
+  FIRST_DRAINING,
+  FIRST_VERSIONED_SECRETS,
+  log,
+  options,
+  origin,
+  outDir,
+  REGISTRY,
+  STABLE,
+  startedAt,
+  timeline,
+} from './lib/context.mjs';
+import {
+  appliedMigrationTimes,
+  backgroundMigrations,
+  postSteps,
+  secretFormats,
+  secretsDuringUpgrade,
+  USAGE_ROLLUP_BACKFILL,
+  usageRollupCheck,
+} from './lib/database.mjs';
+import {
+  buildFromSource,
+  compareVersions,
+  ensureImage,
+  hostArch,
+  localArch,
+  readJournal,
+  resolveFrom,
+} from './lib/images.mjs';
+import { startLockMonitor } from './lib/locks.mjs';
+import { collectLogs, teardown } from './lib/stack.mjs';
+import {
   compose,
   containerId,
   inspect,
   must,
   PERSON_PASSWORD,
-  PROJECT,
-  parseArgs,
   psql,
   REPO_ROOT,
   run,
-  signIn,
   sleep,
   TOOL_DIR,
   waitHealthy,
@@ -57,547 +87,6 @@ import {
   WORDS,
 } from './seed.mjs';
 import { runSmoke } from './smoke.mjs';
-
-const REGISTRY = 'ghcr.io/ncecere/open-chat-interface';
-const STABLE = /^v(\d+)\.(\d+)\.(\d+)$/;
-/** The first release whose API drains on shutdown (design item 13). */
-const FIRST_DRAINING = 'v0.11.0';
-/** The first release that reads versioned secrets (`oci:v1:<key id>:`). */
-const FIRST_VERSIONED_SECRETS = 'v0.11.0';
-/** The migrators' advisory lock keys (packages/db/src/migrator.ts, post-migrator.ts). */
-const MIGRATION_LOCK = 8374920115573001n;
-const POST_MIGRATION_LOCK = 8374920115573002n;
-
-const spec = {
-  from: { default: '' },
-  'to-api': { default: '' },
-  'to-web': { default: '' },
-  inject: { default: '' },
-  out: {
-    default: resolve(TOOL_DIR, 'out', new Date().toISOString().replace(/[:.]/g, '-')),
-  },
-  port: { type: 'number', default: 18480 },
-  people: { type: 'number', default: 40 },
-  threads: { type: 'number', default: 10_000 },
-  'messages-per-thread': { type: 'number', default: 30 },
-  /** Usage events seeded (one per seeded reply first, then spread over 60 days). */
-  'usage-events': { type: 'number', default: 240_000 },
-  vus: { type: 'number', default: 6 },
-  'think-ms': { type: 'number', default: 400 },
-  'send-every': { type: 'number', default: 2 },
-  'baseline-seconds': { type: 'number', default: 20 },
-  'settle-seconds': { type: 'number', default: 15 },
-  'cooldown-seconds': { type: 'number', default: 10 },
-  'stop-timeout': { type: 'number', default: 30 },
-  'stub-chunks': { type: 'number', default: 40 },
-  'stub-chunk-ms': { type: 'number', default: 100 },
-  'p99-ms': { type: 'number', default: 2000 },
-  'max-ms': { type: 'number', default: 5000 },
-  'lock-wait-ms': { type: 'number', default: 3000 },
-  'request-timeout-ms': { type: 'number', default: 30_000 },
-  /**
-   * Report replies cut off by a stopping replica instead of failing. Off since
-   * design item 13 (draining on shutdown). A replica running a release from
-   * before it (FROM older than v0.11.0) cannot drain, so the replies it cuts
-   * are always reported, and checked for recovery, rather than failed.
-   */
-  'allow-cut-replies': { type: 'boolean', default: false },
-  /**
-   * Report failures and latency from SIGTERM of an API replica until
-   * --gap-tail-ms after it exited instead of failing. Off since item 13; the
-   * windows of replicas on a release from before it are always reported.
-   */
-  'allow-shutdown-gaps': { type: 'boolean', default: false },
-  'gap-tail-ms': { type: 'number', default: 15_000 },
-  'replace-web': { type: 'boolean', default: true },
-  /** After the upgrade, restart each API replica on TO, as the next upgrade will. */
-  'restart-api': { type: 'boolean', default: true },
-  /** Run the post-deploy phase (`migrate --post`) once every replica runs TO. */
-  'post-deploy': { type: 'boolean', default: true },
-  /**
-   * Test-only background migrations TO runs (comma-separated; empty for none):
-   * the default rewrites every seeded message in place, a batch at a time.
-   */
-  background: { default: 'oci-test.rewrite-messages-in-place' },
-  'background-timeout-seconds': { type: 'number', default: 300 },
-  'expect-fail': { type: 'boolean', default: false },
-  /** Pull FROM (and --to-*) images even when a local copy exists. */
-  pull: { type: 'boolean', default: false },
-  keep: { type: 'boolean', default: false },
-  help: { type: 'boolean', default: false },
-};
-
-const options = parseArgs(process.argv.slice(2), spec);
-if (options.help) {
-  console.log(
-    `Usage: node tools/upgrade-test/run.mjs [options]\n\n${Object.entries(spec)
-      .map(([k, v]) => `  --${k}${v.type === 'boolean' ? '' : ' <value>'}  (default: ${v.default})`)
-      .join('\n')}\n\nInjected cases: ${Object.keys(CASES).join(', ')}`,
-  );
-  process.exit(0);
-}
-
-const outDir = resolve(options.out);
-mkdirSync(outDir, { recursive: true });
-const startedAt = Date.now();
-const timeline = [];
-function log(what) {
-  const at = new Date().toISOString();
-  timeline.push({ at, what });
-  console.log(`[upgrade-test ${at.slice(11, 19)}] ${what}`);
-}
-
-const portA = options.port;
-const portB = options.port + 1;
-const bases = [`http://127.0.0.1:${portA}`, `http://127.0.0.1:${portB}`];
-const origin = bases[0];
-const env = {
-  OCI_UPGRADE_PORT: String(portA),
-  OCI_UPGRADE_PORT2: String(portB),
-  OCI_UPGRADE_STOP_GRACE: `${options['stop-timeout']}s`,
-  OCI_UPGRADE_STUB_CHUNKS: String(options['stub-chunks']),
-  OCI_UPGRADE_STUB_CHUNK_MS: String(options['stub-chunk-ms']),
-  OCI_UPGRADE_TEST_BACKGROUND: options.background,
-};
-
-/* ------------------------------------------------------------------------ */
-
-function compareVersions(a, b) {
-  const x = a.match(STABLE).slice(1).map(Number);
-  const y = b.match(STABLE).slice(1).map(Number);
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
-  return 0;
-}
-
-async function publishedTags(app) {
-  const repo = `${REGISTRY.replace('ghcr.io/', '')}/${app}`;
-  const token = await fetch(`https://ghcr.io/token?scope=repository:${repo}:pull&service=ghcr.io`, {
-    signal: AbortSignal.timeout(15_000),
-  }).then((r) => r.json());
-  const response = await fetch(`https://ghcr.io/v2/${repo}/tags/list?n=1000`, {
-    headers: { authorization: `Bearer ${token.token}` },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) throw new Error(`GHCR tag list for ${app}: HTTP ${response.status}`);
-  return (await response.json()).tags ?? [];
-}
-
-async function resolveFrom(sourceVersion) {
-  if (options.from) return options.from.startsWith('v') ? options.from : `v${options.from}`;
-  let tags;
-  try {
-    const [api, web] = await Promise.all([publishedTags('api'), publishedTags('web')]);
-    tags = api.filter((t) => web.includes(t));
-  } catch (error) {
-    log(`could not list GHCR tags (${error.message}); falling back to git tags`);
-    tags = (await run('git', ['tag', '-l', 'v*'])).stdout.split('\n');
-  }
-  const older = tags
-    .filter((t) => STABLE.test(t) && compareVersions(t, `v${sourceVersion}`) < 0)
-    .sort(compareVersions);
-  if (!older.length) throw new Error(`No published stable release older than ${sourceVersion}`);
-  return older.at(-1);
-}
-
-/** The Docker server's architecture (`amd64`, `arm64`): images of it run natively. */
-let hostArchPromise;
-function hostArch() {
-  hostArchPromise ??= run('docker', ['version', '--format', '{{.Server.Arch}}']).then(
-    (r) => r.stdout.trim() || 'amd64',
-  );
-  return hostArchPromise;
-}
-
-async function localArch(image) {
-  const r = await run('docker', ['image', 'inspect', '--format', '{{.Architecture}}', image]);
-  return r.code === 0 ? r.stdout.trim() : null;
-}
-
-/**
- * Makes `image` available, natively when the registry has the host's
- * architecture. Releases from v0.11 are multi-arch (linux/amd64 and
- * linux/arm64); earlier ones are linux/amd64 only and run emulated on other
- * hosts. A local copy of another architecture is replaced when a native one
- * can be pulled (an older run may have pulled it emulated). Returns the
- * architecture used.
- */
-async function ensureImage(image) {
-  const host = await hostArch();
-  const local = await localArch(image);
-  if (local === host && !options.pull) return { image, arch: local, emulated: false };
-  log(`pulling ${image} for linux/${host}`);
-  let result = await run('docker', ['pull', '-q', '--platform', `linux/${host}`, image]);
-  if (result.code === 0) return { image, arch: host, emulated: false };
-  if (local && !options.pull) {
-    log(`${image} has no linux/${host} image; using the local linux/${local} one (emulated)`);
-    return { image, arch: local, emulated: true };
-  }
-  if (host !== 'amd64') {
-    log(`${image} has no linux/${host} image; pulling linux/amd64 to run emulated`);
-    result = await run('docker', ['pull', '-q', '--platform', 'linux/amd64', image]);
-    if (result.code === 0) return { image, arch: 'amd64', emulated: true };
-  }
-  throw new Error(`docker pull ${image} failed: ${result.stderr}`);
-}
-
-async function buildFromSource(app, version) {
-  // Named after the compose project, so runs with --project never share an image.
-  const image = `${PROJECT}-${app}:to`;
-  const revision = (await run('git', ['rev-parse', 'HEAD'])).stdout.trim() || 'unknown';
-  log(`building ${image} from source (${version}, ${revision.slice(0, 8)})`);
-  const t0 = Date.now();
-  await must(
-    run('docker', [
-      'build',
-      '-q',
-      // Natively, whatever DOCKER_DEFAULT_PLATFORM says: both Dockerfiles
-      // build on amd64 and arm64.
-      '--platform',
-      `linux/${await hostArch()}`,
-      '-f',
-      `docker/${app}.Dockerfile`,
-      '--build-arg',
-      `OCI_VERSION=${version}`,
-      '--build-arg',
-      `OCI_REVISION=${revision}`,
-      '-t',
-      image,
-      '.',
-    ]),
-    `building ${image}`,
-  );
-  log(`built ${image} in ${Math.round((Date.now() - t0) / 1000)} s`);
-  return image;
-}
-
-async function readJournal(image) {
-  const r = await must(
-    run('docker', [
-      'run',
-      '--rm',
-      '--entrypoint',
-      'cat',
-      image,
-      '/app/packages/db/drizzle/meta/_journal.json',
-    ]),
-    `reading the migration journal of ${image}`,
-  );
-  return JSON.parse(r.stdout).entries;
-}
-
-/** Post-deploy steps recorded by `migrate --post`. */
-async function postSteps() {
-  const out = await psql(
-    `select name, coalesce(duration_ms, -1), attempts, finished_at is not null
-       from oci_post_migration order by name;`,
-    env,
-  ).catch(() => '');
-  return out
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [name, durationMs, attempts, finished] = line.split('\t');
-      return {
-        name,
-        durationMs: Number(durationMs) < 0 ? null : Number(durationMs),
-        attempts: Number(attempts),
-        finished: finished === 't',
-      };
-    });
-}
-
-/**
- * Stored secrets by format (v0.11 design, item 23): values encrypted with
- * ENCRYPTION_KEY in the versioned format (`oci:v1:<key id>:`), which a v0.10
- * replica cannot read, and in the format before it.
- */
-async function secretFormats() {
-  const out = await psql(
-    `select count(*) filter (where v like 'oci:v1:%'), count(*) filter (where v not like 'oci:v1:%')
-       from (
-         select encrypted_api_key as v from provider where encrypted_api_key is not null
-         union all select encrypted_secret from webhook_endpoint
-         union all select encrypted_shared_header_value from connector
-           where encrypted_shared_header_value is not null
-         union all select encrypted_oauth_client_secret from connector
-           where encrypted_oauth_client_secret is not null
-         union all select encrypted_tokens from connector_account where encrypted_tokens is not null
-         union all select encrypted_pending from connector_account where encrypted_pending is not null
-       ) secrets;`,
-    env,
-  ).catch(() => '');
-  const [versioned, legacy] = out.trim().split('\t').map(Number);
-  return { versioned: versioned || 0, legacy: legacy || 0 };
-}
-
-/**
- * While a previous-release replica still serves: an administrator re-enters
- * the provider's key (through either web proxy, so through both releases),
- * and the new release must keep storing it in the format the previous one
- * reads, or the previous release's chats (the load) would fail to decrypt it.
- */
-async function secretsDuringUpgrade() {
-  const admin = new Client({ bases, origin, label: 'secrets', timeoutMs: 30_000 });
-  const signedIn = await signIn(admin, ADMIN.email, ADMIN.password);
-  const [providerId] = (await psql('select id from provider order by created_at limit 1;', env))
-    .trim()
-    .split('\n');
-  let saved = 0;
-  for (let attempt = 0; signedIn.ok && attempt < 8; attempt++) {
-    const response = await admin.request(
-      'provider-key',
-      'PATCH',
-      `/api/admin/providers/${providerId}`,
-      {
-        body: { apiKey: 'stub-key' },
-        expect: [200],
-      },
-    );
-    if (response.ok) saved++;
-  }
-  return { saved, attempts: 8, ...(await secretFormats()) };
-}
-
-/** Background migrations and their progress. */
-async function backgroundMigrations() {
-  const out = await psql(
-    `select name, status, rows_processed, batches, attempts, coalesce(last_error, ''),
-            coalesce(throttled_reason, ''),
-            coalesce((extract(epoch from started_at) * 1000)::bigint, 0),
-            coalesce((extract(epoch from finished_at) * 1000)::bigint, 0)
-       from background_migration order by name;`,
-    env,
-  ).catch(() => '');
-  return out
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [name, status, rows, batches, attempts, lastError, throttled, started, finished] =
-        line.split('\t');
-      return {
-        name,
-        status,
-        rowsProcessed: Number(rows),
-        batches: Number(batches),
-        attempts: Number(attempts),
-        lastError: lastError || null,
-        throttledReason: throttled || null,
-        startedAt: Number(started) || null,
-        finishedAt: Number(finished) || null,
-        ms: Number(started) && Number(finished) ? Number(finished) - Number(started) : null,
-      };
-    });
-}
-
-/** The usage-rollup backfill (migration 0040, v0.11); its rollups are checked after it. */
-const USAGE_ROLLUP_BACKFILL = '0.11.usage-rollups';
-
-const ROLLUP_AMOUNTS = [
-  'events',
-  'settled_events',
-  'messages',
-  'tokens_in',
-  'tokens_out',
-  'cost_micros',
-  'quota_messages',
-  'quota_tokens',
-  'quota_cost_micros',
-];
-const MODEL_AMOUNTS = ROLLUP_AMOUNTS.slice(0, 6);
-
-/**
- * Compares the usage rollups with the raw events, in one statement (one
- * snapshot, so the load's writes and the fold job cannot make them disagree
- * mid-check): every (UTC hour, person, model) of `usage_rollup_hour` plus the
- * change log not folded yet, and every (hour, model) of
- * `usage_rollup_model_hour` plus the log, against a `group by` over every
- * event, amount by amount (docs/dev/database.md, "Usage rollups"). A rollup
- * key whose amounts all net to zero is no key. Null when TO has no rollups.
- */
-async function usageRollupCheck() {
-  const [exists] = (
-    await psql(`select to_regclass('usage_rollup_hour') is not null;`, env).catch(() => 'f')
-  ).trim();
-  if (exists !== 't') return null;
-  const eventAmounts = `count(*) as events,
-      count(*) filter (where not pending) as settled_events,
-      coalesce(sum(message_count) filter (where not pending), 0) as messages,
-      coalesce(sum(tokens_in) filter (where not pending), 0) as tokens_in,
-      coalesce(sum(tokens_out) filter (where not pending), 0) as tokens_out,
-      coalesce(sum(cost_micros) filter (where not pending), 0) as cost_micros,
-      sum(message_count) as quota_messages,
-      sum(tokens_in::bigint + tokens_out + reserved_tokens) as quota_tokens,
-      sum(cost_micros + reserved_cost_micros) as quota_cost_micros`;
-  const sums = (names) => names.map((name) => `sum(${name})::bigint as ${name}`).join(', ');
-  const nonZero = (names) => `not (${names.map((name) => `sum(${name}) = 0`).join(' and ')})`;
-  const differs = (names) =>
-    `(${names.map((n) => `e.${n}`).join(', ')}) is distinct from (${names.map((n) => `r.${n}`).join(', ')})`;
-  const out = await psql(
-    `with e as (
-       select date_trunc('hour', occurred_at, 'UTC') as hour, user_id, model_slug, ${eventAmounts}
-       from usage_event group by 1, 2, 3
-     ), em as (
-       select hour, model_slug, ${sums(MODEL_AMOUNTS)} from e group by 1, 2
-     ), r as (
-       select hour, user_id, model_slug, ${sums(ROLLUP_AMOUNTS)}
-       from (select hour, user_id, model_slug, ${ROLLUP_AMOUNTS.join(', ')} from usage_rollup_hour
-             union all
-             select hour, user_id, model_slug, ${ROLLUP_AMOUNTS.join(', ')} from usage_rollup_change) x
-       group by 1, 2, 3 having ${nonZero(ROLLUP_AMOUNTS)}
-     ), rm as (
-       select hour, model_slug, ${sums(MODEL_AMOUNTS)}
-       from (select hour, model_slug, ${MODEL_AMOUNTS.join(', ')} from usage_rollup_model_hour
-             union all
-             select hour, model_slug, ${MODEL_AMOUNTS.join(', ')} from usage_rollup_change) x
-       group by 1, 2 having ${nonZero(MODEL_AMOUNTS)}
-     )
-     select
-       (select count(*) from usage_event),
-       (select count(*) from usage_event where in_rollup is not true),
-       (select count(*) from usage_event where user_id is null),
-       (select count(*) from e),
-       (select count(*) from e full join r
-          on r.hour = e.hour and r.user_id is not distinct from e.user_id and r.model_slug = e.model_slug
-        where ${differs(ROLLUP_AMOUNTS)}),
-       (select count(*) from em),
-       (select count(*) from em e full join rm r on r.hour = e.hour and r.model_slug = e.model_slug
-        where ${differs(MODEL_AMOUNTS)}),
-       (select count(*) from usage_rollup_hour),
-       (select count(*) from usage_rollup_change),
-       (select coalesce(sum(events), 0) from e), (select coalesce(sum(events), 0) from r),
-       (select coalesce(sum(cost_micros), 0) from e), (select coalesce(sum(cost_micros), 0) from r),
-       (select coalesce(sum(quota_tokens), 0) from e), (select coalesce(sum(quota_tokens), 0) from r);`,
-    env,
-  );
-  const [
-    events,
-    unmarked,
-    deletedAccounts,
-    personKeys,
-    personDiffering,
-    modelKeys,
-    modelDiffering,
-    rollupRows,
-    unfolded,
-    eventsTotal,
-    rollupEventsTotal,
-    costTotal,
-    rollupCostTotal,
-    quotaTokensTotal,
-    rollupQuotaTokensTotal,
-  ] = out.trim().split('\t').map(Number);
-  return {
-    events,
-    unmarked,
-    deletedAccounts,
-    personKeys,
-    personDiffering,
-    modelKeys,
-    modelDiffering,
-    rollupRows,
-    unfolded,
-    totals: {
-      events: [eventsTotal, rollupEventsTotal],
-      costMicros: [costTotal, rollupCostTotal],
-      quotaTokens: [quotaTokensTotal, rollupQuotaTokensTotal],
-    },
-    exact:
-      unmarked === 0 &&
-      personDiffering === 0 &&
-      modelDiffering === 0 &&
-      eventsTotal === rollupEventsTotal &&
-      costTotal === rollupCostTotal &&
-      quotaTokensTotal === rollupQuotaTokensTotal,
-  };
-}
-
-async function appliedMigrationTimes() {
-  const out = await psql(
-    'select created_at from drizzle.__drizzle_migrations order by created_at;',
-    env,
-  );
-  return out.trim().split('\n').filter(Boolean).map(Number);
-}
-
-/* ------------------------------------------------------------------------ */
-/* Lock monitor                                                               */
-/* ------------------------------------------------------------------------ */
-
-function startLockMonitor(currentPhase, intervalMs = 1000) {
-  // The migrators' own sessions wait by design (a concurrent index build
-  // waits for every older transaction); what matters is who waits on them.
-  const keys = [MIGRATION_LOCK, POST_MIGRATION_LOCK]
-    .map((key) => `(${Number(key >> 32n)}, ${Number(key & 0xffffffffn)})`)
-    .join(', ');
-  const query = `
-    select a.pid,
-           (extract(epoch from clock_timestamp() - a.query_start) * 1000)::bigint,
-           left(regexp_replace(a.query, '\\s+', ' ', 'g'), 120),
-           coalesce((select left(regexp_replace(b.query, '\\s+', ' ', 'g'), 120)
-                       from pg_stat_activity b
-                      where b.pid = (pg_blocking_pids(a.pid))[1]), '')
-      from pg_stat_activity a
-     where a.wait_event_type = 'Lock' and a.backend_type = 'client backend'
-       and not exists (select 1 from pg_locks l where l.pid = a.pid and l.locktype = 'advisory'
-                        and (l.classid::bigint, l.objid::bigint) in (${keys}) and l.granted);`;
-  const waits = new Map();
-  let running = true;
-  const loop = (async () => {
-    while (running) {
-      const t0 = Date.now();
-      try {
-        const out = await psql(query, env);
-        for (const line of out.trim().split('\n').filter(Boolean)) {
-          const [pid, waited, q, blocker] = line.split('\t');
-          const key = `${pid}:${q}`;
-          const waitedMs = Number(waited);
-          const prior = waits.get(key);
-          if (!prior || prior.waitedMs < waitedMs) {
-            waits.set(key, {
-              waitedMs,
-              query: q,
-              blocker,
-              phase: currentPhase(),
-            });
-          }
-        }
-      } catch {}
-      await sleep(Math.max(0, intervalMs - (Date.now() - t0)));
-    }
-  })();
-  return async () => {
-    running = false;
-    await loop;
-    const top = [...waits.values()].sort((a, b) => b.waitedMs - a.waitedMs).slice(0, 15);
-    return {
-      intervalMs,
-      samples: waits.size,
-      maxWaitMs: top[0]?.waitedMs ?? 0,
-      top,
-    };
-  };
-}
-
-/* ------------------------------------------------------------------------ */
-
-async function collectLogs(services) {
-  const logDir = join(outDir, 'logs');
-  mkdirSync(logDir, { recursive: true });
-  for (const service of services) {
-    const r = await compose(['logs', '--no-color', '--timestamps', service], env);
-    writeFileSync(join(logDir, `${service}.log`), r.stdout + r.stderr);
-  }
-}
-
-async function teardown() {
-  if (options.keep) {
-    log(`--keep: leaving compose project oci-upgrade running (web on ${bases.join(', ')})`);
-    return;
-  }
-  await compose(['--profile', 'tools', 'down', '-v', '--remove-orphans', '--timeout', '5'], env);
-}
 
 async function main() {
   const report = {

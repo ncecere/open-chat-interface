@@ -301,7 +301,8 @@ picker in **Admin → Models → Providers & Models → Add/Edit model**.
 The lab supplies a logo shown beside the model in the picker and the admin
 catalog, with separate light and dark marks selected from the active theme.
 
-The catalog lives in `packages/shared/src/model-labs.ts` and the SVGs in
+The catalog lives in `packages/shared/src/model-labs/` (re-exported from
+`packages/shared/src/model-labs.ts`) and the SVGs in
 `apps/web/public/logos/`. Both are generated from the
 [LobeHub icon set](https://github.com/lobehub/lobe-icons) (MIT):
 

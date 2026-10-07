@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { and, asc, desc, eq, gt, gte, isNull, lte, or, schema, sql } from '@oci/db';
-import { COMPLIANCE_EXPORT_FORMAT, type ComplianceRun, type ComplianceStatus } from '@oci/shared';
+import { and, eq, isNull, lte, schema } from '@oci/db';
+import { COMPLIANCE_EXPORT_FORMAT } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
@@ -11,18 +11,26 @@ import { manualRunConflict, requestManualRun } from '../jobs/requests.js';
 import { runExclusively } from '../jobs/runner.js';
 import { withSpan } from '../observability/tracing.js';
 import { getDefaultOrganizationId } from '../organization.js';
-import { getSetting } from '../settings.js';
-import { summarizeMessageParts } from './content.js';
 import { advanceCursor, committedWatermark, exportCursor } from './cursor.js';
-import { listLegalHolds } from './holds.js';
 import {
-  complianceConfigurationIssues,
+  auditLines,
+  messageLines,
+  newTotals,
+  type StreamPlan,
+  streamSummary,
+} from './export-lines.js';
+import { ComplianceExportError, runFolder, verifyObject } from './export-objects.js';
+import { complianceSlot, DAY_MS, slotCovered } from './export-schedule.js';
+import type { RunRow } from './export-status.js';
+import {
   complianceKeyPrefix,
   complianceSettings,
   type ResolvedComplianceSettings,
   resolveComplianceTarget,
-  toPublicComplianceSettings,
 } from './settings.js';
+
+export { complianceSlot } from './export-schedule.js';
+export { complianceStatus } from './export-status.js';
 
 /**
  * Compliance export: audit events and, when an administrator turns it on,
@@ -42,203 +50,7 @@ import {
 
 export const COMPLIANCE_JOB = 'compliance.export';
 
-type RunRow = typeof schema.complianceExportRun.$inferSelect;
 type Actor = { id: string; email: string } | null;
-
-const PAGE = 500;
-const HOUR_MS = 60 * 60_000;
-const DAY_MS = 24 * HOUR_MS;
-
-/** A failure explained in words fit for the run history. */
-class ComplianceExportError extends Error {}
-
-interface StreamTotals {
-  count: number;
-  bytes: number;
-  firstSeq: number | null;
-  lastSeq: number | null;
-  firstId: string | null;
-  lastId: string | null;
-  hash: ReturnType<typeof createHash>;
-}
-
-const newTotals = (): StreamTotals => ({
-  count: 0,
-  bytes: 0,
-  firstSeq: null,
-  lastSeq: null,
-  firstId: null,
-  lastId: null,
-  hash: createHash('sha256'),
-});
-
-function encodeLines(
-  rows: Array<{ seq: number; id: string; line: Record<string, unknown> }>,
-  totals: StreamTotals,
-): Uint8Array {
-  const body = Buffer.from(rows.map((row) => `${JSON.stringify(row.line)}\n`).join(''), 'utf8');
-  for (const row of rows) {
-    totals.count += 1;
-    totals.firstSeq ??= row.seq;
-    totals.firstId ??= row.id;
-    totals.lastSeq = row.seq;
-    totals.lastId = row.id;
-  }
-  totals.bytes += body.byteLength;
-  totals.hash.update(body);
-  return body;
-}
-
-const iso = (value: Date | string | null) =>
-  value === null ? null : new Date(value).toISOString();
-
-/** One line per audit entry with a sequence number in (after, through], in order. */
-async function* auditLines(
-  after: number,
-  through: number,
-  totals: StreamTotals,
-): AsyncGenerator<Uint8Array> {
-  let cursor = after;
-  while (cursor < through) {
-    const rows = await db
-      .select()
-      .from(schema.auditLog)
-      .where(and(gt(schema.auditLog.seq, cursor), lte(schema.auditLog.seq, through)))
-      .orderBy(asc(schema.auditLog.seq))
-      .limit(PAGE);
-    if (rows.length === 0) return;
-    cursor = Number(rows.at(-1)!.seq);
-    yield encodeLines(
-      rows.map((row) => ({
-        seq: Number(row.seq),
-        id: row.id,
-        line: {
-          seq: Number(row.seq),
-          id: row.id,
-          createdAt: row.createdAt.toISOString(),
-          action: row.action,
-          actorUserId: row.actorUserId,
-          actorEmail: row.actorEmail,
-          targetType: row.targetType,
-          targetId: row.targetId,
-          metadata: row.metadata ?? null,
-          ipAddress: row.ipAddress,
-        },
-      })),
-      totals,
-    );
-  }
-}
-
-interface MessageRow extends Record<string, unknown> {
-  seq: string | number;
-  id: string;
-  thread_id: string;
-  user_id: string;
-  user_email: string | null;
-  role: string;
-  parts: unknown;
-  status: string;
-  model_slug: string | null;
-  parent_message_id: string | null;
-  superseded_at: Date | string | null;
-  error_message: string | null;
-  created_at: Date | string;
-  updated_at: Date | string;
-  thread_title: string;
-  thread_temporary: boolean;
-  thread_project_id: string | null;
-}
-
-/**
- * One line per message whose change sequence number is in (after, through].
- * A message still streaming is skipped: finishing it changes its status and
- * gives it a new number, so it is exported once, complete.
- */
-async function* messageLines(
-  after: number,
-  through: number,
-  totals: StreamTotals,
-): AsyncGenerator<Uint8Array> {
-  let cursor = after;
-  while (cursor < through) {
-    const rows = await db.execute<MessageRow>(sql`
-      select m.change_seq as seq, m.id, m.thread_id, m.user_id, u.email as user_email,
-        m.role, m.parts, m.status, m.model_slug, m.parent_message_id, m.superseded_at,
-        m.error_message, m.created_at, m.updated_at,
-        t.title as thread_title, t.temporary as thread_temporary, t.project_id as thread_project_id
-      from ${schema.message} m
-      join ${schema.thread} t on t.id = m.thread_id
-      left join ${schema.user} u on u.id = m.user_id
-      where m.change_seq > ${cursor} and m.change_seq <= ${through}
-      order by m.change_seq
-      limit ${PAGE}
-    `);
-    if (rows.length === 0) return;
-    cursor = Number(rows.at(-1)!.seq);
-    const complete = rows.filter((row) => row.status !== 'streaming');
-    if (complete.length === 0) continue;
-    yield encodeLines(
-      complete.map((row) => {
-        const content = summarizeMessageParts(row.parts);
-        return {
-          seq: Number(row.seq),
-          id: row.id,
-          line: {
-            seq: Number(row.seq),
-            id: row.id,
-            threadId: row.thread_id,
-            userId: row.user_id,
-            userEmail: row.user_email,
-            role: row.role,
-            status: row.status,
-            model: row.model_slug,
-            parentMessageId: row.parent_message_id,
-            createdAt: iso(row.created_at),
-            updatedAt: iso(row.updated_at),
-            supersededAt: iso(row.superseded_at),
-            error: row.error_message,
-            thread: {
-              title: row.thread_title,
-              temporary: row.thread_temporary,
-              projectId: row.thread_project_id,
-            },
-            ...content,
-          },
-        };
-      }),
-      totals,
-    );
-  }
-}
-
-async function readObject(target: BackupTarget, key: string): Promise<AsyncIterable<Uint8Array>> {
-  return (await target.driver.getStream(key)) as AsyncIterable<Uint8Array>;
-}
-
-/** Reads an object back: its size, SHA-256 and line count must be what was written. */
-async function verifyObject(
-  target: BackupTarget,
-  key: string,
-  expected: { bytes: number; sha256: string; lines: number | null },
-): Promise<void> {
-  const hash = createHash('sha256');
-  let bytes = 0;
-  let lines = 0;
-  for await (const chunk of await readObject(target, key)) {
-    hash.update(chunk);
-    bytes += chunk.byteLength;
-    for (const byte of chunk) if (byte === 0x0a) lines += 1;
-  }
-  if (
-    bytes !== expected.bytes ||
-    hash.digest('hex') !== expected.sha256 ||
-    (expected.lines !== null && lines !== expected.lines)
-  )
-    throw new ComplianceExportError(
-      `Verification failed: the stored ${key.split('/').at(-1)} does not match what was written.`,
-    );
-}
 
 /** Deletes objects; true when every one is gone. */
 async function deleteObjects(target: BackupTarget, keys: Array<string | null>): Promise<boolean> {
@@ -299,34 +111,6 @@ async function targetForRun(run: RunRow): Promise<BackupTarget> {
   if (run.destination !== settings.destination || run.keyPrefix !== complianceKeyPrefix(settings))
     throw new Error('The destination has changed since this run.');
   return resolveComplianceTarget(settings);
-}
-
-const stamp = (date: Date) => date.toISOString().replace(/[:.]/g, '-');
-
-/** `<prefix>YYYY/MM/DD/<start time>-<run id>/`: one folder per run, sorted by time. */
-function runFolder(root: string, startedAt: Date, runId: string): string {
-  const day = startedAt.toISOString().slice(0, 10).replace(/-/g, '/');
-  return `${root}${day}/${stamp(startedAt)}-${runId.slice(0, 8)}/`;
-}
-
-interface StreamPlan {
-  after: number;
-  through: number;
-}
-
-function streamSummary(plan: StreamPlan, key: string | null, totals: StreamTotals) {
-  return {
-    key,
-    afterSeq: plan.after,
-    throughSeq: plan.through,
-    count: totals.count,
-    firstSeq: totals.firstSeq,
-    lastSeq: totals.lastSeq,
-    firstId: totals.firstId,
-    lastId: totals.lastId,
-    bytes: totals.bytes,
-    sha256: key ? totals.hash.copy().digest('hex') : null,
-  };
 }
 
 /**
@@ -602,45 +386,6 @@ export async function pruneComplianceExports(
   return pruned;
 }
 
-/** The most recent scheduled start at or before `now`: the hour, or today's hour (UTC). */
-export function complianceSlot(now: Date, schedule: 'hourly' | 'daily', hourUtc: number): Date {
-  if (schedule === 'hourly') {
-    const slot = new Date(now);
-    slot.setUTCMinutes(0, 0, 0);
-    return slot;
-  }
-  const slot = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0),
-  );
-  if (slot.getTime() > now.getTime()) slot.setUTCDate(slot.getUTCDate() - 1);
-  return slot;
-}
-
-/**
- * Whether the current slot is covered: a successful export since it began, or
- * a scheduled attempt in the last hour (so a failure is retried hourly
- * rather than on every tick).
- */
-async function slotCovered(slot: Date, now: Date): Promise<boolean> {
-  const [row] = await db
-    .select({ id: schema.complianceExportRun.id })
-    .from(schema.complianceExportRun)
-    .where(
-      and(
-        gte(schema.complianceExportRun.startedAt, slot),
-        or(
-          eq(schema.complianceExportRun.status, 'succeeded'),
-          and(
-            eq(schema.complianceExportRun.trigger, 'schedule'),
-            gt(schema.complianceExportRun.startedAt, new Date(now.getTime() - HOUR_MS)),
-          ),
-        ),
-      ),
-    )
-    .limit(1);
-  return Boolean(row);
-}
-
 /** The job: exports when on and the current slot is not yet covered. */
 export async function runScheduledComplianceExport(now = new Date()): Promise<number> {
   const settings = await complianceSettings();
@@ -685,96 +430,6 @@ export async function startManualComplianceExport(actor: Actor): Promise<'starte
     ),
   );
   return 'started';
-}
-
-const num = (value: number | string | null) => (value === null ? null : Number(value));
-
-function toComplianceRunView(row: RunRow): ComplianceRun {
-  return {
-    id: row.id,
-    trigger: row.trigger,
-    status: row.status,
-    startedAt: row.startedAt.toISOString(),
-    finishedAt: row.finishedAt?.toISOString() ?? null,
-    destination: row.destination,
-    includeContent: row.includeContent,
-    audit: {
-      key: row.auditKey,
-      afterSeq: num(row.auditAfterSeq),
-      throughSeq: num(row.auditThroughSeq),
-      count: row.auditCount,
-      bytes: num(row.auditBytes),
-      sha256: row.auditSha256,
-    },
-    messages: row.includeContent
-      ? {
-          key: row.messagesKey,
-          afterSeq: num(row.messagesAfterSeq),
-          throughSeq: num(row.messagesThroughSeq),
-          count: row.messageCount,
-          bytes: num(row.messagesBytes),
-          sha256: row.messagesSha256,
-        }
-      : null,
-    manifestKey: row.manifestKey,
-    verified: row.verified,
-    errorMessage: row.errorMessage,
-    prunedAt: row.prunedAt?.toISOString() ?? null,
-  };
-}
-
-async function recentComplianceRuns(limit = 20): Promise<RunRow[]> {
-  return db
-    .select()
-    .from(schema.complianceExportRun)
-    .orderBy(desc(schema.complianceExportRun.startedAt))
-    .limit(limit);
-}
-
-async function lastSuccessfulComplianceRun(): Promise<RunRow | null> {
-  const [row] = await db
-    .select()
-    .from(schema.complianceExportRun)
-    .where(eq(schema.complianceExportRun.status, 'succeeded'))
-    .orderBy(desc(schema.complianceExportRun.startedAt))
-    .limit(1);
-  return row ?? null;
-}
-
-/** Everything the Compliance page shows. */
-export async function complianceStatus(now = new Date()): Promise<ComplianceStatus> {
-  const settings = await complianceSettings();
-  const [issues, runs, lastSuccess, storage, auditCursor, messagesCursor, holds] =
-    await Promise.all([
-      complianceConfigurationIssues(settings),
-      recentComplianceRuns(20),
-      lastSuccessfulComplianceRun(),
-      getSetting('storage'),
-      exportCursor('audit'),
-      exportCursor('messages'),
-      listLegalHolds({ includeLifted: true, limit: 100 }),
-    ]);
-  let nextRunAt: string | null = null;
-  if (settings.enabled) {
-    const slot = complianceSlot(now, settings.schedule, settings.hourUtc);
-    nextRunAt = (await slotCovered(slot, now))
-      ? new Date(slot.getTime() + (settings.schedule === 'hourly' ? HOUR_MS : DAY_MS)).toISOString()
-      : now.toISOString();
-  }
-  return {
-    settings: toPublicComplianceSettings(settings),
-    issues,
-    attachmentStorage: {
-      driver: storage.driver,
-      bucket: storage.driver === 's3' ? storage.s3.bucket || null : null,
-    },
-    running: runs.some((run) => run.status === 'running'),
-    nextRunAt,
-    lastSuccessAt: lastSuccess?.finishedAt?.toISOString() ?? null,
-    cursor: { audit: auditCursor ?? 0, messages: messagesCursor },
-    runs: runs.map(toComplianceRunView),
-    holds,
-  };
 }
 
 /** Writes, reads back and deletes a small object at the destination. */

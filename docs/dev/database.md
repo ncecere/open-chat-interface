@@ -567,8 +567,8 @@ and replays the migrations in journal order to know which tables exist. A
 table created earlier in the same file is new and empty, so anything goes; a
 table created by an earlier migration, or by no migration at all (such as the
 runtime-created `project_file_embedding`), is existing. CI runs the linter
-first in Application checks. Its tests are `scripts/lint-migrations.test.mjs`,
-with one fixture per rule in `scripts/lint-migrations/fixtures/rules/`.
+first in Application checks. Its tests are `scripts/lint-migrations-*.test.mjs`
+(helpers in `scripts/lint-migrations.helpers.mjs`), with one fixture per rule in `scripts/lint-migrations/fixtures/rules/`.
 
 Post-deploy steps (`packages/db/post`, in `post/journal.json` order) are
 linted after every pre-deploy migration, with post-deploy rules: every table

@@ -26,335 +26,36 @@
  *
  * Exit codes: 0 pass, 1 a check failed, 2 the drill itself could not run.
  */
+
 import { fork } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   ADMIN,
   latencyStats,
   MODEL_SLUG,
   PERSON_PASSWORD,
-  parseArgs,
   run,
   sleep,
 } from '../upgrade-test/lib.mjs';
 import { setupThroughApi, WORDS } from '../upgrade-test/seed.mjs';
-
-const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(TOOL_DIR, '../..');
-const PROJECT = 'oci-failover';
-const COMPOSE_FILE = join(TOOL_DIR, 'compose.yaml');
-const PATRONI_CONFIG = '/home/postgres/postgres.yml';
-const SUPERUSER_URL = 'postgresql://postgres:failover-drill-superuser@haproxy:5432';
-/** Stored on a reply saved as interrupted (apps/api/src/services/chat/run-recovery.ts). */
-const INTERRUPTED = 'This reply was interrupted';
-/** Recorded on a job run cut short by a lost lock (apps/api/src/services/jobs/runner.ts). */
-const LOST_LOCK = 'Stopped early: the job lost its lock';
-
-const spec = {
-  'api-image': { default: '' },
-  'web-image': { default: '' },
-  out: {
-    default: resolve(TOOL_DIR, 'out', new Date().toISOString().replace(/[:.]/g, '-')),
-  },
-  port: { type: 'number', default: 18580 },
-  people: { type: 'number', default: 8 },
-  vus: { type: 'number', default: 6 },
-  'think-ms': { type: 'number', default: 300 },
-  'send-every': { type: 'number', default: 1 },
-  'baseline-seconds': { type: 'number', default: 20 },
-  'after-seconds': { type: 'number', default: 40 },
-  /** Retryable failures are accepted from the failover until this long after HAProxy switched. */
-  'window-seconds': { type: 'number', default: 30 },
-  'import-conversations': { type: 'number', default: 5000 },
-  /** How many times to move the primary, a minute apart (the first mid-job). */
-  failovers: { type: 'number', default: 1 },
-  'settle-seconds': { type: 'number', default: 240 },
-  /** Kill the Redis primary (under Sentinel) instead of moving the PostgreSQL one. */
-  redis: { type: 'boolean', default: false },
-  /** With --redis: every Nth reply is read for --cut-after-ms only, then resumed. */
-  'cut-every': { type: 'number', default: 3 },
-  'cut-after-ms': { type: 'number', default: 1200 },
-  keep: { type: 'boolean', default: false },
-  help: { type: 'boolean', default: false },
-};
-
-const options = parseArgs(process.argv.slice(2), spec);
-if (options.help) {
-  console.log(
-    `Usage: node tools/failover-drill/run.mjs [options]\n\n${Object.entries(spec)
-      .map(([k, v]) => `  --${k}${v.type === 'boolean' ? '' : ' <value>'}  (default: ${v.default})`)
-      .join('\n')}`,
-  );
-  process.exit(0);
-}
-
-const outDir = resolve(options.out);
-mkdirSync(outDir, { recursive: true });
-const base = `http://127.0.0.1:${options.port}`;
-const env = { OCI_DRILL_PORT: String(options.port) };
-const SENTINELS = ['sentinel-1', 'sentinel-2', 'sentinel-3'];
-if (options.redis)
-  Object.assign(env, {
-    OCI_DRILL_REDIS_URL: '',
-    OCI_DRILL_REDIS_SENTINELS: SENTINELS.map((name) => `${name}:26379`).join(','),
-  });
-const timeline = [];
-const startedAt = Date.now();
-function log(what) {
-  const at = new Date().toISOString();
-  timeline.push({ at, what });
-  console.log(`[failover-drill ${at.slice(11, 19)}] ${what}`);
-}
-
-/* ------------------------------------------------------------------------ */
-
-function compose(args, options = {}) {
-  const profiles = options.redis === false ? [] : ['--profile', 'redis-ha'];
-  return run('docker', ['compose', '-p', PROJECT, '-f', COMPOSE_FILE, ...profiles, ...args], {
-    env: { ...env, ...options.env },
-    ...options,
-  });
-}
-
-async function must(promise, what) {
-  const result = await promise;
-  if (result.code !== 0) {
-    throw new Error(
-      `${what} failed (exit ${result.code}): ${(result.stderr || result.stdout).slice(-2000)}`,
-    );
-  }
-  return result;
-}
-
-/** SQL through HAProxy, so it always reaches the current primary. */
-async function psql(sql, { database = 'oci', node = 'pg-1' } = {}) {
-  const result = await must(
-    compose(
-      [
-        'exec',
-        '-T',
-        node,
-        'psql',
-        `${SUPERUSER_URL}/${database}`,
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-qAt',
-        '-F',
-        '\t',
-      ],
-      { input: sql },
-    ),
-    'psql',
-  );
-  return result.stdout.trim();
-}
-
-async function cluster() {
-  for (const node of ['pg-1', 'pg-2', 'pg-3']) {
-    const result = await compose([
-      'exec',
-      '-T',
-      node,
-      'patronictl',
-      '-c',
-      PATRONI_CONFIG,
-      'list',
-      '-f',
-      'json',
-    ]);
-    if (result.code === 0) {
-      try {
-        return JSON.parse(result.stdout);
-      } catch {}
-    }
-  }
-  return [];
-}
-
-async function waitFor(what, check, timeoutMs, intervalMs = 1000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const value = await check().catch(() => null);
-    if (value) return value;
-    await sleep(intervalMs);
-  }
-  throw new Error(`Timed out after ${timeoutMs / 1000}s waiting for ${what}`);
-}
-
-async function buildImage(app) {
-  const image = `oci-failover-${app}:drill`;
-  const revision = (await run('git', ['rev-parse', 'HEAD'])).stdout.trim() || 'unknown';
-  log(`building ${image} from this checkout (${revision.slice(0, 8)})`);
-  const t0 = Date.now();
-  await must(
-    run(
-      'docker',
-      [
-        'build',
-        '-q',
-        '-f',
-        `docker/${app}.Dockerfile`,
-        '--build-arg',
-        `OCI_REVISION=${revision}`,
-        '-t',
-        image,
-        '.',
-      ],
-      {
-        cwd: REPO_ROOT,
-      },
-    ),
-    `building ${image}`,
-  );
-  log(`built ${image} in ${Math.round((Date.now() - t0) / 1000)} s`);
-  return image;
-}
-
-let sessions = 0;
-/**
- * A signed-in person for setup and checks (the load has its own client), from
- * an address of its own: Better Auth allows three sign-ins per address in 10 s.
- */
-async function session(email, password = PERSON_PASSWORD) {
-  const ip = `198.19.1.${++sessions}`;
-  const response = await fetch(`${base}/api/auth/sign-in/email`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', origin: base, 'x-forwarded-for': ip },
-    body: JSON.stringify({ email, password, rememberMe: true }),
-  });
-  if (!response.ok) throw new Error(`Sign-in for ${email} failed: HTTP ${response.status}`);
-  const cookie = (response.headers.getSetCookie?.() ?? [])
-    .map((line) => line.split(';')[0])
-    .join('; ');
-  return async (method, path, body) => {
-    const headers = { cookie, origin: base, 'x-forwarded-for': ip };
-    if (body !== undefined && !(body instanceof FormData))
-      headers['content-type'] = 'application/json';
-    const reply = await fetch(base + path, {
-      method,
-      headers,
-      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
-    });
-    const text = await reply.text();
-    let json = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {}
-    return { status: reply.status, json, text };
-  };
-}
-
-/** The host name the sentinels give for the Redis primary (the Compose service name). */
-async function sentinelPrimary() {
-  for (const sentinel of SENTINELS) {
-    const result = await compose([
-      'exec',
-      '-T',
-      sentinel,
-      'redis-cli',
-      '-p',
-      '26379',
-      'SENTINEL',
-      'get-master-addr-by-name',
-      'oci',
-    ]);
-    const host = result.stdout.trim().split('\n')[0];
-    if (result.code === 0 && host) return host;
-  }
-  return null;
-}
-
-/** Whether `service` is a Redis replica in sync with its primary. */
-async function redisReplicaInSync(service) {
-  const result = await compose(['exec', '-T', service, 'redis-cli', 'INFO', 'replication']);
-  return result.stdout.includes('role:slave') && result.stdout.includes('master_link_status:up');
-}
-
-/** The Redis row of System health, as one API replica sees it. */
-async function redisHealth(admin) {
-  const health = await admin('GET', '/api/admin/health');
-  return health.json?.checks?.find((check) => check.id === 'redis') ?? null;
-}
-
-/**
- * Kills the Redis primary (SIGKILL), waits for the sentinels to promote the
- * replica and for the API to use Redis again, then starts the killed node,
- * which the sentinels turn into a replica of the new primary (for the next
- * failover).
- */
-async function redisFailover(index, admin) {
-  const primary = await sentinelPrimary();
-  if (!primary) throw new Error('The sentinels name no Redis primary');
-  log(`Redis failover ${index + 1}: killing the primary ${primary}`);
-  const t0 = Date.now();
-  await must(compose(['kill', '-s', 'SIGKILL', primary]), 'killing the Redis primary');
-  let promotedTo = null;
-  const promoted = await waitFor(
-    'the sentinels to promote the replica',
-    async () => {
-      const now = await sentinelPrimary();
-      if (!now || now === primary) return null;
-      promotedTo = now;
-      return Date.now();
-    },
-    60_000,
-    100,
-  );
-  // Both web replicas: System health is answered by whichever the proxy picks.
-  let healthy = 0;
-  const followed = await waitFor(
-    'the API to use Redis again',
-    async () => {
-      healthy = (await redisHealth(admin))?.status === 'ok' ? healthy + 1 : 0;
-      return healthy >= 4 ? Date.now() : null;
-    },
-    60_000,
-    100,
-  );
-  await must(compose(['start', primary]), 'starting the old Redis primary again');
-  await waitFor(
-    'the old primary to rejoin as a replica',
-    () => redisReplicaInSync(primary),
-    60_000,
-    500,
-  );
-  log(
-    `Redis failover ${index + 1}: ${promotedTo} promoted after ${promoted - t0} ms; the API used Redis again after ${followed - t0} ms; ${primary} rejoined as a replica`,
-  );
-  return {
-    from: primary,
-    to: promotedTo,
-    startedAt: t0,
-    commandMs: promoted - t0,
-    routedMs: followed - t0,
-  };
-}
-
-/** A Claude export (a bare JSON array) of `count` short conversations. */
-function claudeExport(count) {
-  const conversations = [];
-  for (let n = 0; n < count; n++) {
-    const at = new Date(Date.UTC(2026, 0, 1) + n * 60_000).toISOString();
-    conversations.push({
-      uuid: `drill-${n}`,
-      name: `Imported during the failover drill ${n}`,
-      created_at: at,
-      updated_at: at,
-      chat_messages: [
-        {
-          uuid: `drill-${n}-q`,
-          sender: 'human',
-          text: `Question ${n} about ${WORDS[n % WORDS.length]}`,
-          created_at: at,
-        },
-        { uuid: `drill-${n}-a`, sender: 'assistant', text: `Answer ${n}.`, created_at: at },
-      ],
-    });
-  }
-  return JSON.stringify(conversations);
-}
+import { claudeExport, session } from './lib/api.mjs';
+import { buildImage, cluster, compose, must, psql, waitFor } from './lib/cluster.mjs';
+import {
+  base,
+  env,
+  INTERRUPTED,
+  LOST_LOCK,
+  log,
+  options,
+  outDir,
+  PATRONI_CONFIG,
+  SENTINELS,
+  startedAt,
+  TOOL_DIR,
+  timeline,
+} from './lib/context.mjs';
+import { redisFailover, redisHealth, redisReplicaInSync } from './lib/redis.mjs';
 
 /* ------------------------------------------------------------------------ */
 

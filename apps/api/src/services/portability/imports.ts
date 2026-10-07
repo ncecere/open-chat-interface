@@ -14,13 +14,8 @@ import { getDefaultOrganizationId } from '../organization.js';
 import { getStorageDriver, type StorageDriver } from '../storage/index.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
 import { admissionTotals, lockStorageUsage, type StorageTransaction } from '../storage/usage.js';
-import {
-  detectConversationSource,
-  type ImportedConversation,
-  type ImportedSource,
-  mapChatGptConversation,
-  mapClaudeConversation,
-} from './import-mappers.js';
+import { applyConversation, detectedSource, formatVersion, type Progress } from './import-apply.js';
+import { claimNextImport, type ImportRow } from './import-queue.js';
 import {
   DEFAULT_READER_LIMITS,
   ImportRejected,
@@ -28,14 +23,9 @@ import {
   readExport,
 } from './import-reader.js';
 
-type ImportRow = typeof schema.conversationImport.$inferSelect;
-
-/** A running import that has not reported progress for this long is presumed dead. */
-const IMPORT_STALE_MS = 10 * 60 * 1000;
 /** Claims before a repeatedly crashing import is given up on. */
 const IMPORT_MAX_ATTEMPTS = 3;
 const HEARTBEAT_MS = 15_000;
-const MESSAGE_BATCH = 500;
 
 export function serializeImport(row: ImportRow): ConversationImportSummary {
   return {
@@ -211,191 +201,6 @@ export async function deleteImport(id: string, userId: string): Promise<void> {
     throw notFound('Import not found');
   }
   if (removed.storageKey) await deleteStoredNow(removed.storageKey);
-}
-
-/**
- * Claims the oldest runnable import.
- *
- * `skip locked` lets replicas claim concurrently; a running row whose heartbeat
- * has gone stale was abandoned by a crash or restart and is claimed again,
- * which is safe because applying an import is idempotent. A person's second
- * import never starts while their first is genuinely running.
- */
-async function claimNextImport(now = new Date()): Promise<ImportRow | null> {
-  const staleBefore = new Date(now.getTime() - IMPORT_STALE_MS).toISOString();
-  const [row] = await db
-    .update(schema.conversationImport)
-    .set({
-      status: 'running',
-      attempts: sql`${schema.conversationImport.attempts} + 1`,
-      startedAt: sql`coalesce(${schema.conversationImport.startedAt}, now())`,
-      updatedAt: now,
-    })
-    .where(
-      eq(
-        schema.conversationImport.id,
-        sql`(
-          select candidate.id from conversation_import candidate
-          where (
-            candidate.status = 'pending'
-            or (candidate.status = 'running' and candidate.updated_at < ${staleBefore}::timestamptz)
-          )
-          and not exists (
-            select 1 from conversation_import other
-            where other.user_id = candidate.user_id
-              and other.id <> candidate.id
-              and other.status = 'running'
-              and other.updated_at >= ${staleBefore}::timestamptz
-          )
-          order by candidate.created_at, candidate.id
-          limit 1
-          for update skip locked
-        )`,
-      ),
-    )
-    .returning();
-  return row ?? null;
-}
-
-interface Progress {
-  imported: number;
-  skipped: number;
-  failed: number;
-  unknown: Record<string, number>;
-  sources: Record<ImportedSource, number>;
-  claudeBlocks: boolean;
-}
-
-/**
- * Writes one conversation and its messages in a single transaction.
- *
- * The partial unique index on (user, source, source id) makes this idempotent:
- * a conversation imported before, or still in the trash, is skipped rather
- * than duplicated or overwritten, so messages added here since are never lost.
- */
-async function insertImportedConversation(
-  owner: { userId: string; organizationId: string },
-  conversation: ImportedConversation,
-): Promise<'imported' | 'skipped'> {
-  const createdAt = conversation.createdAt ?? new Date();
-  const lastMessageAt = conversation.messages.at(-1)?.createdAt ?? conversation.updatedAt;
-  const updatedAt = conversation.updatedAt ?? lastMessageAt ?? createdAt;
-
-  return db.transaction(async (tx) => {
-    const [thread] = await tx
-      .insert(schema.thread)
-      .values({
-        organizationId: owner.organizationId,
-        userId: owner.userId,
-        title: conversation.title,
-        importSource: conversation.source,
-        importSourceId: conversation.sourceId,
-        lastMessageAt: lastMessageAt ?? updatedAt,
-        createdAt,
-        updatedAt,
-      })
-      .onConflictDoNothing()
-      .returning({ id: schema.thread.id });
-    if (!thread) return 'skipped';
-
-    let promptId: string | null = null;
-    const rows = conversation.messages.map((message, position) => {
-      const id = randomUUID();
-      const parentMessageId = message.role === 'assistant' ? promptId : null;
-      if (message.role === 'user') promptId = id;
-      const at = message.createdAt ?? createdAt;
-      return {
-        id,
-        threadId: thread.id,
-        userId: owner.userId,
-        role: message.role,
-        parts: message.parts,
-        position,
-        parentMessageId,
-        modelSlug: message.modelSlug,
-        // Imported turns are history, not generations: no usage, always complete.
-        status: 'complete' as const,
-        createdAt: at,
-        updatedAt: at,
-      };
-    });
-    for (let index = 0; index < rows.length; index += MESSAGE_BATCH) {
-      await tx.insert(schema.message).values(rows.slice(index, index + MESSAGE_BATCH));
-    }
-    return 'imported';
-  });
-}
-
-async function applyConversation(row: ImportRow, value: unknown, progress: Progress) {
-  const source = detectConversationSource(value);
-  if (!source) {
-    progress.failed += 1;
-    progress.unknown['unrecognised-conversation'] =
-      (progress.unknown['unrecognised-conversation'] ?? 0) + 1;
-    return;
-  }
-  progress.sources[source] += 1;
-  const mapped =
-    source === 'chatgpt' ? mapChatGptConversation(value) : mapClaudeConversation(value);
-  if (mapped.usedContentBlocks) progress.claudeBlocks = true;
-  for (const type of mapped.unknownTypes) {
-    progress.unknown[type] = (progress.unknown[type] ?? 0) + 1;
-  }
-  if (!mapped.conversation) {
-    if (mapped.reason === 'empty') progress.skipped += 1;
-    else progress.failed += 1;
-    return;
-  }
-  try {
-    const outcome = await insertImportedConversation(
-      { userId: row.userId, organizationId: row.organizationId },
-      mapped.conversation,
-    );
-    if (outcome === 'imported') progress.imported += 1;
-    else progress.skipped += 1;
-  } catch (error) {
-    // The database went away (a failover), not this conversation: stop the
-    // whole import, to be resumed, rather than count the rest as failed.
-    if (isConnectionError(error)) throw error;
-    progress.failed += 1;
-    logger.warn(
-      { error, importId: row.id, sourceId: mapped.conversation.sourceId },
-      'Failed to import one conversation',
-    );
-  }
-}
-
-function detectedSource(progress: Progress): 'chatgpt' | 'claude' | 'unknown' {
-  if (progress.sources.chatgpt === 0 && progress.sources.claude === 0) return 'unknown';
-  return progress.sources.chatgpt >= progress.sources.claude ? 'chatgpt' : 'claude';
-}
-
-/** ChatGPT's 2026 layout splits files and adds a manifest; Claude's adds content blocks. */
-function formatVersion(
-  source: 'chatgpt' | 'claude' | 'unknown',
-  entries: string[],
-  claudeBlocks: boolean,
-): string | null {
-  const names = entries.map((entry) => entry.toLowerCase());
-  if (source === 'chatgpt') {
-    return names.some(
-      (name) =>
-        /conversations-\d+\.json$/.test(name) ||
-        name.endsWith('export_manifest.json') ||
-        name.endsWith('conversation_asset_file_names.json'),
-    )
-      ? 'v2'
-      : 'v1';
-  }
-  if (source === 'claude') {
-    return claudeBlocks ||
-      names.some(
-        (name) => name.includes('design_chats/') || /(^|\/)projects\/[^/]+\.json$/.test(name),
-      )
-      ? 'v2'
-      : 'v1';
-  }
-  return null;
 }
 
 /** Ends an import, releasing its upload in the same transaction that records the outcome. */
