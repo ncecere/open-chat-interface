@@ -167,6 +167,9 @@ export const message = pgTable(
       'gin',
       sql`to_tsvector('simple'::regconfig, jsonb_path_query_array(${t.parts}, '$[*] ? (@.type == "text").text'::jsonpath))`,
     ),
+    // Not declared here: the same text with accented letters folded, so search
+    // ignores accents (#362), is built by post-deploy step
+    // 0012_message_text_search_folded_index (message_text_search_folded_idx).
   ],
 );
 

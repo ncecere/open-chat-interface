@@ -1188,6 +1188,22 @@ password-reset request or a refused sign-in has no signed-in actor, only an
 `audit_log_actor_email_idx` on `lower(actor_email)` for entries without an
 actor account, which answers that match.
 
+#### Accent-insensitive conversation search (post-deploy step 0012)
+
+Conversation search ignores accents (#362): `bibliotheque` finds
+"bibliothèque". PostgreSQL's `unaccent` is an extension, so no extension is
+needed: the text is folded with `translate()`, which replaces each precomposed
+Latin letter with diacritics by its base letter. Step 0012 builds a second GIN
+index, `message_text_search_folded_idx`, over the folded message text
+(`CREATE INDEX CONCURRENTLY`, so writes to `message` continue; it reads every
+message once and is about the size of `message_text_search_idx`). Until the
+step has finished, search keeps using `message_text_search_idx` and is exact
+about accents, as before; once it has, every replica switches (within about 30
+seconds). `message_text_search_idx` stays: a replica of the previous release
+still uses it, and it can be dropped by hand after the upgrade is final. The
+conversation list's title filter folds accents on the fly and needs no step.
+Project file search (the keyword side) is not folded.
+
 #### Code artifacts (migration 0043, post-deploy step 0009)
 
 Migration 0043 lets an artifact be program code (#298): a nullable column

@@ -1,17 +1,4 @@
-import {
-  and,
-  asc,
-  type Database,
-  desc,
-  eq,
-  gte,
-  ilike,
-  isNull,
-  lte,
-  or,
-  schema,
-  sql,
-} from '@oci/db';
+import { and, asc, type Database, desc, eq, gte, isNull, lte, or, schema, sql } from '@oci/db';
 import {
   type BranchMessageInput,
   type ForkMessageInput,
@@ -20,6 +7,7 @@ import {
 } from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, rateLimited, validationFailed } from '../lib/errors.js';
+import { foldedIlike } from '../lib/fold.js';
 import { containsPattern } from '../lib/like.js';
 import { copyArtifactsToFork } from './artifacts/store.js';
 import { copyCompactionToFork } from './chat/compaction-fork.js';
@@ -209,7 +197,8 @@ export async function listThreads(
   ];
 
   if (options?.search) {
-    conditions.push(ilike(schema.thread.title, containsPattern(options.search)));
+    // Accents do not matter: "bibliotheque" finds "bibliothèque" (#362).
+    conditions.push(foldedIlike(sql`${schema.thread.title}`, containsPattern(options.search)));
   }
 
   // The caller checks that the project is the user's own.
