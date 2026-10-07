@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDatabase, eq, schema, sql } from '@oci/db';
+import { createDatabase, eq, inArray, schema, sql } from '@oci/db';
 import { convertToModelMessages } from 'ai';
 import {
   afterAll,
@@ -19,6 +19,7 @@ import {
   gate,
   modelParts,
   modelText,
+  shareFilesWithSource,
 } from '../../../test/chat-attachment-context.fixtures.js';
 import {
   createLiveDatabase,
@@ -170,7 +171,7 @@ describe.skipIf(!available)('live historical attachment context', () => {
       state,
     });
 
-  it('resolves copied fork metadata against the original live owned allocation', async () => {
+  it('gives the fork a row of its own for the file, read as the original’s was', async () => {
     const source = await thread();
     const file = await attachment('text/plain', 'FORK_SOURCE_CONTENT');
     const first = await send(source.id, 'Read the source', { attachmentIds: [file.id] });
@@ -181,9 +182,17 @@ describe.skipIf(!available)('live historical attachment context', () => {
     });
     const copied = (await messages(fork.id))[0]!;
     expect(copied.id).not.toBe(first.turn.promptMessageId);
-    expect(JSON.stringify(copied.parts)).toContain(file.id);
+    // The copy shows a file of its own (#358), not the original's id.
+    expect(JSON.stringify(copied.parts)).not.toContain(file.id);
+    const [own] = await pool.db
+      .select()
+      .from(schema.attachment)
+      .where(eq(schema.attachment.messageId, copied.id));
+    expect(own).toMatchObject({ storageKey: file.storageKey, userId: owner });
+    expect(JSON.stringify(copied.parts)).toContain(own!.id);
     const followup = await send(fork.id, 'Use the copied file');
     expect(await modelText(followup)).toContain('FORK_SOURCE_CONTENT');
+    // The original's row is still allocated to the original question.
     const [stored] = await pool.db
       .select()
       .from(schema.attachment)
@@ -192,7 +201,32 @@ describe.skipIf(!available)('live historical attachment context', () => {
   });
 
   it.each(['deleted', 'expired'] as const)(
-    'omits files from a %s source even when the copied fork and file stay live',
+    'keeps the files of a fork when its source is %s',
+    async (kind) => {
+      const source = await thread();
+      const file = await attachment('text/plain', 'KEPT_FORK_CONTENT');
+      const first = await send(source.id, 'Read source', { attachmentIds: [file.id] });
+      await complete(first);
+      const { forkFromMessage } = await import('../../services/threads.js');
+      const fork = await forkFromMessage(source.id, owner, {
+        messageId: first.run.assistantMessage.id,
+      });
+      await pool.db
+        .update(schema.thread)
+        .set(
+          kind === 'deleted'
+            ? { deletedAt: new Date() }
+            : { temporary: true, expiresAt: new Date(Date.now() - 1_000) },
+        )
+        .where(eq(schema.thread.id, source.id));
+      const text = await modelText(await send(fork.id, 'Continue'));
+      expect(text).toContain('KEPT_FORK_CONTENT');
+      expect(text).not.toMatch(/no longer available/i);
+    },
+  );
+
+  it.each(['deleted', 'expired'] as const)(
+    'omits files from a %s source of a fork made before 0.11, which shares the source’s file',
     async (kind) => {
       const source = await thread();
       const file = await attachment('text/plain', 'UNAVAILABLE_SOURCE_CONTENT');
@@ -202,6 +236,7 @@ describe.skipIf(!available)('live historical attachment context', () => {
       const fork = await forkFromMessage(source.id, owner, {
         messageId: first.run.assistantMessage.id,
       });
+      await shareFilesWithSource(pool, fork.id);
       await pool.db
         .update(schema.thread)
         .set(
@@ -218,7 +253,7 @@ describe.skipIf(!available)('live historical attachment context', () => {
   );
 
   it.each(['deleted', 'expired'] as const)(
-    'rechecks a source becoming %s after image hydration before committing the fork turn',
+    'rechecks a source becoming %s after image hydration before committing the turn of a fork made before 0.11',
     async (kind) => {
       const source = await thread();
       const file = await attachment('image/png', null);
@@ -228,6 +263,7 @@ describe.skipIf(!available)('live historical attachment context', () => {
       const fork = await forkFromMessage(source.id, owner, {
         messageId: first.run.assistantMessage.id,
       });
+      await shareFilesWithSource(pool, fork.id);
       const before = await messages(fork.id);
       const released = state.released;
       const hydrated = gate();
@@ -259,6 +295,47 @@ describe.skipIf(!available)('live historical attachment context', () => {
       await assertFailedWithoutWrites(fork.id, before, released);
     },
   );
+
+  it('rechecks the fork’s own file being deleted after image hydration before committing its turn', async () => {
+    const source = await thread();
+    const file = await attachment('image/png', null);
+    const first = await send(source.id, 'Read source', { attachmentIds: [file.id] });
+    await complete(first);
+    const { forkFromMessage } = await import('../../services/threads.js');
+    const fork = await forkFromMessage(source.id, owner, {
+      messageId: first.run.assistantMessage.id,
+    });
+    const before = await messages(fork.id);
+    const released = state.released;
+    const hydrated = gate();
+    const finish = gate();
+    getBlob.mockImplementation(async (key) => {
+      const bytes = await LocalStorageDriver.prototype.get.call(driver, key);
+      hydrated.open();
+      await finish.promise;
+      return bytes;
+    });
+    const pending = send(fork.id, 'Must not persist').then(
+      () => null,
+      (error: unknown) => error,
+    );
+    try {
+      await hydrated.promise;
+      await pool.db
+        .update(schema.attachment)
+        .set({ deletedAt: new Date(), deletedReason: 'user' })
+        .where(
+          inArray(
+            schema.attachment.messageId,
+            before.map((message) => message.id),
+          ),
+        );
+    } finally {
+      finish.open();
+    }
+    expect(await pending).toBeInstanceOf(Error);
+    await assertFailedWithoutWrites(fork.id, before, released);
+  });
 
   it.each(['foreign', 'unallocated', 'pending', 'deleted'] as const)(
     'omits a %s reference with a generic notice and never reads its blob',

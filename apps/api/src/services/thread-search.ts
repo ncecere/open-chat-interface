@@ -46,7 +46,7 @@ export function messageSearchVector(alias: string): SQL {
  * Until it has run, search is exact about accents, as before: the folded
  * expression below would be answered by scanning every message.
  */
-export const FOLDED_SEARCH_STEP = '0012_message_text_search_folded_index';
+export const FOLDED_SEARCH_STEP = '0013_message_text_search_folded_index';
 
 /** True when the folded index exists; false while it is being built, or when that cannot be told. */
 export async function foldedSearchReady(): Promise<boolean> {

@@ -259,6 +259,21 @@ export function AttachmentList({
                           ·{' '}
                         </>
                       )}
+                      {/* A fork's or an edit's copy of a file is listed with its
+                          own conversation (#358). */}
+                      {attachment.conversation && (
+                        <>
+                          In{' '}
+                          <Link
+                            to="/chat/$threadId"
+                            params={{ threadId: attachment.conversation.id }}
+                            className="font-medium text-[var(--text-secondary)] hover:underline"
+                          >
+                            {attachment.conversation.title}
+                          </Link>{' '}
+                          ·{' '}
+                        </>
+                      )}
                       {/* In a composer and not sent (yet), unlike the rest (#297). */}
                       {attachment.unsent && 'Not sent · '}
                       {attachment.mimeType} · {formatBytes(attachment.sizeBytes)}

@@ -9,8 +9,8 @@ import { db } from '../db/index.js';
 import { forbidden, notFound, rateLimited, validationFailed } from '../lib/errors.js';
 import { foldedIlike } from '../lib/fold.js';
 import { containsPattern } from '../lib/like.js';
-import { copyArtifactsToFork } from './artifacts/store.js';
-import { copyCompactionToFork } from './chat/compaction-fork.js';
+import { insertPlannedFiles, planFileCopies } from './attachments/copies.js';
+import { copyMessagesInto } from './chat/branch-copy.js';
 import { editedQuestionParts } from './chat/message-parts.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
 import { notOnLegalHold } from './compliance/holds.js';
@@ -349,55 +349,6 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
   });
 }
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/**
- * Copies messages into a fork or edit as new rows that keep their source ids
- * as lineage, with the compaction summary and artifacts made along them.
- */
-async function copyMessagesInto(
-  tx: Transaction,
-  input: {
-    sourceThreadId: string;
-    threadId: string;
-    userId: string;
-    messages: (typeof schema.message.$inferSelect)[];
-  },
-) {
-  if (input.messages.length === 0) return;
-  const copies = await tx
-    .insert(schema.message)
-    .values(
-      input.messages.map((message) => ({
-        threadId: input.threadId,
-        userId: input.userId,
-        role: message.role,
-        parts: message.parts,
-        position: message.position,
-        parentMessageId: message.id,
-        modelSlug: message.modelSlug,
-        effort: message.effort,
-        webSearchUsed: message.webSearchUsed,
-        status: message.status,
-        errorMessage: message.errorMessage,
-        tokensIn: message.tokensIn,
-        tokensOut: message.tokensOut,
-        durationMs: message.durationMs,
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-      })),
-    )
-    .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
-  const target = {
-    sourceThreadId: input.sourceThreadId,
-    threadId: input.threadId,
-    userId: input.userId,
-    copied: new Map(copies.map((copy) => [copy.sourceId!, copy.id])),
-  };
-  await copyCompactionToFork(tx, target);
-  await copyArtifactsToFork(tx, target);
-}
-
 /**
  * A fork's title: its source's, marked, so the two can be told apart in the
  * sidebar, which shows the start of a long title (#213). A fork of a fork is
@@ -461,7 +412,7 @@ export async function branchFromUserMessage(
     if (selected.role !== 'user') {
       throw validationFailed('Only user messages can be edited');
     }
-    const parts = editedQuestionParts(selected.parts, input.text, input.attachmentIds);
+    const kept = editedQuestionParts(selected.parts, input.text, input.attachmentIds);
 
     const [branch] = await tx
       .insert(schema.thread)
@@ -492,13 +443,15 @@ export async function branchFromUserMessage(
         .filter((message) => message.supersededAt === null),
     });
 
+    // The question's kept files get rows of their own too (#358).
+    const [plan] = await planFileCopies(tx, userId, [kept]);
     const [replacement] = await tx
       .insert(schema.message)
       .values({
         threadId: branch.id,
         userId,
         role: 'user',
-        parts,
+        parts: plan!.parts,
         position: selected.position,
         parentMessageId: selected.id,
         modelSlug: selected.modelSlug,
@@ -508,6 +461,7 @@ export async function branchFromUserMessage(
       .returning();
 
     if (!replacement) throw new Error('Failed to create edited message');
+    await insertPlannedFiles(tx, userId, [{ messageId: replacement.id, files: plan!.files }]);
     return { thread: branch, message: replacement };
   });
 }

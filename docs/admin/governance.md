@@ -369,6 +369,15 @@ turns it on, and **Save allowance** is available once something has changed. Set
 Artifact versions count towards total storage (not towards the file count)
 while their conversation is not in the trash.
 
+A fork, and an edit that keeps its question's files, hold their own copy of each
+file (v0.11, #358): the attachment is a row of its own, counted in the owner's
+total and file count like any other, pointing at the same stored object. The
+object is deleted only when the last row using it is, so deleting, trashing or
+expiring a conversation never removes a file another conversation shows. A fork
+is never refused for lack of allowance (the file is already stored); the
+allowance applies to the next upload. Storage totals count each copy, while the
+bucket holds the object once.
+
 Storage is a **gauge, not a flow**: it measures what somebody holds now, not
 what they have ever uploaded. In-progress uploads reserve space. Deleting files
 or moving their conversation to trash frees allowance immediately, even while
@@ -456,6 +465,9 @@ entries are kept. Each field shows
   conversations are not exempt. **Keep pinned conversations** exempts anything a
   person has pinned.
 - **Trash retention** — the recovery window before a deletion becomes permanent.
+  Retention and the trash purge delete a conversation's own files only: the
+  files of a fork or an edit made from it are separate copies and stay with
+  them (v0.11).
 - **Usage history** — per-message usage rows. Daily totals are kept regardless.
 - **Reporting timezone** — where a day starts and ends on the Usage page, and
   the zone of today's date in a system prompt when the person's browser does

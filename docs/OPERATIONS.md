@@ -1188,12 +1188,12 @@ password-reset request or a refused sign-in has no signed-in actor, only an
 `audit_log_actor_email_idx` on `lower(actor_email)` for entries without an
 actor account, which answers that match.
 
-#### Accent-insensitive conversation search (post-deploy step 0012)
+#### Accent-insensitive conversation search (post-deploy step 0013)
 
 Conversation search ignores accents (#362): `bibliotheque` finds
 "bibliothèque". PostgreSQL's `unaccent` is an extension, so no extension is
 needed: the text is folded with `translate()`, which replaces each precomposed
-Latin letter with diacritics by its base letter. Step 0012 builds a second GIN
+Latin letter with diacritics by its base letter. Step 0013 builds a second GIN
 index, `message_text_search_folded_idx`, over the folded message text
 (`CREATE INDEX CONCURRENTLY`, so writes to `message` continue; it reads every
 message once and is about the size of `message_text_search_idx`). Until the

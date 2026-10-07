@@ -82,12 +82,13 @@ describe.skipIf(!available)('live PostgreSQL migration jobs', () => {
     state.env = { DATABASE_URL: live.connectionString, RUN_MIGRATIONS: true };
     expect(await jobs.postWorkPending()).toBe(true);
     const job = jobs.migrationJobs().find((entry) => entry.name === 'migrations.post-deploy')!;
-    // Eleven steps applied (0007, 0008 and 0010 index the audit log for #216 and
-    // #342, 0009 validates the code-artifact kind for #298, 0012 indexes the
-    // folded message text for #362), seven background migrations scheduled (the
-    // usage rollup backfill and the five secret re-encryptions every instance
+    // Thirteen steps applied (0007, 0008 and 0010 index the audit log for #216 and
+    // #342, 0009 validates the code-artifact kind for #298, 0011 and 0012 index
+    // stored objects for #358, 0013 indexes the folded message text for #362),
+    // eight background migrations scheduled (the usage rollup backfill, the five
+    // secret re-encryptions and the attachment own-rows migration every instance
     // has, and the test one).
-    expect(await job.run()).toBe(18);
+    expect(await job.run()).toBe(21);
     expect(await jobs.postWorkPending()).toBe(false);
     expect(await job.run()).toBe(0);
 

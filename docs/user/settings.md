@@ -189,8 +189,10 @@ your role, broken down into chat files, project files and artifacts.
 
 Delete chat files you no longer need: this is what frees space against a
 storage limit. Deleting asks you to confirm, since it cannot be undone; a
-deleted file is removed from its conversations, which stay, and models can no
-longer read it there. Project files show the project they
+deleted file is removed from the conversation it is listed with, which stays, and
+models can no longer read it there. A fork or an edit has its own copy of each
+file, listed on its own line with its conversation and counted on its own, so the
+same name can appear more than once; deleting one leaves the others. Project files show the project they
 belong to; open the project to delete them. A file attached in a chat and not
 sent yet is marked **Not sent**; deleting it says so, since it is in no
 conversation.

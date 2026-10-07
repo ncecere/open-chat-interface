@@ -125,7 +125,7 @@ function deleteDescription(count: number, unsent: number): string {
   if (count <= 1)
     return unsent
       ? 'It was never sent. This cannot be undone.'
-      : 'It is removed from the conversations it was attached to, and models can no longer read it there. This cannot be undone.';
+      : 'It is removed from the conversation it was attached to, and models can no longer read it there. This cannot be undone.';
   if (unsent === count) return 'They were never sent. This cannot be undone.';
   return unsent
     ? 'Those that were sent are removed from the conversations they were attached to, and models can no longer read them there. This cannot be undone.'
@@ -251,9 +251,10 @@ export function SettingsAttachmentsPage() {
     <div>
       <h1 className="text-2xl font-bold">Attachments</h1>
       <p className="mt-1 max-w-4xl text-sm leading-5 text-[var(--text-secondary)]">
-        Files you uploaded in chats and to projects. Deleting a chat file removes it from its
-        conversations, which stay, and models can no longer read it there. Project files are managed
-        from their project.
+        Files you uploaded in chats and to projects. Deleting a chat file removes it from the
+        conversation it is listed with, which stays, and models can no longer read it there. A fork
+        or an edit has its own copy of each file, listed and counted separately. Project files are
+        managed from their project.
       </p>
 
       <StorageMeter />

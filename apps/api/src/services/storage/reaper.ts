@@ -20,14 +20,86 @@ function backoffMs(attempts: number): number {
   return Math.min(2 ** attempts * 60_000, 24 * 60 * 60 * 1000);
 }
 
+/** What the queue records when it does not delete an object another file still uses. */
+const STILL_IN_USE = 'Another file still uses this object';
+
+/**
+ * The keys among `keys` that an attachment row still uses, as its file or its
+ * thumbnail (#358): a fork's or an edit's copy of a file has a row of its own
+ * for the same stored object, which must outlive the row it was copied from.
+ */
+export async function keysInUse(
+  keys: string[],
+  executor: Pick<typeof db, 'execute'> = db,
+): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const list = sql.join(
+    keys.map((key) => sql`${key}`),
+    sql`, `,
+  );
+  const rows = await executor.execute<{ key: string }>(sql`
+    select storage_key as key from attachment where storage_key in (${list})
+    union
+    select thumbnail_key as key from attachment where thumbnail_key in (${list})
+  `);
+  return new Set(rows.map((row) => row.key));
+}
+
+/**
+ * Settles the objects the delete trigger parked (`next_attempt_at` infinite,
+ * migration 0045) because another row used them when a row was deleted. The
+ * reaper of earlier releases takes only due entries, so it never touched them.
+ * An object nothing uses any more is made due; one something still uses is
+ * dropped from the queue, since whichever row is deleted last queues the
+ * object itself (and two rows deleted at the same moment each park it, so the
+ * second to commit finds it unused here).
+ */
+async function settleParkedObjects(): Promise<void> {
+  await db.transaction(async (tx) => {
+    const parked = await tx.execute<{ id: string; storage_key: string }>(sql`
+      select id, storage_key from deleted_object
+      where deleted_at is null and next_attempt_at = 'infinity'
+      order by created_at
+      limit ${BATCH_SIZE}
+      for update skip locked
+    `);
+    if (parked.length === 0) return;
+    const used = await keysInUse(
+      parked.map((row) => row.storage_key),
+      tx,
+    );
+    const ids = (rows: Array<{ id: string }>) =>
+      sql.join(
+        rows.map((row) => sql`${row.id}`),
+        sql`, `,
+      );
+    const dropped = [...parked].filter((row) => used.has(row.storage_key));
+    const due = [...parked].filter((row) => !used.has(row.storage_key));
+    if (dropped.length > 0)
+      await tx.execute(sql`
+        update deleted_object set deleted_at = now(), last_error = ${STILL_IN_USE}
+        where id in (${ids(dropped)})
+      `);
+    if (due.length > 0)
+      await tx.execute(sql`
+        update deleted_object set next_attempt_at = now() where id in (${ids(due)})
+      `);
+  });
+}
+
 /**
  * Deletes blobs queued by the attachment delete trigger.
  *
  * `skip locked` lets several replicas drain concurrently without contending,
  * and a failed delete stays queued with a growing backoff rather than becoming
  * a log line and a permanently orphaned file.
+ *
+ * An object is deleted only when no attachment row uses it any more (#358):
+ * the trigger parks the object of a row deleted while another still uses it,
+ * and this checks again just before deleting, whatever queued it.
  */
 export async function drainDeletedObjects(now: Date = new Date()): Promise<number> {
+  await settleParkedObjects();
   // `now` has millisecond precision and PostgreSQL microsecond: compare against
   // the end of that millisecond so a row queued within it is already due.
   const dueBefore = new Date(now.getTime() + 1);
@@ -62,9 +134,17 @@ export async function drainDeletedObjects(now: Date = new Date()): Promise<numbe
   if (claimed.length === 0) return 0;
 
   const driver = await getStorageDriver();
+  const used = await keysInUse(claimed.map((row) => row.storage_key));
   let deleted = 0;
 
   for (const row of claimed) {
+    if (used.has(row.storage_key)) {
+      await db
+        .update(schema.deletedObject)
+        .set({ deletedAt: new Date(), lastError: STILL_IN_USE })
+        .where(sql`${schema.deletedObject.id} = ${row.id}`);
+      continue;
+    }
     try {
       await driver.delete(row.storage_key);
       await db

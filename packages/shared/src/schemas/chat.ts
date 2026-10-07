@@ -86,6 +86,13 @@ export const storedFileSchema = attachmentSchema.extend({
    * day are deleted.
    */
   unsent: z.boolean().default(false),
+  /**
+   * The conversation a chat file was sent in (#358). A fork and an edit have a
+   * row, and so a line in this list, of their own for each file they show, so
+   * the same name can appear once per conversation; this says which. Null for
+   * a project file and for an unsent upload.
+   */
+  conversation: z.object({ id: z.string(), title: z.string() }).nullable().default(null),
 });
 
 /** GET /api/threads?view=history: one page, newest activity first. */

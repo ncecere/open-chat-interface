@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lte, schema } from '@oci/db';
+import { and, desc, eq, isNull, lte, schema, sql } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
@@ -8,6 +8,7 @@ import { destroyAttachments } from '../lifecycle/destroy.js';
 import { assertRoleFeature } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { adjustStorageUsage } from '../storage/usage.js';
+import { giveSharersOwnRows } from './shared-rows.js';
 
 export { type UploadResult, uploadAttachment } from './upload.js';
 
@@ -40,7 +41,9 @@ export async function getOwnedAttachment(id: string, userId: string) {
 /**
  * Settings → Attachments: chat files (message attachments and staged
  * uploads) and, since v0.9.1, project files with the project they belong to,
- * so the list accounts for what the storage meter counts. Newest first.
+ * so the list accounts for what the storage meter counts. Newest first. A file
+ * a fork or an edit shows is listed once for each conversation that has a row
+ * for it (#358), with that conversation, and each is counted by the meter.
  */
 export async function listAttachments(userId: string) {
   return db
@@ -53,9 +56,13 @@ export async function listAttachments(userId: string) {
       messageId: schema.attachment.messageId,
       projectId: schema.attachment.projectId,
       projectName: schema.project.name,
+      threadId: schema.thread.id,
+      threadTitle: schema.thread.title,
     })
     .from(schema.attachment)
     .leftJoin(schema.project, eq(schema.project.id, schema.attachment.projectId))
+    .leftJoin(schema.message, eq(schema.message.id, schema.attachment.messageId))
+    .leftJoin(schema.thread, eq(schema.thread.id, schema.message.threadId))
     .where(
       and(
         eq(schema.attachment.userId, userId),
@@ -104,6 +111,10 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
       if (!row) throw notFound('Attachment not found');
       if (row.deletedAt) return false;
       if (row.messageId && !thread) return true;
+
+      // A fork or edit made before 0.11 may still show this file through the
+      // same row: it gets its own before this one goes (#358).
+      if (row.messageId) await giveSharersOwnRows(tx, sql`select ${row.messageId}::text`);
 
       if (row.messageId) {
         const [message] = await tx

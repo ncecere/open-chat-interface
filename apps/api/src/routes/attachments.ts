@@ -52,6 +52,9 @@ attachmentRoutes.get('/', async (c) => {
       project: row.projectId ? { id: row.projectId, name: row.projectName ?? 'Project' } : null,
       // Uploaded in a chat and not sent (yet): in a composer now (#297).
       unsent: !row.projectId && !row.messageId,
+      // The conversation it was sent in, which tells apart the copies a fork
+      // or an edit holds of the same file (#358).
+      conversation: row.threadId ? { id: row.threadId, title: row.threadTitle ?? '' } : null,
     })),
   });
 });

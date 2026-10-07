@@ -33,7 +33,9 @@ each edit can be told apart in the sidebar; rename it if you prefer. Files
 sent with the question stay with it: the edit box shows them below the text,
 and the revised question is answered with them. Choose **Remove** (×) on a
 file to leave it out of the revised question; **Cancel** keeps everything as
-it was.
+it was. The edit gets its own copy of each file it keeps, so deleting the
+original conversation later does not take them away (see
+[Forks and edits keep their own files](#forks-and-edits-keep-their-own-files)).
 
 Editing, retrying and forking at a question answer with the model and
 reasoning level shown in the model picker when you do it. If a model failed or
@@ -62,6 +64,23 @@ again as it opens, as an edit does.
 This is worth reaching for more often than people do. Asking "what if we did it
 the other way?" as a fork means you end up with both answers side by side in
 the sidebar rather than one overwritten by the other.
+
+### Forks and edits keep their own files
+
+A fork, and an edit that keeps a question's files, get **their own copy of each
+file**, as they get their own copy of artifacts. Deleting the conversation they
+were made from, moving it to the trash and emptying it, an automatic purge by
+your administrator's retention period, or deleting the file from that
+conversation in **Settings → Attachments**, never removes the files of a
+conversation you kept, and the other way round: deleting a fork or an edit
+leaves the original's files alone. A file is removed from storage only when
+the last conversation that has a copy of it is deleted.
+
+Each copy counts towards your storage allowance like the file it copies, so a
+fork of a conversation with a 5 MB PDF holds 5 MB more on the meter, and
+**Settings → Attachments** lists the file once for each conversation that has
+it, saying which. Making a fork is never refused for lack of space (the file is
+already stored); an upload after it may be.
 
 ## How messages are formatted
 

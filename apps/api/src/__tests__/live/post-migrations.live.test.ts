@@ -305,7 +305,9 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
       ['0008_audit_log_user_ids_index', 'applied'],
       ['0009_artifact_kind_code', 'applied'],
       ['0010_audit_log_actor_email_index', 'applied'],
-      ['0012_message_text_search_folded_index', 'applied'],
+      ['0011_attachment_storage_key_index', 'applied'],
+      ['0012_attachment_thumbnail_key_index', 'applied'],
+      ['0013_message_text_search_folded_index', 'applied'],
     ]);
     for (const name of [
       'message_created_at_idx',
@@ -317,6 +319,8 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
       'audit_log_target_idx',
       'audit_log_user_ids_idx',
       'audit_log_actor_email_idx',
+      'attachment_storage_key_idx',
+      'attachment_thumbnail_key_idx',
       'message_text_search_folded_idx',
     ]) {
       expect(await indexState(name)).toBe('valid');

@@ -233,7 +233,11 @@ writes its file before committing its record. [Backups](backups.md) kept in the
 attachment bucket (under `.oci-backups/`) are never treated as orphans either.
 
 Above it, **Storage in use** shows live bytes and files, what is in the trash,
-and how many objects are queued for removal.
+and how many objects are queued for removal. A fork's or an edit's copy of a
+file is a row of its own on the same stored object, so live files and bytes
+count it, while the bucket holds the object once; an object is removed only
+when the last row using it is deleted, and an entry for an object another file
+still uses is dropped from the queue without deleting it.
 
 ## When somebody reports a problem
 
