@@ -51,7 +51,9 @@ for someone new (just-in-time provisioning).
 - **Turn on read-only mode**, with an optional reason (shown to everyone) and
   an expected end. The expected end is shown to people and sent to API clients
   as `Retry-After`; it must be later than now. Nothing ends by itself, so turn
-  it off when you are done.
+  it off when you are done. It asks first: focus moves to **Cancel**, and
+  only **Confirm: refuse every change now** turns it on. Escape or Cancel
+  closes the question and puts focus back on **Turn on read-only mode**.
 - **Turn off read-only mode** is the one administration control that stays
   usable while read-only. Changes are accepted again on every replica at once.
   Open pages learn it within 30 seconds: the banner goes, and so does any
