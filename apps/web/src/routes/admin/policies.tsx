@@ -46,10 +46,13 @@ const POLICY_LABELS = { title: 'Title', body: 'Policy text' };
 function PolicyDialog({
   latest,
   draft,
+  nextVersion,
   onClose,
 }: {
   latest: UsagePolicy | null;
   draft?: UsagePolicy;
+  /** The number a new version will get, for the confirmation. */
+  nextVersion: number;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -58,7 +61,11 @@ function PolicyDialog({
   const source = draft ?? latest;
   const [title, setTitle] = useState(source?.title ?? 'Acceptable use policy');
   const [body, setBody] = useState(source?.body ?? '');
-  const [publish, setPublish] = useState(true);
+  // Off by default (#371): publishing cannot be undone and asks everyone to
+  // accept again, so saving a draft is the safe default and publishing is
+  // chosen, and confirmed, each time.
+  const [publish, setPublish] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   // Each problem under its field, which is marked invalid and described by
   // it, until that field is edited; only one about no field (a failed save)
   // at the foot (#283, #322). A read-only refusal goes once changes are
@@ -79,8 +86,11 @@ function PolicyDialog({
       await queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] });
       onClose();
     },
-    onError: (cause) =>
-      setProblems(apiErrorProblems(cause, 'The policy could not be saved.', POLICY_LABELS)),
+    onError: (cause) => {
+      // Back to the form, where the problem is shown under its field.
+      setConfirming(false);
+      setProblems(apiErrorProblems(cause, 'The policy could not be saved.', POLICY_LABELS));
+    },
   });
 
   function submit(event: FormEvent) {
@@ -95,6 +105,11 @@ function PolicyDialog({
         ({ field, text }) => ({ fields: field ? [field] : [], text }),
       );
       setProblems(found.length > 0 ? found : [{ fields: [], text: 'Check the policy fields.' }]);
+      return;
+    }
+    // Publishing from here asks first, as publishing a draft from the list does.
+    if (!draft && publish && !confirming) {
+      setConfirming(true);
       return;
     }
     save.mutate(parsed.data);
@@ -146,7 +161,8 @@ function PolicyDialog({
                 Publish immediately
               </label>
               <p id="policy-publish-hint" className="mt-0.5 text-[var(--text-muted)] text-xs">
-                Turn off to save a draft that nobody is asked to accept yet.
+                Off saves a draft that nobody is asked to accept yet. On asks everyone to accept
+                this wording, and can never be undone; you are asked to confirm first.
               </p>
             </div>
             <Switch
@@ -167,13 +183,41 @@ function PolicyDialog({
           </p>
         )}
 
+        {confirming && (
+          <div
+            role="alert"
+            className="rounded-xl border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-4 py-3 text-sm"
+          >
+            <p className="font-medium">
+              Publish “{title.trim()}” as version {nextVersion}?
+            </p>
+            <p className="mt-1 text-[var(--text-secondary)]">
+              Everyone, including people who accepted an earlier version, must accept this wording
+              before they can use the instance again. A published version cannot be changed or
+              withdrawn.
+            </p>
+          </div>
+        )}
+
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
+          {confirming ? (
+            <Button type="button" variant="ghost" onClick={() => setConfirming(false)}>
+              Back
+            </Button>
+          ) : (
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+          )}
           <Button type="submit" variant="primary" disabled={save.isPending}>
             {save.isPending && <Spinner />}
-            {draft ? 'Save draft' : publish ? 'Publish version' : 'Save draft'}
+            {draft
+              ? 'Save draft'
+              : confirming
+                ? `Publish version ${nextVersion}`
+                : publish
+                  ? 'Publish version…'
+                  : 'Save draft'}
           </Button>
         </DialogFooter>
       </form>
@@ -224,6 +268,7 @@ export function AdminPoliciesPage() {
 
   const policies = data?.policies ?? [];
   const current = policies.find((policy) => policy.publishedAt) ?? null;
+  const nextVersion = Math.max(0, ...policies.map((policy) => policy.version)) + 1;
 
   return (
     <div>
@@ -339,12 +384,23 @@ export function AdminPoliciesPage() {
       </div>
 
       <Dialog open={composing} onOpenChange={(open) => !open && setComposing(false)}>
-        {composing && <PolicyDialog latest={current} onClose={() => setComposing(false)} />}
+        {composing && (
+          <PolicyDialog
+            latest={current}
+            nextVersion={nextVersion}
+            onClose={() => setComposing(false)}
+          />
+        )}
       </Dialog>
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         {editing && (
-          <PolicyDialog latest={current} draft={editing} onClose={() => setEditing(null)} />
+          <PolicyDialog
+            latest={current}
+            draft={editing}
+            nextVersion={nextVersion}
+            onClose={() => setEditing(null)}
+          />
         )}
       </Dialog>
 
@@ -369,7 +425,7 @@ export function AdminPoliciesPage() {
       <ConfirmDialog
         open={publishing !== null}
         onOpenChange={(open) => !open && setPublishing(null)}
-        title={`Publish v${publishing?.version ?? ''}?`}
+        title={`Publish “${publishing?.title ?? ''}” as v${publishing?.version ?? ''}?`}
         description="Everyone, including people who accepted an earlier version, must accept this wording before they can use the instance again. A published version cannot be changed or withdrawn."
         confirmLabel="Publish"
         pendingLabel="Publishing…"

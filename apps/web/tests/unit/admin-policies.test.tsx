@@ -12,6 +12,7 @@ import {
   dialog,
   findButton,
   renderAdmin,
+  typeInto,
   typeIntoTextarea,
 } from './admin-test-utils';
 
@@ -85,11 +86,7 @@ it('clears the error once the policy text is filled in (#217)', async () => {
   await click(button('New version'));
   const body = document.getElementById('policy-body') as HTMLTextAreaElement;
   await typeIntoTextarea(body, '   ');
-  await click(
-    [...dialog()!.querySelectorAll('button')].find(
-      (candidate) => candidate.textContent?.trim() === 'Publish version',
-    )!,
-  );
+  await click(button('Save draft'));
   // In the form's words, not the API's "Body" (#228).
   expect(alerts(dialog()!)).toEqual(['Policy text is required.']);
   expect(api.post).not.toHaveBeenCalled();
@@ -128,4 +125,64 @@ it("names each version's Publish button for its version (#175)", async () => {
     'Publish Walk AUP second draft v3',
     'Publish Walk AUP draft v2',
   ]);
+});
+
+const submitButton = () =>
+  [...dialog()!.querySelectorAll('button[type="submit"]')].at(0) as HTMLButtonElement;
+
+async function fillNewVersion(title: string) {
+  await click(button('New version'));
+  await typeInto(document.getElementById('policy-title') as HTMLInputElement, title);
+  await typeIntoTextarea(
+    document.getElementById('policy-body') as HTMLTextAreaElement,
+    'Be kind to the machines, please.',
+  );
+}
+
+it('saves a draft by default: Publish immediately starts off (#371)', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await fillNewVersion('Walk9 AUP');
+  expect(document.getElementById('policy-publish')?.getAttribute('aria-checked')).toBe('false');
+  expect(submitButton().textContent).toBe('Save draft');
+
+  await click(submitButton());
+  expect(api.post).toHaveBeenCalledWith('/admin/policies', {
+    title: 'Walk9 AUP',
+    body: 'Be kind to the machines, please.',
+    publish: false,
+  });
+});
+
+it('asks before publishing from New version, naming the title and version, and says it cannot be undone (#371)', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await fillNewVersion('Walk9 AUP');
+  await click(document.getElementById('policy-publish')!);
+  // Before: this button published at once, with no question.
+  expect(submitButton().textContent).toBe('Publish version…');
+
+  await click(submitButton());
+  expect(api.post).not.toHaveBeenCalled();
+  expect(dialog()?.textContent).toContain('Publish “Walk9 AUP” as version 3?');
+  expect(dialog()?.textContent).toContain('cannot be changed or withdrawn');
+  expect(submitButton().textContent).toBe('Publish version 3');
+
+  // Back changes nothing; the form is still there, the switch still on.
+  await click(button('Back'));
+  expect(api.post).not.toHaveBeenCalled();
+  expect(document.getElementById('policy-title')).not.toBeNull();
+
+  await click(submitButton());
+  await click(submitButton());
+  expect(api.post).toHaveBeenCalledTimes(1);
+  expect(api.post).toHaveBeenCalledWith('/admin/policies', {
+    title: 'Walk9 AUP',
+    body: 'Be kind to the machines, please.',
+    publish: true,
+  });
+});
+
+it('names the policy and version in the confirmation for publishing a draft from the list (#371)', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await click(button('Publish Walk AUP draft v2'));
+  expect(dialog()?.textContent).toContain('Publish “Walk AUP draft” as v2?');
 });

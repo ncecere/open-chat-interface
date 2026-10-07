@@ -159,6 +159,24 @@ describe.skipIf(!available)('live: acceptable-use policy drafts', () => {
     expect(row).toMatchObject({ title: 'Walk AUP in force', body: 'Be kind.' });
   });
 
+  it('records which version and title a publish published, from the list or at creation (#371)', async () => {
+    const draftId = await create(false, 'Walk9 AUP to publish');
+    expect((await send('POST', `/${draftId}/publish`)).status).toBe(200);
+    const createdId = await create(true, 'Walk9 AUP published at once');
+    const publishes = await audit('policy.publish');
+    const forDraft = publishes.find((entry) => entry.targetId === draftId);
+    const forCreated = publishes.find((entry) => entry.targetId === createdId);
+    // Before: `metadata: null` for the first (only the policy's ID).
+    expect(forDraft?.metadata).toEqual({
+      version: expect.any(Number),
+      title: 'Walk9 AUP to publish',
+    });
+    expect(forCreated?.metadata).toEqual({
+      version: expect.any(Number),
+      title: 'Walk9 AUP published at once',
+    });
+  });
+
   it('answers 404 for a version that does not exist', async () => {
     expect((await send('DELETE', '/not-a-policy')).status).toBe(404);
   });

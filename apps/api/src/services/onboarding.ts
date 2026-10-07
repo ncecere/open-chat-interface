@@ -179,8 +179,14 @@ export async function createPolicyVersion(params: {
   return { id: created.id, version };
 }
 
-/** Publishes a draft, which re-prompts everyone who accepted an older one. */
-export async function publishPolicy(policyId: string): Promise<boolean> {
+/**
+ * Publishes a draft, which re-prompts everyone who accepted an older one. What
+ * it published is returned so the audit entry can say which version and title
+ * (#371).
+ */
+export async function publishPolicy(
+  policyId: string,
+): Promise<{ outcome: 'published'; version: number; title: string } | { outcome: 'not-found' }> {
   const organizationId = await getDefaultOrganizationId();
 
   const published = await db
@@ -192,10 +198,12 @@ export async function publishPolicy(policyId: string): Promise<boolean> {
         eq(schema.usagePolicy.organizationId, organizationId),
       ),
     )
-    .returning({ id: schema.usagePolicy.id });
+    .returning({ version: schema.usagePolicy.version, title: schema.usagePolicy.title });
 
-  if (published.length > 0) invalidatePolicyCache();
-  return published.length > 0;
+  const [row] = published;
+  if (!row) return { outcome: 'not-found' };
+  invalidatePolicyCache();
+  return { outcome: 'published', ...row };
 }
 
 export type DraftChange =

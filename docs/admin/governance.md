@@ -516,13 +516,18 @@ Consequences:
 
 ### Drafts
 
-Turn off **Publish immediately** to save a draft. Nobody is asked to accept a
+**New version** saves a draft unless you turn on **Publish immediately** (off
+by default, because publishing cannot be undone). Nobody is asked to accept a
 draft, so it can still be reworded (**Edit**) or discarded (**Delete**) until
-you **Publish** it, which asks for confirmation first. Once published, the
-wording is fixed. **View** shows the full text of any version, drafts and
+you **Publish** it. Publishing always asks for confirmation first, from the
+list and from **New version**, naming the title and version and saying that a
+published version cannot be changed or withdrawn. Once published, the wording
+is fixed. **View** shows the full text of any version, drafts and
 published ones alike, to administrators and auditors.
 
-Each edit of a draft is audited as `policy.update`, with the title as it was
+Publishing is audited as `policy.publish` with the version and title
+(whether the version was published at creation or from the list). Each edit of
+a draft is audited as `policy.update`, with the title as it was
 and became and `textChanged`. A changed text is recorded by its length and
 SHA-256 digest before and after, never by its wording, which can be long. A
 save that changes nothing is not recorded.

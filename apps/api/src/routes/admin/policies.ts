@@ -56,14 +56,19 @@ policyRoutes.post('/:id/publish', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
 
-  if (!(await publishPolicy(id))) throw notFound('Policy version not found');
+  const published = await publishPolicy(id);
+  if (published.outcome === 'not-found') throw notFound('Policy version not found');
 
+  // Which version and title, as the entry for publishing at creation has (#371):
+  // it carried only the policy's ID, so the log did not say what everybody had
+  // just been asked to accept.
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'policy.publish',
     targetType: 'usage_policy',
     targetId: id,
+    metadata: { version: published.version, title: published.title },
   });
 
   return c.json({ ok: true });
