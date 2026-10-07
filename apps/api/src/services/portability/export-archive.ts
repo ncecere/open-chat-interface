@@ -5,7 +5,13 @@ import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { artifactsWithVersions } from '../artifacts/store.js';
 import { activeMessage } from '../chat/reply-path.js';
-import { exportableParts, MAX_EXPORT_MESSAGES, renderMarkdown, safeTitleSlug } from '../export.js';
+import {
+  exportableParts,
+  MAX_EXPORT_MESSAGES,
+  modelDisplayNames,
+  renderMarkdown,
+  safeTitleSlug,
+} from '../export.js';
 import { getStorageDriver } from '../storage/index.js';
 import { NameAllocator, safeEntrySegment, ZIP_MAX_ENTRIES, ZipStreamWriter } from './zip-writer.js';
 
@@ -403,7 +409,14 @@ export async function* exportArchive(
     const jsonPath = `conversations/${name}.json`;
     writer.add(
       markdownPath,
-      renderMarkdown(thread, messages.slice(0, MAX_EXPORT_MESSAGES), artifacts),
+      renderMarkdown(
+        thread,
+        messages.slice(0, MAX_EXPORT_MESSAGES),
+        artifacts,
+        undefined,
+        // Models as the app names them (#152); one query per conversation.
+        await modelDisplayNames(thread.organizationId, messages),
+      ),
       {
         mtime: thread.updatedAt,
       },

@@ -98,7 +98,8 @@ they changed it), and it lists only the levels your role may use.
 
 A temporary chat stays off the sidebar, becomes unavailable when it expires,
 and is removed by background cleanup. The instance still stores it while it is
-active.
+active. Start one with the clock icon at the top right; if your role does not
+have temporary chats, the icon is not shown.
 
 Temporary does not mean trace-free: usage and audit records may remain, and the
 model provider's retention policy still applies. Check your institution's data
@@ -122,10 +123,15 @@ request; copy any unsaved message text before replacing local history. A draft
 you are typing stays in the composer during recovery.
 
 A pending reply may still be running. You can wait or request **Stop**; a local
-reader closing is not proof that the server stopped. Moving to another
+reader closing is not proof that the server stopped. After **Stop** the page
+says **Stopping the reply…** until the server has saved it; the reply keeps
+what was written and says you stopped it (or that you stopped it before it
+began). Moving to another
 conversation closes its browser reader without cancelling the server response.
 
 Load failures show a retry or unavailable state rather than an empty chat.
+A reply that failed says so in its place, with the reason and **Try again**,
+both as it happens and after a reload.
 Opening another conversation will not send a pending new-chat prompt there.
 
 ## What the model can see
@@ -190,7 +196,9 @@ summary the model receives.
   for example "keep every figure in the budget". The dialog closes at once;
   while the summary is made, the icon shows **Summarising earlier messages…**
   and you can keep writing. Asking again meanwhile does not make a second one.
-  It uses the model of the latest reply.
+  It uses the model of the latest reply. A conversation needs at least two
+  turns (since the last summary) first; until then the dialog says there is
+  nothing to summarise yet.
 - **If a summary you asked for fails,** a quiet note under the conversation
   says so and why: your usage allowance ran out, the model returned an error,
   the model took too long, or there was nothing to summarise by then. Select

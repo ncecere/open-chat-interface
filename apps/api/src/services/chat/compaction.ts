@@ -1,10 +1,12 @@
-import { and, eq, gte, schema, sql } from '@oci/db';
 import { type CompactionReason, ERROR_CODES, type UserRole } from '@oci/shared';
-import { db } from '../../db/index.js';
 import { AppError, quotaExceeded, validationFailed } from '../../lib/errors.js';
 import { allowanceExhausted } from '../quota/index.js';
 import { softThresholdUnits } from './compaction-plan.js';
-import { type ActiveCompaction, latestCompaction } from './compaction-records.js';
+import {
+  type ActiveCompaction,
+  hasTurnsToSummarise,
+  latestCompaction,
+} from './compaction-records.js';
 import { runCompaction } from './compaction-run.js';
 import { planCompaction } from './compaction-span.js';
 import { type SummaryModel, summaryChunkUnits } from './compaction-summary.js';
@@ -114,18 +116,8 @@ export async function assertCompactionPossible(input: {
   instructions?: string | null;
 }) {
   const previous = await latestCompaction(input.threadId, input.user.id);
-  const [turns] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.message)
-    .where(
-      and(
-        eq(schema.message.threadId, input.threadId),
-        eq(schema.message.userId, input.user.id),
-        eq(schema.message.role, 'user'),
-        previous ? gte(schema.message.position, previous.firstKeptPosition) : undefined,
-      ),
-    );
-  if (Number(turns?.count ?? 0) < 2) throw validationFailed(NOTHING_TO_COMPACT);
+  if (!(await hasTurnsToSummarise(input.threadId, input.user.id, previous)))
+    throw validationFailed(NOTHING_TO_COMPACT);
   summaryChunkUnits(input.model, previous?.summary ?? null, input.instructions);
   if (await allowanceSpent(input.user, input.model.slug))
     throw quotaExceeded(

@@ -79,7 +79,7 @@ export function ModelScopePicker({
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-[var(--text-muted)]">
           {selected.length === 0
-            ? 'Applies to every model. Choose models to limit this policy to them.'
+            ? 'Applies to every model. Choose models to limit this budget to them.'
             : `${selected.length} model${selected.length === 1 ? '' : 's'} selected.`}
         </p>
         {selected.length > 0 && (

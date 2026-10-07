@@ -16,7 +16,7 @@ import {
   upsertModelSchema,
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
 import {
@@ -32,7 +32,7 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 interface ModelDraft {
@@ -231,6 +231,10 @@ export function ModelFormDialog({
   const [draft, setDraft] = useState(() => initialDraft(model, providers));
   const [slugTouched, setSlugTouched] = useState(Boolean(model));
   const [error, setError] = useState<string | null>(null);
+  // The listed problems were about the form as it was submitted; once it
+  // changes they may no longer hold, so they go until the next attempt (#178).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every draft change
+  useEffect(() => setError(null), [draft]);
 
   // Whether thinking can be surfaced at all depends on the wire protocol, so
   // the guidance follows whichever provider is selected.
@@ -248,8 +252,7 @@ export function ModelFormDialog({
       ]);
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The model could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The model could not be saved.')),
   });
 
   function submit(event: FormEvent) {
@@ -278,8 +281,17 @@ export function ModelFormDialog({
       outputPriceMicros: toPriceMicros(draft.outputPrice),
     });
     if (!parsed.success) problems.push(...modelFieldProblems(parsed.error.issues));
-    const limits =
-      problems.length === 0 ? modelLimitsProblem(contextWindow, maxOutputTokens) : null;
+    // The room-for-input rule is checked alongside the others, not only once
+    // they pass, so a bad slug and a too-large output are listed together
+    // (#129). It is skipped only when either limit is itself invalid.
+    const limitFieldInvalid =
+      Number.isNaN(contextWindow) ||
+      Number.isNaN(maxOutputTokens) ||
+      (!parsed.success &&
+        parsed.error.issues.some((issue) =>
+          ['contextWindow', 'maxOutputTokens'].includes(String(issue.path[0])),
+        ));
+    const limits = limitFieldInvalid ? null : modelLimitsProblem(contextWindow, maxOutputTokens);
     if (limits) problems.push(limits);
     if (!parsed.success || problems.length > 0) {
       setError(problems.length > 0 ? problems.join('\n') : 'Check the model fields.');

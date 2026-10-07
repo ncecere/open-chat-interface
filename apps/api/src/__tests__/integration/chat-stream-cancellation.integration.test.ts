@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { runStopKind } from '../../lib/run-abort.js';
 import {
   ChatStreamStore,
   cancelActiveChatRun,
@@ -141,7 +142,7 @@ describe.skipIf(!enabled)('integration: atomic Redis chat cancellation', () => {
       expect(abort.signal.aborted).toBe(false);
       expect(await cancelActiveChatRun(identity.threadId, identity.userId)).toBe(true);
       expect(abort.signal.aborted).toBe(true);
-      expect(abort.signal.reason).toBe('user-stop');
+      expect(runStopKind(abort.signal)).toBe('user-stop');
     } finally {
       unregisterLocalChatRun(identity.runId);
     }
@@ -162,7 +163,7 @@ describe.skipIf(!enabled)('integration: atomic Redis chat cancellation', () => {
       expect(await cancelActiveChatRun(identity.threadId, identity.userId)).toBe(true);
       expect.soft(oldAbort.signal.aborted).toBe(false);
       expect(nextAbort.signal.aborted).toBe(true);
-      expect(nextAbort.signal.reason).toBe('user-stop');
+      expect(runStopKind(nextAbort.signal)).toBe('user-stop');
     } finally {
       unregisterLocalChatRun(identity.runId);
       unregisterLocalChatRun(next.runId);

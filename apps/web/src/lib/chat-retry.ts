@@ -7,6 +7,7 @@
  */
 
 import { noteReadOnlyResponse } from '~/lib/read-only';
+import { noteUnauthorizedResponse } from '~/lib/session-ended';
 
 /** Retries after the first refusal; then the refusal is shown as an error. */
 export const DRAIN_RETRIES = 2;
@@ -59,5 +60,7 @@ export async function fetchRetryingDrain(
   }
   // Read-only maintenance mode (423, never retried): the page says so at once.
   await noteReadOnlyResponse(response);
+  // A session that ended while the page was open: to sign-in (#165).
+  noteUnauthorizedResponse(response);
   return response;
 }

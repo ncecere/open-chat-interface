@@ -173,7 +173,7 @@ describe('an interrupted reply', () => {
     expect(container.querySelector('[role="note"]')?.textContent).toContain('interrupted');
     expect(container.querySelector('button[aria-label="Retry"]')).not.toBeNull();
   });
-  it('says nothing for a reply the person stopped', async () => {
+  it('says a reply the person stopped was stopped, not interrupted (#154)', async () => {
     await act(() =>
       root.render(
         <MessageList
@@ -183,6 +183,8 @@ describe('an interrupted reply', () => {
         />,
       ),
     );
-    expect(container.querySelector('[role="note"]')).toBeNull();
+    const notes = [...container.querySelectorAll('[role="note"]')].map((node) => node.textContent);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatch(/^You stopped this reply/);
   });
 });

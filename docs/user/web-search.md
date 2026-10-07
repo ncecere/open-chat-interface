@@ -50,7 +50,8 @@ If a search fails, for example because the search provider rejected the
 institution's key, you still get an answer. The reply shows **Web search
 failed** with the reason, and the model is told to say that current sources
 could not be checked. A model using the search tool sees the failure as the
-step's result and answers accordingly.
+step's result and answers accordingly; its work block says **Web search
+failed** too.
 
 A search that times out, cannot reach the provider or meets a server error is
 tried once more before it counts as failed, so a brief network problem usually

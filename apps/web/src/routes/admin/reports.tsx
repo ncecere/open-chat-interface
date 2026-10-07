@@ -57,12 +57,12 @@ function EmailRequiredNotice() {
   );
 }
 
-/** "Next: in 3 days", "Next: within the hour" when due, or "Paused" (#85). */
+/** "Next: in 3d", "Next: within the hour" when due, or "Paused" (#85, #126). */
 export function nextRunText(report: Pick<ScheduledReport, 'nextRunAt'>, now = Date.now()): string {
   if (!report.nextRunAt) return 'Paused';
   const at = Date.parse(report.nextRunAt);
   if (at <= now + 60 * 60 * 1000) return 'Next: within the hour';
-  return `Next: ${formatRelativeTime(report.nextRunAt)}`;
+  return `Next: ${formatRelativeTime(report.nextRunAt, now)}`;
 }
 
 const CADENCES = [
@@ -320,11 +320,18 @@ export function AdminReportsPage() {
                     size="sm"
                     variant="ghost"
                     disabled={toggle.isPending}
+                    // Named for the report, as Edit is, so each row's buttons differ (#175).
+                    aria-label={`${report.enabled ? 'Pause' : 'Resume'} ${report.name}`}
                     onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
                   >
                     {report.enabled ? 'Pause' : 'Resume'}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDeleteFor(report)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Delete ${report.name}`}
+                    onClick={() => setDeleteFor(report)}
+                  >
                     Delete
                   </Button>
                 </EditOnly>

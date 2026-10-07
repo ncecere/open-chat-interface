@@ -118,18 +118,26 @@ export async function updateUser(
     await db.delete(schema.session).where(eq(schema.session.userId, targetId));
   }
 
-  await recordAudit({
-    actorUserId: actor.id,
-    actorEmail: actor.email,
-    action: 'user.update',
-    targetType: 'user',
-    targetId,
-    metadata: patch,
-  });
-
   // A role change is access control; record it under its protected action so
-  // routine audit retention cannot prune it with ordinary profile edits.
-  if (patch.role !== undefined && patch.role !== target.role) {
+  // routine audit retention cannot prune it with ordinary profile edits. It is
+  // recorded once: the role is left out of `user.update`, which is written only
+  // when something else changed too, so one role change is one entry and one
+  // webhook (#140).
+  const roleChanged = patch.role !== undefined && patch.role !== target.role;
+  const { role: _role, ...otherChanges } = patch;
+  const updateMetadata = roleChanged ? otherChanges : patch;
+  if (Object.keys(updateMetadata).length > 0) {
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'user.update',
+      targetType: 'user',
+      targetId,
+      metadata: updateMetadata,
+    });
+  }
+
+  if (roleChanged) {
     await recordAudit({
       actorUserId: actor.id,
       actorEmail: actor.email,
@@ -144,15 +152,20 @@ export async function updateUser(
 }
 
 export async function revokeUserSessions(actor: AdminUserActor, targetId: string) {
-  await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  const ended = await db
+    .delete(schema.session)
+    .where(eq(schema.session.userId, targetId))
+    .returning({ id: schema.session.id });
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'user.revoke_sessions',
     targetType: 'user',
     targetId,
+    // How many sessions this ended, so the entry says what it did (#148).
+    metadata: { sessionsEnded: ended.length },
   });
-  return { ok: true };
+  return { ok: true, sessionsEnded: ended.length };
 }
 
 export const LAST_ADMIN_SELF_DELETION_MESSAGE =

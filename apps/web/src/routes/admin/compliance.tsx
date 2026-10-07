@@ -37,7 +37,7 @@ import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
@@ -276,11 +276,7 @@ function SettingsForm({
         hasChanges={hasChanges}
         isPending={save.isPending}
         errorMessage={
-          save.error
-            ? save.error instanceof ApiError
-              ? save.error.message
-              : 'Compliance settings could not be saved.'
-            : null
+          save.error ? apiErrorMessage(save.error, 'Compliance settings could not be saved.') : null
         }
         successMessage={saved && !hasChanges ? 'Compliance settings saved.' : null}
       />

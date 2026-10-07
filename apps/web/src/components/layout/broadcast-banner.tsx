@@ -1,6 +1,7 @@
 import type { ActiveBroadcast } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Info, TriangleAlert, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
@@ -17,6 +18,62 @@ const LEVEL_ICONS: Record<ActiveBroadcast['level'], typeof Info> = {
   critical: AlertTriangle,
 };
 
+/** setTimeout's longest delay; a later end is checked again after it. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * The announcements still within their end, re-rendering when the next one
+ * ends. The list is refreshed only every few minutes, so without this an
+ * open page kept a scheduled window's announcement beside the read-only
+ * banner after the window started (#160).
+ */
+function useUnexpired(broadcasts: ActiveBroadcast[]): ActiveBroadcast[] {
+  const [now, setNow] = useState(() => Date.now());
+  const ends = broadcasts
+    .map((broadcast) => (broadcast.endsAt ? Date.parse(broadcast.endsAt) : Number.NaN))
+    .filter((end) => Number.isFinite(end) && end > now);
+  const next = ends.length ? Math.min(...ends) : null;
+  useEffect(() => {
+    if (next === null) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.min(next - Date.now(), MAX_TIMER_MS));
+    return () => clearTimeout(timer);
+  }, [next]);
+  return broadcasts.filter(
+    (broadcast) => !broadcast.endsAt || !(Date.parse(broadcast.endsAt) <= now),
+  );
+}
+
+function useBroadcasts() {
+  return useQuery({
+    queryKey: ['me', 'broadcasts'],
+    queryFn: () => api.get<{ broadcasts: ActiveBroadcast[] }>('/me/broadcasts'),
+    // Long enough not to poll noisily, short enough that an announcement
+    // published now reaches an open tab without a reload.
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
+}
+
+/** However slow the request, the page is shown after this long. */
+const MAX_WAIT_MS = 3_000;
+
+/**
+ * Whether the first answer about announcements is in (or failed, or took
+ * too long). The chat shell lays its page out hidden until then: a banner
+ * arriving after the page had painted pushed it down by its own height, a
+ * layout shift of 0.08-0.13 (#167). Refetches never hide it again.
+ */
+export function useBroadcastsSettled(): boolean {
+  const { isPending } = useBroadcasts();
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isPending) return;
+    const timer = setTimeout(() => setTimedOut(true), MAX_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [isPending]);
+  return !isPending || timedOut;
+}
+
 /**
  * Instance announcements, shown above the application.
  *
@@ -27,14 +84,7 @@ const LEVEL_ICONS: Record<ActiveBroadcast['level'], typeof Info> = {
 export function BroadcastBanner() {
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({
-    queryKey: ['me', 'broadcasts'],
-    queryFn: () => api.get<{ broadcasts: ActiveBroadcast[] }>('/me/broadcasts'),
-    // Long enough not to poll noisily, short enough that an announcement
-    // published now reaches an open tab without a reload.
-    refetchInterval: 5 * 60_000,
-    staleTime: 60_000,
-  });
+  const { data } = useBroadcasts();
 
   const dismiss = useMutation({
     mutationFn: (id: string) => api.post(`/me/broadcasts/${id}/dismiss`),
@@ -59,7 +109,7 @@ export function BroadcastBanner() {
     },
   });
 
-  const broadcasts = data?.broadcasts ?? [];
+  const broadcasts = useUnexpired(data?.broadcasts ?? []);
   if (broadcasts.length === 0) return null;
 
   return (

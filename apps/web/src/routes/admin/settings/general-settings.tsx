@@ -15,7 +15,7 @@ import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 type Features = InstanceSettings['features'];
 type FeatureKey = keyof Features;
@@ -105,9 +105,7 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the system prompt.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the system prompt.'));
     },
   });
 
@@ -139,6 +137,7 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
       </Field>
 
       <SaveRow
+        subject="the system instructions"
         hasChanges={hasChanges}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -169,9 +168,7 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the default reasoning level.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the default reasoning level.'));
     },
   });
 
@@ -208,6 +205,7 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
       </Field>
 
       <SaveRow
+        subject="the default reasoning level"
         hasChanges={draft !== saved}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -243,9 +241,7 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save feature settings.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save feature settings.'));
     },
   });
 
@@ -304,6 +300,7 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
       )}
 
       <SaveRow
+        subject="the features"
         hasChanges={hasChanges}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -336,9 +333,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the tool step limit.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the tool step limit.'));
     },
   });
 
@@ -380,6 +375,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
       </Field>
 
       <SaveRow
+        subject="the tool step limit"
         hasChanges={draft !== String(saved)}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -410,9 +406,7 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the compaction setting.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the compaction setting.'));
     },
   });
 
@@ -437,6 +431,7 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
         }}
       />
       <SaveRow
+        subject="conversation summaries"
         hasChanges={draft !== saved}
         isPending={save.isPending}
         errorMessage={errorMessage}
@@ -470,9 +465,7 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save the diagram setting.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save the diagram setting.'));
     },
   });
 
@@ -497,6 +490,7 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
         }}
       />
       <SaveRow
+        subject="editorial diagrams"
         hasChanges={draft !== saved}
         isPending={save.isPending}
         errorMessage={errorMessage}

@@ -26,7 +26,9 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
+import { formatDate } from '~/lib/utils';
+import { validationText } from '~/lib/validation-issues';
 
 /**
  * Writes a new version, or rewords a draft (`draft`). A published version is
@@ -61,8 +63,7 @@ function PolicyDialog({
       await queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] });
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The policy could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The policy could not be saved.')),
   });
 
   function submit(event: FormEvent) {
@@ -73,7 +74,7 @@ function PolicyDialog({
       ? updatePolicyDraftSchema.safeParse({ title, body })
       : upsertUsagePolicySchema.safeParse({ title, body, publish });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the policy fields.');
+      setError(validationText(parsed.error.issues, 'Check the policy fields.'));
       return;
     }
     save.mutate(parsed.data);
@@ -162,7 +163,7 @@ function ViewPolicyDialog({ policy, onClose }: { policy: UsagePolicy; onClose: (
         </DialogTitle>
         <DialogDescription>
           {policy.publishedAt
-            ? `Published ${new Date(policy.publishedAt).toLocaleDateString()} · accepted by ${policy.acceptanceCount}`
+            ? `Published ${formatDate(policy.publishedAt)} · accepted by ${policy.acceptanceCount}`
             : 'Draft: nobody has been asked to accept it yet.'}
         </DialogDescription>
       </DialogHeader>
@@ -227,7 +228,13 @@ export function AdminPoliciesPage() {
         {policies.length > 0 && (
           <RowList>
             {policies.map((policy) => (
-              <Row key={policy.id}>
+              // On a phone the actions sit below the title: side by side, the
+              // non-shrinking actions took the whole width and the title
+              // collapsed to nothing while Publish ran out of the card (#168).
+              <Row
+                key={policy.id}
+                className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4"
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate font-medium">{policy.title}</p>
@@ -242,13 +249,13 @@ export function AdminPoliciesPage() {
                   </div>
                   <p className="text-[var(--text-muted)] text-xs">
                     {policy.publishedAt
-                      ? `Published ${new Date(policy.publishedAt).toLocaleDateString()}`
+                      ? `Published ${formatDate(policy.publishedAt)}`
                       : 'Not published'}
                     {` · accepted by ${policy.acceptanceCount}`}
                   </p>
                 </div>
 
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -278,7 +285,13 @@ export function AdminPoliciesPage() {
                         <Trash2 />
                         Delete
                       </Button>
-                      <Button variant="secondary" size="sm" onClick={() => setPublishing(policy)}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        // Named for its version, as View, Edit and Delete are (#175).
+                        aria-label={`Publish ${policy.title} v${policy.version}`}
+                        onClick={() => setPublishing(policy)}
+                      >
                         <Send />
                         Publish
                       </Button>

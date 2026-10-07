@@ -33,3 +33,39 @@ test('the greeting is not crowded or covered by the composer on a phone', async 
   const menu = (await page.getByRole('menu').boundingBox())!;
   expect(menu.y).toBeGreaterThanOrEqual(greeting.y + greeting.height);
 });
+
+test('the model picker keeps the page margin on both sides of a phone (#169)', async ({ page }) => {
+  // The picker renders only with a model to pick; CI's seeded database has
+  // none, so one is stubbed rather than relying on a spec that ran earlier.
+  await page.route('**/api/models', (route) =>
+    route.fulfill({
+      json: {
+        models: [
+          {
+            id: 'model-phone',
+            slug: 'phone-model',
+            displayName: 'Phone Model',
+            description: 'Stub for the picker',
+            providerId: 'provider-test',
+            providerKind: 'openai-compatible',
+            providerLabel: 'Test Gateway',
+            upstreamModelId: 'phone-model',
+            capabilities: ['vision'],
+            labId: 'openai',
+            contextWindow: 128000,
+            maxOutputTokens: 8192,
+            supportedEfforts: [],
+            isDefault: true,
+            sortOrder: 0,
+          },
+        ],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page);
+  await page.getByRole('combobox', { name: /^Select model/ }).click();
+  const panel = (await page.getByRole('dialog', { name: 'Choose a model' }).boundingBox())!;
+  expect(panel.x).toBeGreaterThanOrEqual(16);
+  expect(390 - (panel.x + panel.width)).toBeGreaterThanOrEqual(16);
+});

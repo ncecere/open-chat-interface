@@ -2,6 +2,16 @@ import { AlertCircle, FileText, X } from 'lucide-react';
 import type { PendingAttachment } from '~/hooks/use-attachments';
 import { cn, formatBytes } from '~/lib/utils';
 
+/**
+ * Why a file was refused, naming it once (#180): the API's reasons and the
+ * size check already start with the file's name, so it is not put in front
+ * of them again ("walk2-big.txt: walk2-big.txt is larger…").
+ */
+export function failureText(item: Pick<PendingAttachment, 'filename' | 'error'>): string {
+  const reason = item.error ?? 'This file could not be attached.';
+  return reason.startsWith(item.filename) ? reason : `${item.filename}: ${reason}`;
+}
+
 /** Uploaded and in-flight files shown above the composer textarea. */
 export function AttachmentChips({
   items,
@@ -75,7 +85,7 @@ export function AttachmentChips({
         <ul role="alert" className="mt-2 flex flex-col gap-1 text-[var(--danger)] text-xs">
           {failures.map((item) => (
             <li key={item.localId} id={`attachment-error-${item.localId}`}>
-              {item.filename}: {item.error ?? 'This file could not be attached.'}
+              {failureText(item)}
             </li>
           ))}
         </ul>

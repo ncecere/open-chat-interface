@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -105,6 +106,7 @@ export function SignupPage() {
                 <Label htmlFor="signup-email">Email</Label>
                 <Input
                   id="signup-email"
+                  {...fieldErrorProps('signup-error', error, false)}
                   type="email"
                   autoComplete="email"
                   required
@@ -117,6 +119,7 @@ export function SignupPage() {
                 <Label htmlFor="signup-password">Password</Label>
                 <Input
                   id="signup-password"
+                  {...fieldErrorProps('signup-error', error, false)}
                   type="password"
                   autoComplete="new-password"
                   required
@@ -127,11 +130,7 @@ export function SignupPage() {
                 />
                 <p className="text-xs text-[var(--text-muted)]">Use at least 12 characters.</p>
               </div>
-              {error && (
-                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]">
-                  {error}
-                </p>
-              )}
+              {error && <AuthFormError id="signup-error">{error}</AuthFormError>}
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
                 {submitting ? <Spinner /> : <UserPlus />} Create account
               </Button>

@@ -1,12 +1,14 @@
 import { and, eq, schema } from '@oci/db';
 import {
+  USER_ROLES,
+  type UserRole,
   updateRateLimitSettingsSchema,
   updateRetentionSettingsSchema,
   upsertStoragePolicySchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
-import { notFound } from '../../lib/errors.js';
+import { notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
@@ -19,6 +21,7 @@ import {
   updateRetentionSettings,
 } from '../../services/lifecycle/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
+import { diffSettings } from '../../services/settings-diff.js';
 import { listStoragePolicies, storageTotals } from '../../services/storage/quota.js';
 import { pendingDeletionCount, reconcileStorage } from '../../services/storage/reaper.js';
 
@@ -28,30 +31,60 @@ lifecycleRoutes.get('/storage-policies', async (c) => {
   return c.json({ policies: await listStoragePolicies() });
 });
 
+/** A storage allowance's values, as its audit entries record them. */
+const STORAGE_POLICY_VALUES = {
+  maxTotalBytes: schema.storagePolicy.maxTotalBytes,
+  maxFileCount: schema.storagePolicy.maxFileCount,
+  maxFileBytes: schema.storagePolicy.maxFileBytes,
+  enabled: schema.storagePolicy.enabled,
+};
+
+/** The role a storage-policy URL names; 404 for anything that is not a role. */
+function roleFromPath(value: string): UserRole {
+  if (!(USER_ROLES as readonly string[]).includes(value)) throw notFound('Unknown role');
+  return value as UserRole;
+}
+
 lifecycleRoutes.put('/storage-policies/:role', async (c) => {
   const actor = currentUser(c);
+  // The URL names the role. The body may repeat it, but a body naming another
+  // role is refused rather than quietly updating that one instead (#141).
+  const role = roleFromPath(c.req.param('role'));
   const input = await parseBody(c, upsertStoragePolicySchema);
+  if (input.role !== undefined && input.role !== role) {
+    throw validationFailed('The role in the body must match the URL.', [
+      {
+        path: ['role'],
+        message: `This URL updates the ${role} allowance; leave role out or send "${role}".`,
+      },
+    ]);
+  }
   const organizationId = await getDefaultOrganizationId();
+  const next = {
+    maxTotalBytes: input.maxTotalBytes ?? null,
+    maxFileCount: input.maxFileCount ?? null,
+    maxFileBytes: input.maxFileBytes ?? null,
+    enabled: input.enabled,
+  };
+  // Read first, so the audit entry says what each value was as well as what
+  // it became (#148).
+  const [previous] = await db
+    .select(STORAGE_POLICY_VALUES)
+    .from(schema.storagePolicy)
+    .where(
+      and(
+        eq(schema.storagePolicy.organizationId, organizationId),
+        eq(schema.storagePolicy.role, role),
+      ),
+    )
+    .limit(1);
 
   await db
     .insert(schema.storagePolicy)
-    .values({
-      organizationId,
-      role: input.role,
-      maxTotalBytes: input.maxTotalBytes ?? null,
-      maxFileCount: input.maxFileCount ?? null,
-      maxFileBytes: input.maxFileBytes ?? null,
-      enabled: input.enabled,
-    })
+    .values({ organizationId, role, ...next })
     .onConflictDoUpdate({
       target: [schema.storagePolicy.organizationId, schema.storagePolicy.role],
-      set: {
-        maxTotalBytes: input.maxTotalBytes ?? null,
-        maxFileCount: input.maxFileCount ?? null,
-        maxFileBytes: input.maxFileBytes ?? null,
-        enabled: input.enabled,
-        updatedAt: new Date(),
-      },
+      set: { ...next, updatedAt: new Date() },
     });
 
   await recordAudit({
@@ -59,13 +92,9 @@ lifecycleRoutes.put('/storage-policies/:role', async (c) => {
     actorEmail: actor.email,
     action: 'storage.policy.update',
     targetType: 'storage_policy',
-    targetId: input.role,
-    metadata: {
-      maxTotalBytes: input.maxTotalBytes ?? null,
-      maxFileCount: input.maxFileCount ?? null,
-      maxFileBytes: input.maxFileBytes ?? null,
-      enabled: input.enabled,
-    },
+    targetId: role,
+    // Each changed value as it was and as it became (null before a first save).
+    metadata: { ...next, changes: diffSettings(previous ?? {}, next) },
   });
 
   return c.json({ ok: true });
@@ -73,7 +102,7 @@ lifecycleRoutes.put('/storage-policies/:role', async (c) => {
 
 lifecycleRoutes.delete('/storage-policies/:role', async (c) => {
   const actor = currentUser(c);
-  const role = c.req.param('role');
+  const role = roleFromPath(c.req.param('role'));
   const organizationId = await getDefaultOrganizationId();
 
   const removed = await db
@@ -81,12 +110,13 @@ lifecycleRoutes.delete('/storage-policies/:role', async (c) => {
     .where(
       and(
         eq(schema.storagePolicy.organizationId, organizationId),
-        eq(schema.storagePolicy.role, role as never),
+        eq(schema.storagePolicy.role, role),
       ),
     )
-    .returning({ id: schema.storagePolicy.id });
+    .returning(STORAGE_POLICY_VALUES);
 
-  if (removed.length === 0) throw notFound('Storage policy not found');
+  const [policy] = removed;
+  if (!policy) throw notFound('Storage policy not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -94,6 +124,8 @@ lifecycleRoutes.delete('/storage-policies/:role', async (c) => {
     action: 'storage.policy.delete',
     targetType: 'storage_policy',
     targetId: role,
+    // What was removed, so it can be put back (#148).
+    metadata: { ...policy },
   });
 
   return c.json({ ok: true });

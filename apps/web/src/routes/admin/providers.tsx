@@ -23,6 +23,15 @@ export const PROVIDERS_SECTION_ID = 'providers';
  * provider exposes nothing on its own; "Discover models" adds chosen models to
  * the catalog on the Models tab.
  */
+/** A provider's endpoint, key and model count, as one line (shown and as its tooltip, #130). */
+function providerSummary(provider: Provider): string {
+  return [
+    provider.baseUrl ?? 'Default endpoint',
+    provider.credentialHint ? ` · key ${provider.credentialHint}` : ' · no key',
+    ` · ${provider.modelCount} model${provider.modelCount === 1 ? '' : 's'}`,
+  ].join('');
+}
+
 export function ProvidersSection() {
   const queryClient = useQueryClient();
   const [formFor, setFormFor] = useState<{ provider: Provider | null } | null>(null);
@@ -100,14 +109,18 @@ export function ProvidersSection() {
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className="min-w-0 truncate font-medium">{provider.label}</p>
+                  {/* Full values on hover when a narrow screen cuts them short (#130). */}
+                  <p className="min-w-0 truncate font-medium" title={provider.label}>
+                    {provider.label}
+                  </p>
                   <Badge variant="neutral">{PROVIDER_KIND_LABELS[provider.kind]}</Badge>
                   {!provider.enabled && <Badge variant="warning">disabled</Badge>}
                 </div>
-                <p className="truncate text-xs text-[var(--text-muted)]">
-                  {provider.baseUrl ?? 'Default endpoint'}
-                  {provider.credentialHint ? ` · key ${provider.credentialHint}` : ' · no key'}
-                  {` · ${provider.modelCount} model${provider.modelCount === 1 ? '' : 's'}`}
+                <p
+                  className="truncate text-xs text-[var(--text-muted)]"
+                  title={providerSummary(provider)}
+                >
+                  {providerSummary(provider)}
                 </p>
               </div>
 

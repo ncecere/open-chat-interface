@@ -14,7 +14,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 type SmtpSettings = InstanceSettings['smtp'];
@@ -290,7 +290,7 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
     },
     onError: (error) => {
       setSuccessMessage(false);
-      setErrorMessage(error instanceof ApiError ? error.message : 'Unable to save SMTP settings.');
+      setErrorMessage(apiErrorMessage(error, 'Unable to save SMTP settings.'));
     },
   });
 
@@ -332,9 +332,9 @@ export function SmtpSettingsForm({ initialSettings }: { initialSettings: SmtpSet
               : 'Verification, reset, and invitation emails need SMTP'
           }
         >
-          Saving a complete configuration changes the status reported to the sign-in experience. The
-          settings API does not test the connection or send a test message, so confirm delivery
-          independently before requiring email verification.
+          Saving a complete configuration changes the status reported to the sign-in experience. Use{' '}
+          <strong>Send test email</strong> below to confirm messages arrive before requiring email
+          verification.
         </Notice>
       </SettingsSection>
 

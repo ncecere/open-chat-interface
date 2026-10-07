@@ -1,3 +1,4 @@
+import { runAbortReason } from '../../lib/run-abort.js';
 import { withStore } from './connection.js';
 import type { BeginChatRunResult, BeginOptions, ChatRunIdentity } from './types.js';
 
@@ -36,6 +37,14 @@ export async function chatRunProducerActive(
   return withStore((store) => store.producerActive(runId, windowMs));
 }
 
+/** Milliseconds until the producer counts as silent; null when Redis is unavailable. */
+export async function chatRunProducerQuietIn(
+  runId: string,
+  windowMs: number,
+): Promise<number | null> {
+  return withStore((store) => store.producerQuietInMs(runId, windowMs));
+}
+
 export async function capturedChatRunFrames(runId: string): Promise<string[] | null> {
   return withStore((store) => store.capturedFrames(runId));
 }
@@ -65,7 +74,7 @@ export async function cancelActiveChatRun(threadId: string, userId: string): Pro
   const local = [...localRuns.values()]
     .reverse()
     .find((run) => run.identity.threadId === threadId && run.identity.userId === userId);
-  if (local) local.abort.abort('user-stop');
+  if (local) local.abort.abort(runAbortReason('user-stop'));
 
   const active = await withStore((store) => store.activeRun(threadId, userId));
   const requested = active ? await withStore((store) => store.requestCancellation(active)) : false;

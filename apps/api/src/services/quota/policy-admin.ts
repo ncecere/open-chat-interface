@@ -5,6 +5,7 @@ import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { recordAudit } from '../audit.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { replaceModels, replaceRoles, validateModelScope } from './policy-assignments.js';
+import { loadPolicies } from './policy-queries.js';
 import { isValidTimezone } from './windows.js';
 
 type Actor = { id: string; email: string };
@@ -170,13 +171,9 @@ export async function updateQuotaPolicy(actor: Actor, id: string, input: UpsertQ
 export async function deleteQuotaPolicy(actor: Actor, id: string) {
   const organizationId = await getDefaultOrganizationId();
 
-  const [existing] = await db
-    .select({ id: schema.quotaPolicy.id, name: schema.quotaPolicy.name })
-    .from(schema.quotaPolicy)
-    .where(
-      and(eq(schema.quotaPolicy.id, id), eq(schema.quotaPolicy.organizationId, organizationId)),
-    )
-    .limit(1);
+  // The whole policy, with its roles, models and override count, so the
+  // audit entry says what was removed, not only its name (#148).
+  const [existing] = await loadPolicies(organizationId, [id]);
   if (!existing) throw notFound('Policy not found');
 
   await db.delete(schema.quotaPolicy).where(eq(schema.quotaPolicy.id, id));
@@ -187,7 +184,19 @@ export async function deleteQuotaPolicy(actor: Actor, id: string) {
     action: 'quota.policy.delete',
     targetType: 'quota_policy',
     targetId: id,
-    metadata: { name: existing.name },
+    metadata: {
+      name: existing.name,
+      description: existing.description,
+      metric: existing.metric,
+      limitValue: existing.limitValue,
+      windowKind: existing.windowKind,
+      windowHours: existing.windowHours,
+      timezone: existing.timezone,
+      enabled: existing.enabled,
+      roles: existing.roles,
+      modelSlugs: existing.modelSlugs,
+      overrideCount: existing.overrideCount,
+    },
   });
 
   return { ok: true };

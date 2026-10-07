@@ -8,9 +8,12 @@ import {
   uninstallStreamdownOverlayFocus,
 } from '../../src/components/chat/streamdown-overlay-focus';
 
-const TABLE = ['| Name | Quota |', '| --- | --- |', '| Walk A | 5 TB |', '| Walk B | 1 TB |'].join(
-  '\n',
-);
+const TABLE = [
+  '| Name | Quota |',
+  '| --- | --- |',
+  '| [Walk A](https://example.com/a) | 5 TB |',
+  '| Walk B | 1 TB |',
+].join('\n');
 
 let root: Root;
 let container: HTMLDivElement;
@@ -100,4 +103,33 @@ it('returns focus to the View fullscreen button when it closes', async () => {
 
   expect(overlay()).toBeNull();
   expect(document.activeElement).toBe(trigger);
+});
+
+it.each([
+  ['the overlay', () => overlay()],
+  ['Copy table', () => overlay()?.querySelector<HTMLElement>('button') ?? null],
+  [
+    'a link in a cell',
+    () =>
+      overlay()?.querySelector<HTMLElement>('table a[href], table [data-streamdown="link"]') ??
+      null,
+  ],
+])('closes on Escape with focus on %s, and gives focus back (#155)', async (_name, target) => {
+  const trigger = await openOverlay();
+  const focused = target();
+  expect(focused).toBeTruthy();
+  await act(async () => {
+    focused?.focus();
+    focused?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+  });
+  await flush();
+  expect(overlay()).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+it('is named for the table it shows, not for the button that opened it (#155)', async () => {
+  await openOverlay();
+  expect(overlay()?.getAttribute('aria-label')).toBe('Table, full screen');
 });

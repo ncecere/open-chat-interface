@@ -609,7 +609,10 @@ replicas work through afterwards while OCI serves.
    Direct PostgreSQL or session-mode pooling remains required for maintenance jobs.
    With `RUN_MIGRATIONS=false`, startup refuses to serve unless the latest bundled
    migration's timestamp is recorded. That marker is not a schema-integrity check
-   or evidence that reverting an image after newer migrations is safe.
+   or evidence that reverting an image after newer migrations is safe. If the
+   database cannot be reached, startup waits up to 30 s for it, then exits with
+   "Could not reach the database to check its migrations", not a migration
+   error.
    `migrate` refuses, changing nothing, if the release requires an earlier
    release's background migration or post-deploy step that has not finished;
    the message names it. Finish it on the release you are running (step 7),
@@ -1292,7 +1295,9 @@ replies. On the first `SIGTERM` (or `SIGINT`) it:
 2. Refuses new chat turns (`POST /api/chat`, and continuing after tool
    approvals) with `503`, `Retry-After: 1` and `Connection: close`, before
    reading them, so nothing is stored. The web app sends the turn again, up to
-   twice, and the person sees nothing unless every attempt is refused. Every
+   twice, and the person sees nothing unless every attempt is refused; then
+   it says the server is restarting and puts the message back in the
+   composer, as for any other refused send. Every
    other request is answered as usual, with `Connection: close`, so a proxy's
    pooled connections stop carrying new requests to the replica.
 3. Stops its background jobs: no new runs start on it (another replica's tick
@@ -1626,7 +1631,8 @@ Patroni cluster under load; the design and the results are in
   the failover is retried for up to 10 s.
 - **Background jobs** stop after the batch in hand when their lock goes with
   the old primary, and the next tick continues on the new one. Imports resume
-  where they stopped.
+  where they stopped. A tick whose lock connection is closed as it opens
+  connects again and runs.
 - **Readiness** stays `200` (`"status": "degraded"`) for the first 30 s the
   database is unreachable, so a failover does not take every replica out of
   rotation at once; after that it answers `503`.

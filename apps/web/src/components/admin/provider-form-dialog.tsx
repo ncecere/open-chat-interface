@@ -15,7 +15,7 @@ import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 export const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
   openai: 'OpenAI',
@@ -65,8 +65,7 @@ export function ProviderFormDialog({
       ]);
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The provider could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The provider could not be saved.')),
   });
 
   const requiresBaseUrl = kind === 'openai-compatible';

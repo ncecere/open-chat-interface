@@ -68,6 +68,17 @@ export function noteReadOnlyRefusal(body: unknown): boolean {
   return true;
 }
 
+/**
+ * The read-only status a Better Auth client error carries, when it is a
+ * read-only refusal: the client spreads the API's body into the error
+ * (`{ error: { code: 'READ_ONLY', … }, status: 423 }`). Notes it as well, so
+ * the banner and the other controls follow. Null for any other error.
+ */
+export function authReadOnlyRefusal(error: unknown): ReadOnlyStatus | null {
+  if ((error as { status?: unknown } | null)?.status !== 423) return null;
+  return noteReadOnlyRefusal(error) ? current : null;
+}
+
 /** Reads a `423` response's body without consuming the caller's copy. */
 export async function noteReadOnlyResponse(response: Response): Promise<void> {
   if (response.status !== 423) return;
@@ -79,8 +90,11 @@ export async function noteReadOnlyResponse(response: Response): Promise<void> {
 }
 
 /**
- * "14:30" today, "Mon 5 Oct, 14:30" on another day this year, and with the
- * year in another year ("Sun 10 Jan 2027, 14:30", #81), in the person's own zone.
+ * "14:30 BST" today, "Mon 5 Oct, 14:30 BST" on another day this year, and with
+ * the year in another year ("Sun 10 Jan 2027, 14:30 GMT", #81), in the
+ * person's own zone, named: a scheduled window's announcement gives its times
+ * in the instance's zone, and an unnamed local time beside it read as a
+ * different time (#160).
  */
 export function formatReadOnlyTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
@@ -91,6 +105,7 @@ export function formatReadOnlyTime(iso: string, now = new Date()): string {
     ...(sameYear ? {} : { year: 'numeric' }),
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   });
 }
 
@@ -99,6 +114,16 @@ export function readOnlyMessage(status: ReadOnlyStatus, now = new Date()): strin
   const until = status.until ? ` until about ${formatReadOnlyTime(status.until, now)}` : '';
   const reason = status.reason ? ` ${status.reason.trim().replace(/([^.!?])$/, '$1.')}` : '';
   return `Read-only for maintenance${until}: you can read, search and export, but changes can’t be saved.${reason}`;
+}
+
+/**
+ * Forgot password while read-only: a reset is a change, so it is refused and
+ * no email goes out; say so rather than "a link has been sent" (#138).
+ */
+export function passwordResetPausedMessage(status: ReadOnlyStatus, now = new Date()): string {
+  const until = status.until ? ` until about ${formatReadOnlyTime(status.until, now)}` : '';
+  const reason = status.reason ? ` ${status.reason.trim().replace(/([^.!?])$/, '$1.')}` : '';
+  return `Password resets are paused for maintenance${until}, and no reset email has been sent.${reason} Try again once maintenance is over.`;
 }
 
 /** Short reason for a disabled control's tooltip. */

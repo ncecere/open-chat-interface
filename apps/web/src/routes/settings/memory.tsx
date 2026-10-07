@@ -1,12 +1,13 @@
 import { type MemoryEntry, type MemoryState, normalizeMemoryContent } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Brain } from 'lucide-react';
-import { type FormEvent, useId, useState } from 'react';
+import { type FormEvent, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { keepFocusWhenRemoved } from '~/lib/focus-return';
 import { fetchMemory, MEMORY_QUERY_KEY } from '~/lib/memory';
 import { formatRelativeTime } from '~/lib/utils';
 
@@ -49,9 +50,25 @@ function MemoryRow({
   const remove = useMemoryMutation(() => api.delete(`/memory/${entry.id}`));
   const error = save.error ?? remove.error;
   const length = normalizeMemoryContent(draft).length;
+  const rowRef = useRef<HTMLLIElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(false);
+
+  // Asking, cancelling or a failed delete swaps the buttons, removing the one
+  // that had focus: put focus on its counterpart rather than the body (#128).
+  useLayoutEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (document.activeElement && document.activeElement !== document.body) return;
+    (confirmingDelete ? cancelRef : deleteRef).current?.focus();
+  }, [confirmingDelete]);
 
   return (
     <li
+      ref={rowRef}
       className="flex flex-col gap-2 border-b border-[var(--border-subtle)] py-4 last:border-0"
       data-testid="memory-entry"
     >
@@ -133,19 +150,27 @@ function MemoryRow({
                   size="sm"
                   aria-label={`Confirm: delete memory: ${entry.content}`}
                   disabled={remove.isPending}
-                  onClick={() =>
-                    remove.mutate(undefined, { onSettled: () => setConfirmingDelete(false) })
-                  }
+                  onClick={() => {
+                    // Once deleted, the next memory (or the list) gets focus (#128).
+                    if (rowRef.current) keepFocusWhenRemoved(rowRef.current);
+                    remove.mutate(undefined, { onSettled: () => setConfirmingDelete(false) });
+                  }}
                 >
                   {remove.isPending && <Spinner />}
                   Delete
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
+                <Button
+                  ref={cancelRef}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmingDelete(false)}
+                >
                   Cancel
                 </Button>
               </>
             ) : (
               <Button
+                ref={deleteRef}
                 variant="ghost"
                 size="sm"
                 aria-label={`Delete memory: ${entry.content}`}

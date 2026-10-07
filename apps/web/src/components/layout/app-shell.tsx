@@ -2,13 +2,14 @@ import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
-import { BroadcastBanner } from '~/components/layout/broadcast-banner';
+import { BroadcastBanner, useBroadcastsSettled } from '~/components/layout/broadcast-banner';
 import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
 import { TopBar } from '~/components/layout/top-bar';
 import { useCommandPalette } from '~/hooks/use-command-palette';
 import { useGlobalShortcuts } from '~/hooks/use-global-shortcuts';
+import { cn } from '~/lib/utils';
 import { TemporaryChatProvider, useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 /**
@@ -42,6 +43,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const previousPathname = useRef(pathname);
   const commandPalette = useCommandPalette();
+  // The page waits for the first word on announcements, so a banner does not
+  // push it down after it has painted (#167).
+  const bannersSettled = useBroadcastsSettled();
 
   useEffect(() => {
     const query = window.matchMedia(DOCKED_SIDEBAR);
@@ -100,19 +104,31 @@ export function AppShell({ children }: { children: ReactNode }) {
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenCommandPalette={commandPalette.show}
           />
-          {/* Above the panel rather than inside it, so an announcement is not
-              lost when the conversation scrolls. Pushed below the top bar's
-              floating controls (absolute, top-6, about 4rem tall), which
-              otherwise covered the banner and its Dismiss button; with no
-              banner the wrapper is empty and takes no space. */}
-          <div data-banners className="pt-[4.25rem] empty:hidden">
-            <ReadOnlyBanner />
-            <BroadcastBanner />
-          </div>
-          <main className="min-h-0 flex-1 rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
-            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
-                keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}
-            <div id="main-content" tabIndex={0} className="scrollbar-thin h-full overflow-y-auto">
+          <main className="flex min-h-0 flex-1 flex-col rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
+            {/*
+             * The top bar's floating controls (absolute, top-6, about 2.6rem
+             * tall) get a strip of their own, always: the page scrolls below
+             * it rather than under them, where they hid a conversation's first
+             * lines (#166). Announcements sit below the strip, outside the
+             * scroller, so they are not lost when the conversation scrolls.
+             */}
+            <div
+              data-banners
+              className={cn('shrink-0', sidebarOpen ? 'pt-[3.25rem]' : 'pt-[4.25rem]')}
+            >
+              <ReadOnlyBanner />
+              <BroadcastBanner />
+            </div>
+            <div
+              id="main-content"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access per WCAG 2.1.1, and this doubles as the skip-link target
+              tabIndex={0}
+              aria-busy={!bannersSettled}
+              className={cn(
+                'scrollbar-thin min-h-0 flex-1 overflow-y-auto',
+                !bannersSettled && 'invisible',
+              )}
+            >
               {children}
             </div>
           </main>

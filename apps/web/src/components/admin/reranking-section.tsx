@@ -16,7 +16,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { priceMicros } from '~/lib/price';
 
 const RERANKING_QUERY_KEY = ['admin', 'reranking'] as const;
@@ -67,6 +67,12 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
   useReportUnsaved(hasChanges);
   const invalidPrice = priceMicros(draft.price) === undefined;
   const endpoint = status.providers.find((provider) => provider.id === draft.providerId)?.endpoint;
+  // Why Test reranking is unavailable, said beside it rather than left to guess (#157).
+  const testBlocked = !draft.providerId
+    ? 'Choose a provider to test reranking.'
+    : !draft.modelId.trim()
+      ? 'Enter a model id to test reranking.'
+      : null;
 
   const save = useMutation({
     mutationFn: (input: UpdateRerankingInput) =>
@@ -183,7 +189,10 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
           <Input
             id="reranking-endpoint"
             readOnly
-            value={endpoint ?? 'Choose a provider'}
+            // Empty until a provider is chosen: a placeholder, not a value that
+            // reads as though it were the endpoint.
+            value={endpoint ?? ''}
+            placeholder="Shown once a provider is chosen"
             className="font-mono text-xs"
           />
         </Field>
@@ -203,12 +212,18 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
             type="button"
             variant="secondary"
             size="sm"
-            disabled={test.isPending || !draft.providerId || !draft.modelId.trim()}
+            disabled={test.isPending || testBlocked !== null}
+            aria-describedby={testBlocked ? 'reranking-test-blocked' : undefined}
             onClick={() => test.mutate()}
           >
             {test.isPending && <Spinner />}
             Test reranking
           </Button>
+          {testBlocked && (
+            <p id="reranking-test-blocked" className="text-xs text-[var(--text-muted)]">
+              {testBlocked}
+            </p>
+          )}
           {test.data?.ok && (
             <p className="flex items-center gap-1.5 text-sm text-[var(--success)]">
               <CheckCircle2 className="size-4" aria-hidden="true" />
@@ -229,9 +244,7 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
         isPending={save.isPending}
         errorMessage={
           save.error
-            ? save.error instanceof ApiError
-              ? save.error.message
-              : 'The reranking settings could not be saved.'
+            ? apiErrorMessage(save.error, 'The reranking settings could not be saved.')
             : null
         }
         successMessage={saved ? 'Reranking settings saved.' : null}

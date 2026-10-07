@@ -25,6 +25,7 @@ export async function activeBroadcastsFor(
       body: schema.broadcast.body,
       level: schema.broadcast.level,
       dismissable: schema.broadcast.dismissable,
+      endsAt: schema.broadcast.endsAt,
     })
     .from(schema.broadcast)
     .leftJoin(
@@ -58,6 +59,7 @@ export async function activeBroadcastsFor(
     body: row.body,
     level: row.level,
     dismissable: row.dismissable,
+    endsAt: row.endsAt ? row.endsAt.toISOString() : null,
   }));
 }
 

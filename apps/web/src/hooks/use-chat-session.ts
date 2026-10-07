@@ -44,7 +44,8 @@ export function useChatSession(options: {
   temporary?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { data: models = EMPTY_MODELS } = useModels();
+  const modelsQuery = useModels();
+  const models = modelsQuery.data ?? EMPTY_MODELS;
   const { data: currentUser } = useCurrentUser();
   const scope = useMemo(
     () => ({
@@ -111,7 +112,12 @@ export function useChatSession(options: {
       }
       // Refused before it was saved (429, 409, 422, 403…): nothing of this
       // message exists on the server, so it must not vanish from the composer.
-      if (sending && response.status >= 400 && response.status < 500 && scope.request === request) {
+      // So is a 503 still there after the drain retries (#161): a draining
+      // replica answers it before reading the turn, the proxy when no replica
+      // is ready, and the chat route itself never does (it answers 500).
+      const refusedStatus =
+        (response.status >= 400 && response.status < 500) || response.status === 503;
+      if (sending && refusedStatus && scope.request === request) {
         const refused = readRefusedSubmission(init?.body);
         if (refused) refuseSubmission.current(refused);
       }
@@ -285,7 +291,7 @@ export function useChatSession(options: {
   const stop = useCallback(async () => {
     // Stopping the browser reader alone must not leave the detached resumable
     // producer running. The owner-scoped endpoint aborts it server-side.
-    recovery.waitForServer();
+    recovery.waitForStop();
     scope.reconnectAbort?.abort();
     const localStop = stopChat();
     const remoteStop = fetch(`/api/chat/${encodeURIComponent(options.threadId)}/stream`, {
@@ -293,7 +299,7 @@ export function useChatSession(options: {
       credentials: 'same-origin',
     }).catch(() => undefined);
     await Promise.all([localStop, remoteStop]);
-  }, [stopChat, options.threadId, recovery.waitForServer, scope]);
+  }, [stopChat, options.threadId, recovery.waitForStop, scope]);
 
   // Lasts for this conversation only; Settings → Models sets where new ones start.
   const selectModel = useCallback((model: CatalogModel) => setChosenSlug(model.slug), []);
@@ -386,6 +392,8 @@ export function useChatSession(options: {
     webSearch,
     setWebSearch,
     models,
+    /** The models or the person's features have not arrived yet (#156). */
+    optionsLoading: modelsQuery.isPending || !currentUser,
     selectedModel,
     selectModel,
     send,

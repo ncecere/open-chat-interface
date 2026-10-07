@@ -2,11 +2,12 @@ import type { ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ChevronDown, Folder, GitFork, Pencil, Pin, PinOff } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
-import { useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
+import { useArchiveThread, useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
+import { keepFocusWhenRemoved } from '~/lib/focus-return';
+import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
 /** Groups by local calendar date, matching the reference's Today/Yesterday buckets. */
@@ -33,6 +34,9 @@ function groupThreads(threads: ThreadSummary[]) {
   return groups.filter((group) => group.threads.length > 0);
 }
 
+const ROW_ACTION =
+  'rounded p-1 text-[var(--text-muted)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+
 /** One conversation in the sidebar, with its pin, rename and archive actions. */
 export function ThreadRow({
   thread,
@@ -44,11 +48,17 @@ export function ThreadRow({
   /** Shown lightly after the title of a pinned project conversation. */
   projectName?: string;
 }) {
-  const update = useUpdateThread();
+  const update = useUpdateThread({ reportErrors: true });
+  const archive = useArchiveThread();
   const [renaming, setRenaming] = useState(false);
+  // Off while read-only, with the reason, as the message actions are (#159).
+  const readOnly = useReadOnlyStatus();
+  const lockedTitle = readOnly.active ? readOnlyShortReason(readOnly) : undefined;
 
   return (
     <div
+      // A row focus can move to when a neighbour is archived (#128).
+      data-focus-row=""
       className={cn(
         'group relative flex items-center rounded-lg transition-colors',
         active ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--bg-control)]',
@@ -102,8 +112,10 @@ export function ThreadRow({
         <button
           type="button"
           aria-label={`${thread.pinned ? 'Unpin' : 'Pin'} thread: ${thread.title}`}
+          disabled={readOnly.active}
+          title={lockedTitle}
           onClick={() => update.mutate({ id: thread.id, pinned: !thread.pinned })}
-          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className={ROW_ACTION}
         >
           {thread.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
         </button>
@@ -111,32 +123,26 @@ export function ThreadRow({
           type="button"
           aria-label={`Rename thread: ${thread.title}`}
           aria-haspopup="dialog"
+          disabled={readOnly.active}
+          title={lockedTitle}
           onClick={() => setRenaming(true)}
-          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className={ROW_ACTION}
         >
           <Pencil className="size-3.5" />
         </button>
         <button
           type="button"
           aria-label={`Archive thread: ${thread.title}`}
-          onClick={() =>
-            update.mutate(
-              { id: thread.id, archived: true },
-              {
-                // Said, with a way back, rather than the row just vanishing (#101).
-                onSuccess: () =>
-                  toast.success('Conversation archived', {
-                    id: `archived-${thread.id}`,
-                    description: thread.title,
-                    action: {
-                      label: 'Undo',
-                      onClick: () => update.mutate({ id: thread.id, archived: false }),
-                    },
-                  }),
-              },
-            )
-          }
-          className="rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          disabled={readOnly.active}
+          title={lockedTitle}
+          onClick={(event) => {
+            // The row leaves the list: focus moves to the next row, not the body (#128).
+            const row = event.currentTarget.closest<HTMLElement>('[data-focus-row]');
+            if (row) keepFocusWhenRemoved(row);
+            // Said, with a way back, rather than the row just vanishing (#101, #125).
+            archive.mutate({ id: thread.id, title: thread.title });
+          }}
+          className={ROW_ACTION}
         >
           <Archive className="size-3.5" />
         </button>

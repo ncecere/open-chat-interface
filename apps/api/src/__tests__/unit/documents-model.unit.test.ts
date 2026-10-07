@@ -250,4 +250,24 @@ describe('markdownHasTable (web hint)', () => {
     expect(markdownHasTable('text\n\n---\n')).toBe(false);
     expect(markdownHasTable('')).toBe(false);
   });
+
+  it('agrees with the parser about a table whose cell counts do not match (#150)', () => {
+    const cases = [
+      // Text typed before the header row, on its line: a cell too many.
+      'Planets: | Planet | Diameter |\n| --- | --- |\n| Earth | 12,742 |',
+      '| a | b | c |\n| --- | --- |\n| 1 | 2 | 3 |',
+      '| a |\n| --- | --- |',
+      // Still tables: an escaped pipe is part of a cell; text on the line above.
+      '| a \\| b | c |\n| --- | --- |',
+      'Planets:\n| Planet | Diameter |\n| --- | --- |',
+      '| a | b |\n|---|---|',
+    ];
+    for (const markdown of cases)
+      expect([markdown, markdownHasTable(markdown)]).toEqual([
+        markdown,
+        hasTables(documentModel('T', markdown).blocks),
+      ]);
+    expect(markdownHasTable(cases[0]!)).toBe(false);
+    expect(markdownHasTable(cases[3]!)).toBe(true);
+  });
 });

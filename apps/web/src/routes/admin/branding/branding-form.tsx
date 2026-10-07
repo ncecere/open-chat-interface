@@ -16,7 +16,7 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
 import {
@@ -65,9 +65,7 @@ export function BrandingForm({ initialSettings }: { initialSettings: BrandingSet
     },
     onError: (error) => {
       setSavedMessage(false);
-      setErrorMessage(
-        error instanceof ApiError ? error.message : 'Unable to save branding settings.',
-      );
+      setErrorMessage(apiErrorMessage(error, 'Unable to save branding settings.'));
     },
   });
 

@@ -59,12 +59,16 @@ function ShareLinkRow({
     >
       <div className="min-w-0 flex-1">
         {link.threadUnavailable ? (
-          <p className="truncate font-medium text-[var(--text-primary)]">{title}</p>
+          <p className="truncate font-medium text-[var(--text-primary)]" title={title}>
+            {title}
+          </p>
         ) : (
           <Link
             to="/chat/$threadId"
             params={{ threadId: link.threadId }}
             className="block truncate font-medium text-[var(--text-primary)] underline-offset-2 hover:underline"
+            // The full title on hover when a narrow screen cuts it short (#130).
+            title={title}
           >
             {title}
           </Link>

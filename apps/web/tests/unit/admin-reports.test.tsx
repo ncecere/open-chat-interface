@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminReportsPage, nextRunText } from '../../src/routes/admin/reports';
-import { button, cleanup, click, renderAdmin, typeInto } from './admin-test-utils';
+import { button, buttonNames, cleanup, click, renderAdmin, typeInto } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -53,9 +53,17 @@ it('says when each report is next sent (#85)', () => {
   expect(nextRunText({ nextRunAt: '2026-11-02T12:00:00Z' }, now)).toMatch(/^Next: /);
 });
 
+it('counts forward to the next send of a report already sent (#126)', () => {
+  // Sent at noon: monthly is due 30 days later, weekly 7. These used to read "Next: just now".
+  const now = Date.parse('2026-10-05T12:00:00Z');
+  expect(nextRunText({ nextRunAt: '2026-11-04T12:00:00Z' }, now)).toBe('Next: in 30d');
+  expect(nextRunText({ nextRunAt: '2026-10-12T12:00:00Z' }, now)).toBe('Next: in 7d');
+  expect(nextRunText({ nextRunAt: '2026-10-06T12:00:00Z' }, now)).toBe('Next: in 1d');
+});
+
 it('edits a report in place and shows its next run (#85)', async () => {
   ({ root } = await renderAdmin(<AdminReportsPage />));
-  expect(document.body.textContent).toMatch(/Next: /);
+  expect(document.body.textContent).toContain('Next: in 28d');
 
   await click(button('Edit Walk monthly usage'));
   const name = document.getElementById('report-name') as HTMLInputElement;
@@ -87,4 +95,17 @@ it('shows an empty list as the other admin lists do (#113)', async () => {
   const empty = document.querySelector('.border-dashed');
   expect(empty?.textContent).toContain('No reports scheduled.');
   expect(empty?.querySelector('svg')).not.toBeNull();
+});
+
+it("names each report's Pause and Delete buttons for the report (#175)", async () => {
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  expect(buttonNames()).toEqual(
+    expect.arrayContaining([
+      'Edit Walk monthly usage',
+      'Pause Walk monthly usage',
+      'Delete Walk monthly usage',
+    ]),
+  );
+  expect(buttonNames()).not.toContain('Pause');
+  expect(buttonNames()).not.toContain('Delete');
 });

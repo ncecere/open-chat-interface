@@ -12,6 +12,14 @@ export function selectUserPage(current: Set<string>, pageIds: string[], checked:
   return next;
 }
 
+/** What a bulk action did: accounts changed, and sessions a sign-out or ban ended. */
+export interface BulkResult {
+  affected: number;
+  skippedSelf: boolean;
+  /** Absent before v0.11.1, and for role changes. */
+  sessionsEnded?: number;
+}
+
 /** Selection spans pages and filters until explicitly cleared or a bulk action succeeds. */
 export function useUserSelection(pageIds: string[]) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -19,7 +27,7 @@ export function useUserSelection(pageIds: string[]) {
   const queryClient = useQueryClient();
   const bulk = useMutation({
     mutationFn: (body: { action: string; role?: string; reason?: string }) =>
-      api.post<{ affected: number; skippedSelf: boolean }>('/admin/users/bulk', {
+      api.post<BulkResult>('/admin/users/bulk', {
         userIds: [...selected],
         ...body,
       }),

@@ -400,6 +400,22 @@ describe.skipIf(!available)('live: signed webhooks', () => {
     expect((await call('GET', `/api/admin/webhooks/${created.id}`)).status).toBe(404);
   });
 
+  it("records a test's outcome on the endpoint, as any delivery does (#144)", async () => {
+    const created = await create();
+    expect(created.lastSuccessAt).toBeNull();
+    await ok(call('POST', `/api/admin/webhooks/${created.id}/test`));
+    const delivered = await ok<WebhookEndpoint>(call('GET', `/api/admin/webhooks/${created.id}`));
+    expect(delivered.lastSuccessAt).not.toBeNull();
+    expect(delivered.lastFailureAt).toBeNull();
+
+    respondWith = 500;
+    await ok(call('POST', `/api/admin/webhooks/${created.id}/test`));
+    const failed = await ok<WebhookEndpoint>(call('GET', `/api/admin/webhooks/${created.id}`));
+    expect(failed.lastSuccessAt).toBe(delivered.lastSuccessAt);
+    expect(failed.lastFailureAt).not.toBeNull();
+    expect(failed.lastError).toContain('500');
+  });
+
   it('leases claimed rows, so a delivery is not sent twice by overlapping runs', async () => {
     await create({ allActions: true });
     await recordAudit({ action: 'report.run', metadata: {} });

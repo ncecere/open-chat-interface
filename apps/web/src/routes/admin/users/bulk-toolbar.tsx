@@ -4,7 +4,8 @@ import { MutationError } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
 import { Select } from '~/components/ui/select';
-import type { useUserSelection } from './use-user-selection';
+import { useCurrentUser } from '~/hooks/use-current-user';
+import type { BulkResult, useUserSelection } from './use-user-selection';
 
 const BULK_ACTION_FAILURES: Record<string, string> = {
   set_role: 'The role could not be applied to the selected accounts.',
@@ -12,21 +13,53 @@ const BULK_ACTION_FAILURES: Record<string, string> = {
   ban: 'The selected accounts could not be banned.',
 };
 
+const plural = (count: number, noun: string) =>
+  `${count.toLocaleString('en-US')} ${noun}${count === 1 ? '' : 's'}`;
+
 function describeAccounts(count: number) {
-  return `${count} account${count === 1 ? '' : 's'}`;
+  return plural(count, 'account');
 }
+
+const roleLabel = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
+
+/** What a finished bulk action did, in the page's words (#145). */
+export function bulkResultText(
+  variables: { action: string; role?: string } | undefined,
+  result: BulkResult,
+): string {
+  const accounts = describeAccounts(result.affected);
+  const sessions =
+    result.sessionsEnded === undefined ? '' : `, ending ${plural(result.sessionsEnded, 'session')}`;
+  const done =
+    variables?.action === 'set_role'
+      ? `${roleLabel(variables.role ?? '')} role applied to ${accounts}.`
+      : variables?.action === 'ban'
+        ? `Banned ${accounts}${sessions}.`
+        : variables?.action === 'revoke_sessions'
+          ? `Signed out ${accounts}${sessions}.`
+          : `Updated ${accounts}.`;
+  return result.skippedSelf ? `${done} Your own account was left unchanged.` : done;
+}
+
+type Pending = { kind: 'ban' | 'admin' | 'sign-out'; count: number; withSelf: boolean };
 
 export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof useUserSelection> }) {
   const { selected, bulkRole, setBulkRole, bulk, clear } = selection;
-  // The count is captured when the dialog opens: a successful ban clears the
-  // selection while the dialog is still closing.
-  const [banCount, setBanCount] = useState<number | null>(null);
-  // Granting administrator access asks first, as the per-account role
-  // selector does; other roles apply at once.
-  const [adminCount, setAdminCount] = useState<number | null>(null);
+  // Your own account is always skipped by the API, so it is not counted in
+  // what a confirmation says will change (#145).
+  const ownId = useCurrentUser().data?.user.id;
+  const withSelf = ownId !== undefined && selected.has(ownId);
   const count = selected.size;
-  const banAccounts = describeAccounts(banCount ?? count);
-  const adminAccounts = describeAccounts(adminCount ?? count);
+  const others = withSelf ? count - 1 : count;
+  // The figures are captured when a dialog opens: a successful action clears
+  // the selection while the dialog is still closing. Granting administrator
+  // access, banning and signing out ask first; other roles apply at once.
+  const [pending, setPending] = useState<Pending | null>(null);
+  const open = (kind: Pending['kind']) => setPending({ kind, count: others, withSelf });
+  const accounts = describeAccounts(pending?.count ?? others);
+  const selfNote = pending?.withSelf
+    ? 'Your own account is selected but will be left unchanged.'
+    : 'Your own account is never included.';
 
   return (
     <>
@@ -35,24 +68,29 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
           aria-label="Bulk actions"
           className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-3"
         >
-          <span className="font-medium text-sm">{describeAccounts(count)} selected</span>
+          <span className="font-medium text-sm">
+            {describeAccounts(count)} selected
+            {withSelf && (
+              <span className="font-normal text-[var(--text-muted)]">
+                {' '}
+                (including yours, which is left unchanged)
+              </span>
+            )}
+          </span>
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <Select
               aria-label="Role to apply"
               value={bulkRole}
               onChange={(value) => setBulkRole(value as AdminUser['role'])}
-              options={USER_ROLES.map((role) => ({
-                value: role,
-                label: role.charAt(0).toUpperCase() + role.slice(1),
-              }))}
+              options={USER_ROLES.map((role) => ({ value: role, label: roleLabel(role) }))}
             />
             <Button
               size="sm"
               variant="secondary"
-              disabled={bulk.isPending}
+              disabled={bulk.isPending || others === 0}
               onClick={() =>
                 bulkRole === 'admin'
-                  ? setAdminCount(count)
+                  ? open('admin')
                   : bulk.mutate({ action: 'set_role', role: bulkRole })
               }
             >
@@ -61,16 +99,16 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
             <Button
               size="sm"
               variant="secondary"
-              disabled={bulk.isPending}
-              onClick={() => bulk.mutate({ action: 'revoke_sessions' })}
+              disabled={bulk.isPending || others === 0}
+              onClick={() => open('sign-out')}
             >
               Sign out
             </Button>
             <Button
               size="sm"
               variant="danger"
-              disabled={bulk.isPending}
-              onClick={() => setBanCount(count)}
+              disabled={bulk.isPending || others === 0}
+              onClick={() => open('ban')}
             >
               Ban
             </Button>
@@ -80,8 +118,8 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
           </span>
         </section>
       )}
-      {/* The ban and admin dialogs report their own failure while open. */}
-      {banCount === null && adminCount === null && (
+      {/* The dialogs report their own failure while open. */}
+      {pending === null && (
         <MutationError
           error={bulk.error}
           message={
@@ -91,32 +129,47 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
           className="mb-3"
         />
       )}
-      {bulk.data?.skippedSelf && (
-        <p className="mb-3 text-[var(--text-muted)] text-xs">
-          Your own account was left unchanged.
+      {bulk.data && (
+        <p role="status" className="mb-3 text-[var(--text-muted)] text-xs">
+          {bulkResultText(bulk.variables, bulk.data)}
         </p>
       )}
 
       <ConfirmDialog
-        open={banCount !== null}
-        onOpenChange={(open) => !open && setBanCount(null)}
-        title={`Ban ${banAccounts}?`}
-        description="Banned accounts are signed out and cannot sign in again until an administrator lifts the ban. Your own account is never included."
-        confirmLabel={`Ban ${banAccounts}`}
+        open={pending?.kind === 'ban'}
+        onOpenChange={(isOpen) => !isOpen && setPending(null)}
+        title={`Ban ${accounts}?`}
+        description={`Banned accounts are signed out and cannot sign in again until an administrator lifts the ban. ${selfNote}`}
+        confirmLabel={`Ban ${accounts}`}
         pendingLabel="Banning…"
         errorMessage={BULK_ACTION_FAILURES.ban ?? ''}
         onConfirm={() => bulk.mutateAsync({ action: 'ban' })}
       />
 
       <ConfirmDialog
-        open={adminCount !== null}
-        onOpenChange={(open) => !open && setAdminCount(null)}
-        title={`Make ${adminAccounts} administrators?`}
-        description="Administrators can see and change every setting, manage every account (including other administrators), and read the audit log. Your own account is never included."
-        confirmLabel={`Make ${adminAccounts} administrators`}
+        open={pending?.kind === 'admin'}
+        onOpenChange={(isOpen) => !isOpen && setPending(null)}
+        title={
+          (pending?.count ?? others) === 1
+            ? 'Make 1 account an administrator?'
+            : `Make ${accounts} administrators?`
+        }
+        description={`Administrators can see and change every setting, manage every account (including other administrators), and read the audit log. ${selfNote}`}
+        confirmLabel={`Make ${accounts} administrators`}
         pendingLabel="Applying…"
         errorMessage={BULK_ACTION_FAILURES.set_role ?? ''}
         onConfirm={() => bulk.mutateAsync({ action: 'set_role', role: 'admin' })}
+      />
+
+      <ConfirmDialog
+        open={pending?.kind === 'sign-out'}
+        onOpenChange={(isOpen) => !isOpen && setPending(null)}
+        title={`Sign ${accounts} out everywhere?`}
+        description={`This ends every session of the selected accounts. They can sign in again straight away. ${selfNote}`}
+        confirmLabel={`Sign out ${accounts}`}
+        pendingLabel="Signing out…"
+        errorMessage={BULK_ACTION_FAILURES.revoke_sessions ?? ''}
+        onConfirm={() => bulk.mutateAsync({ action: 'revoke_sessions' })}
       />
     </>
   );

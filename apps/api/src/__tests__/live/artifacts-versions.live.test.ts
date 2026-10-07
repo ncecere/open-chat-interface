@@ -1,4 +1,4 @@
-import { createDatabase, schema, sql } from '@oci/db';
+import { createDatabase, eq, schema, sql } from '@oci/db';
 import { MAX_ARTIFACT_BYTES } from '@oci/shared';
 import { strFromU8, unzipSync } from 'fflate';
 import type { Hono } from 'hono';
@@ -139,7 +139,8 @@ describe.skipIf(!available)('live artifacts', () => {
         toolStep([['c1', 'create_artifact', { title: 'Notes', kind: 'markdown', content: 'v1' }]]),
         textStep('Done.'),
       );
-      await turn(chat.id, 'Notes please');
+      // Short, so it is saved only because the person asked for an artifact (#149).
+      await turn(chat.id, 'Notes in an artifact please');
       const list = (await (await get(`/api/artifacts?threadId=${chat.id}`)).json()) as {
         artifacts: Array<{ id: string; currentVersion: number; sizeBytes: number }>;
       };
@@ -191,7 +192,7 @@ describe.skipIf(!available)('live artifacts', () => {
         toolStep([['c1', 'create_artifact', { title: 'Doc', kind: 'markdown', content: 'v1' }]]),
         textStep('Done.'),
       );
-      await turn(chat.id, 'Doc');
+      await turn(chat.id, 'Doc artifact');
       const [artifact] = await artifactsOf(chat.id);
       const big = await post(`/api/artifacts/${artifact!.id}/versions`, {
         content: 'x'.repeat(MAX_ARTIFACT_BYTES + 1),
@@ -270,6 +271,51 @@ describe.skipIf(!available)('live artifacts', () => {
           ],
         }),
       ]);
+    });
+
+    it('names the model as the app does and each artifact once in Markdown (#152)', async () => {
+      const [provider] = await pool.db
+        .insert(schema.provider)
+        .values({ organizationId: state.organizationId, kind: 'openai', label: 'Walk3 export' })
+        .returning();
+      await pool.db.insert(schema.model).values({
+        organizationId: state.organizationId,
+        providerId: provider!.id,
+        slug: 'artifact-model',
+        upstreamModelId: 'artifact-model',
+        displayName: 'Artifact Model 1',
+      });
+      const person = await seedUser(pool.db, state.organizationId);
+      const chat = await thread(person);
+      const report = `# Report\n\n${'A sentence of the report. '.repeat(30)}`;
+      script(
+        toolStep([
+          ['c1', 'create_artifact', { title: 'Planets report', kind: 'markdown', content: report }],
+        ]),
+        textStep('Here is the report.'),
+      );
+      await turn(chat.id, 'Write the planets report as an artifact', { user: person });
+
+      const { exportThreadMarkdown } = await import('../../services/export.js');
+      const markdown = await exportThreadMarkdown(chat.id, person);
+      expect(markdown).toContain('## Assistant \u00b7 Artifact Model 1');
+      expect(markdown).not.toContain('artifact-model');
+      expect(markdown.match(/Planets report/g)).toHaveLength(1);
+      expect(markdown).toContain('_Artifact \u201cPlanets report\u201d (Document, version 1)_');
+      expect(markdown).not.toContain('Created artifact');
+
+      // The data export's Markdown files read the same.
+      const { exportArchive } = await import('../../services/portability/export-archive.js');
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of exportArchive({ id: person })) chunks.push(chunk);
+      const [, file] = Object.entries(unzipSync(Buffer.concat(chunks))).find(
+        ([name]) => name.startsWith('conversations/') && name.endsWith('.md'),
+      )!;
+      const archived = strFromU8(file);
+      expect(archived).toContain('## Assistant \u00b7 Artifact Model 1');
+      expect(archived.match(/Planets report/g)).toHaveLength(1);
+
+      await pool.db.delete(schema.provider).where(eq(schema.provider.id, provider!.id));
     });
 
     it('shares artifacts at the shared version, redacted, and nothing from outside the share', async () => {

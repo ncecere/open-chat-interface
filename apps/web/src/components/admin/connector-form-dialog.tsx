@@ -14,7 +14,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 export const AUTH_MODE_LABELS: Record<ConnectorAuthMode, string> = {
   none: 'No sign-in',
@@ -31,6 +31,18 @@ const AUTH_MODE_HINTS: Record<ConnectorAuthMode, string> = {
 };
 
 type SecretAction = 'keep' | 'replace' | 'clear';
+
+/** The form's names for the fields the API names differently (#127). */
+const CONNECTOR_LABELS = {
+  url: 'Server URL',
+  slug: 'Short name',
+  authMode: 'Authentication',
+  sharedHeaderName: 'Header name',
+  sharedHeaderValue: 'Header value',
+  oauthClientId: 'Client ID',
+  oauthClientSecret: 'Client secret',
+  oauthScopes: 'Scopes',
+};
 
 /** Where authorization servers send people back, for registering an OAuth client. */
 function connectorRedirectUrl(connector: AdminConnector | null): string {
@@ -169,7 +181,7 @@ export function ConnectorFormDialog({
       onClose();
     },
     onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The connector could not be saved.'),
+      setError(apiErrorMessage(cause, 'The connector could not be saved.', CONNECTOR_LABELS)),
   });
 
   function submit(event: FormEvent) {

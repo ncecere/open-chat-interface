@@ -225,17 +225,38 @@ describe('renaming from the sidebar', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it('says a conversation was archived and offers Undo (#101)', async () => {
+  it('says a conversation was archived and offers Undo (#101, #125)', async () => {
     await render();
-    api.patch.mockResolvedValue({ thread: thread('t1', 'Trip plans', { archived: true }) });
+    // As the server does: an archived conversation drops out of the sidebar
+    // list, so the refetch after archiving unmounts the row that asked. The
+    // #101 test's fake kept the row, which hid that its notice never ran. The
+    // project tree answers later than the list, as over a network, so the row
+    // is gone before the mutation's refresh (both lists) has finished.
+    const get = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/projects/sidebar') await new Promise((resolve) => setTimeout(resolve, 30));
+      return get(path);
+    });
+    api.patch.mockImplementation(async (path: string, body: { archived: boolean }) => {
+      const id = path.split('/')[2]!;
+      const changed = thread(id, 'Trip plans', { archived: body.archived });
+      threads = body.archived
+        ? threads.filter((item) => item.id !== id)
+        : [...threads.filter((item) => item.id !== id), changed];
+      return { thread: changed };
+    });
+    toast.success.mockClear();
     await click(button('Archive thread: Trip plans'));
     expect(api.patch).toHaveBeenCalledWith('/threads/t1', { archived: true });
+    await vi.waitFor(() => expect(rowTitles()).not.toContain('Trip plans'));
     await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
     const [message, options] = toast.success.mock.calls[0]!;
     expect(message).toBe('Conversation archived');
     expect(options.description).toBe('Trip plans');
     await act(async () => options.action.onClick());
+    await settle();
     expect(api.patch).toHaveBeenLastCalledWith('/threads/t1', { archived: false });
+    await vi.waitFor(() => expect(rowTitles()).toContain('Trip plans'));
   });
 
   it('cancels on Escape without saving', async () => {
@@ -347,5 +368,28 @@ describe('renaming from the top bar', () => {
   it('is not shown away from a conversation', async () => {
     await render('/');
     expect(findButton('Rename conversation')).toBeUndefined();
+  });
+});
+
+describe('temporary chat for a role without it (#181)', () => {
+  it('is not offered, rather than shown disabled with a reason nobody can read', async () => {
+    const get = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) =>
+      path === '/me'
+        ? {
+            user: { id: 'me', name: 'Pat' },
+            features: { projects: true, shareLinks: false, temporaryChat: false },
+          }
+        : get(path),
+    );
+    await render('/');
+    expect(document.querySelector('[aria-label="Start temporary chat"]')).toBeNull();
+    expect(document.querySelector('[title="Temporary chat is unavailable"]')).toBeNull();
+  });
+
+  it('is offered to a role with it', async () => {
+    await render('/');
+    const button = document.querySelector<HTMLButtonElement>('[aria-label="Start temporary chat"]');
+    expect(button?.disabled).toBe(false);
   });
 });

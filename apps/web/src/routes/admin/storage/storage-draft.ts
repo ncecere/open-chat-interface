@@ -1,4 +1,9 @@
-import type { InstanceSettings, StorageDriver, UpdateInstanceSettings } from '@oci/shared';
+import {
+  type InstanceSettings,
+  MAX_UPLOAD_FILE_BYTES,
+  type StorageDriver,
+  type UpdateInstanceSettings,
+} from '@oci/shared';
 
 export type StorageSettings = InstanceSettings['storage'];
 export type StoragePatch = NonNullable<UpdateInstanceSettings['storage']>;
@@ -31,6 +36,8 @@ export interface StorageValidation {
 }
 
 const MB = 1024 * 1024;
+/** The API's ceiling for the instance upload limit, in the form's MB (#142). */
+export const MAX_UPLOAD_MB = MAX_UPLOAD_FILE_BYTES / MB;
 
 /** Bytes as MB for the form: up to three decimals, no trailing zeros. */
 export function mbFromBytes(bytes: number): string {
@@ -88,6 +95,8 @@ export function validateDraft(
 
   if (!Number.isSafeInteger(maxFileBytes)) {
     errors.maxFileMb = 'File size must be a positive number of MB.';
+  } else if (maxFileBytes > MAX_UPLOAD_FILE_BYTES) {
+    errors.maxFileMb = `File size can be at most ${MAX_UPLOAD_MB.toLocaleString('en-US')} MB (1 GB).`;
   }
   if (!Number.isSafeInteger(maxFilesPerMessage) || maxFilesPerMessage <= 0) {
     errors.maxFilesPerMessage = 'File count must be a positive whole number.';

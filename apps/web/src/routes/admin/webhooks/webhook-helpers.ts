@@ -1,8 +1,9 @@
 import type { WebhookEndpoint } from '@oci/shared';
+import { formatDateTime } from '~/lib/utils';
 
 export const WEBHOOKS_QUERY_KEY = ['admin', 'webhooks'] as const;
 
-export const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : null);
+export const when = (iso: string | null) => (iso ? formatDateTime(iso) : null);
 
 /** One action per line or comma; blanks dropped, duplicates removed. Exported for tests. */
 export function parseActions(text: string): string[] {

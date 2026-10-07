@@ -3,6 +3,7 @@ import { Info } from 'lucide-react';
 import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
 import { ModelInfoCard } from '~/components/model/model-info-card';
+import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
 import { cn } from '~/lib/utils';
 import { CAPABILITY_LABELS, modelDescription } from './model-picker-data';
 
@@ -38,10 +39,11 @@ export function ModelPickerOption({
       role="none"
       className={cn(
         'relative flex w-full items-center rounded-lg transition-colors',
-        'hover:bg-[var(--bg-control)]',
+        // --bg-control is the panel's own white in light, so it showed nothing (#135).
+        'hover:bg-[var(--bg-control-hover)]',
         selected && 'bg-[var(--accent-soft)]',
         // Visible like a focus ring, since focus itself stays in the search box.
-        active && 'outline outline-2 outline-[var(--accent-bright)] -outline-offset-2',
+        active && ACTIVE_OPTION_RING,
       )}
     >
       <button

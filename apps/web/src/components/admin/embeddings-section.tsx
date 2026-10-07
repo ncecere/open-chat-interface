@@ -27,8 +27,9 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { priceMicros } from '~/lib/price';
+import { formatDateTime } from '~/lib/utils';
 
 const EMBEDDINGS_QUERY_KEY = ['admin', 'embeddings'] as const;
 
@@ -72,12 +73,20 @@ export function embeddingsChanges(
 }
 
 /** Where pgvector stands, and what the operator needs to do about it. */
-function PgvectorNotice({ pgvector }: { pgvector: EmbeddingsStatus['pgvector'] }) {
+function PgvectorNotice({
+  pgvector,
+  searchOn,
+}: {
+  pgvector: EmbeddingsStatus['pgvector'];
+  searchOn: boolean;
+}) {
   if (pgvector.state === 'enabled') {
     return (
       <Notice title={`pgvector ${pgvector.version ?? ''} is enabled`.replace('  ', ' ')}>
-        The database can store embeddings. Open Chat Interface creates its table when meaning-based
-        search is switched on.
+        {/* Once search is on, the table already exists (#182). */}
+        {searchOn
+          ? 'The database stores the embeddings that meaning-based search uses.'
+          : 'The database can store embeddings. Open Chat Interface creates its table when meaning-based search is switched on.'}
       </Notice>
     );
   }
@@ -317,8 +326,7 @@ function RetiredGenerations({ retired }: { retired: EmbeddingGenerationStatus[] 
       {retired.map((generation) => (
         <li key={generation.id}>
           Embeddings of {generation.modelId} are kept until{' '}
-          {generation.dropAfter ? new Date(generation.dropAfter).toLocaleString() : 'later'}, then
-          removed.
+          {generation.dropAfter ? formatDateTime(generation.dropAfter) : 'later'}, then removed.
         </li>
       ))}
     </ul>
@@ -345,7 +353,10 @@ function Progress({ status }: { status: EmbeddingsStatus }) {
         {status.generations.filling && status.generations.current
           ? ` with ${status.generations.current.modelId}`
           : ''}
-        . The background job embeds the rest.
+        .{/* Only when there is a rest to embed (#182). */}
+        {status.passages.embedded < status.passages.total
+          ? ' The background job embeds the rest.'
+          : ''}
       </p>
       {status.failures.files > 0 && (
         <Notice tone="warning" title="Some files could not be embedded">
@@ -524,9 +535,7 @@ function EmbeddingsForm({ status }: { status: EmbeddingsStatus }) {
         isPending={save.isPending}
         errorMessage={
           save.error
-            ? save.error instanceof ApiError
-              ? save.error.message
-              : 'The embeddings settings could not be saved.'
+            ? apiErrorMessage(save.error, 'The embeddings settings could not be saved.')
             : null
         }
         successMessage={saved ? 'Embeddings settings saved.' : null}
@@ -573,7 +582,7 @@ function EmbeddingsSettings() {
         description="Embeddings are stored in PostgreSQL with the pgvector extension, which an operator enables."
         editable={false}
       >
-        <PgvectorNotice pgvector={status.data.pgvector} />
+        <PgvectorNotice pgvector={status.data.pgvector} searchOn={status.data.active} />
       </SettingsSection>
       <SettingsSection
         title="Embeddings model"

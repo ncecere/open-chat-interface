@@ -43,7 +43,8 @@ have been doing, why they are hitting a limit, whether the account is behaving
 oddly.
 
 It shows their totals, storage, **active sessions with the address and client
-each came from**, their limits, recent conversation titles, and their audit
+each came from** (the ten newest, with the total above them, such as "Showing
+the 10 most recent of 616 active sessions"), their limits, recent conversation titles, and their audit
 trail — matched both as actor and as target, so something done *to* them appears
 beside things they did. **See every event for this account** opens the audit log
 filtered to their address.
@@ -61,8 +62,10 @@ until the hold is lifted.
   granting or removing administrator access.
 - **Ban** asks for an optional reason, shown to administrators on the account.
   The server ends every session for the account as part of the ban, so they are
-  signed out straight away. You cannot ban yourself. **Unban** lifts it; they
-  can then sign in again.
+  signed out straight away: an open app goes to the sign-in page, which says
+  they were signed out, and signing in says the account has been suspended
+  (not the reason). You cannot ban yourself. **Unban** lifts it; they can then
+  sign in again.
 - **Sign out everywhere** ends every session, and appears only when there is
   one to end. This is the right response to a suspected compromise; changing the
   password alone leaves existing sessions working. They can sign in again
@@ -128,13 +131,17 @@ role, which is where the defaults come from.
 ![Selecting several accounts](../images/admin-users-bulk-actions.png)
 
 Select rows and the action bar appears. A role can be applied to the selection,
-or the selection signed out or banned.
+or the selection signed out or banned. Making accounts administrators, signing
+them out and banning them ask first; afterwards the page says what was done,
+such as "Signed out 2 accounts, ending 5 sessions."
 
 Three behaviours worth knowing:
 
-- **You cannot include your own account.** Selecting only yourself is refused;
-  selecting yourself alongside others silently skips you and says so. Locking
-  yourself out mid-operation is not something the interface will help with.
+- **You cannot include your own account.** Selecting only yourself leaves the
+  actions unavailable; selecting yourself alongside others skips you, and the
+  bar, the confirmation and the result say so and count only the others.
+  Locking yourself out mid-operation is not something the interface will help
+  with.
 - **A ban revokes sessions in the same action**, exactly as a single-account ban
   does.
 - **The audit entry names every account affected**, not just a count, so the

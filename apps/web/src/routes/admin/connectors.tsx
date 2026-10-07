@@ -34,6 +34,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api } from '~/lib/api-client';
 import { CONNECT_OUTCOMES, startConnecting } from '~/lib/connectors';
+import { formatDateTime } from '~/lib/utils';
 
 export const CONNECTORS_QUERY_KEY = ['admin', 'connectors'] as const;
 
@@ -42,7 +43,27 @@ const KIND_OPTIONS = [
   { value: 'write', label: 'Write — asks for approval' },
 ];
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : null);
+/**
+ * What deleting a connector removes, naming only what it has: "Its 0 tools,
+ * every role's allow for them and 0 connected accounts" said nothing (#182).
+ */
+export function connectorDeleteText(connector: Pick<AdminConnector, 'tools' | 'accountCount'>) {
+  const tools = connector.tools.length;
+  const accounts = connector.accountCount;
+  const parts = [
+    ...(tools > 0
+      ? [
+          `its ${tools} tool${tools === 1 ? '' : 's'} (and every role’s permission to use ${tools === 1 ? 'it' : 'them'})`,
+        ]
+      : []),
+    ...(accounts > 0 ? [`its ${accounts} connected account${accounts === 1 ? '' : 's'}`] : []),
+  ];
+  if (parts.length === 0) return 'It has no tools or connected accounts. This cannot be undone.';
+  const removed = parts.join(' and ');
+  return `${removed.charAt(0).toUpperCase()}${removed.slice(1)} will be removed. This cannot be undone.`;
+}
+
+const when = (iso: string | null) => (iso ? formatDateTime(iso) : null);
 
 function ToolRow({ connector, tool }: { connector: AdminConnector; tool: ConnectorTool }) {
   const queryClient = useQueryClient();
@@ -378,11 +399,7 @@ export function AdminConnectorsPage() {
         open={Boolean(deleteFor)}
         onOpenChange={(open) => !open && setDeleteFor(null)}
         title={`Delete ${deleteFor?.name ?? 'connector'}?`}
-        description={
-          deleteFor
-            ? `Its ${deleteFor.tools.length} tool${deleteFor.tools.length === 1 ? '' : 's'}, every role’s allow for them and ${deleteFor.accountCount} connected account${deleteFor.accountCount === 1 ? '' : 's'} will be removed. This cannot be undone.`
-            : ''
-        }
+        description={deleteFor ? connectorDeleteText(deleteFor) : ''}
         confirmLabel="Delete connector"
         pendingLabel="Deleting…"
         errorMessage="The connector could not be deleted."

@@ -11,6 +11,10 @@ import {
 import { cn } from '~/lib/utils';
 
 const POLL_MS = 30_000;
+/** Asked just after a window's edge, once the server applies it. */
+const WINDOW_EDGE_MS = 1_000;
+/** setTimeout's longest delay; a window further off is met by the polling. */
+const POLL_LIMIT_MS = 2_147_483_647;
 
 /** Asks the API now. Failures leave the state as it was (a refused write still updates it). */
 export async function refreshReadOnlyStatus(): Promise<void> {
@@ -39,7 +43,23 @@ export function useReadOnlyPolling(): ReadOnlyStatus {
       window.removeEventListener('focus', onFocus);
     };
   }, []);
-  return useReadOnlyStatus();
+  const status = useReadOnlyStatus();
+  // A scheduled window starts and ends on time on an open page too, as its
+  // announcement leaves (#160), rather than up to a poll later.
+  const startsAt = status.window?.startsAt;
+  const endsAt = status.window?.endsAt;
+  useEffect(() => {
+    const timers = [startsAt, endsAt].flatMap((at) => {
+      const delay = at ? Date.parse(at) - Date.now() + WINDOW_EDGE_MS : Number.NaN;
+      return delay > 0 && delay < POLL_LIMIT_MS
+        ? [setTimeout(() => void refreshReadOnlyStatus(), delay)]
+        : [];
+    });
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [startsAt, endsAt]);
+  return status;
 }
 
 /**

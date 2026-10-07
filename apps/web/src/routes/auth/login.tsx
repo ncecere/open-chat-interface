@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -11,6 +12,7 @@ import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
+import { SIGNED_OUT_PARAM } from '~/lib/session-ended';
 
 const WRONG_CREDENTIALS = 'Unable to sign in. Check your email and password.';
 
@@ -42,6 +44,12 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  // Only wrong credentials are about the fields; a rate limit is not (#183).
+  const invalidCredentials = error === WRONG_CREDENTIALS;
+  // Sent here because the session ended while the app was open (#165).
+  const [signedOut] = useState(() =>
+    new URLSearchParams(window.location.search).has(SIGNED_OUT_PARAM),
+  );
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -107,7 +115,8 @@ export function LoginPage() {
    * bouncing again would loop.
    */
   useEffect(() => {
-    if (!status || error) return;
+    // After being signed out, say so rather than sign straight back in.
+    if (!status || error || signedOut) return;
     if (new URLSearchParams(window.location.search).has('local')) return;
 
     const auto = status.ssoProviders.find((provider) => provider.autoRedirect);
@@ -119,12 +128,13 @@ export function LoginPage() {
         callbackURL: '/',
         errorCallbackURL: SSO_ERROR_URL,
       });
-  }, [status, error]);
+  }, [status, error, signedOut]);
 
   const appName = status?.branding.appName;
 
   return (
-    <div className="flex min-h-dvh flex-col items-center px-4 pt-[12vh] pb-12">
+    // The page's main landmark, as on every other auth page (#173).
+    <main className="flex min-h-dvh flex-col items-center px-4 pt-[12vh] pb-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           {/* The page's heading; the wordmark beside it is an image of the name (#110). */}
@@ -147,6 +157,15 @@ export function LoginPage() {
         ) : (
           <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {signedOut && !error && (
+                <p
+                  role="status"
+                  className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-secondary)]"
+                >
+                  You were signed out, from another device or by an administrator. Sign in again to
+                  continue.
+                </p>
+              )}
               {!status?.localAuthEnabled && (
                 // The form stays usable because administrators still need a way
                 // in when an identity provider is misconfigured. Saying so
@@ -160,6 +179,7 @@ export function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  {...fieldErrorProps('login-error', error, invalidCredentials)}
                   type="email"
                   autoComplete="email"
                   required
@@ -173,6 +193,7 @@ export function LoginPage() {
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
+                  {...fieldErrorProps('login-error', error, invalidCredentials)}
                   type="password"
                   autoComplete="current-password"
                   required
@@ -181,11 +202,7 @@ export function LoginPage() {
                 />
               </div>
 
-              {error && (
-                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]">
-                  {error}
-                </p>
-              )}
+              {error && <AuthFormError id="login-error">{error}</AuthFormError>}
 
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
                 {submitting ? <Spinner className="text-white" /> : <KeyRound />}
@@ -248,6 +265,6 @@ export function LoginPage() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }

@@ -6,6 +6,7 @@ import {
   activeChatRunId,
   capturedChatRunFrames,
   chatRunProducerActive,
+  chatRunProducerQuietIn,
   finalizeInterruptedChatRun,
   sharedRedis,
   touchChatRunHeartbeat,
@@ -247,6 +248,20 @@ export async function recoverStaleClaim(claim: {
   const cached = await activeChatRunId(claim.threadId);
   const runId = cached && messageIdOf(cached) === claim.messageId ? cached : claim.messageId;
   return recoverInterruptedRun({ runId, threadId: claim.threadId, userId: claim.userId });
+}
+
+/**
+ * How long until the claim's producer also counts as silent in Redis (its
+ * heartbeat key expired and its last event `staleMs` old), which recovery
+ * waits for as well as the claim's own staleness; 0 without Redis.
+ */
+export async function claimProducerQuietInMs(claim: {
+  messageId: string;
+  threadId: string;
+}): Promise<number> {
+  const cached = await activeChatRunId(claim.threadId);
+  const runId = cached && messageIdOf(cached) === claim.messageId ? cached : claim.messageId;
+  return (await chatRunProducerQuietIn(runId, runLiveness.staleMs)) ?? 0;
 }
 
 /** How far back the sweep looks for runs: replies do not stream for hours. */

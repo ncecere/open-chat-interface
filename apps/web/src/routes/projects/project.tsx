@@ -193,7 +193,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
 }
 
 function PageFrame({ children }: { children: ReactNode }) {
-  return <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-16 md:pt-12">{children}</div>;
+  return <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-4 md:pt-6">{children}</div>;
 }
 
 function ProjectView({
@@ -468,6 +468,7 @@ function ProjectFiles({
                 target="_blank"
                 rel="noreferrer"
                 className="min-w-0 flex-1 truncate text-sm hover:underline"
+                title={file.filename}
               >
                 {file.filename}
               </a>
@@ -523,6 +524,7 @@ function ProjectConversations({ projectId }: { projectId: string }) {
               <Link
                 to="/chat/$threadId"
                 params={{ threadId: thread.id }}
+                title={thread.title}
                 className="flex items-center gap-3 py-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
                 <span className="min-w-0 flex-1 truncate">{thread.title}</span>

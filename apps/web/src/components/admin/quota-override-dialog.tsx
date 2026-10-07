@@ -17,7 +17,7 @@ import {
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 /** Cost is stored in micro-dollars; the other metrics are plain counts. */
 function toDisplay(value: number, metric: QuotaMetric): string {
@@ -80,8 +80,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
       setError(null);
       await invalidate();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The override could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The override could not be saved.')),
   });
 
   const clear = useMutation({

@@ -54,6 +54,7 @@ export const Composer = memo(function Composer({
   attachmentsAvailable,
   attachments = [],
   onAttachFiles,
+  loading = false,
   onRemoveAttachment,
   placeholder = 'Type your message here...',
   autoFocus = false,
@@ -139,6 +140,7 @@ export const Composer = memo(function Composer({
             attachmentsAvailable={attachmentsAvailable}
             attachmentsPausedReason={readOnly.active ? readOnlyShortReason(readOnly) : undefined}
             onAttachFiles={onAttachFiles}
+            loading={loading}
           />
           {projectId && attachmentsAvailable !== false && onExcludedProjectFilesChange && (
             <ProjectFilesControl

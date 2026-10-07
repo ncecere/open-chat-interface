@@ -42,11 +42,26 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const DELIMITER_ROW = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
 
 /**
+ * A table row's cells, as GFM (and markdown-it) count them: split at pipes not
+ * escaped with a backslash, without the empty cells outside a leading or
+ * trailing pipe.
+ */
+function cellCount(row: string, escapes: boolean): number {
+  const cells = escapes ? row.split(/(?<!\\)\|/) : row.split('|');
+  if (cells[0]?.trim() === '') cells.shift();
+  if (cells.length && cells[cells.length - 1]?.trim() === '') cells.pop();
+  return cells.length;
+}
+
+/**
  * Whether Markdown appears to contain a GFM table: a row with a pipe followed
  * by a delimiter row (`| --- | :-: |`, or `---` under a single-column
- * header), outside fenced code. It errs towards yes: the web client uses it
- * to offer spreadsheet export and the API to refuse early without parsing;
- * the server's parser has the last word.
+ * header) with as many cells, outside fenced code. It errs towards yes: the
+ * web client uses it to offer spreadsheet export and the API to refuse early
+ * without parsing; the server's parser has the last word. The cell counts
+ * must match, as they must for the parser: a header row with text before it
+ * on the same line has a cell too many and is no table, yet was offered as
+ * one, and the export then failed with "No tables to export" (#150).
  */
 export function markdownHasTable(text: string): boolean {
   let fence: string | null = null;
@@ -65,7 +80,13 @@ export function markdownHasTable(text: string): boolean {
     }
     // Tables inside block quotes and list items count too.
     const line = raw.replace(/^(\s*>)+/, '').trim();
-    if (previous.includes('|') && line.includes('-') && DELIMITER_ROW.test(line)) return true;
+    if (
+      previous.includes('|') &&
+      line.includes('-') &&
+      DELIMITER_ROW.test(line) &&
+      cellCount(previous, true) === cellCount(line, false)
+    )
+      return true;
     previous = line.replace(/^([-*+]|\d{1,9}[.)])\s+/, '');
   }
   return false;

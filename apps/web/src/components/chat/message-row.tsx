@@ -10,14 +10,17 @@ import { MessageActions } from '~/components/chat/message-actions';
 import { MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
+  failureOf,
   interruptionOf,
   metadataOf,
   replyLayoutOf,
+  stoppedOf,
   textOf,
   type WorkEntry,
 } from '~/components/chat/message-content';
 import { MessageEditor } from '~/components/chat/message-editor';
 import { ProjectSearchNote } from '~/components/chat/project-search-note';
+import { ReplyFailureNote } from '~/components/chat/reply-outcome-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
 import { WorkBlock } from '~/components/chat/reply-work';
 import { replySearchOf, searchGroundingOf } from '~/components/chat/search-grounding';
@@ -102,6 +105,8 @@ export const MessageRow = memo(function MessageRow({
   const grounding = searchGroundingOf(message);
   const metadata = metadataOf(message);
   const interruption = interruptionOf(message);
+  const failure = streaming ? null : failureOf(message);
+  const stopped = !streaming && stoppedOf(message);
   const capacity = capacityWaitOf(message);
 
   return (
@@ -133,6 +138,12 @@ export const MessageRow = memo(function MessageRow({
       {interruption && (
         <p role="note" className="mb-1 text-xs text-[var(--text-muted)]">
           {interruption}
+        </p>
+      )}
+      {failure && <ReplyFailureNote reason={failure} onRetry={onRetry} latest={Boolean(onRetry)} />}
+      {stopped && (
+        <p role="note" className="mb-1 text-xs text-[var(--text-muted)]">
+          {text.trim() ? 'You stopped this reply.' : 'You stopped this reply before it began.'}
         </p>
       )}
       {(replySwitch || !streaming) && (

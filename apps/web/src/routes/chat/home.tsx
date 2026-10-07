@@ -38,7 +38,12 @@ const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
  */
 export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const { data } = useCurrentUser();
-  const { data: models = EMPTY_MODELS } = useModels();
+  const modelsQuery = useModels();
+  const models = modelsQuery.data ?? EMPTY_MODELS;
+  // Until the models and the person's features arrive, nothing is said about
+  // them: "No models are available yet" was shown for as long as the request
+  // took, and the greeting and Attach appeared later, moving the page (#156).
+  const loading = modelsQuery.isPending || !data;
   const navigate = useNavigate();
   const { mutateAsync: createThread } = useCreateThread();
   const { temporary: temporaryMode, setTemporary } = useTemporaryChat();
@@ -159,7 +164,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
     <div className="flex h-full flex-col justify-center md:justify-normal">
       {/* Desktop uses the upper-middle region; mobile centers the compact prompt. */}
       {/* On phones, room between the greeting and the centred composer (#102). */}
-      <div className="flex-none px-4 pb-8 md:flex-1 md:overflow-y-auto md:pt-[18vh] md:pb-0">
+      <div className="flex-none px-4 pb-8 md:flex-1 md:overflow-y-auto md:pt-[11vh] md:pb-0">
         <div className="mx-auto w-full max-w-[41.75rem]">
           <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-left md:text-[1.875rem]">
             {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}
@@ -169,9 +174,12 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
               // One text item, so the flex gap (for the icon) never lands after
               // the comma, and the name is in the DOM once, not once per
               // breakpoint (#94). On phones the name wraps to its own line.
-              <span>
-                How can I help you{firstName ? ', ' : '?'}
-                {firstName && <span className="block md:inline">{firstName}?</span>}
+              // Hidden, with room for the name, until it is known.
+              <span className={cn(!data && 'invisible')}>
+                How can I help you{firstName || !data ? ', ' : '?'}
+                {(firstName || !data) && (
+                  <span className="block md:inline">{firstName ?? '\u00a0'}?</span>
+                )}
               </span>
             )}
           </h1>
@@ -226,10 +234,18 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
             ))}
           </div>
 
-          {models.length === 0 && (
+          {modelsQuery.isSuccess && models.length === 0 && (
             <p className="mt-8 rounded-xl bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
               No models are available yet. An administrator needs to add a provider and enable a
               model in the catalog.
+            </p>
+          )}
+          {modelsQuery.isError && (
+            <p
+              role="alert"
+              className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
+            >
+              The list of models could not be loaded. Reload the page to try again.
             </p>
           )}
           {startError && (
@@ -256,7 +272,9 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
         webSearch={webSearch}
         onWebSearchChange={setWebSearch}
         webSearchAvailable={data?.features.webSearch ?? false}
-        attachmentsAvailable={data?.features.attachments ?? false}
+        // Shown (waiting) until known, so it does not appear later and move the row.
+        attachmentsAvailable={data ? data.features.attachments : true}
+        loading={loading}
         attachments={attachmentItems}
         onAttachFiles={upload}
         onRemoveAttachment={remove}

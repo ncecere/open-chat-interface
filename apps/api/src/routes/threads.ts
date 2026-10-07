@@ -48,6 +48,7 @@ import {
 } from '../services/projects.js';
 import { activateReply } from '../services/replies.js';
 import { roleFeatures } from '../services/role-features.js';
+import { decodeThreadHistoryCursor, listThreadHistory } from '../services/thread-history.js';
 import { searchThreads } from '../services/thread-search.js';
 import { serializeThread } from '../services/thread-summary.js';
 import {
@@ -56,11 +57,9 @@ import {
   assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
-  decodeThreadHistoryCursor,
   forkFromMessage,
   getOwnedThread,
   listMessages,
-  listThreadHistory,
   listThreads,
 } from '../services/threads.js';
 

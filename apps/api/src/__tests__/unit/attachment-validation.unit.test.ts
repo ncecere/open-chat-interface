@@ -39,17 +39,38 @@ describe('unit: attachment content validation', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 422 });
   });
 
-  it('names the refused type with the right article', async () => {
-    // A ZIP renamed to .png: "an application/zip", not "a application/zip".
+  it('names a refused type in words, not as a MIME type (#180)', async () => {
+    // A ZIP renamed to .png.
     const zip = Buffer.from('504b0304140000000000', 'hex');
     await expect(
       validate({ filename: 'disguised.png', declaredMimeType: 'image/png', bytes: zip }),
     ).rejects.toMatchObject({
-      message: 'disguised.png is an application/zip file, which is not allowed here',
+      message: 'disguised.png is a ZIP archive, which is not allowed here',
     });
     await expect(
       validate({ filename: 'p.png', bytes: ONE_PIXEL_PNG, allowedMimeTypes: ['text/plain'] }),
-    ).rejects.toMatchObject({ message: 'p.png is an image/png file, which is not allowed here' });
+    ).rejects.toMatchObject({ message: 'p.png is a PNG image, which is not allowed here' });
+    // A Windows program renamed to .png, as in the QA walk ("MZ" header).
+    const exe = Buffer.concat([
+      Buffer.from('4d5a90000300000004000000ffff0000', 'hex'),
+      Buffer.alloc(64),
+    ]);
+    const refusal = validate({
+      filename: 'walk3-fake.png',
+      declaredMimeType: 'image/png',
+      bytes: exe,
+    });
+    await expect(refusal).rejects.toMatchObject({
+      message: 'walk3-fake.png is a Windows program, which is not allowed here',
+    });
+  });
+
+  it('says "this type of file" for a type with no common name', async () => {
+    const { fileKind } = await import('../../services/attachments/validate.js');
+    expect(fileKind('application/x-unheard-of')).toBeNull();
+    expect(fileKind('image/svg+xml')).toBe('an SVG image');
+    expect(fileKind('image/heic')).toBe('a HEIC image');
+    expect(fileKind('audio/mpeg')).toBe('an audio file');
   });
 
   it('accepts printable UTF-8 as text but rejects binary/control-heavy content', async () => {

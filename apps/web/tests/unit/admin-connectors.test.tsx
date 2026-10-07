@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-import type { AdminConnector } from '@oci/shared';
+import { type AdminConnector, createConnectorSchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectorChanges } from '../../src/components/admin/connector-form-dialog';
 import { toolGroups } from '../../src/components/admin/role-tools-form';
-import { AdminConnectorsPage } from '../../src/routes/admin/connectors';
+import { formatDateTime } from '../../src/lib/utils';
+import { AdminConnectorsPage, connectorDeleteText } from '../../src/routes/admin/connectors';
 import {
   button,
   cleanup,
@@ -13,6 +14,7 @@ import {
   findButton,
   renderAdmin,
   typeInto,
+  validationFailure,
 } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
@@ -177,6 +179,65 @@ describe('Connectors admin page', () => {
       enabled: true,
       allowPrivateNetwork: false,
     });
+  });
+
+  it('names only what deleting a connector removes (#182)', async () => {
+    connectors = [connector({ tools: [], accountCount: 0 })];
+    await render();
+    await click(button('Delete Docs'));
+    expect(dialog()?.textContent).toContain(
+      'It has no tools or connected accounts. This cannot be undone.',
+    );
+    expect(dialog()?.textContent).not.toContain('0 tools');
+    const tool = connector().tools[0]!;
+    expect(connectorDeleteText({ tools: [tool], accountCount: 0 })).toBe(
+      'Its 1 tool (and every role’s permission to use it) will be removed. This cannot be undone.',
+    );
+    expect(connectorDeleteText({ tools: [tool, tool], accountCount: 3 })).toBe(
+      'Its 2 tools (and every role’s permission to use them) and its 3 connected accounts will be removed. This cannot be undone.',
+    );
+    expect(connectorDeleteText({ tools: [], accountCount: 1 })).toBe(
+      'Its 1 connected account will be removed. This cannot be undone.',
+    );
+  });
+
+  it('shows a failure time in the admin date format (#177)', async () => {
+    const failedAt = '2026-10-05T22:51:07.000Z';
+    connectors = [
+      connector({ lastErrorAt: failedAt, lastError: 'Connection refused', lastContactAt: null }),
+    ];
+    await render();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(`Last failure ${formatDateTime(failedAt)}: Connection refused`);
+    expect(text).not.toContain(new Date(failedAt).toLocaleString());
+  });
+
+  it('says which field the API refused and why (#127)', async () => {
+    connectors = [];
+    await render();
+    await click(button('Add connector'));
+    await typeInto(document.getElementById('connector-name') as HTMLInputElement, 'Walk2');
+    await typeInto(
+      document.getElementById('connector-url') as HTMLInputElement,
+      'https://wiki.example.test/mcp',
+    );
+    await typeInto(document.getElementById('connector-slug') as HTMLInputElement, 'Walk2 Bad!');
+    api.post.mockRejectedValueOnce(
+      validationFailure(createConnectorSchema, {
+        name: 'Walk2',
+        url: 'https://wiki.example.test/mcp',
+        slug: 'Walk2 Bad!',
+        authMode: 'none',
+      }),
+    );
+    const submit = [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Add connector',
+    )!;
+    await click(submit);
+    const alert = dialog()?.querySelector('[role="alert"]')?.textContent;
+    expect(alert).toBe(
+      'Short name: Use up to 24 lowercase letters, digits and hyphens, such as docs or crm-eu.',
+    );
   });
 
   it('confirms before deleting, naming what goes with it', async () => {

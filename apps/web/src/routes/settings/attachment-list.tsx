@@ -101,6 +101,8 @@ interface AttachmentListProps {
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onDelete: (ids: string[]) => void;
+  /** Under "No attachments yet": where uploads come from, for what this role can upload. */
+  emptyHint?: string;
 }
 
 export function AttachmentList({
@@ -116,6 +118,7 @@ export function AttachmentList({
   onToggle,
   onToggleAll,
   onDelete,
+  emptyHint = 'Files uploaded in chats and to projects will appear here.',
 }: AttachmentListProps) {
   // Project files are managed (and deleted) from their project, not here.
   const selectable = attachments.filter((file) => !file.project);
@@ -135,9 +138,7 @@ export function AttachmentList({
             {totalCount === 0 ? 'No attachments yet' : 'No files match this filter'}
           </p>
           <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-            {totalCount === 0
-              ? 'Files uploaded in chats and to projects will appear here.'
-              : 'Choose another file type to see your uploads.'}
+            {totalCount === 0 ? emptyHint : 'Choose another file type to see your uploads.'}
           </p>
         </div>
       </div>
@@ -200,6 +201,8 @@ export function AttachmentList({
             return (
               <div
                 key={attachment.id}
+                // Where focus goes when the file before it is deleted (#128).
+                data-focus-row=""
                 className={cn(
                   'grid min-h-14 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] px-4 py-2 last:border-b-0 sm:grid-cols-[1.25rem_minmax(0,1fr)_8rem_2rem]',
                   isSelected && 'bg-[var(--accent-soft)]/45',

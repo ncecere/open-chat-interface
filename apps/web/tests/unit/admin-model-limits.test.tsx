@@ -7,6 +7,7 @@ import { parseTokenCount } from '../../src/components/admin/model-form-dialog';
 import { ThemeProvider } from '../../src/providers/theme-provider';
 import { AdminModelsPage } from '../../src/routes/admin/models';
 import { alerts, button, cleanup, click, dialog, renderAdmin, typeInto } from './admin-test-utils';
+import { untitledTruncations } from './truncation';
 
 /**
  * A model's context window and output limit, which the admin form could not
@@ -59,7 +60,19 @@ beforeEach(() => {
   api.get.mockImplementation(async (path: string) => {
     if (path === '/admin/models') return { models: [model] };
     if (path === '/admin/providers') {
-      return { providers: [{ id: 'p1', label: 'OpenAI', kind: 'openai', enabled: true }] };
+      return {
+        providers: [
+          {
+            id: 'p1',
+            label: 'OpenAI',
+            kind: 'openai',
+            enabled: true,
+            baseUrl: 'https://gateway.example.edu/v1/openai-compatible',
+            credentialHint: 'sk-…1234',
+            modelCount: 1,
+          },
+        ],
+      };
     }
     if (path === '/admin/setup-status') return { checks: [] };
     throw new Error(`Unexpected GET ${path}`);
@@ -82,6 +95,14 @@ async function openEditor() {
   ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
   await click(button('Edit Big model'));
 }
+
+describe('truncated text (#130)', () => {
+  it.each(['models', 'providers'])('has a tooltip on the %s tab', async (tab) => {
+    ({ root } = await renderAdmin(page, { path: `/admin/models?tab=${tab}` }));
+    expect(document.body.textContent).toContain(tab === 'models' ? 'big-model' : 'gateway');
+    expect(untitledTruncations()).toEqual([]);
+  });
+});
 
 describe('model limits', () => {
   it('reads blank, thousands separators and anything else', () => {
@@ -185,6 +206,42 @@ describe('the model form and inline rename (#79)', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
+  it('clears the listed problems once the form is edited (#178)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(button('Add model'));
+    const add = () =>
+      click(
+        [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+          (candidate) => candidate.textContent?.trim() === 'Add model',
+        )!,
+      );
+    await add();
+    expect(alerts(dialog() as HTMLElement)[0]).toContain('Display name is required.');
+    await typeInto(field('upstream-model-id'), 'walk3-upstream');
+    await typeInto(field('model-display-name'), 'Walk3 model');
+    expect(alerts(dialog() as HTMLElement)).toEqual([]);
+  });
+
+  it('lists a bad slug and an output with no room for input together (#129)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(button('Add model'));
+    await typeInto(field('upstream-model-id'), 'walk2-upstream');
+    await typeInto(field('model-display-name'), 'Walk2 model');
+    await typeInto(field('model-slug'), 'Walk2 Bad Slug');
+    await typeInto(field('model-context-window'), '8,000');
+    await typeInto(field('model-max-output'), '9000');
+    const add = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (candidate) => candidate.textContent?.trim() === 'Add model',
+    );
+    await click(add!);
+    const [alert] = alerts(dialog() as HTMLElement);
+    expect(alert?.split('\n')).toEqual([
+      'OCI slug: Slug must be lowercase alphanumeric with dashes',
+      'The output limit must leave room for input: keep it below 7,488 tokens (the context window, less 512).',
+    ]);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('renames on Enter, once, and puts the name back on Escape', async () => {
     ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
     await click(
@@ -208,5 +265,52 @@ describe('the model form and inline rename (#79)', () => {
     await act(async () => name.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
     expect(api.patch).toHaveBeenCalledTimes(1);
     expect(api.patch).toHaveBeenCalledWith('/admin/models/m1', { displayName: 'Walk renamed' });
+  });
+
+  it('does not leave a cleared name blank: it says why and puts the name back (#146)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(
+      [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+        candidate.textContent?.endsWith('OpenAI · big-model'),
+      )!,
+    );
+    const name = field('name-m1');
+    await typeInto(name, '   ');
+    await act(async () => {
+      name.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+    });
+    expect(api.patch).not.toHaveBeenCalled();
+    const note = document.getElementById(name.getAttribute('aria-describedby') ?? '');
+    expect(note?.textContent).toBe('A display name is required, so Big model was kept.');
+    expect(name.value).toBe('Big model');
+    await act(async () => name.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    expect(name.value).toBe('Big model');
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it('puts the name back even when the field was emptied without an input React saw (#146)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(
+      [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+        candidate.textContent?.endsWith('OpenAI · big-model'),
+      )!,
+    );
+    const name = field('name-m1');
+    // What the walk's browser tool did: set the value directly. React tracks
+    // that assignment, so the input event that follows changes no state.
+    await act(async () => {
+      name.value = '';
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(name.value).toBe('');
+    await act(async () => {
+      name.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+    });
+    expect(name.value).toBe('Big model');
+    expect(api.patch).not.toHaveBeenCalled();
   });
 });

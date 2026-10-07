@@ -132,6 +132,17 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 
+  test('the appearance menu has no violations while open (#172)', async ({ page }) => {
+    await signIn(page);
+    await page.goto('/');
+    // A modal menu: the page behind it is hidden and must not stay focusable.
+    await page.getByRole('button', { name: 'Appearance settings' }).click();
+    await expect(page.getByRole('menu')).toBeVisible();
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
   test('the reply switcher on a retried turn has no violations', async ({ page }) => {
     const created = '2026-01-01T00:00:00.000Z';
     const reply = (id: string, text: string) => ({
@@ -228,7 +239,20 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
 
   test('the artifact panel and an artifact step have no violations', async ({ page }) => {
     const created = '2026-01-01T00:00:00.000Z';
-    const html = '<!doctype html>\n<title>Plan page</title>\n<h1>Plan</h1>\n<p>Hello</p>';
+    // Comments and parameters too: their GitHub colours failed contrast (#171).
+    const html = [
+      '<!doctype html>',
+      '<title>Plan page</title>',
+      '<!-- The plan, in one page -->',
+      '<h1>Plan</h1>',
+      '<p>Hello</p>',
+      '<script>',
+      '  // Adds two numbers',
+      '  function add(first, second) {',
+      '    return first + second;',
+      '  }',
+      '</script>',
+    ].join('\n');
     const artifact = {
       id: 'a11y-artifact',
       threadId: 'a11y-artifacts',

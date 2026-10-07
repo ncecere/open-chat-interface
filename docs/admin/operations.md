@@ -54,7 +54,9 @@ Where attachments live — a local path or an S3-compatible bucket — and what 
 currently held.
 
 **Data & storage → Storage** (`/admin/storage`) has three tabs: the storage
-driver, the S3 connection, and the upload policy.
+driver, the S3 connection, and the upload policy. The upload policy's maximum
+file size can be at most 1,024 MB (1 GB), the same ceiling as a role's per-file
+[storage allowance](governance.md#storage-allowance).
 
 **Test put/read/delete** on the S3 tab checks the saved S3 settings actually
 work, and can be run while local storage is still active. Do this before
@@ -102,13 +104,17 @@ page asks for the new provider's key before search can be switched on.
 
 **Test search** runs one sample search with the provider and the key or address
 on the page, saved or not, and says whether it worked or what the provider
-replied, for example that it rejected the key. Nothing is saved, and each test
+replied, for example that it rejected the key. SearXNG has no key: a refusal
+from it (HTTP 403) almost always means its JSON output is off, and the message
+says to add `json` to `search.formats`. Nothing is saved, and each test
 is recorded in the audit log as `search.test` (provider and outcome only).
 
 People are offered search only when it can actually run: the switch is on, a
 provider is selected, and it has its key or address. Until all of those hold,
 search is removed from the composer rather than offered and failing. The page
-says whether search is available, and why not.
+says whether search is set up, and why not. Set up means configured: only a
+search shows that the provider answers, so use **Test search** after a change
+to the provider.
 
 ### Fallback provider
 

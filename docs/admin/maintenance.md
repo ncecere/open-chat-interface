@@ -24,10 +24,11 @@ It applies on every API replica at once, and to the background workers.
 A refused change is answered before the server does anything with it, so
 nothing is half-saved. People see a banner saying why and until when, in the
 chat, in Settings and in administration. The message box, upload, edit, fork
-and retry buttons are off, with the reason, and so are the controls and Save
-buttons of administration pages. In personal Settings a save is refused with
+and retry buttons are off, with the reason, as are the sidebar's pin, rename
+and archive buttons and the controls and Save buttons of administration pages. In personal Settings a save is refused with
 the same explanation. Somebody who sends just as read-only starts gets that
-explanation too, not an error.
+explanation too, not an error. **Forgot your password?** says password resets
+are paused, with the reason and the expected end, and that no email was sent.
 
 A person signing in for the first time can still accept the acceptable use
 policy, which is part of signing in. Single sign-on can still create an account
@@ -47,7 +48,9 @@ for someone new (just-in-time provisioning).
   With **Announce it now**, everybody sees an announcement (an ordinary
   [announcement](instance-settings.md)) from now until the window starts,
   saying when and what will not work; the read-only banner takes over at the
-  start. Changing the window updates its announcement and shows it again to
+  start, on pages already open too. The announcement gives its times in the
+  instance's display time zone (Branding); the banner gives the end in each
+  person's own time zone. Both name their zone. Changing the window updates its announcement and shows it again to
   people who had hidden it; cancelling the window removes it.
 
 Every change is in the audit log as `maintenance.read_only.update`, with who

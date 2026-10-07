@@ -35,8 +35,9 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
+import { validationText } from '~/lib/validation-issues';
 
 const LEVEL_LABELS: Record<BroadcastLevel, string> = {
   info: 'Information',
@@ -62,6 +63,15 @@ interface Draft {
 }
 
 /** Datetime-local values are local wall time; the API stores instants. */
+/** Who sees an announcement, as one line (shown and as its tooltip, #130). */
+function audienceOf(broadcast: Broadcast): string {
+  return [
+    broadcast.audienceRoles.length === 0 ? 'Everyone' : broadcast.audienceRoles.join(', '),
+    broadcast.dismissalCount > 0 ? ` · dismissed by ${broadcast.dismissalCount}` : '',
+    broadcast.dismissable ? '' : ' · cannot be dismissed',
+  ].join('');
+}
+
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
   const date = new Date(iso);
@@ -109,8 +119,7 @@ function BroadcastDialog({
       ]);
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The announcement could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The announcement could not be saved.')),
   });
 
   function submit(event: FormEvent) {
@@ -129,7 +138,7 @@ function BroadcastDialog({
     });
 
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the announcement fields.');
+      setError(validationText(parsed.error.issues, 'Check the announcement fields.'));
       return;
     }
     save.mutate(parsed.data);
@@ -363,7 +372,10 @@ export function AdminBroadcastsPage() {
             <Row key={broadcast.id}>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-medium">{broadcast.title}</p>
+                  {/* Full values on hover when a narrow screen cuts them short (#130). */}
+                  <p className="truncate font-medium" title={broadcast.title}>
+                    {broadcast.title}
+                  </p>
                   <Badge variant={LEVEL_VARIANTS[broadcast.level]}>
                     {LEVEL_LABELS[broadcast.level]}
                   </Badge>
@@ -373,14 +385,11 @@ export function AdminBroadcastsPage() {
                     <Badge variant="outline">{broadcast.published ? 'scheduled' : 'draft'}</Badge>
                   )}
                 </div>
-                <p className="truncate text-[var(--text-muted)] text-xs">
-                  {broadcast.audienceRoles.length === 0
-                    ? 'Everyone'
-                    : broadcast.audienceRoles.join(', ')}
-                  {broadcast.dismissalCount > 0
-                    ? ` · dismissed by ${broadcast.dismissalCount}`
-                    : ''}
-                  {broadcast.dismissable ? '' : ' · cannot be dismissed'}
+                <p
+                  className="truncate text-[var(--text-muted)] text-xs"
+                  title={audienceOf(broadcast)}
+                >
+                  {audienceOf(broadcast)}
                 </p>
                 {/* The message itself, for everyone who can open this page:
                     auditors have no edit dialog to read it in (#87). */}

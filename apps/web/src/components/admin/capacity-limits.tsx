@@ -24,7 +24,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { ApiError, api } from '~/lib/api-client';
+import { api, apiErrorMessage } from '~/lib/api-client';
 
 /**
  * Provider capacity (v0.11): limits OCI keeps below a provider's own rate
@@ -108,8 +108,7 @@ export function CapacityLimitsDialog({
       await queryClient.invalidateQueries({ queryKey: CAPACITY_QUERY_KEY });
       onClose();
     },
-    onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The limits could not be saved.'),
+    onError: (cause) => setError(apiErrorMessage(cause, 'The limits could not be saved.')),
   });
 
   function submit(event: FormEvent) {
@@ -157,9 +156,11 @@ export function CapacityLimitsDialog({
               inputMode="numeric"
               value={values[field.key]}
               placeholder="No limit"
-              onChange={(event) =>
-                setValues((current) => ({ ...current, [field.key]: event.target.value }))
-              }
+              onChange={(event) => {
+                // A correction clears the complaint about it (#178).
+                setError(null);
+                setValues((current) => ({ ...current, [field.key]: event.target.value }));
+              }}
             />
           </Field>
         ))}
@@ -394,6 +395,10 @@ export function ProviderCapacitySection() {
                   value={maxWait}
                   onChange={(event) => {
                     setSaved(false);
+                    // Editing the value clears the complaint about it, which
+                    // otherwise stayed while Save was disabled (#178).
+                    setFormError(null);
+                    save.reset();
                     setMaxWait(event.target.value);
                   }}
                   className="max-w-40"
@@ -413,6 +418,7 @@ export function ProviderCapacitySection() {
                         value={priority?.[role] ?? 'normal'}
                         onChange={(next) => {
                           setSaved(false);
+                          save.reset();
                           setPriority((current) =>
                             current ? { ...current, [role]: next as QueuePriority } : current,
                           );
@@ -432,9 +438,7 @@ export function ProviderCapacitySection() {
                 errorMessage={
                   formError ??
                   (save.error
-                    ? save.error instanceof ApiError
-                      ? save.error.message
-                      : 'The queue settings could not be saved.'
+                    ? apiErrorMessage(save.error, 'The queue settings could not be saved.')
                     : null)
                 }
                 successMessage={saved && !changed ? 'Queue settings saved.' : null}

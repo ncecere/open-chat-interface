@@ -1,3 +1,5 @@
+import { authReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
+
 /** The instance's password rules (Better Auth `emailAndPassword`). */
 export const PASSWORD_MIN = 12;
 export const PASSWORD_MAX = 200;
@@ -11,6 +13,10 @@ export interface AuthResult {
 export function authErrorMessage(result: AuthResult, fallback: string): string | null {
   const error = result.error;
   if (!error) return null;
+  // Read-only maintenance: its reason and expected end, not "Try again",
+  // which cannot work until it is over (#159).
+  const readOnly = authReadOnlyRefusal(error);
+  if (readOnly) return readOnlyMessage(readOnly);
   switch (error.code) {
     case 'INVALID_PASSWORD':
       return 'Your current password is not correct.';

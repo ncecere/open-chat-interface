@@ -49,7 +49,10 @@ interface UserDetail {
   /** Null (or absent, before v0.9) when the person is not on legal hold. */
   legalHold?: { reason: string; placedAt: string; placedByEmail: string | null } | null;
   storage: { bytesUsed: number; fileCount: number };
+  /** The newest few active sessions; `sessionCount` is how many there are. */
   sessions: SessionRow[];
+  /** Every unexpired session (absent before v0.11.1, when the list was the count). */
+  sessionCount?: number;
   recentThreads: ThreadRow[];
   audit: AuditRow[];
 }
@@ -137,7 +140,9 @@ export function AdminUserDetailPage() {
 
   const { user, storage, sessions, recentThreads, audit } = data;
   const name = user.name || user.email;
-  const sessionCount = `${sessions.length} active session${sessions.length === 1 ? '' : 's'}`;
+  // The list holds only the newest sessions; the total comes from the API (#134).
+  const totalSessions = data.sessionCount ?? sessions.length;
+  const sessionCount = `${totalSessions.toLocaleString('en-US')} active session${totalSessions === 1 ? '' : 's'}`;
 
   return (
     <div>
@@ -179,7 +184,7 @@ export function AdminUserDetailPage() {
                   Ban
                 </Button>
               )}
-              {sessions.length > 0 && (
+              {totalSessions > 0 && (
                 <Button
                   type="button"
                   size="sm"
@@ -264,41 +269,49 @@ export function AdminUserDetailPage() {
         {sessions.length === 0 ? (
           <Empty>No active sessions.</Empty>
         ) : (
-          <section
-            // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
-            tabIndex={0}
-            aria-label="Active sessions"
-            className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
-          >
-            <table className="w-full min-w-[32rem] text-sm">
-              <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
-                <tr>
-                  <th className="px-4 py-2 text-left">Started</th>
-                  <th className="px-4 py-2 text-left">Expires</th>
-                  <th className="px-4 py-2 text-left">Address</th>
-                  <th className="px-4 py-2 text-left">Client</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((session) => (
-                  <tr key={session.id} className="border-[var(--border-subtle)] border-t">
-                    <td className="px-4 py-2">{formatRelativeTime(session.createdAt)}</td>
-                    <td className="px-4 py-2 text-[var(--text-muted)]">
-                      {formatTimeUntil(session.expiresAt)}
-                    </td>
-                    <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
-                    <td
-                      className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs"
-                      title={session.userAgent ?? undefined}
-                    >
-                      {session.userAgent ?? '—'}
-                    </td>
+          <>
+            <p id="session-count" className="mb-2 text-[var(--text-muted)] text-sm">
+              {totalSessions > sessions.length
+                ? `Showing the ${sessions.length} most recent of ${sessionCount}.`
+                : `${sessionCount}.`}
+            </p>
+            <section
+              // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+              tabIndex={0}
+              aria-label="Active sessions"
+              aria-describedby="session-count"
+              className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+            >
+              <table className="w-full min-w-[32rem] text-sm">
+                <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Started</th>
+                    <th className="px-4 py-2 text-left">Expires</th>
+                    <th className="px-4 py-2 text-left">Address</th>
+                    <th className="px-4 py-2 text-left">Client</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+                </thead>
+                <tbody>
+                  {sessions.map((session) => (
+                    <tr key={session.id} className="border-[var(--border-subtle)] border-t">
+                      <td className="px-4 py-2">{formatRelativeTime(session.createdAt)}</td>
+                      <td className="px-4 py-2 text-[var(--text-muted)]">
+                        {formatTimeUntil(session.expiresAt)}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
+                      <td
+                        className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs"
+                        title={session.userAgent ?? undefined}
+                      >
+                        {session.userAgent ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          </>
         )}
       </Section>
 

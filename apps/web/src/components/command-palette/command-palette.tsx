@@ -1,11 +1,17 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Search } from 'lucide-react';
+import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
 import { Spinner } from '~/components/ui/spinner';
+import { useFocusReturn } from '~/hooks/use-focus-return';
+import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import type { CommandPaletteProps } from './types';
 import { useCommandPaletteState } from './use-command-palette-state';
 
 const LISTBOX_ID = 'oci-command-palette-listbox';
+
+// The palette hides the page; it is also made inert (#172).
+keepHiddenContentInert();
 
 /** Global command and thread search, controlled by the app shell. */
 export function CommandPalette(props: CommandPaletteProps) {
@@ -25,6 +31,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     threadAnnouncement,
     consumeKeepFocus,
   } = useCommandPaletteState(props);
+  const focusReturn = useFocusReturn();
   let optionIndex = -1;
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -39,11 +46,14 @@ export function CommandPalette(props: CommandPaletteProps) {
           )}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
+            focusReturn.onOpenAutoFocus();
             event.preventDefault();
             inputRef.current?.focus();
           }}
           onCloseAutoFocus={(event) => {
             if (consumeKeepFocus()) event.preventDefault();
+            // Back to the composer or the Search button that opened it (#128).
+            focusReturn.onCloseAutoFocus(event);
           }}
         >
           <DialogPrimitive.Title className="sr-only">Search</DialogPrimitive.Title>
@@ -81,6 +91,10 @@ export function CommandPalette(props: CommandPaletteProps) {
             aria-label="Suggestions"
             className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 py-2"
           >
+            {/* Options as a listbox has them (#176): focus stays in the search
+                field, which points at the selected option, so an option is not a
+                button (each was a Tab stop). A fieldset is a group, named by its
+                legend, which a listbox may hold. */}
             {groups.map((group) => (
               <fieldset key={group.id} className="m-0 mb-2 min-w-0 border-0 p-0 last:mb-0">
                 <legend className="w-full px-2 pb-1 pt-1 text-[0.6875rem] font-semibold text-[var(--text-muted)]">
@@ -93,21 +107,32 @@ export function CommandPalette(props: CommandPaletteProps) {
                   const Icon = item.icon;
 
                   return (
-                    <button
+                    <div
                       key={item.id}
                       id={`oci-command-palette-option-${item.id}`}
-                      type="button"
                       role="option"
+                      // Out of the Tab order; the search field's arrow keys move between options.
+                      tabIndex={-1}
                       aria-selected={selected}
                       onPointerMove={() => setSelectedIndex(index)}
+                      // The search field keeps focus; a click only chooses.
+                      onMouseDown={(event) => event.preventDefault()}
                       onClick={() => void selectItem(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void selectItem(item);
+                      }}
                       className={cn(
-                        'flex min-h-9 w-full gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm',
+                        'flex min-h-9 w-full cursor-pointer gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm',
                         item.content ? 'items-start' : 'items-center',
                         'transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
+                        // The active option gets the focus ring the model picker uses: the
+                        // border and wash alone were 1.5:1 in light (#135).
                         selected
-                          ? 'border-[var(--border-strong)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]',
+                          ? cn(
+                              'border-transparent bg-[var(--accent-soft)] text-[var(--text-primary)]',
+                              ACTIVE_OPTION_RING,
+                            )
+                          : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)]',
                       )}
                     >
                       <Icon
@@ -131,7 +156,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                           ))}
                         </span>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </fieldset>

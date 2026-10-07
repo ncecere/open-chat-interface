@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-router';
 import { AppShell } from '~/components/layout/app-shell';
 import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
+import { NotFoundPage } from '~/components/ui/not-found-page';
 import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import {
@@ -24,6 +25,7 @@ import {
   validateChatThreadSearch,
   validateProjectSearch,
 } from '~/lib/chat-search-params';
+import { noteSessionConfirmed, onSessionEnded, SIGNED_OUT_PARAM } from '~/lib/session-ended';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
@@ -36,18 +38,43 @@ interface SessionSnapshot {
   user: { id: string; role: string };
 }
 
-/** Route guards read the session directly so redirects happen before render. */
-async function loadSession(): Promise<SessionSnapshot | null> {
+/** The session this tab last confirmed; null once it is known to have ended. */
+let confirmedSession: SessionSnapshot | null = null;
+
+/**
+ * Route guards read the session directly so redirects happen before render.
+ *
+ * Only a 401 says the session has ended. Any other failure (the database away
+ * for a few seconds: a 500, a network error) says nothing about it, and every
+ * navigation runs this, so it replaced the whole app with "Could not load
+ * this page" until a reload. Within an app already signed in, navigation now
+ * carries on with the session last confirmed, and the page's own requests
+ * show their retry states; only a first load, with nothing confirmed yet,
+ * fails (#164).
+ */
+export async function loadSession(): Promise<SessionSnapshot | null> {
   try {
-    return await api.get<SessionSnapshot>('/me');
+    confirmedSession = await api.get<SessionSnapshot>('/me');
+    noteSessionConfirmed();
+    return confirmedSession;
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) return null;
+    if (error instanceof ApiError && error.status === 401) {
+      confirmedSession = null;
+      return null;
+    }
+    if (confirmedSession) return confirmedSession;
     throw error;
   }
 }
 
 const rootRoute = createRootRoute({
   component: Outlet,
+  // An address outside every layout: the page itself is the landmark (#131).
+  notFoundComponent: () => (
+    <main className="h-dvh">
+      <NotFoundPage />
+    </main>
+  ),
 });
 
 const signupRoute = createRoute({
@@ -259,6 +286,8 @@ const adminRoute = createRoute({
   },
   component: lazyRouteComponent(() => import('~/components/admin/admin-layout'), 'AdminLayout'),
   pendingComponent: FullPageSpinner,
+  // "/admin/invitations" and the like: inside the admin chrome, with a way back (#131).
+  notFoundComponent: () => <NotFoundPage admin />,
 });
 
 const adminOverviewRoute = createRoute({
@@ -503,6 +532,20 @@ export const router = createRouter({
   defaultPreload: 'intent',
   defaultPendingComponent: FullPageSpinner,
   defaultErrorComponent: RouteLoadError,
+  // Inside a layout (the chat shell, settings): its page area says so (#131).
+  defaultNotFoundComponent: () => <NotFoundPage />,
+});
+
+/**
+ * A session ended while the app was open (a ban, Sign out everywhere): leave
+ * the stale page for sign-in, which says the person was signed out (#165).
+ * The public pages need no session.
+ */
+onSessionEnded(() => {
+  confirmedSession = null;
+  const { pathname } = router.state.location;
+  if (pathname.startsWith('/auth/') || pathname.startsWith('/share/')) return;
+  void router.navigate({ to: '/auth/login', search: { [SIGNED_OUT_PARAM]: '1' } as never });
 });
 
 declare module '@tanstack/react-router' {

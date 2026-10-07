@@ -2,7 +2,12 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useState } from 'react';
+import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
+import { MENU_ITEM_FOCUS } from './item-focus';
+
+// An open Select hides the page; it is also made inert, so nothing hidden takes focus (#172).
+keepHiddenContentInert();
 
 export const SelectRoot = SelectPrimitive.Root;
 export const SelectGroup = SelectPrimitive.Group;
@@ -11,8 +16,12 @@ export const SelectValue = SelectPrimitive.Value;
 export function SelectTrigger({
   className,
   children,
+  valueTitle,
   ...props
-}: ComponentProps<typeof SelectPrimitive.Trigger>) {
+}: ComponentProps<typeof SelectPrimitive.Trigger> & {
+  /** The chosen option's full text, as a tooltip when the trigger cuts it short (#130). */
+  valueTitle?: string;
+}) {
   return (
     <SelectPrimitive.Trigger
       className={cn(
@@ -27,7 +36,9 @@ export function SelectTrigger({
       )}
       {...props}
     >
-      <span className="min-w-0 truncate text-left">{children}</span>
+      <span className="min-w-0 truncate text-left" title={valueTitle}>
+        {children}
+      </span>
       <SelectPrimitive.Icon asChild>
         <ChevronDown className="size-4 shrink-0 text-[var(--text-muted)]" />
       </SelectPrimitive.Icon>
@@ -73,8 +84,9 @@ export function SelectItem({
     <SelectPrimitive.Item
       className={cn(
         'relative flex cursor-pointer select-none items-center gap-2 rounded-lg py-2 pr-2 pl-8',
-        'text-sm outline-none transition-colors',
-        'data-[highlighted]:bg-[var(--bg-control-hover)]',
+        'text-sm transition-colors',
+        // A visible ring on the keyboard-focused option, as in menus (#135).
+        MENU_ITEM_FOCUS,
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         className,
       )}
@@ -166,6 +178,7 @@ export function Select({
         className={className}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
+        valueTitle={options.find((option) => option.value === value)?.label}
       >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
@@ -218,7 +231,14 @@ export function GroupedSelect({
       }}
       disabled={disabled}
     >
-      <SelectTrigger id={id} className={className} aria-label={ariaLabel}>
+      <SelectTrigger
+        id={id}
+        className={className}
+        aria-label={ariaLabel}
+        valueTitle={
+          groups.flatMap((group) => group.options).find((option) => option.value === value)?.label
+        }
+      >
         <SelectValue placeholder={placeholder ?? 'Select an option'} />
       </SelectTrigger>
       <SelectContent aria-label={ariaLabel ?? labelText}>

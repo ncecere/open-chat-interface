@@ -197,17 +197,28 @@ describe.skipIf(!available)('live conversation compaction', () => {
       const model = script([textStep('Meanwhile')], [pending.step, summary('UNUSED')]);
       const response = await compact(chat.id, { instructions: 'keep the budget figures' });
       expect(response.status).toBe(202);
-      expect(await response.json()).toEqual({ compaction: null, pending: true, failure: null });
+      expect(await response.json()).toEqual({
+        compaction: null,
+        pending: true,
+        failure: null,
+        summarisable: true,
+      });
       await pending.running;
       // A repeat while it runs is the same request.
       const repeat = await compact(chat.id, { instructions: 'something else' });
       expect(repeat.status).toBe(202);
-      expect(await repeat.json()).toEqual({ compaction: null, pending: true, failure: null });
+      expect(await repeat.json()).toEqual({
+        compaction: null,
+        pending: true,
+        failure: null,
+        summarisable: true,
+      });
       expect(await jobs(chat.id)).toHaveLength(1);
       expect(await compactionStatus(chat.id)).toEqual({
         compaction: null,
         pending: true,
         failure: null,
+        summarisable: true,
       });
       // The person keeps talking meanwhile.
       const meanwhile = await turn(chat.id, 'MEANWHILE');
@@ -263,12 +274,18 @@ describe.skipIf(!available)('live conversation compaction', () => {
       const chat = await thread();
       script([], [summary('BUSY-SUMMARY')]);
       expect((await compact(chat.id)).status).toBe(422);
+      expect((await compactionStatus(chat.id)).summarisable).toBe(false);
       await seedTurns(chat.id, 1, 1);
+      // One exchange: the state says so before anyone asks (#153), and the
+      // request is refused for the same reason.
+      expect((await compactionStatus(chat.id)).summarisable).toBe(false);
       const short = await compact(chat.id);
       expect(short.status).toBe(422);
       expect(await short.text()).toContain('nothing to summarise');
+      await seedTurns(chat.id, 2, 2);
+      expect((await compactionStatus(chat.id)).summarisable).toBe(true);
 
-      await seedTurns(chat.id, 2, 3);
+      await seedTurns(chat.id, 3, 3);
       expect((await compact(chat.id, {}, stranger)).status).toBe(404);
       expect(
         (

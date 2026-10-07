@@ -6,6 +6,7 @@ import {
   type UIMessage,
 } from 'ai';
 import { logger } from '../../lib/logger.js';
+import { runAbortReason } from '../../lib/run-abort.js';
 import {
   type ChatRunStatus,
   captureChatRun,
@@ -198,7 +199,7 @@ export async function streamResponse(
           if (Date.now() - lastCancellationCheck < 500) return;
           lastCancellationCheck = Date.now();
           if (await isChatRunCancellationRequested(runIdentity.runId)) {
-            abortController.abort('user-stop');
+            abortController.abort(runAbortReason('user-stop'));
           }
         },
         onError: ({ error }) => {
@@ -299,16 +300,20 @@ export async function streamResponse(
         if (setupFailed) return;
         if (completion) return completion;
         completion = (async () => {
+          // A stop is a stop even when the provider's stream ended it with an
+          // error rather than an abort frame; a stopped reply is never saved
+          // as complete (#136).
+          const stopped = isAborted || abortController.signal.aborted;
           const status = unadmitted
             ? unadmitted.kind === 'timeout'
               ? 'error'
               : 'cancelled'
-            : isAborted
+            : stopped
               ? 'cancelled'
               : !current || current.failed
                 ? 'error'
                 : 'complete';
-          const interrupted = isAborted && stoppedByShutdown(abortController.signal);
+          const interrupted = stopped && stoppedByShutdown(abortController.signal);
           outcome = {
             status,
             ...(status === 'error' ? { error: 'The model stream failed' } : {}),
@@ -391,7 +396,7 @@ export async function streamResponse(
   } catch (error) {
     setupFailed = true;
     outcome = { status: 'error', error: 'Stream setup failed' };
-    abortController.abort('setup-failed');
+    abortController.abort(runAbortReason('setup-failed'));
     await lease?.release();
     if (capacity?.kind === 'waiting') await capacity.cancel();
     // If SDK completion already began, let its measured usage settle first.

@@ -8,7 +8,9 @@ import {
 } from '@tanstack/react-router';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import type { ZodType } from 'zod';
 import { AdminAccessProvider, type AdminRole } from '../../src/components/admin/admin-access';
+import { ApiError } from '../../src/lib/api-client';
 
 type TestRouter = ReturnType<typeof createRouter>;
 
@@ -210,4 +212,22 @@ export async function typeInto(input: HTMLInputElement, value: string) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await settle();
+}
+
+/**
+ * The error the API returns when `body` fails `schema`: the real schema's Zod
+ * issues, through JSON, as middleware/error-handler.ts sends them.
+ */
+export function validationFailure(schema: ZodType, body: unknown): ApiError {
+  const result = schema.safeParse(body);
+  if (result.success) throw new Error('The body passed the schema');
+  const details = JSON.parse(JSON.stringify(result.error.issues));
+  return new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', details);
+}
+
+/** Each button's accessible name: its aria-label, else its text. */
+export function buttonNames(scope: ParentNode = document): string[] {
+  return [...scope.querySelectorAll('button')].map(
+    (candidate) => candidate.getAttribute('aria-label') ?? candidate.textContent?.trim() ?? '',
+  );
 }

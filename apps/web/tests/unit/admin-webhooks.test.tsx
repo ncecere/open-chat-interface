@@ -2,6 +2,7 @@
 import type { WebhookEndpoint } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { formatDateTime } from '../../src/lib/utils';
 import {
   AdminWebhooksPage,
   parseActions,
@@ -104,6 +105,10 @@ describe('Webhooks admin page', () => {
     expect(text).toContain('2 pending');
     expect(text).toContain('The endpoint answered HTTP 500.');
     expect(text).toContain('OCI-Webhook-Signature');
+    // One date format across admin (#177).
+    expect(text).toContain(`secret set ${formatDateTime('2026-10-01T09:00:00.000Z')}`);
+    expect(text).toContain(`Last failure ${formatDateTime('2026-10-01T11:00:00.000Z')}`);
+    expect(text).not.toContain(new Date('2026-10-01T09:00:00.000Z').toLocaleString());
   });
 
   it('adds an endpoint and shows its secret once', async () => {
@@ -192,6 +197,36 @@ describe('Webhooks admin page', () => {
     expect(region.getAttribute('aria-label')).toBe(
       'Recent deliveries to https://hooks.example.test/oci',
     );
+  });
+
+  it('says when a pending retry is next tried, counting forward (#126)', async () => {
+    const retry = Date.now() + 4 * 60_000 + 10_000;
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/admin/webhooks') return { webhooks };
+      if (path === '/admin/audit/actions') return { actions: [] };
+      return {
+        deliveries: [
+          {
+            id: 'd1',
+            event: 'user.create',
+            status: 'pending',
+            attempts: 1,
+            maxAttempts: 8,
+            nextAttemptAt: new Date(retry).toISOString(),
+            lastAttemptAt: new Date(Date.now() - 60_000).toISOString(),
+            lastStatusCode: 500,
+            lastError: null,
+            deliveredAt: null,
+            createdAt: new Date(Date.now() - 60_000).toISOString(),
+          },
+        ],
+      };
+    });
+    await render();
+    await click(button('Show deliveries'));
+    const log = document.querySelector('table')!.textContent ?? '';
+    expect(log).toContain('HTTP 500 \u00b7 next in 4m');
+    expect(log).not.toContain('next just now');
   });
 
   it('confirms before deleting', async () => {

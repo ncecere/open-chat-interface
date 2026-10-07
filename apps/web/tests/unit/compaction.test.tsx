@@ -26,7 +26,7 @@ import { MessageList } from '../../src/components/chat/message-list';
 import { TopBar } from '../../src/components/layout/top-bar';
 import { COMPACTION_POLL_MS, COMPACTION_POLL_WINDOW_MS } from '../../src/hooks/use-compaction';
 import { ApiError } from '../../src/lib/api-client';
-import { alerts, button, cleanup, click, dialog, settle } from './admin-test-utils';
+import { alerts, button, cleanup, click, dialog, findButton, settle } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -222,6 +222,43 @@ describe('Summarise earlier messages now', () => {
     });
     expect(control()?.title).toBe(COMPACT_ACTION_LABEL);
     expect(status()).toBe('');
+  });
+
+  it('says there is nothing to summarise yet before asking for instructions (#153)', async () => {
+    // One question and one reply, as the API reports it.
+    api.get.mockResolvedValue({
+      compaction: null,
+      pending: false,
+      failure: null,
+      summarisable: false,
+    });
+    const { client } = await mount(topBar, '/chat/thread-one');
+    expect(control()?.title).toBe('Nothing to summarise yet');
+    await click(button(COMPACT_ACTION_LABEL));
+    expect(dialog()?.querySelector('h2')?.textContent).toBe(COMPACT_ACTION_LABEL);
+    expect(dialog()?.textContent).toContain(
+      'There is nothing to summarise yet. A conversation needs at least two turns',
+    );
+    expect(dialog()?.querySelector('textarea')).toBeNull();
+    expect(findButton('Summarise')).toBeUndefined();
+    await click(button('Close'));
+    expect(dialog()).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();
+
+    // After a second exchange the state (read again after each reply) allows it.
+    api.get.mockResolvedValue({
+      compaction: null,
+      pending: false,
+      failure: null,
+      summarisable: true,
+    });
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['thread', 'thread-one', 'compaction'] });
+    });
+    await settle();
+    expect(control()?.title).toBe(COMPACT_ACTION_LABEL);
+    await click(button(COMPACT_ACTION_LABEL));
+    expect(dialog()?.querySelector('textarea')).not.toBeNull();
   });
 
   it('stops checking after a while when the summary takes long', async () => {

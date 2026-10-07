@@ -43,6 +43,9 @@ export function useChatRecovery(options: {
   const [refreshing, setRefreshing] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The person pressed Stop and the server has not saved the stopped reply
+  // yet: the page says "Stopping…", not that a reply is pending (#154).
+  const [stopRequested, setStopRequested] = useState(false);
   const latest = useRef(options);
   latest.current = options;
   const resumeRequest = useRef<Promise<void> | null>(null);
@@ -75,6 +78,11 @@ export function useChatRecovery(options: {
     setWatch(latest.current.scope.request);
     setAttempt(++attemptRef.current);
   }, []);
+  /** As waitForServer, after the person asked the server to stop the reply. */
+  const waitForStop = useCallback(() => {
+    setStopRequested(true);
+    waitForServer();
+  }, [waitForServer]);
 
   useEffect(() => {
     // A refresh requested before a new send must not become permission to
@@ -150,16 +158,16 @@ export function useChatRecovery(options: {
         latest.current.onCanonicalMessages?.(snapshot.messages);
         const pending = hasPendingReply(snapshot.messages);
         setRemotePending(pending);
+        if (!pending) setStopRequested(false);
         setUnavailable(false);
         setError(null);
         if (pending) schedule();
         else {
           setWatch(null);
           if (before.runId) before.clearRun(before.runId);
+          // A saved failed reply says so itself, with its reason and Retry
+          // (ReplyFailureNote); a second notice here said neither (#133).
           latest.current.chat.clearError();
-          const lastReply = snapshot.messages.findLast((message) => message.role === 'assistant');
-          if (lastReply && messageStatus(lastReply) === 'error')
-            setError('The saved response ended with an error. You can retry the message.');
         }
       } catch (failure) {
         if (
@@ -175,6 +183,7 @@ export function useChatRecovery(options: {
           setError('Conversation unavailable');
         } else setError('Could not refresh saved messages. Retry to check the response.');
         setWatch(null);
+        setStopRequested(false);
         if (before.runId) before.clearRun(before.runId);
       } finally {
         if (!disposed) setRefreshing(false);
@@ -188,5 +197,15 @@ export function useChatRecovery(options: {
     };
   }, [options.threadId, options.runId, options.scope.request, status, watch, attempt, resuming]);
 
-  return { resuming, remotePending, refreshing, unavailable, error, recover, waitForServer };
+  return {
+    resuming,
+    remotePending,
+    stopping: stopRequested && remotePending,
+    refreshing,
+    unavailable,
+    error,
+    recover,
+    waitForServer,
+    waitForStop,
+  };
 }

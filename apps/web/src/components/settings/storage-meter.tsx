@@ -92,8 +92,11 @@ export function StorageMeter() {
             ? 'You are close to your storage limit. Delete files to make room.'
             : `${formatBytes(Math.max(0, (data.maxTotalBytes as number) - data.liveBytes))} free.`
           : 'No storage limit applies to your role.'}
+        {/* Files you deleted (gone for good, only waiting to be removed from
+            storage) and those of conversations in the trash. There is no trash
+            for files, so this does not say they are in one (#179). */}
         {data.pendingFileCount > 0 &&
-          ` ${formatBytes(data.pendingBytes)} is in the trash and no longer counts against your limit.`}
+          ` ${formatBytes(data.pendingBytes)} of deleted files, and of conversations in the trash, no longer counts against your limit.`}
       </p>
     </div>
   );

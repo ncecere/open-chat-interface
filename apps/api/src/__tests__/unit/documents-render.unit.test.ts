@@ -61,9 +61,9 @@ describe('document rendering', () => {
     expect(() => assertExportable('xlsx', '# Just text')).toThrow(NO_TABLES_TO_EXPORT);
     expect(() => assertExportable('xlsx', TABLE)).not.toThrow();
     expect(() => assertExportable('docx', '# Just text')).not.toThrow();
-    // Looks like a table to the line scan, but the columns do not match: the
-    // parser in the worker refuses it.
-    expect(() => assertExportable('xlsx', 'a | b\n---')).not.toThrow();
+    // The columns do not match, so the parser would refuse it too; the line
+    // scan now counts them, so the web client no longer offers it (#150).
+    expect(() => assertExportable('xlsx', 'a | b\n---')).toThrow(NO_TABLES_TO_EXPORT);
   });
 
   it.each(DOCUMENT_FORMATS)('refuses a %s larger than the output limit', async (format) => {

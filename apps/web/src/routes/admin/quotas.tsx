@@ -65,12 +65,12 @@ export function AdminQuotasPage() {
     <div>
       <AdminPageHeader
         title="Usage budgets"
-        description="Create a policy, then apply it to the roles that should share it. A role can carry several policies at once, and every one of them is enforced. Scope a policy to specific models to give a family such as Anthropic its own budget."
+        description="Create a budget, then apply it to the roles that should share it. A role can carry several budgets at once, and every one of them is enforced. Scope a budget to specific models to give a family such as Anthropic its own."
         actions={
           <EditOnly>
             <Button variant="primary" onClick={() => setFormFor({ policy: null })}>
               <Plus />
-              New policy
+              New budget
             </Button>
           </EditOnly>
         }
@@ -144,8 +144,8 @@ export function AdminQuotasPage() {
           ))}
         </RowList>
       ) : (
-        <EmptyState icon={Gauge} title="No quota policies yet.">
-          Usage is unlimited until a policy is applied to a role. Budget policies need per-model
+        <EmptyState icon={Gauge} title="No usage budgets yet.">
+          Usage is unlimited until a budget is applied to a role. Dollar budgets need per-model
           prices, which are set in the model catalog.
         </EmptyState>
       )}
@@ -153,15 +153,15 @@ export function AdminQuotasPage() {
       <ConfirmDialog
         open={Boolean(deleteFor)}
         onOpenChange={(open) => !open && setDeleteFor(null)}
-        title={`Delete ${deleteFor?.name ?? 'policy'}?`}
+        title={`Delete ${deleteFor?.name ?? 'budget'}?`}
         description={
           deleteFor && deleteFor.overrideCount > 0
             ? `The roles it applies to will no longer be limited by it, and its ${deleteFor.overrideCount} per-user override${deleteFor.overrideCount === 1 ? '' : 's'} will be removed. This action cannot be undone.`
             : 'The roles it applies to will no longer be limited by it. This action cannot be undone.'
         }
-        confirmLabel="Delete policy"
+        confirmLabel="Delete budget"
         pendingLabel="Deleting…"
-        errorMessage="The quota policy could not be deleted."
+        errorMessage="The budget could not be deleted."
         onConfirm={() => (deleteFor ? deletePolicy(deleteFor) : Promise.resolve())}
       />
 

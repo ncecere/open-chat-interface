@@ -51,7 +51,7 @@ const { errorHandler } = await import('../../middleware/error-handler.js');
 const QUERY = 'library opening hours kestrel';
 const BRAVE_KEY = 'brave-fallback-secret-key';
 
-type Behaviour = 'ok' | 'server-error' | 'unauthorized';
+type Behaviour = 'ok' | 'server-error' | 'unauthorized' | 'json-off';
 const stub = {
   primary: 'ok' as Behaviour,
   fallback: 'ok' as Behaviour,
@@ -67,6 +67,11 @@ function answer(response: ServerResponse, behaviour: Behaviour, body: unknown) {
   }
   if (behaviour === 'unauthorized') {
     response.writeHead(401).end('no');
+    return;
+  }
+  // SearXNG without json in search.formats: 403 for format=json (#143).
+  if (behaviour === 'json-off') {
+    response.writeHead(403, { 'content-type': 'text/html' }).end('<h1>Forbidden</h1>');
     return;
   }
   response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
@@ -299,8 +304,18 @@ describe.skipIf(!available)('live: web search fallback provider', () => {
   it('does not fall back on an error the administrator must fix', async () => {
     stub.primary = 'unauthorized';
     await expect(searchWeb(QUERY)).rejects.toThrow(
-      'SearXNG rejected the web search API key (HTTP 401)',
+      'SearXNG refused the search (HTTP 401). It may be behind a proxy that asks for a sign-in',
     );
+    expect(stub.hits).toEqual({ primary: 1, fallback: 0, brave: 0 });
+  });
+
+  it('says SearXNG needs JSON output, not a key, when it answers 403 (#143)', async () => {
+    stub.primary = 'json-off';
+    const failure = searchWeb(QUERY);
+    await expect(failure).rejects.toThrow(
+      'SearXNG refused the search (HTTP 403). Its JSON output is probably not enabled: an administrator needs to add json to search.formats in its settings.yml.',
+    );
+    await expect(failure).rejects.not.toThrow(/API key/);
     expect(stub.hits).toEqual({ primary: 1, fallback: 0, brave: 0 });
   });
 
@@ -365,7 +380,7 @@ describe.skipIf(!available)('live: web search fallback provider', () => {
     expect(stub.braveKeys).toEqual([BRAVE_KEY]);
 
     // Each is tested on its own: a failing first provider does not hide the fallback's result.
-    stub.primary = 'unauthorized';
+    stub.primary = 'json-off';
     const failing = await send('POST', '/settings/search/test', {
       provider: 'searxng',
       baseUrl: primaryOrigin,
@@ -373,7 +388,7 @@ describe.skipIf(!available)('live: web search fallback provider', () => {
     });
     const result = (await failing.json()) as SearchTestResult;
     expect(result).toMatchObject({ ok: false, fallback: { ok: true } });
-    expect(result.message).toContain('SearXNG rejected the web search API key');
+    expect(result.message).toContain('SearXNG refused the search (HTTP 403). Its JSON output');
 
     // A typed key for another provider is never replaced by the saved Brave key.
     const other = await send('POST', '/settings/search/test', {

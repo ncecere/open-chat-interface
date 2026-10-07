@@ -164,7 +164,8 @@ and shows the new one once; from then on every request, including retries of
 earlier events, is signed with the new secret.
 
 **Send test** posts a signed `webhook.test` event straight away and shows what
-the endpoint answered. **Show deliveries** lists the last 50 deliveries with
+the endpoint answered; like any delivery, it updates the endpoint's "Last
+delivered" or "Last failure". **Show deliveries** lists the last 50 deliveries with
 their status, attempts and last error. Auditors can see endpoints and their
 deliveries but not change them, send tests or see secrets.
 

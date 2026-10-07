@@ -18,7 +18,7 @@ import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
-import { formatBytes, formatTimeUntil } from '~/lib/utils';
+import { formatBytes, formatDateTime, formatTimeUntil } from '~/lib/utils';
 
 export interface UserLimits {
   usage: UsageSummary;
@@ -97,7 +97,7 @@ function BudgetRow({ allowance }: { allowance: UsageAllowance }) {
       <p className="mt-1.5 flex flex-wrap gap-x-2 text-[var(--text-muted)] text-xs">
         <span>{formatQuotaAmount(allowance.remaining, allowance.metric)} remaining</span>
         {reset && allowance.resetsAt && (
-          <time dateTime={allowance.resetsAt} title={new Date(allowance.resetsAt).toLocaleString()}>
+          <time dateTime={allowance.resetsAt} title={formatDateTime(allowance.resetsAt)}>
             · {reset}
           </time>
         )}

@@ -9,14 +9,20 @@ import { labsFrom, matchesCapabilities, matchesSearch } from './model-picker-dat
 import { ModelPickerFilters } from './model-picker-filters';
 import { ModelPickerDetails, ModelPickerOption, modelOptionId } from './model-picker-presentation';
 
+/** The page margin the panel keeps from the window's edges (#169). */
+const PICKER_MARGIN_PX = 16;
+
 export const ModelPicker = memo(function ModelPicker({
   models,
   selected,
   onSelect,
+  loading = false,
 }: {
   models: CatalogModel[];
   selected: CatalogModel | null;
   onSelect: (model: CatalogModel) => void;
+  /** The list has not arrived yet: say so, not that there are no models (#156). */
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -150,7 +156,9 @@ export const ModelPicker = memo(function ModelPicker({
 
   if (models.length === 0) {
     return (
-      <span className="px-2 text-[0.8125rem] text-[var(--text-muted)]">No models available</span>
+      <span className="px-2 text-[0.8125rem] text-[var(--text-muted)]">
+        {loading ? 'Loading models…' : 'No models available'}
+      </span>
     );
   }
 
@@ -183,6 +191,9 @@ export const ModelPicker = memo(function ModelPicker({
       <PopoverContent
         align="start"
         side="top"
+        // Kept a phone's 16 px page margin from both edges: as wide as the
+        // window less 2rem, it ran from x=16 to the right edge (#169).
+        collisionPadding={PICKER_MARGIN_PX}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           searchRef.current?.focus();
@@ -192,7 +203,7 @@ export const ModelPicker = memo(function ModelPicker({
         // Never taller than the space Radix measures on the chosen side: from
         // the mid-screen composer on a phone it opened past the top edge,
         // hiding the search box.
-        className="relative flex max-h-[var(--radix-popover-content-available-height)] w-[min(29rem,calc(100vw-1rem))] flex-col p-0"
+        className="relative flex max-h-[var(--radix-popover-content-available-height)] w-[min(29rem,calc(100vw-2rem))] flex-col p-0"
       >
         <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5">
           <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />

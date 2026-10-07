@@ -1,9 +1,10 @@
 import { type ComponentProps, lazy, memo, Suspense } from 'react';
-import { MARKDOWN_LINK_SAFETY } from '~/components/chat/external-link-warning';
+import { MessageLink } from '~/components/chat/external-link-warning';
 import {
   installStreamdownOverlayFocus,
   installStreamdownScrollRegions,
 } from '~/components/chat/streamdown-overlay-focus';
+import { readableCodePlugin } from '~/lib/code-contrast';
 import { cn } from '~/lib/utils';
 
 /**
@@ -14,7 +15,8 @@ import { cn } from '~/lib/utils';
 const loadRenderer = () =>
   Promise.all([
     import('streamdown'),
-    import('@streamdown/code'),
+    // Shiki's GitHub colours, adjusted where they fall short of AA on our surfaces (#171).
+    import('@streamdown/code').then(({ code }) => ({ code: readableCodePlugin(code) })),
     import('@streamdown/math'),
     import('~/components/chat/mermaid-plugin'),
   ]);
@@ -47,7 +49,9 @@ const StreamdownMarkdown = lazy(() =>
             className={className}
             // The reference interface shows plain code without a gutter.
             lineNumbers={false}
-            linkSafety={MARKDOWN_LINK_SAFETY}
+            // Links are real links that warn before leaving the instance (#174),
+            // not Streamdown's link-safety buttons.
+            components={MESSAGE_COMPONENTS}
             // Share pages pass their own URL policy and keep the visible marker.
             {...(!skipHtml && !urlTransform && ownerRehypePlugins
               ? { rehypePlugins: ownerRehypePlugins }
@@ -64,6 +68,8 @@ const StreamdownMarkdown = lazy(() =>
     },
   ),
 );
+
+const MESSAGE_COMPONENTS = { a: MessageLink };
 
 type Pluggable = NonNullable<
   ComponentProps<typeof import('streamdown').Streamdown>['rehypePlugins']

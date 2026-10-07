@@ -30,4 +30,13 @@ describe('refusing a turn while the thread has an open reply (#121)', () => {
     // Past staleMs but not yet recovered (another replica is on it): still a second.
     expect(silentFor(25_000).retryAfterSeconds).toBe(1);
   });
+
+  it('waits for the producer to fall silent in Redis too, when that is later (#163)', () => {
+    // The claim alone says 5 s; the heartbeat or last event says 13 s.
+    const refusal = claimRefusal(new Date(now - 15_000), now, 12_500);
+    expect(refusal.retryAfterSeconds).toBe(13);
+    expect(refusal.message).toMatch(/again in 13 seconds\.$/);
+    // Redis already quiet: the claim decides, as before.
+    expect(claimRefusal(new Date(now - 15_000), now, 0).retryAfterSeconds).toBe(5);
+  });
 });

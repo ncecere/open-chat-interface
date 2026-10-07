@@ -36,9 +36,11 @@ const counted = (count: number, one: string, many: string) =>
 function activityPhrases(steps: readonly WorkStep[]): string[] {
   const kinds = new Map<string, WorkStep[]>();
   for (const step of steps) {
+    // A failed search says so, whether made before the reply or by the model
+    // as a tool call: "a step failed" hid what failed (#143).
     const kind =
-      step.presearch && step.state === 'error'
-        ? 'presearch_failed'
+      step.state === 'error' && (step.presearch || step.toolId === 'web_search')
+        ? 'search_failed'
         : step.state === 'error'
           ? 'failed'
           : step.state === 'denied'
@@ -57,8 +59,8 @@ function activityPhrases(steps: readonly WorkStep[]): string[] {
   return [...kinds].map(([kind, group]) => {
     const count = group.length;
     switch (kind) {
-      case 'presearch_failed':
-        return 'web search failed';
+      case 'search_failed':
+        return `web search failed${times(count)}`;
       case 'failed':
         return count === 1 ? 'a step failed' : `${count} steps failed`;
       case 'denied':

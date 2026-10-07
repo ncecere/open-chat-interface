@@ -205,7 +205,8 @@ describe.skipIf(!available)('live artifacts', () => {
         ]),
         textStep('Created.'),
       );
-      const created = await turn(chat.id, 'Write a plan');
+      // Short, so it is saved only because the person asked for an artifact (#149).
+      const created = await turn(chat.id, 'Write a plan as an artifact');
       const [artifact] = await artifactsOf(chat.id);
       expect(artifact).toMatchObject({
         sourceKey: 'tool:c1',
@@ -281,7 +282,7 @@ describe.skipIf(!available)('live artifacts', () => {
         },
         textStep('Done.'),
       );
-      const { reply } = await turn(chat.id, 'Write and edit');
+      const { reply } = await turn(chat.id, 'Write an artifact and edit it');
       const errors = Object.fromEntries(
         reply.parts
           .filter((part) => part.type === 'tool-update_artifact')
@@ -299,6 +300,58 @@ describe.skipIf(!available)('live artifacts', () => {
       });
       const [artifact] = await artifactsOf(chat.id);
       expect(artifact!.currentVersion).toBe(1);
+    });
+
+    it('keeps a small table and a function out of Markdown artifacts unless asked (#149)', async () => {
+      const { CODE_MARKDOWN_REFUSAL, MIN_MARKDOWN_ARTIFACT_CHARS, SHORT_MARKDOWN_REFUSAL } =
+        await import('../../services/artifacts/markdown-floor.js');
+      // What the instance's default model sent in the QA walk.
+      const table = [
+        '| Planet | Diameter (km) |',
+        '| --- | --- |',
+        '| Mercury | 4,879 |',
+        '| Venus | 12,104 |',
+        '| Earth | 12,742 |',
+      ].join('\n');
+      const code = '```python\ndef add(a, b):\n    """Add two numbers."""\n    return a + b\n```';
+      const report = `# Report\n\n${'A sentence of the report that runs on. '.repeat(20)}`;
+      expect(report.length).toBeGreaterThan(MIN_MARKDOWN_ARTIFACT_CHARS);
+      const calls = (): Array<[string, string, unknown]> => [
+        ['c1', 'create_artifact', { title: 'Planets', kind: 'markdown', content: table }],
+        ['c2', 'create_artifact', { title: 'Add', kind: 'markdown', content: code }],
+        ['c3', 'create_artifact', { title: 'Report', kind: 'markdown', content: report }],
+        ['c4', 'create_artifact', { title: 'Dot', kind: 'svg', content: SVG_IMAGE }],
+      ];
+      const chat = await thread();
+      script(toolStep(calls()), textStep('Here they are.'));
+      const { reply } = await turn(
+        chat.id,
+        'give me a 3-row Markdown table of planets with diameter in km, then a short Python function that adds two numbers',
+      );
+      const outcomes = Object.fromEntries(
+        reply.parts
+          .filter((part) => part.type === 'tool-create_artifact')
+          .map((part) => [part.toolCallId as string, [part.state, part.errorText ?? null]]),
+      );
+      expect(outcomes).toEqual({
+        c1: ['output-error', SHORT_MARKDOWN_REFUSAL],
+        c2: ['output-error', CODE_MARKDOWN_REFUSAL],
+        c3: ['output-available', null],
+        c4: ['output-available', null],
+      });
+      expect((await artifactsOf(chat.id)).map((artifact) => artifact.title).sort()).toEqual([
+        'Dot',
+        'Report',
+      ]);
+
+      // Asked for by name, the same content is saved.
+      const asked = await thread();
+      script(toolStep(calls().slice(0, 2)), textStep('Done.'));
+      await turn(asked.id, 'Put the planets table and the function in artifacts');
+      expect((await artifactsOf(asked.id)).map((artifact) => artifact.title).sort()).toEqual([
+        'Add',
+        'Planets',
+      ]);
     });
 
     it('returns the existing artifact for a repeated call, and enforces version and count limits', async () => {

@@ -10,6 +10,7 @@ import {
 } from '@oci/shared';
 import { z } from 'zod';
 import { validationFailed } from '../../lib/errors.js';
+import { markdownArtifactRefusal, personAskedForArtifact } from '../artifacts/markdown-floor.js';
 import { addArtifactVersion, createArtifact, currentContent } from '../artifacts/store.js';
 import { roleFeatures } from '../role-features.js';
 import type { ToolDefinition } from './types.js';
@@ -49,6 +50,7 @@ const createArtifactTool: ToolDefinition = {
     'an HTML page or small app (a complete, self-contained document), an SVG image or diagram,',
     'a Mermaid diagram, or a long prose document they asked for (a report, letter or plan) as Markdown.',
     'Never use it for program code: write code in fenced code blocks in your reply, one per language or file.',
+    'Never use it for tables, lists or short answers: write those in your reply.',
     'Do not repeat the content in your reply or link to it; a card appears on its own. Returns the artifact id for later updates.',
   ].join(' '),
   kind: 'read',
@@ -65,6 +67,13 @@ const createArtifactTool: ToolDefinition = {
       kind: ArtifactKind;
       content: string;
     };
+    // The guidance alone did not stop small tables and functions becoming
+    // Markdown artifacts (#149); see artifacts/markdown-floor.ts.
+    if (kind === 'markdown') {
+      const refusal = markdownArtifactRefusal(content);
+      if (refusal && !(await personAskedForArtifact(caller.threadId)))
+        throw validationFailed(refusal);
+    }
     const { artifact } = await createArtifact({
       userId: caller.userId,
       role: caller.role,

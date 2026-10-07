@@ -119,6 +119,26 @@ describe('provider capacity', () => {
     });
   });
 
+  it('clears a complaint once the value it was about is corrected (#178)', async () => {
+    ({ root } = await renderAdmin(<ProvidersSection />));
+    const wait = () => document.querySelector<HTMLInputElement>('#capacity-max-wait')!;
+    await typeInto(wait(), '4');
+    await click(button('Save changes'));
+    expect(alerts()).toContain('The longest wait must be between 5 and 1,800 seconds.');
+    // Back to the saved value: Save is disabled, and the complaint goes with it.
+    await typeInto(wait(), '120');
+    expect(alerts()).not.toContain('The longest wait must be between 5 and 1,800 seconds.');
+
+    await click(button('Capacity limits for Primary OpenAI'));
+    const form = dialog()!;
+    const streams = form.querySelector<HTMLInputElement>('#capacity-maxConcurrentStreams')!;
+    await typeInto(streams, '0');
+    await click(button('Save limits'));
+    expect(alerts(form)).toHaveLength(1);
+    await typeInto(streams, '8');
+    expect(alerts(form)).toEqual([]);
+  });
+
   it('says when limits hold per replica only', async () => {
     api.get.mockImplementation(async (path: string) =>
       path === '/admin/providers/capacity'

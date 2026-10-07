@@ -419,4 +419,24 @@ describe('real router lazy admin and settings routes', () => {
       expectSafeError(secret);
     },
   );
+
+  it('shows a heading, an explanation and a way back at an unknown admin address (#131)', async () => {
+    await renderRoute('/admin/invitations');
+    await act(async () => {
+      await router.load();
+    });
+    const layout = container.querySelector('[data-layout="AdminLayout"]');
+    expect(layout, 'inside the admin chrome').not.toBeNull();
+    expect(layout?.querySelector('h1')?.textContent).toBe('Page not found');
+    expect(layout?.textContent).toContain('There is no administration page at /admin/invitations.');
+    expect(control('Go to Overview', 'a').getAttribute('href')).toBe('/admin');
+    expect(container.textContent).not.toMatch(/^Not Found$/m);
+  });
+
+  it('shows the same page, in a main landmark, at an unknown address (#131)', async () => {
+    await renderRoute('/no-such-page');
+    const main = container.querySelector('main');
+    expect(main?.querySelector('h1')?.textContent).toBe('Page not found');
+    expect(control('New chat', 'a').getAttribute('href')).toBe('/');
+  });
 });

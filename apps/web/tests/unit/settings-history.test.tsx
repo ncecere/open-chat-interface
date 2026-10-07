@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HISTORY_SEARCH_DEBOUNCE_MS, SettingsHistoryPage } from '../../src/routes/settings/history';
 import { button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
+import { untitledTruncations } from './truncation';
 
 /**
  * Settings → History (v0.9.1): conversations a page at a time with Load
@@ -47,7 +48,18 @@ beforeEach(() => {
       };
     if (path === '/projects') return { projects: [{ id: 'p1', name: 'Thesis' }] };
     if (path === '/me/imports') return { imports: [] };
-    if (path === '/threads/trash') return { threads: [] };
+    if (path === '/threads/trash')
+      return {
+        threads: [
+          {
+            ...thread('d1', 'A deleted conversation'),
+            messageCount: 3,
+            deletedAt: new Date().toISOString(),
+            deletedReason: 'person',
+            purgeAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+          },
+        ],
+      };
     if (path.startsWith('/threads?')) {
       const params = new URLSearchParams(path.slice('/threads?'.length));
       historyRequests.push(params);
@@ -125,6 +137,15 @@ describe('Settings → History', () => {
     expect(box.closest('label')).toBeNull();
     expect(first!.textContent).toContain('Project: Thesis');
     expect(rows()[1]?.textContent).not.toContain('Project:');
+  });
+
+  it('gives every title and project line that can be cut short a tooltip (#130)', async () => {
+    await render();
+    expect(document.body.textContent).toContain('Project: Thesis');
+    expect(untitledTruncations()).toEqual([]);
+    await click([...document.querySelectorAll<HTMLElement>('[role="tab"]')][2]!);
+    expect(document.body.textContent).toContain('A deleted conversation');
+    expect(untitledTruncations()).toEqual([]);
   });
 
   it('selects all with a tri-state checkbox', async () => {

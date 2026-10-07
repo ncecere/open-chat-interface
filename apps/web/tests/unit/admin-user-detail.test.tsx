@@ -251,6 +251,25 @@ describe('user detail actions', () => {
     await click(button('End all sessions'));
     expect(api.post).toHaveBeenCalledWith('/admin/users/user-1/revoke-sessions', {});
   });
+
+  it('states the true total when only the newest sessions are listed (#134)', async () => {
+    const listed = Array.from({ length: 10 }, (_, index) => ({ ...session, id: `s${index}` }));
+    const original = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) =>
+      path === '/admin/users/user-1'
+        ? { ...(await original(path)), sessions: listed, sessionCount: 616 }
+        : original(path),
+    );
+    ({ root } = await renderDetail());
+
+    const table = document.querySelector('section[aria-label="Active sessions"]')!;
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(10);
+    const note = document.getElementById(table.getAttribute('aria-describedby') ?? '');
+    expect(note?.textContent).toBe('Showing the 10 most recent of 616 active sessions.');
+
+    await click(button('Sign out everywhere'));
+    expect(dialog()?.textContent).toContain('This ends 616 active sessions.');
+  });
 });
 
 describe('deleting an account', () => {

@@ -62,6 +62,11 @@ colours do not survive naive parsing — `getComputedStyle` returns `oklch(...)`
 unconverted, and treating that as RGB produces numbers that look plausible and
 are wrong.
 
+Unit tests can check a token pair without a browser:
+`tests/unit/css-test-utils.ts` compiles an element's Tailwind classes, resolves
+them against `tokens.css` for each theme and accent, and converts OKLCH
+properly before computing the ratio.
+
 ## Accessibility
 
 - Every control needs an accessible name. An icon-only button needs
@@ -70,7 +75,16 @@ are wrong.
   carries the height.
 - Colour is never the only signal. Capability pills carry an icon and a label
   as well as a hue.
-- A dialog traps focus and restores it on dismissal, which Radix handles.
+- A focused or active list item (menus, Select popups, the model picker, the
+  command palette) is marked with the `--accent-bright` ring from
+  `components/ui/item-focus.ts`, not a background change alone, which is
+  invisible in light.
+- A dialog traps focus and returns it to its opener on dismissal. Radix only
+  does this for a `DialogTrigger`; `DialogContent` (and the command palette)
+  use `hooks/use-focus-return.ts`, which also maps a Select or menu item to
+  its trigger. When an action removes the focused control's row, focus moves
+  to the next row, else the previous one, else the section heading
+  (`lib/focus-return.ts`; mark non-`li` rows with `data-focus-row`).
 
 `tests/e2e/accessibility-*.spec.ts` scan for regressions. They are a net, not
 proof.

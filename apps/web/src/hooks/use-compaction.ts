@@ -45,6 +45,7 @@ function useCompactionState<T>(
 
 const selectCompaction = (state: CompactionState) => state.compaction;
 const selectPending = (state: CompactionState) => state.pending;
+const selectSummarisable = (state: CompactionState) => state.summarisable ?? true;
 // `?? null`: a response from an API older than v0.10 has no `failure`.
 const selectFailure = (state: CompactionState) => state.failure ?? null;
 
@@ -56,6 +57,14 @@ export function useCompaction(threadId: string, enabled = true) {
 /** Whether a summary of the conversation is being made in the background. */
 export function useCompactionPending(threadId: string) {
   return useCompactionState(threadId, selectPending).data === true;
+}
+
+/**
+ * Whether asking for a summary now has anything to summarise (#153); true
+ * from a server that does not say, which then refuses on submit as before.
+ */
+export function useCompactionSummarisable(threadId: string) {
+  return useCompactionState(threadId, selectSummarisable).data !== false;
 }
 
 /** The last failure of a summary the person asked for, until dismissed or retried. */

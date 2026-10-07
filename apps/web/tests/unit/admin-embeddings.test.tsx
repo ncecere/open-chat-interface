@@ -201,6 +201,36 @@ describe('Providers & Models → Embeddings', () => {
     expect(input('embeddings-price').value).toBe('0.02');
   });
 
+  it('speaks of the rest only while there is one, and of the table as existing once on (#182)', async () => {
+    current = status({
+      settings: configured,
+      pgvector: { state: 'enabled', version: '0.8.6' },
+      active: true,
+      storageDimensions: 1536,
+      passages: { total: 2000, embedded: 2000 },
+    });
+    ({ root } = await renderAdmin(<EmbeddingsSection />));
+    const progress = document.querySelector('[data-embeddings-progress="active"]')?.textContent;
+    expect(progress).toBe(
+      'Meaning-based search is on: 2,000 of 2,000 passages embedded (1536 dimensions).',
+    );
+    expect(text()).not.toContain('creates its table when meaning-based search is switched on');
+    expect(text()).toContain('The database stores the embeddings that meaning-based search uses.');
+
+    await cleanup(root!);
+    current = status({
+      settings: configured,
+      pgvector: { state: 'enabled', version: '0.8.6' },
+      active: true,
+      storageDimensions: 1536,
+      passages: { total: 2000, embedded: 1500 },
+    });
+    ({ root } = await renderAdmin(<EmbeddingsSection />));
+    expect(document.querySelector('[data-embeddings-progress="active"]')?.textContent).toContain(
+      '1,500 of 2,000 passages embedded (1536 dimensions). The background job embeds the rest.',
+    );
+  });
+
   it('says when storage is still being prepared', async () => {
     current = status({ settings: configured, pgvector: { state: 'enabled', version: '0.8.6' } });
     ({ root } = await renderAdmin(<EmbeddingsSection />));

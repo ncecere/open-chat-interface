@@ -110,6 +110,9 @@ activity first.
 - Tick conversations, or use **Select all** to tick everything listed, then
   **Archive** or **Delete** them. Deleting moves them to the trash, where they
   stay recoverable until their deletion date.
+- In **Trash**, **Restore** brings a conversation back. **Delete now** (one
+  conversation) and **Empty trash** (all of them) delete permanently, so each
+  asks you to confirm first.
 
 Two buttons at the top handle all of your data at once:
 **Export all conversations** downloads your conversations and files, and

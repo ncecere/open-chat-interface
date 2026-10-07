@@ -277,6 +277,32 @@ describe.skipIf(!available)('live: partial administrative updates', () => {
     expect(audit?.metadata).toMatchObject({ keys: ['colorTheme'] });
   });
 
+  it('caps the instance upload limit at 1 GiB (#142)', async () => {
+    const storage = async () => {
+      const [row] = await live.db
+        .select({ value: schema.instanceSetting.value })
+        .from(schema.instanceSetting)
+        .where(
+          and(
+            eq(schema.instanceSetting.organizationId, state.organizationId),
+            eq(schema.instanceSetting.key, 'storage'),
+          ),
+        );
+      return row?.value as { maxFileBytes?: number } | undefined;
+    };
+    // 100,000 MB, which the walk saved as "97.66 GB per file".
+    const refused = await app.request('/settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ storage: { maxFileBytes: 100_000 * 1024 * 1024 } }),
+    });
+    expect(refused.status).toBe(422);
+    expect((await storage())?.maxFileBytes).not.toBe(100_000 * 1024 * 1024);
+
+    await send(app, 'PATCH', '/settings', { storage: { maxFileBytes: 1024 * 1024 * 1024 } });
+    expect((await storage())?.maxFileBytes).toBe(1024 * 1024 * 1024);
+  });
+
   it('stores only what the search provider uses and drops a key when switching', async () => {
     async function stored() {
       const [row] = await live.db

@@ -19,6 +19,8 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { formatDateTime } from '~/lib/utils';
+import { validationText } from '~/lib/validation-issues';
 
 interface InvitesResponse {
   invites: Array<Omit<Invite, 'token'>>;
@@ -45,13 +47,6 @@ function inviteStatus(invite: ListedInvite): InviteStatus {
   return 'active';
 }
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-}
-
 function CreateInviteDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState('');
@@ -67,6 +62,12 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] }),
   });
 
+  /** Any edit clears the last attempt's error, which is about what was sent (#178). */
+  function edited() {
+    setValidationError(null);
+    if (create.isError) create.reset();
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setValidationError(null);
@@ -79,7 +80,7 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     });
 
     if (!result.success) {
-      setValidationError(result.error.issues[0]?.message ?? 'Check the invitation details.');
+      setValidationError(validationText(result.error.issues, 'Check the invitation details.'));
       return;
     }
 
@@ -184,7 +185,10 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
             id="invite-email"
             type="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              edited();
+              setEmail(event.target.value);
+            }}
             placeholder="person@example.com"
             autoComplete="email"
             maxLength={320}
@@ -195,7 +199,10 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           <Select
             id="invite-role"
             value={role}
-            onChange={(next) => setRole(next as UserRole)}
+            onChange={(next) => {
+              edited();
+              setRole(next as UserRole);
+            }}
             options={USER_ROLES.map((option) => ({
               value: option,
               label: option.charAt(0).toUpperCase() + option.slice(1),
@@ -216,7 +223,10 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
             step={1}
             inputMode="numeric"
             value={expiresInDays}
-            onChange={(event) => setExpiresInDays(event.target.value)}
+            onChange={(event) => {
+              edited();
+              setExpiresInDays(event.target.value);
+            }}
             placeholder="No expiration"
           />
         </Field>
@@ -324,18 +334,18 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
             <dt className="text-[var(--text-muted)]">Expires</dt>
             <dd
               className="mt-0.5 text-[var(--text-secondary)]"
-              title={invite.expiresAt ? formatDate(invite.expiresAt) : undefined}
+              title={invite.expiresAt ? formatDateTime(invite.expiresAt) : undefined}
             >
-              {invite.expiresAt ? formatDate(invite.expiresAt) : 'Never'}
+              {invite.expiresAt ? formatDateTime(invite.expiresAt) : 'Never'}
             </dd>
           </div>
           <div>
             <dt className="text-[var(--text-muted)]">Created</dt>
             <dd
               className="mt-0.5 text-[var(--text-secondary)]"
-              title={formatDate(invite.createdAt)}
+              title={formatDateTime(invite.createdAt)}
             >
-              {formatDate(invite.createdAt)}
+              {formatDateTime(invite.createdAt)}
             </dd>
           </div>
           {invite.redeemedAt && (
@@ -343,9 +353,9 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
               <dt className="text-[var(--text-muted)]">Redeemed</dt>
               <dd
                 className="mt-0.5 text-[var(--text-secondary)]"
-                title={formatDate(invite.redeemedAt)}
+                title={formatDateTime(invite.redeemedAt)}
               >
-                {formatDate(invite.redeemedAt)}
+                {formatDateTime(invite.redeemedAt)}
               </dd>
             </div>
           )}
