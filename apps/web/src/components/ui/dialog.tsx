@@ -42,7 +42,10 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2',
+          // On a phone every dialog is a card 16 px in from each edge (#199):
+          // the base was full-bleed (w-full), so only dialogs that narrowed
+          // themselves were inset, and the two looked like different apps.
+          'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2',
           'rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-6',
           'shadow-[var(--shadow-popover)]',
           className,
@@ -101,6 +104,11 @@ export function DialogDescription({
   );
 }
 
+/**
+ * The actions, a right-aligned row at every width (#199): some dialogs stacked
+ * theirs on a phone, Cancel under the action, and the rest kept the row. A
+ * pair that does not fit wraps instead.
+ */
 export function DialogFooter({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('mt-6 flex justify-end gap-2', className)} {...props} />;
+  return <div className={cn('mt-6 flex flex-wrap justify-end gap-2', className)} {...props} />;
 }

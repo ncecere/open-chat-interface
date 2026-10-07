@@ -234,7 +234,9 @@ export function AttachmentList({
                       <span className="truncate">{attachment.filename}</span>
                       <ExternalLink className="size-3 shrink-0 text-[var(--text-secondary)]" />
                     </a>
-                    <p className="truncate text-xs leading-4 text-[var(--text-muted)]">
+                    {/* Wraps: cut short on a phone, it hid the size and date,
+                        with no tooltip to read them (#195). */}
+                    <p className="text-xs leading-4 wrap-anywhere text-[var(--text-muted)]">
                       {project && (
                         <>
                           Project{' '}

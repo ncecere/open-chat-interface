@@ -16,7 +16,10 @@ separate object with its own versions, which you can open, copy and download.
   Program code, tables, lists and short answers stay in the reply unless you
   ask for an artifact: OCI does not save a document that is mostly code or
   only a few hundred characters long, and the model writes it in its reply
-  instead. To get one anyway, say "artifact" in your message.
+  instead. Such an attempt is not shown in the reply: no step, no card and
+  no artifact panel. A long document's card appears once enough of it has
+  been written to keep. To get a short one anyway, say "artifact" in your
+  message; its card then appears when it is saved.
 
 Other code blocks are not affected. Artifacts work with every model: models
 without tools write a code block and OCI saves it once the reply is finished.
@@ -163,7 +166,8 @@ without it.
   can open, copy and download them but not see other versions.
 - **Exports**: the full export (Settings → Your data) includes every artifact
   with all its versions in each conversation's JSON file; the Markdown files
-  and a single conversation's Markdown download name them.
+  and a single conversation's Markdown download name them, with the version
+  each reply made and, when there is a newer one, the latest version.
 - **Storage**: artifacts count towards your storage allowance (each version
   counts). Moving a conversation to the trash frees that space; restoring it
   needs room for it again.

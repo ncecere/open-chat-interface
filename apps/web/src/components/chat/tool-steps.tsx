@@ -15,7 +15,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { ArtifactToolStep } from '~/components/artifacts/artifact-tool-step';
 import { MemoryNote } from '~/components/chat/memory-note';
 import type { ToolPlace } from '~/components/chat/message-content';
-import { SourceList } from '~/components/chat/search-grounding';
+import { SearchDetails, type SearchGroundingView } from '~/components/chat/search-grounding';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
@@ -64,26 +64,44 @@ function ResultSummary({ part, step }: { part: ToolPart; step: ToolStepSummary }
       <p className="text-[var(--text-muted)]">Not run{step.reason ? `: ${step.reason}` : ''}.</p>
     );
   if (step.state !== 'done') return null;
-  const results = (part.output as { results?: unknown } | null)?.results;
-  if (step.toolId === 'web_search' && Array.isArray(results)) {
-    const links = results.flatMap((result) => {
-      const candidate = result as { url?: unknown; title?: unknown } | null;
+  return <p className="text-[var(--text-muted)]">Finished.</p>;
+}
+
+const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
+
+/**
+ * A finished or failed `web_search` call as the search before a reply shows
+ * it (#203): its query, the provider that answered, and each source with its
+ * title, address and snippet, opened through the external-link check.
+ */
+function webSearchOf(part: ToolPart, step: ToolStepSummary): SearchGroundingView | null {
+  if (step.toolId !== 'web_search' || (step.state !== 'done' && step.state !== 'error'))
+    return null;
+  const input = part.input as { query?: unknown } | undefined;
+  const output = part.output as
+    | { query?: unknown; results?: unknown; provider?: unknown; fallback?: unknown }
+    | null
+    | undefined;
+  const results = Array.isArray(output?.results) ? output.results : [];
+  const provider = text(output?.provider);
+  return {
+    query: text(output?.query) ?? text(input?.query),
+    results: results.flatMap((result) => {
+      const candidate = result as { url?: unknown; title?: unknown; snippet?: unknown } | null;
       return typeof candidate?.url === 'string' && /^https?:\/\//i.test(candidate.url)
         ? [
             {
               url: candidate.url,
-              title: typeof candidate.title === 'string' ? candidate.title : candidate.url,
+              title: text(candidate.title) ?? candidate.url,
+              snippet: text(candidate.snippet) ?? '',
             },
           ]
         : [];
-    });
-    if (links.length === 0) return <p className="text-[var(--text-muted)]">No results.</p>;
-    // The search-before-a-reply's list: title, the address it opens and the
-    // site's mark, through the external-link check. A bare title list read as
-    // text, not as sources. Snippets stay out (a summary, not raw output).
-    return <SourceList sources={links} />;
-  }
-  return <p className="text-[var(--text-muted)]">Finished.</p>;
+    }),
+    ...(step.state === 'error' ? { error: text(part.errorText) ?? 'The search failed.' } : {}),
+    ...(provider ? { provider } : {}),
+    ...(output?.fallback === true ? { fallback: true } : {}),
+  };
 }
 
 /** One tool call: a one-line summary that expands to its inputs and a summary of its result. */
@@ -106,6 +124,7 @@ export function ToolStepRow({
       button.current?.focus();
   }, [focusOnMount]);
   const Icon = step.toolId === 'web_search' ? Globe2 : Wrench;
+  const search = webSearchOf(part, step);
   return (
     <div className="min-w-0">
       <button
@@ -126,7 +145,12 @@ export function ToolStepRow({
           aria-hidden="true"
         />
       </button>
-      {open && (
+      {open && search && (
+        <div id={detailsId} className="mt-2 space-y-3 text-xs text-[var(--text-secondary)]">
+          <SearchDetails grounding={search} />
+        </div>
+      )}
+      {open && !search && (
         <div
           id={detailsId}
           className="mt-2 space-y-2 rounded-lg bg-black/10 px-3 py-2 text-xs text-[var(--text-secondary)]"

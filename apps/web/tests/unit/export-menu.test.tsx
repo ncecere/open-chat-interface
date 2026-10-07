@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportFormatsFor } from '../../src/components/chat/export-menu';
 import { MessageActions } from '../../src/components/chat/message-actions';
 import { ApiError, dispositionFilename } from '../../src/lib/api-client';
-import { alerts, button, cleanup, click, findButton, settle } from './admin-test-utils';
+import { alerts, button, cleanup, click, settle } from './admin-test-utils';
 
 /** "Export as…" on replies (v0.9 file output). */
 
@@ -50,7 +50,10 @@ async function mount(text: string, exportTarget: typeof target | null = target) 
   return container;
 }
 
-const trigger = () => button('Export as…');
+// Named for its reply (#194): "Export as… “Text”".
+const exportButton = () =>
+  document.querySelector<HTMLButtonElement>('button[aria-label^="Export as…"]');
+const trigger = () => exportButton()!;
 const items = () =>
   [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
 const item = (label: string) =>
@@ -168,12 +171,12 @@ describe('the export menu on a reply', () => {
 
   it('is not offered without a saved reply or any text', async () => {
     await mount(TABLE_REPLY, null);
-    expect(findButton('Export as…')).toBeUndefined();
-    expect(findButton('Copy message')).toBeDefined();
+    expect(exportButton()).toBeNull();
+    expect(document.querySelector('button[aria-label^="Copy message"]')).not.toBeNull();
     await cleanup(root!);
     root = undefined;
     await mount('   ');
-    expect(findButton('Export as…')).toBeUndefined();
+    expect(exportButton()).toBeNull();
   });
 });
 

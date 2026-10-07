@@ -1,3 +1,5 @@
+import { nameStreamdownControls } from '~/components/chat/streamdown-control-names';
+
 /**
  * Focus management for Streamdown's table full-screen view (WCAG 2.4.3).
  *
@@ -120,6 +122,8 @@ export function markStreamdownScrollRegions(root: ParentNode = document): void {
       element.setAttribute('aria-label', label);
     }
   }
+  // Then each region and button is named for its block (#194).
+  nameStreamdownControls(root);
 }
 
 export function installStreamdownScrollRegions(doc: Document = document): void {

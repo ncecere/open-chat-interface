@@ -33,8 +33,9 @@ Your name, email address, role, and how you sign in.
   when it was last active (to within five minutes). Your current device is
   marked **This device** and **Active now**.
   **Sign out** ends one other session; **Sign out all other devices** ends
-  every session but this one. A device you sign out can stay signed in for up
-  to five minutes.
+  every session but this one. A device you sign out is signed out at once: a
+  page still open there goes to the sign-in page when it next contacts the
+  server.
 
 You cannot change your email address yourself.
 

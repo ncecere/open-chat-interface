@@ -2,12 +2,15 @@
 import type { ComplianceStatus, LegalHold } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../src/lib/api-client';
 import { formatDateTime } from '../../src/lib/utils';
 import { AdminCompliancePage, complianceChanges } from '../../src/routes/admin/compliance';
 import { AdminUserDetailPage } from '../../src/routes/admin/user-detail';
 import { AdminUsersPage } from '../../src/routes/admin/users';
 import {
+  alerts,
   button,
+  buttonNames,
   cleanup,
   click,
   dialog,
@@ -161,7 +164,11 @@ describe('Compliance admin page', () => {
     const text = document.body.textContent ?? '';
     expect(text).toContain('Daily at 02:00 UTC');
     expect(text).toContain('Audit events only');
-    expect(text).toContain('Audit events exported through #412');
+    // Under the last export, in the manifests' terms (#224).
+    const exported = [...document.querySelectorAll('dt')].find(
+      (term) => term.textContent === 'Last successful export',
+    )?.parentElement;
+    expect(exported?.textContent).toContain('Audit log through sequence 412');
     expect(text).toContain('The latest export failed');
     expect(text).toContain('Export failed: Access Denied');
     expect(text).toContain('400 audit events');
@@ -225,6 +232,40 @@ describe('Compliance admin page', () => {
     expect(api.post).toHaveBeenCalledWith('/admin/compliance/holds/h1/lift', {
       reason: 'Settled',
     });
+  });
+
+  it('clears a refused hold’s error once the address is corrected (#217)', async () => {
+    api.post.mockRejectedValueOnce(new ApiError(404, 'NOT_FOUND', 'No account has that address.'));
+    await render();
+    await typeInto(document.getElementById('hold-email') as HTMLInputElement, 'nobody@x.test');
+    await typeInto(document.getElementById('hold-reason') as HTMLInputElement, 'Matter 9');
+    await click(button('Place hold'));
+    expect(alerts().join(' ')).toContain('No account has that address.');
+    await typeInto(document.getElementById('hold-email') as HTMLInputElement, 'sam@example.test');
+    expect(alerts().join(' ')).not.toContain('No account has that address.');
+  });
+
+  it('shows no export position before anything has been exported (#224)', async () => {
+    current = status({ lastSuccessAt: null, cursor: { audit: 0, messages: null } });
+    await render();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('None yet');
+    expect(text).not.toContain('#0');
+    expect(text).not.toContain('through sequence');
+  });
+
+  it('names each hold’s Lift button for the person (#220)', async () => {
+    current = status({
+      holds: [
+        activeHold,
+        { ...activeHold, id: 'h2', userId: 'user-3', userEmail: 'sam@example.test' },
+      ],
+    });
+    await render();
+    expect(buttonNames()).toEqual(
+      expect.arrayContaining(['Lift hold on dana@example.test', 'Lift hold on sam@example.test']),
+    );
+    expect(buttonNames()).not.toContain('Lift');
   });
 
   it('is read-only for auditors', async () => {

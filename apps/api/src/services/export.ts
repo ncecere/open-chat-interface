@@ -3,6 +3,7 @@ import {
   ARTIFACT_KIND_LABELS,
   type ArtifactKind,
   artifactOfToolPart,
+  isDeclinedArtifactPart,
   isToolPart,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
@@ -13,6 +14,32 @@ import { db } from '../db/index.js';
 import { artifactsWithVersions } from './artifacts/store.js';
 import { currentAppName } from './branding.js';
 import { activeMessage } from './chat/reply-path.js';
+
+/**
+ * The time zone a download is dated in: the person's, as their browser gives
+ * it, so an evening export is not dated tomorrow (#211). UTC for an unknown
+ * zone or none (the full-data export runs in the background, with no browser).
+ */
+export function exportTimeZone(value: string | undefined | null): string {
+  if (!value) return 'UTC';
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+/** A day as YYYY-MM-DD in `timeZone`. */
+export function dayIn(date: Date, timeZone = 'UTC'): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
 export const MAX_EXPORT_MESSAGES = 2_000;
@@ -89,7 +116,10 @@ export function orderedReplyLines(
   };
   for (const part of parts) {
     if (isToolPart(part)) {
-      if (!skip(part)) add('tools', `_${summarizeToolPart(part).summary}_`);
+      // An artifact attempt declined because its content belongs in the
+      // reply is not a step the reader needs (#201).
+      if (!skip(part) && !isDeclinedArtifactPart(part))
+        add('tools', `_${summarizeToolPart(part).summary}_`);
     } else if (part.type === 'text' && typeof part.text === 'string' && part.text.trim())
       add('text', part.text.trim());
   }
@@ -116,20 +146,36 @@ interface ExportArtifactReference {
   versions: Array<{ version: number; messageId: string | null }>;
 }
 
-/** The artifact versions a message made, each with its line: "Artifact 'Report' (HTML, version 2)". */
+/**
+ * The artifact versions a message made, each with its line: "Artifact 'Report'
+ * (HTML, version 2)". The last version the export lists says when a newer one
+ * exists, made by hand or by a reply not exported (#211).
+ */
 function artifactLines(
   messageId: string | undefined,
   artifacts: readonly ExportArtifactReference[],
+  /** The messages this export holds. */
+  exported: ReadonlySet<string>,
 ): Array<{ key: string | null; line: string }> {
   if (!messageId) return [];
-  return artifacts.flatMap((artifact) =>
-    artifact.versions
+  return artifacts.flatMap((artifact) => {
+    const latest = Math.max(...artifact.versions.map((version) => version.version));
+    const lastListed = Math.max(
+      ...artifact.versions
+        .filter((version) => version.messageId !== null && exported.has(version.messageId))
+        .map((version) => version.version),
+    );
+    return artifact.versions
       .filter((version) => version.messageId === messageId)
       .map((version) => ({
         key: artifact.id ? `${artifact.id}:${version.version}` : null,
-        line: `_Artifact \u201c${artifact.title}\u201d (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${version.version})_`,
-      })),
-  );
+        line: `_Artifact \u201c${artifact.title}\u201d (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${version.version}${
+          version.version === lastListed && version.version < latest
+            ? `; the latest is version ${latest}`
+            : ''
+        })_`,
+      }));
+  });
 }
 
 /**
@@ -168,16 +214,20 @@ export function renderMarkdown(
   source?: string,
   /** Model display names by slug (modelDisplayNames); a missing one shows the slug. */
   modelNames: ReadonlyMap<string, string> = new Map(),
+  /** The zone the dates are given in (exportTimeZone). */
+  timeZone = 'UTC',
 ): string {
   const lines: string[] = [
     `# ${thread.title}`,
     '',
-    `Exported${source ? ` from ${source} on` : ''} ${new Date().toISOString().slice(0, 10)} · started ${thread.createdAt
-      .toISOString()
-      .slice(0, 10)}`,
+    `Exported${source ? ` from ${source} on` : ''} ${dayIn(new Date(), timeZone)} · started ${dayIn(
+      thread.createdAt,
+      timeZone,
+    )}`,
     '',
   ];
 
+  const exported = new Set(messages.flatMap((message) => message.id ?? []));
   for (const message of messages) {
     if (message.role === 'system') continue;
 
@@ -203,7 +253,7 @@ export function renderMarkdown(
     // Tool steps and text in the order the reply wrote them. A step that made
     // an artifact listed below is left out, so each artifact is named once,
     // with its kind and version (#152).
-    const made = artifactLines(message.id, artifacts);
+    const made = artifactLines(message.id, artifacts, exported);
     const listed = new Set(made.flatMap((entry) => entry.key ?? []));
     lines.push(
       ...orderedReplyLines(message.parts, (part) => {
@@ -242,12 +292,16 @@ export function safeTitleSlug(title: string, fallback = 'conversation'): string 
 }
 
 /** A filesystem-safe name derived from the conversation title. */
-export function exportFilename(title: string): string {
-  return `${safeTitleSlug(title)}-${new Date().toISOString().slice(0, 10)}.md`;
+export function exportFilename(title: string, timeZone = 'UTC'): string {
+  return `${safeTitleSlug(title)}-${dayIn(new Date(), timeZone)}.md`;
 }
 
 /** Ownership is enforced by the caller before this runs. */
-export async function exportThreadMarkdown(threadId: string, userId: string): Promise<string> {
+export async function exportThreadMarkdown(
+  threadId: string,
+  userId: string,
+  timeZone = 'UTC',
+): Promise<string> {
   const [thread] = await db
     .select({
       title: schema.thread.title,
@@ -286,5 +340,6 @@ export async function exportThreadMarkdown(threadId: string, userId: string): Pr
     artifacts,
     await currentAppName(),
     await modelDisplayNames(thread.organizationId, messages),
+    timeZone,
   );
 }

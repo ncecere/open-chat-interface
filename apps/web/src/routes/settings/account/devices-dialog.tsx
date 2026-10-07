@@ -118,8 +118,10 @@ export function DevicesDialog({
         <DialogHeader>
           <DialogTitle>Devices</DialogTitle>
           <DialogDescription>
-            Where your account is signed in. A device you sign out may stay signed in for up to five
-            minutes.
+            {/* Sessions are read from the database on every request (no
+                cookie cache since v0.11), so signing out applies at once (#235). */}
+            Where your account is signed in. A device you sign out is signed out at once; a page
+            still open there goes to the sign-in page when it next contacts the server.
           </DialogDescription>
         </DialogHeader>
         {sessions.isLoading ? (

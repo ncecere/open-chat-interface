@@ -8,6 +8,7 @@ import { formatDateTime } from '../../src/lib/utils';
 import { AdminConnectorsPage, connectorDeleteText } from '../../src/routes/admin/connectors';
 import {
   button,
+  buttonNames,
   cleanup,
   click,
   dialog,
@@ -103,6 +104,21 @@ const render = async (role: 'admin' | 'auditor' = 'admin', path = '/admin/connec
 };
 
 describe('Connectors admin page', () => {
+  it("names each connector's test and refresh buttons for the connector (#220)", async () => {
+    connectors = [connector(), connector({ id: 'c2', name: 'Wiki', slug: 'wiki' })];
+    await render();
+    expect(buttonNames()).toEqual(
+      expect.arrayContaining([
+        'Test connection to Docs',
+        'Refresh tools from Docs',
+        'Test connection to Wiki',
+        'Refresh tools from Wiki',
+      ]),
+    );
+    expect(buttonNames()).not.toContain('Test connection');
+    expect(buttonNames()).not.toContain('Refresh tools');
+  });
+
   it('lists connectors with credentials as set or not set, and their tools', async () => {
     await render();
     const text = document.body.textContent ?? '';
@@ -210,6 +226,9 @@ describe('Connectors admin page', () => {
     const text = document.body.textContent ?? '';
     expect(text).toContain(`Last failure ${formatDateTime(failedAt)}: Connection refused`);
     expect(text).not.toContain(new Date(failedAt).toLocaleString());
+    // A failed test may have reached the server: not "Not contacted yet" (#223).
+    expect(text).toContain('Never connected successfully · Last failure');
+    expect(text).not.toContain('Not contacted yet');
   });
 
   it('says which field the API refused and why (#127)', async () => {
@@ -238,6 +257,9 @@ describe('Connectors admin page', () => {
     expect(alert).toBe(
       'Short name: Use up to 24 lowercase letters, digits and hyphens, such as docs or crm-eu.',
     );
+    // Corrected, the complaint goes (#217).
+    await typeInto(document.getElementById('connector-slug') as HTMLInputElement, 'walk2');
+    expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('confirms before deleting, naming what goes with it', async () => {

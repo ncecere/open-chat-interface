@@ -16,6 +16,7 @@ import {
   renderAdmin,
   settle,
 } from './admin-test-utils';
+import { shownTitle, TitleProbe } from './title-probe';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -141,6 +142,19 @@ async function type(input: HTMLInputElement, value: string) {
   });
   await settle();
 }
+
+describe('user detail title (#197)', () => {
+  it('names the person in the tab, not just Users', async () => {
+    ({ root } = await renderAdmin(
+      <>
+        <AdminUserDetailPage />
+        <TitleProbe />
+      </>,
+      { path: '/admin/users/user-1' },
+    ));
+    expect(shownTitle()).toBe('Dana Admin · Users · Admin · Acme');
+  });
+});
 
 describe('user detail actions', () => {
   it('confirms before removing administrator access and sends the new role', async () => {

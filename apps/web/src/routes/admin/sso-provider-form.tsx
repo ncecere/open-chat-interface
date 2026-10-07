@@ -170,7 +170,7 @@ export function SsoProviderForm({
           </p>
         )}
 
-        <DialogFooter className="flex-col-reverse sm:flex-row">
+        <DialogFooter>
           <Button type="button" variant="ghost" disabled={save.isPending} onClick={onClose}>
             Cancel
           </Button>

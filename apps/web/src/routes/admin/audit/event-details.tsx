@@ -60,9 +60,18 @@ export function EventDetails({ entry }: { entry: AuditLogEntry }) {
       <div className="min-w-0">
         <p className="text-xs font-medium text-[var(--text-secondary)]">Metadata</p>
         {entry.metadata ? (
-          <pre className="scrollbar-thin mt-2 max-h-64 overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-[var(--text-secondary)]">
-            {serializeMetadata(entry.metadata)}
-          </pre>
+          <section
+            aria-label={`Metadata of ${entry.action}`}
+            // Long metadata scrolls; the keyboard must reach it (WCAG 2.1.1, #192),
+            // as OCI-39 did for the conversation, code blocks and tables.
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+            tabIndex={0}
+            className="scrollbar-thin mt-2 max-h-64 overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] focus-visible:outline-2 focus-visible:outline-[var(--accent-bright)]"
+          >
+            <pre className="m-0 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-[var(--text-secondary)]">
+              {serializeMetadata(entry.metadata)}
+            </pre>
+          </section>
         ) : (
           <p className="mt-1 text-xs text-[var(--text-muted)]">No metadata recorded.</p>
         )}
@@ -102,6 +111,8 @@ export function DetailsButton({
       className="px-2"
       aria-expanded={expanded}
       aria-controls={detailsId}
+      // Every row has one; each names its event (#220).
+      aria-label={`Details of ${entry.action} by ${actorLabel(entry)}, ${formatTimestamp(entry.createdAt)}`}
       onClick={onToggle}
     >
       Details

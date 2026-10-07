@@ -17,6 +17,7 @@ import { useHistoryPages } from '~/hooks/use-history-pages';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
+import { useRemoveUnusedConversation } from '~/hooks/use-unused-conversation';
 import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getInitialHistory, type HistoryIsland } from '~/lib/chat-history';
 import { usePageTitle } from '~/lib/document-title';
@@ -152,6 +153,9 @@ function ThreadConversation({
     temporary,
   });
   const { send, stop, regenerate, selectedModel } = session;
+  // Its first message refused and nothing saved: not left in the history as
+  // an empty "New Chat" once the person leaves (#234).
+  useRemoveUnusedConversation(threadId, session.refused && session.messages.length === 0);
   const selectedModelSlug = selectedModel?.slug;
   const navigate = useNavigate();
   const { mutateAsync: branchMessage } = useBranchMessage();
@@ -227,33 +231,44 @@ function ThreadConversation({
     await send();
   }, [send, replySettled]);
 
+  /** The new conversation answers its last question once it opens. */
+  const answerInBranch = useCallback(
+    (
+      branchId: string,
+      message: { id: string; modelSlug: string | null; effort: ReasoningEffort | null },
+    ) => {
+      sessionStorage.setItem(
+        PENDING_BRANCH_KEY,
+        JSON.stringify({
+          threadId: branchId,
+          messageId: message.id,
+          modelSlug: message.modelSlug ?? selectedModelSlug ?? null,
+          // Without a recorded level the new thread starts at the instance default.
+          effort: message.effort ?? undefined,
+        } satisfies PendingBranchResponse),
+      );
+    },
+    [selectedModelSlug],
+  );
+
   const forkAtMessage = useCallback(
     async (messageId: string) => {
       const result = await forkMessage({ threadId, messageId });
+      // A fork made at a question would end unanswered, with no Retry: it is
+      // answered, as an edit is (#213).
+      if (result.message?.role === 'user') answerInBranch(result.thread.id, result.message);
       await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
     },
-    [forkMessage, threadId, navigate],
+    [forkMessage, threadId, navigate, answerInBranch],
   );
 
   const editAndBranch = useCallback(
     async (messageId: string, text: string) => {
       const result = await branchMessage({ threadId, messageId, text });
-      const modelSlug = result.message.modelSlug ?? selectedModelSlug ?? null;
-      // Without a recorded level the new thread starts at the instance default.
-      const effort = result.message.effort ?? undefined;
-
-      sessionStorage.setItem(
-        PENDING_BRANCH_KEY,
-        JSON.stringify({
-          threadId: result.thread.id,
-          messageId: result.message.id,
-          modelSlug,
-          effort,
-        }),
-      );
+      answerInBranch(result.thread.id, result.message);
       await navigate({ to: '/chat/$threadId', params: { threadId: result.thread.id } });
     },
-    [branchMessage, threadId, selectedModelSlug, navigate],
+    [branchMessage, threadId, navigate, answerInBranch],
   );
 
   // Earlier pages, kept apart from the chat session's live part (v0.11).
@@ -295,7 +310,8 @@ function ThreadConversation({
 
   const conversationTitle = useOpenConversation(threadId)?.thread.title;
   const pageName = temporary ? 'Temporary chat' : conversationTitle || 'Conversation';
-  usePageTitle(pageName);
+  // Unavailable: the page says so, and its heading names the tab (#197).
+  usePageTitle(session.recovery.unavailable ? null : pageName);
 
   if (session.recovery.unavailable)
     return (
@@ -379,7 +395,9 @@ function ThreadConversation({
                         : 'A reply is pending on the server. You can stop it or wait for saved messages.'}
                     </p>
                   )}
-                  {!session.recovery.stopping && (
+                  {/* Nothing was saved from a refused message: no saved
+                      messages to reload, unless a reply is pending (#234). */}
+                  {!session.recovery.stopping && (!session.refused || waitingOnServer) && (
                     <button
                       type="button"
                       className="text-sm underline"

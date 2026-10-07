@@ -5,11 +5,18 @@
  * `encryptedApiKey`, and `smtpPassword` are all caught without listing every
  * spelling. A recorded change says a secret changed, never what it became.
  */
-const SECRET_FRAGMENTS = ['password', 'secret', 'apikey', 'token', 'credential', 'privatekey'];
+const SECRET_FRAGMENTS = ['password', 'secret', 'apikey', 'credential', 'privatekey'];
+
+/**
+ * `token` in the singular (`accessToken`, `botToken`); `tokens` is a count
+ * (`maxOutputTokens`, `tokensPerMinute`), which an audit entry should show
+ * as it was and became (#221).
+ */
+const TOKEN = /token(?!s)/;
 
 function isSecret(key: string): boolean {
   const lowered = key.toLowerCase();
-  return SECRET_FRAGMENTS.some((fragment) => lowered.includes(fragment));
+  return SECRET_FRAGMENTS.some((fragment) => lowered.includes(fragment)) || TOKEN.test(lowered);
 }
 
 export interface SettingChange {

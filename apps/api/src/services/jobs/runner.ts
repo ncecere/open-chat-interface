@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { eq, schema, sql } from '@oci/db';
+import { eq, inArray, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { retryOnConnectionError } from '../../lib/db-connection.js';
 import { isDraining } from '../../lib/drain.js';
@@ -178,11 +178,29 @@ export function stopJobs(): void {
   timers.length = 0;
 }
 
-/** Most recent run of each job, for the admin health view. */
-export async function recentJobRuns(limit = 50) {
-  return db
-    .select()
-    .from(schema.jobRun)
-    .orderBy(sql`${schema.jobRun.startedAt} desc`)
-    .limit(Math.max(1, Math.min(limit, 200)));
+/**
+ * The most recent run of each named job, for the admin health view. One index
+ * lookup per name (job_run_name_started_idx), so a daily job is found however
+ * many runs the minute-by-minute jobs have recorded since (#215); the newest N
+ * runs across all jobs covered only a few minutes.
+ */
+export async function latestJobRuns(names: string[]) {
+  if (names.length === 0) return [];
+  const latest = await db.execute<{ id: string }>(sql`
+    select last.id
+    from unnest(array[${sql.join(
+      names.map((name) => sql`${name}`),
+      sql`, `,
+    )}]::text[]) as job(name)
+    cross join lateral (
+      select ${schema.jobRun.id} as id
+      from ${schema.jobRun}
+      where ${schema.jobRun.jobName} = job.name
+      order by ${schema.jobRun.startedAt} desc
+      limit 1
+    ) as last
+  `);
+  const ids = latest.map((row) => row.id);
+  if (ids.length === 0) return [];
+  return db.select().from(schema.jobRun).where(inArray(schema.jobRun.id, ids));
 }

@@ -162,8 +162,15 @@ export async function workersHealthCheck() {
   const status = await workerStatus();
   const count = (role: ProcessRole) =>
     (status.replicas ?? []).filter((replica) => replica.role === role).length;
+  // Only the roles seen, and `all` in words: "0 all" read as nonsense (#228).
+  const roles = [
+    [count('web'), 'web'],
+    [count('worker'), 'worker'],
+    [count('all'), 'serving and running jobs (OCI_ROLE=all)'],
+  ] as const;
+  const seenRoles = roles.filter(([n]) => n > 0).map(([n, name]) => `${n} ${name}`);
   const seen = status.replicas
-    ? ` Replicas seen in the last minute: ${count('web')} web, ${count('worker')} worker, ${count('all')} all.`
+    ? ` Replicas seen in the last minute: ${seenRoles.join(', ') || 'none'}.`
     : '';
   const id = 'workers';
   const label = 'Background workers';

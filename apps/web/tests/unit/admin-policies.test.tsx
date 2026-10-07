@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminPoliciesPage } from '../../src/routes/admin/policies';
 import {
+  alerts,
   button,
   buttonNames,
   cleanup,
@@ -11,6 +12,7 @@ import {
   dialog,
   findButton,
   renderAdmin,
+  typeIntoTextarea,
 } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
@@ -76,6 +78,23 @@ it('rewords a draft but offers no edit for a published version', async () => {
     title: 'Walk AUP draft',
     body: 'Be kind. Typo: recieve.',
   });
+});
+
+it('clears the error once the policy text is filled in (#217)', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await click(button('New version'));
+  const body = document.getElementById('policy-body') as HTMLTextAreaElement;
+  await typeIntoTextarea(body, '   ');
+  await click(
+    [...dialog()!.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Publish version',
+    )!,
+  );
+  // In the form's words, not the API's "Body" (#228).
+  expect(alerts(dialog()!)).toEqual(['Policy text is required.']);
+  expect(api.post).not.toHaveBeenCalled();
+  await typeIntoTextarea(body, 'Be kind to the machines, please.');
+  expect(alerts(dialog()!)).toEqual([]);
 });
 
 it('deletes a draft after confirmation', async () => {

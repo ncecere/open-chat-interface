@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
+import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsLayout } from '../../src/components/settings/settings-layout';
 import { ThemeProvider } from '../../src/providers/theme-provider';
-import { cleanup, renderAdmin } from './admin-test-utils';
+import { cleanup, renderAdmin, settle } from './admin-test-utils';
+import { styleFor, toPx } from './css-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -210,6 +212,37 @@ describe('settings layout', () => {
     expect(keys('New Chat')).toEqual(['Ctrl', 'Shift', 'O']);
     expect(keys('Open Model Picker')).toEqual(['Ctrl', '/']);
     expect(keys('Send Message')).toEqual(['Ctrl', 'Enter']);
+  });
+
+  it('keeps room for who is signed in until /me answers, so the page does not move (#200)', async () => {
+    // The identity row is the grid's first; on a phone the page is below it.
+    const rowHeight = async () => {
+      const grid = container
+        .querySelector('nav[aria-label="Settings sections"]')!
+        .closest('.grid')!;
+      const heights = await Promise.all(
+        [...grid.children[0]!.querySelectorAll('*')].map(
+          async (node) => toPx((await styleFor(node.getAttribute('class') ?? '')).height) || 0,
+        ),
+      );
+      return Math.max(0, ...heights);
+    };
+    let answer!: (value: unknown) => void;
+    api.get.mockImplementation((path: string) =>
+      path === '/me'
+        ? new Promise((resolve) => {
+            answer = resolve;
+          })
+        : Promise.resolve({ allowances: [] }),
+    );
+    await render();
+    const before = await rowHeight();
+    await act(async () => answer(me));
+    await settle();
+    expect(container.textContent).toContain('Bitop Admin');
+    const after = await rowHeight();
+    expect(after).toBe(48);
+    expect(before).toBe(after);
   });
 
   it('keeps the wide-screen avatar at 96px', async () => {

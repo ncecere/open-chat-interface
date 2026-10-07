@@ -76,6 +76,28 @@ interface DiscoveryResult {
 }
 
 /**
+ * Why a request never got an answer, in words: Node's fetch says only "fetch
+ * failed", with the reason in its cause's code, which the page showed as it
+ * was (#228). Exported for tests.
+ */
+export function unreachableReason(error: unknown): string {
+  if (error instanceof Error && error.name === 'TimeoutError')
+    return 'it did not answer within 15 seconds.';
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (code === 'ENOTFOUND' || code === 'EAI_AGAIN')
+      return 'its address could not be found. Check the base URL.';
+    if (code === 'ECONNREFUSED') return 'it refused the connection. Check the base URL and port.';
+    if (code === 'ECONNRESET') return 'the connection was closed before it answered.';
+    if (typeof code === 'string' && /CERT|SSL|TLS/.test(code))
+      return 'its TLS certificate could not be verified.';
+    current = (current as { cause?: unknown }).cause;
+  }
+  return 'there was no answer from its address. Check the base URL and the network.';
+}
+
+/**
  * Lists the models a credential can reach upstream. Availability in OCI is a
  * separate decision: nothing is exposed until an admin adds it to the catalog.
  */
@@ -102,9 +124,7 @@ export async function discoverModels(credentials: ProviderCredentials): Promise<
   try {
     response = await fetch(endpoint, { headers, signal: AbortSignal.timeout(15_000) });
   } catch (error) {
-    throw providerError(
-      `Could not reach provider: ${error instanceof Error ? error.message : 'unknown error'}`,
-    );
+    throw providerError(`Could not reach the provider: ${unreachableReason(error)}`);
   }
 
   if (!response.ok) {

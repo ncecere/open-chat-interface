@@ -71,13 +71,20 @@ export function getProviderConfigurationIssues(
     try {
       const url = new URL(provider.baseUrl);
       if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-        issues.push({ field: 'baseUrl', message: 'Base URL must use HTTP or HTTPS.' });
+        // Shown after the field's name ("Base URL: …"), so not naming it again (#228).
+        issues.push({ field: 'baseUrl', message: 'Use an http:// or https:// address.' });
       }
       if (url.username || url.password) {
-        issues.push({ field: 'baseUrl', message: 'Base URL must not include credentials.' });
+        issues.push({
+          field: 'baseUrl',
+          message: 'Leave the username and password out; give the key as the API key.',
+        });
       }
     } catch {
-      issues.push({ field: 'baseUrl', message: 'Base URL must be a valid absolute URL.' });
+      issues.push({
+        field: 'baseUrl',
+        message: 'Enter a full address, such as https://gateway.example.com/v1.',
+      });
     }
   }
 

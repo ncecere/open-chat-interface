@@ -175,6 +175,17 @@ describe('storage draft validation', () => {
     ).toEqual({ maxFileMb: 'File size can be at most 1,024 MB (1 GB).' });
   });
 
+  it('caps the files per message at 20 (#218)', () => {
+    const draft = (maxFilesPerMessage: string) => ({
+      ...makeDraft(settings()),
+      maxFilesPerMessage,
+    });
+    expect(validateDraft(draft('20'), true, 'keep', '')).toEqual({});
+    expect(validateDraft(draft('100000'), true, 'keep', '')).toEqual({
+      maxFilesPerMessage: 'File count can be at most 20.',
+    });
+  });
+
   it.each(['', '0', '-1', 'NaN', 'Infinity', '1e300'])('rejects an invalid size: %s', (value) => {
     const draft = { ...makeDraft(settings()), maxFileMb: value };
     expect(validateDraft(draft, true, 'keep', '')).toEqual({

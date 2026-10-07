@@ -2,7 +2,7 @@ import type { Attachment } from '@oci/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { ApiError, api } from '~/lib/api-client';
-import { formatBytes } from '~/lib/utils';
+import { formatLimit } from '~/lib/utils';
 
 export interface PendingAttachment {
   localId: string;
@@ -20,6 +20,15 @@ interface AttachmentResource {
   controller?: AbortController;
   previewUrl?: string;
   attachmentId?: string;
+}
+
+/** An upload that got no answer: the server was out of reach or the file unreadable. */
+class UploadNotSent extends Error {
+  constructor(filename: string) {
+    super(
+      `${filename} was not uploaded: the server could not be reached, or the file could not be read. Try again.`,
+    );
+  }
 }
 
 function deleteAttachment(id: string) {
@@ -66,7 +75,7 @@ export function useAttachments() {
     for (const file of picked) {
       const reason =
         file.size > maxBytes
-          ? `${file.name} is larger than the ${formatBytes(maxBytes)} limit, so it was not uploaded.`
+          ? `${file.name} is larger than the ${formatLimit(maxBytes)} limit, so it was not uploaded.`
           : attached.current + files.length >= maxFiles
             ? `Only ${maxFiles} files can be sent with one message, so this one was not attached. Remove a file to add another.`
             : null;
@@ -120,11 +129,16 @@ export function useAttachments() {
         body.append('files', file);
 
         try {
+          // fetch itself rejects only when no answer came: the server could not
+          // be reached, or the browser could not read the file. Its own text
+          // ("Failed to fetch") means nothing to people (#208).
           const response = await fetch('/api/attachments', {
             method: 'POST',
             body,
             credentials: 'same-origin',
             signal: controller.signal,
+          }).catch(() => {
+            throw new UploadNotSent(file.name);
           });
 
           if (!response.ok) {
@@ -134,7 +148,7 @@ export function useAttachments() {
             throw new ApiError(
               response.status,
               'UPLOAD_FAILED',
-              payload?.error?.message ?? 'Upload failed',
+              payload?.error?.message ?? `${file.name} could not be uploaded. Try again.`,
             );
           }
 
@@ -148,10 +162,23 @@ export function useAttachments() {
           }
 
           resource.attachmentId = uploaded.id;
+          // The server checks the contents; the browser only guessed from the
+          // name. A text file named .png is text: no image preview (#209).
+          const image = uploaded.mimeType.startsWith('image/');
+          if (!image && resource.previewUrl) {
+            URL.revokeObjectURL(resource.previewUrl);
+            resource.previewUrl = undefined;
+          }
           setItems((current) =>
             current.map((item) =>
               item.localId === entry.localId
-                ? { ...item, status: 'ready', attachment: uploaded }
+                ? {
+                    ...item,
+                    status: 'ready',
+                    attachment: uploaded,
+                    mimeType: uploaded.mimeType,
+                    previewUrl: image ? item.previewUrl : undefined,
+                  }
                 : item,
             ),
           );
@@ -164,7 +191,10 @@ export function useAttachments() {
                 ? {
                     ...item,
                     status: 'error',
-                    error: error instanceof Error ? error.message : 'Upload failed',
+                    error:
+                      error instanceof ApiError || error instanceof UploadNotSent
+                        ? error.message
+                        : `${file.name} could not be uploaded. Try again.`,
                   }
                 : item,
             ),

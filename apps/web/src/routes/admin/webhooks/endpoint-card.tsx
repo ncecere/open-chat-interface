@@ -95,12 +95,19 @@ export function EndpointCard({
               variant="secondary"
               size="sm"
               disabled={test.isPending}
+              // Each endpoint's buttons name it, as Edit and Delete do (#220).
+              aria-label={`Send test to ${endpoint.url}`}
               onClick={() => test.mutate()}
             >
               {test.isPending ? <Spinner /> : <Send />}
               Send test
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setConfirmRotate(true)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={`Rotate secret for ${endpoint.url}`}
+              onClick={() => setConfirmRotate(true)}
+            >
               <KeyRound />
               Rotate secret
             </Button>
@@ -142,6 +149,7 @@ export function EndpointCard({
         size="sm"
         className="mt-2"
         aria-expanded={showLog}
+        aria-label={`${showLog ? 'Hide' : 'Show'} deliveries to ${endpoint.url}`}
         onClick={() => setShowLog((value) => !value)}
       >
         {showLog ? 'Hide deliveries' : 'Show deliveries'}

@@ -1,5 +1,7 @@
 import { type ComponentProps, lazy, memo, Suspense } from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
+import { DEMOTED_HEADINGS } from '~/components/chat/markdown-headings';
+import { remarkSoftBreaks } from '~/components/chat/markdown-soft-breaks';
 import {
   installStreamdownOverlayFocus,
   installStreamdownScrollRegions,
@@ -24,7 +26,7 @@ const loadRenderer = () =>
 const StreamdownMarkdown = lazy(() =>
   loadRenderer().then(
     ([
-      { Streamdown, defaultRehypePlugins },
+      { Streamdown, defaultRehypePlugins, defaultRemarkPlugins },
       { code },
       { createMathPlugin },
       { createEditorialMermaidPlugin },
@@ -34,6 +36,9 @@ const StreamdownMarkdown = lazy(() =>
       // Its wide tables and code blocks scroll; make them reachable by keyboard.
       installStreamdownScrollRegions();
       const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
+      // Streamdown's own (GFM, code metadata), then single line breaks kept (#207).
+      // One array for every message: Streamdown re-parses when its identity changes.
+      const remarkPlugins = [...Object.values(defaultRemarkPlugins ?? {}), remarkSoftBreaks];
       // Single-dollar inline math is off by default, but models commonly emit it.
       // Mermaid itself loads only when a diagram is first rendered.
       const plugins = {
@@ -46,11 +51,14 @@ const StreamdownMarkdown = lazy(() =>
         default: ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
           <Streamdown
             plugins={plugins}
-            className={className}
+            className={cn(MARKDOWN_BASE, className)}
+            remarkPlugins={remarkPlugins}
+            translations={TRANSLATIONS}
             // The reference interface shows plain code without a gutter.
             lineNumbers={false}
             // Links are real links that warn before leaving the instance (#174),
-            // not Streamdown's link-safety buttons.
+            // not Streamdown's link-safety buttons; headings sit below the
+            // page's h1 (#212).
             components={MESSAGE_COMPONENTS}
             // Share pages pass their own URL policy and keep the visible marker.
             {...(!skipHtml && !urlTransform && ownerRehypePlugins
@@ -69,7 +77,10 @@ const StreamdownMarkdown = lazy(() =>
   ),
 );
 
-const MESSAGE_COMPONENTS = { a: MessageLink };
+/** "Copy Code" was the one title-cased tooltip among the reply's controls (#194). */
+const TRANSLATIONS = { copyCode: 'Copy code' };
+
+const MESSAGE_COMPONENTS = { a: MessageLink, ...DEMOTED_HEADINGS };
 
 type Pluggable = NonNullable<
   ComponentProps<typeof import('streamdown').Streamdown>['rehypePlugins']
@@ -133,7 +144,7 @@ const StreamdownCode = lazy(() =>
           mode="static"
           controls={false}
           lineNumbers={false}
-          className={className}
+          className={cn(MARKDOWN_BASE, className)}
         >
           {codeFence(source, language)}
         </Streamdown>
@@ -188,7 +199,24 @@ export interface MarkdownProps {
 }
 
 /**
- * Shared prose styling so chat and public shares render identically.
+ * What every rendering needs, whatever its prose styling (a user's message,
+ * a reply, a share page): without the gutter, Shiki's one span per line must
+ * be a block again, or every line of a code block collapses onto one row.
+ * This lived in the reply's prose classes only, so the share page (which had
+ * its own) and user messages showed code on one line (#186).
+ *
+ * A long unbroken word (a hash, a key, a run of letters) wraps inside the
+ * column, as links already did, instead of pushing the conversation or the
+ * share page sideways (#187). `anywhere` rather than `break-word`, so the word
+ * no longer sets the column's minimum width either. Code blocks keep their
+ * lines (`pre` does not wrap) unless the person turned code wrapping on.
+ */
+const MARKDOWN_BASE = 'wrap-anywhere [&_pre_code]:block [&_pre_code>span]:block';
+
+/**
+ * Shared prose styling so chat and public shares render identically (#186:
+ * the share page had its own copy, which styled block code as inline code).
+ * Only inline code gets the inline-code look.
  *
  * Streamdown wraps every fence in its own bordered container and inner scroll
  * pane. Adding a third border around `pre` produced a visibly nested box, so
@@ -206,9 +234,6 @@ export const MARKDOWN_PROSE = cn(
   // The scroll pane sits inside the container's own border; a second one reads
   // as a nested box rather than the single flat panel the reference shows.
   '[&>div>div.overflow-x-auto]:!border-0 [&>div>div.overflow-x-auto]:!rounded-none',
-  // Shiki emits one span per line. Without the gutter they need to be blocks
-  // again, or every line collapses onto one row.
-  '[&_pre_code]:block [&_pre_code>span]:block',
   // Squeezed to the reply's width, a table with many columns left a prose
   // column one word wide (rows 200+ px tall in the QA walk). A table may be as
   // wide as its content, never narrower than the reply, with long cells
@@ -228,7 +253,11 @@ export const Markdown = memo(function Markdown({
   urlTransform,
 }: MarkdownProps) {
   return (
-    <Suspense fallback={<div className={cn('whitespace-pre-wrap', className)}>{children}</div>}>
+    <Suspense
+      fallback={
+        <div className={cn('whitespace-pre-wrap wrap-anywhere', className)}>{children}</div>
+      }
+    >
       <StreamdownMarkdown className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
         {children}
       </StreamdownMarkdown>

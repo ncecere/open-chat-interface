@@ -59,6 +59,10 @@ export function useChatSession(options: {
     [options.threadId],
   );
   const [runId, setRunId] = useState<string | null>(null);
+  // The last message sent was refused before it was saved (nothing of it is
+  // on the server): no saved messages to reload, and a conversation whose
+  // only message it was is still unused (#234).
+  const [refused, setRefused] = useState(false);
   const requestRecovery = useRef<() => void>(() => {});
   // Turns handed back by a server shutting down, sent again in a row (v0.11).
   const handoffRetries = useRef(0);
@@ -83,6 +87,7 @@ export function useChatSession(options: {
       if (sending) {
         scope.runId = null;
         setRunId(null);
+        setRefused(false);
       }
       let signal = init?.signal;
       if (init?.method?.toUpperCase() === 'GET') {
@@ -257,6 +262,7 @@ export function useChatSession(options: {
     // the bubble goes: it was never saved, and a reload would drop it anyway.
     setDraft((current) => (current.trim() ? current : text));
     chat.setMessages((current) => current.filter((message) => message.id !== clientMessageId));
+    setRefused(true);
   };
   acceptSubmission.current = (submission, promptId) => {
     consumeFiles(submission.attachmentIds);
@@ -383,6 +389,8 @@ export function useChatSession(options: {
       recovery.remotePending ||
       recovery.resuming,
     recovery,
+    /** The last message sent was refused before it was saved (#234). */
+    refused,
     draft,
     setDraft,
     excludedProjectFileIds,

@@ -288,4 +288,4 @@ export async function runOrQueueJobNow(name: string): Promise<number | 'queued' 
   return 'queued';
 }
 
-export { recentJobRuns, runningJobCount } from './runner.js';
+export { latestJobRuns, runningJobCount } from './runner.js';

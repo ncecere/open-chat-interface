@@ -232,7 +232,11 @@ describe('Markdown export', () => {
         },
       ],
     );
-    expect(markdown).toContain('_Artifact \u201cChart\u201d (HTML, version 1)_');
-    expect(markdown).not.toContain('version 2');
+    // Version 2 was made elsewhere (by hand, or by a reply not exported): it
+    // is not listed as this reply's, but a newer version is said to exist (#211).
+    expect(markdown).toContain(
+      '_Artifact \u201cChart\u201d (HTML, version 1; the latest is version 2)_',
+    );
+    expect(markdown).not.toContain('(HTML, version 2');
   });
 });

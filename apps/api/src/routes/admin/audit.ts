@@ -5,6 +5,7 @@ import { db } from '../../db/index.js';
 import { containsPattern, prefixPattern } from '../../lib/like.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { parseQuery } from '../../middleware/validate.js';
+import { auditEntryAbout, auditEntryAboutEmail } from '../../services/audit-subject.js';
 
 export const auditRoutes = new Hono<AppBindings>();
 
@@ -19,7 +20,8 @@ export const auditRoutes = new Hono<AppBindings>();
 const listQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
   /**
-   * Every event by or about one account: it acted, or it was the target. The
+   * Every event by or about one account: it acted, it was the target, or a
+   * bulk action named it (services/audit-subject.ts). The
    * same rule as the Recent activity panel on the account's page, which links
    * here with it.
    */
@@ -45,14 +47,13 @@ function buildWhere(filters: Omit<AuditFilters, 'limit' | 'offset'>) {
           // Metadata holds what the other columns do not: the email of a
           // deleted account, a role change's from and to, a provider's name.
           ilike(sql`${schema.auditLog.metadata}::text`, containsPattern(filters.search)),
+          // Things done to an account found by its email: those entries carry
+          // its id, not its email (#216).
+          auditEntryAboutEmail(containsPattern(filters.search)),
         )
       : undefined,
-    filters.userId
-      ? or(
-          eq(schema.auditLog.actorUserId, filters.userId),
-          eq(schema.auditLog.targetId, filters.userId),
-        )
-      : undefined,
+    // Including the bulk actions that named the account (#216).
+    filters.userId ? auditEntryAbout(filters.userId) : undefined,
     // Matches a family as well as an exact action, so "auth." finds every
     // authentication event without naming each one.
     filters.action ? ilike(schema.auditLog.action, prefixPattern(filters.action)) : undefined,

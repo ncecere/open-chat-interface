@@ -1,5 +1,6 @@
 import {
   type ArtifactSummary,
+  artifactOfToolPart,
   detectArtifactBlocks,
   type PublicArtifact,
   toolKey,
@@ -19,6 +20,7 @@ import {
   ArtifactsContextProvider,
   type ArtifactsContextValue,
 } from '~/components/artifacts/artifacts-context';
+import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { textOf } from '~/components/chat/message-content';
 import { useMediaQuery } from '~/hooks/use-media-query';
 import { api } from '~/lib/api-client';
@@ -59,10 +61,11 @@ function missingFromLatest(messages: readonly UIMessage[], refs: readonly Artifa
   if (latest?.role !== 'assistant') return false;
   const keys = new Set(refs.map((ref) => lookupKey(ref.messageId, ref.sourceKey)));
   const blocks = detectArtifactBlocks(textOf(latest)).map((block) => block.key);
+  // Calls that saved something (not those declined as reply content, #201).
   const tools = latest.parts.flatMap((part) =>
     part.type === 'tool-create_artifact' &&
     'toolCallId' in part &&
-    part.state === 'output-available'
+    artifactOfToolPart(part as unknown as Record<string, unknown>)
       ? [toolKey(String(part.toolCallId))]
       : [],
   );
@@ -189,7 +192,9 @@ export function ThreadArtifactsProvider({
   const last = messages.at(-1);
   const latest = last?.role === 'assistant' ? last : undefined;
   const live = latest !== undefined && !history.has(latest.id);
-  const drafts = useMemo(() => (latest ? artifactDraftsOf(latest) : []), [latest]);
+  // Not a Markdown document that, as written so far, would be declined (#201):
+  // the panel opens once it is long enough to keep, or once it is saved.
+  const drafts = useMemo(() => (latest ? artifactDraftsOf(shownReply(latest)) : []), [latest]);
 
   const wasStreaming = useRef(streaming);
   const [retries, setRetries] = useState(0);
@@ -259,7 +264,11 @@ export function ThreadArtifactsProvider({
     if (!streaming || session.opened || session.dismissed || session.manual) return;
     if (!autoOpen || !docked) return;
     const draft = drafts.find(
-      (candidate) => candidate.state !== 'failed' && !session.known.has(candidate.toolCallId),
+      (candidate) =>
+        candidate.state !== 'failed' &&
+        !session.known.has(candidate.toolCallId) &&
+        // A new artifact's kind first: a short Markdown one would be declined (#201).
+        (candidate.tool !== 'create_artifact' || candidate.kind !== null),
     );
     if (!draft) return;
     if (writesSource(draft)) {

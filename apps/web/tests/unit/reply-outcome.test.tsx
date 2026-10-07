@@ -97,7 +97,7 @@ describe('a failed reply (#133)', () => {
 });
 
 describe('a reply the person stopped (#154)', () => {
-  const copy = () => reply().querySelector('button[aria-label="Copy message"]');
+  const copy = () => reply().querySelector('button[aria-label^="Copy message"]');
 
   it('says it was stopped before it began, and offers nothing to copy', async () => {
     await render({

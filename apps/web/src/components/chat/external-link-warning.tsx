@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import { type ComponentProps, type ReactNode, useState } from 'react';
+import { type ComponentProps, type ReactNode, useId, useRef, useState } from 'react';
 import type { LinkSafetyModalProps } from 'streamdown';
 import { Button } from '~/components/ui/button';
 import {
@@ -41,6 +41,8 @@ function canOpenWithoutWarning(url: string): boolean {
 
 export function ExternalLinkWarning({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProps) {
   const [remember, setRemember] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const hintId = useId();
 
   function continueToLink() {
     if (remember) localStorage.setItem(SKIP_EXTERNAL_LINK_WARNING_KEY, 'true');
@@ -50,11 +52,20 @@ export function ExternalLinkWarning({ isOpen, onClose, onConfirm, url }: LinkSaf
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl p-8">
+      <DialogContent
+        className="max-w-2xl p-8"
+        // The safe choice first, as in the app's other confirmations: Radix
+        // focused the first control, the checkbox that turns the warning off
+        // for good (#196).
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          cancelRef.current?.focus();
+        }}
+      >
         <DialogHeader className="mb-5">
           <DialogTitle className="flex items-center gap-3 text-xl">
             <AlertTriangle className="size-5" aria-hidden="true" />
-            Open External Link
+            Open external link
           </DialogTitle>
           <DialogDescription className="pt-2 text-base leading-7 text-[var(--text-secondary)]">
             We cannot guarantee the safety of external links. Be cautious and keep your personal
@@ -66,26 +77,33 @@ export function ExternalLinkWarning({ isOpen, onClose, onConfirm, url }: LinkSaf
           Continue to: <span className="font-semibold">{safeHost(url)}</span>
         </p>
 
-        <label className="mt-5 flex cursor-pointer items-start gap-3">
+        {/* The checkbox is named by its label alone; the note under it is its
+            description, not part of its name (#196). */}
+        <div className="mt-5 flex items-start gap-3">
           <input
+            id={`${hintId}-remember`}
             type="checkbox"
             checked={remember}
             onChange={(event) => setRemember(event.target.checked)}
-            className="mt-1 size-4 rounded border border-[var(--border-strong)] accent-[var(--accent)]"
+            aria-describedby={`${hintId}-hint`}
+            className="mt-1 size-4 cursor-pointer rounded border border-[var(--border-strong)] accent-[var(--accent)]"
           />
-          <span>
-            <span className="block text-sm font-medium text-[var(--text-primary)]">
+          <div>
+            <label
+              htmlFor={`${hintId}-remember`}
+              className="block cursor-pointer text-sm font-medium text-[var(--text-primary)]"
+            >
               Don&apos;t show this warning again
-            </span>
-            <span className="mt-1 block text-xs leading-5 text-[var(--text-muted)]">
+            </label>
+            <p id={`${hintId}-hint`} className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
               External sites remain outside this instance&apos;s control. You can clear this choice
               by removing this site&apos;s local browser data.
-            </span>
-          </span>
-        </label>
+            </p>
+          </div>
+        </div>
 
         <DialogFooter>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button ref={cancelRef} type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button type="button" variant="accent" onClick={continueToLink}>

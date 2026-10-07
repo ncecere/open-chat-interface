@@ -80,6 +80,19 @@ export const DEFAULT_MAX_FILE_BYTES = 20 * 1024 * 1024;
  */
 export const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024;
 export const DEFAULT_MAX_FILES_PER_MESSAGE = 10;
+/**
+ * The most files one message (or one project upload) may carry (#218). The
+ * upload routes size their request-body limit as file size × file count, so
+ * an unbounded count made that limit terabytes; and a model is rarely given
+ * more than a handful of files at once. Twice the default.
+ */
+export const MAX_FILES_PER_MESSAGE = 20;
+/**
+ * The most results a web search asks its provider for (#218): Brave and
+ * Tavily accept at most 20, and search already requested no more than this
+ * whatever was saved, so a larger value only misled.
+ */
+export const MAX_SEARCH_RESULTS = 20;
 
 /**
  * What a reservation holds before real usage is known. One message is exact;

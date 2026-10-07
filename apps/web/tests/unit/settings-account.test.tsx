@@ -336,6 +336,10 @@ describe('Settings → Account', () => {
       await render();
       await click(button('View Devices'));
       expect(api.get).toHaveBeenCalledWith('/me/sessions');
+      // Signing out applies at once (session-revocation.live.test.ts), not
+      // after "up to five minutes" (#235).
+      expect(dialog()?.textContent).toContain('A device you sign out is signed out at once');
+      expect(dialog()?.textContent).not.toContain('five minutes');
       const rows = [...document.querySelectorAll('[data-testid="account-session"]')];
       expect(rows).toHaveLength(2);
       expect(rows[0]?.textContent).toContain('Chrome on macOS');

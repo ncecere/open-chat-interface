@@ -106,6 +106,25 @@ describe('provider capacity', () => {
     });
   });
 
+  it('lists every invalid limit at once (#226)', async () => {
+    ({ root } = await renderAdmin(<ProvidersSection />));
+    await click(button('Capacity limits for Primary OpenAI'));
+    const form = dialog()!;
+    const input = (id: string) => form.querySelector<HTMLInputElement>(`#capacity-${id}`)!;
+    await typeInto(input('requestsPerMinute'), '-5');
+    await typeInto(input('tokensPerMinute'), '1.5');
+    await typeInto(input('maxConcurrentStreams'), 'abc');
+    await click(button('Save limits'));
+    expect(alerts(form)).toEqual([
+      [
+        'Requests per minute must be a whole number of at least 1, or empty for no limit.',
+        'Tokens per minute must be a whole number of at least 1, or empty for no limit.',
+        'Replies at once must be a whole number of at least 1, or empty for no limit.',
+      ].join('\n'),
+    ]);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
   it('saves the longest wait and role priority', async () => {
     ({ root } = await renderAdmin(<ProvidersSection />));
     await typeInto(document.querySelector<HTMLInputElement>('#capacity-max-wait')!, '2');

@@ -1,7 +1,12 @@
 import { Link } from '@tanstack/react-router';
 import { CheckCircle2, KeyRound, Lock, Mail } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
+import {
+  AuthFormError,
+  AuthOutcomeHeading,
+  fieldErrorProps,
+  useFocusAfterRender,
+} from '~/components/auth/form-error';
 import { Wordmark } from '~/components/brand/wordmark';
 import { useReadOnlyPolling } from '~/components/layout/read-only-banner';
 import { Button } from '~/components/ui/button';
@@ -45,6 +50,9 @@ export function ForgotPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Whether a submit has replaced the form, whose heading then takes focus (#190).
+  const [submitted, setSubmitted] = useState(false);
+  const focusAfterRender = useFocusAfterRender();
   // Read-only maintenance refuses resets (#138): say so before and after a
   // send. The status is public, like the banner's.
   const readOnly = useReadOnlyPolling();
@@ -58,12 +66,16 @@ export function ForgotPasswordPage() {
       redirectTo: '/auth/reset-password',
     });
     setSubmitting(false);
+    setSubmitted(true);
     // A refusal (read-only, rate limit, server error) does not depend on
     // whether the account exists, so it can be shown. Read-only switches the
     // page to the paused state through the store.
     if (result.error) {
-      if (!authReadOnlyRefusal(result.error))
+      if (!authReadOnlyRefusal(result.error)) {
         setError(result.error.message || 'The reset link could not be sent. Try again.');
+        // The form stays: back to its button rather than the body (#190).
+        focusAfterRender('reset-request-submit');
+      }
       return;
     }
     // The same result whether or not an account exists, to avoid disclosing it.
@@ -78,8 +90,10 @@ export function ForgotPasswordPage() {
       {paused ? (
         <div className="space-y-4 text-center">
           <Lock className="mx-auto size-8 text-[var(--text-muted)]" aria-hidden="true" />
-          <h1 className="text-lg font-semibold">Password reset paused</h1>
-          <p role="status" className="text-sm text-[var(--text-muted)]">
+          <AuthOutcomeHeading focus={submitted} describedBy="reset-paused-message">
+            Password reset paused
+          </AuthOutcomeHeading>
+          <p id="reset-paused-message" role="status" className="text-sm text-[var(--text-muted)]">
             {passwordResetPausedMessage(readOnly)}
           </p>
           <Button asChild className="w-full">
@@ -89,8 +103,10 @@ export function ForgotPasswordPage() {
       ) : sent ? (
         <div className="space-y-4 text-center">
           <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
-          <h1 className="text-lg font-semibold">Check your email</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <AuthOutcomeHeading focus={submitted} describedBy="reset-sent-message">
+            Check your email
+          </AuthOutcomeHeading>
+          <p id="reset-sent-message" className="text-sm text-[var(--text-muted)]">
             If an account exists, a password reset link has been sent.
           </p>
           <Button asChild className="w-full">
@@ -125,7 +141,13 @@ export function ForgotPasswordPage() {
             />
           </div>
           {error && <AuthFormError id="reset-request-error">{error}</AuthFormError>}
-          <Button type="submit" variant="primary" disabled={submitting} className="w-full">
+          <Button
+            id="reset-request-submit"
+            type="submit"
+            variant="primary"
+            disabled={submitting}
+            className="w-full"
+          >
             {submitting ? <Spinner /> : <Mail />} Send reset link
           </Button>
           <Link
@@ -151,12 +173,16 @@ export function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
+  // Whether a submit has replaced the form, whose heading then takes focus (#190).
+  const [submitted, setSubmitted] = useState(false);
+  const focusAfterRender = useFocusAfterRender();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     const result = await authClient.resetPassword({ newPassword: password, token });
+    setSubmitted(true);
     if (result.error) {
       if (result.error.code === 'INVALID_TOKEN') {
         setInvalid(true);
@@ -164,6 +190,8 @@ export function ResetPasswordPage() {
         return;
       }
       setError(result.error.message ?? 'This reset link is invalid or expired.');
+      // Back to the field the error describes rather than the body (#190).
+      focusAfterRender('new-password');
       setSubmitting(false);
       return;
     }
@@ -176,15 +204,17 @@ export function ResetPasswordPage() {
       {complete ? (
         <div className="space-y-4 text-center">
           <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
-          <h1 className="text-lg font-semibold">Password updated</h1>
+          <AuthOutcomeHeading focus={submitted}>Password updated</AuthOutcomeHeading>
           <Button asChild variant="primary" className="w-full">
             <Link to="/auth/login">Continue to sign in</Link>
           </Button>
         </div>
       ) : invalid || !token ? (
         <div className="space-y-4 text-center">
-          <h1 className="text-lg font-semibold">Reset link unavailable</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <AuthOutcomeHeading focus={submitted} describedBy="reset-unavailable-message">
+            Reset link unavailable
+          </AuthOutcomeHeading>
+          <p id="reset-unavailable-message" className="text-sm text-[var(--text-muted)]">
             {invalid
               ? 'This reset link is invalid or has expired.'
               : 'This link is missing its reset token.'}

@@ -1,5 +1,6 @@
 import {
   type InstanceSettings,
+  MAX_SEARCH_RESULTS,
   SEARCH_PROVIDER_KINDS,
   SEARCH_PROVIDERS,
   type SearchProviderKind,
@@ -230,7 +231,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
               hint={
                 showValidation && validation.maxResults
                   ? validation.maxResults
-                  : 'Maximum results requested for each search.'
+                  : `Maximum results requested for each search, up to ${MAX_SEARCH_RESULTS}.`
               }
             >
               <Input
@@ -238,6 +239,7 @@ export function SearchSettingsForm({ settings }: { settings: InstanceSettings })
                 type="number"
                 inputMode="numeric"
                 min={1}
+                max={MAX_SEARCH_RESULTS}
                 step={1}
                 value={draft.maxResults}
                 disabled={save.isPending}

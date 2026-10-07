@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -109,7 +110,12 @@ async function prepare(path: string) {
 async function mount() {
   const { RouterProvider } = runtime;
   await act(async () => {
-    root.render(<RouterProvider router={router} />);
+    // As main.tsx mounts it: pages read their data through React Query.
+    root.render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
   });
 }
 
@@ -355,6 +361,37 @@ describe('real router lazy admin and settings routes', () => {
     },
   );
 
+  it.each(['/admin/webhooks', '/settings/history', '/chat/t-1?message=m-2'])(
+    'sends an anonymous visit to %s to sign-in with the way back (#225)',
+    async (path) => {
+      const { ApiError } = await import('../../src/lib/api-client');
+      session.get.mockRejectedValue(new ApiError(401, 'UNAUTHORIZED', 'No session'));
+      await renderRoute(path);
+      expect(router.state.location.pathname).toBe('/auth/login');
+      expect(new URLSearchParams(router.state.location.searchStr).get('redirect')).toBe(path);
+    },
+  );
+
+  it('sends an anonymous visit to the home page to plain sign-in', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    session.get.mockRejectedValue(new ApiError(401, 'UNAUTHORIZED', 'No session'));
+    await renderRoute('/');
+    expect(router.state.location.href).toBe('/auth/login');
+  });
+
+  it.each([
+    ['/auth/login?redirect=%2Fadmin%2Fwebhooks', '/admin/webhooks'],
+    ['/auth/login?redirect=%2F%2Fevil.example%2Fadmin', '/'],
+    ['/auth/login?redirect=https%3A%2F%2Fevil.example%2F', '/'],
+    ['/auth/login?redirect=%2F%5Cevil.example', '/'],
+  ])('sends someone already signed in from %s on to %s, never off the site', async (path, to) => {
+    await renderRoute(path);
+    await act(async () => {
+      await router.load();
+    });
+    expect(router.state.location.pathname).toBe(to);
+  });
+
   it.each([
     ['/admin', 'routes/admin/overview', 'AdminOverviewPage'],
     ['/settings', 'components/settings/settings-layout', 'SettingsAccountPage'],
@@ -438,5 +475,17 @@ describe('real router lazy admin and settings routes', () => {
     const main = container.querySelector('main');
     expect(main?.querySelector('h1')?.textContent).toBe('Page not found');
     expect(control('New chat', 'a').getAttribute('href')).toBe('/');
+  });
+
+  it('offers a signed-out visitor Sign in, not New chat, at an unknown address (#197)', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    session.get.mockRejectedValue(new ApiError(401, 'UNAUTHORIZED', 'No session'));
+    await renderRoute('/no-such-page');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const main = container.querySelector('main');
+    expect(main?.querySelector('h1')?.textContent).toBe('Page not found');
+    expect(main?.textContent).toContain('Check the address, or sign in.');
+    expect(control('Sign in', 'a').getAttribute('href')).toBe('/auth/login');
+    expect(main?.textContent).not.toContain('New chat');
   });
 });

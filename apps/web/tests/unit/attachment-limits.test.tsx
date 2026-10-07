@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AttachmentChips } from '../../src/components/chat/attachment-chips';
 import { useAttachments } from '../../src/hooks/use-attachments';
+import { formatLimit } from '../../src/lib/utils';
 
 vi.mock('../../src/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { chat: { maxFilesPerMessage: 2, maxFileBytes: 1024 } } }),
@@ -86,7 +87,7 @@ it('names each refused file once, in words (#180)', async () => {
   await act(async () => state.upload([file('walk3-big.txt', 4096), file('walk3-fake.png')]));
   const reasons = [...container.querySelectorAll('[role="alert"] li')].map((li) => li.textContent);
   expect(reasons).toEqual([
-    'walk3-big.txt is larger than the 1.0 KB limit, so it was not uploaded.',
+    'walk3-big.txt is larger than the 1 KB limit, so it was not uploaded.',
     'walk3-fake.png is a Windows program, which is not allowed here',
   ]);
   // A reason that does not name the file still says which one it is.
@@ -94,4 +95,19 @@ it('names each refused file once, in words (#180)', async () => {
   expect(container.querySelector('[role="alert"]')?.textContent).toContain(
     'e.txt: Only 2 files can be sent with one message',
   );
+});
+
+it('gives a limit as it is set, without a stray ".0" (#209)', () => {
+  expect(formatLimit(20 * 1024 * 1024)).toBe('20 MB');
+  expect(formatLimit(1.5 * 1024 * 1024)).toBe('1.5 MB');
+  expect(formatLimit(1024)).toBe('1 KB');
+});
+
+it('shows a text file named .png as a document once the server has read it (#209)', async () => {
+  // The browser guesses image/png from the name; the server finds text.
+  const fake = new File(['plain notes'], 'walk3-fake.png', { type: 'image/png' });
+  await act(async () => state.upload([fake]));
+  expect(state.items[0]).toMatchObject({ status: 'ready', mimeType: 'text/plain' });
+  expect(state.items[0]?.previewUrl).toBeUndefined();
+  expect(container.querySelector('img')).toBeNull();
 });

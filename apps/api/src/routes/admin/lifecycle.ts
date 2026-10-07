@@ -12,7 +12,7 @@ import { notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
-import { recentJobRuns, runOrQueueJobNow } from '../../services/jobs/index.js';
+import { latestJobRuns, lifecycleJobs, runOrQueueJobNow } from '../../services/jobs/index.js';
 import {
   getConfigSources,
   getRateLimitSettings,
@@ -180,21 +180,37 @@ lifecycleRoutes.put('/rate-limits', async (c) => {
   return c.json(settings);
 });
 
-/** Answers "did cleanup actually run?", the first thing an admin asks. */
+/**
+ * Answers "did cleanup actually run?", the first thing an admin asks: every
+ * registered job with its most recent run (null before its first), whatever
+ * its schedule. A daily job listed only while its run was among the newest
+ * few dozen had no row and no Run button most of the day (#215).
+ */
 lifecycleRoutes.get('/jobs', async (c) => {
-  const runs = await recentJobRuns(50);
+  const registered = lifecycleJobs();
+  const runs = await latestJobRuns(registered.map((job) => job.name));
+  const byName = new Map(runs.map((run) => [run.jobName, run]));
 
   return c.json({
-    runs: runs.map((run) => ({
-      id: run.id,
-      jobName: run.jobName,
-      startedAt: run.startedAt.toISOString(),
-      finishedAt: run.finishedAt?.toISOString() ?? null,
-      durationMs: run.durationMs,
-      itemsProcessed: run.itemsProcessed,
-      status: run.status,
-      errorMessage: run.errorMessage,
-    })),
+    jobs: registered.map((job) => {
+      const run = byName.get(job.name);
+      return {
+        name: job.name,
+        intervalMs: job.intervalMs,
+        lastRun: run
+          ? {
+              id: run.id,
+              jobName: run.jobName,
+              startedAt: run.startedAt.toISOString(),
+              finishedAt: run.finishedAt?.toISOString() ?? null,
+              durationMs: run.durationMs,
+              itemsProcessed: run.itemsProcessed,
+              status: run.status,
+              errorMessage: run.errorMessage,
+            }
+          : null,
+      };
+    }),
   });
 });
 

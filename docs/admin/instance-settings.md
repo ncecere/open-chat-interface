@@ -14,6 +14,9 @@ its own address: **General** and **Branding** under **Appearance & features**,
 Leave it blank to use the built-in default; a person's own customisation is
 appended after it. Keep it short. A long prompt is charged on every message and
 is the first thing to suspect when replies drift from what people expect.
+Every system prompt also includes today's date in the reporting timezone
+([Retention](governance.md#retention)), naming the zone, so models can place
+"latest" and search results in time.
 
 **Default reasoning level** is where the effort control starts in a new
 conversation: Instant, Low, Medium or High. People can still change it per
@@ -203,3 +206,7 @@ incident.
 
 Audience can be limited by role, which is how a message meant for staff avoids
 students.
+
+The list marks each announcement *showing*, *scheduled* (published, starting
+later), *ended* (past its end) or *draft*, and gives its start and end when it
+has them.

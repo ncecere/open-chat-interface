@@ -3,6 +3,7 @@ import type { UIMessage } from 'ai';
 import { type Dispatch, memo, type SetStateAction, useRef } from 'react';
 import { showsArtifactCard } from '~/components/artifacts/artifact-tool-step';
 import { useArtifacts } from '~/components/artifacts/artifacts-context';
+import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { CapacityNote, CapacityWait, capacityWaitOf } from '~/components/chat/capacity-wait';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
@@ -56,7 +57,7 @@ interface MessageRowProps {
  * permissions and action closures can all change independently of the text.
  */
 export const MessageRow = memo(function MessageRow({
-  message,
+  message: stored,
   threadId,
   streaming,
   editing,
@@ -68,6 +69,8 @@ export const MessageRow = memo(function MessageRow({
   onAnswerApproval,
   onStop,
 }: MessageRowProps) {
+  // Without artifact attempts declined as reply content (#201).
+  const message = shownReply(stored);
   const text = textOf(message);
 
   if (message.role === 'user') {

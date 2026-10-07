@@ -13,6 +13,10 @@ Files are checked by their **contents**, not their extension. Renaming a file to
 `.png` will not get it accepted, and a genuine PNG with the wrong extension will
 be.
 
+A file that is refused, or that could not be uploaded, stays above the composer
+in red with the reason beneath it, so you can see which one it was. Remove it
+with its ×, or choose **New Chat** to start again with an empty composer.
+
 ## The model has to be able to read it
 
 Images require a model with **vision**. Otherwise the model receives an

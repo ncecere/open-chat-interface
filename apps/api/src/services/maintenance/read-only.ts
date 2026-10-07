@@ -274,8 +274,11 @@ export async function updateMaintenance(
     next.readOnly = input.readOnly;
     next.changedAt = new Date().toISOString();
     next.changedBy = actor.email;
-    // Turning it off ends the stated expectation with it.
+    // Turning it off ends the stated expectation and its reason with it: a
+    // reason kept from an earlier window prefilled the next one and stood in
+    // for a scheduled window's missing reason (#222).
     if (!input.readOnly && input.until === undefined) next.until = null;
+    if (!input.readOnly && input.reason === undefined) next.reason = null;
   }
   if (input.reason !== undefined) next.reason = input.reason || null;
   if (input.until !== undefined) next.until = input.until;
@@ -325,7 +328,14 @@ export async function updateMaintenance(
       active: { before: before.active, after: after.active },
       source: after.source,
       reason: after.reason ?? next.reason ?? null,
-      until: after.until,
+      // The expected end as saved. The status's own `until` is null for an
+      // end already past, which recorded a saved end as none (#221).
+      until: after.source === 'schedule' ? after.until : (next.until ?? null),
+      previous: {
+        readOnly: current.readOnly === true,
+        reason: current.reason ?? null,
+        until: current.until ?? null,
+      },
       window: next.window ? { startsAt: next.window.startsAt, endsAt: next.window.endsAt } : null,
       keepRunningJobs: keepRunningJobs(next),
     },

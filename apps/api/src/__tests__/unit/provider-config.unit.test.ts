@@ -121,9 +121,12 @@ describe('provider configuration validation', () => {
   });
 
   it.each([
-    ['ftp://gw.example/v1', 'Base URL must use HTTP or HTTPS.'],
-    ['https://user:pass@gw.example/v1', 'Base URL must not include credentials.'],
-    ['not-a-url', 'Base URL must be a valid absolute URL.'],
+    ['ftp://gw.example/v1', 'Use an http:// or https:// address.'],
+    [
+      'https://user:pass@gw.example/v1',
+      'Leave the username and password out; give the key as the API key.',
+    ],
+    ['not-a-url', 'Enter a full address, such as https://gateway.example.com/v1.'],
   ])('rejects unusable base URL %s', (baseUrl, message) => {
     const issues = getProviderConfigurationIssues(provider({ baseUrl }));
 

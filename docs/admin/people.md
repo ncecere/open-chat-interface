@@ -45,8 +45,9 @@ oddly.
 It shows their totals, storage, **active sessions with the address and client
 each came from** (the ten newest, with the total above them, such as "Showing
 the 10 most recent of 616 active sessions"), their limits, recent conversation titles, and their audit
-trail — matched both as actor and as target, so something done *to* them appears
-beside things they did. **See every event for this account** opens the audit log
+trail — matched as actor, as target and among the accounts a bulk action named,
+so something done *to* them appears beside things they did. Searching the audit
+log for their email finds the same entries. **See every event for this account** opens the audit log
 filtered to their address.
 
 Conversation **titles only**. An administrator managing an account has no reason
@@ -165,6 +166,10 @@ worth doing when somebody's circumstances change between offer and acceptance.
 An address that already has an account cannot be invited (change the
 account's role instead), and an address can have only one pending invitation
 at a time: revoke it to send a new one, for example with a different role.
+An invitation for an address can only be accepted with that address, so the
+invitation page fills it in. When email verification is required, the new
+account still verifies its address as any other does: whoever opens the link
+could have been given it by hand.
 
 Invitations need email to be configured. Without SMTP you can still create one,
 but you will have to deliver the link yourself.

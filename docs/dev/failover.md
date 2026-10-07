@@ -12,8 +12,11 @@ old primary's connections all drop at once. Open transactions roll back,
 session advisory locks are released, and every query in flight fails with a
 connection error: `57P01` (admin shutdown) or, from postgres.js,
 `CONNECTION_CLOSED`. For a few seconds new connections fail too
-(`ECONNREFUSED`, `ECONNRESET`, `57P03`), or reach a node that is no longer
-primary (`25006`, read-only transaction) until the proxy notices.
+(`ECONNREFUSED`, `ECONNRESET`, `57P03`; `ENOTFOUND` or `EAI_AGAIN` while
+the database's host name does not resolve, as for a stopped Compose service
+or a rescheduled pod), or reach a node that is no longer primary (`25006`,
+read-only transaction) until the proxy notices. All of these count as a lost
+connection (`lib/db-connection.ts`).
 
 ## What OCI does about it
 
@@ -22,7 +25,7 @@ primary (`25006`, read-only transaction) until the proxy notices.
 | **Reads** (`GET`, `HEAD`, `OPTIONS`) | Run once more within the request, after 250 ms, on a new connection (`middleware/read-retry.ts`). A second failure is answered as below. |
 | **Writes** (every other method) | Never repeated automatically: they may have committed just as the connection dropped. Answered **`500`** with `"retryable": true` in the error and `X-OCI-Retryable: database-connection` (plus `Retry-After: 1`), so a client that knows the operation is safe can send it again. **Not `503`**: that status means "this replica is draining" (`lib/drain.ts`), and the bundled proxy takes a replica that answers `503` out of rotation. |
 | **Starting a reply** (`persistTurn`, the prompt's transaction) | Retried for up to 10 s. A transaction whose commit was lost with its connection is recognised on the retry by the reply's lineage, which only that transaction sets, so the message is stored once. |
-| **A reply's final save** | The reply streams through Redis, so it is not interrupted. Its save, the thread touch and the usage settlement are each retried for up to 30 s with backoff (`services/chat/run-save.ts`); a continued reply's added totals are reapplied only while it is still `streaming`, so they are never counted twice. The run keeps heartbeating in Redis meanwhile, so no replica recovers it as interrupted. If the database is still away after that, the claim is recovered as interrupted from the captured stream once it is back (item 13). |
+| **A reply's final save** | The reply streams through Redis, so it is not interrupted. Its save, the thread touch and the usage settlement are each retried for up to 30 s with backoff (`services/chat/run-save.ts`); a continued reply's added totals are reapplied only while it is still `streaming`, so they are never counted twice. The run keeps heartbeating in Redis meanwhile, so no replica recovers it as interrupted. If the database is still away after that, the claim is recovered from the captured stream once it is back (item 13): as `complete` when the stream reached the model's finish (only the save was lost; usage unknown), otherwise as interrupted. |
 | **Background jobs** | The job's advisory lock lives on its own connection, so a failover releases it. The lock connection is checked every 5 s and at each check a job makes between batches (`jobMayContinue()`); once the lock is lost the job stops after the batch in hand, its run is recorded as cut short ("Stopped early: the job lost its lock…") and nothing is unlocked. The next tick takes the lock again on the new primary. The job's run record is saved through the failover (bounded retry), so no run is left `running`. |
 | **Imports** | A lost connection, a lost lock or a shutdown at a checkpoint (every 25 conversations) puts the import back in the queue without using one of its attempts; the next run reads the file again and skips the conversations already stored. |
 | **Pre-deploy migrations** | One transaction: a failover rolls the attempt back, advisory lock included, and the rerun (the orchestrator restarting the migrate job) starts cleanly. |

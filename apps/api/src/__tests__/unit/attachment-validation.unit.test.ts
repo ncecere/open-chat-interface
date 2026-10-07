@@ -45,11 +45,14 @@ describe('unit: attachment content validation', () => {
     await expect(
       validate({ filename: 'disguised.png', declaredMimeType: 'image/png', bytes: zip }),
     ).rejects.toMatchObject({
-      message: 'disguised.png is a ZIP archive, which is not allowed here',
+      message:
+        'disguised.png is a ZIP archive, which is not allowed here. You can attach images and text files.',
     });
     await expect(
       validate({ filename: 'p.png', bytes: ONE_PIXEL_PNG, allowedMimeTypes: ['text/plain'] }),
-    ).rejects.toMatchObject({ message: 'p.png is a PNG image, which is not allowed here' });
+    ).rejects.toMatchObject({
+      message: 'p.png is a PNG image, which is not allowed here. You can attach text files.',
+    });
     // A Windows program renamed to .png, as in the QA walk ("MZ" header).
     const exe = Buffer.concat([
       Buffer.from('4d5a90000300000004000000ffff0000', 'hex'),
@@ -61,7 +64,8 @@ describe('unit: attachment content validation', () => {
       bytes: exe,
     });
     await expect(refusal).rejects.toMatchObject({
-      message: 'walk3-fake.png is a Windows program, which is not allowed here',
+      message:
+        'walk3-fake.png is a Windows program, which is not allowed here. You can attach images and text files.',
     });
   });
 
@@ -102,10 +106,56 @@ describe('unit: attachment content validation', () => {
   });
 
   it('enforces empty and maximum-size limits', async () => {
-    await expect(validate({ bytes: Buffer.alloc(0) })).rejects.toThrow('is empty');
-    await expect(validate({ bytes: Buffer.alloc(5), maxFileBytes: 4 })).rejects.toThrow(
-      'exceeds the',
+    await expect(validate({ bytes: Buffer.alloc(0) })).rejects.toThrow(
+      'upload.txt is empty, so it was not uploaded.',
     );
+    await expect(validate({ bytes: Buffer.alloc(5), maxFileBytes: 4 })).rejects.toThrow(
+      'upload.txt is larger than the 0 KB limit',
+    );
+  });
+
+  it('words refusals as whole sentences, as the composer does, and says what is allowed (#209)', async () => {
+    const MB = 1024 * 1024;
+    await expect(
+      validate({
+        filename: 'walk3-big.txt',
+        bytes: Buffer.alloc(21 * MB, 'x'),
+        maxFileBytes: 20 * MB,
+      }),
+    ).rejects.toMatchObject({
+      message: 'walk3-big.txt is larger than the 20 MB limit, so it was not uploaded.',
+    });
+    await expect(
+      validate({ bytes: Buffer.alloc(2 * MB, 'x'), maxFileBytes: 1.5 * MB }),
+    ).rejects.toMatchObject({
+      message: 'upload.txt is larger than the 1.5 MB limit, so it was not uploaded.',
+    });
+    // The instance's default types.
+    await expect(
+      validate({
+        filename: 'walk3-archive.zip',
+        declaredMimeType: 'application/zip',
+        bytes: Buffer.from('504b0304140000000000', 'hex'),
+        allowedMimeTypes: [
+          'image/png',
+          'image/jpeg',
+          'image/webp',
+          'image/gif',
+          'application/pdf',
+          'text/plain',
+          'text/markdown',
+        ],
+      }),
+    ).rejects.toMatchObject({
+      message:
+        'walk3-archive.zip is a ZIP archive, which is not allowed here. You can attach images, PDFs and text files.',
+    });
+    // No allowed type with a common name: nothing to list.
+    await expect(
+      validate({ filename: 'notes.txt', allowedMimeTypes: ['application/x-unheard-of'] }),
+    ).rejects.toMatchObject({
+      message: 'notes.txt is a type of file that is not allowed here.',
+    });
   });
 
   it('strips path components and control characters from filenames', async () => {

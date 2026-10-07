@@ -3,14 +3,16 @@ import {
   ARTIFACT_KINDS,
   type ArtifactKind,
   applyArtifactEdits,
+  type DeclinedArtifactResult,
   MAX_ARTIFACT_BYTES,
   MAX_ARTIFACT_EDITS,
   MAX_ARTIFACT_TITLE_LENGTH,
+  markdownArtifactRefusal,
   toolKey,
 } from '@oci/shared';
 import { z } from 'zod';
 import { validationFailed } from '../../lib/errors.js';
-import { markdownArtifactRefusal, personAskedForArtifact } from '../artifacts/markdown-floor.js';
+import { personAskedForArtifact } from '../artifacts/markdown-floor.js';
 import { addArtifactVersion, createArtifact, currentContent } from '../artifacts/store.js';
 import { roleFeatures } from '../role-features.js';
 import type { ToolDefinition } from './types.js';
@@ -68,11 +70,14 @@ const createArtifactTool: ToolDefinition = {
       content: string;
     };
     // The guidance alone did not stop small tables and functions becoming
-    // Markdown artifacts (#149); see artifacts/markdown-floor.ts.
+    // Markdown artifacts (#149); see markdownArtifactRefusal in @oci/shared.
+    // Declined as a result, not thrown as an error (#201): nothing failed,
+    // and a failed step showed the person "3 steps failed" and this note to
+    // the model word for word. The conversation leaves such a call out.
     if (kind === 'markdown') {
       const refusal = markdownArtifactRefusal(content);
       if (refusal && !(await personAskedForArtifact(caller.threadId)))
-        throw validationFailed(refusal);
+        return { saved: false, note: refusal } satisfies DeclinedArtifactResult;
     }
     const { artifact } = await createArtifact({
       userId: caller.userId,

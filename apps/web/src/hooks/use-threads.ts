@@ -1,6 +1,7 @@
 import type { ReasoningEffort, ThreadSummary } from '@oci/shared';
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { undoToast } from '~/components/ui/undo-toast';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import {
   invalidateConversationLists,
@@ -42,12 +43,18 @@ export interface BranchMessageResult {
   };
 }
 
+interface ForkMessageResult {
+  thread: ThreadSummary;
+  /** The fork's copy of the message it was made at (absent from older servers). */
+  message?: BranchMessageResult['message'] & { role: 'user' | 'assistant' };
+}
+
 export function useForkMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ threadId, messageId }: { threadId: string; messageId: string }) =>
-      api.post<{ thread: ThreadSummary }>(`/threads/${threadId}/forks`, { messageId }),
+      api.post<ForkMessageResult>(`/threads/${threadId}/forks`, { messageId }),
     onSuccess: () => invalidateConversationLists(queryClient),
   });
 }
@@ -125,16 +132,15 @@ export function useArchiveThread() {
   return useMutation({
     mutationFn: ({ id }: { id: string; title: string }) => setArchived(queryClient, id, true),
     onSuccess: (_result, { id, title }) => {
-      toast.success('Conversation archived', {
+      // Long enough to reach Undo, and kept while it has focus (#205).
+      undoToast({
         id: `archived-${id}`,
+        title: 'Conversation archived',
         description: title,
-        action: {
-          label: 'Undo',
-          onClick: () => {
-            setArchived(queryClient, id, false).catch(() =>
-              toast.error('Could not restore the conversation. Try again from Settings → History.'),
-            );
-          },
+        onUndo: () => {
+          setArchived(queryClient, id, false).catch(() =>
+            toast.error('Could not restore the conversation. Try again from Settings → History.'),
+          );
         },
       });
     },

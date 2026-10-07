@@ -14,6 +14,11 @@ Hovering over a message reveals its controls.
 | **Previous reply** / **Next reply** | The latest reply, once retried | Switches between the replies to your latest question |
 | **Fork conversation here** | Either | Starts a separate conversation from this point |
 
+Screen readers and voice control hear which message each control acts on, by
+its opening words: **Copy message “Walk3 table: give me a small…”**, **Fork
+conversation at “…”**. Code blocks and tables are numbered within their
+message in the same way: **Copy code block 2 (Python)**, **Download table 1**.
+
 ### Editing, retrying and forking preserve the original
 
 Editing creates a new conversation with your revised question; the original
@@ -35,11 +40,19 @@ edit it or fork from it instead.
 
 Forking copies the conversation up to the chosen point into a new one and leaves
 the original untouched, so you can pursue an alternative without losing the
-answer you already have.
+answer you already have. The new conversation is titled "Fork of" and the
+original's title. Forked at one of your questions, it answers that question
+again as it opens, as an edit does.
 
 This is worth reaching for more often than people do. Asking "what if we did it
 the other way?" as a fork means you end up with both answers side by side in
 the sidebar rather than one overwritten by the other.
+
+## How messages are formatted
+
+Replies and your own messages are shown as Markdown: headings, lists, tables,
+links and highlighted code blocks. A single line break starts a new line, so a
+poem or an address keeps its lines; a blank line starts a new paragraph.
 
 ## How a reply shows the model's work
 
@@ -118,6 +131,9 @@ which model produced it, so the conversation stays readable afterwards.
 
 A live reply can usually reconnect, but its replay cache has a size limit and
 expires. If replay fails, the app checks saved history for a known pending reply.
+If the server cannot be reached (for example while it restarts), the page says
+so and keeps checking, less often the longer it lasts (at most every 15
+seconds), and shows the saved reply once the server answers.
 You can also choose **Reload saved messages**. This does not resend a failed
 request; copy any unsaved message text before replacing local history. A draft
 you are typing stays in the composer during recovery.
@@ -130,6 +146,9 @@ began). Moving to another
 conversation closes its browser reader without cancelling the server response.
 
 Load failures show a retry or unavailable state rather than an empty chat.
+A conversation, or the sidebar's projects, that could not load because the
+server was briefly unreachable loads again by itself every few seconds for two
+minutes, so you do not need to press **Retry** once the server is back.
 A reply that failed says so in its place, with the reason and **Try again**,
 both as it happens and after a reload.
 Opening another conversation will not send a pending new-chat prompt there.
@@ -152,7 +171,9 @@ larger model does not remove every limit.
 Whenever a message is refused like this, or because you are sending too quickly
 or have reached a usage limit, it is not sent: its text goes back into the
 message box and its files stay attached, so you can send it again once the
-reason is dealt with. The conversation is left as it was.
+reason is dealt with. The conversation is left as it was. If it was the
+first message of a new chat and you leave it without sending again, the empty
+chat is removed rather than left in your history as "New Chat".
 
 ## Long conversations
 
@@ -244,8 +265,9 @@ under its project, not in the date groupings.
 - **Rename** one with its pencil; see
   [Renaming a conversation](#renaming-a-conversation).
 - **Archive** one to remove it from the list without deleting it. A notice
-  confirms it, with **Undo**; archived conversations remain under
-  [Settings → History](settings.md#history).
+  confirms it, with **Undo**, for ten seconds; it stays while the pointer is
+  over it or Undo has focus (Alt+T moves focus to notices). Archived
+  conversations remain under [Settings → History](settings.md#history).
 - **Search** finds conversations by title and by what was said in them,
   including those in projects. See
   [Finding a conversation](#finding-a-conversation).

@@ -33,7 +33,8 @@ async function render(props: ComponentProps<typeof MessageList>) {
   await act(() => root.render(<MessageList {...props} />));
 }
 async function click(label: string) {
-  const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  // Message controls are named for their message (#194): "Edit message “Hello”".
+  const button = container.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`);
   expect(button).not.toBeNull();
   await act(() => button!.click());
 }
@@ -146,7 +147,7 @@ describe('memoized transcript correctness', () => {
     expect(container.textContent).toContain('new-model');
     expect(container.textContent).toContain('(high)');
     await click('Retry');
-    await click('Fork conversation here');
+    await click('Fork conversation');
     expect(nextRetry).toHaveBeenCalledOnce();
     expect(nextFork).toHaveBeenCalledWith('answer');
     expect(firstRetry).not.toHaveBeenCalled();

@@ -114,7 +114,7 @@ it('drops what was cached while signed out before entering the app', async () =>
   await act(() => root.render(withClient(<LoginPage />)));
   await submit();
 
-  expect(mocks.navigate).toHaveBeenCalledWith({ to: '/' });
+  expect(mocks.navigate).toHaveBeenCalledWith({ href: '/' });
   expect(client.getQueryData(['me'])).toBeUndefined();
   expect(client.getQueryData(['projects', 'sidebar'])).toBeUndefined();
 });

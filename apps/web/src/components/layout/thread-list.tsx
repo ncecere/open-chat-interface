@@ -72,7 +72,9 @@ export function ThreadRow({
           // screen reader's list of buttons is not N copies of one name (#111).
           aria-label={`Go to parent thread of: ${thread.title}`}
           title="Go to parent thread"
-          className="ml-2 rounded p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          // 24 × 24, the WCAG 2.2 target floor; it was the 14 px icon plus
+          // padding, 22 × 22, right against the row's link (#193).
+          className="ml-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <GitFork className="size-3.5" aria-hidden="true" />
         </Link>
@@ -197,26 +199,31 @@ export function ThreadList() {
 
         return (
           <div key={group.label}>
+            {/* Every group is a heading, as Projects is, so heading navigation
+                reaches each day; they were paragraphs, and Pinned a bare
+                button (#198). Pinned's disclosure sits inside its heading. */}
             {isPinned ? (
-              <button
-                type="button"
-                aria-expanded={pinnedOpen}
-                aria-controls="pinned-thread-list"
-                onClick={() => setPinnedOpen((open) => !open)}
-                // min-h keeps the target at the 24px WCAG 2.2 floor; the label
-                // itself is deliberately small, so padding carries the height.
-                className="flex min-h-6 w-full items-center gap-1 rounded px-2.5 pb-1 text-left text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
-              >
-                <ChevronDown
-                  className={cn('size-3 transition-transform', !pinnedOpen && '-rotate-90')}
-                  aria-hidden="true"
-                />
-                Pinned
-              </button>
+              <h2>
+                <button
+                  type="button"
+                  aria-expanded={pinnedOpen}
+                  aria-controls="pinned-thread-list"
+                  onClick={() => setPinnedOpen((open) => !open)}
+                  // min-h keeps the target at the 24px WCAG 2.2 floor; the label
+                  // itself is deliberately small, so padding carries the height.
+                  className="flex min-h-6 w-full items-center gap-1 rounded px-2.5 pb-1 text-left text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
+                >
+                  <ChevronDown
+                    className={cn('size-3 transition-transform', !pinnedOpen && '-rotate-90')}
+                    aria-hidden="true"
+                  />
+                  Pinned
+                </button>
+              </h2>
             ) : (
-              <p className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]">
+              <h2 className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]">
                 {group.label}
-              </p>
+              </h2>
             )}
             {visible && (
               <div

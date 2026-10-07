@@ -359,6 +359,13 @@ export const auditLog = pgTable(
   (t) => [
     index('audit_log_created_idx').on(t.createdAt),
     index('audit_log_actor_idx').on(t.actorUserId),
+    // An account's audit trail matches its id as actor, as target, or among
+    // the accounts a bulk action named (#216). Built CONCURRENTLY by
+    // post-deploy steps 0007_audit_log_target_index and
+    // 0008_audit_log_user_ids_index (`migrate --post`), never by a pre-deploy
+    // migration: building them in one blocks writes to `audit_log`.
+    index('audit_log_target_idx').on(t.targetId),
+    index('audit_log_user_ids_idx').using('gin', sql`(${t.metadata} -> 'userIds')`),
     uniqueIndex('audit_log_seq_unique').on(t.seq),
   ],
 );

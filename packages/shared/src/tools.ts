@@ -134,6 +134,36 @@ const KNOWN_TOOL_LABELS: Record<string, string> = {
 /** Built-in tools that change only OCI's own artifacts (v0.9); see `ARTIFACT_TOOL_IDS`. */
 export const ARTIFACT_TOOL_IDS = ['create_artifact', 'update_artifact'] as const;
 
+/** How a declined `create_artifact` call's note to the model begins (#149, #201). */
+export const ARTIFACT_NOT_SAVED = 'Not saved as an artifact';
+
+/**
+ * What `create_artifact` returns when it declines content that belongs in the
+ * reply (#201): a result, not an error, because nothing failed. `note` tells
+ * the model what to do instead; the person never sees it.
+ */
+export interface DeclinedArtifactResult {
+  saved: false;
+  note: string;
+}
+
+/**
+ * A `create_artifact` call the server declined (#149) because its content
+ * belongs in the reply: not a failure, and not something the person did, so
+ * the conversation, share pages and downloads leave it out (#201). Replies
+ * stored before #201 have the decline as the step's error text.
+ */
+export function isDeclinedArtifactPart(part: unknown): boolean {
+  if (!isToolPart(part) || toolIdOfPart(part) !== 'create_artifact') return false;
+  if (part.state === 'output-available')
+    return (part.output as Partial<DeclinedArtifactResult> | null)?.saved === false;
+  return (
+    part.state === 'output-error' &&
+    typeof part.errorText === 'string' &&
+    part.errorText.startsWith(`${ARTIFACT_NOT_SAVED}:`)
+  );
+}
+
 /** The artifact a finished artifact tool step created or changed, from its result. */
 export function artifactOfToolPart(
   part: PartLike,
@@ -281,7 +311,8 @@ export function summarizeToolPart(part: PartLike): ToolStepSummary {
     const input = part.input as { title?: unknown } | undefined;
     const title = result?.title ?? (typeof input?.title === 'string' ? input.title : null);
     const target = title ? ` ${quote(title)}` : '';
-    if (state === 'done' && result)
+    if (isDeclinedArtifactPart(part)) summary = `${ARTIFACT_NOT_SAVED}${target}`;
+    else if (state === 'done' && result)
       summary = created
         ? `Created artifact${target}`
         : `Updated artifact${target} · version ${result.version}`;
@@ -307,8 +338,10 @@ export function summarizeToolPart(part: PartLike): ToolStepSummary {
   };
 }
 
-/** Every tool step of a message, in order. */
+/** Every tool step of a message, in order, without declined artifact attempts (#201). */
 export function toolStepsOf(parts: unknown): ToolStepSummary[] {
   if (!Array.isArray(parts)) return [];
-  return parts.filter(isToolPart).map(summarizeToolPart);
+  return parts
+    .filter((part) => isToolPart(part) && !isDeclinedArtifactPart(part))
+    .map((part) => summarizeToolPart(part as PartLike));
 }

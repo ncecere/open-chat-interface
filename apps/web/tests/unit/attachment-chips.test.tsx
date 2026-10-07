@@ -45,3 +45,19 @@ it('shows no message for files that uploaded', async () => {
   await act(async () => root.render(<AttachmentChips items={[ready]} onRemove={() => {}} />));
   expect(container.querySelector('[role="alert"]')).toBeNull();
 });
+
+it('shows a document, not a broken image, while a file named .png that is not one uploads (#209)', async () => {
+  const uploading = {
+    ...refused,
+    filename: 'walk3-fake.png',
+    status: 'uploading',
+    error: undefined,
+  } as PendingAttachment;
+  await act(async () => root.render(<AttachmentChips items={[uploading]} onRemove={() => {}} />));
+  const preview = container.querySelector('img');
+  expect(preview).not.toBeNull();
+  // The browser could not draw it: the bytes are text.
+  await act(async () => preview!.dispatchEvent(new Event('error')));
+  expect(container.querySelector('img')).toBeNull();
+  expect(container.textContent).toContain('walk3-fake.png');
+});

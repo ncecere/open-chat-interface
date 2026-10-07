@@ -448,4 +448,42 @@ describe('history and summaries', () => {
       },
     ]);
   });
+
+  it('leaves out artifact attempts declined as reply content, old and new (#201)', async () => {
+    const { CODE_MARKDOWN_REFUSAL, SHORT_MARKDOWN_REFUSAL } = await import('@oci/shared');
+    const { orderedReplyLines } = await import('../../services/export.js');
+    const attempt = (toolCallId: string, extra: Record<string, unknown>) => ({
+      type: 'tool-create_artifact',
+      toolCallId,
+      input: { title: 'Colours', kind: 'markdown', content: '| a |' },
+      ...extra,
+    });
+    const parts = [
+      attempt('d1', {
+        state: 'output-available',
+        output: { saved: false, note: SHORT_MARKDOWN_REFUSAL },
+      }),
+      // Stored before #201: the decline was the step's error.
+      attempt('d2', { state: 'output-error', errorText: CODE_MARKDOWN_REFUSAL }),
+      attempt('f1', { state: 'output-error', errorText: 'An artifact can be at most 512 KB.' }),
+      { type: 'text', text: 'The table.' },
+    ];
+    expect(toolStepsOf(parts).map((step) => step.summary)).toEqual(['Creating an artifact failed']);
+    expect(sanitizePublicParts(parts)).toEqual([
+      { type: 'tool-step', toolId: 'create_artifact', summary: 'Creating an artifact failed' },
+      { type: 'text', text: 'The table.' },
+    ]);
+    expect(orderedReplyLines(parts)).toEqual([
+      '_Creating an artifact failed_',
+      '',
+      'The table.',
+      '',
+    ]);
+    // Where every step is listed (data exports), it says what happened, not "failed".
+    expect(summarizeToolPart(parts[0]!)).toMatchObject({
+      state: 'done',
+      summary: "Not saved as an artifact 'Colours'",
+    });
+    expect(summarizeToolPart(parts[1]!).summary).toBe("Not saved as an artifact 'Colours'");
+  });
 });

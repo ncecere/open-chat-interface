@@ -7,8 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from the v0.11.0 QA walk (issues #35–#121). One migration, `0042`, runs
-with `migrate` as usual; nothing else is needed to upgrade.
+Fixes from three QA walks of v0.11.0 (issues #35–#237). One migration, `0042`,
+runs with `migrate` as usual. Two new post-deploy steps, `0007` and `0008`, index
+the audit log so a person's trail includes bulk actions done to them (#216): run
+`migrate --post` after every replica runs the new release, as for any release.
+Until they run, the trail is complete but slower on a large audit log. The
+PostgreSQL driver patch (`patches/postgres@3.4.9.patch`) is applied by
+`pnpm install`.
 
 ### Added
 
@@ -105,6 +110,50 @@ with `migrate` as usual; nothing else is needed to upgrade.
 - **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
+
+### Fixed after a third QA walk (#186–#237)
+
+- **Replies and recovery:** a pending reply resolves once the API is back,
+  however long it was down (#229); a reply that finished during a database
+  outage is saved as complete (#231); the conversation and project-list errors
+  retry by themselves (#233); a message refused during a drain leaves no empty
+  conversation or "Reload saved messages" (#234); the worker waits for a
+  database host that does not resolve (#230); readiness answers within a
+  second during a database outage (#232).
+- **Rendering:** shared conversations keep code blocks' lines and colours
+  (#186); long words wrap (#187); single line breaks are kept (#207); reply
+  headings start at level 2 (#212); refused artifact attempts are no longer
+  shown as failed steps (#201); the web-search step shows its query, provider
+  and sources (#203); search snippets drop Markdown (#206); repeated message
+  and code-block controls are named for what they act on (#194).
+- **Chat:** summaries work with thinking models (#202); the model is told
+  today's date in the instance's reporting time zone (#204); the archive
+  notice stays 10 s and while Undo has focus (#205); upload failures and
+  refusals read clearly, and New Chat clears failed uploads (#208, #209); a
+  fork at a question is answered and titled "Fork of …" (#213); downloads use
+  the person's date (#211); the project delete dialog handles empty projects
+  (#210); an emailed invitation fills in its address (#214, partly: see the
+  issue).
+- **Administration:** every background job is listed with Run (#215); bulk
+  actions appear in a person's audit trail (#216); errors clear on edit on
+  every form (#217, #226); files per message and search results are capped at
+  20 (#218); audit entries record previous values (#221); read-only mode's
+  reason and end are cleared and validated (#222); clearer connector,
+  compliance and announcement status (#223, #224, #227); wording and button
+  names (#219, #220, #228); the audit metadata block is reachable by keyboard
+  (#192).
+- **Accounts:** sign-in returns to the page asked for (#225); Devices says a
+  signed-out device is signed out at once (#235); the verification email says
+  its link lasts an hour (#236); the signed-out address reads
+  `?signed-out=1` (#237).
+- **Accessibility and layout:** contrast on highlighted rows (#188); focus
+  after bulk actions, auth forms and in the phone drawer (#189, #190, #191);
+  24 px targets (#193); no clipped text without a way to read it (#195); the
+  external-link warning focuses Cancel (#196); page titles name the page
+  (#197); sidebar groups are headings (#198); one dialog layout on phones
+  (#199); Settings no longer shifts while loading on phones (#200).
+- **Dependencies:** patched seroval, source-map-js, fast-copy and KaTeX for
+  advisories published after 0.11.0.
 
 ### Fixed after a second QA walk (#125–#184)
 

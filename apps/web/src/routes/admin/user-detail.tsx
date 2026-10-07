@@ -19,6 +19,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
+import { pageWithin, usePageTitle } from '~/lib/document-title';
 import { formatBytes, formatRelativeTime, formatTimeUntil } from '~/lib/utils';
 
 interface SessionRow {
@@ -95,6 +96,8 @@ export function AdminUserDetailPage() {
     queryFn: () => api.get<UserDetail>(`/admin/users/${userId}`),
   });
   const { data, isLoading } = detail;
+  // The person by name in the tab, not "Users" for everyone's page (#197).
+  usePageTitle(data ? pageWithin(data.user.name || data.user.email, '/admin/users') : null);
 
   const [confirming, setConfirming] = useState<'ban' | 'sign-out' | null>(null);
   const [banReason, setBanReason] = useState('');

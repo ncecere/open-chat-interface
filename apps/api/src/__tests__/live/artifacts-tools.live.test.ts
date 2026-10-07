@@ -302,9 +302,14 @@ describe.skipIf(!available)('live artifacts', () => {
       expect(artifact!.currentVersion).toBe(1);
     });
 
-    it('keeps a small table and a function out of Markdown artifacts unless asked (#149)', async () => {
-      const { CODE_MARKDOWN_REFUSAL, MIN_MARKDOWN_ARTIFACT_CHARS, SHORT_MARKDOWN_REFUSAL } =
-        await import('../../services/artifacts/markdown-floor.js');
+    it('keeps a small table and a function out of Markdown artifacts unless asked (#149, #201)', async () => {
+      const {
+        CODE_MARKDOWN_REFUSAL,
+        MIN_MARKDOWN_ARTIFACT_CHARS,
+        SHORT_MARKDOWN_REFUSAL,
+        isDeclinedArtifactPart,
+        toolStepsOf,
+      } = await import('@oci/shared');
       // What the instance's default model sent in the QA walk.
       const table = [
         '| Planet | Diameter (km) |',
@@ -331,14 +336,27 @@ describe.skipIf(!available)('live artifacts', () => {
       const outcomes = Object.fromEntries(
         reply.parts
           .filter((part) => part.type === 'tool-create_artifact')
-          .map((part) => [part.toolCallId as string, [part.state, part.errorText ?? null]]),
+          .map((part) => [
+            part.toolCallId as string,
+            [part.state, part.errorText ?? null, (part.output as { note?: string })?.note ?? null],
+          ]),
       );
+      // Declined, not failed (#201): the model reads why in the result.
       expect(outcomes).toEqual({
-        c1: ['output-error', SHORT_MARKDOWN_REFUSAL],
-        c2: ['output-error', CODE_MARKDOWN_REFUSAL],
-        c3: ['output-available', null],
-        c4: ['output-available', null],
+        c1: ['output-available', null, SHORT_MARKDOWN_REFUSAL],
+        c2: ['output-available', null, CODE_MARKDOWN_REFUSAL],
+        c3: ['output-available', null, null],
+        c4: ['output-available', null, null],
       });
+      // The stored reply's steps, as every renderer lists them, leave them out.
+      expect(reply.parts.filter(isDeclinedArtifactPart).map((part) => part.toolCallId)).toEqual([
+        'c1',
+        'c2',
+      ]);
+      expect(toolStepsOf(reply.parts).map((step) => step.summary)).toEqual([
+        "Created artifact 'Report'",
+        "Created artifact 'Dot'",
+      ]);
       expect((await artifactsOf(chat.id)).map((artifact) => artifact.title).sort()).toEqual([
         'Dot',
         'Report',

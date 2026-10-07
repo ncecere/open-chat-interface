@@ -16,7 +16,8 @@ import {
   upsertModelSchema,
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
+import { CAPABILITY_LABELS } from '~/components/chat/model-picker-data';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
 import {
@@ -31,6 +32,7 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
@@ -137,10 +139,13 @@ function ChoicePills<Value extends string>({
   values,
   options,
   onChange,
+  labels,
 }: {
   values: Value[];
   options: readonly Value[];
   onChange: (values: Value[]) => void;
+  /** Names to show; otherwise the value, spaced and capitalised. */
+  labels?: Readonly<Record<Value, string>>;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -153,13 +158,14 @@ function ChoicePills<Value extends string>({
             aria-pressed={selected}
             onClick={() => onChange(toggleValue(values, option))}
             className={cn(
-              'rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors',
+              'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+              !labels && 'capitalize',
               selected
                 ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
                 : 'bg-[var(--bg-control-alt)] text-[var(--text-muted)] hover:text-[var(--text-primary)]',
             )}
           >
-            {option.replaceAll('_', ' ')}
+            {labels?.[option] ?? option.replaceAll('_', ' ')}
           </button>
         );
       })}
@@ -233,8 +239,7 @@ export function ModelFormDialog({
   const [error, setError] = useState<string | null>(null);
   // The listed problems were about the form as it was submitted; once it
   // changes they may no longer hold, so they go until the next attempt (#178).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every draft change
-  useEffect(() => setError(null), [draft]);
+  useClearOnEdit(draft, () => setError(null));
 
   // Whether thinking can be surfaced at all depends on the wire protocol, so
   // the guidance follows whichever provider is selected.
@@ -494,6 +499,9 @@ export function ModelFormDialog({
           <ChoicePills
             values={draft.capabilities}
             options={MODEL_CAPABILITIES}
+            // The names the model list and picker use: "PDF comprehension",
+            // not "Pdf Comprehension" here and "PDF" there (#228).
+            labels={CAPABILITY_LABELS}
             onChange={(capabilities) => setDraft((current) => ({ ...current, capabilities }))}
           />
         </Field>
@@ -521,7 +529,8 @@ export function ModelFormDialog({
           />
         </Field>
 
-        <div className="grid gap-3 rounded-xl border border-[var(--border-subtle)] p-4 sm:grid-cols-2">
+        {/* Full width, so the switch sits at the right as in every other dialog (#228). */}
+        <div className="rounded-xl border border-[var(--border-subtle)] p-4">
           <label
             htmlFor="model-enabled"
             className="flex items-center justify-between gap-3 text-sm"

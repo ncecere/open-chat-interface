@@ -15,6 +15,7 @@ vi.mock('streamdown', () => ({
     sanitize: 'sanitize',
     harden: ['harden', { allowedLinkPrefixes: ['*'] }],
   },
+  defaultRemarkPlugins: { gfm: 'gfm' },
 }));
 vi.mock('@streamdown/code', () => ({ code: {} }));
 vi.mock('@streamdown/math', () => ({ createMathPlugin: () => ({}) }));
@@ -61,7 +62,8 @@ it('does not cache past changed HTML safety, URL policy or styling', async () =>
       children: 'Same text',
       skipHtml: true,
       urlTransform: nextTransform,
-      className: 'new-style',
+      // After the classes every rendering needs (#186).
+      className: expect.stringMatching(/ new-style$/),
     }),
   );
 });

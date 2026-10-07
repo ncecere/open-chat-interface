@@ -18,8 +18,50 @@ healthRoutes.get('/live', (c) => c.json({ status: 'ok' }));
  * of rotation together and turn requests the API retries (or marks retryable)
  * into a full outage. Past this, the outage is real and readiness says so.
  */
-export const readiness = { databaseGraceMs: 30_000 };
+export const readiness = {
+  databaseGraceMs: 30_000,
+  /**
+   * How long a dependency check may take before it counts as failing (#232).
+   * A database whose host does not resolve, or whose address drops packets
+   * during a failover, kept readiness waiting for 5-15 s or until the driver's
+   * connect timeout; a probe that gives up after 1-3 s counted that as a
+   * failure and took the replica out of rotation inside the grace above.
+   * Below the Helm chart's 2 s probe timeout.
+   */
+  checkTimeoutMs: 1_000,
+};
 let databaseDownSince: number | null = null;
+/**
+ * The database check in progress. A probe that arrives while an earlier
+ * check still waits joins it rather than queuing another query behind it,
+ * so probes every 2 s through an outage do not pile up on the pool.
+ */
+let databaseCheck: Promise<unknown> | null = null;
+
+async function checkDatabase(): Promise<'ok' | 'error'> {
+  if (!databaseCheck) {
+    const check: Promise<unknown> = Promise.resolve(sqlClient`select 1`).finally(() => {
+      if (databaseCheck === check) databaseCheck = null;
+    });
+    databaseCheck = check;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`No answer within ${readiness.checkTimeoutMs} ms`)),
+      readiness.checkTimeoutMs,
+    );
+  });
+  try {
+    await Promise.race([databaseCheck, timeout]);
+    return 'ok';
+  } catch (error) {
+    logger.error({ error }, 'Database readiness check failed');
+    return 'error';
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Whether to send this replica new traffic. 503 from the first shutdown signal
@@ -43,14 +85,7 @@ healthRoutes.get('/ready', async (c) => {
       { 'Retry-After': '1' },
     );
   }
-  let database: 'ok' | 'error' = 'ok';
-
-  try {
-    await sqlClient`select 1`;
-  } catch (error) {
-    logger.error({ error }, 'Database readiness check failed');
-    database = 'error';
-  }
+  const database = await checkDatabase();
 
   if (database === 'ok') databaseDownSince = null;
   else databaseDownSince ??= Date.now();

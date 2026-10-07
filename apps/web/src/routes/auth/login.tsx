@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
+import { AuthFormError, fieldErrorProps, useFocusAfterRender } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -12,6 +12,7 @@ import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
+import { returnPathFromSearch } from '~/lib/return-path';
 import { SIGNED_OUT_PARAM } from '~/lib/session-ended';
 
 const WRONG_CREDENTIALS = 'Unable to sign in. Check your email and password.';
@@ -44,12 +45,16 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  const focusAfterRender = useFocusAfterRender();
   // Only wrong credentials are about the fields; a rate limit is not (#183).
   const invalidCredentials = error === WRONG_CREDENTIALS;
   // Sent here because the session ended while the app was open (#165).
   const [signedOut] = useState(() =>
     new URLSearchParams(window.location.search).has(SIGNED_OUT_PARAM),
   );
+  // The page a signed-out visit asked for, to return to afterwards (#225);
+  // only a path on this site, so the parameter cannot send anyone elsewhere.
+  const [returnTo] = useState(() => returnPathFromSearch() ?? '/');
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -63,11 +68,11 @@ export function LoginPage() {
       setNeedsVerification(result.error.code === 'EMAIL_NOT_VERIFIED');
       // Wrong credentials get the wording the user guide quotes (#97); other
       // refusals (unverified, banned, rate limited) keep the server's reason.
-      setError(
-        result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || !result.error.message
-          ? WRONG_CREDENTIALS
-          : result.error.message,
-      );
+      const wrong = result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || !result.error.message;
+      setError(wrong ? WRONG_CREDENTIALS : result.error.message!);
+      // Back to the form rather than the body (#190): the fields at fault, which
+      // the error describes, or the button for a refusal that is not theirs.
+      focusAfterRender(wrong ? 'email' : 'login-submit');
       setSubmitting(false);
       return;
     }
@@ -76,12 +81,16 @@ export function LoginPage() {
     // this tab): an anonymous /me answer would otherwise be reused for the
     // new account, hiding its menu, projects and features until a reload.
     queryClient.clear();
-    await navigate({ to: '/' });
+    await navigate({ href: returnTo });
   }
 
   async function handleSso(providerId: string) {
     setError(null);
-    await authClient.signIn.sso({ providerId, callbackURL: '/', errorCallbackURL: SSO_ERROR_URL });
+    await authClient.signIn.sso({
+      providerId,
+      callbackURL: returnTo,
+      errorCallbackURL: SSO_ERROR_URL,
+    });
   }
 
   /**
@@ -125,10 +134,10 @@ export function LoginPage() {
     if (auto)
       void authClient.signIn.sso({
         providerId: auto.providerId,
-        callbackURL: '/',
+        callbackURL: returnTo,
         errorCallbackURL: SSO_ERROR_URL,
       });
-  }, [status, error, signedOut]);
+  }, [status, error, signedOut, returnTo]);
 
   const appName = status?.branding.appName;
 
@@ -204,7 +213,13 @@ export function LoginPage() {
 
               {error && <AuthFormError id="login-error">{error}</AuthFormError>}
 
-              <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
+              <Button
+                id="login-submit"
+                type="submit"
+                variant="primary"
+                disabled={submitting}
+                className="mt-1 w-full"
+              >
                 {submitting ? <Spinner className="text-white" /> : <KeyRound />}
                 Sign in
               </Button>

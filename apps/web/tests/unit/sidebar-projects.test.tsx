@@ -19,6 +19,7 @@ import { useMoveThread } from '../../src/hooks/use-projects';
 import { useCreateThread } from '../../src/hooks/use-threads';
 import { chatHistoryKey } from '../../src/lib/conversation-cache';
 import { button, click, settle } from './admin-test-utils';
+import { styleFor, toPx } from './css-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -410,6 +411,44 @@ describe('sidebar projects', () => {
   });
 });
 
+describe('sidebar general list', () => {
+  /** The size of a box from its compiled classes: its own, else its padding round its icon. */
+  async function targetSize(element: Element) {
+    const style = await styleFor(element.getAttribute('class') ?? '');
+    const icon = await styleFor(element.querySelector('svg')?.getAttribute('class') ?? '');
+    const padding = 2 * toPx(style.padding);
+    return {
+      width: style.width ? toPx(style.width) : toPx(icon.width) + padding,
+      height: style.height ? toPx(style.height) : toPx(icon.height) + padding,
+    };
+  }
+
+  it('makes "Go to parent thread" a 24 × 24 target (#193)', async () => {
+    threads = [thread('f1', 'Forked plan', { parentThreadId: 'u1' })];
+    await render();
+    const parent = document.querySelector('a[title="Go to parent thread"]')!;
+    expect(parent.getAttribute('aria-label')).toBe('Go to parent thread of: Forked plan');
+    const size = await targetSize(parent);
+    expect(size.width).toBeGreaterThanOrEqual(24);
+    expect(size.height).toBeGreaterThanOrEqual(24);
+  });
+
+  it('heads every group, so heading navigation reaches each day (#198)', async () => {
+    threads = [
+      thread('pg', 'Pinned grant', { pinned: true, projectId: 'p2' }),
+      thread('u1', 'Unfiled today'),
+      thread('o1', 'Unfiled long ago', { lastMessageAt: LONG_AGO, createdAt: LONG_AGO }),
+    ];
+    await render();
+    const headings = [...document.querySelectorAll('nav h2')].map((h) => h.textContent);
+    expect(headings).toEqual(['Projects', 'Pinned', 'Today', 'Older']);
+    // Pinned keeps its disclosure, inside the heading.
+    const pinned = button('Pinned');
+    expect(pinned.closest('h2')).not.toBeNull();
+    expect(pinned.getAttribute('aria-expanded')).toBe('true');
+  });
+});
+
 describe('sidebar refresh after conversation changes', () => {
   function MoveHarness() {
     const move = useMoveThread();
@@ -472,5 +511,42 @@ describe('sidebar refresh after conversation changes', () => {
 
     expect(api.post).toHaveBeenCalledWith('/threads', { temporary: false, projectId: 'p3' });
     expect(titles(projectList('Empty'))).toEqual(['New Chat']);
+  });
+});
+
+describe('sidebar projects during a database outage', () => {
+  // "Projects could not be loaded" stayed after a 40 s outage was over, until
+  // a reload (#233). The real query and QueryClient; the API answers 500 as
+  // it did while PostgreSQL was away.
+  it('loads the projects by itself once the outage is over', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    const { AUTO_RETRY_MS } = await import('../../src/hooks/use-auto-retry');
+    let down = true;
+    const normal = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) => {
+      if (down && path === '/projects/sidebar')
+        throw new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
+      return normal(path);
+    });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      await render();
+      expect(document.body.textContent).toContain('Projects could not be loaded.');
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_RETRY_MS);
+      });
+      await settle();
+      expect(document.body.textContent).toContain('Projects could not be loaded.');
+
+      down = false;
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_RETRY_MS);
+      });
+      await settle();
+      expect(document.body.textContent).not.toContain('Projects could not be loaded.');
+      expect(link('Thesis')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

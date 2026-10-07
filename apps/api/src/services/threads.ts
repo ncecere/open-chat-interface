@@ -12,7 +12,12 @@ import {
   schema,
   sql,
 } from '@oci/db';
-import type { BranchMessageInput, ForkMessageInput, UserRole } from '@oci/shared';
+import {
+  type BranchMessageInput,
+  type ForkMessageInput,
+  THREAD_TITLE_MAX_LENGTH,
+  type UserRole,
+} from '@oci/shared';
 import { db } from '../db/index.js';
 import { forbidden, notFound, rateLimited, validationFailed } from '../lib/errors.js';
 import { containsPattern } from '../lib/like.js';
@@ -149,6 +154,33 @@ export async function purgeUnusedThreads(now = new Date()): Promise<number> {
     { reason: 'unused_expiry', actorUserId: null, skipLocked: true, all: true },
   );
   return removed.length;
+}
+
+/**
+ * Destroys one of the person's conversations if it is still unused (untitled,
+ * without a message), as the daily cleanup would, but at once: the page that
+ * started it calls this when the person leaves after its first message was
+ * refused (a server restarting, a rate limit), so no empty "New Chat" is left
+ * in their history (#234). Holds nothing to keep, so it skips the trash. A
+ * conversation that has a message by now (a send that was accepted after
+ * all; the turn's transaction locks the conversation as this does) is kept.
+ */
+export async function destroyUnusedThread(threadId: string, userId: string): Promise<boolean> {
+  const removed = await destroyThreads(
+    and(
+      eq(schema.thread.id, threadId),
+      eq(schema.thread.userId, userId),
+      unused(),
+      isNull(schema.thread.lastMessageAt),
+      eq(schema.thread.pinned, false),
+      eq(schema.thread.archived, false),
+      isNull(schema.thread.deletedAt),
+      isNull(schema.thread.importSource),
+      notOnLegalHold(schema.thread.userId),
+    ),
+    { reason: 'unused_expiry', actorUserId: userId },
+  );
+  return removed.length > 0;
 }
 
 export async function listThreads(
@@ -302,7 +334,7 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
       .values({
         organizationId: sourceThread.organizationId,
         userId,
-        title: sourceThread.title,
+        title: forkTitle(sourceThread.title),
         parentThreadId: sourceThread.id,
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
@@ -356,6 +388,38 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
 
     return fork;
   });
+}
+
+/**
+ * A fork's title: its source's, marked, so the two can be told apart in the
+ * sidebar, which shows the start of a long title (#213). A fork of a fork is
+ * not marked twice.
+ */
+export function forkTitle(title: string): string {
+  if (title.startsWith(FORK_PREFIX)) return title;
+  return `${FORK_PREFIX}${title}`.slice(0, THREAD_TITLE_MAX_LENGTH);
+}
+const FORK_PREFIX = 'Fork of ';
+
+/**
+ * The fork's copy of the message it was made at: a fork made at a question
+ * is answered at once, as an edit is (#213).
+ */
+export async function forkedMessage(forkId: string, sourceMessageId: string) {
+  const [copy] = await db
+    .select({
+      id: schema.message.id,
+      role: schema.message.role,
+      modelSlug: schema.message.modelSlug,
+      effort: schema.message.effort,
+    })
+    .from(schema.message)
+    .where(
+      and(eq(schema.message.threadId, forkId), eq(schema.message.parentMessageId, sourceMessageId)),
+    )
+    .limit(1);
+  if (!copy) throw notFound('Message not found');
+  return copy;
 }
 
 /**

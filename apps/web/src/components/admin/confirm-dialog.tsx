@@ -74,7 +74,7 @@ export function ConfirmDialog({
 
           <MutationError error={action.error} message={errorMessage} className="mt-3" />
 
-          <DialogFooter className="flex-col-reverse sm:flex-row">
+          <DialogFooter>
             <Button
               type="button"
               variant="ghost"

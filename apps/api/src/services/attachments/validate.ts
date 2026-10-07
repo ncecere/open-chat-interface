@@ -63,6 +63,33 @@ export function fileKind(mimeType: string): string | null {
   return null;
 }
 
+/** What people call each allowed kind of file, for saying what may be attached. */
+const ALLOWED_KINDS: Array<[pattern: RegExp, kinds: string]> = [
+  [/^image\//, 'images'],
+  [/^application\/pdf$/, 'PDFs'],
+  [/^(text\/|application\/json$)/, 'text files'],
+  [/wordprocessingml|^application\/msword$/, 'Word documents'],
+  [/spreadsheetml|^application\/vnd\.ms-excel$/, 'spreadsheets'],
+  [/presentationml|^application\/vnd\.ms-powerpoint$/, 'presentations'],
+];
+
+/** "You can attach images, PDFs and text files.", or null when none has a common name. */
+export function allowedKindsSentence(allowedMimeTypes: string[]): string | null {
+  const kinds = ALLOWED_KINDS.filter(([pattern]) =>
+    allowedMimeTypes.some((type) => pattern.test(type)),
+  ).map(([, kinds]) => kinds);
+  if (kinds.length === 0) return null;
+  const list =
+    kinds.length === 1 ? kinds[0] : `${kinds.slice(0, -1).join(', ')} and ${kinds.at(-1)}`;
+  return `You can attach ${list}.`;
+}
+
+/** A size limit as people set it: "20 MB", "1.5 MB", "512 KB", without a stray ".0". */
+function limitText(bytes: number): string {
+  const [unit, size] = bytes >= 1024 * 1024 ? ['MB', 1024 * 1024] : ['KB', 1024];
+  return `${Number((bytes / size).toFixed(1))} ${unit}`;
+}
+
 const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 function decodeText(bytes: Buffer): string | null {
@@ -103,11 +130,13 @@ export async function validateUpload(params: {
   const filename = sanitizeFilename(params.filename);
 
   if (params.bytes.byteLength === 0) {
-    throw validationFailed(`${filename} is empty`);
+    throw validationFailed(`${filename} is empty, so it was not uploaded.`);
   }
+  // Whole sentences, worded as the composer's own checks are (#209).
   if (params.bytes.byteLength > params.maxFileBytes) {
-    const limitMb = Math.round(params.maxFileBytes / (1024 * 1024));
-    throw validationFailed(`${filename} exceeds the ${limitMb} MB limit`);
+    throw validationFailed(
+      `${filename} is larger than the ${limitText(params.maxFileBytes)} limit, so it was not uploaded.`,
+    );
   }
 
   const detected = await fileTypeFromBuffer(params.bytes);
@@ -123,15 +152,23 @@ export async function validateUpload(params: {
   } else if (looksLikeText(params.bytes)) {
     mimeType = 'text/plain';
   } else {
-    throw validationFailed(`${filename} has an unrecognized or unsupported format`);
+    throw validationFailed(
+      `${filename} has an unrecognised or unsupported format, so it was not uploaded.`,
+    );
   }
 
   if (!params.allowedMimeTypes.includes(mimeType)) {
     const kind = fileKind(mimeType);
+    const allowed = allowedKindsSentence(params.allowedMimeTypes);
     throw validationFailed(
-      kind
-        ? `${filename} is ${kind}, which is not allowed here`
-        : `${filename} is a type of file that is not allowed here`,
+      [
+        kind
+          ? `${filename} is ${kind}, which is not allowed here.`
+          : `${filename} is a type of file that is not allowed here.`,
+        allowed,
+      ]
+        .filter(Boolean)
+        .join(' '),
     );
   }
 
@@ -139,7 +176,7 @@ export async function validateUpload(params: {
     try {
       JSON.parse(decodeText(params.bytes) ?? '');
     } catch {
-      throw validationFailed(`${filename} does not contain valid JSON`);
+      throw validationFailed(`${filename} does not contain valid JSON.`);
     }
   }
 

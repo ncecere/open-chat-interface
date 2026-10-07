@@ -49,6 +49,29 @@ const isUnauthorized = (error: unknown) => {
   return false;
 };
 
+/**
+ * The server answered, but not as an MCP server: a success status with a body
+ * the MCP client could not read (HTML, or JSON that is not JSON-RPC). Said as
+ * such, since "could not be reached" sends an administrator to check the
+ * network rather than the URL (#223).
+ */
+const notMcp = (error: unknown): boolean => {
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current; depth++) {
+    const { name, message } = current as { name?: unknown; message?: unknown };
+    // A body that is not JSON (the client lets JSON.parse's error through).
+    if (name === 'ZodError' || name === 'SyntaxError') return true;
+    if (
+      name === 'MCPClientError' &&
+      typeof message === 'string' &&
+      /failed to parse server response|unexpected content type/i.test(message)
+    )
+      return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+};
+
 /** A JSON-RPC error the server sent for this request (`code` set by the MCP client). */
 const rpcMessage = (error: unknown): string | null => {
   const candidate = error as { name?: unknown; code?: unknown; message?: unknown } | null;
@@ -90,6 +113,11 @@ export function connectorFailure(
     return providerError(
       auth.reconnectMessage ??
         `${name} refused OCI’s credentials. Ask an administrator to check them.`,
+    );
+  const answered = status !== null && status >= 200 && status < 300;
+  if (answered || (status === null && notMcp(error)))
+    return providerError(
+      `${name} answered, but not as an MCP server${answered ? ` (HTTP ${status})` : ''}. Check that the URL is the server’s MCP endpoint.`,
     );
   if (status !== null) return providerError(`${name} returned an error (HTTP ${status}).`);
   const rpc = rpcMessage(error);

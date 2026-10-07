@@ -14,6 +14,8 @@ type InviteState = 'checking' | 'valid' | 'invalid' | 'accepted';
 
 interface ValidateInviteResponse {
   emailLocked: boolean;
+  /** The address the invitation is for, filled in and fixed (#214); absent from older servers. */
+  email?: string | null;
 }
 
 interface AcceptInviteResponse {
@@ -36,6 +38,7 @@ export function AcceptInvitePage() {
   const [emailLocked, setEmailLocked] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +60,10 @@ export function AcceptInvitePage() {
       .then((result) => {
         if (!active) return;
         setEmailLocked(result.emailLocked);
+        if (result.email) {
+          setEmail(result.email);
+          setInvitedEmail(result.email);
+        }
         setInviteState('valid');
       })
       .catch(() => {
@@ -145,11 +152,20 @@ export function AcceptInvitePage() {
                   required
                   maxLength={320}
                   value={email}
+                  // The invitation is for this address and no other.
+                  readOnly={invitedEmail !== null}
+                  aria-describedby={
+                    [error && 'invite-error', emailLocked && 'invite-email-hint']
+                      .filter(Boolean)
+                      .join(' ') || undefined
+                  }
                   onChange={(event) => setEmail(event.target.value)}
                 />
                 {emailLocked && (
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Enter the email address this invitation was sent to.
+                  <p id="invite-email-hint" className="text-xs text-[var(--text-muted)]">
+                    {invitedEmail
+                      ? 'The address this invitation was sent to.'
+                      : 'Enter the email address this invitation was sent to.'}
                   </p>
                 )}
               </div>

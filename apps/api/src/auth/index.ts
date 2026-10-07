@@ -8,7 +8,11 @@ import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { clientIpFromHeaders } from '../lib/client-ip.js';
 import { logger } from '../lib/logger.js';
-import { RESET_LINK_TTL_SECONDS, sendPasswordResetEmail } from '../services/email.js';
+import {
+  RESET_LINK_TTL_SECONDS,
+  sendPasswordResetEmail,
+  VERIFY_LINK_TTL_SECONDS,
+} from '../services/email.js';
 import { getDefaultOrganizationId } from '../services/organization.js';
 import { getSetting } from '../services/settings.js';
 import { recordAuthEvent } from './audit.js';
@@ -168,6 +172,8 @@ export const auth = betterAuth({
   },
 
   emailVerification: {
+    // Set here, not left to Better Auth's default, because the email states it (#236).
+    expiresIn: VERIFY_LINK_TTL_SECONDS,
     autoSignInAfterVerification: true,
     sendOnSignUp: true,
     sendOnSignIn: true,

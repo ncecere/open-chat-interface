@@ -108,6 +108,14 @@ export const updateMaintenanceSchema = z
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0)
       ctx.addIssue({ code: 'custom', message: 'Send at least one change.' });
+    // An expected end already past says nothing; it was stored, shown nowhere
+    // and sent as no Retry-After (#222).
+    if (value.until && Date.parse(value.until) <= Date.now())
+      ctx.addIssue({
+        code: 'custom',
+        path: ['until'],
+        message: 'Choose a time later than now.',
+      });
     if (value.window && Date.parse(value.window.endsAt) <= Date.parse(value.window.startsAt))
       ctx.addIssue({
         code: 'custom',

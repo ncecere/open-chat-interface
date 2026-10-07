@@ -11,6 +11,7 @@ import { db, sql } from './db/index.js';
 import { requireMigrationsRecorded } from './db/migration-check.js';
 import { closeReadReplica } from './db/read.js';
 import { startDatabasePresence } from './db/replicas.js';
+import { databaseErrorText } from './lib/db-connection.js';
 import {
   chatTurnsBeingAdmitted,
   closeConnectionsWhileDraining,
@@ -173,10 +174,13 @@ async function main() {
 
 main().catch((error) => {
   // Serialize the message explicitly: pino renders a bare Error as {} under
-  // the `error` key, which hides the reason an operator needs.
+  // the `error` key, which hides the reason an operator needs. A lost
+  // database connection is named by the driver's message, not Drizzle's
+  // failed query; and a worker says it is the worker (#230). The role is read
+  // from the environment directly: loadEnv() itself may be what failed.
   logger.error(
-    { err: error instanceof Error ? error.message : String(error) },
-    'Failed to start API',
+    { err: databaseErrorText(error) },
+    process.env.OCI_ROLE === 'worker' ? 'Failed to start the worker' : 'Failed to start API',
   );
   process.exit(1);
 });

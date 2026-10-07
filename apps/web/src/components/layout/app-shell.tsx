@@ -92,7 +92,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         onToggleSidebar={() => (sidebarOpen ? closeSidebar() : setSidebarOpen(true))}
       />
       <div className="flex h-dvh overflow-hidden bg-[var(--bg-app)]">
-        <SkipLink />
+        {/* Its target is inert behind the drawer, and Shift+Tab from the
+            drawer's first control went to it, out of the modal (#191). */}
+        <SkipLink inert={mobile && sidebarOpen} />
         <Sidebar open={sidebarOpen} mobile={mobile} onToggle={closeSidebar} />
 
         <div

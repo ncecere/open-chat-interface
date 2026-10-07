@@ -1,6 +1,7 @@
 import type { ConversationCompaction } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { memo, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { capacityWaitOf } from '~/components/chat/capacity-wait';
 import { CompactionDivider } from '~/components/chat/compaction-divider';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
@@ -95,7 +96,8 @@ export const MessageList = memo(function MessageList({
     lastText ||
       lastReasoning ||
       (lastIsAssistant &&
-        (toolStepsOf(last).length > 0 ||
+        // A declined artifact attempt is not progress anyone sees (#201).
+        (toolStepsOf(shownReply(last)).length > 0 ||
           toolLimitOf(last) ||
           capacityWaitOf(last)?.state === 'waiting')),
   );

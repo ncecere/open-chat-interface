@@ -1,3 +1,4 @@
+import { connect, createServer, type Server, type Socket } from 'node:net';
 import postgres from 'postgres';
 
 /**
@@ -89,4 +90,43 @@ export function gate() {
     open = resolve;
   });
   return { promise, open };
+}
+
+/**
+ * A TCP proxy in front of the database that can be cut, as an outage longer
+ * than a failover looks to the application: open connections drop and new
+ * ones are refused until it is restored on the same port.
+ */
+export async function outageProxy(connectionString: string) {
+  const target = new URL(connectionString);
+  const sockets = new Set<Socket>();
+  let server: Server | null = null;
+  let port = 0;
+  const listen = async () => {
+    server = createServer((client) => {
+      const upstream = connect(Number(target.port || 5432), target.hostname);
+      for (const socket of [client, upstream]) {
+        sockets.add(socket);
+        socket.on('close', () => sockets.delete(socket));
+        socket.on('error', () => {
+          client.destroy();
+          upstream.destroy();
+        });
+      }
+      client.pipe(upstream).pipe(client);
+    });
+    await new Promise<void>((resolve) => server!.listen(port, '127.0.0.1', resolve));
+    port = (server!.address() as { port: number }).port;
+  };
+  const cut = async () => {
+    const closing = server;
+    server = null;
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => (closing ? closing.close(resolve) : resolve(undefined)));
+  };
+  await listen();
+  const url = new URL(connectionString);
+  url.hostname = '127.0.0.1';
+  url.port = String(port);
+  return { url: url.toString(), cut, restore: listen, close: cut };
 }

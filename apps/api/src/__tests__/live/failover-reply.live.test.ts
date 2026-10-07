@@ -1,4 +1,4 @@
-import { createDatabase, eq, schema } from '@oci/db';
+import { createDatabase, eq, schema, sql } from '@oci/db';
 import { MockLanguageModelV4 } from 'ai/test';
 import { Hono } from 'hono';
 import Redis from 'ioredis';
@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   controlConnection,
   gate,
+  outageProxy,
   terminateEveryBackend,
   waitForLockWaiter,
 } from '../../../test/failover.js';
@@ -304,5 +305,107 @@ describe.skipIf(!available)('live failover during a reply’s final save', () =>
       .from(schema.usageEvent)
       .where(eq(schema.usageEvent.id, runId));
     expect(event).toMatchObject({ pending: false, tokensOut: 2 });
+  }, 30_000);
+
+  // An outage longer than the final save's retries (#231): the reply streamed
+  // to its end, its save gave up, and once the database was back recovery
+  // saved the whole answer as "interrupted because the server writing it
+  // stopped", inviting a paid Retry.
+  it('saves a finished reply as complete when its final save outlasted the outage', async () => {
+    const { finalSaveRetry } = await import('../../services/chat/run-save.js');
+    const { runLiveness, recoverInterruptedRun } = await import(
+      '../../services/chat/run-recovery.js'
+    );
+    const { logger } = await import('../../lib/logger.js');
+    const savedRetry = { ...finalSaveRetry };
+    const savedLiveness = { ...runLiveness };
+    Object.assign(finalSaveRetry, { budgetMs: 500, initialDelayMs: 50 });
+    Object.assign(runLiveness, { staleMs: 600 });
+    const proxy = await outageProxy(live.connectionString);
+    const cut = createDatabase(proxy.url, { max: 4 });
+    const [thread] = await pool.db
+      .insert(schema.thread)
+      .values({ organizationId: state.organizationId, userId: owner, title: 'Long outage' })
+      .returning();
+    const written = gate();
+    const finish = gate();
+    state.model = new MockLanguageModelV4({
+      doStream: (async () => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 't' });
+            controller.enqueue({ type: 'text-delta', id: 't', delta: 'The whole answer, ' });
+            written.open();
+            await finish.promise;
+            controller.enqueue({ type: 'text-delta', id: 't', delta: 'to its last word.' });
+            controller.enqueue({ type: 'text-end', id: 't' });
+            controller.enqueue({
+              type: 'finish',
+              usage: { inputTokens: { total: 3 }, outputTokens: { total: 2 } },
+              finishReason: { unified: 'stop', raw: 'stop' },
+            });
+            controller.close();
+          },
+        }),
+      })) as never,
+    });
+    state.db = cut.db;
+    vi.mocked(logger.error).mockClear();
+    try {
+      const response = await app.request('/api/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          threadId: thread!.id,
+          modelSlug: 'test-model',
+          messages: [{ role: 'user', parts: [{ type: 'text', text: 'Answer me fully' }] }],
+        }),
+      });
+      expect(response.status).toBe(200);
+      const runId = response.headers.get('x-oci-chat-run-id')!;
+      const reading = response.text();
+      await written.promise;
+      // PostgreSQL goes away mid-reply; the reply still streams to its end.
+      await proxy.cut();
+      finish.open();
+      expect(await reading).toContain('to its last word.');
+      await vi.waitFor(
+        () =>
+          expect(logger.error).toHaveBeenCalledWith(
+            expect.anything(),
+            'Failed to persist assistant message',
+          ),
+        { timeout: 10_000, interval: 50 },
+      );
+
+      // The database is back; the claim has gone quiet (its producer is done).
+      await proxy.restore();
+      await pool.db.execute(
+        sql`update message set updated_at = now() - interval '1 minute' where id = ${runId}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      expect(await recoverInterruptedRun({ runId, threadId: thread!.id, userId: owner })).toBe(
+        true,
+      );
+      const [reply] = await pool.db
+        .select()
+        .from(schema.message)
+        .where(eq(schema.message.id, runId));
+      expect(reply).toMatchObject({ status: 'complete', errorMessage: null });
+      expect(reply?.parts).toContainEqual(
+        expect.objectContaining({
+          type: 'text',
+          text: 'The whole answer, to its last word.',
+          state: 'done',
+        }),
+      );
+    } finally {
+      state.db = pool.db;
+      Object.assign(finalSaveRetry, savedRetry);
+      Object.assign(runLiveness, savedLiveness);
+      await cut.sql.end({ timeout: 1 });
+      await proxy.close();
+    }
   }, 30_000);
 });

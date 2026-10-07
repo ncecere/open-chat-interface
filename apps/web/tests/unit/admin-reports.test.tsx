@@ -1,8 +1,17 @@
 // @vitest-environment happy-dom
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { ApiError } from '../../src/lib/api-client';
 import { AdminReportsPage, nextRunText } from '../../src/routes/admin/reports';
-import { button, buttonNames, cleanup, click, renderAdmin, typeInto } from './admin-test-utils';
+import {
+  alerts,
+  button,
+  buttonNames,
+  cleanup,
+  click,
+  renderAdmin,
+  typeInto,
+} from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -83,6 +92,23 @@ it('edits a report in place and shows its next run (#85)', async () => {
   // Back to adding.
   expect(button('Add report')).toBeTruthy();
   expect(name.value).toBe('');
+});
+
+it('clears a refused report’s error once the recipients are corrected (#217)', async () => {
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  await typeInto(document.getElementById('report-name') as HTMLInputElement, 'Walk3');
+  const recipients = document.getElementById('report-recipients') as HTMLInputElement;
+  await typeInto(recipients, 'ops@example.edu, not-an-email');
+  api.post.mockRejectedValueOnce(
+    // As the API's Zod check reports it.
+    new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', [
+      { code: 'invalid_format', format: 'email', path: ['recipients', 1], message: 'Invalid' },
+    ]),
+  );
+  await click(button('Add report'));
+  expect(alerts().join(' ')).toContain('Recipients (item 2) must be a valid email address.');
+  await typeInto(recipients, 'ops@example.edu');
+  expect(alerts()).toEqual([]);
 });
 
 it('shows an empty list as the other admin lists do (#113)', async () => {

@@ -31,7 +31,7 @@ import {
   requestCompaction,
 } from '../services/chat/compaction-queue.js';
 import { consumeFileExport, exportReply } from '../services/documents/export.js';
-import { exportFilename, exportThreadMarkdown } from '../services/export.js';
+import { exportFilename, exportThreadMarkdown, exportTimeZone } from '../services/export.js';
 import {
   emptyTrash,
   listTrashedThreads,
@@ -57,6 +57,8 @@ import {
   assertTemporaryChatAllowed,
   branchFromUserMessage,
   createThread,
+  destroyUnusedThread,
+  forkedMessage,
   forkFromMessage,
   getOwnedThread,
   listMessages,
@@ -222,11 +224,13 @@ threadRoutes.get('/:id/export', async (c) => {
   const thread = await getOwnedThread(c.req.param('id'), user.id);
   // Shares the hourly allowance with document exports (file output, v0.9).
   await consumeFileExport(user.id);
-  const markdown = await exportThreadMarkdown(thread.id, user.id);
+  // Dated in the person's own zone, which the download link sends (#211).
+  const timeZone = exportTimeZone(c.req.query('timeZone'));
+  const markdown = await exportThreadMarkdown(thread.id, user.id, timeZone);
 
   return c.body(markdown, 200, {
     'content-type': 'text/markdown; charset=utf-8',
-    'content-disposition': `attachment; filename="${exportFilename(thread.title)}"`,
+    'content-disposition': `attachment; filename="${exportFilename(thread.title, timeZone)}"`,
     'cache-control': 'no-store',
   });
 });
@@ -273,7 +277,9 @@ threadRoutes.post('/:id/forks', async (c) => {
 
   const input = await parseBody(c, forkMessageSchema);
   const fork = await forkFromMessage(c.req.param('id'), user.id, input);
-  return c.json({ thread: serializeThread(fork) }, 201);
+  // The copy of the message forked at: a question is answered in the fork.
+  const message = await forkedMessage(fork.id, input.messageId);
+  return c.json({ thread: serializeThread(fork), message }, 201);
 });
 
 threadRoutes.post('/:id/branches', async (c) => {
@@ -424,6 +430,17 @@ threadRoutes.patch('/:id', async (c) => {
       .returning();
   }
   return c.json({ thread: serializeThread(updated ?? thread) });
+});
+
+/**
+ * Removes the person's conversation if it is still unused (no message, still
+ * untitled), skipping the trash: what the page does when its first message
+ * was refused and the person leaves it (#234). `removed` is false for one in
+ * use, someone else's or one already gone; none of those is an error.
+ */
+threadRoutes.delete('/:id/unused', async (c) => {
+  const user = currentUser(c);
+  return c.json({ removed: await destroyUnusedThread(c.req.param('id'), user.id) });
 });
 
 /**

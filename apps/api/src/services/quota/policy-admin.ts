@@ -4,6 +4,7 @@ import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { recordAudit } from '../audit.js';
 import { getDefaultOrganizationId } from '../organization.js';
+import { diffSettings } from '../settings-diff.js';
 import { replaceModels, replaceRoles, validateModelScope } from './policy-assignments.js';
 import { loadPolicies } from './policy-queries.js';
 import { isValidTimezone } from './windows.js';
@@ -95,6 +96,33 @@ export async function createQuotaPolicy(actor: Actor, input: UpsertQuotaPolicyIn
   return { id: created.id };
 }
 
+/** A budget's values as its audit entries record them, roles and models sorted. */
+function policyValues(policy: {
+  name: string;
+  description?: string | null;
+  metric: string;
+  limitValue: number | string;
+  windowKind: string;
+  windowHours: number | null;
+  timezone: string;
+  enabled: boolean;
+  roles: readonly string[];
+  modelSlugs: readonly string[];
+}) {
+  return {
+    name: policy.name,
+    description: policy.description ?? null,
+    metric: policy.metric,
+    limitValue: Number(policy.limitValue),
+    windowKind: policy.windowKind,
+    windowHours: policy.windowHours,
+    timezone: policy.timezone,
+    enabled: policy.enabled,
+    roles: [...policy.roles].sort(),
+    modelSlugs: [...policy.modelSlugs].sort(),
+  };
+}
+
 export async function updateQuotaPolicy(actor: Actor, id: string, input: UpsertQuotaPolicyInput) {
   const organizationId = await getDefaultOrganizationId();
 
@@ -104,6 +132,16 @@ export async function updateQuotaPolicy(actor: Actor, id: string, input: UpsertQ
     ]);
   }
 
+  // As it was, so the audit entry can say what each value was (#221). Read
+  // before the edit's transaction, as the delete below does.
+  const [previous] = await loadPolicies(organizationId, [id]);
+  if (!previous) throw notFound('Policy not found');
+
+  const next = policyValues({
+    ...input,
+    description: input.description ?? null,
+    windowHours: normalizeWindow(input),
+  });
   await db
     .transaction(async (tx) => {
       // Serialize edits before reading/replacing either assignment set.
@@ -157,12 +195,9 @@ export async function updateQuotaPolicy(actor: Actor, id: string, input: UpsertQ
     action: 'quota.policy.update',
     targetType: 'quota_policy',
     targetId: id,
-    metadata: {
-      name: input.name,
-      metric: input.metric,
-      roles: input.roles,
-      modelSlugs: input.modelSlugs,
-    },
+    // The budget as saved, and each value that changed as it was and as it
+    // became; the limit and window used not to be recorded at all (#221).
+    metadata: { ...next, changes: diffSettings(policyValues(previous), next) },
   });
 
   return { id };

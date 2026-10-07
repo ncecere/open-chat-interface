@@ -4,7 +4,8 @@ import type { Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { QuotaOverrideDialog } from '../../src/components/admin/quota-override-dialog';
 import { Dialog } from '../../src/components/ui/dialog';
-import { cleanup, dialog, renderAdmin } from './admin-test-utils';
+import { ApiError } from '../../src/lib/api-client';
+import { alerts, button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -39,6 +40,27 @@ function override(overrides: Partial<QuotaOverride>): QuotaOverride {
     ...overrides,
   };
 }
+
+it('names the Expires field as labelled when the API refuses a date (#228)', async () => {
+  api.get.mockResolvedValue({ overrides: [override({})] });
+  // As setUserOverride refuses a past expiry.
+  api.put.mockRejectedValueOnce(
+    new ApiError(422, 'VALIDATION_FAILED', 'The expiry must be in the future.', [
+      { path: ['expiresAt'], message: 'Choose a date later than now.' },
+    ]),
+  );
+  ({ root } = await renderAdmin(
+    <Dialog open>
+      <QuotaOverrideDialog
+        user={{ id: 'u1', name: 'Walk Person', email: 'walk@example.edu' } as AdminUser}
+        onClose={() => undefined}
+      />
+    </Dialog>,
+  ));
+  await click(button('Save'));
+  expect(alerts(dialog()!).join(' ')).toContain('Expires: Choose a date later than now.');
+  expect(alerts(dialog()!).join(' ')).not.toContain('Expires at');
+});
 
 it('shows role defaults with thousands separators, as the rest of the admin does (#80)', async () => {
   api.get.mockResolvedValue({

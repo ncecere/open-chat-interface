@@ -360,6 +360,35 @@ describe.skipIf(!available)('live reply switching', () => {
     expect(fork.status).toBe(403);
   });
 
+  it('names a fork apart from its source, and gives the question it was made at (#213)', async () => {
+    const { chat, prompt, newReply } = await retriedThread();
+    const fork = async (threadId: string, messageId: string) => {
+      const response = await app.request(`/api/threads/${threadId}/forks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messageId }),
+      });
+      expect(response.status).toBe(201);
+      return (await response.json()) as {
+        thread: { id: string; title: string };
+        message: { id: string; role: string };
+      };
+    };
+    // Forked at the question: the client answers the fork's own copy of it.
+    const atQuestion = await fork(chat.id, prompt);
+    expect(atQuestion.thread.title).toBe('Fork of Retried chat');
+    expect(atQuestion.message.role).toBe('user');
+    const copied = await rows(atQuestion.thread.id);
+    expect(copied.map((row) => row.id)).toEqual([atQuestion.message.id]);
+    expect(atQuestion.message.id).not.toBe(prompt);
+
+    expect((await fork(chat.id, newReply)).message.role).toBe('assistant');
+    // A fork of a fork is not marked twice.
+    expect((await fork(atQuestion.thread.id, atQuestion.message.id)).thread.title).toBe(
+      'Fork of Retried chat',
+    );
+  });
+
   it('exports, shares and searches only the active reply', async () => {
     const { chat, prompt, oldReply, newReply } = await retriedThread();
     await pool.db

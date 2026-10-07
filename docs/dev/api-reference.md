@@ -91,7 +91,7 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/admin/lifecycle/config-sources` | Which retention and rate-limit values come from saved settings, environment variables or built-in defaults. |
-| GET | `/api/admin/lifecycle/jobs` | Answers "did cleanup actually run?", the first thing an admin asks. |
+| GET | `/api/admin/lifecycle/jobs` | Answers "did cleanup actually run?", the first thing an admin asks: every registered job with its most recent run (null before its first), whatever its schedule. |
 | POST | `/api/admin/lifecycle/jobs/:name/run` | — |
 | GET | `/api/admin/lifecycle/rate-limits` | — |
 | PUT | `/api/admin/lifecycle/rate-limits` | — |
@@ -150,6 +150,8 @@ Generated from 44 route files.
 | --- | --- | --- |
 | GET | `/api/admin/policies` | — |
 | POST | `/api/admin/policies` | Creates the next version. |
+| PATCH | `/api/admin/policies/:id` | Rewords a draft. |
+| DELETE | `/api/admin/policies/:id` | Deletes a draft. |
 | POST | `/api/admin/policies/:id/publish` | — |
 
 ## `routes/admin/providers.ts`
@@ -208,6 +210,7 @@ Generated from 44 route files.
 | PATCH | `/api/admin/settings` | — |
 | POST | `/api/admin/settings/logo` | Uploads an instance logo. |
 | POST | `/api/admin/settings/search/test` | Runs one sample search with the provider, address and key on the page, so an administrator can check them before or after saving, and the same for the fallback provider when the page has one (v0.10). |
+| POST | `/api/admin/settings/smtp/test` | Sends a test message to the administrator asking, with the saved settings (#115). |
 | POST | `/api/admin/settings/storage/test` | — |
 
 ## `routes/admin/setup.ts`
@@ -293,7 +296,7 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/auth/accept-invite` | — |
-| POST | `/api/auth/accept-invite/validate` | — |
+| POST | `/api/auth/accept-invite/validate` | Whether an invitation link can be used: `emailLocked`, and `email`, the address it is for (null when it is for none). |
 | GET | `/api/auth/status` | Public bootstrap payload for the login screen: which auth methods exist and how the instance is branded. |
 
 ## `routes/branding.ts`
@@ -424,12 +427,13 @@ Generated from 44 route files.
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
 | GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start), whether a background summary is queued or being made (`pending`), and the last failure of a summary the person asked for (`failure`, v0.10). |
 | DELETE | `/api/threads/:id/compaction/failure` | Dismisses the report of a failed summary (v0.10) and returns the state as GET does. |
-| GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
-| POST | `/api/threads/:id/forks` | — |
+| GET | `/api/threads/:id/export` | Downloads one conversation as Markdown, dated in `?timeZone=` (an IANA zone, such as the browser's; UTC when absent or unknown). |
+| POST | `/api/threads/:id/forks` | Copies the conversation through `messageId` into a new one titled "Fork of …"; returns `thread` and `message`, the copy of the message forked at (`id`, `role`, `modelSlug`, `effort`). |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |
 | GET | `/api/threads/:id/messages/:messageId/export` | Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX. |
 | DELETE | `/api/threads/:id/permanent` | Destroys a trashed thread now, without waiting out the grace window. |
 | POST | `/api/threads/:id/restore` | — |
+| DELETE | `/api/threads/:id/unused` | Removes the person's conversation if it is still unused (no message, still untitled), skipping the trash: what the page does when its first message was refused and the person leaves it (#234). |
 | GET | `/api/threads/search` | Full-text search over titles and message text, best match first. |
 | GET | `/api/threads/trash` | Trash listing is a fixed path, so it must be declared before `/:id`. |
 | DELETE | `/api/threads/trash` | — |

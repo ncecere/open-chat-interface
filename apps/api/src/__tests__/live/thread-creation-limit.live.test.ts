@@ -292,4 +292,29 @@ describe.skipIf(!available)('live: starting conversations is bounded', () => {
     ]);
     expect(await purgeUnusedThreads()).toBe(0);
   });
+
+  // A conversation whose first message was refused (a server restarting) was
+  // left in the person's history as an empty "New Chat" (#234). The page asks
+  // for it to be removed when the person leaves it; only an unused one goes.
+  it("removes an unused conversation at once on request, never a used or someone else's", async () => {
+    const [userId, otherId] = [await person('admin'), await person('admin')];
+    const app = await appFor(userId, 'admin');
+    const startId = async () =>
+      ((await (await start(app)).json()) as { thread: { id: string } }).thread.id;
+    const remove = async (id: string, as = app) => {
+      const response = await as.request(`/api/threads/${id}/unused`, { method: 'DELETE' });
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { removed: boolean }).removed;
+    };
+    const [unusedId, usedId] = [await startId(), await startId()];
+    await addMessage(usedId, userId);
+
+    // Someone else's: kept.
+    expect(await remove(unusedId, await appFor(otherId, 'admin'))).toBe(false);
+    expect(await remove(usedId)).toBe(false);
+    expect(await remove(unusedId)).toBe(true);
+    // Destroyed, not trashed: nothing to restore.
+    expect((await threadsOf(userId)).map((thread) => thread.id)).toEqual([usedId]);
+    expect(await remove(unusedId)).toBe(false);
+  });
 });

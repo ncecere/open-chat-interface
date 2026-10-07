@@ -1,9 +1,10 @@
 import type { DocumentFormat } from '@oci/shared';
 import { Check, Copy, GitFork, Globe2, Pencil, RefreshCw } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
+import { messageExcerpt } from '~/lib/message-excerpt';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
@@ -26,7 +27,15 @@ interface ReplyExportTarget {
   messageId: string;
 }
 
-function ReplyExport({ target, text }: { target: ReplyExportTarget; text: string }) {
+function ReplyExport({
+  target,
+  text,
+  about,
+}: {
+  target: ReplyExportTarget;
+  text: string;
+  about: string;
+}) {
   const { threadId, messageId } = target;
   const pathFor = useCallback(
     (format: DocumentFormat) =>
@@ -36,7 +45,7 @@ function ReplyExport({ target, text }: { target: ReplyExportTarget; text: string
   const state = useDocumentExport(pathFor, 'reply');
   return (
     <>
-      <ExportMenu markdown={text} state={state} compact />
+      <ExportMenu markdown={text} state={state} compact about={about} />
       <ExportNotice state={state} className="order-last basis-full pl-1 pt-1" />
     </>
   );
@@ -63,6 +72,10 @@ export function MessageActions({
   searched?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  // Every message has these controls; its opening words tell them apart (#194):
+  // "Copy message “Walk3 table: give me a small…”".
+  const excerpt = useMemo(() => messageExcerpt(text), [text]);
+  const about = excerpt ? ` “${excerpt}”` : '';
   // Read-only maintenance mode (v0.11): forking, editing and retrying write.
   const readOnly = useReadOnlyStatus();
   const lockedTitle = readOnly.active ? readOnlyShortReason(readOnly) : undefined;
@@ -80,7 +93,7 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Copy message"
+          aria-label={`Copy message${about}`}
           onClick={async () => {
             await navigator.clipboard.writeText(text);
             setCopied(true);
@@ -90,12 +103,14 @@ export function MessageActions({
           {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
         </Button>
       )}
-      {exportTarget && text.trim() && <ReplyExport target={exportTarget} text={text} />}
+      {exportTarget && text.trim() && (
+        <ReplyExport target={exportTarget} text={text} about={about} />
+      )}
       {onFork && (
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Fork conversation here"
+          aria-label={excerpt ? `Fork conversation at${about}` : 'Fork conversation here'}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={() => void onFork()}
@@ -107,7 +122,7 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Edit message"
+          aria-label={`Edit message${about}`}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={onEdit}

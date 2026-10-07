@@ -4,6 +4,7 @@ import { ChevronRight, Folder, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { ThreadRow } from '~/components/layout/thread-list';
 import { CreateProjectDialog } from '~/components/projects/project-dialogs';
+import { useAutoRetry } from '~/hooks/use-auto-retry';
 import { useExpandedProjects } from '~/hooks/use-expanded-projects';
 import { type OpenConversation, useOpenConversation } from '~/hooks/use-open-conversation';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
@@ -29,7 +30,10 @@ export function SidebarProjects() {
  * keeps it closed for that visit.
  */
 function ProjectsSection() {
-  const { data: projects, isLoading, isError } = useSidebarProjects();
+  const { data: projects, isLoading, isError, refetch } = useSidebarProjects();
+  // Loads again by itself after an outage, rather than saying "could not be
+  // loaded" until the page is reloaded (#233).
+  useAutoRetry(isError, () => void refetch());
   const params = useParams({ strict: false }) as { projectId?: string; threadId?: string };
   const open = useOpenConversation(params.threadId);
   const { expanded, toggle } = useExpandedProjects(projects);

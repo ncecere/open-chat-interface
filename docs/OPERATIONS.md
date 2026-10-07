@@ -610,9 +610,12 @@ replicas work through afterwards while OCI serves.
    With `RUN_MIGRATIONS=false`, startup refuses to serve unless the latest bundled
    migration's timestamp is recorded. That marker is not a schema-integrity check
    or evidence that reverting an image after newer migrations is safe. If the
-   database cannot be reached, startup waits up to 30 s for it, then exits with
-   "Could not reach the database to check its migrations", not a migration
-   error.
+   database cannot be reached (the connection is refused, or its host name does
+   not resolve), startup waits up to 30 s for it, logging "The database is
+   unreachable; waiting for it before checking its migrations" with the
+   driver's reason, then exits with "Could not reach the database to check its
+   migrations (reason)", not a migration error. A worker logs "Failed to start
+   the worker", the API "Failed to start API".
    `migrate` refuses, changing nothing, if the release requires an earlier
    release's background migration or post-deploy step that has not finished;
    the message names it. Finish it on the release you are running (step 7),
@@ -1166,6 +1169,17 @@ serve the usage page's Overview tab (at 4 million messages about 41 MB,
 v0.10, and the Overview tab keeps its single pass over messages until step
 0005 has finished.
 
+#### Audit trail indexes (post-deploy steps 0007 and 0008)
+
+An account's audit trail (its page's Recent activity and "Events by or
+about" it in the audit log) also lists the bulk actions that named it, which
+keep the accounts in `metadata.userIds` rather than `target_id`. Steps 0007
+and 0008 build `audit_log_target_idx` on `audit_log(target_id)` and the GIN
+index `audit_log_user_ids_idx` on `metadata -> 'userIds'` (small: only bulk
+entries carry the key), so the trail is three index scans rather than a pass
+over the whole log. Until `migrate --post` has built them the trail is
+complete but read by scanning the table.
+
 #### Usage rollups (migration 0040, background migration 0.11.usage-rollups)
 
 Migration 0040 adds a nullable column `usage_event.in_rollup` (no default, so
@@ -1297,7 +1311,9 @@ replies. On the first `SIGTERM` (or `SIGINT`) it:
    reading them, so nothing is stored. The web app sends the turn again, up to
    twice, and the person sees nothing unless every attempt is refused; then
    it says the server is restarting and puts the message back in the
-   composer, as for any other refused send. Every
+   composer, as for any other refused send. If that was the first message of
+   a new chat and the person leaves it instead of sending again, the empty
+   conversation is removed rather than left in their history. Every
    other request is answered as usual, with `Connection: close`, so a proxy's
    pooled connections stop carrying new requests to the replica.
 3. Stops its background jobs: no new runs start on it (another replica's tick
@@ -1385,6 +1401,7 @@ spec:
       readinessProbe:
         httpGet: { path: /api/health/ready, port: 3000 }
         periodSeconds: 2
+        timeoutSeconds: 2
         failureThreshold: 1
       livenessProbe:
         httpGet: { path: /api/health/live, port: 3000 }
@@ -1627,15 +1644,22 @@ Patroni cluster under load; the design and the results are in
   means a replica is draining, and proxies take `503` replicas out of
   rotation).
 - **Replies** being written keep streaming (they go through Redis); their final
-  save waits out the failover for up to 30 s. A new message whose saving meets
-  the failover is retried for up to 10 s.
+  save waits out the failover for up to 30 s. If the database is away for
+  longer, the reply is saved once it is back by the recovery described in
+  [Recovering an interrupted chat run](#recovering-an-interrupted-chat-run): a
+  reply that had finished is saved as complete (its token counts unknown), not
+  as interrupted. A new message whose saving meets the failover is retried for
+  up to 10 s.
 - **Background jobs** stop after the batch in hand when their lock goes with
   the old primary, and the next tick continues on the new one. Imports resume
   where they stopped. A tick whose lock connection is closed as it opens
   connects again and runs.
 - **Readiness** stays `200` (`"status": "degraded"`) for the first 30 s the
   database is unreachable, so a failover does not take every replica out of
-  rotation at once; after that it answers `503`.
+  rotation at once; after that it answers `503`. Its database check gives up
+  after 1 s and counts as failing, so readiness answers within about a second
+  even when the database's address drops packets or its name is slow to
+  fail to resolve; give probes a timeout of at least 2 s.
 - **Migrations** are one transaction; a failover rolls the attempt back and
   rerunning the migrate job starts cleanly.
 
@@ -1787,7 +1811,10 @@ the reader is idle, then every 5 s), a new message in its conversation
 `chat.recover-interrupted-replies` (every 15 seconds, runs started in the last
 six hours). Recovery ends the run's Redis stream, so every reader finishes with
 what was captured; saves the reply as `cancelled` with the interrupted
-message, rebuilt from the captured stream so it keeps what the person saw;
+message, rebuilt from the captured stream so it keeps what the person saw (a
+reply whose captured stream reached the model's finish, so that only its
+final save was lost, is saved as `complete` instead, with its token counts
+unknown);
 settles the usage reservation as unknown (keeping its estimate, as the quota
 sweep does); and frees the person's concurrency slot. A producer that was
 only paused and saves later replaces the interrupted copy with its real

@@ -185,8 +185,14 @@ test('shows a search as a collapsed tool step that expands to its inputs and res
   await expect(assistant(page).first()).not.toContainText('"query"');
   await step.click();
   await expect(step).toHaveAttribute('aria-expanded', 'true');
-  await expect(assistant(page).first()).toContainText('"query": "library opening hours"');
-  await expect(assistant(page).first().getByText('City guide')).toBeVisible();
+  // A search step shows its query as text, not the JSON inputs (#203).
+  const details = assistant(page)
+    .first()
+    .locator(`[id="${await step.getAttribute('aria-controls')}"]`);
+  await expect(details.getByText('Search query', { exact: true })).toBeVisible();
+  await expect(details.getByText('library opening hours', { exact: true })).toBeVisible();
+  await expect(assistant(page).first()).not.toContainText('"query"');
+  await expect(details.getByText('City guide')).toBeVisible();
 });
 
 test('approves a tool call, continues the same reply and keeps it after a reload', async ({

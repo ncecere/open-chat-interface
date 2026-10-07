@@ -1,4 +1,9 @@
-import { type InstanceSettings, SEARCH_PROVIDERS, type SearchProviderKind } from '@oci/shared';
+import {
+  type InstanceSettings,
+  MAX_SEARCH_RESULTS,
+  SEARCH_PROVIDERS,
+  type SearchProviderKind,
+} from '@oci/shared';
 
 export type SearchSettings = InstanceSettings['search'];
 type Features = InstanceSettings['features'];
@@ -65,7 +70,9 @@ function addressProblem(value: string): string | undefined {
       return 'Enter an HTTP or HTTPS address.';
     }
   } catch {
-    return 'Enter a full address, starting with https://.';
+    // http:// is accepted (a SearXNG beside OCI often has no TLS), so the
+    // message says so (#228).
+    return 'Enter a full address, starting with http:// or https://.';
   }
   return undefined;
 }
@@ -156,7 +163,9 @@ export function validateDraft(
   }
 
   if (!Number.isInteger(maxResults) || maxResults <= 0) {
-    errors.maxResults = 'Max results must be a positive whole number.';
+    errors.maxResults = 'Maximum results must be a positive whole number.';
+  } else if (maxResults > MAX_SEARCH_RESULTS) {
+    errors.maxResults = `Maximum results can be at most ${MAX_SEARCH_RESULTS}.`;
   }
 
   validateFallback(saved, draft, fallbackKey, errors);

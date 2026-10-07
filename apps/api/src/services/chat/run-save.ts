@@ -24,8 +24,9 @@ export type ReplyUsage = {
  * unaffected; only its save needs the database. Meanwhile the run keeps
  * heartbeating in Redis, so no other replica recovers it as interrupted. If
  * the database is still unreachable after this, the save fails as before and
- * the claim is recovered as interrupted from the captured stream once the
- * database is back.
+ * the claim is recovered from the captured stream once the database is back:
+ * as complete when the stream reached the model's finish (#231), otherwise as
+ * interrupted.
  */
 export const finalSaveRetry: RetryOptions = { budgetMs: 30_000, initialDelayMs: 250 };
 

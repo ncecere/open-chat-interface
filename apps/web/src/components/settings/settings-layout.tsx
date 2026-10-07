@@ -85,7 +85,9 @@ function visibleTabs(
  */
 function Identity() {
   const { data } = useCurrentUser();
-  if (!data) return null;
+  // Until /me answers, the avatar's room is kept: on a phone the row sits
+  // above the page, and arriving late it pushed the page down 48 px (#200).
+  if (!data) return <div data-identity-placeholder aria-hidden="true" className="h-12 lg:h-24" />;
 
   const { user } = data;
   const initials = user.name

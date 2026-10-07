@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RECOVERY_FAILED_TEXT, RECOVERY_RETRYING_TEXT } from '../../src/hooks/use-chat-recovery';
 import { ApiError } from '../../src/lib/api-client';
 import type { ChatHistory } from '../../src/lib/chat-history';
 import {
@@ -82,20 +83,26 @@ afterEach(async () => {
 });
 
 describe('canonical chat recovery with the real AI SDK', () => {
-  it('pauses on a transient canonical failure; explicit Retry preserves draft and an in-flight upload', async () => {
+  it('keeps checking, less often, after transient failures; explicit Retry preserves draft and an in-flight upload', async () => {
     const upload = deferred<Response>();
     network.mockImplementation(async (input) => {
       if (String(input) === '/api/attachments') return upload.promise;
       return new Response(null, { status: 204 });
     });
-    getHistory.mockRejectedValueOnce(new ApiError(503, 'UNAVAILABLE', 'Internal upstream details'));
+    getHistory.mockRejectedValue(new ApiError(503, 'UNAVAILABLE', 'Internal upstream details'));
     await mount(initialPending());
-    expect(session.recovery.error).toBe(
-      'Could not refresh saved messages. Retry to check the response.',
-    );
+    expect(session.recovery.error).toBe(RECOVERY_RETRYING_TEXT);
     expect(session.recovery.unavailable).toBe(false);
-    await advance(10_000);
+    expect(session.recovery.remotePending).toBe(true);
+    // Backoff after each failure: 4 s, then 8 s (#229).
+    await advance(3_999);
     expect(getHistory).toHaveBeenCalledOnce();
+    await advance(1);
+    expect(getHistory).toHaveBeenCalledTimes(2);
+    await advance(7_999);
+    expect(getHistory).toHaveBeenCalledTimes(2);
+    getHistory.mockReset();
+    getHistory.mockRejectedValue(new ApiError(503, 'UNAVAILABLE', 'Internal upstream details'));
 
     let uploading!: Promise<void>;
     await settle(() => {
@@ -108,7 +115,7 @@ describe('canonical chat recovery with the real AI SDK', () => {
     expect(items[0]?.status).toBe('uploading');
     getHistory.mockResolvedValueOnce(history());
     await settle(() => session.recovery.recover());
-    expect(getHistory).toHaveBeenCalledTimes(2);
+    expect(getHistory).toHaveBeenCalledOnce();
     expect(session.messages).toEqual(history().messages);
     expect(session.recovery.error).toBeNull();
     expect(session.streaming).toBe(false);
@@ -297,9 +304,7 @@ describe('canonical chat recovery with the real AI SDK', () => {
       getHistory.mockResolvedValueOnce(snapshot);
       await settle(() => core.recovery.recover());
       expect(sdk.messages).toBe(baseline);
-      expect(core.recovery.error).toBe(
-        'Could not refresh saved messages. Retry to check the response.',
-      );
+      expect(core.recovery.error).toBe(RECOVERY_FAILED_TEXT);
       expect(core.recovery.unavailable).toBe(false);
       expect(core.recovery.refreshing).toBe(false);
     }

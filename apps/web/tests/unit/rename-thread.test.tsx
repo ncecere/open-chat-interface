@@ -32,7 +32,12 @@ vi.mock('../../src/lib/api-client', async (importOriginal) => ({
   api,
 }));
 vi.mock('../../src/components/layout/theme-menu', () => ({ ThemeMenu: () => null }));
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+const toast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  dismiss: vi.fn(),
+}));
 vi.mock('sonner', () => ({ toast }));
 vi.mock('../../src/providers/temporary-chat-provider', () => ({
   useTemporaryChat: () => ({ temporary: false, setTemporary: vi.fn() }),
@@ -253,7 +258,8 @@ describe('renaming from the sidebar', () => {
     const [message, options] = toast.success.mock.calls[0]!;
     expect(message).toBe('Conversation archived');
     expect(options.description).toBe('Trip plans');
-    await act(async () => options.action.onClick());
+    // The Undo button (undoToast; its timing is in archive-undo-notice.test.tsx).
+    await act(async () => options.action.props.onClick());
     await settle();
     expect(api.patch).toHaveBeenLastCalledWith('/threads/t1', { archived: false });
     await vi.waitFor(() => expect(rowTitles()).toContain('Trip plans'));
@@ -345,6 +351,15 @@ describe('renaming from the top bar', () => {
     });
     expect(findButton('Move to project')).toBeUndefined();
     expect(findButton('Rename conversation')).toBeTruthy();
+  });
+
+  it('asks for the download dated in the person’s own time zone (#211)', async () => {
+    await render('/chat/t1');
+    const link = document.querySelector('[aria-label="Download this conversation"]');
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(link?.getAttribute('href')).toBe(
+      `/api/threads/t1/export?timeZone=${encodeURIComponent(zone)}`,
+    );
   });
 
   it('offers no conversation actions for one that does not exist (#103)', async () => {

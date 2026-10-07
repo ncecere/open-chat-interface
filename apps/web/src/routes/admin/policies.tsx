@@ -26,9 +26,13 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { formatDate } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
+
+/** The form's names for the fields, as errors should use them (#228). */
+const POLICY_LABELS = { title: 'Title', body: 'Policy text' };
 
 /**
  * Writes a new version, or rewords a draft (`draft`). A published version is
@@ -63,8 +67,11 @@ function PolicyDialog({
       await queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] });
       onClose();
     },
-    onError: (cause) => setError(apiErrorMessage(cause, 'The policy could not be saved.')),
+    onError: (cause) =>
+      setError(apiErrorMessage(cause, 'The policy could not be saved.', POLICY_LABELS)),
   });
+  // The error is about the values sent; correcting them clears it (#217).
+  useClearOnEdit({ title, body, publish }, () => setError(null));
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -74,7 +81,7 @@ function PolicyDialog({
       ? updatePolicyDraftSchema.safeParse({ title, body })
       : upsertUsagePolicySchema.safeParse({ title, body, publish });
     if (!parsed.success) {
-      setError(validationText(parsed.error.issues, 'Check the policy fields.'));
+      setError(validationText(parsed.error.issues, 'Check the policy fields.', POLICY_LABELS));
       return;
     }
     save.mutate(parsed.data);

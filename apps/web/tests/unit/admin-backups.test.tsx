@@ -13,6 +13,7 @@ import {
   typeInto,
   validationFailure,
 } from './admin-test-utils';
+import { styleFor } from './css-test-utils';
 import { untitledTruncations } from './truncation';
 
 const api = vi.hoisted(() => ({
@@ -179,6 +180,11 @@ describe('Backups admin page', () => {
     await typeInto(document.getElementById('backups-keep-daily') as HTMLInputElement, '0');
     await click(button('Save changes'));
     expect(alerts()).toContain('Daily backups kept must be at least 1.');
+    // Corrected back to the saved value, Save is disabled: the error used to
+    // stay indefinitely (#217).
+    await typeInto(document.getElementById('backups-keep-daily') as HTMLInputElement, '7');
+    expect(alerts()).not.toContain('Daily backups kept must be at least 1.');
+    expect(button('Save changes').disabled).toBe(true);
   });
 
   it('turns copying files on and chooses how many are checked', async () => {
@@ -235,17 +241,23 @@ describe('System health', () => {
         };
       if (path === '/admin/lifecycle/jobs')
         return {
-          runs: [
+          jobs: [
             {
-              id: 'r1',
-              jobName: 'attachment-orphan-reconciliation',
-              status: 'ok',
-              startedAt: new Date().toISOString(),
-              finishedAt: new Date().toISOString(),
-              durationMs: 120,
-              itemsProcessed: 3,
-              errorMessage: null,
+              name: 'attachment-orphan-reconciliation',
+              intervalMs: 60_000,
+              lastRun: {
+                id: 'r1',
+                jobName: 'attachment-orphan-reconciliation',
+                status: 'success',
+                startedAt: new Date().toISOString(),
+                finishedAt: new Date().toISOString(),
+                durationMs: 120,
+                itemsProcessed: 3,
+                errorMessage: null,
+              },
             },
+            // A daily job that has not run since the API started (#215).
+            { name: 'retention.audit-log', intervalMs: 86_400_000, lastRun: null },
           ],
         };
       if (path === '/admin/lifecycle/storage-health')
@@ -266,7 +278,22 @@ describe('System health', () => {
     expect(text).toContain('Set OTEL_EXPORTER_OTLP_ENDPOINT to export traces.');
     // A long job name and its run line can be cut short on a phone (#130).
     expect(text).toContain('attachment-orphan-reconciliation');
+    expect(text).toContain('runs every minute');
+    // Every registered job is listed, whether or not it has run (#215).
+    expect(text).toContain('retention.audit-log');
+    expect(text).toContain('Not run yet · runs every day');
     expect(untitledTruncations()).toEqual([]);
+    // A tooltip cannot be read on a touch phone, where 18 of 28 run lines were
+    // cut at "runs every…" (#215): the name and run line wrap instead.
+    const lines = [...document.querySelectorAll('li p')].filter((line) =>
+      /runs every|attachment-orphan-reconciliation/.test(line.textContent ?? ''),
+    );
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    for (const line of lines) {
+      const style = await styleFor(line.className);
+      expect(style['text-overflow'], line.textContent ?? '').toBeUndefined();
+      expect(style['white-space'], line.textContent ?? '').not.toBe('nowrap');
+    }
   });
 });
 

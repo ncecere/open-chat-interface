@@ -39,13 +39,22 @@ export async function applyBulkUserAction(
   // `affected`, so signing out accounts with none read as nothing done (#145).
   let affected = 0;
   let sessionsEnded: number | undefined;
+  // Each account's role before the change, as a single change records
+  // `{from, to}` (#221). Read under the update's row locks, so it is the
+  // role this change replaced.
+  let previousRoles: Record<string, string> | undefined;
   if (input.action === 'set_role' && input.role) {
-    const rows = await db
-      .update(schema.user)
-      .set({ role: input.role })
-      .where(inArray(schema.user.id, targets))
-      .returning({ id: schema.user.id });
-    affected = rows.length;
+    const role = input.role;
+    previousRoles = await db.transaction(async (tx) => {
+      const before = await tx
+        .select({ id: schema.user.id, role: schema.user.role })
+        .from(schema.user)
+        .where(inArray(schema.user.id, targets))
+        .for('update');
+      await tx.update(schema.user).set({ role }).where(inArray(schema.user.id, targets));
+      return Object.fromEntries(before.map((row) => [row.id, row.role]));
+    });
+    affected = Object.keys(previousRoles).length;
   } else if (input.action === 'ban' || input.action === 'unban') {
     const banned = input.action === 'ban';
     const rows = await db
@@ -78,6 +87,7 @@ export async function applyBulkUserAction(
       affected,
       ...(sessionsEnded !== undefined ? { sessionsEnded } : {}),
       ...(input.role ? { role: input.role } : {}),
+      ...(previousRoles ? { previousRoles } : {}),
       // Name the accounts so the audit entry can be checked afterwards.
       userIds: targets,
     },

@@ -10,6 +10,7 @@ import { Button } from '~/components/ui/button';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
+import { loopTab } from '~/lib/tab-loop';
 import { cn } from '~/lib/utils';
 
 interface SidebarProps {
@@ -46,6 +47,8 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       aria-label={mobile ? 'Conversation sidebar' : undefined}
       aria-hidden={!open ? true : undefined}
       inert={!open ? true : undefined}
+      // As a modal, Tab and Shift+Tab stay in it (#191).
+      onKeyDown={mobile && open ? loopTab : undefined}
       className={cn(
         'fixed inset-y-0 left-0 z-50 flex h-dvh w-full shrink-0 flex-col bg-[var(--bg-app)] bg-[image:var(--sidebar-gradient)]',
         'transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:transition-[margin]',

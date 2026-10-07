@@ -30,6 +30,16 @@
       "idx": 5,
       "tag": "0006_thread_created_at_index",
       "release": "0.11.0"
+    },
+    {
+      "idx": 6,
+      "tag": "0007_audit_log_target_index",
+      "release": "0.11.0"
+    },
+    {
+      "idx": 7,
+      "tag": "0008_audit_log_user_ids_index",
+      "release": "0.11.0"
     }
   ]
 }

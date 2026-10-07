@@ -14,6 +14,7 @@ import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { saveModelLimits } from '../../services/limits/capacity/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
+import { diffSettings } from '../../services/settings-diff.js';
 
 export const modelRoutes = new Hono<AppBindings>();
 
@@ -159,16 +160,8 @@ modelRoutes.patch('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
 
-  const [existing] = await db
-    .select({
-      id: schema.model.id,
-      organizationId: schema.model.organizationId,
-      contextWindow: schema.model.contextWindow,
-      maxOutputTokens: schema.model.maxOutputTokens,
-    })
-    .from(schema.model)
-    .where(eq(schema.model.id, id))
-    .limit(1);
+  // The whole row: the audit entry records what each changed field was (#221).
+  const [existing] = await db.select().from(schema.model).where(eq(schema.model.id, id)).limit(1);
 
   if (!existing) throw notFound('Model not found');
 
@@ -237,7 +230,16 @@ modelRoutes.patch('/:id', async (c) => {
     action: 'model.update',
     targetType: 'model',
     targetId: id,
-    metadata: { fields: Object.keys(input) },
+    // Each changed field as it was and as it became: a rename names both
+    // names, a switch which way it went (#221).
+    metadata: {
+      slug: existing.slug,
+      fields: Object.keys(input),
+      changes: diffSettings(
+        existing as unknown as Record<string, unknown>,
+        input as Record<string, unknown>,
+      ),
+    },
   });
 
   return c.json({ id: updated?.id });

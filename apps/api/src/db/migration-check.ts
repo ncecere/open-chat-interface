@@ -1,5 +1,6 @@
 import { type Database, migrationsApplied } from '@oci/db';
 import {
+  databaseErrorText,
   isConnectionError,
   type RetryOptions,
   retryOnConnectionError,
@@ -29,13 +30,13 @@ export async function requireMigrationsRecorded(
       ...retry,
       onRetry: ({ attempt, delayMs, error }) =>
         logger.warn(
-          { attempt, delayMs, err: error instanceof Error ? error.message : String(error) },
+          { attempt, delayMs, err: databaseErrorText(error) },
           'The database is unreachable; waiting for it before checking its migrations',
         ),
     });
   } catch (error) {
     if (!isConnectionError(error)) throw error;
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = databaseErrorText(error);
     throw new Error(
       `Could not reach the database to check its migrations (${reason}). Check that PostgreSQL is running and DATABASE_URL points at it.`,
       { cause: error },

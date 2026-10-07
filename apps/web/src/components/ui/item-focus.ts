@@ -24,3 +24,15 @@ export const MENU_ITEM_FOCUS = [
  */
 export const ACTIVE_OPTION_RING =
   'outline outline-2 -outline-offset-2 outline-[var(--accent-bright)]';
+
+/**
+ * Secondary text on a highlighted option: a model's description, a search
+ * result's snippet (#188). --text-muted clears 4.5:1 on the list's surface,
+ * but the dark highlight wash is lighter (#898989 on #262626, 4.3:1), so on a
+ * highlighted row the muted colour steps up to --text-secondary. Set on the
+ * row, it reaches every muted line inside it without each one knowing.
+ */
+export const HIGHLIGHTED_ROW_TEXT = '[--text-muted:var(--text-secondary)]';
+
+/** The same for a row the pointer is over, which gets the same wash. */
+export const HOVERED_ROW_TEXT = 'hover:[--text-muted:var(--text-secondary)]';

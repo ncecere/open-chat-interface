@@ -3,7 +3,11 @@ import { Info } from 'lucide-react';
 import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
 import { ModelInfoCard } from '~/components/model/model-info-card';
-import { ACTIVE_OPTION_RING } from '~/components/ui/item-focus';
+import {
+  ACTIVE_OPTION_RING,
+  HIGHLIGHTED_ROW_TEXT,
+  HOVERED_ROW_TEXT,
+} from '~/components/ui/item-focus';
 import { cn } from '~/lib/utils';
 import { CAPABILITY_LABELS, modelDescription } from './model-picker-data';
 
@@ -41,7 +45,9 @@ export function ModelPickerOption({
         'relative flex w-full items-center rounded-lg transition-colors',
         // --bg-control is the panel's own white in light, so it showed nothing (#135).
         'hover:bg-[var(--bg-control-hover)]',
-        selected && 'bg-[var(--accent-soft)]',
+        HOVERED_ROW_TEXT,
+        // The description stays readable on the wash (#188).
+        selected && cn('bg-[var(--accent-soft)]', HIGHLIGHTED_ROW_TEXT),
         // Visible like a focus ring, since focus itself stays in the search box.
         active && ACTIVE_OPTION_RING,
       )}
@@ -54,14 +60,17 @@ export function ModelPickerOption({
         onClick={() => onSelect(model)}
         className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
       >
-        <span className="flex w-full items-center gap-2">
-          <LabLogo labId={model.labId} className="size-4 shrink-0" />
-          <span className="min-w-0 truncate text-base font-semibold leading-5 text-[var(--text-primary)]">
+        {/* Name and description wrap rather than end in an ellipsis: on a
+            phone there is no hover for a tooltip, and the cut hid what tells
+            two models apart, "Claude Haiku 4.5 (t…" for "(thinking)" (#195). */}
+        <span className="flex w-full items-start gap-2">
+          <LabLogo labId={model.labId} className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 text-base font-semibold leading-5 wrap-anywhere text-[var(--text-primary)]">
             {model.displayName}
           </span>
         </span>
 
-        <span className="w-full truncate pl-6 text-xs font-medium leading-4 text-[var(--text-muted)]">
+        <span className="w-full pl-6 text-xs font-medium leading-4 wrap-anywhere text-[var(--text-muted)]">
           {modelDescription(model)}
         </span>
         {model.capabilities.length > 0 && (

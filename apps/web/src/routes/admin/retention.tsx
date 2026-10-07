@@ -16,6 +16,7 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
 
 /** The form's names for the fields, as the API names them (#127). */
@@ -53,6 +54,8 @@ function RetentionForm({
   const [saved, setSaved] = useState(false);
 
   useEffect(() => setDraft(settings), [settings]);
+  // The error is about the values sent; correcting them clears it (#217).
+  useClearOnEdit(draft, () => setError(null));
 
   const patch = changedRetention(settings, draft);
   const hasChanges = Object.keys(patch).length > 0;
@@ -150,7 +153,7 @@ function RetentionForm({
           <Field
             label="Reporting timezone"
             htmlFor="display-timezone"
-            hint="Where a day starts and ends on the Usage page. Limits reset on their own policy's timezone, which this does not change."
+            hint="Where a day starts and ends on the Usage page, and the date models are told. Limits reset on their own policy's timezone, which this does not change."
           >
             <Input
               id="display-timezone"

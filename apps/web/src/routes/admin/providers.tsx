@@ -130,6 +130,8 @@ export function ProvidersSection() {
                     variant="secondary"
                     size="sm"
                     disabled={discover.isPending}
+                    // Every row has one; each names its provider (#220).
+                    aria-label={`Discover models from ${provider.label}`}
                     onClick={() => discover.mutate(provider)}
                   >
                     {discover.isPending && discover.variables?.id === provider.id && <Spinner />}

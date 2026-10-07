@@ -1,4 +1,5 @@
 import { AlertCircle, FileText, X } from 'lucide-react';
+import { useState } from 'react';
 import type { PendingAttachment } from '~/hooks/use-attachments';
 import { cn, formatBytes } from '~/lib/utils';
 
@@ -20,6 +21,9 @@ export function AttachmentChips({
   items: PendingAttachment[];
   onRemove: (localId: string) => void;
 }) {
+  // Previews the browser could not draw: a file named .png that is not an
+  // image shows as a document while it uploads, not as a broken image (#209).
+  const [unreadable, setUnreadable] = useState<ReadonlySet<string>>(new Set());
   if (items.length === 0) return null;
   const failures = items.filter((item) => item.status === 'error');
 
@@ -43,11 +47,15 @@ export function AttachmentChips({
               aria-describedby={failed ? `attachment-error-${item.localId}` : undefined}
             >
               {/* A refused "image" may not be one (a renamed archive): no preview. */}
-              {isImage && item.previewUrl && !failed ? (
+              {isImage && item.previewUrl && !failed && !unreadable.has(item.previewUrl) ? (
                 <img
                   src={item.previewUrl}
                   alt=""
                   className="size-7 shrink-0 rounded object-cover"
+                  onError={() => {
+                    const url = item.previewUrl!;
+                    setUnreadable((current) => new Set(current).add(url));
+                  }}
                 />
               ) : (
                 <span className="flex size-7 shrink-0 items-center justify-center rounded bg-[var(--bg-control-hover)]">
