@@ -1171,7 +1171,7 @@ serve the usage page's Overview tab (at 4 million messages about 41 MB,
 v0.10, and the Overview tab keeps its single pass over messages until step
 0005 has finished.
 
-#### Audit trail indexes (post-deploy steps 0007 and 0008)
+#### Audit trail indexes (post-deploy steps 0007, 0008 and 0010)
 
 An account's audit trail (its page's Recent activity and "Events by or
 about" it in the audit log) also lists the bulk actions that named it, which
@@ -1181,6 +1181,12 @@ index `audit_log_user_ids_idx` on `metadata -> 'userIds'` (small: only bulk
 entries carry the key), so the trail is three index scans rather than a pass
 over the whole log. Until `migrate --post` has built them the trail is
 complete but read by scanning the table.
+
+It also lists what was done anonymously with the person's address: a
+password-reset request or a refused sign-in has no signed-in actor, only an
+`actor_email`. Step 0010 builds the small partial index
+`audit_log_actor_email_idx` on `lower(actor_email)` for entries without an
+actor account, which answers that match.
 
 #### Code artifacts (migration 0043, post-deploy step 0009)
 
@@ -1743,6 +1749,15 @@ Patroni cluster under load; the design and the results are in
   is back in the message box. Send it again." A new chat whose first message
   was not saved is removed when the person leaves it, as for any refused first
   message.
+- **Stop** (the button while a reply is generating) works through the outage
+  too. Its session lookup waits up to 10 s like a new message, and then the
+  API signals the running reply through Redis without reading the
+  conversation in the database (the run's record in Redis names its owner, so
+  only that person's Stop reaches it). If the database is still away after the
+  10 s the request answers the retryable `500`, and the page does not drop
+  it: it says "Stop didn't reach the server yet; trying again." and asks
+  again every 1 to 5 s for as long as the reply is still running, so the reply
+  stops soon after the database is back. Pressing Stop again asks at once.
 - **Background jobs** stop after the batch in hand when their lock goes with
   the old primary, and the next tick continues on the new one. Imports resume
   where they stopped. A tick whose lock connection is closed as it opens

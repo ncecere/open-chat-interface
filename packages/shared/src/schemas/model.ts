@@ -33,7 +33,16 @@ export const catalogModelSchema = z.object({
  * Prices are integer micro-dollars per million tokens, so cost arithmetic never
  * touches a float. Null means "unpriced": cost policies cannot bill the model.
  */
-const tokenPriceSchema = z.number().int().nonnegative().max(1_000_000_000).nullable().optional();
+const tokenPriceSchema = z
+  .number()
+  // The form edits dollars and sends whole micro-dollars; the sentences say
+  // what to enter (#347): a production bundle drops Zod's own wording, which
+  // left "Input price: Invalid input".
+  .int('Enter a price with at most six decimal places.')
+  .nonnegative('Enter a price of 0 or more.')
+  .max(1_000_000_000, 'Enter a price of at most $1,000 per million tokens.')
+  .nullable()
+  .optional();
 
 /** The context window OCI assumes for a model whose window is not set. */
 export const FALLBACK_CONTEXT_WINDOW = 32_768;

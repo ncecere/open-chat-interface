@@ -89,6 +89,9 @@ export function useChatRecovery(options: {
   }, [initialPending, resumeStream]);
 
   const recover = useCallback(() => {
+    // Asked for by the person (or by a Stop that got through after failing):
+    // check now, not after the pause that failed checks had grown to.
+    failuresRef.current = 0;
     setWatch(latest.current.scope.request);
     setAttempt(++attemptRef.current);
   }, []);

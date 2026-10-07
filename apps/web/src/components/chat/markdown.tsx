@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
+import { escapeCurrencyDollars } from '~/components/chat/markdown-currency';
 import {
   DEMOTED_HEADINGS,
   HeadingLevels,
@@ -106,17 +107,21 @@ function buildMarkdownRenderer([
   // Streamdown's own (GFM, code metadata), then single line breaks kept (#207).
   // One array for every message: Streamdown re-parses when its identity changes.
   const remarkPlugins = [...Object.values(defaultRemarkPlugins ?? {}), remarkSoftBreaks];
-  // Single-dollar inline math is off by default, but models commonly emit it.
+  // Single-dollar inline math is off by default, but models commonly emit it;
+  // escapeCurrencyDollars keeps amounts of money out of it (#339).
   // Mermaid itself loads only when a diagram is first rendered.
+  const mermaid = createEditorialMermaidPlugin();
   const plugins = {
     code,
     math: createMathPlugin({ singleDollarTextMath: true }),
-    mermaid: createEditorialMermaidPlugin(),
+    mermaid,
   };
+  // A person's own message: text, not LaTeX, so every `$` is a dollar sign (#339).
+  const pluginsWithoutMath = { code, mermaid };
 
-  return ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
+  return ({ children, className, math = true, skipHtml, urlTransform }: MarkdownProps) => (
     <Streamdown
-      plugins={plugins}
+      plugins={math ? plugins : pluginsWithoutMath}
       className={cn(MARKDOWN_BASE, className)}
       remarkPlugins={remarkPlugins}
       translations={TRANSLATIONS}
@@ -135,7 +140,7 @@ function buildMarkdownRenderer([
         ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
         : {})}
     >
-      {normalizeMathDelimiters(children)}
+      {math ? normalizeMathDelimiters(escapeCurrencyDollars(children)) : children}
     </Streamdown>
   );
 }
@@ -262,6 +267,12 @@ export const HighlightedCode = memo(function HighlightedCode({
 export interface MarkdownProps {
   children: string;
   className?: string;
+  /**
+   * Typeset `$…$` and `$$…$$` as maths (default). A person's own message turns
+   * it off: they type text, and "$5 … $10" or a message about LaTeX must read
+   * as typed (#339).
+   */
+  math?: boolean;
   skipHtml?: boolean;
   /**
    * Matches Streamdown's signature. Public shares use this to drop every
@@ -338,6 +349,7 @@ export const MARKDOWN_PROSE = cn(
 export const Markdown = memo(function Markdown({
   children,
   className,
+  math,
   skipHtml,
   urlTransform,
 }: MarkdownProps) {
@@ -349,7 +361,7 @@ export const Markdown = memo(function Markdown({
   if (Loaded)
     return (
       <HeadingLevels.Provider value={levels}>
-        <Loaded className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
+        <Loaded className={className} math={math} skipHtml={skipHtml} urlTransform={urlTransform}>
           {children}
         </Loaded>
       </HeadingLevels.Provider>
@@ -361,7 +373,12 @@ export const Markdown = memo(function Markdown({
       }
     >
       <HeadingLevels.Provider value={levels}>
-        <StreamdownMarkdown className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
+        <StreamdownMarkdown
+          className={className}
+          math={math}
+          skipHtml={skipHtml}
+          urlTransform={urlTransform}
+        >
           {children}
         </StreamdownMarkdown>
       </HeadingLevels.Provider>

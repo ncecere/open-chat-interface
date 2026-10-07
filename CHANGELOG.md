@@ -7,14 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from seven QA walks of v0.11.0 (issues #35–#331). Two migrations, `0042`
-and `0043` (code artifacts, #298), run with `migrate` as usual. Three new
-post-deploy steps run with `migrate --post` after every replica runs the new
-release, as for any release: `0007` and `0008` index the audit log so a
-person's trail includes bulk actions done to them (#216; until they run, the
-trail is complete but slower on a large audit log), and `0009` enables code
-artifacts (#298; until it runs, code stays in the reply, so a replica of the
-previous release never sees the new kind). The PostgreSQL driver patch
+Fixes from eight QA walks of v0.11.0 (issues #35–#353). Three migrations,
+`0042`, `0043` (code artifacts, #298) and `0044` (two columns that let a failed
+scheduled report be tried again, #352; no table rewrite), run with `migrate` as
+usual. Four new post-deploy steps run with `migrate --post` after every replica
+runs the new release, as for any release: `0007`, `0008` and `0010` index the
+audit log so a person's trail includes bulk actions done to them and entries
+made with their address alone (#216, #342; until they run, the trail is
+complete but slower on a large audit log), and `0009` enables code artifacts
+(#298; until it runs, code stays in the reply, so a replica of the previous
+release never sees the new kind). The PostgreSQL driver patch
 (`patches/postgres@3.4.9.patch`) is applied by `pnpm install`.
 
 ### Added
@@ -24,6 +26,9 @@ previous release never sees the new kind). The PostgreSQL driver patch
   /api/admin/settings/smtp/test`; `smtp.hasUsername` and `smtp.hasPassword` in
   the settings.
 - **Edit scheduled reports**, and see when each is next sent (#85).
+- **A scheduled report whose email failed is tried again** after 15 minutes,
+  1 hour and 4 hours, instead of counting as sent for its whole period, and each
+  report has a **Send now** button (#352). `POST /api/admin/reports/:id/send`.
 - **Unsaved-changes protection** in administration: leaving a page, closing
   the tab or pressing Escape in a half-filled dialog asks first (#45).
 - **Acceptable-use drafts** can be read, reworded and deleted before they are
@@ -112,6 +117,39 @@ previous release never sees the new kind). The PostgreSQL driver patch
 - **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
+
+### Fixed after an eighth QA walk (#333–#353)
+
+- **Chat:** two or more dollar amounts in a paragraph are no longer typeset
+  as maths ("$5 for students, $10 for staff" reads as typed; `$x^2$` still
+  renders), and a person's own messages show no maths at all (#339); the
+  sidebar's New Chat leaves temporary mode like the other New Chat controls
+  (#340); an empty change to preferences, a model, a person or an SSO
+  provider answers 422 instead of 500 (#341); artifact card titles wrap
+  (#336); a message's Edit puts focus in the text box and returns it after
+  Cancel, Escape or Save (#333).
+- **Audit:** a person's trail includes password-reset requests and refused
+  sign-ins made with their address (#342; post-deploy step `0010` indexes
+  it: run `migrate --post`); failed Test entries record why (#343); nested
+  settings changes line up field by field (#344); an unban clears the ban
+  reason on every path (#350); read-only entries record only the window in
+  effect (#349).
+- **Administration:** System health and Overview show local times and honest
+  labels, with empty days included (#345, #348); an invitation reports an
+  out-of-range expiry and an existing account together (#346); clearer
+  messages for prices and wrong types (#347); the Users table and the Audit
+  search box fit from 768 px up (#334, #335).
+- **Accounts:** the verify-email page's Resend button is focusable and says
+  why it is off (#337); each auth field is described once (#338).
+- **Outages and email:** a Stop pressed during a database outage reaches the
+  reply: the server waits out a short outage and signals the run, and the page
+  resends the stop and says so until it gets through (#351); a scheduled
+  report whose email failed stays due and is tried again after 15 minutes,
+  1 hour and 4 hours, and every report has a Send now button (#352; migration
+  `0044`).
+- **Read-only mode:** every Settings control that saves or deletes is turned
+  off with the reason, including Edit name, Change password and History's
+  import (#353).
 
 ### Fixed after a seventh QA walk (#310–#331)
 

@@ -243,6 +243,22 @@ describe('the model form and inline rename (#79)', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
+  it('says what to enter for a negative price, and for a sort order that is not a number (#347)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(button('Add model'));
+    await typeInto(field('model-input-price'), '-1');
+    await typeInto(field('model-output-price'), '2000');
+    const add = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (candidate) => candidate.textContent?.trim() === 'Add model',
+    );
+    await click(add!);
+    // It said "Input price: Invalid input".
+    expect(errorAt('model-input-price')).toBe('Input price: Enter a price of 0 or more.');
+    expect(errorAt('model-output-price')).toBe(
+      'Output price: Enter a price of at most $1,000 per million tokens.',
+    );
+  });
+
   it('clears the listed problems once the form is edited (#178)', async () => {
     ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
     await click(button('Add model'));

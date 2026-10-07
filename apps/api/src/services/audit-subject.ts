@@ -1,4 +1,4 @@
-import { or, schema, sql } from '@oci/db';
+import { and, or, schema, sql } from '@oci/db';
 
 type SQL = ReturnType<typeof sql.raw>;
 
@@ -12,16 +12,31 @@ const log = schema.auditLog;
  * the actor and target left a bulk role change or sign-out out of the
  * person's trail.
  *
- * Each branch has an index (audit_log_actor_idx, audit_log_target_idx, and
- * the GIN index audit_log_user_ids_idx on `metadata -> 'userIds'`, post-deploy
- * steps 0007 and 0008), so PostgreSQL can combine them instead of scanning
- * the table. The `?` form is the one that GIN index answers.
+ * Also what was done anonymously with the account's address (#342): a
+ * password-reset request or a refused sign-in has no signed-in actor, so it
+ * carries only `actor_email`. Those are entries about the account, matched on
+ * the address with the case folded (the address is whatever was typed, and a
+ * person types `M.Bell@` for `m.bell@`) and only where no actor account is
+ * recorded, so they are exactly the entries the ID cannot find. The audit log
+ * is read by administrators and auditors only; the same entries are already
+ * found by searching for the address.
+ *
+ * Each branch has an index (audit_log_actor_idx, audit_log_target_idx, the
+ * GIN index audit_log_user_ids_idx on `metadata -> 'userIds'`, and the
+ * partial audit_log_actor_email_idx on `lower(actor_email)` where there is no
+ * actor account; post-deploy steps 0007, 0008 and 0010), so PostgreSQL can
+ * combine them instead of scanning the table. The `?` form is the one the GIN
+ * index answers. The address comes from a subquery PostgreSQL evaluates once.
  */
 export function auditEntryAbout(userId: string): SQL {
   return or(
     sql`${log.actorUserId} = ${userId}`,
     sql`${log.targetId} = ${userId}`,
     sql`(${log.metadata} -> 'userIds') ? ${userId}`,
+    and(
+      sql`${log.actorUserId} is null`,
+      sql`lower(${log.actorEmail}) = (select lower(${schema.user.email}) from ${schema.user} where ${schema.user.id} = ${userId})`,
+    ),
   ) as SQL;
 }
 

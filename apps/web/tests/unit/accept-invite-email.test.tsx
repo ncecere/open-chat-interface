@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AcceptInvitePage } from '../../src/routes/auth/accept-invite';
@@ -49,4 +50,31 @@ it('leaves the address to the person for an invitation that is not for one', asy
   await settle();
   expect(emailField().value).toBe('');
   expect(emailField().readOnly).toBe(false);
+});
+
+it('describes each invitation field by its own message, and the password rule once (#338)', async () => {
+  validation = { emailLocked: false, email: null };
+  ({ root } = await renderAdmin(<AcceptInvitePage />));
+  await settle();
+  const password = document.querySelector<HTMLInputElement>('#invite-password')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      password,
+      'short',
+    );
+    password.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    document
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+  const description = (id: string) =>
+    (document.getElementById(id)!.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => document.getElementById(part)!.textContent);
+  expect(description('invite-name')).toEqual(['Enter your name.']);
+  expect(description('invite-email')).toEqual(['Enter your email address.']);
+  expect(description('invite-password')).toEqual(['Use at least 12 characters for your password.']);
 });

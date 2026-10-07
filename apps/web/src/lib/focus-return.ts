@@ -148,6 +148,26 @@ export function focusPlace(place: FocusPlace): boolean {
   return document.activeElement === heading;
 }
 
+/**
+ * After an inline editor or confirmation closes (its Cancel, Save or Escape
+ * removed the control that had focus), puts focus on `target`, the button
+ * that opened it, unless focus has already gone somewhere on purpose (#270,
+ * #291, #333). Returns whether `target` has focus.
+ */
+export function returnFocusIfLost(target: HTMLElement | null | undefined): boolean {
+  const active = document.activeElement;
+  if (active && active !== document.body) return false;
+  target?.focus();
+  return Boolean(target) && document.activeElement === target;
+}
+
+/** Puts the cursor at the end of a text box and focuses it (an editor opening). */
+export function focusAtEnd(field: HTMLInputElement | HTMLTextAreaElement | null | undefined) {
+  if (!field) return;
+  field.focus();
+  field.setSelectionRange(field.value.length, field.value.length);
+}
+
 const WATCH_MS = 15_000;
 
 /**

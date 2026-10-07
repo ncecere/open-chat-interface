@@ -6,6 +6,7 @@ import { AdminPageHeader, LoadError, SettingsSection } from '~/components/admin/
 import { SetupChecklist } from '~/components/admin/setup-checklist';
 import { Badge } from '~/components/ui/badge';
 import { FullPageSpinner } from '~/components/ui/spinner';
+import { type ActivityPoint, denseActivity, formatActivityDay } from '~/lib/activity-series';
 import { api } from '~/lib/api-client';
 import { formatBytes } from '~/lib/utils';
 
@@ -52,7 +53,7 @@ function Trend({ current, previous }: { current: number; previous: number }) {
  * Drawn inline rather than pulling in a charting library: this shows whether
  * something changed, and anything more precise belongs on the usage page.
  */
-function Sparkline({ points }: { points: { day: string; messages: number }[] }) {
+function Sparkline({ points }: { points: ActivityPoint[] }) {
   if (points.length < 2) return null;
 
   const peak = Math.max(...points.map((point) => point.messages), 1);
@@ -67,7 +68,7 @@ function Sparkline({ points }: { points: { day: string; messages: number }[] }) 
       preserveAspectRatio="none"
       className="h-10 w-full text-[var(--accent-bright)]"
       role="img"
-      aria-label={`Messages per day over the last ${points.length} days, peaking at ${peak}`}
+      aria-label={`Messages per day over the last ${points.length} days, ${formatActivityDay(points[0]?.day ?? '')} to ${formatActivityDay(points.at(-1)?.day ?? '')}, peaking at ${peak}`}
     >
       <polyline
         points={path}
@@ -116,6 +117,9 @@ export function AdminOverviewPage() {
     );
   }
 
+  // One point per day, so the line and its label are about the same days (#348).
+  const activity = denseActivity(data.activity);
+
   return (
     <div>
       {header}
@@ -153,17 +157,20 @@ export function AdminOverviewPage() {
         />
       </div>
 
-      {data.activity.length > 1 && (
+      {activity.length > 1 && (
         <section className="mt-6 rounded-xl border border-[var(--border-subtle)] p-5">
           <h2 className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
             Messages per day
           </h2>
           <div className="mt-3">
-            <Sparkline points={data.activity} />
+            <Sparkline points={activity} />
           </div>
           <p className="mt-1 flex justify-between gap-2 text-[var(--text-muted)] text-xs">
-            <span>{data.activity[0]?.day}</span>
-            <span>{data.activity.at(-1)?.day}</span>
+            <span>{formatActivityDay(activity[0]?.day ?? '')}</span>
+            <span>{formatActivityDay(activity.at(-1)?.day ?? '')}</span>
+          </p>
+          <p className="mt-1 text-[var(--text-muted)] text-xs">
+            Each day runs from midnight to midnight UTC.
           </p>
         </section>
       )}

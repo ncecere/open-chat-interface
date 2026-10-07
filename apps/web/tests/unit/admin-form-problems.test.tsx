@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
-import { scheduledReportInputSchema, updateInstanceSettingsSchema } from '@oci/shared';
+import {
+  createInviteSchema,
+  scheduledReportInputSchema,
+  updateInstanceSettingsSchema,
+} from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QuotaPolicyDialog } from '../../src/components/admin/quota-policy-dialog';
 import { Dialog } from '../../src/components/ui/dialog';
+import { ApiError } from '../../src/lib/api-client';
 import { AdminInvitesPage } from '../../src/routes/admin/invites';
 import { AdminPoliciesPage } from '../../src/routes/admin/policies';
 import { AdminReportsPage } from '../../src/routes/admin/reports';
@@ -114,7 +119,8 @@ it('Email delivery: a field the API refuses is shown at that field, not at the f
   await typeInto(input('smtp-host'), 'smtp.example.edu');
   await click(button('Save changes'));
 
-  expect(fieldError('smtp-host')).toBe('SMTP host is missing or not the right kind of value.');
+  // Says what kind of value to enter (#347), not "missing or not the right kind".
+  expect(fieldError('smtp-host')).toBe('SMTP host must be text.');
   // Only at the field: nothing beside Save changes.
   expect(alerts().filter((text) => text.includes('SMTP host'))).toHaveLength(1);
   // Corrected, it goes.
@@ -178,6 +184,55 @@ it('Invitations: an expiry over 365 days is the app’s error at the field, not 
   await submitIn('Create invitation');
   expect(fieldError('invite-expiry')).toBe('Expires in days must be at most 365.');
   expect(api.post).not.toHaveBeenCalled();
+});
+
+const ACCOUNT_EXISTS =
+  'An account with this email address already exists. Change its role on its account page instead.';
+
+it('Invitations: an out-of-range expiry and an address that already has an account are both shown in one save (#346)', async () => {
+  api.get.mockResolvedValue({ invites: [] });
+  // As the API answers it: the schema's issue for the days and the address's own.
+  const body = { email: 'm.bell@northbrook.edu', role: 'user', expiresInDays: 400 };
+  api.post.mockRejectedValue(
+    new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', [
+      ...(validationFailure(createInviteSchema, body).details as unknown[]),
+      { path: ['email'], message: ACCOUNT_EXISTS },
+    ]),
+  );
+  ({ root } = await renderAdmin(<AdminInvitesPage />));
+  await click(button('Create invitation'));
+  await typeInto(input('invite-email'), 'm.bell@northbrook.edu');
+  await typeInto(input('invite-expiry'), '400');
+  await submitIn('Create invitation');
+
+  // The server was asked, so it could add what only it knows.
+  expect(api.post).toHaveBeenCalledWith('/admin/invites', body);
+  expect(fieldError('invite-expiry')).toBe('Expires in days must be at most 365.');
+  expect(fieldError('invite-email')).toBe(`Email: ${ACCOUNT_EXISTS}`);
+
+  // Correcting the days clears only the days' error; the address's stays.
+  await typeInto(input('invite-expiry'), '7');
+  expect(fieldError('invite-expiry')).toBeNull();
+  expect(fieldError('invite-email')).toBe(`Email: ${ACCOUNT_EXISTS}`);
+});
+
+it('Invitations: a refused form that the server cannot be asked about keeps its own errors, and one with no address is not sent (#346)', async () => {
+  api.get.mockResolvedValue({ invites: [] });
+  ({ root } = await renderAdmin(<AdminInvitesPage />));
+  await click(button('Create invitation'));
+  // No address: nothing for the server to add.
+  await typeInto(input('invite-expiry'), '400');
+  await submitIn('Create invitation');
+  expect(api.post).not.toHaveBeenCalled();
+  expect(fieldError('invite-expiry')).toBe('Expires in days must be at most 365.');
+
+  // An address, but the connection drops: the days' error is not replaced.
+  api.post.mockRejectedValue(new TypeError('Failed to fetch'));
+  await typeInto(input('invite-email'), 'new.person@northbrook.edu');
+  await submitIn('Create invitation');
+  expect(api.post).toHaveBeenCalledTimes(1);
+  expect(fieldError('invite-expiry')).toBe('Expires in days must be at most 365.');
+  expect(alerts(dialog()!)).toEqual(['Expires in days must be at most 365.']);
 });
 
 it('Reports: a window of 0 days is the app’s error at the field (#320)', async () => {

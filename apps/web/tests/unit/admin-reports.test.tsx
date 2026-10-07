@@ -152,3 +152,60 @@ it("names each report's Pause and Delete buttons for the report (#175)", async (
   expect(buttonNames()).not.toContain('Pause');
   expect(buttonNames()).not.toContain('Delete');
 });
+
+it('says a failed report was not counted as sent, and sends it from its own button (#352)', async () => {
+  const failing = {
+    ...report,
+    lastRunAt: null,
+    nextRunAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    lastStatus: 'error' as const,
+    lastError: 'Email delivery failed',
+    failedAttempts: 1,
+    retriesLeft: 3,
+  };
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/reports') return { reports: [failing] };
+    if (path === '/admin/setup-status') return { checks: [] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  api.post.mockResolvedValue({ delivered: true, error: null });
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  // Before: "Failed: Email delivery failed" beside "Next: in 30d", and a
+  // never-sent report that failed showed no failure at all.
+  expect(document.body.textContent).toContain(
+    'Failed: Email delivery failed. It was not counted as sent, and will be tried again.',
+  );
+  expect(document.body.textContent).toContain('Next: within the hour');
+  expect(document.body.textContent).not.toContain('Last sent');
+
+  // Always possible, whether or not the report is due.
+  await click(button('Send Walk monthly usage now'));
+  expect(api.post).toHaveBeenCalledWith('/admin/reports/r1/send', {});
+  expect(document.body.textContent).toContain('Sent Walk monthly usage.');
+});
+
+it('says so when Send now could not deliver, and when the automatic tries are used up (#352)', async () => {
+  const failing = {
+    ...report,
+    lastStatus: 'error' as const,
+    lastError: 'Email delivery failed',
+    failedAttempts: 4,
+    retriesLeft: 0,
+  };
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/reports') return { reports: [failing] };
+    if (path === '/admin/setup-status') return { checks: [] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  api.post.mockResolvedValue({ delivered: false, error: 'Email delivery failed' });
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  expect(document.body.textContent).toContain(
+    'Automatic tries are used up; use Send now once email works.',
+  );
+  // The earlier success is still shown beside the failure.
+  expect(document.body.textContent).toContain('Last sent');
+  await click(button('Send Walk monthly usage now'));
+  expect(alerts().join(' ')).toContain(
+    'Walk monthly usage could not be sent: Email delivery failed.',
+  );
+});

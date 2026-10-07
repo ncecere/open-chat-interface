@@ -8,6 +8,7 @@ import {
   type UserRole,
 } from '@oci/shared';
 import type { FieldProblem } from '~/hooks/use-clear-on-edit';
+import { validationProblems } from '~/lib/validation-issues';
 
 /**
  * The Add/Edit model form's draft and its validation sentences, apart from
@@ -133,6 +134,9 @@ const DRAFT_FIELDS: Record<string, keyof ModelDraft> = {
 };
 export const draftField = (key: string) => DRAFT_FIELDS[key] ?? key;
 
+/** The wording Zod gives an issue when the schema wrote none. */
+const ZOD_OWN_WORDING = /^(Invalid|Too (big|small)|Unrecognized|Expected|Required\b)/;
+
 /** One sentence per invalid field, in form order, with the form field it is about. */
 export function modelFieldProblems(
   issues: ReadonlyArray<{
@@ -156,9 +160,13 @@ export function modelFieldProblems(
         ? `${label} is required.`
         : text && issue.code === 'too_big'
           ? `${label} must be at most ${Number(issue.maximum).toLocaleString('en-US')} characters.`
-          : label && !issue.message.startsWith(label.replace('OCI ', ''))
-            ? `${label}: ${issue.message}`
-            : issue.message;
+          : label && ZOD_OWN_WORDING.test(issue.message)
+            ? // Zod's bare wording ("Invalid input" in a production bundle) says
+              // nothing: reworded from the issue (#347).
+              (validationProblems([issue], FIELD_LABELS)[0]?.text ?? `${label} is not valid.`)
+            : label && !issue.message.startsWith(label.replace('OCI ', ''))
+              ? `${label}: ${issue.message}`
+              : issue.message;
     byField.set(key, sentence);
   }
   return [...byField.entries()]

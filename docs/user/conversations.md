@@ -69,6 +69,13 @@ Replies and your own messages are shown as Markdown: headings, lists, tables,
 links and highlighted code blocks. A single line break starts a new line, so a
 poem or an address keeps its lines; a blank line starts a new paragraph.
 
+**Maths and dollar signs.** In a reply, LaTeX between dollar signs is typeset:
+`$x^2$` inline, `$$ … $$` as a display formula. Amounts of money stay as
+written: "$5 for students, $10 for staff" shows both dollar signs. A `$` counts
+as maths only when it touches the formula on both sides and the closing `$` is
+not followed by a digit, so write `\$` if you ever need to force a dollar sign.
+Your own messages are shown as typed, with no maths at all.
+
 ## How a reply shows the model's work
 
 Some models work through a problem before answering, and some use tools (a
@@ -127,7 +134,10 @@ they changed it), and it lists only the levels your role may use.
 A temporary chat stays off the sidebar, becomes unavailable when it expires,
 and is removed by background cleanup. The instance still stores it while it is
 active. Start one with the clock icon at the top right; if your role does not
-have temporary chats, the icon is not shown.
+have temporary chats, the icon is not shown. Temporary mode ends when you
+start a new chat by any route (the sidebar's New Chat button, the **+** in the
+top bar, the command palette or ⌘⇧O / Ctrl+Shift+O), so the next conversation
+is an ordinary one; press the clock again to start another temporary chat.
 
 Temporary does not mean trace-free: usage and audit records may remain, and the
 model provider's retention policy still applies. Check your institution's data

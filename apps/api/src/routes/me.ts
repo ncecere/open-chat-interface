@@ -14,7 +14,7 @@ import { db } from '../db/index.js';
 import { clientIp } from '../lib/client-ip.js';
 import { logger } from '../lib/logger.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
-import { parseBody, parseQuery } from '../middleware/validate.js';
+import { parseBody, parseChanges, parseQuery } from '../middleware/validate.js';
 import { deleteOwnAccount } from '../services/account-deletion.js';
 import {
   listOwnSessions,
@@ -228,10 +228,11 @@ meRoutes.get('/usage', async (c) => {
 /**
  * Saves the person's preferences. A default model or reasoning level must be
  * one their role allows (422 otherwise); null returns to the instance default.
+ * A body with no field to change is refused with 422 naming the fields.
  */
 meRoutes.patch('/preferences', async (c) => {
   const user = currentUser(c);
-  const patch = await parseBody(c, preferenceSchema);
+  const patch = await parseChanges(c, preferenceSchema);
 
   const current = await loadPreferences(user.id);
   if (patch.defaultModelSlug !== undefined || patch.defaultEffort !== undefined) {

@@ -5,9 +5,10 @@ import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   AuthFormError,
+  authFieldProps,
   authFormProblems,
   emailProblem,
-  fieldErrorProps,
+  type FieldMessage,
   useFocusAfterRender,
 } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
@@ -67,7 +68,8 @@ export function LoginPage() {
   // Only wrong credentials are about the fields; a rate limit is not (#183).
   const invalidCredentials = error === WRONG_CREDENTIALS;
   // The fields the form's own check found empty or malformed (#320's sweep).
-  const [missing, setMissing] = useState<string[]>([]);
+  const [messages, setMessages] = useState<FieldMessage[]>([]);
+  const missing = messages.map((message) => message.id);
   // Sent here because the session ended while the app was open (#165).
   const [signedOut] = useState(() =>
     new URLSearchParams(window.location.search).has(SIGNED_OUT_PARAM),
@@ -84,7 +86,7 @@ export function LoginPage() {
       { id: 'email', problem: emailProblem(email) },
       { id: 'password', problem: password ? null : 'Enter your password.' },
     ]);
-    setMissing(problems?.ids ?? []);
+    setMessages(problems?.messages ?? []);
     if (problems) {
       setError(problems.message);
       focusAfterRender(problems.ids[0]!);
@@ -233,11 +235,13 @@ export function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
-                  {...fieldErrorProps(
-                    'login-error',
+                  {...authFieldProps({
+                    errorId: 'login-error',
                     error,
-                    invalidCredentials || missing.includes('email'),
-                  )}
+                    messages,
+                    fieldId: 'email',
+                    invalid: invalidCredentials || missing.includes('email'),
+                  })}
                   type="email"
                   autoComplete="email"
                   required
@@ -251,11 +255,13 @@ export function LoginPage() {
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
-                  {...fieldErrorProps(
-                    'login-error',
+                  {...authFieldProps({
+                    errorId: 'login-error',
                     error,
-                    invalidCredentials || missing.includes('password'),
-                  )}
+                    messages,
+                    fieldId: 'password',
+                    invalid: invalidCredentials || missing.includes('password'),
+                  })}
                   type="password"
                   autoComplete="current-password"
                   required
@@ -264,7 +270,11 @@ export function LoginPage() {
                 />
               </div>
 
-              {error && <AuthFormError id="login-error">{error}</AuthFormError>}
+              {error && (
+                <AuthFormError id="login-error" messages={messages}>
+                  {error}
+                </AuthFormError>
+              )}
 
               <Button
                 id="login-submit"

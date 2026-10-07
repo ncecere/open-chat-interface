@@ -111,7 +111,8 @@ on the page, saved or not, and says whether it worked or what the provider
 replied, for example that it rejected the key. SearXNG has no key: a refusal
 from it (HTTP 403) almost always means its JSON output is off, and the message
 says to add `json` to `search.formats`. Nothing is saved, and each test
-is recorded in the audit log as `search.test` (provider and outcome only).
+is recorded in the audit log as `search.test`: the provider, the outcome, the address
+tried (for SearXNG) and, when it failed, the reason, never a key.
 
 People are offered search only when it can actually run: the switch is on, a
 provider is selected, and it has its key or address. Until all of those hold,

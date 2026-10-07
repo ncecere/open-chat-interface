@@ -8,6 +8,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { formatRelativeTime } from '~/lib/utils';
 
 function purgeCountdown(purgeAt: string): string {
@@ -31,6 +32,8 @@ function messages(count: number): string {
  */
 export function TrashList() {
   const queryClient = useQueryClient();
+  // Restoring and deleting are refused while read-only (#353).
+  const lock = useReadOnlyLock();
   const [purging, setPurging] = useState<TrashedThread | null>(null);
   const [emptying, setEmptying] = useState(false);
 
@@ -86,7 +89,14 @@ export function TrashList() {
           Deleted conversations stay here until their deletion date, then are removed permanently.
           Deleting now cannot be undone, so download anything you want to keep first.
         </p>
-        <Button variant="danger" size="sm" aria-haspopup="dialog" onClick={() => setEmptying(true)}>
+        <Button
+          variant="danger"
+          size="sm"
+          aria-haspopup="dialog"
+          title={lock.title}
+          disabled={lock.locked}
+          onClick={() => setEmptying(true)}
+        >
           Empty trash
         </Button>
       </div>
@@ -119,7 +129,8 @@ export function TrashList() {
                 variant="secondary"
                 size="sm"
                 // Only this row's: a disabled neighbour cannot take focus when this row goes.
-                disabled={restore.isPending && restore.variables?.id === thread.id}
+                title={lock.title}
+                disabled={lock.locked || (restore.isPending && restore.variables?.id === thread.id)}
                 aria-label={`Restore ${thread.title}`}
                 onClick={(event) => restoreRow(event, thread)}
               >
@@ -130,6 +141,8 @@ export function TrashList() {
                 size="sm"
                 aria-haspopup="dialog"
                 aria-label={`Delete ${thread.title} now`}
+                title={lock.title}
+                disabled={lock.locked}
                 onClick={() => setPurging(thread)}
               >
                 Delete now
@@ -156,6 +169,7 @@ export function TrashList() {
         confirmLabel="Delete now"
         pendingLabel="Deleting…"
         errorMessage="The conversation could not be deleted."
+        confirmDisabled={lock.locked}
         onConfirm={async () => {
           if (!purging) return;
           await api.delete(`/threads/${purging.id}/permanent`);
@@ -178,6 +192,7 @@ export function TrashList() {
         confirmLabel="Empty trash"
         pendingLabel="Deleting…"
         errorMessage="The trash could not be emptied."
+        confirmDisabled={lock.locked}
         onConfirm={async () => {
           await api.delete('/threads/trash');
           await invalidate();

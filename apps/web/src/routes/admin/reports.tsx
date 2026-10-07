@@ -35,6 +35,8 @@ interface ScheduledReport {
   nextRunAt: string | null;
   lastStatus: 'success' | 'error' | null;
   lastError: string | null;
+  /** Automatic tries a failing report has left before it waits for its next period (#352). */
+  retriesLeft: number | null;
 }
 
 /**
@@ -66,6 +68,17 @@ export function nextRunText(report: Pick<ScheduledReport, 'nextRunAt'>, now = Da
   const at = Date.parse(report.nextRunAt);
   if (at <= now + 60 * 60 * 1000) return 'Next: within the hour';
   return `Next: ${formatRelativeTime(report.nextRunAt, now)}`;
+}
+
+/**
+ * What a failed report says beside its failure (#352): that it is tried again
+ * by itself, or that the automatic tries are used up and Send now is the way.
+ */
+export function failureText(report: Pick<ScheduledReport, 'lastError' | 'retriesLeft'>): string {
+  const reason = report.lastError?.replace(/[.\s]+$/, '') ?? 'The email was not sent';
+  return report.retriesLeft
+    ? `Failed: ${reason}. It was not counted as sent, and will be tried again.`
+    : `Failed: ${reason}. It was not counted as sent. Automatic tries are used up; use Send now once email works.`;
 }
 
 /** The form's names for the fields, so each error names the one it is about (#127, #283). */
@@ -195,6 +208,16 @@ export function AdminReportsPage() {
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.patch(`/admin/reports/${id}`, { enabled }),
+    onSuccess: invalidate,
+  });
+
+  // One report, now, whether or not it is due (#352).
+  const sendOne = useMutation({
+    mutationFn: (report: ScheduledReport) =>
+      api.post<{ delivered: boolean; error: string | null }>(
+        `/admin/reports/${report.id}/send`,
+        {},
+      ),
     onSuccess: invalidate,
   });
 
@@ -343,6 +366,22 @@ export function AdminReportsPage() {
           className="mt-2"
         />
 
+        <MutationError
+          error={sendOne.error}
+          message={`${sendOne.variables?.name ?? 'The report'} could not be sent.`}
+          className="mt-2"
+        />
+        {sendOne.data && (
+          <p
+            role={sendOne.data.delivered ? 'status' : 'alert'}
+            className={`mt-2 text-sm ${sendOne.data.delivered ? 'text-[var(--text-muted)]' : 'text-[var(--danger)]'}`}
+          >
+            {sendOne.data.delivered
+              ? `Sent ${sendOne.variables?.name ?? 'the report'}.`
+              : `${sendOne.variables?.name ?? 'The report'} could not be sent: ${sendOne.data.error ?? 'unknown error'}.`}
+          </p>
+        )}
+
         {runNow.data && (
           <p className="mt-2 text-[var(--text-muted)] text-sm">
             {runNow.data.sent === 0
@@ -369,24 +408,30 @@ export function AdminReportsPage() {
                     {report.recipients.join(', ')}
                   </p>
                   <p className="mt-0.5 text-[var(--text-muted)] text-xs">{nextRunText(report)}</p>
+                  {report.lastStatus === 'error' && (
+                    <p className="mt-0.5 text-[var(--danger)] text-xs">{failureText(report)}</p>
+                  )}
                   {report.lastRunAt && (
-                    <p className="mt-0.5 text-xs">
-                      <span
-                        className={
-                          report.lastStatus === 'error'
-                            ? 'text-[var(--danger)]'
-                            : 'text-[var(--text-muted)]'
-                        }
-                      >
-                        {report.lastStatus === 'error'
-                          ? `Failed: ${report.lastError}`
-                          : `Last sent ${formatRelativeTime(report.lastRunAt)}`}
-                      </span>
+                    <p className="mt-0.5 text-[var(--text-muted)] text-xs">
+                      Last sent {formatRelativeTime(report.lastRunAt)}
                     </p>
                   )}
                 </div>
 
                 <EditOnly>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={sendOne.isPending}
+                    // Always possible, whether or not it is due, so a report
+                    // whose email failed can be sent again (#352).
+                    aria-label={`Send ${report.name} now`}
+                    onClick={() => sendOne.mutate(report)}
+                  >
+                    {sendOne.isPending && sendOne.variables?.id === report.id
+                      ? 'Sending…'
+                      : 'Send now'}
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"

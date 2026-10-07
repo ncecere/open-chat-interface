@@ -14,6 +14,7 @@ import {
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { cn, formatBytes } from '~/lib/utils';
 
 interface SelectionCheckboxProps {
@@ -120,6 +121,8 @@ export function AttachmentList({
   onDelete,
   emptyHint = 'Files uploaded in chats and to projects will appear here.',
 }: AttachmentListProps) {
+  // Deleting a file is refused while read-only (#353).
+  const lock = useReadOnlyLock();
   // Project files are managed (and deleted) from their project, not here.
   const selectable = attachments.filter((file) => !file.project);
   const selectedVisibleCount = selectable.filter((file) => selected.has(file.id)).length;
@@ -287,9 +290,9 @@ export function AttachmentList({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    disabled={isDeleting}
+                    disabled={isDeleting || lock.locked}
                     aria-label={`Delete ${attachment.filename}`}
-                    title={`Delete ${attachment.filename}`}
+                    title={lock.title ?? `Delete ${attachment.filename}`}
                     className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-on-tint)] hover:bg-[var(--danger)]/30"
                     onClick={() => onDelete([attachment.id])}
                   >

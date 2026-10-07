@@ -63,11 +63,15 @@ them), an announcement (its window and audience too), a connector (its address
 among them), a webhook (the actions it forwards), a scheduled report and an
 acceptable-use draft (its title, and whether the text changed). Each
 lists its `changes`, every value as it was and as it became, a nested one by
-its path (`roles.user.chatRequestsPerMinute`); an announcement, webhook or
+its path (`roles.user.chatRequestsPerMinute`, and for the instance settings
+`storage.maxFilesPerMessage` or `smtp.port`, the one field with its own before, not the
+whole branch; a password or key only as set or unset); an announcement, webhook or
 acceptable-use save that changes nothing is not recorded. Every **Test** button
 that reaches an outside service is recorded with its outcome (`smtp.test`,
 `storage.test`, `search.test`, `embeddings.test`, `reranking.test`,
-`backup.test`, `compliance.test`, `connector.test`, `webhook.test.send`). A deletion records what was removed: a
+`backup.test`, `compliance.test`, `connector.test`, `webhook.test.send`),
+with where it went (for the test email, the server and the address it was sent to) and, when
+it failed, the reason, cleaned of anything that looks like a credential. A deletion records what was removed: a
 deleted usage budget keeps its measure, limit, window, roles, models and how
 many per-user overrides went with it, a deleted storage allowance its values,
 and a cleared override its limit. **Sign out everywhere** records how many sessions it ended.
@@ -169,8 +173,18 @@ Points worth knowing:
   or recipients; **Pause** stops it without losing it.
 - **Send due now** exists so you can check the recipients and the content
   without waiting a month to discover the address was wrong.
-- **A failure is recorded on the report**, not only in the logs, so you can see a
-  report has been failing without reading server output.
+- **A failed send does not count as sent.** The report stays due, shows
+  "Failed: Email delivery failed. It was not counted as sent, and will be tried
+  again", and is tried again by the hourly check after 15 minutes, then 1 hour,
+  then 4 hours. If all of those fail the report waits for its next period
+  (and says "Automatic tries are used up"), so a mail server that stays away
+  is not asked every hour. The failure is recorded on the report, not only in
+  the logs, so you can see it without reading server output.
+- **Send now** on each report sends it immediately, due or not, and is always
+  there after a failure: when it delivers, the failure is cleared and the report
+  counts as sent for its period. On a report that is not failing it sends a
+  copy and leaves its schedule as it was. If it cannot deliver, the page says
+  why.
 - Reports need email configured. Without SMTP none will arrive: the Reports
   page warns until email delivery is set up, enabling a report makes email a
   required step on the [setup checklist](first-run.md#5-set-up-email-delivery),

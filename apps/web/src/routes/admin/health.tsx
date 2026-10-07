@@ -106,6 +106,20 @@ export function localTimesIn(detail: string, now = new Date()): string {
   );
 }
 
+/**
+ * A check's detail in the reader's local time. The text the server wrote,
+ * with its ISO 8601 instants, is the tooltip when the two differ, so the
+ * exact moment (and its zone) stays one hover away (#345).
+ */
+function HealthDetail({ detail }: { detail: string }) {
+  const local = localTimesIn(detail);
+  return (
+    <p className="text-[var(--text-muted)] text-xs" title={local === detail ? undefined : detail}>
+      {local}
+    </p>
+  );
+}
+
 function HealthChecks() {
   const health = useQuery({
     queryKey: ['admin', 'health'],
@@ -150,7 +164,7 @@ function HealthChecks() {
               />
               <div className="min-w-0">
                 <p className="font-medium text-sm">{check.label}</p>
-                <p className="text-[var(--text-muted)] text-xs">{localTimesIn(check.detail)}</p>
+                <HealthDetail detail={check.detail} />
               </div>
             </li>
           );

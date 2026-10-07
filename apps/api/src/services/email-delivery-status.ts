@@ -84,9 +84,6 @@ export async function emailDeliveryStatus(): Promise<EmailDeliveryStatus | null>
   };
 }
 
-/** "2026-10-06 14:31 UTC", as the other health rows write times. */
-const utc = (iso: string) => `${iso.slice(0, 16).replace('T', ' ')} UTC`;
-
 interface Check {
   id: string;
   label: string;
@@ -98,6 +95,11 @@ interface Check {
  * System health's Email delivery row: not configured, failing (the latest
  * send failed, with when and why), or sending. A warning rather than an
  * error, as for connectors: the rest of the service keeps working.
+ *
+ * Times are ISO 8601 instants, as the Read-only row writes them: the server
+ * does not know the reader's zone, and the System health page turns each into
+ * local time (`localTimesIn`). A "2026-10-06 20:38 UTC" string could not be
+ * (#345).
  */
 export async function emailHealthCheck(): Promise<Check> {
   const base = { id: 'email', label: 'Email delivery' } as const;
@@ -118,7 +120,7 @@ export async function emailHealthCheck(): Promise<Check> {
     return {
       ...base,
       status: 'warn',
-      detail: `${which} through ${smtp.host} failed, most recently at ${utc(status.lastFailureAt!)}: ${
+      detail: `${which} through ${smtp.host} failed, most recently at ${status.lastFailureAt}: ${
         status.lastFailureReason ?? 'unknown error'
       }. Until email works, people cannot verify their address or reset their password. Check it with Send test email under Email delivery.`,
     };
@@ -127,7 +129,7 @@ export async function emailHealthCheck(): Promise<Check> {
     ...base,
     status: 'ok',
     detail: status?.lastSuccessAt
-      ? `Sending through ${smtp.host}; last delivered ${utc(status.lastSuccessAt)}`
+      ? `Sending through ${smtp.host}; last delivered ${status.lastSuccessAt}`
       : `Sending through ${smtp.host}`,
   };
 }

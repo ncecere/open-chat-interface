@@ -14,6 +14,7 @@ import {
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { uploadImportFile } from '~/lib/import-upload';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn, formatBytes, formatRelativeTime } from '~/lib/utils';
 
@@ -73,6 +74,8 @@ function ImportRow({
   deleting: boolean;
 }) {
   const active = record.status === 'pending' || record.status === 'running';
+  // Cancelling or removing an import is refused while read-only (#353).
+  const lock = useReadOnlyLock();
   return (
     <li className="flex items-start gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0">
       <div className="min-w-0 flex-1">
@@ -96,7 +99,8 @@ function ImportRow({
       <Button
         variant="ghost"
         size="sm"
-        disabled={record.status === 'running' || deleting}
+        title={lock.title}
+        disabled={record.status === 'running' || deleting || lock.locked}
         aria-label={active ? `Cancel import of ${record.filename}` : `Remove ${record.filename}`}
         onClick={onDelete}
       >
@@ -196,6 +200,9 @@ function ImportPanel({
   const inputId = useId();
   const helpId = useId();
   const { records, upload, remove, progress, announcement, error, busy } = state;
+  // An upload is refused while read-only, so choosing a file is off, with the
+  // reason in sight (a title alone is not shown on a phone) (#353).
+  const lock = useReadOnlyLock();
 
   return (
     <div>
@@ -215,7 +222,7 @@ function ImportPanel({
         accept=".zip,.json,application/zip,application/json"
         aria-describedby={helpId}
         className="sr-only"
-        disabled={busy}
+        disabled={busy || lock.locked}
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) upload.mutate(file);
@@ -228,7 +235,8 @@ function ImportPanel({
           type="button"
           variant="secondary"
           size="sm"
-          disabled={busy}
+          title={lock.title}
+          disabled={busy || lock.locked}
           onClick={() => inputRef.current?.click()}
         >
           {upload.isPending ? 'Uploading…' : 'Choose export file'}
@@ -253,6 +261,11 @@ function ImportPanel({
         )}
       </div>
 
+      {lock.locked && (
+        <p className="mt-2 text-[var(--text-muted)] text-xs">
+          {lock.title}: importing is paused until maintenance ends.
+        </p>
+      )}
       <p role="status" aria-live="polite" className="mt-2 text-[var(--text-muted)] text-xs">
         {announcement}
       </p>

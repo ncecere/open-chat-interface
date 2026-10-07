@@ -5,7 +5,7 @@ import { db } from '../../db/index.js';
 import { clientIp } from '../../lib/client-ip.js';
 import { notFound } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
-import { parseBody, parseQuery } from '../../middleware/validate.js';
+import { parseBody, parseChanges, parseQuery } from '../../middleware/validate.js';
 import { applyBulkUserAction, bulkActionSchema } from '../../services/admin-users/bulk-actions.js';
 import { getUserDetail } from '../../services/admin-users/detail.js';
 import { listQuerySchema, listUsers } from '../../services/admin-users/listing.js';
@@ -65,7 +65,7 @@ userRoutes.get('/:id/limits', async (c) => {
 userRoutes.patch('/:id', async (c) => {
   const { id, email } = currentUser(c);
   const targetId = c.req.param('id');
-  const patch = await parseBody(c, updateUserSchema);
+  const patch = await parseChanges(c, updateUserSchema);
   return c.json(await updateUser({ id, email }, targetId, patch));
 });
 

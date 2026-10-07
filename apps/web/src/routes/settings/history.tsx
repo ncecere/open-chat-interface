@@ -14,6 +14,7 @@ import { useProjects, useProjectsAvailable } from '~/hooks/use-projects';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { keepFocusWhenRemoved, placeBesideRows } from '~/lib/focus-return';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { formatRelativeTime } from '~/lib/utils';
 import { TrashList } from './trash-list';
 
@@ -86,6 +87,8 @@ function SelectAll({
 
 function ConversationList({ archived }: { archived: boolean }) {
   const queryClient = useQueryClient();
+  // Archiving, deleting and restoring are refused while read-only (#353).
+  const lock = useReadOnlyLock();
   const searchId = useId();
   const [query, setQuery] = useState('');
   const search = useDebounced(query.trim(), HISTORY_SEARCH_DEBOUNCE_MS);
@@ -212,7 +215,8 @@ function ConversationList({ archived }: { archived: boolean }) {
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={bulk.isPending}
+                title={lock.title}
+                disabled={bulk.isPending || lock.locked}
                 onClick={(event) => runBulk(event, 'archive')}
               >
                 Archive
@@ -221,7 +225,8 @@ function ConversationList({ archived }: { archived: boolean }) {
             <Button
               variant="danger"
               size="sm"
-              disabled={bulk.isPending}
+              title={lock.title}
+              disabled={bulk.isPending || lock.locked}
               onClick={(event) => runBulk(event, 'delete')}
             >
               Delete
@@ -300,7 +305,11 @@ function ConversationList({ archived }: { archived: boolean }) {
                       variant="ghost"
                       size="sm"
                       // Only this row's: a disabled neighbour cannot take focus.
-                      disabled={unarchive.isPending && unarchive.variables?.id === thread.id}
+                      title={lock.title}
+                      disabled={
+                        lock.locked ||
+                        (unarchive.isPending && unarchive.variables?.id === thread.id)
+                      }
                       aria-label={`Restore ${thread.title}`}
                       onClick={(event) => {
                         // The row leaves on refetch: focus goes to the next, not the body (#250).

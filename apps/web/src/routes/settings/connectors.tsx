@@ -13,9 +13,12 @@ import {
   startConnecting,
   USER_CONNECTORS_QUERY_KEY,
 } from '~/lib/connectors';
+import { useReadOnlyLock } from '~/lib/read-only';
 
 function ConnectorRow({ connector }: { connector: UserConnector }) {
   const queryClient = useQueryClient();
+  // Connecting and disconnecting are refused while read-only (#353).
+  const lock = useReadOnlyLock();
   const connect = useMutation({ mutationFn: () => startConnecting(connector.id, 'settings') });
   const disconnect = useMutation({
     mutationFn: () => api.delete(`/connectors/${connector.id}/account`),
@@ -58,7 +61,8 @@ function ConnectorRow({ connector }: { connector: UserConnector }) {
         <Button
           variant="secondary"
           size="sm"
-          disabled={disconnect.isPending}
+          title={lock.title}
+          disabled={disconnect.isPending || lock.locked}
           onClick={() => disconnect.mutate()}
           aria-label={`Disconnect ${connector.name}`}
         >
@@ -69,7 +73,8 @@ function ConnectorRow({ connector }: { connector: UserConnector }) {
         <Button
           variant="primary"
           size="sm"
-          disabled={connect.isPending}
+          title={lock.title}
+          disabled={connect.isPending || lock.locked}
           onClick={() => connect.mutate()}
           aria-label={`Connect ${connector.name}`}
         >

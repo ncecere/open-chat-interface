@@ -97,6 +97,35 @@ describe.skipIf(!available)('live: invitations', () => {
     ]);
   });
 
+  it('reports an out-of-range expiry and an address that already has an account together (#346)', async () => {
+    const { status, body } = await invite({
+      email: 'P.Nair@northbrook.edu',
+      role: 'user',
+      expiresInDays: 400,
+    });
+    expect(status).toBe(422);
+    const details = body.error.details as Array<{ path: string[]; message: string }>;
+    expect(details.map((issue) => issue.path[0]).sort()).toEqual(['email', 'expiresInDays']);
+    expect(details.find((issue) => issue.path[0] === 'email')?.message).toContain('already exists');
+    // Nothing was created by the refusal, and with the days fixed the address is still refused.
+    const again = await invite({ email: 'P.Nair@northbrook.edu', role: 'user', expiresInDays: 7 });
+    expect(again.status).toBe(409);
+  });
+
+  it('reports a pending invitation and a bad expiry together, and a bad expiry alone as before', async () => {
+    expect((await invite({ email: 'walk.two@northbrook.edu' })).status).toBe(201);
+    const both = await invite({ email: 'walk.two@northbrook.edu', expiresInDays: 0 });
+    expect(both.status).toBe(422);
+    expect(
+      (both.body.error.details as Array<{ path: string[] }>).map((issue) => issue.path[0]).sort(),
+    ).toEqual(['email', 'expiresInDays']);
+    const alone = await invite({ email: 'walk.fresh@northbrook.edu', expiresInDays: 400 });
+    expect(alone.status).toBe(422);
+    expect(
+      (alone.body.error.details as Array<{ path: string[] }>).map((issue) => issue.path[0]),
+    ).toEqual(['expiresInDays']);
+  });
+
   it('says when an invitation is for a different address', async () => {
     const { body } = await invite({ email: 'walk.bound@northbrook.edu', role: 'user' });
     const token = decodeURIComponent(String(body.url).split('#token=')[1] ?? '');

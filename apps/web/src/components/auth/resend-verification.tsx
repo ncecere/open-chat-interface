@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { authClient } from '~/lib/auth-client';
+import { cn } from '~/lib/utils';
 
 /**
  * How long after a verification email the button waits before offering
@@ -16,8 +17,14 @@ export const RESEND_COOLDOWN_MS = 60_000;
 export function ResendVerification({
   email,
   sentAt,
+  emailFieldId,
 }: {
   email: string;
+  /**
+   * The page's own Email field, when it has one to fill in (the verify-email
+   * page): pressing Resend without an address moves the cursor there (#337).
+   */
+  emailFieldId?: string;
   /** When a link was just sent for this address (a refused sign-in sends one). */
   sentAt?: number;
 }) {
@@ -25,6 +32,7 @@ export function ResendVerification({
   const [waitUntil, setWaitUntil] = useState(() => (sentAt ? sentAt + RESEND_COOLDOWN_MS : 0));
   const [now, setNow] = useState(() => Date.now());
   const waiting = waitUntil > now;
+  const missingEmail = !email.trim();
 
   // One re-render when the wait ends, not a ticking countdown that a screen
   // reader would announce every second.
@@ -35,7 +43,12 @@ export function ResendVerification({
   }, [waiting, waitUntil]);
 
   async function resend() {
-    if (!email.trim() || state === 'sending' || waiting) return;
+    if (missingEmail) {
+      // Say what is missing and take the person to it, rather than doing nothing.
+      if (emailFieldId) document.getElementById(emailFieldId)?.focus();
+      return;
+    }
+    if (state === 'sending' || waiting) return;
     setState('sending');
     try {
       const result = await authClient.sendVerificationEmail({
@@ -58,13 +71,23 @@ export function ResendVerification({
       <Button
         type="button"
         variant="secondary"
-        className="w-full"
-        disabled={!email.trim() || state === 'sending' || waiting}
-        aria-describedby={waiting ? 'resend-wait' : undefined}
+        // With no address the button stays in the tab order and says why
+        // (aria-disabled, not disabled), as the shared Button does for a
+        // button that is busy (#337, #269): a native disabled button was
+        // skipped by Tab and gave a screen reader nothing to read.
+        disabled={state === 'sending' || waiting}
+        aria-disabled={missingEmail || undefined}
+        className={cn('w-full', missingEmail && 'opacity-50')}
+        aria-describedby={waiting ? 'resend-wait' : missingEmail ? 'resend-needs-email' : undefined}
         onClick={() => void resend()}
       >
         {state === 'sending' ? 'Requesting email...' : 'Resend verification email'}
       </Button>
+      {missingEmail && !waiting && (
+        <p id="resend-needs-email" className="text-xs text-[var(--text-muted)]">
+          Enter your email address above to ask for a link.
+        </p>
+      )}
       {state === 'requested' && (
         <p role="status" className="text-xs text-[var(--text-muted)]">
           If this address needs verification, check its inbox and spam folder. If no email arrives,

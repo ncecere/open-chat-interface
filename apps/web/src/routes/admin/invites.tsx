@@ -20,7 +20,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
+import { ApiError, api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 import { formatDateTime } from '~/lib/utils';
 import { validationProblems } from '~/lib/validation-issues';
 
@@ -70,11 +70,16 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
   const formError = problemsElsewhere(problems, ['email', 'expiresInDays']);
 
   const create = useMutation({
-    mutationFn: (body: ReturnType<typeof createInviteSchema.parse>) =>
-      api.post<CreatedInvite>('/admin/invites', body),
+    mutationFn: (body: Record<string, unknown>) => api.post<CreatedInvite>('/admin/invites', body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] }),
-    onError: (error) =>
-      setProblems(apiErrorProblems(error, 'Failed to create invitation.', INVITE_LABELS)),
+    onError: (error, body) => {
+      // A form the page already found wrong was sent only to hear the server's
+      // check of the address too (#346): if the server could not answer that
+      // (the connection dropped), the problems already shown stay.
+      const refusedHere = !createInviteSchema.safeParse(body).success;
+      if (refusedHere && !(error instanceof ApiError && error.details)) return;
+      setProblems(apiErrorProblems(error, 'Failed to create invitation.', INVITE_LABELS));
+    },
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -82,11 +87,12 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     setProblems([]);
     create.reset();
 
-    const result = createInviteSchema.safeParse({
+    const body = {
       email: email.trim() || null,
       role,
       expiresInDays: expiresInDays === '' ? null : Number(expiresInDays),
-    });
+    };
+    const result = createInviteSchema.safeParse(body);
 
     if (!result.success) {
       setProblems(
@@ -95,6 +101,14 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           text,
         })),
       );
+      // Whether the address already has an account or a pending invitation is
+      // known only to the server, which checks it along with the rest. With a
+      // well-formed address, the refused form is sent anyway: the server
+      // refuses it for the same problems and adds the address's, so one save
+      // shows both rather than the second only after the first is fixed
+      // (#346). Nothing is created by a refusal.
+      if (body.email && !result.error.issues.some((issue) => issue.path[0] === 'email'))
+        create.mutate(body);
       return;
     }
 

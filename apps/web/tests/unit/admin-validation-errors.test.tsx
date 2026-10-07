@@ -79,6 +79,13 @@ it('Retention names the time zone field and the rule', async () => {
   ).toBe('Reporting timezone: Use an IANA time zone such as Europe/London or America/New_York.');
 });
 
+it('Retention says a fraction of a day is not a whole number of days (#347)', async () => {
+  // It said "Memory retention (days) is missing or not the right kind of value."
+  expect(await saveRetention('memory-days', '1.5', { memoryRetentionDays: 1.5 })).toBe(
+    'Memory retention (days) must be a whole number.',
+  );
+});
+
 it('Retention clears the error once the field is corrected, with Save disabled (#217)', async () => {
   await saveRetention('display-timezone', 'Mars/Olympus', { displayTimezone: 'Mars/Olympus' });
   expect(document.querySelector('[role="alert"]')).not.toBeNull();

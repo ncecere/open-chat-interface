@@ -167,6 +167,46 @@ describe('the artifact panel', () => {
     expect(findButton('Edit')).toBeUndefined();
   });
 
+  it('returns focus to Edit when the document editor closes (#333)', async () => {
+    api.post.mockResolvedValue({ artifact: { ...ARTIFACTS[2], currentVersion: 3 } });
+    // Browsers drop focus to the page when the focused element is removed;
+    // happy-dom does not, so that is done here.
+    const fixup = new MutationObserver(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && !active.isConnected) (active as HTMLElement).blur();
+    });
+    fixup.observe(document.body, { childList: true, subtree: true });
+    try {
+      await mount(conversation());
+      await click(button('Open artifact: Plan'));
+      for (const leave of ['Escape', 'Cancel']) {
+        button('Edit').focus();
+        await click(button('Edit'));
+        expect(document.activeElement).toBe(dialog()!.querySelector('textarea'));
+        if (leave === 'Escape') await pressCancelableEscape();
+        else await click(button('Cancel'));
+        expect(dialog()?.querySelector('textarea')).toBeNull();
+        expect(document.activeElement).toBe(button('Edit'));
+      }
+      // Save as new version: the button that had focus is gone with the editor.
+      await click(button('Edit'));
+      const editor = dialog()!.querySelector('textarea')!;
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!
+          .set!;
+        setter.call(editor, '# Plan v3');
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await settle();
+      button('Save as new version').focus();
+      await click(button('Save as new version'));
+      expect(dialog()?.querySelector('textarea')).toBeNull();
+      expect(document.activeElement).toBe(button('Edit'));
+    } finally {
+      fixup.disconnect();
+    }
+  });
+
   it('offers HTML only through the model, never a direct edit', async () => {
     await mount(conversation());
     await click(button('Open artifact: Chart'));

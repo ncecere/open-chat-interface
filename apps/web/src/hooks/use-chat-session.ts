@@ -23,6 +23,7 @@ import {
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { startingModel } from '~/lib/starting-model';
+import { requestStop } from '~/lib/stop-request';
 import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
 const EMPTY_MODELS: CatalogModel[] = [];
@@ -390,18 +391,45 @@ export function useChatSession(options: {
     };
   }, [scope, stopChat]);
 
+  // The stop request still being sent, and whether its last attempt failed (#351).
+  const stopRetry = useRef<AbortController | null>(null);
+  const [stopDelayed, setStopDelayed] = useState(false);
+  const { stopping } = recovery;
+  // Nobody wants the request any more once the reply is saved as stopped (or
+  // the conversation is left): no more attempts, and no message about them.
+  useEffect(() => {
+    if (stopping) return;
+    stopRetry.current?.abort();
+    setStopDelayed(false);
+  }, [stopping]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the thread is the trigger, not a value read
+  useEffect(() => () => stopRetry.current?.abort(), [options.threadId]);
+
   const stop = useCallback(async () => {
     // Stopping the browser reader alone must not leave the detached resumable
     // producer running. The owner-scoped endpoint aborts it server-side.
     recovery.waitForStop();
     scope.reconnectAbort?.abort();
-    const localStop = stopChat();
-    const remoteStop = fetch(`/api/chat/${encodeURIComponent(options.threadId)}/stream`, {
-      method: 'DELETE',
-      credentials: 'same-origin',
-    }).catch(() => undefined);
-    await Promise.all([localStop, remoteStop]);
-  }, [stopChat, options.threadId, recovery.waitForStop, scope]);
+    // Pressed again, it asks again at once rather than waiting out a pause.
+    stopRetry.current?.abort();
+    const request = new AbortController();
+    stopRetry.current = request;
+    let delayed = false;
+    // Not awaited: a server that cannot be reached is asked again for as long
+    // as the reply is still running, and the person must not be left waiting
+    // on that. A request that failed is not swallowed (#351).
+    void requestStop(options.threadId, request.signal, () => {
+      delayed = true;
+      if (stopRetry.current === request) setStopDelayed(true);
+    }).then((outcome) => {
+      if (stopRetry.current !== request) return;
+      setStopDelayed(false);
+      // It got through after a failure: look at the reply again now instead
+      // of after the pause the failed checks had grown to.
+      if (outcome === 'delivered' && delayed) recovery.recover();
+    });
+    await stopChat();
+  }, [stopChat, options.threadId, recovery.waitForStop, recovery.recover, scope]);
 
   // Lasts for this conversation only; Settings → Models sets where new ones start.
   const selectModel = useCallback((model: CatalogModel) => setChosenSlug(model.slug), []);
@@ -482,6 +510,8 @@ export function useChatSession(options: {
     ...chat,
     answerApproval,
     stop,
+    /** Stop was pressed and has not reached the server yet; it is being sent again (#351). */
+    stopDelayed,
     streaming:
       chat.status === 'streaming' ||
       chat.status === 'submitted' ||

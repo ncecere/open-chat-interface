@@ -38,8 +38,12 @@ export function AdminAuditPage() {
         description="Search administrative and security events across the retained history."
       />
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_12rem_auto]">
-        <div className="relative">
+      {/* The search box needs about 320 px for its hint. Beside the two
+          filters and Export it had 117 to 193 px in the 686 to 762 px area of a
+          768 to 1100 px window, cutting the hint to "Search actor, ac" (#335),
+          so below 1280 px it has the row to itself. */}
+      <div className="grid gap-3 sm:grid-cols-[12rem_12rem_auto_1fr] xl:grid-cols-[minmax(0,1fr)_12rem_12rem_auto]">
+        <div className="relative sm:col-span-full xl:col-span-1">
           <label htmlFor="audit-search" className="sr-only">
             Search audit events
           </label>

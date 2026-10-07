@@ -20,6 +20,7 @@ import {
 } from '~/hooks/use-clear-on-edit';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 import {
   type AuthResult,
   authErrorMessage,
@@ -69,6 +70,9 @@ export function ChangePasswordDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  // A password change is refused while read-only: off with the reason, so nobody
+  // types a password to be told no (#353).
+  const lock = useReadOnlyLock();
   const formId = useId();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -212,7 +216,12 @@ export function ChangePasswordDialog({
               <Button type="button" variant="ghost" onClick={() => reset(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="accent" disabled={change.isPending}>
+              <Button
+                type="submit"
+                variant="accent"
+                title={lock.title}
+                disabled={change.isPending || lock.locked}
+              >
                 {change.isPending && <Spinner />}
                 Change password
               </Button>
@@ -227,11 +236,18 @@ export function ChangePasswordDialog({
 /** What the Password row shows: the change button, or why there is none. */
 export function PasswordControl({ onChange }: { onChange: () => void }) {
   const { data } = useCurrentUser();
+  const lock = useReadOnlyLock();
   const signIn = data?.signIn;
   if (!signIn) return null;
   if (signIn.password) {
     return (
-      <Button variant="secondary" size="sm" onClick={onChange}>
+      <Button
+        variant="secondary"
+        size="sm"
+        title={lock.title}
+        disabled={lock.locked}
+        onClick={onChange}
+      >
         Change Password
       </Button>
     );

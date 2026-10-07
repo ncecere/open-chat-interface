@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import { Fragment, type ReactNode, useEffect, useRef } from 'react';
 
 /**
  * A sign-in, sign-up or reset form's error. Announced when it appears
@@ -6,16 +6,87 @@ import { type ReactNode, useEffect, useRef } from 'react';
  * point at it with `aria-describedby` (WCAG 3.3.1). It was a plain paragraph,
  * which screen readers did not read out (#183).
  */
-export function AuthFormError({ id, children }: { id: string; children: string }) {
+export function AuthFormError({
+  id,
+  children,
+  messages,
+}: {
+  id: string;
+  children: string;
+  /**
+   * The form's own check, one message per field at fault. The alert is still
+   * one message, read once, but each part has an id so the field it is about
+   * can be described by that part alone, not the whole (#338).
+   */
+  messages?: FieldMessage[];
+}) {
   return (
     <p
       id={id}
       role="alert"
       className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
     >
-      {children}
+      {messages && messages.length > 0
+        ? messages.map((message, index) => (
+            <Fragment key={message.id}>
+              {index > 0 && ' '}
+              <span id={`${id}-${message.id}`}>{message.text}</span>
+            </Fragment>
+          ))
+        : children}
     </p>
   );
+}
+
+/** What the form's own check found wrong with one field. */
+export interface FieldMessage {
+  /** The field's id. */
+  id: string;
+  text: string;
+}
+
+/**
+ * The `aria-*` a field gets while its form shows `error`, for a form whose
+ * own check can fault several fields at once (#338). Each field is described
+ * by its own part of the message, not the whole of it: a screen reader
+ * focusing Email read the password's complaint too. An error from elsewhere
+ * (the server, a wrong password) has no parts and describes every field.
+ * The field's hint (`hintId`) goes with it, except where the message already
+ * states it (`hintRestated`: "Use at least 12 characters for your password."
+ * beside "Use at least 12 characters." was read twice).
+ */
+export function authFieldProps({
+  errorId,
+  error,
+  messages = [],
+  fieldId,
+  invalid,
+  hintId,
+  hintRestated = false,
+}: {
+  errorId: string;
+  error: string | null;
+  messages?: FieldMessage[];
+  fieldId: string;
+  invalid?: boolean;
+  hintId?: string;
+  hintRestated?: boolean;
+}) {
+  const own = messages.some((message) => message.id === fieldId);
+  const split = messages.length > 0;
+  // By default a field is marked invalid when the form's own check faulted it.
+  const errorRef = !error
+    ? undefined
+    : split
+      ? own
+        ? `${errorId}-${fieldId}`
+        : undefined
+      : errorId;
+  const hintRef = own && hintRestated ? undefined : hintId;
+  return {
+    'aria-invalid': (invalid ?? own) ? true : undefined,
+    'aria-describedby': [errorRef, hintRef].filter(Boolean).join(' ') || undefined,
+  } as const;
 }
 
 /**
@@ -108,12 +179,13 @@ export interface AuthFieldCheck {
  */
 export function authFormProblems(
   checks: readonly AuthFieldCheck[],
-): { ids: string[]; message: string } | null {
+): { ids: string[]; message: string; messages: FieldMessage[] } | null {
   const failing = checks.filter((check) => check.problem);
   if (failing.length === 0) return null;
   return {
     ids: failing.map((check) => check.id),
     message: failing.map((check) => check.problem).join(' '),
+    messages: failing.map((check) => ({ id: check.id, text: check.problem as string })),
   };
 }
 

@@ -7,6 +7,7 @@ import { UserRoleSelect } from '../../src/components/admin/user-role-select';
 import { CommandPalette } from '../../src/components/command-palette/command-palette';
 import { ThreadList } from '../../src/components/layout/thread-list';
 import { useCommandPalette } from '../../src/hooks/use-command-palette';
+import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ThemeProvider } from '../../src/providers/theme-provider';
 import { SettingsAttachmentsPage } from '../../src/routes/settings/attachments';
 import { SettingsMemoryPage } from '../../src/routes/settings/memory';
@@ -64,18 +65,21 @@ describe('the command palette', () => {
   /** The app shell's wiring: the ⌘K hook, the top bar's Search button. */
   function Shell() {
     const palette = useCommandPalette();
+    // The shell's providers: New chat leaves temporary mode (#340).
     return (
       <ThemeProvider>
-        <textarea aria-label="Message" />
-        <button type="button" onClick={palette.show}>
-          Search commands and conversations
-        </button>
-        <CommandPalette
-          open={palette.open}
-          onOpenChange={palette.setOpen}
-          sidebarOpen
-          onSidebarOpenChange={() => undefined}
-        />
+        <TemporaryChatProvider>
+          <textarea aria-label="Message" />
+          <button type="button" onClick={palette.show}>
+            Search commands and conversations
+          </button>
+          <CommandPalette
+            open={palette.open}
+            onOpenChange={palette.setOpen}
+            sidebarOpen
+            onSidebarOpenChange={() => undefined}
+          />
+        </TemporaryChatProvider>
       </ThemeProvider>
     );
   }

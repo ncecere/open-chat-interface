@@ -99,7 +99,7 @@ export async function updateUser(
   // succeed (#304).
   const demotes = patch.role !== undefined && patch.role !== 'admin';
   const bans = patch.banned === true;
-  const { target, updated } = await db.transaction(async (tx) => {
+  const { target, updated, change } = await db.transaction(async (tx) => {
     const admins = demotes || bans ? await lockAdministrators(tx) : [];
     const [target] = await tx
       .select({
@@ -128,17 +128,27 @@ export async function updateUser(
       throw conflict(demotes ? LAST_ADMIN_ROLE_MESSAGE : LAST_ADMIN_BAN_MESSAGE);
     }
 
+    // A reason belongs to a ban: an account that is not banned after this
+    // change keeps none, whether it was just unbanned with only
+    // `{"banned": false}` (which left the old reason stored, #350) or sent a
+    // reason without a ban. The Users page sends `banReason: null` with an
+    // unban; the API alone did not. The change recorded below is what was
+    // applied, so the entry says the reason was cleared.
+    const bannedAfter = patch.banned ?? target.banned;
+    const clearsReason = !bannedAfter && (target.banReason !== null || patch.banReason != null);
+    const change = clearsReason ? { ...patch, banReason: null } : patch;
+
     const [updated] = await tx
       .update(schema.user)
       .set({
-        ...(patch.name !== undefined && { name: patch.name }),
-        ...(patch.role !== undefined && { role: patch.role }),
-        ...(patch.banned !== undefined && { banned: patch.banned }),
-        ...(patch.banReason !== undefined && { banReason: patch.banReason }),
+        ...(change.name !== undefined && { name: change.name }),
+        ...(change.role !== undefined && { role: change.role }),
+        ...(change.banned !== undefined && { banned: change.banned }),
+        ...(change.banReason !== undefined && { banReason: change.banReason }),
       })
       .where(eq(schema.user.id, targetId))
       .returning({ id: schema.user.id });
-    return { target, updated };
+    return { target, updated, change };
   });
 
   // A ban that leaves sessions alive is not a ban until they expire. Bulk ban
@@ -158,9 +168,9 @@ export async function updateUser(
   // other changes (#323): the Target column showed only an ID, a ban's entry
   // could not be found by the email once the account was deleted, and an
   // unban did not say which reason it lifted.
-  const roleChanged = patch.role !== undefined && patch.role !== target.role;
-  const { role: _role, ...otherChanges } = patch;
-  const updateMetadata = roleChanged ? otherChanges : patch;
+  const roleChanged = change.role !== undefined && change.role !== target.role;
+  const { role: _role, ...otherChanges } = change;
+  const updateMetadata = roleChanged ? otherChanges : change;
   if (Object.keys(updateMetadata).length > 0) {
     const before = Object.fromEntries(
       (['name', 'role', 'banned', 'banReason'] as const)
@@ -184,7 +194,7 @@ export async function updateUser(
       action: 'user.role.change',
       targetType: 'user',
       targetId,
-      metadata: { email: target.email, from: target.role, to: patch.role },
+      metadata: { email: target.email, from: target.role, to: change.role },
     });
   }
 

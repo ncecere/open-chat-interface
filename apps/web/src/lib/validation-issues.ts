@@ -11,6 +11,7 @@ interface Issue {
   code?: unknown;
   origin?: unknown;
   format?: unknown;
+  expected?: unknown;
   maximum?: unknown;
   minimum?: unknown;
   inclusive?: unknown;
@@ -52,6 +53,31 @@ function fieldName(path: unknown, labels: FieldLabels = {}): string | null {
 const amount = (value: unknown) =>
   typeof value === 'number' ? value.toLocaleString('en-US') : String(value);
 
+/**
+ * What kind of value was expected, in words: "is missing or not the right
+ * kind of value" gave no hint what to enter (#347), as for a whole number of
+ * days typed with a decimal point.
+ */
+function invalidTypeText(issue: Issue): string {
+  // Zod's own wording says when nothing was sent; a production bundle has none.
+  if (typeof issue.message === 'string' && /received (undefined|null)\b/.test(issue.message))
+    return 'is required';
+  switch (issue.expected) {
+    case 'int':
+      return 'must be a whole number';
+    case 'number':
+      return 'must be a number';
+    case 'string':
+      return 'must be text';
+    case 'boolean':
+      return 'must be on or off';
+    case 'array':
+      return 'must be a list';
+    default:
+      return 'is missing or not the right kind of value';
+  }
+}
+
 function describe(issue: Issue): string | null {
   const { code, origin, maximum, minimum, format } = issue;
   // `.positive()` is "more than 0", not "at least 0" (#127).
@@ -72,7 +98,7 @@ function describe(issue: Issue): string | null {
     if (format === 'url') return 'must be a valid URL';
     if (format === 'regex') return 'contains characters that are not allowed';
   }
-  if (code === 'invalid_type') return 'is missing or not the right kind of value';
+  if (code === 'invalid_type') return invalidTypeText(issue);
   if (code === 'invalid_value') return 'is not one of the allowed choices';
   // Only Zod's own wording reaches here; it reads badly after a field name.
   return code ? 'is not valid' : null;

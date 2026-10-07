@@ -6,11 +6,14 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { authClient } from '~/lib/auth-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { type AuthResult, authErrorMessage } from './account-helpers';
 
 export function NameRow({ name, editable }: { name: string; editable: boolean }) {
   const queryClient = useQueryClient();
+  // Changing the name is refused while read-only, so it is off with the reason (#353).
+  const lock = useReadOnlyLock();
   const inputId = useId();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
@@ -93,7 +96,13 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
             }}
           />
           <div className="flex gap-2">
-            <Button type="submit" variant="accent" size="sm" disabled={save.isPending}>
+            <Button
+              type="submit"
+              variant="accent"
+              size="sm"
+              title={lock.title}
+              disabled={save.isPending || lock.locked}
+            >
               {save.isPending && <Spinner />}
               Save
             </Button>
@@ -127,6 +136,8 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
             variant="ghost"
             size="sm"
             aria-label="Edit name"
+            title={lock.title}
+            disabled={lock.locked}
             onClick={() => {
               setDraft(name);
               setSaved(false);

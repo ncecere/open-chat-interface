@@ -4,7 +4,9 @@ import { type FormEvent, useState } from 'react';
 import {
   AuthFormError,
   AuthOutcomeHeading,
+  authFieldProps,
   emailProblem,
+  type FieldMessage,
   fieldErrorProps,
   newPasswordProblem,
   useFocusAfterRender,
@@ -200,6 +202,8 @@ export function ResetPasswordPage() {
   );
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // The length rule, when that is what the error says (#338).
+  const [messages, setMessages] = useState<FieldMessage[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
   // Whether a submit has replaced the form, whose heading then takes focus (#190).
@@ -210,6 +214,7 @@ export function ResetPasswordPage() {
     event.preventDefault();
     setError(null);
     const problem = newPasswordProblem(password);
+    setMessages(problem ? [{ id: 'new-password', text: problem }] : []);
     if (problem) {
       setError(problem);
       focusAfterRender('new-password');
@@ -278,7 +283,15 @@ export function ResetPasswordPage() {
             <Label htmlFor="new-password">New password</Label>
             <Input
               id="new-password"
-              {...fieldErrorProps('new-password-error', error, Boolean(error), 'new-password-hint')}
+              {...authFieldProps({
+                errorId: 'new-password-error',
+                error,
+                messages,
+                fieldId: 'new-password',
+                invalid: Boolean(error),
+                hintId: 'new-password-hint',
+                hintRestated: true,
+              })}
               type="password"
               autoComplete="new-password"
               required
@@ -291,7 +304,11 @@ export function ResetPasswordPage() {
               Use at least 12 characters.
             </p>
           </div>
-          {error && <AuthFormError id="new-password-error">{error}</AuthFormError>}
+          {error && (
+            <AuthFormError id="new-password-error" messages={messages}>
+              {error}
+            </AuthFormError>
+          )}
           <Button type="submit" variant="primary" disabled={submitting} className="w-full">
             {submitting ? <Spinner /> : <KeyRound />} Update password
           </Button>

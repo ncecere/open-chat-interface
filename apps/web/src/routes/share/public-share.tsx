@@ -254,7 +254,7 @@ function SharedMessage({
         data-position={place}
       >
         <div className="max-w-[90%] rounded-2xl border border-[var(--border-user-message)] bg-[var(--bg-user-message)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)] sm:max-w-[85%]">
-          <Markdown skipHtml urlTransform={publicMarkdownUrl}>
+          <Markdown math={false} skipHtml urlTransform={publicMarkdownUrl}>
             {text}
           </Markdown>
         </div>

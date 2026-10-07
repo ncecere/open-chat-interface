@@ -95,9 +95,14 @@ describe.skipIf(!available)('live: email delivery failures (#327)', () => {
     expect(failing.status).toBe('warn');
     expect(failing.detail).toContain('The latest 2 emails through 127.0.0.1 failed');
     expect(failing.detail).toContain('ECONNREFUSED');
-    expect(failing.detail).toContain(
-      `${started.toISOString().slice(0, 13).replace('T', ' ')}:`, // the hour, in UTC
+    // An instant, which the page shows in the reader's local time, not a
+    // string already written in UTC (#345).
+    const at = /most recently at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z): /.exec(
+      failing.detail,
     );
+    expect(at, failing.detail).not.toBeNull();
+    expect(Date.parse(at![1]!)).toBeGreaterThanOrEqual(started.getTime() - 1000);
+    expect(failing.detail).not.toContain(' UTC');
     expect(failing.detail).toContain('people cannot verify their address or reset');
     // Never a link or token.
     expect(failing.detail).not.toContain('http://x');
@@ -108,7 +113,9 @@ describe.skipIf(!available)('live: email delivery failures (#327)', () => {
     ).toEqual({ delivered: true });
     const recovered = await emailRow();
     expect(recovered.status).toBe('ok');
-    expect(recovered.detail).toMatch(/^Sending through 127\.0\.0\.1; last delivered \d{4}-/);
+    expect(recovered.detail).toMatch(
+      /^Sending through 127\.0\.0\.1; last delivered \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
   });
 
   it('counts a failed Send test email, and a working one clears the warning', async () => {

@@ -1,12 +1,11 @@
 import { and, desc, eq, gt, isNull, or, schema, sql } from '@oci/db';
 import { createInviteSchema, type Invite } from '@oci/shared';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { generateToken, hashToken } from '../../lib/crypto.js';
-import { conflict, notFound } from '../../lib/errors.js';
+import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
-import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { sendInviteEmail } from '../../services/email.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
@@ -42,45 +41,86 @@ inviteRoutes.get('/', async (c) => {
   return c.json({ invites });
 });
 
+interface FieldIssue {
+  path: string[];
+  message: string;
+}
+
 /** A refusal about the address, which the form shows at its Email field (#302). */
-const emailConflict = (message: string) => conflict(message, [{ path: ['email'], message }]);
+const emailIssue = (message: string): FieldIssue => ({ path: ['email'], message });
+
+/**
+ * What the database says is wrong with inviting this address: it already has
+ * an account, or a pending invitation. Checked here rather than when the link
+ * is used: accepting an invitation for an address that already has an account
+ * fails, and two pending ones with different roles left whichever was
+ * accepted first to decide.
+ */
+async function addressIssues(email: string): Promise<FieldIssue[]> {
+  const [account] = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(sql`lower(${schema.user.email}) = ${email}`)
+    .limit(1);
+  if (account) {
+    return [
+      emailIssue(
+        'An account with this email address already exists. Change its role on its account page instead.',
+      ),
+    ];
+  }
+  const [pending] = await db
+    .select({ id: schema.invitation.id })
+    .from(schema.invitation)
+    .where(
+      and(
+        sql`lower(${schema.invitation.email}) = ${email}`,
+        isNull(schema.invitation.redeemedAt),
+        or(isNull(schema.invitation.expiresAt), gt(schema.invitation.expiresAt, new Date())),
+      ),
+    )
+    .limit(1);
+  if (pending) {
+    return [
+      emailIssue(
+        'This address already has a pending invitation. Revoke it first to send a new one.',
+      ),
+    ];
+  }
+  return [];
+}
+
+/**
+ * The body, with every problem reported at once (#283, #346): the schema's
+ * (an expiry of 400 days) and the database's about the address. The address
+ * is read on its own, so a bad expiry does not hide that the address already
+ * has an account until the next save.
+ */
+async function parseInvite(c: Context) {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    throw validationFailed('Request body must be valid JSON');
+  }
+  const body = createInviteSchema.safeParse(raw);
+  const address = createInviteSchema.shape.email.safeParse(
+    typeof raw === 'object' && raw !== null ? (raw as { email?: unknown }).email : undefined,
+  );
+  const taken = address.success && address.data ? await addressIssues(address.data) : [];
+
+  if (body.success) {
+    // As before: a refusal about the address alone is a conflict.
+    if (taken[0]) throw conflict(taken[0].message, taken);
+    return body.data;
+  }
+  throw validationFailed('Request validation failed', [...body.error.issues, ...taken]);
+}
 
 inviteRoutes.post('/', async (c) => {
   const actor = currentUser(c);
-  const input = await parseBody(c, createInviteSchema);
+  const input = await parseInvite(c);
   const organizationId = await getDefaultOrganizationId();
-
-  // Checked here rather than when the link is used: accepting an invitation
-  // for an address that already has an account fails, and two pending ones
-  // with different roles left whichever was accepted first to decide.
-  if (input.email) {
-    const [account] = await db
-      .select({ id: schema.user.id })
-      .from(schema.user)
-      .where(sql`lower(${schema.user.email}) = ${input.email}`)
-      .limit(1);
-    if (account) {
-      throw emailConflict(
-        'An account with this email address already exists. Change its role on its account page instead.',
-      );
-    }
-    const [pending] = await db
-      .select({ id: schema.invitation.id })
-      .from(schema.invitation)
-      .where(
-        and(
-          sql`lower(${schema.invitation.email}) = ${input.email}`,
-          isNull(schema.invitation.redeemedAt),
-          or(isNull(schema.invitation.expiresAt), gt(schema.invitation.expiresAt, new Date())),
-        ),
-      )
-      .limit(1);
-    if (pending) {
-      throw emailConflict(
-        'This address already has a pending invitation. Revoke it first to send a new one.',
-      );
-    }
-  }
 
   const token = generateToken();
   const expiresAt = input.expiresInDays

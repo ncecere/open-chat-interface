@@ -48,7 +48,7 @@ export async function backupHealthCheck(now = new Date()): Promise<Check> {
       ? {
           ...base,
           status: 'warn',
-          detail: `Off, and the latest backup (${latest.startedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC) failed${latest.errorMessage ? `: ${latest.errorMessage.slice(0, 200)}` : ''}`,
+          detail: `Off, and the latest backup (${latest.startedAt.toISOString()}) failed${latest.errorMessage ? `: ${latest.errorMessage.slice(0, 200)}` : ''}`,
         }
       : {
           ...base,
@@ -77,7 +77,7 @@ export async function backupHealthCheck(now = new Date()): Promise<Check> {
 
   const finished = success.finishedAt ?? success.startedAt;
   const verified = success.verified ? 'verified' : 'not verified';
-  const summary = `Last backup ${finished.toISOString().slice(0, 16).replace('T', ' ')} UTC, ${verified}, ${sizeLabel(success.dumpBytes)} database, ${success.attachmentCount ?? 0} attachment objects`;
+  const summary = `Last backup ${finished.toISOString()}, ${verified}, ${sizeLabel(success.dumpBytes)} database, ${success.attachmentCount ?? 0} attachment objects`;
   if (now.getTime() - finished.getTime() > DAY_MS + 2 * 60 * 60_000)
     return { ...base, status: 'warn', detail: `No backup in over a day. ${summary}` };
   if ((success.missingObjects ?? 0) > 0)
@@ -129,7 +129,7 @@ export async function complianceHealthCheck(now = new Date()): Promise<Check> {
 
   const finished = success.finishedAt ?? success.startedAt;
   const period = settings.schedule === 'hourly' ? 60 * 60_000 : DAY_MS;
-  const summary = `Last export ${finished.toISOString().slice(0, 16).replace('T', ' ')} UTC (${settings.schedule}${settings.includeContent ? ', with conversation content' : ', audit events only'}).${holdNote}`;
+  const summary = `Last export ${finished.toISOString()} (${settings.schedule}${settings.includeContent ? ', with conversation content' : ', audit events only'}).${holdNote}`;
   if (now.getTime() - finished.getTime() > 2 * period + 30 * 60_000)
     return { ...base, status: 'warn', detail: `No export for over two periods. ${summary}` };
   return { ...base, status: 'ok', detail: summary };

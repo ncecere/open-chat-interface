@@ -357,7 +357,7 @@ Generated from 44 route files.
 | POST | `/api/me/onboarding/accept-policy` | — |
 | POST | `/api/me/onboarding/complete` | — |
 | POST | `/api/me/onboarding/skip` | — |
-| PATCH | `/api/me/preferences` | Saves the person's preferences. |
+| PATCH | `/api/me/preferences` | Saves the person's preferences. A body with no field to change is refused with 422 naming the fields. |
 | GET | `/api/me/sessions` | Settings → Account → Devices: where this person is signed in, this device first. |
 | DELETE | `/api/me/sessions/:id` | Signs out one other device (404 for anyone else's or an unknown session). |
 | POST | `/api/me/sessions/revoke-others` | Signs out every other device. |

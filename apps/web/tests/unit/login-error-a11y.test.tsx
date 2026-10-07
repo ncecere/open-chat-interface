@@ -125,9 +125,13 @@ it('says in its own words which fields are empty or malformed, not the browserâ€
   expect(alert.textContent).toBe(
     'Enter an email address such as you@example.com. Enter your password.',
   );
+  // Each field is described by its own part of the message (#338).
+  const describedBy = (id: string) =>
+    document.getElementById(field(id).getAttribute('aria-describedby')!)?.textContent;
+  expect(describedBy('email')).toBe('Enter an email address such as you@example.com.');
+  expect(describedBy('password')).toBe('Enter your password.');
   for (const id of ['email', 'password']) {
     expect(field(id).getAttribute('aria-invalid')).toBe('true');
-    expect(field(id).getAttribute('aria-describedby')).toBe(alert.id);
   }
   expect(asked).toBe(0);
 });

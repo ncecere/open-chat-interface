@@ -17,6 +17,7 @@ import { useCurrentUser } from '~/hooks/use-current-user';
 import { NAV_SECTIONS } from '~/lib/admin-navigation';
 import { focusComposerSoon, touchOnly } from '~/lib/focus-after-navigation';
 import { shortcutKeys } from '~/lib/keyboard-shortcuts';
+import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 import { useTheme } from '~/providers/theme-provider';
 import type { CommandPaletteProps, PaletteGroup } from './types';
 
@@ -28,6 +29,7 @@ export function usePaletteActions({
   const navigate = useNavigate();
   const { data: currentUser } = useCurrentUser();
   const { resolvedTheme, setTheme } = useTheme();
+  const { setTemporary } = useTemporaryChat();
   return useMemo<PaletteGroup[]>(() => {
     const groups: PaletteGroup[] = [
       {
@@ -44,6 +46,8 @@ export function usePaletteActions({
             // has closed, not back to whatever opened it (#251).
             keepFocusOnClose: !touchOnly(),
             onSelect: async () => {
+              // An ordinary chat, like the sidebar button (#340).
+              setTemporary(false);
               await navigate({ to: '/' });
               focusComposerSoon();
             },
@@ -145,5 +149,13 @@ export function usePaletteActions({
     }
 
     return groups;
-  }, [currentUser?.user.role, navigate, onSidebarOpenChange, resolvedTheme, setTheme, sidebarOpen]);
+  }, [
+    currentUser?.user.role,
+    navigate,
+    onSidebarOpenChange,
+    resolvedTheme,
+    setTemporary,
+    setTheme,
+    sidebarOpen,
+  ]);
 }

@@ -112,6 +112,43 @@ it('says an expired link has expired, and how to get a new one', async () => {
   expect(network.verificationRequests).toEqual([{ email: 'late@example.test', callbackURL: '/' }]);
 });
 
+it('keeps Resend reachable with no address, says why, and takes you to the Email box (#337)', async () => {
+  await open('/?error=TOKEN_EXPIRED&callbackURL=%2F');
+  const resend = () =>
+    [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Resend verification email',
+    )!;
+  // Not natively disabled (Tab would skip it), and its reason is its description.
+  expect(resend().disabled).toBe(false);
+  expect(resend().getAttribute('aria-disabled')).toBe('true');
+  const reason = document.getElementById(resend().getAttribute('aria-describedby') ?? '');
+  expect(reason?.textContent).toBe('Enter your email address above to ask for a link.');
+  // Every control on the page is reachable by Tab, in order: the real
+  // browser's sequence is the page's tabbable elements.
+  const tabbable = [...container.querySelectorAll<HTMLElement>('a[href], button, input')].filter(
+    (element) => !(element as HTMLButtonElement).disabled,
+  );
+  expect(tabbable.map((element) => element.textContent || element.id)).toEqual([
+    'Sign in',
+    'verify-email-address',
+    'Resend verification email',
+  ]);
+  // Pressing it sends nothing and puts the cursor where the address goes.
+  await act(async () => resend().click());
+  expect(network.verificationRequests).toEqual([]);
+  expect(document.activeElement).toBe(container.querySelector('#verify-email-address'));
+  // Once an address is typed it is a normal button, with no reason left.
+  const input = container.querySelector<HTMLInputElement>('#verify-email-address')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setter.call(input, 'late@example.test');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(resend().getAttribute('aria-disabled')).toBeNull();
+  expect(resend().getAttribute('aria-describedby')).toBeNull();
+  expect(document.getElementById('resend-needs-email')).toBeNull();
+});
+
 it('says a damaged link does not work, even for someone signed in', async () => {
   network.signedIn = true;
   await open('/?error=INVALID_TOKEN');

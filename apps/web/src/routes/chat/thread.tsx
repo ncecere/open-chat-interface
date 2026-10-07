@@ -407,7 +407,11 @@ function ThreadConversation({
                       {/* Just after Stop, the server is still saving the stopped
                           reply: say that, not that one is pending (#154). */}
                       {session.recovery.stopping
-                        ? 'Stopping the reply\u2026'
+                        ? session.stopDelayed
+                          ? // The Stop request failed (a database outage, say) and is
+                            // being sent again; the reply is still running (#351).
+                            "Stop didn't reach the server yet; trying again."
+                          : 'Stopping the reply\u2026'
                         : 'A reply is pending on the server. You can stop it or wait for saved messages.'}
                     </p>
                   )}

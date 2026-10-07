@@ -58,7 +58,8 @@ describe.skipIf(!available)('live: backup health while backups are off', () => {
     expect(await backupHealthCheck(now)).toMatchObject({
       status: 'warn',
       detail: expect.stringContaining(
-        'Off, and the latest backup (2026-10-05 11:00 UTC) failed: Verification failed',
+        // An instant, which System health shows in the reader's local time (#345).
+        'Off, and the latest backup (2026-10-05T11:00:00.000Z) failed: Verification failed',
       ),
     });
   });

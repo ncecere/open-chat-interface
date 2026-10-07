@@ -2,9 +2,10 @@ import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   AuthFormError,
+  authFieldProps,
   authFormProblems,
   emailProblem,
-  fieldErrorProps,
+  type FieldMessage,
   newPasswordProblem,
 } from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
@@ -50,7 +51,7 @@ export function AcceptInvitePage() {
   const [submitting, setSubmitting] = useState(false);
   const [verificationRequired, setVerificationRequired] = useState(false);
   // The fields the form's own check found empty or malformed (#320's sweep).
-  const [missing, setMissing] = useState<string[]>([]);
+  const [messages, setMessages] = useState<FieldMessage[]>([]);
 
   useEffect(() => {
     // Remove the bearer token from the address bar/history before making any
@@ -91,7 +92,7 @@ export function AcceptInvitePage() {
       { id: 'invite-email', problem: emailProblem(email) },
       { id: 'invite-password', problem: newPasswordProblem(password) },
     ]);
-    setMissing(problems?.ids ?? []);
+    setMessages(problems?.messages ?? []);
     if (problems) {
       setError(problems.message);
       document.getElementById(problems.ids[0]!)?.focus();
@@ -153,7 +154,12 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-name">Name</Label>
                 <Input
                   id="invite-name"
-                  {...fieldErrorProps('invite-error', error, missing.includes('invite-name'))}
+                  {...authFieldProps({
+                    errorId: 'invite-error',
+                    error,
+                    messages,
+                    fieldId: 'invite-name',
+                  })}
                   autoComplete="name"
                   required
                   maxLength={120}
@@ -166,7 +172,6 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-email">Email</Label>
                 <Input
                   id="invite-email"
-                  aria-invalid={missing.includes('invite-email') ? true : undefined}
                   type="email"
                   autoComplete="email"
                   required
@@ -174,11 +179,13 @@ export function AcceptInvitePage() {
                   value={email}
                   // The invitation is for this address and no other.
                   readOnly={invitedEmail !== null}
-                  aria-describedby={
-                    [error && 'invite-error', emailLocked && 'invite-email-hint']
-                      .filter(Boolean)
-                      .join(' ') || undefined
-                  }
+                  {...authFieldProps({
+                    errorId: 'invite-error',
+                    error,
+                    messages,
+                    fieldId: 'invite-email',
+                    hintId: emailLocked ? 'invite-email-hint' : undefined,
+                  })}
                   onChange={(event) => setEmail(event.target.value)}
                 />
                 {emailLocked && (
@@ -194,12 +201,14 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-password">Password</Label>
                 <Input
                   id="invite-password"
-                  {...fieldErrorProps(
-                    'invite-error',
+                  {...authFieldProps({
+                    errorId: 'invite-error',
                     error,
-                    missing.includes('invite-password'),
-                    'invite-password-hint',
-                  )}
+                    messages,
+                    fieldId: 'invite-password',
+                    hintId: 'invite-password-hint',
+                    hintRestated: true,
+                  })}
                   type="password"
                   autoComplete="new-password"
                   required
@@ -213,7 +222,11 @@ export function AcceptInvitePage() {
                 </p>
               </div>
 
-              {error && <AuthFormError id="invite-error">{error}</AuthFormError>}
+              {error && (
+                <AuthFormError id="invite-error" messages={messages}>
+                  {error}
+                </AuthFormError>
+              )}
 
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
                 {submitting ? <Spinner /> : <UserPlus />}
