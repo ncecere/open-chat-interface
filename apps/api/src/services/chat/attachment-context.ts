@@ -23,7 +23,28 @@ export type ModelAttachment = {
   bytes: Buffer | null;
 };
 export type HistoricalAttachmentReference = { id: string; messageId: string };
-export const UNAVAILABLE_ATTACHMENT_TEXT = 'A previously attached file is no longer available.';
+/**
+ * What the model is told about files of a turn that can no longer be read (a
+ * file removed by its owner or an administrator, expired, or lost from
+ * storage), so it says so instead of inventing what they held (#359). Names
+ * come from the person's own row, or from the stored part when the row is gone;
+ * a file whose row is someone else's is not named. `null` is an unnamed file.
+ */
+export function unavailableNotice(names: Array<string | null>): string {
+  const named = names.flatMap((name) => (name ? [JSON.stringify(name.slice(0, 120))] : []));
+  const unnamed = names.length - named.length;
+  const list = [
+    ...named,
+    ...(unnamed > 0 ? [unnamed === 1 ? 'one more file' : `${unnamed} more files`] : []),
+  ];
+  const one = names.length === 1;
+  return (
+    `[${one ? 'The file' : 'The files'} ${list.join(', ')} attached to this message ` +
+    `${one ? 'is' : 'are'} no longer available, so ${one ? 'its' : 'their'} contents cannot be read. ` +
+    `Do not guess or make up ${one ? 'what it' : 'what they'} contained: ` +
+    `tell the person ${one ? 'the file is' : 'the files are'} unavailable.]`
+  );
+}
 export type StoredMessage = { id: string; role: string; parts: unknown };
 export type AttachmentCandidate = {
   id: string;
@@ -202,16 +223,30 @@ export function historicalAttachmentAvailable(userId: string) {
   );
 }
 
+/** A file name as the stored part gives it, for a file whose row is gone. */
+function partFilename(message: StoredMessage, id: string): string | null {
+  if (!Array.isArray(message.parts)) return null;
+  for (const part of message.parts) {
+    if (part?.type !== 'data-attachment' || part.data?.id !== id) continue;
+    return typeof part.data.filename === 'string' && part.data.filename.trim()
+      ? part.data.filename.trim()
+      : null;
+  }
+  return null;
+}
+
 /** Inspect original and copied references without loading file payloads. */
 export async function inspectHistoricalAttachments(messages: StoredMessage[], userId: string) {
   const idsByMessage = new Map(messages.map((message) => [message.id, attachmentIds(message)]));
   const ids = [...new Set([...idsByMessage.values()].flat())];
   if (ids.length > MAX_CONTEXT_FILES) throw validationFailed('Too many historical context files');
   const byMessage = new Map<string, AttachmentCandidate[]>();
-  const unavailable = new Set<string>();
+  // The notice for each message that shows a file the model cannot have.
+  const unavailable = new Map<string, string>();
   if (!ids.length) return { byMessage, unavailable };
-  // A fork copies canonical server metadata, while allocation stays on the
-  // original user turn. Require that original owner/thread to remain available.
+  // A fork's or an edit's file is its own row, owned by the copied message.
+  // Rows of forks and edits made before 0.11 are the original question's, so
+  // the original owner/thread must remain available too.
   const rows = await db
     .select(candidateColumns)
     .from(schema.attachment)
@@ -225,15 +260,44 @@ export async function inspectHistoricalAttachments(messages: StoredMessage[], us
       ),
     );
   const loaded = new Map(rows.map((file) => [file.id, file]));
-  for (const [messageId, fileIds] of idsByMessage) {
+  const missing = ids.filter((id) => !loaded.has(id));
+  // Names for the notice: the person's own row says it (a removed or expired
+  // file), else the part the server stored when the row is gone; a row that is
+  // someone else's is never named.
+  const known = missing.length
+    ? new Map(
+        (
+          await db
+            .select({
+              id: schema.attachment.id,
+              userId: schema.attachment.userId,
+              filename: schema.attachment.filename,
+            })
+            .from(schema.attachment)
+            .where(inArray(schema.attachment.id, missing))
+        ).map((row) => [row.id, row]),
+      )
+    : new Map<string, { userId: string; filename: string }>();
+  for (const message of messages) {
+    const fileIds = idsByMessage.get(message.id) ?? [];
     byMessage.set(
-      messageId,
+      message.id,
       fileIds.flatMap((id) => {
         const file = loaded.get(id);
-        if (file) return [file];
-        unavailable.add(messageId);
-        return [];
+        return file ? [file] : [];
       }),
+    );
+    const gone = fileIds.filter((id) => !loaded.has(id));
+    if (gone.length === 0) continue;
+    unavailable.set(
+      message.id,
+      unavailableNotice(
+        gone.map((id) => {
+          const row = known.get(id);
+          if (row) return row.userId === userId ? row.filename : null;
+          return partFilename(message, id);
+        }),
+      ),
     );
   }
   return { byMessage, unavailable };
@@ -244,7 +308,8 @@ export function withAttachmentContext(
   message: UIMessage,
   attachments: ModelAttachment[],
   supportsVision: boolean,
-  unavailable = false,
+  /** The notice for files of this turn that can no longer be read (#359). */
+  unavailable?: string,
 ): UIMessage {
   const parts: UIMessage['parts'] = [...message.parts];
   for (const attachment of attachments) {
@@ -264,6 +329,6 @@ export function withAttachmentContext(
       });
     }
   }
-  if (unavailable) parts.push({ type: 'text', text: UNAVAILABLE_ATTACHMENT_TEXT });
+  if (unavailable) parts.push({ type: 'text', text: unavailable });
   return { ...message, parts };
 }

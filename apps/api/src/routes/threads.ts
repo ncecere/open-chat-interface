@@ -21,6 +21,7 @@ import { clientIp } from '../lib/client-ip.js';
 import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import { markUnavailableFiles, unavailableFileIds } from '../services/attachments/availability.js';
 import { recordAudit } from '../services/audit.js';
 import {
   assertCompactionPossible,
@@ -387,24 +388,28 @@ threadRoutes.get('/:id', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
   const messages = await listMessages(thread.id);
+  // Files that can no longer be opened are marked in their parts (#359).
+  const gone = await unavailableFileIds(user.id, messages);
 
   return c.json({
     thread: serializeThread(thread),
-    messages: messages.map((message) => ({
-      id: message.id,
-      threadId: message.threadId,
-      role: message.role,
-      parts: message.parts,
-      modelSlug: message.modelSlug,
-      effort: message.effort,
-      parentMessageId: message.parentMessageId,
-      status: message.status,
-      errorMessage: message.errorMessage,
-      tokensIn: message.tokensIn,
-      tokensOut: message.tokensOut,
-      durationMs: message.durationMs,
-      createdAt: message.createdAt.toISOString(),
-    })),
+    messages: messages
+      .map((stored) => markUnavailableFiles(stored, gone))
+      .map((message) => ({
+        id: message.id,
+        threadId: message.threadId,
+        role: message.role,
+        parts: message.parts,
+        modelSlug: message.modelSlug,
+        effort: message.effort,
+        parentMessageId: message.parentMessageId,
+        status: message.status,
+        errorMessage: message.errorMessage,
+        tokensIn: message.tokensIn,
+        tokensOut: message.tokensOut,
+        durationMs: message.durationMs,
+        createdAt: message.createdAt.toISOString(),
+      })),
   });
 });
 

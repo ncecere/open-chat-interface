@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { AppError, rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import { markUnavailableFiles, unavailableFileIds } from '../services/attachments/availability.js';
 import { setupApprovalContinuation } from '../services/chat/approvals.js';
 import { type HistoryPageRequest, readConversationPage } from '../services/chat/history-page.js';
 import { readOwnedRunState } from '../services/chat/run-state.js';
@@ -118,6 +119,18 @@ chatRoutes.delete('/:threadId/stream', async (c) => {
 
 type StoredMessage = Awaited<ReturnType<typeof listConversation>>['messages'][number];
 
+/**
+ * The messages as the page reads them. A file that can no longer be opened is
+ * marked `available: false` in its part, so the page shows it as removed
+ * instead of as a file that will not open (#359).
+ */
+async function toUIMessages(userId: string, ...lists: StoredMessage[][]) {
+  const gone = await unavailableFileIds(userId, lists.flat());
+  return lists.map((list) =>
+    list.map((message) => toUIMessage(markUnavailableFiles(message, gone))),
+  );
+}
+
 function toUIMessage(message: StoredMessage) {
   return {
     id: message.id,
@@ -168,11 +181,8 @@ chatRoutes.get('/:threadId/messages', async (c) => {
 
   if (query.limit === undefined && anchors === 0) {
     const { messages, replies } = await listConversation(thread.id);
-    return c.json({
-      thread: serializeThread(thread),
-      messages: messages.map(toUIMessage),
-      replies: replies.map(toUIMessage),
-    });
+    const [shown, shownReplies] = await toUIMessages(user.id, messages, replies);
+    return c.json({ thread: serializeThread(thread), messages: shown, replies: shownReplies });
   }
 
   const limit = query.limit ?? CHAT_HISTORY_PAGE_SIZE;
@@ -184,10 +194,6 @@ chatRoutes.get('/:threadId/messages', async (c) => {
         ? { kind: 'around', messageId: query.around, limit }
         : { kind: 'latest', limit };
   const { messages, replies, page } = await readConversationPage(thread.id, request);
-  return c.json({
-    thread: serializeThread(thread),
-    messages: messages.map(toUIMessage),
-    replies: replies.map(toUIMessage),
-    page,
-  });
+  const [shown, shownReplies] = await toUIMessages(user.id, messages, replies);
+  return c.json({ thread: serializeThread(thread), messages: shown, replies: shownReplies, page });
 });

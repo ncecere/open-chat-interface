@@ -89,6 +89,12 @@ is not refused for lack of space, but your next upload may be. Current role and
 attachment-feature restrictions also apply to historical files; a file-free
 conversation can still be used when file access is disabled.
 
+A file that is gone (for example one you deleted in **Settings → Attachments**)
+is shown in its conversation as removed: its name struck through, with **No
+longer available**, and not as a file that will not open. The model is told by
+name that it cannot read the file and must not guess its contents, so it says
+the file is unavailable rather than inventing an answer from it.
+
 If a file is being changed or deleted while a reply is prepared, the request may
 be refused as unavailable or busy. Retry after the file operation finishes;
 that failed preparation does not save a new user turn.

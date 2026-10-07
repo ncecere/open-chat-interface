@@ -82,6 +82,14 @@ fork of a conversation with a 5 MB PDF holds 5 MB more on the meter, and
 it, saying which. Making a fork is never refused for lack of space (the file is
 already stored); an upload after it may be.
 
+If a file is gone (you deleted it in **Settings → Attachments**, for example, or
+it was lost to a deletion before copies were kept), the conversation shows it as
+removed: its name struck through with **No longer
+available**, not as a file that will not open. The model is told by name that
+the file cannot be read and is asked not to guess at it, so it says so instead
+of answering as if it had read the file. Remove the chip in the edit box if you
+do not want to carry it into an edit.
+
 ## How messages are formatted
 
 Replies and your own messages are shown as Markdown: headings, lists, tables,

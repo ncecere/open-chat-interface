@@ -132,6 +132,9 @@ export function MessageEditor({
               <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
                 {file.filename}
               </span>
+              {file.available === false && (
+                <span className="text-xs text-[var(--text-muted)]">(no longer available)</span>
+              )}
               <button
                 type="button"
                 disabled={saving}

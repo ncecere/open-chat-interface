@@ -312,7 +312,7 @@ Generated from 44 route files.
 | --- | --- | --- |
 | POST | `/api/chat` | — |
 | POST | `/api/chat/:threadId/approvals` | Answers a reply's open tool approvals and continues the same assistant message under the durable claim, streaming like a new reply. |
-| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. |
+| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. A `data-attachment` part whose file can no longer be opened (deleted, expired or gone) carries `available: false` in its `data`, so the page shows it as removed; the stored part is unchanged (#359). The same in `GET /api/threads/:id`. |
 | GET | `/api/chat/:threadId/stream` | Replays the active SSE stream after authenticating the thread owner. |
 | DELETE | `/api/chat/:threadId/stream` | Explicit stop request; also reaches a producer running in another API process via Redis. |
 
@@ -421,7 +421,7 @@ Generated from 44 route files.
 | --- | --- | --- |
 | GET | `/api/threads` | Live conversations, pinned first then newest, at most 200; `view=sidebar` leaves out unpinned project conversations. |
 | POST | `/api/threads` | Starts a conversation, or answers 429 with Retry-After when the person starts them faster than their role's messages per minute or already has ten unused untitled ones from the last minute (v0.10.2). |
-| GET | `/api/threads/:id` | — |
+| GET | `/api/threads/:id` | The conversation and its stored messages; a file that can no longer be opened is marked `available: false` in its `data-attachment` part, as in `GET /api/chat/:threadId/messages` (#359). |
 | PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
 | POST | `/api/threads/:id/branches` | Copies the conversation before `messageId` (a question) into a new one ending with `text` as the revised question, titled from that text. The revised question keeps the original's files, or only those listed in `attachmentIds` (each must be one of the original's; others are refused with 422). Returns `thread` and `message`, the revised question (`id`, `modelSlug`, `effort`). Each kept file gets an attachment row of its own in the new conversation, on the same stored object, so deleting the original never removes it (#358). |

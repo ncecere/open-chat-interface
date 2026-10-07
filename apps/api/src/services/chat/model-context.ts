@@ -17,7 +17,6 @@ import {
   inspectHistoricalAttachments,
   inspectIncomingAttachments,
   materializeAttachments,
-  UNAVAILABLE_ATTACHMENT_TEXT,
   withAttachmentContext,
 } from './attachment-context.js';
 import { type ActiveCompaction, latestCompaction } from './compaction.js';
@@ -218,8 +217,8 @@ export async function buildModelContext(
         (sum, file) => addCost(sum, attachmentCost(file, supportsVision)),
         emptyCost(),
       );
-      if (historical.unavailable.has(id))
-        cost = addCost(cost, textCost(UNAVAILABLE_ATTACHMENT_TEXT));
+      const notice = historical.unavailable.get(id);
+      if (notice) cost = addCost(cost, textCost(notice));
       return cost;
     };
     let required = addCost(systemCost, messageCost(latest));
@@ -315,7 +314,7 @@ export async function buildModelContext(
       asUI(message, toolsOffered),
       (historical.byMessage.get(message.id) ?? []).map((file) => loaded.get(file.id)!),
       supportsVision,
-      historical.unavailable.has(message.id),
+      historical.unavailable.get(message.id),
     );
   const uiMessages = withProjectFiles(
     [
@@ -324,7 +323,7 @@ export async function buildModelContext(
         latest,
         latestCandidates.map((file) => loaded.get(file.id)!),
         supportsVision,
-        Boolean(history.target && historical.unavailable.has(history.target.id)),
+        history.target ? historical.unavailable.get(history.target.id) : undefined,
       ),
     ],
     project,
