@@ -7,7 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from nine QA walks of v0.11.0 (issues #35–#376). Four migrations,
+## [0.11.1] - 2026-10-07
+
+Fixes from nine QA walks of v0.11.0 (issues #35–#378). Four migrations,
 `0042`, `0043` (code artifacts, #298), `0044` (two columns that let a failed
 scheduled report be tried again, #352; no table rewrite) and `0045` (a delete
 trigger that keeps a stored file while another conversation still uses it,
@@ -1660,7 +1662,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.11.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.11.1...main
+[0.11.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.1
 [0.11.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.0
 [0.10.2]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.2
 [0.10.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.1
