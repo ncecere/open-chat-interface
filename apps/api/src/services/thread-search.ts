@@ -10,7 +10,6 @@ import { db } from '../db/index.js';
 import { foldSql, foldSqlText } from '../lib/fold.js';
 import { containsPattern } from '../lib/like.js';
 import { stripControls, tsqueryOperand } from '../lib/text.js';
-import { isPostStepDone } from './migrations/readiness.js';
 import { textArray } from './project-search/retrieval.js';
 
 type SQL = ReturnType<typeof sql.raw>;
@@ -42,19 +41,55 @@ export function messageSearchVector(alias: string): SQL {
 }
 
 /**
- * Post-deploy step that builds the index over the accent-folded text (#362).
- * Until it has run, search is exact about accents, as before: the folded
- * expression below would be answered by scanning every message.
+ * The optional index over the accent-folded message text (#362). It is not a
+ * post-deploy step: building it reads every message (about a millisecond
+ * each), which is too much to put on every upgrade. An operator who wants
+ * accent-insensitive message search builds it by hand
+ * (packages/db/optional/message_text_search_folded_index.sql, docs/OPERATIONS.md).
+ * Without it message text is searched exactly as before; titles are folded
+ * either way, since nothing indexes them.
  */
-export const FOLDED_SEARCH_STEP = '0013_message_text_search_folded_index';
+export const FOLDED_SEARCH_INDEX = 'message_text_search_folded_idx';
+export const FOLDED_SEARCH_INDEX_FILE = 'message_text_search_folded_index.sql';
 
-/** True when the folded index exists; false while it is being built, or when that cannot be told. */
+/** How long an answer about the index is trusted: short, so a built (or dropped) index is noticed soon. */
+export const FOLDED_READY_TTL_MS = 30_000;
+
+let foldedReady: { value: boolean; until: number } | null = null;
+
+/** Test seam: forget the cached answer about the optional index. */
+export function resetFoldedSearchReady(): void {
+  foldedReady = null;
+}
+
+/**
+ * True when the optional folded index exists and is valid. Only then may a query
+ * use the folded expression: without the index it would read every message. An
+ * index still being built (or left INVALID by a cancelled build) is not ready,
+ * and neither is a database that cannot answer.
+ */
 export async function foldedSearchReady(): Promise<boolean> {
+  const now = Date.now();
+  if (foldedReady && foldedReady.until > now) return foldedReady.value;
+  let value = false;
   try {
-    return await isPostStepDone(FOLDED_SEARCH_STEP);
+    const rows = await db.execute<{ ready: boolean }>(sql`
+      select exists (
+        select 1
+        from pg_index i
+        join pg_class c on c.oid = i.indexrelid
+        where c.relname = ${FOLDED_SEARCH_INDEX}
+          and i.indrelid = to_regclass('message')
+          and i.indisvalid
+          and i.indisready
+      ) as ready
+    `);
+    value = rows[0]?.ready === true;
   } catch {
-    return false;
+    value = false;
   }
+  foldedReady = { value, until: now + FOLDED_READY_TTL_MS };
+  return value;
 }
 
 /**
@@ -64,8 +99,9 @@ export async function foldedSearchReady(): Promise<boolean> {
  * table only changes letters, never JSON syntax), so `to_tsvector` still
  * indexes string values only.
  *
- * Must stay character-for-character the expression of post-deploy step 0012
- * (`message_text_search_folded_idx`); a unit test compares them.
+ * Must stay character-for-character the expression of the optional index
+ * (`message_text_search_folded_idx`); a unit test compares them. Only ever used
+ * when `foldedSearchReady()` said the index exists.
  */
 export function foldedMessageSearchVectorText(alias: string): string {
   if (!/^[a-z_][a-z0-9_]*$/.test(alias)) throw new Error('Invalid table alias');
@@ -95,35 +131,48 @@ async function parseSearchQuery(raw: string, folded: boolean): Promise<ParsedQue
   const text = stripControls(raw.normalize('NFC').slice(0, SEARCH_QUERY_MAX_CHARS)).trim();
   if (!text) return null;
 
-  // Folded the way the indexed text is, so the words meet as the index holds them (#362).
-  const subject = folded ? foldSql(sql`${text}::text`) : sql`${text}`;
+  // Titles are always folded, and the words that meet them are folded the same
+  // way (#362). Message text is folded only when the optional index exists, and
+  // its words then meet it as the index holds them.
+  const titleWords = await wordsOf(foldSql(sql`${text}::text`));
+  const bodyWords = folded ? titleWords : await wordsOf(sql`${text}`);
+  if (titleWords.length === 0 && bodyWords.length === 0) return null;
+
+  const operands = (words: string[]) =>
+    words.map((lexeme) => tsqueryOperand(lexeme, true)).join(' & ');
+  return {
+    tsquery: operands(bodyWords),
+    terms: bodyWords,
+    folded,
+    titleTsquery: operands(titleWords),
+    titleTerms: titleWords,
+  };
+}
+
+/** The words of a search text as Postgres's own parser reads them, in order. */
+async function wordsOf(subject: SQL): Promise<string[]> {
   const rows = await db.execute<{ lexeme: string }>(sql`
     select lexeme
     from unnest(to_tsvector('simple'::regconfig, ${subject})) as words(lexeme, positions, weights)
     order by positions[1]
   `);
-  let lexemes = rows.map((row) => row.lexeme).filter(Boolean);
+  const lexemes = rows.map((row) => row.lexeme).filter(Boolean);
   // A lone letter left over from "it's" matches nearly everything as a prefix.
   const longer = lexemes.filter((lexeme) => [...lexeme].length > 1);
-  if (longer.length > 0) lexemes = longer;
-  lexemes = lexemes.slice(0, MAX_TERMS);
-
-  return lexemes.length > 0
-    ? {
-        tsquery: lexemes.map((lexeme) => tsqueryOperand(lexeme, true)).join(' & '),
-        terms: lexemes,
-        folded,
-      }
-    : null;
+  return (longer.length > 0 ? longer : lexemes).slice(0, MAX_TERMS);
 }
 
 /** A search as the database runs it. */
 export interface ParsedQuery {
+  /** Matches message text. */
   tsquery: string;
   /** The words, each matched as a prefix; folded when `folded`. */
   terms: string[];
-  /** Whether accents are ignored (the folded index exists, #362). */
+  /** Whether message text ignores accents: the optional folded index exists (#362). */
   folded: boolean;
+  /** As `tsquery` and `terms`, for titles, which always ignore accents (#362). */
+  titleTsquery: string;
+  titleTerms: string[];
 }
 
 /** SQL escape strings for one backslash and two (for quoting a lexeme). */
@@ -137,8 +186,8 @@ const TWO_BACKSLASHES = sql.raw(String.raw`E'\\\\'`);
  * search word, each quoted as one exact lexeme. Without folding it is the
  * search query itself.
  */
-function headlineQuery(search: ParsedQuery, body: SQL, query: SQL): SQL {
-  if (!search.folded) return query;
+function headlineQuery(folded: boolean, terms: string[], body: SQL, query: SQL): SQL {
+  if (!folded) return query;
   return sql`coalesce((
     select string_agg(
       '''' || replace(replace(matched.lexeme, ${ONE_BACKSLASH}, ${TWO_BACKSLASHES}), '''', '''''') || '''',
@@ -148,7 +197,7 @@ function headlineQuery(search: ParsedQuery, body: SQL, query: SQL): SQL {
       select words.lexeme
       from unnest(to_tsvector('simple'::regconfig, ${body})) as words(lexeme, positions, weights)
       where exists (
-        select 1 from unnest(${textArray(search.terms)}) as wanted(term)
+        select 1 from unnest(${textArray(terms)}) as wanted(term)
         where starts_with(${foldSql('words.lexeme')}, wanted.term)
       )
       limit 100
@@ -179,8 +228,10 @@ function clampSearchLimit(limit: number | undefined): number {
 
 /**
  * The ranked search over one person's conversations. Exported so tests can
- * EXPLAIN exactly what runs. `search.folded` ignores accents (#362): the
- * words, the titles and the message index are all folded the same way.
+ * EXPLAIN exactly what runs. Titles always ignore accents (#362). Message text
+ * does only with `search.folded`, which callers set from `foldedSearchReady()`:
+ * the folded message expression must never run without its index, or it would
+ * read every message.
  */
 export function threadSearchStatement(
   userId: string,
@@ -189,14 +240,15 @@ export function threadSearchStatement(
   limit: number,
 ) {
   const query = sql`${search.tsquery}::tsquery`;
+  const titleQuery = sql`${search.titleTsquery}::tsquery`;
   const messageVector = (alias: string) =>
     search.folded ? foldedMessageSearchVector(alias) : messageSearchVector(alias);
-  const titleText = search.folded ? foldSql('t.title') : sql`t.title`;
+  const titleText = foldSql('t.title');
   const titleVector = sql`to_tsvector('simple'::regconfig, ${titleText})`;
   const typed = containsPattern(stripControls(rawQuery).trim().slice(0, SEARCH_QUERY_MAX_CHARS));
-  const pattern = search.folded ? foldSql(sql`${typed}::text`) : sql`${typed}`;
+  const pattern = foldSql(sql`${typed}::text`);
   const titleLike = sql`${titleText} ilike ${pattern} escape '\\'`;
-  const titleMatches = sql`(${titleVector} @@ ${query} or ${titleLike})`;
+  const titleMatches = sql`(${titleVector} @@ ${titleQuery} or ${titleLike})`;
   const titleBody = sql`translate(t.title, chr(1) || chr(2), '  ')`;
   const messageBody = sql`translate(left(${messageSearchText('m')}, ${SNIPPET_SOURCE_MAX_CHARS}), chr(1) || chr(2), '  ')`;
 
@@ -221,7 +273,7 @@ export function threadSearchStatement(
         t.id,
         coalesce(s.rank, 0)
           + case
-              when ${titleVector} @@ ${query} then 1 + ts_rank(${titleVector}, ${query})
+              when ${titleVector} @@ ${titleQuery} then 1 + ts_rank(${titleVector}, ${titleQuery})
               when ${titleLike} then 0.5
               else 0
             end as rank,
@@ -238,7 +290,7 @@ export function threadSearchStatement(
     select
       c.id,
       c.rank::float8 as rank,
-      ts_headline('simple'::regconfig, ${titleBody}, ${headlineQuery(search, titleBody, query)}, ${TITLE_OPTIONS}) as title_highlight,
+      ts_headline('simple'::regconfig, ${titleBody}, ${headlineQuery(true, search.titleTerms, titleBody, titleQuery)}, ${TITLE_OPTIONS}) as title_highlight,
       coalesce((
         select json_agg(
           json_build_object(
@@ -247,7 +299,7 @@ export function threadSearchStatement(
             'snippet', ts_headline(
               'simple'::regconfig,
               source.body,
-              ${headlineQuery(search, sql`source.body`, query)},
+              ${headlineQuery(search.folded, search.terms, sql`source.body`, query)},
               ${SNIPPET_OPTIONS}
             )
           )

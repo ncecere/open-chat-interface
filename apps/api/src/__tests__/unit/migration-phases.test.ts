@@ -253,11 +253,11 @@ describe('post-deploy folder', () => {
       // Which rows use a stored object, for shared files (#358).
       ['0011_attachment_storage_key_index', '0.11.0', 'attachment_storage_key_idx'],
       ['0012_attachment_thumbnail_key_index', '0.11.0', 'attachment_thumbnail_key_idx'],
-      // Conversation search ignores accents (#362).
-      ['0013_message_text_search_folded_index', '0.11.0', 'message_text_search_folded_idx'],
+      // Not 0013: the folded message-text index (#362) is optional, built by hand, and
+      // an upgrade must not wait for it (about 1 ms per message). See packages/db/optional.
     ]);
     const builds = steps.filter((step) => step.index);
-    expect(builds).toHaveLength(12);
+    expect(builds).toHaveLength(11);
     expect(builds.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

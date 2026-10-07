@@ -423,7 +423,13 @@ describe.skipIf(!available)('live Postgres: conversation search', () => {
       const statement = await tx.execute<{ 'QUERY PLAN': string }>(
         sql`explain ${threadSearchStatement(
           ownerId,
-          { tsquery: "'kangaroo':*", terms: ['kangaroo'], folded: false },
+          {
+            tsquery: "'kangaroo':*",
+            terms: ['kangaroo'],
+            folded: false,
+            titleTsquery: "'kangaroo':*",
+            titleTerms: ['kangaroo'],
+          },
           'kangaroo',
           20,
         )}`,

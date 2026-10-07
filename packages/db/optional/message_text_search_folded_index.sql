@@ -1,0 +1,51 @@
+-- OPTIONAL: NOT run by `migrate --post`, and not listed in post/journal.json.
+-- Run it by hand, once, if you want message-text search to ignore accents (#362).
+--
+-- WHAT IT ADDS. Conversation titles already ignore accents with no index
+-- ("bibliotheque" finds the title "Bibliothèque"). Searching inside messages is
+-- exact about accents ("bibliotheque" does not find "bibliothèque") until this
+-- index exists. Once it is built and valid the API notices it within about 30
+-- seconds (it looks the index up by name in pg_index): no restart, no setting,
+-- no code change. Dropping it puts message search back to exact within the same
+-- time.
+--
+-- WHAT IT COSTS. Building it reads every message and folds its text, about
+-- 1 to 1.5 ms per message: 100,000 messages of about 1.6 KB took 2 min 28 s
+-- (the existing `message_text_search_idx` takes about 16 s for the same rows),
+-- so a million messages is about 25 minutes, and 300,000 short ones took 5.5
+-- minutes in the upgrade test. The index is about as large as
+-- `message_text_search_idx` (80 MB per 100,000 messages here). That is why it is
+-- not a post-deploy step: it must not make an upgrade wait. CONCURRENTLY means
+-- it does not block reads or writes of `message`, but it does load the database
+-- while it runs, so choose a quiet period.
+--
+-- HOW TO RUN IT (outside a transaction: CONCURRENTLY cannot run inside one, so
+-- no `psql -1`/`--single-transaction`; no statement timeout, or the build is
+-- cancelled and leaves an INVALID index that the application ignores):
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+--     -c "SET statement_timeout = 0" -f message_text_search_folded_index.sql
+--
+--   (The file is also in the API image at
+--   /app/packages/db/optional/message_text_search_folded_index.sql.)
+--
+-- If a build is cancelled or fails, drop what it left and run it again:
+--   DROP INDEX CONCURRENTLY IF EXISTS "message_text_search_folded_idx";
+-- Check it with:
+--   SELECT indisvalid FROM pg_index
+--   WHERE indexrelid = 'message_text_search_folded_idx'::regclass;
+--
+-- WHAT IT IS. PostgreSQL's `unaccent` is an extension and not IMMUTABLE, so the
+-- text is folded with `translate()`: every precomposed Latin letter with
+-- diacritics becomes its base letter, character for character
+-- (apps/api/src/lib/fold.ts holds the table; a test keeps the two equal).
+-- Letters of other scripts are untouched.
+--
+-- This index is on the same message text as `message_text_search_idx` (0023) but
+-- over the folded text. The expression must stay identical to
+-- `foldedMessageSearchVector` in apps/api/src/services/thread-search.ts, or the
+-- planner cannot use the index (a test compares them). The old index stays: it
+-- answers the search while this one is missing, and a replica of the previous
+-- release still uses it.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "message_text_search_folded_idx" ON "message"
+	USING gin (to_tsvector('simple'::regconfig, translate(jsonb_path_query_array("parts", '$[*] ? (@.type == "text").text'::jsonpath)::text, 'ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿĀāĂăĄąĆćĈĉĊċČčĎďĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİĴĵĶķĹĺĻļĽľŃńŅņŇňŌōŎŏŐőŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžƠơƯưǍǎǏǐǑǒǓǔǕǖǗǘǙǚǛǜǞǟǠǡǦǧǨǩǪǫǬǭǰǴǵǸǹǺǻȀȁȂȃȄȅȆȇȈȉȊȋȌȍȎȏȐȑȒȓȔȕȖȗȘșȚțȞȟȦȧȨȩȪȫȬȭȮȯȰȱȲȳḀḁḂḃḄḅḆḇḈḉḊḋḌḍḎḏḐḑḒḓḔḕḖḗḘḙḚḛḜḝḞḟḠḡḢḣḤḥḦḧḨḩḪḫḬḭḮḯḰḱḲḳḴḵḶḷḸḹḺḻḼḽḾḿṀṁṂṃṄṅṆṇṈṉṊṋṌṍṎṏṐṑṒṓṔṕṖṗṘṙṚṛṜṝṞṟṠṡṢṣṤṥṦṧṨṩṪṫṬṭṮṯṰṱṲṳṴṵṶṷṸṹṺṻṼṽṾṿẀẁẂẃẄẅẆẇẈẉẊẋẌẍẎẏẐẑẒẓẔẕẖẗẘẙẠạẢảẤấẦầẨẩẪẫẬậẮắẰằẲẳẴẵẶặẸẹẺẻẼẽẾếỀềỂểỄễỆệỈỉỊịỌọỎỏỐốỒồỔổỖỗỘộỚớỜờỞởỠỡỢợỤụỦủỨứỪừỬửỮữỰựỲỳỴỵỶỷỸỹØøĐđŁłĦħı', 'AAAAAACEEEEIIIINOOOOOUUUUYaaaaaaceeeeiiiinooooouuuuyyAaAaAaCcCcCcCcDdEeEeEeEeEeGgGgGgGgHhIiIiIiIiIJjKkLlLlLlNnNnNnOoOoOoRrRrRrSsSsSsSsTtTtUuUuUuUuUuUuWwYyYZzZzZzOoUuAaIiOoUuUuUuUuUuAaAaGgKkOoOojGgNnAaAaAaEeEeIiIiOoOoRrRrUuUuSsTtHhAaEeOoOoOoOoYyAaBbBbBbCcDdDdDdDdDdEeEeEeEeEeFfGgHhHhHhHhHhIiIiKkKkKkLlLlLlLlMmMmMmNnNnNnNnOoOoOoOoPpPpRrRrRrRrSsSsSsSsSsTtTtTtTtUuUuUuUuUuVvVvWwWwWwWwWwXxXxYyZzZzZzhtwyAaAaAaAaAaAaAaAaAaAaAaAaEeEeEeEeEeEeEeEeIiIiOoOoOoOoOoOoOoOoOoOoOoOoUuUuUuUuUuUuUuYyYyYyYyOoDdLlHhi')::jsonb));

@@ -18,7 +18,7 @@ type SQL = ReturnType<typeof sql.raw>;
  *
  * The two strings are spliced into SQL as literals, never parameters: the
  * planner uses an expression index only when the query has the same constants.
- * post-deploy step 0012 holds the same literals; a test keeps them equal.
+ * The optional index (packages/db/optional) holds the same literals; a test keeps them equal.
  */
 
 /** Letters that are one base letter with marks added, by their Unicode decomposition. */

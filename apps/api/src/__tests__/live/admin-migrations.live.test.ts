@@ -150,7 +150,6 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0010_audit_log_actor_email_index', 'pending'],
       ['0011_attachment_storage_key_index', 'pending'],
       ['0012_attachment_thumbnail_key_index', 'pending'],
-      ['0013_message_text_search_folded_index', 'pending'],
     ]);
     const [created] = report.postDeploy;
     expect(created!.statement).toMatchObject({ cost: 'concurrent-index', fast: true });
@@ -165,7 +164,7 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       invalidExists: false,
     });
     expect(created!.index!.estimatedBytes).toBeGreaterThan(0);
-    expect(report.indexes.toBuild).toBe(12);
+    expect(report.indexes.toBuild).toBe(11);
     expect(report.verdict.mode).toBe('rolling');
     expect(report.verdict.summary).toMatch(/Run `migrate --post`/);
     expect(renderReport(report)).toMatch(/Verdict: ROLLING/);
