@@ -158,6 +158,9 @@ Every change makes a new version; earlier versions are kept.
   **Edit**, change the text and select **Save as new version** (or press
   Ctrl+Enter, ⌘+Enter on a Mac). If the document changed while you were
   editing, OCI tells you instead of overwriting the newer version.
+  The model is shown the latest saved version of a document you have edited,
+  so it can answer questions about your changes and build on them (long
+  documents are cut to fit the model's context, and say so).
 - **HTML, SVG and diagrams** are changed by asking the model, for example
   "make the chart's bars blue". A model that can use tools revises the existing
   artifact, and the reply shows its card marked *Updated · HTML · version 3*.
