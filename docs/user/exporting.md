@@ -34,7 +34,9 @@ text, or on share links.
 
 Files are named after the conversation and the day for a reply
 (`quarterly-plan-reply-2026-10-02.docx`), and after the title and version for a
-document (`project-plan-v3.pdf`).
+document (`project-plan-v3.pdf`). Letters in any script stay in the name, so a
+conversation titled "日本語の宿題" or "واجب الكتابة" downloads under that name;
+only characters a file name cannot hold (slashes, quotes, emoji) are left out.
 
 ## What is kept
 

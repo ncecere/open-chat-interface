@@ -189,7 +189,7 @@ describe.skipIf(!available)('live Postgres: document export', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toBe(DOCUMENT_FORMAT_INFO.docx.mimeType);
       expect(response.headers.get('content-disposition')).toMatch(
-        /^attachment; filename="quarterly-plan-q3-more-reply-\d{4}-\d{2}-\d{2}\.docx"$/,
+        /^attachment; filename="quarterly-plan-q3-more-reply-\d{4}-\d{2}-\d{2}\.docx"; filename\*=UTF-8''quarterly-plan-q3-more-reply-\d{4}-\d{2}-\d{2}\.docx$/,
       );
       expect(response.headers.get('cache-control')).toBe('no-store');
       expect(response.headers.get('x-content-type-options')).toBe('nosniff');
@@ -210,7 +210,9 @@ describe.skipIf(!available)('live Postgres: document export', () => {
 
       const pptx = await app.request(replyUrl(ids.reply!, 'pptx'));
       expect(pptx.status).toBe(200);
-      expect(pptx.headers.get('content-disposition')).toMatch(/\.pptx"$/);
+      expect(pptx.headers.get('content-disposition')).toMatch(
+        /\.pptx"; filename\*=UTF-8''[^;]*\.pptx$/,
+      );
       const slides = unzipSync(await bytesOf(pptx));
       expect(strFromU8(slides['ppt/slides/slide2.xml']!)).toContain('Findings');
 
@@ -289,7 +291,7 @@ describe.skipIf(!available)('live Postgres: document export', () => {
       const current = await app.request(artifactUrl(ids.document!, 'docx'));
       expect(current.status).toBe(200);
       expect(current.headers.get('content-disposition')).toBe(
-        'attachment; filename="notes-markdown-draft-v2.docx"',
+        `attachment; filename="notes-markdown-draft-v2.docx"; filename*=UTF-8''notes-markdown-draft-v2.docx`,
       );
       const text = await docxText(current);
       expect(text).toContain('Notes: markdown "draft"');
@@ -338,6 +340,42 @@ describe.skipIf(!available)('live Postgres: document export', () => {
       }
       expect(rows.map((row) => row.metadata.version).sort()).toEqual([1, 2, 2]);
     });
+  });
+
+  it('names downloads after a title in any script (#361)', async () => {
+    const app = appFor(ownerId);
+    const nameOf = (response: Response) => {
+      const header = response.headers.get('content-disposition') ?? '';
+      // Every character of the header is ASCII; filename* carries the real name.
+      expect([...header].every((character) => character >= ' ' && character <= '~')).toBe(true);
+      expect(header).toMatch(/^attachment; filename="[^"]+"; filename\*=UTF-8''/);
+      return decodeURIComponent(header.split("filename*=UTF-8''")[1]!);
+    };
+    const japanese = await newThread('日本語の宿題');
+    const reply = await message(japanese, 'assistant', 'Short reply', 0);
+    const docx = await app.request(replyUrl(reply, 'docx', japanese));
+    expect(docx.status).toBe(200);
+    expect(nameOf(docx)).toMatch(/^日本語の宿題-reply-\d{4}-\d{2}-\d{2}\.docx$/);
+
+    const arabic = await newThread('واجب الكتابة 📚');
+    const markdown = await app.request(`/api/threads/${arabic}/export`);
+    expect(markdown.status).toBe(200);
+    expect(nameOf(markdown)).toMatch(/^واجب-الكتابة-\d{4}-\d{2}-\d{2}\.md$/);
+
+    const russian = await newThread('Домашнее задание');
+    const note = await message(russian, 'assistant', 'Text', 0);
+    const [titled] = await live.db.execute<{ id: string }>(sql`
+      insert into artifact (user_id, thread_id, message_id, source_key, title, kind, current_version)
+      values (${ownerId}, ${russian}, ${note}, 'tool:markdown-ru', 'План урока', 'markdown', 1)
+      returning id
+    `);
+    await live.db.execute(sql`
+      insert into artifact_version (artifact_id, version, content, size_bytes, source, message_id)
+      values (${titled!.id}, 1, 'Текст', ${Buffer.byteLength('Текст')}, 'reply', ${note})
+    `);
+    const download = await app.request(artifactUrl(titled!.id, 'docx'));
+    expect(download.status).toBe(200);
+    expect(nameOf(download)).toBe('план-урока-v1.docx');
   });
 
   it('shares one hourly allowance with conversation downloads', async () => {

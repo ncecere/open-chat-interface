@@ -1,5 +1,11 @@
+import { contentDisposition } from '@oci/shared';
 import { describe, expect, it } from 'vitest';
-import { exportFilename, orderedReplyLines, renderMarkdown } from '../../services/export.js';
+import {
+  exportFilename,
+  orderedReplyLines,
+  renderMarkdown,
+  safeTitleSlug,
+} from '../../services/export.js';
 
 describe('export filenames', () => {
   it('derives a readable name from the conversation title', () => {
@@ -18,6 +24,25 @@ describe('export filenames', () => {
   it('drops quotes that would escape the content-disposition header', () => {
     const name = exportFilename('He said "hello"');
     expect(name).not.toContain('"');
+  });
+
+  it('keeps the letters of every script (#361)', () => {
+    expect(exportFilename('Walk9 日本語 العربية Русский 📚', 'UTC')).toMatch(
+      /^walk9-日本語-العربية-русский-\d{4}-\d{2}-\d{2}\.md$/,
+    );
+    expect(exportFilename('日本語の宿題')).toMatch(/^日本語の宿題-\d{4}-\d{2}-\d{2}\.md$/);
+    expect(exportFilename('واجب الكتابة')).toMatch(/^واجب-الكتابة-\d{4}-\d{2}-\d{2}\.md$/);
+    expect(exportFilename('Bibliothèque Été')).toMatch(/^bibliothèque-été-/);
+  });
+
+  it('still removes what a file name cannot carry', () => {
+    const stem = safeTitleSlug('a/b\\c:d*e?"f<g>h|i\u202ej\u0000k.. 📚');
+    expect(stem).toBe('abcdefghijk');
+    // Windows device names get a suffix; a bound never splits a character.
+    expect(safeTitleSlug('CON')).toBe('con-');
+    const long = safeTitleSlug('😀字'.repeat(100) + '字'.repeat(100));
+    expect(Array.from(long)).toHaveLength(60);
+    expect(long).not.toContain('\ufffd');
   });
 
   it('falls back when a title has nothing usable left', () => {
@@ -150,5 +175,28 @@ describe('headings in a Markdown export (#255)', () => {
     expect(markdown).toContain('```bash\n# a comment, not a heading\necho done\n```');
     expect(markdown).toContain('#hashtag is not a heading');
     expect(markdown).not.toContain('------');
+  });
+});
+
+describe('Content-Disposition (#361)', () => {
+  it('sends both filename and an RFC 5987 filename* for a non-Latin name', () => {
+    const header = contentDisposition('日本語の宿題-2026-10-07.md');
+    expect(header).toBe(
+      `attachment; filename="download.md"; filename*=UTF-8''%E6%97%A5%E6%9C%AC%E8%AA%9E%E3%81%AE%E5%AE%BF%E9%A1%8C-2026-10-07.md`,
+    );
+    // Every character of the header is ASCII, which is what HTTP requires.
+    expect([...header].every((c) => c >= ' ' && c <= '~')).toBe(true);
+  });
+
+  it('transliterates accented Latin letters in the plain filename and escapes the quote', () => {
+    expect(contentDisposition('bibliothèque "x" 100%.md')).toBe(
+      `attachment; filename="bibliotheque _x_ 100_.md"; filename*=UTF-8''biblioth%C3%A8que%20%22x%22%20100%25.md`,
+    );
+  });
+
+  it('can be inline, and keeps a name from becoming a path', () => {
+    expect(contentDisposition('../a\r\nb.png', 'inline')).toBe(
+      `inline; filename=".._ab.png"; filename*=UTF-8''.._ab.png`,
+    );
   });
 });

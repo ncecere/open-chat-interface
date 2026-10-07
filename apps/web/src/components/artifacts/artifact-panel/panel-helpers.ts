@@ -1,4 +1,4 @@
-import { type ArtifactKind, artifactFileType } from '@oci/shared';
+import { type ArtifactKind, artifactFileType, safeFileStem } from '@oci/shared';
 import type { ArtifactDraft } from '~/components/artifacts/artifact-drafts';
 import type { ArtifactRef } from '~/components/artifacts/artifacts-context';
 import { saveBlob } from '~/lib/api-client';
@@ -17,17 +17,9 @@ export type PanelView =
       writing: boolean;
     };
 
-/** The title made safe for a file name, without an extension. */
+/** The title made safe for a file name, without an extension; every script's letters stay (#361). */
 export function filenameBase(title: string): string {
-  return (
-    title
-      .normalize('NFKD')
-      .replace(/[^\w\s-]/g, '')
-      .trim()
-      .replace(/\s+/g, '-')
-      .slice(0, 60)
-      .toLowerCase() || 'artifact'
-  );
+  return safeFileStem(title, 'artifact');
 }
 
 /**

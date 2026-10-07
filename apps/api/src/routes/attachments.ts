@@ -1,4 +1,8 @@
-import { DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_FILES_PER_MESSAGE } from '@oci/shared';
+import {
+  contentDisposition,
+  DEFAULT_MAX_FILE_BYTES,
+  DEFAULT_MAX_FILES_PER_MESSAGE,
+} from '@oci/shared';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { rateLimited, validationFailed } from '../lib/errors.js';
@@ -130,7 +134,7 @@ attachmentRoutes.get('/:id/content', async (c) => {
   return c.body(bytes as unknown as ArrayBuffer, 200, {
     'content-type': row.mimeType,
     'content-length': String(bytes.byteLength),
-    'content-disposition': `inline; filename="${encodeURIComponent(row.filename)}"`,
+    'content-disposition': contentDisposition(row.filename, 'inline'),
     'cache-control': 'private, max-age=3600',
     'x-content-type-options': 'nosniff',
   });

@@ -2,6 +2,7 @@ import { eq, schema } from '@oci/db';
 import {
   branchMessageSchema,
   compactThreadSchema,
+  contentDisposition,
   createThreadSchema,
   DOCUMENT_FORMATS,
   forkMessageSchema,
@@ -231,7 +232,7 @@ threadRoutes.get('/:id/export', async (c) => {
 
   return c.body(markdown, 200, {
     'content-type': 'text/markdown; charset=utf-8',
-    'content-disposition': `attachment; filename="${exportFilename(thread.title, timeZone)}"`,
+    'content-disposition': contentDisposition(exportFilename(thread.title, timeZone)),
     'cache-control': 'no-store',
   });
 });

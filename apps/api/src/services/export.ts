@@ -5,6 +5,7 @@ import {
   artifactOfToolPart,
   isDeclinedArtifactPart,
   isToolPart,
+  safeFileStem,
   summarizeToolPart,
   TOOL_LIMIT_REASONS,
   type ToolLimitReason,
@@ -287,16 +288,12 @@ export function renderMarkdown(
   return lines.join('\n');
 }
 
-/** A filesystem-safe slug derived from a title, or `fallback` when nothing is left. */
+/**
+ * A filesystem-safe slug derived from a title, or `fallback` when nothing is
+ * left. Letters of every script are kept (#361).
+ */
 export function safeTitleSlug(title: string, fallback = 'conversation'): string {
-  const safe = title
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .slice(0, 60)
-    .toLowerCase();
-
-  return safe || fallback;
+  return safeFileStem(title, fallback);
 }
 
 /** A filesystem-safe name derived from the conversation title. */
