@@ -118,6 +118,33 @@ release never sees the new kind). The PostgreSQL driver patch
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
 
+### Fixed after a ninth QA walk: administration (#367–#376)
+
+- **The acceptable use policy is enforced by the API** (#367). Until a person
+  has accepted the published version, every write that uses the instance (chat,
+  uploads, new conversations and projects, tool approvals, memory, imports,
+  settings) is refused with `403 POLICY_ACCEPTANCE_REQUIRED`; reading,
+  accepting, signing in and out, deleting their account and the whole
+  administration API stay open. It applies to every role. **An API-only client
+  that has never accepted now gets 403 on writes**: sign in as it and accept
+  once. The web app shows the acceptance page on that error.
+- **Acceptable use:** New version no longer publishes without asking: "Publish
+  immediately" starts off and publishing asks first (#371); a published
+  version cannot be published again, and an older draft is not offered Publish
+  (#372); acceptances are audited as `policy.accept`, listed with email on the
+  version's View, and the count says "N accepted, M since deleted" when accounts
+  were deleted (#373).
+- **Audit:** failed Test entries for Compliance, Reranking, Embeddings,
+  Connector, Webhook and Storage record the reason and target (#368); budget,
+  connector and provider creation record their limit, window and address, and
+  override entries carry the person's email (#374); ban and unban are
+  `user.ban` and `user.unban` instead of `user.update` (a webhook subscribed to
+  exactly `user.update` no longer receives bans), and a refused sign-in records
+  why (#375); `policy.publish` records the version and title (#371).
+- **Reports:** Send due now says what was sent and what failed and shows only
+  the latest result (#369); the list stacks on a phone (#370). **Usage** charts
+  write their days as "Oct 1" (#376).
+
 ### Fixed after an eighth QA walk (#333–#353)
 
 - **Chat:** two or more dollar amounts in a paragraph are no longer typeset
