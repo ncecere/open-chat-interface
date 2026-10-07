@@ -457,10 +457,16 @@ export function AdminReportsPage() {
         ) : (
           <ul className="mt-3 divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
             {data.reports.map((report) => (
-              <li key={report.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              // On a phone the four actions sit below the text: beside it they
+              // took the width and left the name and details a column of one
+              // word a line (#370); the same stack as the acceptable-use rows (#168).
+              <li
+                key={report.id}
+                className="flex flex-col items-stretch gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm">{report.name}</p>
-                  <p className="text-[var(--text-muted)] text-xs">
+                  <p className="break-words text-[var(--text-muted)] text-xs [overflow-wrap:anywhere]">
                     {report.cadence} · {plural(report.windowDays, 'day')} ·{' '}
                     {report.recipients.join(', ')}
                   </p>
@@ -476,45 +482,47 @@ export function AdminReportsPage() {
                 </div>
 
                 <EditOnly>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={sendOne.isPending}
-                    // Always possible, whether or not it is due, so a report
-                    // whose email failed can be sent again (#352).
-                    aria-label={`Send ${report.name} now`}
-                    onClick={() => sendOne.mutate(report)}
-                  >
-                    {sendOne.isPending && sendOne.variables?.id === report.id
-                      ? 'Sending…'
-                      : 'Send now'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Edit ${report.name}`}
-                    onClick={() => edit(report)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={toggle.isPending}
-                    // Named for the report, as Edit is, so each row's buttons differ (#175).
-                    aria-label={`${report.enabled ? 'Pause' : 'Resume'} ${report.name}`}
-                    onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
-                  >
-                    {report.enabled ? 'Pause' : 'Resume'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Delete ${report.name}`}
-                    onClick={() => setDeleteFor(report)}
-                  >
-                    Delete
-                  </Button>
+                  <div className="-ml-2 flex flex-wrap items-center gap-1 sm:ml-0 sm:shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={sendOne.isPending}
+                      // Always possible, whether or not it is due, so a report
+                      // whose email failed can be sent again (#352).
+                      aria-label={`Send ${report.name} now`}
+                      onClick={() => sendOne.mutate(report)}
+                    >
+                      {sendOne.isPending && sendOne.variables?.id === report.id
+                        ? 'Sending…'
+                        : 'Send now'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Edit ${report.name}`}
+                      onClick={() => edit(report)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={toggle.isPending}
+                      // Named for the report, as Edit is, so each row's buttons differ (#175).
+                      aria-label={`${report.enabled ? 'Pause' : 'Resume'} ${report.name}`}
+                      onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
+                    >
+                      {report.enabled ? 'Pause' : 'Resume'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Delete ${report.name}`}
+                      onClick={() => setDeleteFor(report)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </EditOnly>
               </li>
             ))}
