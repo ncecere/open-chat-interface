@@ -68,13 +68,7 @@ export function DeleteProjectSection({ project }: { project: ProjectSummary }) {
       title="Delete project"
       description="Conversations are kept and leave the project. Its files are deleted."
     >
-      <Button
-        type="button"
-        variant="danger"
-        title={lock.title}
-        disabled={lock.locked}
-        onClick={() => setOpen(true)}
-      >
+      <Button type="button" variant="danger" locked={lock.title} onClick={() => setOpen(true)}>
         <Trash2 aria-hidden="true" />
         Delete project
       </Button>

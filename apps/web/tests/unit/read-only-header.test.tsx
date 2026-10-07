@@ -17,7 +17,7 @@ import { SidebarProjects } from '../../src/components/layout/sidebar-projects';
 import { ThreadList } from '../../src/components/layout/thread-list';
 import { TopBar } from '../../src/components/layout/top-bar';
 import { setReadOnlyStatus } from '../../src/lib/read-only';
-import { button, click, dialog, settle } from './admin-test-utils';
+import { button, click, dialog, expectLocked, isOff, settle } from './admin-test-utils';
 
 /**
  * Read-only mode turns off every change on the conversation screen, with the
@@ -147,13 +147,21 @@ const WRITE_CONTROLS = [
   'Pin conversation: Trip plans',
 ];
 
+const SIDEBAR_ROW_ACTIONS = ['Rename conversation: Trip plans', 'Pin conversation: Trip plans'];
+
 it('turns the header and sidebar changes off with the reason, and back on afterwards', async () => {
   setReadOnlyStatus(ON);
   await render();
   for (const name of WRITE_CONTROLS) {
     const control = button(name);
-    expect(control.disabled, name).toBe(true);
-    expect(control.title, name).toMatch(/^Read-only for maintenance until about /);
+    if (SIDEBAR_ROW_ACTIONS.includes(name)) {
+      // The sidebar rows' own buttons (#159) are natively disabled.
+      expect(control.disabled, name).toBe(true);
+      expect(control.title, name).toMatch(/^Read-only for maintenance until about /);
+    } else {
+      // The rest are focusable and described by the reason (#357).
+      expectLocked(control, /^Read-only for maintenance until about /, name);
+    }
   }
   // Reading and taking a copy stay available.
   const download = document.querySelector('a[aria-label="Download this conversation"]');
@@ -161,7 +169,7 @@ it('turns the header and sidebar changes off with the reason, and back on afterw
 
   await act(async () => setReadOnlyStatus(INACTIVE_READ_ONLY_STATUS));
   await settle();
-  for (const name of WRITE_CONTROLS) expect(button(name).disabled, name).toBe(false);
+  for (const name of WRITE_CONTROLS) expect(isOff(button(name)), name).toBe(false);
   expect(button('Rename conversation').title).toBe('Rename');
   expect(button('New project').title).toBe('New project');
 });
@@ -170,10 +178,9 @@ it('turns off creating a link in a Share dialog left open when read-only starts'
   await render();
   await click(button('Share conversation'));
   expect(dialog()).not.toBeNull();
-  expect(button('Create and copy link').disabled).toBe(false);
+  expect(isOff(button('Create and copy link'))).toBe(false);
 
   await act(async () => setReadOnlyStatus(ON));
   await settle();
-  expect(button('Create and copy link').disabled).toBe(true);
-  expect(button('Create and copy link').title).toMatch(/^Read-only for maintenance/);
+  expectLocked(button('Create and copy link'), /^Read-only for maintenance/);
 });

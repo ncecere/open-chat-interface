@@ -100,8 +100,8 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
               type="submit"
               variant="accent"
               size="sm"
-              title={lock.title}
-              disabled={save.isPending || lock.locked}
+              locked={lock.title}
+              disabled={save.isPending}
             >
               {save.isPending && <Spinner />}
               Save
@@ -136,8 +136,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
             variant="ghost"
             size="sm"
             aria-label="Edit name"
-            title={lock.title}
-            disabled={lock.locked}
+            locked={lock.title}
             onClick={() => {
               setDraft(name);
               setSaved(false);

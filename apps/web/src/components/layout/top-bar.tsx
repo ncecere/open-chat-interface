@@ -171,9 +171,10 @@ function RenameConversationControl({ threadId }: { threadId: string }) {
         variant="ghost"
         size="icon-sm"
         aria-label="Rename conversation"
-        title={lock.title ?? 'Rename'}
+        title="Rename"
+        locked={lock.title}
         aria-haspopup="dialog"
-        disabled={title === undefined || lock.locked}
+        disabled={title === undefined}
         onClick={() => setOpen(true)}
       >
         <Pencil />
@@ -203,8 +204,8 @@ function MoveToProjectControl({ threadId }: { threadId: string }) {
         size="icon-sm"
         aria-label="Move to project"
         // Off while read-only, with the reason (#331).
-        title={lock.title ?? 'Move to project'}
-        disabled={lock.locked}
+        title="Move to project"
+        locked={lock.title}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >

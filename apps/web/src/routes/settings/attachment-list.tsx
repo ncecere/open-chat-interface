@@ -290,9 +290,10 @@ export function AttachmentList({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    disabled={isDeleting || lock.locked}
+                    disabled={isDeleting}
                     aria-label={`Delete ${attachment.filename}`}
-                    title={lock.title ?? `Delete ${attachment.filename}`}
+                    title={`Delete ${attachment.filename}`}
+                    locked={lock.title}
                     className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-on-tint)] hover:bg-[var(--danger)]/30"
                     onClick={() => onDelete([attachment.id])}
                   >

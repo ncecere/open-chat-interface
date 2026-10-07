@@ -61,8 +61,8 @@ function ConnectorRow({ connector }: { connector: UserConnector }) {
         <Button
           variant="secondary"
           size="sm"
-          title={lock.title}
-          disabled={disconnect.isPending || lock.locked}
+          locked={lock.title}
+          disabled={disconnect.isPending}
           onClick={() => disconnect.mutate()}
           aria-label={`Disconnect ${connector.name}`}
         >
@@ -73,8 +73,8 @@ function ConnectorRow({ connector }: { connector: UserConnector }) {
         <Button
           variant="primary"
           size="sm"
-          title={lock.title}
-          disabled={connect.isPending || lock.locked}
+          locked={lock.title}
+          disabled={connect.isPending}
           onClick={() => connect.mutate()}
           aria-label={`Connect ${connector.name}`}
         >

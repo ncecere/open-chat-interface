@@ -266,10 +266,8 @@ export function SettingsAttachmentsPage() {
             variant="accent"
             size="sm"
             className="sm:ml-auto"
-            title={lock.title}
-            disabled={
-              lock.locked || (selected.size > 0 && [...selected].every((id) => deletingIds.has(id)))
-            }
+            locked={lock.title}
+            disabled={selected.size > 0 && [...selected].every((id) => deletingIds.has(id))}
             onClick={() => setConfirming([...selected])}
           >
             <Trash2 />

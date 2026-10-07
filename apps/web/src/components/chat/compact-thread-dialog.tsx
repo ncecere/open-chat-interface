@@ -46,14 +46,13 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
         size="icon-sm"
         aria-label={COMPACT_ACTION_LABEL}
         title={
-          lock.title ??
-          (pending
+          pending
             ? COMPACTION_PENDING_TEXT
             : summarisable
               ? COMPACT_ACTION_LABEL
-              : 'Nothing to summarise yet')
+              : 'Nothing to summarise yet'
         }
-        disabled={lock.locked}
+        locked={lock.title}
         aria-haspopup="dialog"
         data-compaction-pending={pending || undefined}
         onClick={() => setOpen(true)}

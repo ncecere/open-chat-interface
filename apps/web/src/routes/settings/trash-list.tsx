@@ -93,8 +93,7 @@ export function TrashList() {
           variant="danger"
           size="sm"
           aria-haspopup="dialog"
-          title={lock.title}
-          disabled={lock.locked}
+          locked={lock.title}
           onClick={() => setEmptying(true)}
         >
           Empty trash
@@ -129,8 +128,8 @@ export function TrashList() {
                 variant="secondary"
                 size="sm"
                 // Only this row's: a disabled neighbour cannot take focus when this row goes.
-                title={lock.title}
-                disabled={lock.locked || (restore.isPending && restore.variables?.id === thread.id)}
+                locked={lock.title}
+                disabled={restore.isPending && restore.variables?.id === thread.id}
                 aria-label={`Restore ${thread.title}`}
                 onClick={(event) => restoreRow(event, thread)}
               >
@@ -141,8 +140,7 @@ export function TrashList() {
                 size="sm"
                 aria-haspopup="dialog"
                 aria-label={`Delete ${thread.title} now`}
-                title={lock.title}
-                disabled={lock.locked}
+                locked={lock.title}
                 onClick={() => setPurging(thread)}
               >
                 Delete now

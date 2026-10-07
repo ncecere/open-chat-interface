@@ -1,6 +1,7 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-import type { ComponentProps } from 'react';
+import { type ComponentProps, useId } from 'react';
+import { toast } from 'sonner';
 import { cn } from '~/lib/utils';
 import { FILLED_FOCUS_RING, FOCUS_RING } from './focus-ring';
 import { useHoldFocus } from './hold-focus';
@@ -36,6 +37,18 @@ const buttonVariants = cva(
 
 export interface ButtonProps extends ComponentProps<'button'>, VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  /**
+   * Why this change is off right now: the read-only message from
+   * `useReadOnlyLock().title`, undefined when it is on (#357).
+   *
+   * A natively disabled button is skipped by Tab and never read out, and a
+   * `title` shows on hover only, so a keyboard, screen-reader or touch user
+   * never met the reason. A locked button is marked aria-disabled instead, so
+   * it can be focused; the reason is its description (and its title, for the
+   * pointer); and pressing it, with Enter, Space or a tap, announces the
+   * reason in a toast rather than doing nothing. It still cannot be activated.
+   */
+  locked?: string;
 }
 
 /**
@@ -50,6 +63,8 @@ export interface ButtonProps extends ComponentProps<'button'>, VariantProps<type
  * still cannot be pressed twice. Once focus leaves, or the button is disabled
  * without focus, it is natively disabled as before. Switches, selects and
  * fields do the same through `useHoldFocus` (#292).
+ *
+ * A `locked` button stays aria-disabled the whole time instead (#357).
  */
 export function Button({
   className,
@@ -57,6 +72,7 @@ export function Button({
   size,
   asChild,
   disabled,
+  locked,
   onClick,
   onPointerDown,
   onKeyDown,
@@ -65,31 +81,58 @@ export function Button({
   ...props
 }: ButtonProps) {
   const { hold, track } = useHoldFocus(disabled);
+  const reasonId = useId();
+  const reason = asChild ? undefined : locked;
   const holdFocus = !asChild && hold;
+  // Held or locked: focusable, but it ignores every press.
+  const inert = holdFocus || Boolean(reason);
   const Comp = asChild ? Slot : 'button';
-  return (
+  const button = (
     <Comp
       className={cn(
         buttonVariants({ variant, size }),
-        holdFocus && 'pointer-events-none opacity-50',
+        holdFocus && !reason && 'pointer-events-none opacity-50',
+        // The pointer still reaches a locked button: hover shows the title
+        // and a tap announces the reason.
+        reason && 'cursor-not-allowed opacity-50',
         className,
       )}
       {...props}
-      disabled={holdFocus ? undefined : disabled}
-      aria-disabled={holdFocus ? true : props['aria-disabled']}
+      title={reason ?? props.title}
+      disabled={inert ? undefined : disabled}
+      aria-disabled={inert ? true : props['aria-disabled']}
+      aria-describedby={
+        reason
+          ? [props['aria-describedby'], reasonId].filter(Boolean).join(' ')
+          : props['aria-describedby']
+      }
       {...track(onFocus, onBlur)}
       onClick={(event) => {
         // Also stops a submit button submitting its form again.
-        if (holdFocus) return event.preventDefault();
+        if (inert) {
+          event.preventDefault();
+          // One toast however often it is pressed; the live region announces it.
+          if (reason) toast(reason, { id: 'locked-control' });
+          return;
+        }
         onClick?.(event);
       }}
       onPointerDown={(event) => {
-        if (!holdFocus) onPointerDown?.(event);
+        if (!inert) onPointerDown?.(event);
       }}
       onKeyDown={(event) => {
-        if (!holdFocus) onKeyDown?.(event);
+        if (!inert) onKeyDown?.(event);
       }}
     />
+  );
+  if (!reason) return button;
+  return (
+    <>
+      {button}
+      <span id={reasonId} hidden>
+        {reason}
+      </span>
+    </>
   );
 }
 

@@ -63,8 +63,7 @@ export function DeleteAccountSection() {
             size="sm"
             variant="danger"
             className="shrink-0"
-            title={lock.title}
-            disabled={lock.locked}
+            locked={lock.title}
             onClick={() => {
               setTyped('');
               setPassword('');

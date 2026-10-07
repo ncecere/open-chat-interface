@@ -268,8 +268,8 @@ function SaveRow({
       <Button
         type="submit"
         variant="primary"
-        title={lock.title}
-        disabled={disabled || state.update.isPending || lock.locked}
+        locked={lock.title}
+        disabled={disabled || state.update.isPending}
       >
         {state.update.isPending && <Spinner />}
         Save changes
@@ -401,8 +401,8 @@ function ProjectFiles({
             <Button
               type="button"
               variant="secondary"
-              title={lock.title}
-              disabled={full || upload.isPending || lock.locked}
+              locked={lock.title}
+              disabled={full || upload.isPending}
               onClick={() => inputRef.current?.click()}
             >
               {upload.isPending ? <Spinner /> : <Upload aria-hidden="true" />}
@@ -461,8 +461,8 @@ function ProjectFiles({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`Remove ${file.filename}`}
-                title={lock.title}
-                disabled={remove.isPending || lock.locked}
+                locked={lock.title}
+                disabled={remove.isPending}
                 onClick={() => remove.mutate(file.id)}
               >
                 <Trash2 />

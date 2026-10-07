@@ -4,6 +4,7 @@ import { ChevronRight, Folder, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { ThreadRow } from '~/components/layout/thread-list';
 import { CreateProjectDialog } from '~/components/projects/project-dialogs';
+import { Button } from '~/components/ui/button';
 import { useAutoRetry } from '~/hooks/use-auto-retry';
 import { useExpandedProjects } from '~/hooks/use-expanded-projects';
 import { type OpenConversation, useOpenConversation } from '~/hooks/use-open-conversation';
@@ -63,16 +64,17 @@ function ProjectsSection() {
         >
           Projects
         </h2>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           aria-label="New project"
-          title={lock.title ?? 'New project'}
-          disabled={lock.locked}
+          title="New project"
+          locked={lock.title}
           onClick={() => setCreating(true)}
-          className="flex size-6 items-center justify-center rounded text-[var(--text-muted)] enabled:hover:bg-[var(--bg-control)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="size-6 rounded px-0 text-[var(--text-muted)] [&_svg]:size-3.5"
         >
-          <Plus className="size-3.5" aria-hidden="true" />
-        </button>
+          <Plus aria-hidden="true" />
+        </Button>
       </div>
 
       {isLoading ? null : isError ? (
@@ -80,15 +82,15 @@ function ProjectsSection() {
           Projects could not be loaded.
         </p>
       ) : (projects?.length ?? 0) === 0 ? (
-        <button
+        <Button
           type="button"
-          title={lock.title}
-          disabled={lock.locked}
+          variant="ghost"
+          locked={lock.title}
           onClick={() => setCreating(true)}
-          className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-[var(--text-muted)] enabled:hover:bg-[var(--bg-control)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-auto w-full justify-start whitespace-normal rounded-lg px-2.5 py-2 text-left text-xs text-[var(--text-muted)]"
         >
           Create a project to group conversations with shared instructions and files.
-        </button>
+        </Button>
       ) : (
         <ul className="flex flex-col gap-0.5" aria-label="Projects">
           {projects?.map((project) => (

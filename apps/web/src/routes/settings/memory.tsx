@@ -167,8 +167,8 @@ function MemoryRow({
               type="submit"
               variant="primary"
               size="sm"
-              title={lock.title}
-              disabled={save.isPending || lock.locked || length === 0 || length > maxChars}
+              locked={lock.title}
+              disabled={save.isPending || length === 0 || length > maxChars}
               aria-describedby={length > maxChars ? `${editId}-error` : undefined}
             >
               {save.isPending && <Spinner />}
@@ -193,8 +193,7 @@ function MemoryRow({
                 variant="ghost"
                 size="sm"
                 aria-label={`Edit memory: ${entry.content}`}
-                title={lock.title}
-                disabled={lock.locked}
+                locked={lock.title}
                 onClick={() => {
                   setDraft(entry.content);
                   setEditing(true);
@@ -213,8 +212,8 @@ function MemoryRow({
                   variant="danger"
                   size="sm"
                   aria-label={`Confirm: delete memory: ${entry.content}`}
-                  title={lock.title}
-                  disabled={remove.isPending || lock.locked}
+                  locked={lock.title}
+                  disabled={remove.isPending}
                   onClick={() => {
                     // Once deleted, the next memory (or the list) gets focus (#128).
                     if (rowRef.current) keepFocusWhenRemoved(rowRef.current);
@@ -239,8 +238,7 @@ function MemoryRow({
                 variant="ghost"
                 size="sm"
                 aria-label={`Delete memory: ${entry.content}`}
-                title={lock.title}
-                disabled={lock.locked}
+                locked={lock.title}
                 onClick={() => setConfirmingDelete(true)}
               >
                 Delete
@@ -297,8 +295,8 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
           type="submit"
           variant="primary"
           size="sm"
-          title={lock.title}
-          disabled={add.isPending || lock.locked || full || length === 0 || over}
+          locked={lock.title}
+          disabled={add.isPending || full || length === 0 || over}
           // Why it cannot be pressed, as Back up now does (#261, #310).
           aria-describedby={over ? 'memory-new-error' : full ? 'memory-full' : undefined}
         >
@@ -350,8 +348,8 @@ function DeleteAll({ count }: { count: number }) {
           <Button
             variant="danger"
             size="sm"
-            title={lock.title}
-            disabled={removeAll.isPending || lock.locked}
+            locked={lock.title}
+            disabled={removeAll.isPending}
             onClick={() => {
               // With every memory gone, so are these controls: the list's
               // heading takes focus. Watched as a whole, since "Delete all…"
@@ -372,8 +370,7 @@ function DeleteAll({ count }: { count: number }) {
           ref={openRef}
           variant="secondary"
           size="sm"
-          title={lock.title}
-          disabled={lock.locked}
+          locked={lock.title}
           onClick={() => setConfirming(true)}
         >
           Delete all…
@@ -421,8 +418,8 @@ function MemoryContent({ state }: { state: MemoryState }) {
           className="mt-1 shrink-0"
           checked={enabled}
           // Switching off always works; switching on needs memory to be offered.
-          title={lock.title}
-          disabled={toggle.isPending || lock.locked || (!available && !enabled)}
+          locked={lock.title}
+          disabled={toggle.isPending || (!available && !enabled)}
           onCheckedChange={(checked) => toggle.mutate(checked)}
         />
       </div>

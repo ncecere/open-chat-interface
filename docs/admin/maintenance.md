@@ -35,7 +35,11 @@ switch, archiving, restoring and deleting conversations, **Choose export
 file** for an import, deleting attachments, connecting and disconnecting a
 connector), and the controls and Save buttons of administration pages.
 Download and signing out of devices stay available. A form already open when
-read-only starts has its Save button turned off too. Somebody who sends just as
+read-only starts has its Save button turned off too. A turned-off control in
+Settings, the sidebar, the conversation header or a project looks dimmed but
+stays reachable with Tab: its description is the reason ("Read-only for
+maintenance until about …"), so a screen reader reads it, and pressing or
+tapping it shows the reason as a message instead of doing nothing. Somebody who sends just as
 read-only starts gets that explanation too, not an error, and so does a change
 that was refused before the page knew. **Forgot your password?** says password resets
 are paused, with the reason and the expected end, and that no email was sent.
