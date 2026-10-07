@@ -196,9 +196,39 @@ async function sendReport(
  * again after a pause (`REPORT_RETRY_PAUSES_MS`).
  */
 export async function runDueReports(now = new Date()): Promise<number> {
+  return (await runDueReportsDetailed(now)).sent;
+}
+
+/**
+ * What a run of the due reports did (#369): how many were due, how many were
+ * sent, which failed and why, and whether nothing could be tried because email
+ * delivery is not set up. "Send due now" said "Nothing was due" for a run in
+ * which a due report had just failed, because only the sent count came back.
+ */
+export interface DueReportsRun {
+  due: number;
+  sent: number;
+  failed: Array<{ name: string; error: string }>;
+  /** Email delivery is not set up, so nothing was attempted. */
+  emailNotConfigured: boolean;
+  /** Reports whose last send failed and that wait for their next automatic try, so were not due now. */
+  waiting: string[];
+}
+
+export async function runDueReportsDetailed(now = new Date()): Promise<DueReportsRun> {
+  const run: DueReportsRun = {
+    due: 0,
+    sent: 0,
+    failed: [],
+    emailNotConfigured: false,
+    waiting: [],
+  };
   if (!(await isSmtpUsable())) {
     logger.debug('Scheduled reports skipped: email delivery is not configured');
-    return 0;
+    // Whether anything was due is not known to the page without looking; say
+    // only that email is not set up.
+    run.emailNotConfigured = true;
+    return run;
   }
 
   const reports = await db
@@ -206,9 +236,12 @@ export async function runDueReports(now = new Date()): Promise<number> {
     .from(schema.scheduledReport)
     .where(eq(schema.scheduledReport.enabled, true));
 
-  let sent = 0;
   for (const report of reports) {
-    if (!isDue(report, now)) continue;
+    if (!isDue(report, now)) {
+      if (report.lastStatus === 'error') run.waiting.push(report.name);
+      continue;
+    }
+    run.due += 1;
 
     const result = await sendReport(report);
     if (result.delivered) {
@@ -222,8 +255,11 @@ export async function runDueReports(now = new Date()): Promise<number> {
           failedAttempts: 0,
         })
         .where(eq(schema.scheduledReport.id, report.id));
-      sent += 1;
-    } else if (!result.notConfigured) {
+      run.sent += 1;
+    } else if (result.notConfigured) {
+      run.emailNotConfigured = true;
+    } else {
+      run.failed.push({ name: report.name, error: result.error });
       // `lastRunAt` stays as it was: the period has not been sent (#352).
       await db
         .update(schema.scheduledReport)
@@ -237,7 +273,7 @@ export async function runDueReports(now = new Date()): Promise<number> {
     }
   }
 
-  return sent;
+  return run;
 }
 
 /**

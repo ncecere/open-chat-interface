@@ -174,7 +174,12 @@ Points worth knowing:
 - **Edit** loads a report into the form to change its name, cadence, window
   or recipients; **Pause** stops it without losing it.
 - **Send due now** exists so you can check the recipients and the content
-  without waiting a month to discover the address was wrong.
+  without waiting a month to discover the address was wrong. It says what it
+  did: how many were sent, which failed and why ("1 report failed: Name (Email
+  delivery failed). It was not counted as sent."), that a report failed earlier
+  and is waiting for its next automatic try, or that email delivery is not set
+  up. The page shows only the result of the latest action. The audit entry
+  (`report.run`) records how many were due, sent and failed.
 - **A failed send does not count as sent.** The report stays due, shows
   "Failed: Email delivery failed. It was not counted as sent, and will be tried
   again", and is tried again by the hourly check after 15 minutes, then 1 hour,

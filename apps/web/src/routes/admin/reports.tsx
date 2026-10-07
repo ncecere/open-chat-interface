@@ -81,6 +81,49 @@ export function failureText(report: Pick<ScheduledReport, 'lastError' | 'retries
     : `Failed: ${reason}. It was not counted as sent. Automatic tries are used up; use Send now once email works.`;
 }
 
+/** What "Send due now" did, as the API reports it (#369); a server before it sent only `sent`. */
+export interface DueRun {
+  sent: number;
+  due?: number;
+  failed?: Array<{ name: string; error: string }>;
+  emailNotConfigured?: boolean;
+  waiting?: string[];
+}
+
+/**
+ * What a run of the due reports says (#369): what was attempted and what
+ * failed, not only what was sent. It said "Nothing was due" while a due report
+ * had just failed, because only the sent count was looked at.
+ */
+export function dueRunSummary(run: DueRun): { text: string; problem: boolean } {
+  const plural = (count: number) => `${count} report${count === 1 ? '' : 's'}`;
+  const failed = run.failed ?? [];
+  if (run.emailNotConfigured && run.sent === 0 && failed.length === 0)
+    return { text: 'Nothing was sent: email delivery is not set up.', problem: true };
+  if (failed.length > 0) {
+    const reasons = failed
+      .map((entry) => `${entry.name} (${entry.error.replace(/[.\s]+$/, '')})`)
+      .join('; ');
+    const sent = run.sent > 0 ? `Sent ${plural(run.sent)}; ` : '';
+    return {
+      text: `${sent}${failed.length === 1 ? '1 report' : `${failed.length} reports`} failed: ${reasons}. ${
+        failed.length === 1 ? 'It was' : 'They were'
+      } not counted as sent.`,
+      problem: true,
+    };
+  }
+  if (run.sent > 0) return { text: `Sent ${plural(run.sent)}.`, problem: false };
+  const waiting = run.waiting ?? [];
+  if (waiting.length > 0)
+    return {
+      text: `Nothing was due. ${new Intl.ListFormat('en', { type: 'conjunction' }).format(waiting)} failed earlier and ${
+        waiting.length === 1 ? 'is' : 'are'
+      } waiting to be tried again; use Send now to try at once.`,
+      problem: false,
+    };
+  return { text: 'Nothing was due. A report is only sent once per cadence.', problem: false };
+}
+
 /** The form's names for the fields, so each error names the one it is about (#127, #283). */
 const REPORT_LABELS = {
   name: 'Name',
@@ -205,9 +248,20 @@ export function AdminReportsPage() {
     },
   });
 
+  // Only the latest action's outcome is shown: a result from an earlier one
+  // stayed on screen beside it ("Sent …" above "Nothing was due", #369).
+  // Each action forgets the others' (never its own: resetting a mutation that
+  // is running drops its result).
+  const forgetOthers = (keep: 'toggle' | 'sendOne' | 'runNow') => {
+    if (keep !== 'toggle') toggle.reset();
+    if (keep !== 'sendOne') sendOne.reset();
+    if (keep !== 'runNow') runNow.reset();
+  };
+
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.patch(`/admin/reports/${id}`, { enabled }),
+    onMutate: () => forgetOthers('toggle'),
     onSuccess: invalidate,
   });
 
@@ -218,11 +272,13 @@ export function AdminReportsPage() {
         `/admin/reports/${report.id}/send`,
         {},
       ),
+    onMutate: () => forgetOthers('sendOne'),
     onSuccess: invalidate,
   });
 
   const runNow = useMutation({
-    mutationFn: () => api.post<{ sent: number }>('/admin/reports/run', {}),
+    mutationFn: () => api.post<DueRun>('/admin/reports/run', {}),
+    onMutate: () => forgetOthers('runNow'),
     onSuccess: invalidate,
   });
 
@@ -383,10 +439,11 @@ export function AdminReportsPage() {
         )}
 
         {runNow.data && (
-          <p className="mt-2 text-[var(--text-muted)] text-sm">
-            {runNow.data.sent === 0
-              ? 'Nothing was due. A report is only sent once per cadence.'
-              : `Sent ${runNow.data.sent} report${runNow.data.sent === 1 ? '' : 's'}.`}
+          <p
+            role={dueRunSummary(runNow.data).problem ? 'alert' : 'status'}
+            className={`mt-2 text-sm ${dueRunSummary(runNow.data).problem ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}`}
+          >
+            {dueRunSummary(runNow.data).text}
           </p>
         )}
 
