@@ -77,6 +77,19 @@
 /* Streamdown ships compiled classes that Tailwind must scan. */
 @source "../../node_modules/streamdown/dist/*.js";
 
+/*
+ * Streamdown's block controls (copy, download, full screen, exit) are a 14 px
+ * icon in 4 px of padding: 22 px square, under the WCAG 2.2 target size. They
+ * are at least 24 px, in a reply and in a table's full-screen view (#246).
+ */
+[data-streamdown] button[title]:has(> svg:only-child) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+}
+
 /* Optional wrapping of long code lines (Customization → Wrap long code lines). */
 .code-wrap [data-streamdown="code-block-body"] pre,
 .code-wrap [data-streamdown="code-block-body"] code,

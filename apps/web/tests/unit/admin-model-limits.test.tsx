@@ -247,6 +247,31 @@ describe('the model form and inline rename (#79)', () => {
     expect(alerts(dialog() as HTMLElement)).toEqual([]);
   });
 
+  it('keeps the problems with fields not yet corrected (#257)', async () => {
+    ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
+    await click(button('Add model'));
+    await typeInto(field('upstream-model-id'), 'walk4-upstream');
+    await typeInto(field('model-display-name'), 'Walk4 model');
+    await typeInto(field('model-slug'), 'Walk4 Bad!');
+    await typeInto(field('model-context-window'), 'abc');
+    await typeInto(field('model-max-output'), '-1');
+    const add = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (candidate) => candidate.textContent?.trim() === 'Add model',
+    );
+    await click(add!);
+    const listed = alerts(dialog() as HTMLElement)[0]?.split('\n') ?? [];
+    expect(listed).toContain('Context window must be a whole number of tokens.');
+    expect(listed.some((line) => line.startsWith('OCI slug'))).toBe(true);
+    await typeInto(field('model-slug'), 'walk4-good');
+    expect(alerts(dialog() as HTMLElement)[0]?.split('\n')).toEqual(
+      listed.filter((line) => !line.startsWith('OCI slug')),
+    );
+    await typeInto(field('model-context-window'), '');
+    expect(alerts(dialog() as HTMLElement)[0]).not.toContain('Context window');
+    await typeInto(field('model-max-output'), '');
+    expect(alerts(dialog() as HTMLElement)).toEqual([]);
+  });
+
   it('lists a bad slug and an output with no room for input together (#129)', async () => {
     ({ root } = await renderAdmin(page, { path: '/admin/models?tab=models' }));
     await click(button('Add model'));

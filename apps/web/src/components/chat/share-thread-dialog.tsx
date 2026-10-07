@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Link2, Share2, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -65,13 +66,11 @@ function statusOf(link: OwnerShareLink): 'active' | 'expired' | 'revoked' {
 function ShareLinkRow({
   link,
   copied,
-  revoking,
   onCopy,
   onRevoke,
 }: {
   link: OwnerShareLink;
   copied: boolean;
-  revoking: boolean;
   onCopy: () => void;
   onRevoke: () => void;
 }) {
@@ -120,10 +119,11 @@ function ShareLinkRow({
             size="icon-sm"
             variant="ghost"
             aria-label="Revoke share link"
-            disabled={status === 'revoked' || revoking}
+            aria-haspopup="dialog"
+            disabled={status === 'revoked'}
             onClick={onRevoke}
           >
-            {revoking ? <Spinner /> : <Trash2 />}
+            <Trash2 />
           </Button>
         </div>
       </div>
@@ -148,6 +148,9 @@ export function ShareThreadDialog({
   const [formError, setFormError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
+  // Revoking asks first, as Settings → Sharing does (#252): one click beside
+  // Copy took down a link already sent out, and it cannot be turned back on.
+  const [revoking, setRevoking] = useState<OwnerShareLink | null>(null);
   const queryClient = useQueryClient();
   const linksKey = ['share-links', threadId] as const;
 
@@ -178,12 +181,6 @@ export function ShareThreadDialog({
       await queryClient.invalidateQueries({ queryKey: linksKey });
       await copyLink(response.link);
     },
-  });
-
-  const revoke = useMutation({
-    mutationFn: (linkId: string) =>
-      api.delete<{ link: OwnerShareLink }>(`/share-links/links/${encodeURIComponent(linkId)}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: linksKey }),
   });
 
   async function copyLink(link: OwnerShareLink) {
@@ -319,14 +316,6 @@ export function ShareThreadDialog({
             {copyError}
           </p>
         )}
-        {revoke.error && (
-          <p
-            className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
-            role="alert"
-          >
-            {apiErrorMessage(revoke.error, 'Failed to revoke share link.')}
-          </p>
-        )}
 
         <section className="mt-6" aria-labelledby="existing-share-links">
           <h3 id="existing-share-links" className="text-sm font-semibold">
@@ -358,14 +347,39 @@ export function ShareThreadDialog({
                   key={link.id}
                   link={link}
                   copied={copiedId === link.id}
-                  revoking={revoke.isPending && revoke.variables === link.id}
                   onCopy={() => void copyLink(link)}
-                  onRevoke={() => revoke.mutate(link.id)}
+                  onRevoke={() => setRevoking(link)}
                 />
               ))}
             </ul>
           )}
         </section>
+
+        <ConfirmDialog
+          open={revoking !== null}
+          onOpenChange={(next) => {
+            if (!next) setRevoking(null);
+          }}
+          title="Revoke this link?"
+          description={
+            <>
+              The link stops working at once. Anyone who opened it before keeps what they saved or
+              copied. A revoked link cannot be turned back on; you can make a new one here.
+            </>
+          }
+          confirmLabel="Revoke link"
+          pendingLabel="Revoking…"
+          errorMessage="The link could not be revoked."
+          onConfirm={async () => {
+            if (!revoking) return;
+            await api.delete(`/share-links/links/${encodeURIComponent(revoking.id)}`);
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: linksKey }),
+              // Settings → Sharing lists it too.
+              queryClient.invalidateQueries({ queryKey: ['me', 'share-links'] }),
+            ]);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

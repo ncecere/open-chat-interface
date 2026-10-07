@@ -17,6 +17,7 @@ import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
+import { diffUpdate } from '../../services/settings-diff.js';
 
 export const ssoRoutes = new Hono<AppBindings>();
 
@@ -258,18 +259,20 @@ ssoRoutes.patch('/providers/:providerId', async (c) => {
   const providerId = c.req.param('providerId');
   const patch = await parseBody(c, policyPatchSchema);
 
+  // The whole row, for what each changed setting was (#258).
   const [existing] = await db
-    .select({ id: schema.ssoProvider.id })
+    .select()
     .from(schema.ssoProvider)
     .where(eq(schema.ssoProvider.providerId, providerId))
     .limit(1);
 
   if (!existing) throw notFound('SSO provider not found');
 
-  await db
+  const [updated] = await db
     .update(schema.ssoProvider)
     .set(patch)
-    .where(eq(schema.ssoProvider.providerId, providerId));
+    .where(eq(schema.ssoProvider.providerId, providerId))
+    .returning();
 
   await recordAudit({
     actorUserId: actor.id,
@@ -277,7 +280,9 @@ ssoRoutes.patch('/providers/:providerId', async (c) => {
     action: 'sso.update',
     targetType: 'sso_provider',
     targetId: providerId,
-    metadata: patch,
+    // Each sent setting as it was and became: whether account linking was
+    // trusted before is the question after a takeover (#258).
+    metadata: { ...patch, changes: diffUpdate(existing, updated ?? existing, Object.keys(patch)) },
   });
 
   return c.json({ ok: true });

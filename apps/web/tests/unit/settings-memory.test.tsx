@@ -125,6 +125,14 @@ describe('Settings → Memory', () => {
     expect(api.delete).toHaveBeenCalledWith('/memory');
   });
 
+  it('asks about one memory without "all 1 memory" (#254)', async () => {
+    memory = { ...memory, entries: [memory.entries[0]!] };
+    await render();
+    await click(findButton('Delete all…')!);
+    expect(document.body.textContent).toContain('Delete your one memory? This cannot be undone.');
+    expect(document.body.textContent).not.toContain('all 1');
+  });
+
   it('explains when memory is not offered, keeping review and deletion', async () => {
     memory = { ...memory, enabled: false, available: false };
     await render();

@@ -3,7 +3,7 @@ import type { InstanceSettings } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmtpSettingsForm } from '../../src/routes/admin/settings/smtp-settings';
-import { button, cleanup, click, renderAdmin, typeInto } from './admin-test-utils';
+import { button, buttonNames, cleanup, click, renderAdmin, typeInto } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -33,6 +33,19 @@ const smtp: InstanceSettings['smtp'] = {
   hasUsername: true,
   hasPassword: false,
 };
+
+it('names the username and password controls for which they act on (#260)', async () => {
+  ({ root } = await renderAdmin(<SmtpSettingsForm initialSettings={smtp} />));
+  expect(buttonNames()).toEqual(
+    expect.arrayContaining([
+      'Set or replace the SMTP username',
+      'Clear stored value of the SMTP username',
+      'Set or replace the SMTP password',
+      'Clear stored value of the SMTP password',
+    ]),
+  );
+  expect(new Set(buttonNames()).size).toBe(buttonNames().length);
+});
 
 it('says what is stored and sends a test email (#115)', async () => {
   ({ root } = await renderAdmin(<SmtpSettingsForm initialSettings={smtp} />));

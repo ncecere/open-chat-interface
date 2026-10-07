@@ -31,7 +31,12 @@ import {
   redisConfigured,
 } from './services/chat-streams.js';
 import { startCiphertextFormatWatch } from './services/encryption/rotation.js';
-import { runningJobCount, startLifecycleJobs, stopJobs } from './services/jobs/index.js';
+import {
+  runningJobCount,
+  scheduledHere,
+  startLifecycleJobs,
+  stopJobs,
+} from './services/jobs/index.js';
 import { startReplicaHeartbeat, watchForWorkers } from './services/jobs/workers.js';
 import { initTracing, shutdownTracing } from './services/observability/tracing.js';
 import { purgeExpiredTemporaryThreads } from './services/threads.js';
@@ -101,7 +106,8 @@ async function main() {
     );
     await startLifecycleJobs();
   }
-  const stopHeartbeat = startReplicaHeartbeat(role);
+  // A replica that runs jobs says which, for System health's list (#256).
+  const stopHeartbeat = startReplicaHeartbeat(role, runsJobs ? scheduledHere() : undefined);
   const stopWatchingWorkers = role === 'web' ? watchForWorkers() : () => {};
   // Redis is required for more than one replica (v0.11 design, item 16).
   // Without it, each replica keeps a named connection open so the others can

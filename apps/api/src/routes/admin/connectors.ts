@@ -18,6 +18,7 @@ import {
   updateConnector,
   updateConnectorTool,
 } from '../../services/connectors/admin.js';
+import { diffUpdate } from '../../services/settings-diff.js';
 
 export const connectorRoutes = new Hono<AppBindings>();
 
@@ -50,6 +51,18 @@ connectorRoutes.post('/', async (c) => {
   return c.json(await getAdminConnector(created.id), 201);
 });
 
+/** The settings a connector edit records as they were and became; no secrets. */
+const CONNECTOR_AUDITED_FIELDS = [
+  'name',
+  'url',
+  'authMode',
+  'sharedHeaderName',
+  'oauthScopes',
+  'oauthClientId',
+  'enabled',
+  'allowPrivateNetwork',
+] as const;
+
 /**
  * Changes a connector; only sent fields change. Changing its address,
  * authentication mode or OAuth client disconnects everyone connected to it.
@@ -65,10 +78,12 @@ connectorRoutes.patch('/:id', async (c) => {
     action: 'connector.update',
     targetType: 'connector',
     targetId: existing.id,
-    // Which fields changed, never a credential.
+    // Which fields changed, as they were and became (#258); never a
+    // credential, only whether it was replaced or cleared.
     metadata: {
       slug: existing.slug,
       fields: result.fields,
+      changes: diffUpdate(existing, result.row, CONNECTOR_AUDITED_FIELDS),
       ...result.credentials,
       accountsRemoved: result.accountsRemoved,
     },

@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
+import { errorText } from '../../lib/log-redaction.js';
 import {
   cosineDistance,
   pgvectorInfo,
@@ -547,10 +548,8 @@ export class PgvectorStore implements VectorStore {
   }
 
   async recordFailure(generation: Generation, attachmentId: string, error: unknown) {
-    const lastError = (error instanceof Error ? error.message : String(error)).slice(
-      0,
-      MAX_ERROR_CHARS,
-    );
+    // Stored and shown: without a failed query's parameters, the text (#264).
+    const lastError = errorText(error).slice(0, MAX_ERROR_CHARS);
     await db.transaction(async (tx) => {
       const [previous] = await tx
         .select({ failures: F.failures })

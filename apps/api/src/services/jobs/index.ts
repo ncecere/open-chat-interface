@@ -1,4 +1,5 @@
-import { notFound } from '../../lib/errors.js';
+import { conflict, notFound } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import { runsBackgroundJobs } from '../../lib/role.js';
 import { BACKUP_JOB, runScheduledBackup, startManualBackup } from '../backups/run.js';
 import { processCompactionQueue } from '../chat/compaction-queue.js';
@@ -21,7 +22,7 @@ import {
 import { purgeExpiredTrash } from '../lifecycle/trash.js';
 import { jobPausedByReadOnly } from '../maintenance/read-only.js';
 import { applyMemoryRetention } from '../memory/store.js';
-import { migrationJobs } from '../migrations/jobs.js';
+import { migrationJobs, POST_MIGRATIONS_JOB } from '../migrations/jobs.js';
 import { processPendingImports } from '../portability/imports.js';
 import { embedPendingProjectPassages } from '../project-search/embedding.js';
 import { indexPendingProjectFiles } from '../project-search/indexing.js';
@@ -33,9 +34,9 @@ import { purgeExpiredTemporaryThreads, purgeUnusedThreads } from '../threads.js'
 import { foldUsageRollups, USAGE_ROLLUP_FOLD_JOB } from '../usage-report/rollup-fold.js';
 import { processWebhookDeliveries } from '../webhooks/delivery.js';
 import {
+  assertManualRunPlaced,
   type JobRequest,
   listenForJobRequests,
-  manualRunConflict,
   requestManualRun,
 } from './requests.js';
 import {
@@ -45,7 +46,7 @@ import {
   startJobs,
   stopJobs as stopJobTimers,
 } from './runner.js';
-import { SWEEP_JOB } from './workers.js';
+import { jobsOnWorkers, type ScheduledJob, SWEEP_JOB } from './workers.js';
 
 // Read-only maintenance mode (v0.11 design, section 9): jobs that write pause,
 // apart from those the administrator keeps running (backups, compliance
@@ -243,7 +244,46 @@ export async function handleJobRequest(request: JobRequest): Promise<unknown> {
   if (request.actor && request.job === BACKUP_JOB) return startManualBackup(request.actor);
   if (request.actor && request.job === COMPLIANCE_JOB)
     return startManualComplianceExport(request.actor);
+  // Dropped without a word, a request for a job this replica does not
+  // schedule looked like a run that never came (#256).
+  if (!isLifecycleJob(request.job))
+    logger.warn({ job: request.job }, 'Ignored a request to run a job this replica does not run');
   return runJobNow(request.job);
+}
+
+/**
+ * Whether this replica can run what a request asks for: a manual run it
+ * cannot is left unanswered, so the web replica reports it as not started
+ * rather than queued (#256, #265).
+ */
+export function takesJobRequest(request: JobRequest): boolean {
+  if (request.actor && (request.job === BACKUP_JOB || request.job === COMPLIANCE_JOB)) return true;
+  return isLifecycleJob(request.job);
+}
+
+/** The jobs this replica schedules, as its heartbeat reports them (#256). */
+export function scheduledHere(): ScheduledJob[] {
+  return lifecycleJobs().map(({ name, intervalMs }) => ({ name, intervalMs }));
+}
+
+/**
+ * The jobs System health lists: those scheduled where jobs run. A `web`
+ * replica runs none, and its own settings can register a job no worker has
+ * (#256), so it lists what the workers report, or its own list when they
+ * cannot say.
+ */
+export async function scheduledJobs(): Promise<ScheduledJob[]> {
+  if (runsBackgroundJobs()) return scheduledHere();
+  return (await jobsOnWorkers()) ?? scheduledHere();
+}
+
+/** 409 for a job that exists, but that no replica running jobs schedules. */
+function notScheduledConflict(name: string) {
+  return conflict(
+    name === POST_MIGRATIONS_JOB
+      ? 'No replica that runs background jobs applies post-deploy steps here. Once every replica runs this release, run migrate --post (docker compose --profile tools run --rm migrate-post), or set RUN_POST_MIGRATIONS=true on the replica that runs jobs.'
+      : `No replica that runs background jobs runs ${name}: their settings leave it off, so it cannot start.`,
+  );
 }
 
 /**
@@ -252,7 +292,7 @@ export async function handleJobRequest(request: JobRequest): Promise<unknown> {
  */
 export async function startLifecycleJobs(): Promise<void> {
   startJobs(lifecycleJobs());
-  stopListening = await listenForJobRequests(handleJobRequest);
+  stopListening = await listenForJobRequests(handleJobRequest, takesJobRequest);
 }
 
 /** Stops the timers and the listener; jobs already running finish their batch. */
@@ -280,11 +320,23 @@ export async function runJobNow(name: string): Promise<number | null> {
  * 409 when no replica runs jobs; null for one already running elsewhere.
  */
 export async function runOrQueueJobNow(name: string): Promise<number | 'queued' | null> {
-  // An unknown name is a mistake, not a skip (#82).
-  if (!isLifecycleJob(name)) throw notFound(`There is no job called ${name}`);
-  if (runsBackgroundJobs()) return runJobNow(name);
-  const placed = await requestManualRun({ job: name });
-  if (placed === 'no-worker') throw manualRunConflict();
+  const here = isLifecycleJob(name);
+  if (runsBackgroundJobs()) {
+    // An unknown name is a mistake, not a skip (#82).
+    if (!here) throw notFound(`There is no job called ${name}`);
+    return runJobNow(name);
+  }
+  // A worker runs it, so it must be one a worker schedules: queued otherwise,
+  // it was audited as a run and nothing happened (#256).
+  const onWorkers = await jobsOnWorkers();
+  const known = onWorkers ? onWorkers.some((job) => job.name === name) : here;
+  if (!known) {
+    if (here || name === POST_MIGRATIONS_JOB) throw notScheduledConflict(name);
+    throw notFound(`There is no job called ${name}`);
+  }
+  // Queued only once a worker has taken it: a request no worker hears is
+  // lost, so it is refused with the reason instead (#265).
+  assertManualRunPlaced(await requestManualRun({ job: name }));
   return 'queued';
 }
 

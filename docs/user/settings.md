@@ -111,7 +111,9 @@ activity first.
 - Tick conversations, or use **Select all** to tick everything listed, then
   **Archive** or **Delete** them. Deleting moves them to the trash, where they
   stay recoverable until their deletion date.
-- In **Trash**, **Restore** brings a conversation back. **Delete now** (one
+- In **Archived**, **Restore** moves a conversation back to **Active**. In
+  **Trash**, **Restore** brings a conversation back to where it was before it
+  was deleted. A notice says which conversation was restored. **Delete now** (one
   conversation) and **Empty trash** (all of them) delete permanently, so each
   asks you to confirm first.
 
@@ -196,7 +198,7 @@ shortcuts worth learning:
 | Shortcut | Does |
 | --- | --- |
 | `Cmd/Ctrl + K` | Search and commands |
-| `Cmd/Ctrl + Shift + O` | New conversation |
+| `Cmd/Ctrl + Shift + O` | New conversation, with the cursor in its message box |
 | `Cmd/Ctrl + B` | Show or hide the sidebar |
 | `Cmd/Ctrl + /` | Open the model picker, with its search ready for typing |
 | `Enter` | Send the message (`Cmd/Ctrl + Enter` when inverted) |

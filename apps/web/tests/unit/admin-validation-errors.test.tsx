@@ -73,6 +73,29 @@ it('Retention clears the error once the field is corrected, with Save disabled (
   expect(button('Save retention').disabled).toBe(true);
 });
 
+it('Retention keeps the error about a field still wrong when another is corrected (#257)', async () => {
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/lifecycle/retention') return retention;
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  api.put.mockRejectedValueOnce(
+    validationFailure(updateRetentionSettingsSchema, {
+      usageEventRetentionDays: 5000,
+      displayTimezone: 'Mars/Olympus',
+    }),
+  );
+  ({ root } = await renderAdmin(<AdminRetentionPage />));
+  const zone = document.getElementById('display-timezone') as HTMLInputElement;
+  await typeInto(document.getElementById('usage-days') as HTMLInputElement, '5000');
+  await typeInto(zone, 'Mars/Olympus');
+  await click(button('Save retention'));
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('Usage history');
+  await typeInto(zone, 'UTC');
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+    'Usage history (days) must be at most 3,650.',
+  );
+});
+
 it('Retention names a number field and its bound', async () => {
   expect(await saveRetention('usage-days', '5000', { usageEventRetentionDays: 5000 })).toBe(
     'Usage history (days) must be at most 3,650.',

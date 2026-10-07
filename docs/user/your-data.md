@@ -17,7 +17,9 @@ The archive contains:
 
 - `conversations/` — two files per conversation, named after its title and
   start date. The `.md` file is the readable version, the same as downloading
-  a single conversation. The `.json` file is the complete record: every
+  a single conversation: the title, then a heading for each message (**You**
+  or **Assistant** with the model's name), with the message's own headings one
+  level below it. The `.json` file is the complete record: every
   message as stored, including model reasoning, which the Markdown leaves out,
   and the list of attached files.
 - `attachments/` — the files you attached, in a folder per conversation. Files

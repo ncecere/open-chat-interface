@@ -539,6 +539,8 @@ function EmbeddingsForm({ status }: { status: EmbeddingsStatus }) {
             : null
         }
         successMessage={saved ? 'Embeddings settings saved.' : null}
+        // Reranking's form below has its own Save changes (#260).
+        subject="the embeddings settings"
       />
     </form>
   );

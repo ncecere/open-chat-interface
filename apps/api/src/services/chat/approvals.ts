@@ -137,6 +137,8 @@ export async function setupApprovalContinuation(
     temporary: thread.temporary,
     trigger: 'regenerate-message',
     messages: [{ id: reply.parentMessageId, role: 'user', parts: textParts(prompt.parts) }],
+    // Today's date where the person is, as for a new message (#248).
+    ...(body.timeZone ? { timeZone: body.timeZone } : {}),
   };
   const context: TurnContext = { user, input, thread, resolved, tools };
 

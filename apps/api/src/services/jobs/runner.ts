@@ -3,6 +3,7 @@ import { eq, inArray, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
 import { retryOnConnectionError } from '../../lib/db-connection.js';
 import { isDraining } from '../../lib/drain.js';
+import { errorText } from '../../lib/log-redaction.js';
 import { logger } from '../../lib/logger.js';
 import { observeJob } from '../observability/events.js';
 import { withSpan } from '../observability/tracing.js';
@@ -124,7 +125,9 @@ async function runRecordedJob(job: JobDefinition, lease: JobLease): Promise<numb
     }
     return itemsProcessed;
   } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
+    // Without a failed query's parameters: the run's record is shown to
+    // administrators and outlives the content (#264).
+    const cause = errorText(error);
     const message = lease.lost ? `${LOST_LOCK_MESSAGE} (${cause})` : cause;
     logger.error({ job: job.name, error: message }, 'Background job failed');
     observeJob(job.name, 'error', Date.now() - startedAt.getTime());

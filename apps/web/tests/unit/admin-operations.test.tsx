@@ -367,7 +367,7 @@ describe('operations runs', () => {
       errorMessage: 'The run could not be started.',
     };
     api.post.mockResolvedValueOnce({ started: true });
-    ({ root } = await renderAdmin(<RunNowControl {...props} running={false} blocked={false} />));
+    ({ root } = await renderAdmin(<RunNowControl {...props} running={false} blockedBy={null} />));
     await click(button('Run now'));
     expect(api.post).toHaveBeenCalledWith('/admin/x/run');
     expect(document.body.textContent).toContain('Run started.');
@@ -377,12 +377,18 @@ describe('operations runs', () => {
     expect(document.body.textContent).toContain('The run could not be started.');
 
     await cleanup(root!);
-    ({ root } = await renderAdmin(<RunNowControl {...props} running blocked={false} />));
+    ({ root } = await renderAdmin(<RunNowControl {...props} running blockedBy={null} />));
     expect(button('Run now').disabled).toBe(true);
     expect(document.body.textContent).toContain('A run is in progress.');
 
     await cleanup(root!);
-    ({ root } = await renderAdmin(<RunNowControl {...props} running={false} blocked />));
+    ({ root } = await renderAdmin(
+      <>
+        <p id="why">The bucket is not set.</p>
+        <RunNowControl {...props} running={false} blockedBy="why" />
+      </>,
+    ));
     expect(button('Run now').disabled).toBe(true);
+    expect(button('Run now').getAttribute('aria-describedby')).toBe('why');
   });
 });

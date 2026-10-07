@@ -14,6 +14,7 @@ import { db } from '../db/index.js';
 import { artifactsWithVersions } from './artifacts/store.js';
 import { currentAppName } from './branding.js';
 import { activeMessage } from './chat/reply-path.js';
+import { demoteHeadings } from './markdown-headings.js';
 
 /**
  * The time zone a download is dated in: the person's, as their browser gives
@@ -40,6 +41,9 @@ export function dayIn(date: Date, timeZone = 'UTC'): string {
   const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? '';
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
+
+/** The level of the export's speaker headings ("## You"); messages' own headings go below. */
+const SPEAKER_LEVEL = 2;
 
 /** Bounds a pathological thread rather than streaming an unbounded response. */
 export const MAX_EXPORT_MESSAGES = 2_000;
@@ -100,6 +104,8 @@ export function exportableParts(parts: Record<string, unknown>[]): Record<string
 /**
  * A reply's tool steps (one summary line each) and text, in the order they
  * were written: each run of tool steps, then the text after it, and so on.
+ * The text's own headings are two levels down, below the export's "## You"
+ * and "## Assistant" (#255).
  * The note of a reply that hit its tool limit follows its last tool step.
  * Each block ends with a blank line.
  */
@@ -121,7 +127,7 @@ export function orderedReplyLines(
       if (!skip(part) && !isDeclinedArtifactPart(part))
         add('tools', `_${summarizeToolPart(part).summary}_`);
     } else if (part.type === 'text' && typeof part.text === 'string' && part.text.trim())
-      add('text', part.text.trim());
+      add('text', demoteHeadings(part.text.trim(), SPEAKER_LEVEL));
   }
   const limit = parts.find((part) => part.type === 'data-tool-limit')?.data as
     | { reason?: unknown; steps?: unknown }

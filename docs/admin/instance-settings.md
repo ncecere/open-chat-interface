@@ -14,9 +14,10 @@ its own address: **General** and **Branding** under **Appearance & features**,
 Leave it blank to use the built-in default; a person's own customisation is
 appended after it. Keep it short. A long prompt is charged on every message and
 is the first thing to suspect when replies drift from what people expect.
-Every system prompt also includes today's date in the reporting timezone
-([Retention](governance.md#retention)), naming the zone, so models can place
-"latest" and search results in time.
+Every system prompt also includes today's date, naming the zone, so models can
+place "latest" and search results in time. The date is the person's: their
+browser sends its time zone with each message. Only when it does not (an older
+client) is the reporting timezone ([Retention](governance.md#retention)) used.
 
 **Default reasoning level** is where the effort control starts in a new
 conversation: Instant, Low, Medium or High. People can still change it per

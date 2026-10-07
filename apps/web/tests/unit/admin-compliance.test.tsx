@@ -196,6 +196,9 @@ describe('Compliance admin page', () => {
     await render();
     expect(document.body.textContent).toContain('The export cannot run yet');
     expect(button('Export now').disabled).toBe(true);
+    // The disabled button points at the reason, not just "dimmed" (#261).
+    const reason = document.getElementById(button('Export now').getAttribute('aria-describedby')!);
+    expect(reason?.textContent).toContain('S3 bucket is required.');
   });
 
   it('warns clearly before conversation content is exported, and saves only what changed', async () => {

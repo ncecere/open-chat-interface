@@ -37,6 +37,12 @@ const REPLICAS_KEY = 'oci:{replicas}:list';
 const replicaKey = (id: string) => `oci:{replicas}:replica:${id}`;
 const startedAt = new Date().toISOString();
 
+/** A job as the replica that schedules it reports it. */
+export interface ScheduledJob {
+  name: string;
+  intervalMs: number;
+}
+
 export interface ReplicaInfo {
   id: string;
   role: ProcessRole;
@@ -44,9 +50,16 @@ export interface ReplicaInfo {
   version: string;
   startedAt: string;
   seenAt: string;
+  /**
+   * The jobs this replica schedules: absent on a `web` replica, which runs
+   * none, and from replicas older than v0.12. Which jobs exist depends on
+   * each replica's settings (RUN_MIGRATIONS on a web replica registered a
+   * post-deploy job no worker had), so System health lists these (#256).
+   */
+  jobs?: ScheduledJob[];
 }
 
-async function beat(role: ProcessRole): Promise<void> {
+async function beat(role: ProcessRole, jobs: ScheduledJob[] | undefined): Promise<void> {
   const redis = await sharedRedis();
   if (!redis) return;
   const now = Date.now();
@@ -57,6 +70,7 @@ async function beat(role: ProcessRole): Promise<void> {
     version: APP_VERSION,
     startedAt,
     seenAt: new Date(now).toISOString(),
+    ...(role !== 'web' && jobs ? { jobs } : {}),
   };
   await redis
     .multi()
@@ -72,9 +86,12 @@ async function beat(role: ProcessRole): Promise<void> {
  * the replica from the list at once (a replica shutting down is not a worker
  * any more, even while it drains).
  */
-export function startReplicaHeartbeat(role: ProcessRole = processRole()): () => Promise<void> {
+export function startReplicaHeartbeat(
+  role: ProcessRole = processRole(),
+  jobs?: ScheduledJob[],
+): () => Promise<void> {
   const tick = () =>
-    beat(role).catch((error: unknown) =>
+    beat(role, jobs).catch((error: unknown) =>
       logger.debug({ err: String(error) }, 'Replica heartbeat failed'),
     );
   void tick();
@@ -113,6 +130,22 @@ export async function liveReplicas(): Promise<ReplicaInfo[] | null> {
       }
     })
     .sort((a, b) => a.role.localeCompare(b.role) || a.host.localeCompare(b.host));
+}
+
+/**
+ * The jobs the replicas that run jobs schedule, from their heartbeats; null
+ * when that is not known (no Redis, no such replica heard from, or one too
+ * old to say), in which case a caller falls back to its own list.
+ */
+export async function jobsOnWorkers(): Promise<ScheduledJob[] | null> {
+  const replicas = await liveReplicas().catch(() => null);
+  const workers = (replicas ?? []).filter((replica) => replica.role !== 'web');
+  if (workers.length === 0 || workers.some((worker) => !Array.isArray(worker.jobs))) return null;
+  const byName = new Map<string, ScheduledJob>();
+  for (const job of workers.flatMap((worker) => worker.jobs ?? [])) {
+    if (!byName.has(job.name)) byName.set(job.name, { name: job.name, intervalMs: job.intervalMs });
+  }
+  return [...byName.values()];
 }
 
 async function lastSweepAt(): Promise<Date | null> {

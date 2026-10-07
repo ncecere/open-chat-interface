@@ -11,8 +11,10 @@ import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
+import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
+import { clearRestoredDraft, peekRestoredDraft } from '~/lib/unused-conversation';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -55,7 +57,9 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   }, [projectId, temporaryMode, setTemporary]);
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
-  const [draft, setDraftValue] = useState('');
+  // The unsent text of a conversation this tab removed as it reloaded (#266).
+  const [draft, setDraftValue] = useState(peekRestoredDraft);
+  useEffect(() => clearRestoredDraft(), []);
   /**
    * One conversation per send (v0.10.2). `started` is set synchronously before
    * the first await, so a key that repeats, an automated browser flooding
@@ -82,6 +86,9 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const [modelSlug, setModelSlug] = useState<string | null>(null);
   const { items: attachmentItems, upload, remove } = useAttachments();
   useEffect(() => forgetBrowserModel(), []);
+  // A new chat is there to be typed in: the cursor starts in the box, however
+  // the person arrived (#251). Not on a touch-only device (see touchOnly).
+  useEffect(() => focusComposerOnArrival(), []);
 
   const selectedModel = startingModel(models, modelSlug, data?.chat?.defaultModelSlug);
   // The person's default level, else the administrator's, clamped to what this

@@ -31,7 +31,7 @@ vi.mock('../../db/index.js', () => ({ db: {} }));
 
 const { sendInviteEmail, sendVerificationEmail, sendPasswordResetEmail, actionEmailHtml } =
   await import('../../services/email.js');
-const { messageCount } = await import('../../services/reports.js');
+const { messageCount, modelLine } = await import('../../services/reports.js');
 
 beforeEach(() => {
   sent.length = 0;
@@ -90,5 +90,20 @@ describe('the usage report', () => {
     expect(messageCount(1)).toBe('1 message');
     expect(messageCount(0)).toBe('0 messages');
     expect(messageCount(1204)).toBe('1,204 messages');
+  });
+
+  it('gives an embeddings model its name and tokens, not its key and "0 messages" (#263)', () => {
+    const usage = { modelSlug: 'gpt', displayName: 'GPT', messages: 1, tokens: 9, costMicros: 0 };
+    expect(modelLine({ ...usage, kind: 'chat' })).toBe('GPT  1 message  $0.00');
+    expect(
+      modelLine({
+        modelSlug: 'embedding:text-embedding-3-small',
+        displayName: 'text-embedding-3-small',
+        kind: 'embeddings',
+        messages: 0,
+        tokens: 247_300,
+        costMicros: 0,
+      }),
+    ).toBe('text-embedding-3-small (embeddings)  247,300 tokens  $0.00');
   });
 });

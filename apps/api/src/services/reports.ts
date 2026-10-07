@@ -3,7 +3,13 @@ import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
 import { isSmtpUsable, sendEmail } from './email.js';
 import { getSetting } from './settings.js';
-import { dailyUsage, modelUsage, topConsumers, usageTotals } from './usage-report.js';
+import {
+  dailyUsage,
+  type ModelUsage,
+  modelUsage,
+  topConsumers,
+  usageTotals,
+} from './usage-report.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -28,6 +34,24 @@ function formatCost(micros: number): string {
 /** "1 message", "1,204 messages" (#78: the report said "1 messages"). */
 export function messageCount(count: number): string {
   return `${count.toLocaleString('en-US')} ${count === 1 ? 'message' : 'messages'}`;
+}
+
+/**
+ * One model's line. An embeddings model is named by its model ID, not the
+ * internal `embedding:` key, and given its tokens: it sends no messages, so
+ * "0 messages" said nothing about it (#263).
+ */
+export function modelLine(
+  model: Pick<
+    ModelUsage,
+    'modelSlug' | 'displayName' | 'kind' | 'messages' | 'tokens' | 'costMicros'
+  >,
+): string {
+  const name = model.displayName ?? model.modelSlug;
+  const cost = formatCost(model.costMicros);
+  return model.kind === 'embeddings'
+    ? `${name} (embeddings)  ${model.tokens.toLocaleString('en-US')} tokens  ${cost}`
+    : `${name}  ${messageCount(model.messages)}  ${cost}`;
 }
 
 async function buildUsageReport(windowDays: number, appName: string): Promise<string> {
@@ -56,9 +80,7 @@ async function buildUsageReport(windowDays: number, appName: string): Promise<st
 
   lines.push('', 'Models');
   for (const model of models.entries) {
-    lines.push(
-      `  ${model.displayName ?? model.modelSlug}  ${messageCount(model.messages)}  ${formatCost(model.costMicros)}`,
-    );
+    lines.push(`  ${modelLine(model)}`);
   }
 
   lines.push('', 'Heaviest use');

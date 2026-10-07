@@ -65,12 +65,16 @@ describe.skipIf(!available)('live web-to-worker job requests', () => {
     state.sql = pool.sql;
     requests = await import('../../services/jobs/requests.js');
     jobs = await import('../../services/jobs/index.js');
-    // The worker: what it hears, it handles as the real worker does.
-    stopListening = await requests.listenForJobRequests(async (request) => {
+    stopListening = await startWorker();
+  });
+
+  /** The worker: what it hears, it takes and handles as the real worker does. */
+  function startWorker() {
+    return requests.listenForJobRequests(async (request) => {
       heard.push(request);
       return jobs.handleJobRequest(request);
-    });
-  });
+    }, jobs.takesJobRequest);
+  }
   afterAll(async () => {
     await stopListening?.();
     await pool?.sql.end({ timeout: 1 });
@@ -117,6 +121,33 @@ describe.skipIf(!available)('live web-to-worker job requests', () => {
     state.role = 'all';
     expect(await jobs.runOrQueueJobNow('retention.share-links')).toBe(0);
     await expect(jobs.runOrQueueJobNow('no.such-job')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('reports a run no worker takes as not started, though a worker looked alive (#265)', async () => {
+    state.role = 'web';
+    const job = 'reports.send-due';
+    // The worker stops; its last sweep is seconds old, so it still looks alive.
+    await stopListening();
+    await pool.db.insert(schema.jobRun).values({ jobName: 'chat.recover-interrupted-replies' });
+    requests.manualRunAck.timeoutMs = 1_000;
+    try {
+      await expect(jobs.runOrQueueJobNow(job)).rejects.toMatchObject({
+        status: 409,
+        message: expect.stringContaining('has not started'),
+      });
+      // The worker is back: the refused request is not run later either.
+      stopListening = await startWorker();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(await runs(job)).toEqual([]);
+      // And a run it takes is reported as queued, and happens.
+      expect(await jobs.runOrQueueJobNow(job)).toBe('queued');
+      await vi.waitFor(async () => expect(await runs(job)).toMatchObject([{ status: 'success' }]), {
+        timeout: 5_000,
+        interval: 50,
+      });
+    } finally {
+      requests.manualRunAck.timeoutMs = 5_000;
+    }
   });
 
   it('keeps hearing requests after a failover drops its listening connection', async () => {

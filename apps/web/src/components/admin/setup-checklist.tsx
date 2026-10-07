@@ -55,8 +55,11 @@ function CheckRow({ check }: { check: SetupCheck }) {
         <p className="mt-1 font-medium text-[var(--text-primary)] text-sm">{check.title}</p>
         <p className="mt-0.5 text-[var(--text-muted)] text-sm leading-relaxed">{check.detail}</p>
       </div>
-      {/* Navigation only: the linked page applies its own permissions. */}
+      {/* Navigation only: the linked page applies its own permissions. Named
+          for its step too: two steps can share an action ("Open models"), and
+          a screen reader's list of links read it twice (#260). */}
       <Link
+        aria-label={`${check.action.label}: ${check.title}`}
         to={actionPath(check.action.to)}
         search={actionSearch(check.action.to) as LinkProps['search']}
         className={cn(

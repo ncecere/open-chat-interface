@@ -52,3 +52,22 @@ export async function clippedWithoutTooltip(root: ParentNode = document): Promis
   }
   return missing;
 }
+
+/**
+ * Text the compiled CSS keeps to one line and clips, tooltip or not (#244).
+ * A `title` is read only on hover, which a touch screen has not got, so text
+ * a person must read in full (a file's name) should not be in this list.
+ */
+export async function clippedOnTouch(root: ParentNode = document): Promise<string[]> {
+  const { styleFor } = await import('./css-test-utils');
+  const clipped: string[] = [];
+  for (const element of root.querySelectorAll<HTMLElement>('[class]')) {
+    const text = element.textContent?.replace(/\s+/g, ' ').trim();
+    if (!text || element.closest('[aria-hidden="true"], .sr-only')) continue;
+    const style = await styleFor(element.getAttribute('class') ?? '');
+    const oneLine = style['white-space'] === 'nowrap' || style['text-wrap'] === 'nowrap';
+    const cut = style.overflow === 'hidden' || style['text-overflow'] === 'ellipsis';
+    if (oneLine && cut) clipped.push(text);
+  }
+  return clipped;
+}

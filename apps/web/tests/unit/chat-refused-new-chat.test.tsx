@@ -3,6 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import {
+  peekRestoredDraft,
+  removedConversation,
+  takeRemovedConversation,
+} from '../../src/lib/unused-conversation';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ChatThreadPage } from '../../src/routes/chat/thread';
 
@@ -56,7 +61,7 @@ vi.mock('../../src/components/chat/message-list', () => ({
 
 const threadId = 'new-chat';
 const text = 'Walk3 drain send: reply with one word.';
-let requests: { method: string; path: string }[];
+let requests: { method: string; path: string; keepalive?: true }[];
 let accept: boolean;
 let container: HTMLDivElement;
 let root: Root;
@@ -77,7 +82,7 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(String(input), 'http://localhost:3000').pathname;
       const method = init?.method?.toUpperCase() ?? 'GET';
-      requests.push({ method, path });
+      requests.push({ method, path, ...(init?.keepalive ? { keepalive: true as const } : {}) });
       if (path === `/api/chat/${threadId}/messages`)
         return Response.json({
           thread: { id: threadId, temporary: false, expiresAt: null },
@@ -184,4 +189,41 @@ it('keeps a conversation whose message is sent again and accepted', async () => 
   expect(posts()).toHaveLength(4);
   await act(async () => root.render(null));
   expect(unusedRemovals()).toHaveLength(0);
+});
+
+/** The tab is closed or reloaded: the browser fires pagehide, nothing unmounts. */
+async function closeTab() {
+  await act(async () => {
+    window.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(0);
+  });
+}
+
+it('removes the empty conversation when the tab is reloaded or closed (#266)', async () => {
+  await openNewChat();
+  await closeTab();
+  // Sent so that it outlives the page.
+  expect(unusedRemovals()).toEqual([
+    { method: 'DELETE', path: `/api/threads/${threadId}/unused`, keepalive: true },
+  ]);
+  // Once: closing again, or the page unmounting as it goes, sends nothing more.
+  await closeTab();
+  await act(async () => root.render(null));
+  expect(unusedRemovals()).toHaveLength(1);
+  // The reload in this tab opens a new chat with the unsent text.
+  expect(removedConversation(threadId)).toBe(true);
+  expect(takeRemovedConversation(threadId)).toEqual({ threadId, projectId: null, draft: text });
+  expect(peekRestoredDraft()).toBe(text);
+});
+
+it('never removes a conversation in use when the tab is reloaded (#266)', async () => {
+  await openNewChat();
+  accept = true;
+  const props = mocks.composer.mock.lastCall?.[0] as { onSubmit: () => Promise<void> };
+  await act(async () => {
+    await props.onSubmit();
+  });
+  await closeTab();
+  expect(unusedRemovals()).toHaveLength(0);
+  expect(removedConversation(threadId)).toBe(false);
 });

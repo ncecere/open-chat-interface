@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { EditableFieldset, useAdminAccess } from '~/components/admin/admin-access';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
@@ -177,16 +177,20 @@ export function Notice({
   tone = 'info',
   title,
   children,
+  id,
 }: {
   tone?: 'info' | 'warning';
   title: string;
   children: ReactNode;
+  /** For a control the notice explains, to point at it (`aria-describedby`). */
+  id?: string;
 }) {
   const warning = tone === 'warning';
   const Icon = warning ? AlertTriangle : Info;
 
   return (
     <div
+      id={id}
       role={warning ? 'alert' : 'status'}
       className={`flex gap-3 rounded-xl border p-4 text-sm ${
         warning
@@ -262,6 +266,9 @@ export function LoadError({
   query: { error: unknown; isFetching: boolean; refetch: () => unknown };
   className?: string;
 }) {
+  // Several sections can fail at once (System health has four); each Try
+  // again points at what it reloads (#260).
+  const titleId = useId();
   return (
     <div
       className={cn(
@@ -270,7 +277,7 @@ export function LoadError({
       )}
     >
       <AlertTriangle className="size-8 text-[var(--danger)]" aria-hidden="true" />
-      <p role="alert" className="text-sm font-medium text-[var(--text-primary)]">
+      <p id={titleId} role="alert" className="text-sm font-medium text-[var(--text-primary)]">
         {title}
       </p>
       <p className="max-w-md text-xs text-[var(--text-muted)]">
@@ -281,6 +288,7 @@ export function LoadError({
         variant="secondary"
         size="sm"
         disabled={query.isFetching}
+        aria-describedby={titleId}
         onClick={() => void query.refetch()}
       >
         {query.isFetching && <Spinner />}

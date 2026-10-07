@@ -125,6 +125,21 @@ describe('setup checklist', () => {
     expect(link?.getAttribute('href')).toBe('/admin/settings/email');
   });
 
+  it('names each link for its step, where two steps share an action (#260)', async () => {
+    status = {
+      ...inProgress,
+      checks: [
+        check('models', 'attention', true, '/admin/models?tab=models'),
+        check('default-model', 'attention', true, '/admin/models?tab=models'),
+      ].map((entry) => ({ ...entry, action: { ...entry.action, label: 'Open models' } })),
+    };
+    ({ root } = await renderAdmin(<SetupChecklist />));
+    const names = [...document.querySelectorAll('li a')].map((anchor) =>
+      anchor.getAttribute('aria-label'),
+    );
+    expect(names).toEqual(['Open models: Title models', 'Open models: Title default-model']);
+  });
+
   it('reveals completed items behind a disclosure', async () => {
     ({ root } = await renderAdmin(<SetupChecklist />));
     const toggle = button('Show completed (3)');
@@ -155,8 +170,13 @@ describe('setup checklist', () => {
 
     expect(alerts()).toEqual(['Setup status could not be loaded.']);
     expect(document.body.textContent).toContain('Database unavailable.');
+    // Several sections can fail at once; each Try again says what it reloads (#260).
+    const retry = button('Try again');
+    expect(document.getElementById(retry.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      'Setup status could not be loaded.',
+    );
 
-    await click(button('Try again'));
+    await click(retry);
     expect(alerts()).toEqual([]);
     expect(document.body.textContent).toContain('3 of 6 required steps complete');
   });

@@ -33,9 +33,8 @@ const MAX_SHOWN = 6;
 export type FieldLabels = Readonly<Record<string, string>>;
 
 function fieldName(path: unknown, labels: FieldLabels = {}): string | null {
-  if (!Array.isArray(path) || path.length === 0) return null;
-  const name = [...path].reverse().find((part): part is string => typeof part === 'string');
-  if (!name) return null;
+  const name = fieldKey(path);
+  if (!name || !Array.isArray(path)) return null;
   const words =
     labels[name] ??
     name
@@ -80,28 +79,53 @@ function describe(issue: Issue): string | null {
 }
 
 export function describeValidationIssues(details: unknown, labels?: FieldLabels): string[] {
+  return [...new Set(validationProblems(details, labels).map(({ text }) => text))].slice(
+    0,
+    MAX_SHOWN,
+  );
+}
+
+/** The API's name for the field an issue is about: the innermost named part of its path. */
+function fieldKey(path: unknown): string | null {
+  if (!Array.isArray(path)) return null;
+  return [...path].reverse().find((part): part is string => typeof part === 'string') ?? null;
+}
+
+/**
+ * Each issue's sentence with the field it is about (the API's name for it),
+ * so a form can keep the sentences about fields not yet corrected (#257).
+ */
+export function validationProblems(
+  details: unknown,
+  labels?: FieldLabels,
+): Array<{ field: string | null; text: string }> {
   if (!Array.isArray(details)) return [];
-  const sentences = details.flatMap((raw) => {
+  return details.flatMap((raw) => {
     if (!raw || typeof raw !== 'object') return [];
     const issue = raw as Issue;
-    const field = fieldName(issue.path, labels);
-    // The API's own messages, and those a schema gives a refine or regex, are
-    // already sentences ("An API key is required", "Use an IANA time zone
-    // such as", "Use up to 24 lowercase letters").
-    const own =
-      typeof issue.message === 'string' &&
-      issue.message &&
-      (!issue.code || !ZOD_DEFAULT.test(issue.message))
-        ? issue.message
-        : null;
-    if (own) return [field ? `${field}: ${own}` : own];
-    const text = describe(issue);
-    if (!text) return [];
-    // "must be at most 80" means nothing without the field it belongs to.
-    if (!field) return [];
-    return [`${field} ${text}.`];
+    const key = fieldKey(issue.path);
+    const sentence = issueSentence(issue, labels);
+    return sentence ? [{ field: key, text: sentence }] : [];
   });
-  return [...new Set(sentences)].slice(0, MAX_SHOWN);
+}
+
+function issueSentence(issue: Issue, labels?: FieldLabels): string | null {
+  const field = fieldName(issue.path, labels);
+  // The API's own messages, and those a schema gives a refine or regex, are
+  // already sentences ("An API key is required", "Use an IANA time zone
+  // such as", "Use up to 24 lowercase letters").
+  const own =
+    typeof issue.message === 'string' &&
+    issue.message &&
+    (!issue.code || !ZOD_DEFAULT.test(issue.message))
+      ? issue.message
+      : null;
+  if (own) return field ? `${field}: ${own}` : own;
+  const text = describe(issue);
+  if (!text) return null;
+  // "must be at most 80" means nothing without the field it belongs to.
+  if (!field) return null;
+  return `${field} ${text}.`;
 }
 
 /**

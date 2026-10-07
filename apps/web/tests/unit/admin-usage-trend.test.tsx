@@ -52,11 +52,32 @@ beforeEach(() => {
           entries: [
             { ...row, modelSlug: 'gpt-4-1-mini', displayName: 'GPT-4.1 mini', enabled: true },
             { ...row, modelSlug: 'old-model', displayName: 'Old model', enabled: false },
-            { ...row, modelSlug: 'text-embedding-3-small', displayName: null, enabled: null },
+            { ...row, modelSlug: 'removed-model', displayName: null, enabled: null },
+            {
+              ...row,
+              messages: 0,
+              tokens: 247_300,
+              modelSlug: 'embedding:text-embedding-3-small',
+              displayName: 'text-embedding-3-small',
+              kind: 'embeddings',
+              enabled: null,
+            },
           ],
-          totalCount: 3,
+          totalCount: 4,
         },
-        consumers: { entries: [], totalCount: 0 },
+        consumers: {
+          entries: [
+            {
+              deleted: true,
+              userId: null,
+              name: 'Deleted accounts',
+              email: null,
+              messages: 1,
+              costMicros: 0,
+            },
+          ],
+          totalCount: 1,
+        },
         idleModels: { entries: [], totalCount: 0 },
       };
     }
@@ -85,6 +106,31 @@ it('says what the chart shows in words, for anyone who cannot hover', async () =
   expect(document.body.textContent).toContain('Replies generated per day');
 });
 
+it('says why Messages sent and the usage figures differ: deleted conversations (#262)', async () => {
+  ({ root } = await renderAdmin(<AdminUsagePage />, { path: '/admin/usage?range=30' }));
+  const overview = document.body.textContent ?? '';
+  // The caption blamed regenerations; most of the gap is what was deleted since.
+  expect(overview).toContain(
+    'Conversations, messages sent and attachments count what is still stored: anything deleted since is not counted.',
+  );
+  expect(overview).toContain('replies in conversations deleted since still count');
+  expect(overview).not.toContain('regenerations included, so this can exceed');
+  await cleanup(root!);
+
+  ({ root } = await renderAdmin(
+    <ThemeProvider>
+      <AdminUsagePage />
+    </ThemeProvider>,
+    { path: '/admin/usage?tab=spend&range=30' },
+  ));
+  expect(document.body.textContent).toContain(
+    'Messages counts each reply generated, regenerations included, as usage budgets do.',
+  );
+  expect(document.body.textContent).toContain(
+    'Overview’s Messages sent, which counts only messages still stored.',
+  );
+});
+
 it('labels a disabled model and one outside the chat catalog for what they are', async () => {
   ({ root } = await renderAdmin(
     <ThemeProvider>
@@ -94,8 +140,17 @@ it('labels a disabled model and one outside the chat catalog for what they are',
   ));
   const rows = [...document.querySelectorAll('tbody tr')].map((row) => row.textContent ?? '');
   expect(rows.find((row) => row.includes('Old model'))).toContain('disabled');
-  // Embedding usage was labelled "removed".
-  expect(rows.find((row) => row.includes('text-embedding-3-small'))).toContain('not in catalog');
+  expect(rows.find((row) => row.includes('removed-model'))).toContain('not in catalog');
+  // Embedding usage was labelled "removed", then "not in catalog" under its
+  // internal key with "0 messages"; it is an embeddings model, counting tokens (#263).
+  const embeddings = rows.find((row) => row.includes('text-embedding-3-small'));
+  expect(embeddings).toContain('embeddings');
+  expect(embeddings).not.toMatch(/embedding:|catalog/);
+  expect(embeddings).toContain('247.3k');
+  expect(embeddings).toContain('None: embeddings count tokens only');
+  // One message is "1 message" (#263).
+  expect(document.body.textContent).toContain('1 message');
+  expect(document.body.textContent).not.toContain('1 messages');
   expect(rows.find((row) => row.includes('GPT-4.1 mini'))).not.toMatch(/disabled|catalog|removed/);
 });
 

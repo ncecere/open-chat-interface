@@ -42,7 +42,10 @@ export interface SpendResponse {
   daily: Array<{ day: string; messages: number; tokens: number; costMicros: number }>;
   models: Bounded<{
     modelSlug: string;
+    /** For an embeddings model, its model ID. */
     displayName: string | null;
+    /** Embeddings count tokens (and cost) but no messages. Absent before v0.12. */
+    kind?: 'chat' | 'embeddings';
     labId: string | null;
     /** Null when not in the chat catalog (an embedding model, or one since removed). */
     enabled: boolean | null;

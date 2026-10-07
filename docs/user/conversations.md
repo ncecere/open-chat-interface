@@ -141,14 +141,17 @@ you are typing stays in the composer during recovery.
 A pending reply may still be running. You can wait or request **Stop**; a local
 reader closing is not proof that the server stopped. After **Stop** the page
 says **Stopping the reply…** until the server has saved it; the reply keeps
-what was written and says you stopped it (or that you stopped it before it
-began). Moving to another
+what was written and says you stopped it: before it started answering, when
+it had only shown its reasoning or used a tool, or before it began, when
+nothing was written yet. Moving to another
 conversation closes its browser reader without cancelling the server response.
 
 Load failures show a retry or unavailable state rather than an empty chat.
-A conversation, or the sidebar's projects, that could not load because the
-server was briefly unreachable loads again by itself every few seconds for two
-minutes, so you do not need to press **Retry** once the server is back.
+A conversation, or the sidebar's conversations or projects, that could not
+load because the server was briefly unreachable loads again by itself every few
+seconds for two minutes, so you do not need to press **Retry** or reload once
+the server is back. A new chat whose first reply was cut off this way gets its
+title in the sidebar then too.
 A reply that failed says so in its place, with the reason and **Try again**,
 both as it happens and after a reload.
 Opening another conversation will not send a pending new-chat prompt there.
@@ -166,14 +169,18 @@ Your latest request, system instructions, selected attachments and any current
 search grounding must fit together. If they do not, the request is refused
 before a new user turn is saved. Shorten it, remove files, or choose a model with
 more context. The application also has fixed safety ceilings, so choosing a
-larger model does not remove every limit.
+larger model does not remove every limit. One is the length of a single
+message: up to 100,000 characters. The message box says so, and holds back
+**Send**, as soon as a message is longer; attach long text as a file instead.
 
 Whenever a message is refused like this, or because you are sending too quickly
 or have reached a usage limit, it is not sent: its text goes back into the
 message box and its files stay attached, so you can send it again once the
 reason is dealt with. The conversation is left as it was. If it was the
-first message of a new chat and you leave it without sending again, the empty
-chat is removed rather than left in your history as "New Chat".
+first message of a new chat and you leave it without sending again (for
+another page, or by closing or reloading the tab), the empty chat is removed
+rather than left in your history as "New Chat". Reloading the tab opens a new
+chat with your text back in the message box; attach any files again.
 
 ## Long conversations
 

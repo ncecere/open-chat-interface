@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { Attachment, SendMessageInput } from '@oci/shared';
+import { type Attachment, type SendMessageInput, sendMessageSchema } from '@oci/shared';
 import { UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -471,4 +471,19 @@ it('sends the project files left out with the next message only, then uses all a
   const second = await startSend('Second');
   expect(posts[1]).not.toHaveProperty('excludedProjectFileIds');
   await (await accept(second)).finish();
+});
+
+it("sends the browser's time zone with each message, in a body the API accepts (#248)", async () => {
+  const resolved = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...resolved.call(this), timeZone: 'America/Los_Angeles' };
+  });
+  await mount();
+  const send = await startSend('What is the date today?');
+  expect(posts[0]?.timeZone).toBe('America/Los_Angeles');
+  // The route's own strict schema: an unknown key would refuse every message.
+  expect(sendMessageSchema.safeParse(posts[0]).success).toBe(true);
+  await (await accept(send)).finish();
 });

@@ -10,6 +10,7 @@ import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
 import { nextReportRunAt, runDueReports } from '../../services/reports.js';
+import { diffUpdate } from '../../services/settings-diff.js';
 
 export const reportRoutes = new Hono<AppBindings>();
 
@@ -66,14 +67,19 @@ reportRoutes.patch('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
   const patch = await parseBody(c, patchSchema(reportSchema));
+  const [existing] = await db
+    .select()
+    .from(schema.scheduledReport)
+    .where(eq(schema.scheduledReport.id, id))
+    .limit(1);
 
-  const updated = await db
+  const [updated] = await db
     .update(schema.scheduledReport)
     .set({ ...patch, updatedAt: new Date() })
     .where(eq(schema.scheduledReport.id, id))
-    .returning({ id: schema.scheduledReport.id });
+    .returning();
 
-  if (updated.length === 0) throw notFound('Report not found');
+  if (!updated || !existing) throw notFound('Report not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -82,7 +88,8 @@ reportRoutes.patch('/:id', async (c) => {
     targetType: 'scheduled_report',
     targetId: id,
     ipAddress: clientIp(c),
-    metadata: patch,
+    // Each sent value as it was and became (#258).
+    metadata: { ...patch, changes: diffUpdate(existing, updated, Object.keys(patch)) },
   });
 
   return c.json({ ok: true });

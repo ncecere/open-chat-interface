@@ -451,8 +451,9 @@ entries are kept. Each field shows
 - **Trash retention** — the recovery window before a deletion becomes permanent.
 - **Usage history** — per-message usage rows. Daily totals are kept regardless.
 - **Reporting timezone** — where a day starts and ends on the Usage page, and
-  the zone of today's date in every system prompt. Budgets reset on their own
-  timezone, which this does not change.
+  the zone of today's date in a system prompt when the person's browser does
+  not give its own. Budgets reset on their own timezone, which this does not
+  change.
 - **Memory retention** — [user memory](#user-memory) notes not updated for
   this long are deleted by a daily job; blank (the default) keeps them until
   the person deletes them.

@@ -10,6 +10,13 @@ storeThemeForProject();
 test.describe('WCAG 2.2 AA: keyboard operation', () => {
   test('a skip link is the first tab stop and moves focus to main', async ({ page }) => {
     await signIn(page);
+    // A conversation, opened directly: the home page puts the cursor in the
+    // message box instead, so there is nothing to skip there (#251).
+    const created = await page.request.post('/api/threads', { data: { title: 'Skip link' } });
+    expect(created.ok()).toBe(true);
+    const { thread } = (await created.json()) as { thread: { id: string } };
+    await page.goto(`/chat/${thread.id}`);
+    await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
 
     // 2.4.1 Bypass Blocks: the sidebar otherwise puts ~124 thread links ahead
     // of the composer in tab order.

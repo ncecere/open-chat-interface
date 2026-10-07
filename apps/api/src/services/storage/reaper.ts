@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, lte, schema, sql } from '@oci/db';
 import { BACKUP_STORAGE_PREFIX, COMPLIANCE_STORAGE_PREFIX } from '@oci/shared';
 import { db } from '../../db/index.js';
+import { errorText } from '../../lib/log-redaction.js';
 import { logger } from '../../lib/logger.js';
 import { getStorageDriver } from './index.js';
 
@@ -73,7 +74,7 @@ export async function drainDeletedObjects(now: Date = new Date()): Promise<numbe
       deleted += 1;
     } catch (error) {
       const attempts = row.attempts + 1;
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorText(error);
 
       await db
         .update(schema.deletedObject)

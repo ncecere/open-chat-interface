@@ -32,9 +32,9 @@ import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
+import { type FieldProblem, problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
 interface ModelDraft {
@@ -191,7 +191,14 @@ const FIELD_LABELS: Record<string, string> = {
   visibleToRoles: 'Visible to roles',
 };
 
-/** One sentence per invalid field, in form order. */
+/** The form field a schema key is edited in, where the two differ. */
+const DRAFT_FIELDS: Record<string, keyof ModelDraft> = {
+  inputPriceMicros: 'inputPrice',
+  outputPriceMicros: 'outputPrice',
+};
+const draftField = (key: string) => DRAFT_FIELDS[key] ?? key;
+
+/** One sentence per invalid field, in form order, with the form field it is about. */
 export function modelFieldProblems(
   issues: ReadonlyArray<{
     path: PropertyKey[];
@@ -200,7 +207,7 @@ export function modelFieldProblems(
     origin?: string;
     maximum?: unknown;
   }>,
-): string[] {
+): FieldProblem[] {
   const order = Object.keys(FIELD_LABELS);
   const byField = new Map<string, string>();
   for (const issue of issues) {
@@ -221,7 +228,7 @@ export function modelFieldProblems(
   }
   return [...byField.entries()]
     .sort(([a], [b]) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99))
-    .map(([, sentence]) => sentence);
+    .map(([key, text]) => ({ fields: [draftField(key)], text }));
 }
 
 export function ModelFormDialog({
@@ -236,10 +243,10 @@ export function ModelFormDialog({
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(() => initialDraft(model, providers));
   const [slugTouched, setSlugTouched] = useState(Boolean(model));
-  const [error, setError] = useState<string | null>(null);
-  // The listed problems were about the form as it was submitted; once it
-  // changes they may no longer hold, so they go until the next attempt (#178).
-  useClearOnEdit(draft, () => setError(null));
+  // The listed problems were about the form as it was submitted; each goes
+  // once its own field changes (#178), and the rest stay until fixed (#257).
+  const [problems, setProblems] = useFieldProblems(draft);
+  const error = problemsText(problems, '\n');
 
   // Whether thinking can be surfaced at all depends on the wire protocol, so
   // the guidance follows whichever provider is selected.
@@ -257,23 +264,35 @@ export function ModelFormDialog({
       ]);
       onClose();
     },
-    onError: (cause) => setError(apiErrorMessage(cause, 'The model could not be saved.')),
+    onError: (cause) =>
+      setProblems(
+        apiErrorProblems(cause, 'The model could not be saved.').map((problem) => ({
+          ...problem,
+          fields: problem.fields.map(draftField),
+        })),
+      ),
   });
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    setProblems([]);
 
     // Every problem at once, named by the form's own labels, rather than one
     // per attempt (#79).
-    const problems: string[] = [];
+    const problems: FieldProblem[] = [];
     const contextWindow = parseTokenCount(draft.contextWindow);
     const maxOutputTokens = parseTokenCount(draft.maxOutputTokens);
     if (Number.isNaN(contextWindow)) {
-      problems.push('Context window must be a whole number of tokens.');
+      problems.push({
+        fields: ['contextWindow'],
+        text: 'Context window must be a whole number of tokens.',
+      });
     }
     if (Number.isNaN(maxOutputTokens)) {
-      problems.push('Max output must be a whole number of tokens.');
+      problems.push({
+        fields: ['maxOutputTokens'],
+        text: 'Max output must be a whole number of tokens.',
+      });
     }
     const parsed = upsertModelSchema.safeParse({
       ...draft,
@@ -297,9 +316,12 @@ export function ModelFormDialog({
           ['contextWindow', 'maxOutputTokens'].includes(String(issue.path[0])),
         ));
     const limits = limitFieldInvalid ? null : modelLimitsProblem(contextWindow, maxOutputTokens);
-    if (limits) problems.push(limits);
+    // Either limit can answer this one.
+    if (limits) problems.push({ fields: ['contextWindow', 'maxOutputTokens'], text: limits });
     if (!parsed.success || problems.length > 0) {
-      setError(problems.length > 0 ? problems.join('\n') : 'Check the model fields.');
+      setProblems(
+        problems.length > 0 ? problems : [{ fields: [], text: 'Check the model fields.' }],
+      );
       return;
     }
     save.mutate(parsed.data);

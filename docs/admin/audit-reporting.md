@@ -55,7 +55,12 @@ do the entries for a storage allowance, a model edit (a rename names both names,
 a switch which way it went), a usage budget edit (its limit, window, roles and
 models), a person's limit override (the override it replaced), a bulk role
 change (each account's previous role) and read-only mode (the reason and
-expected end before, and the end as saved). A deletion records what was removed: a
+expected end before, and the end as saved), and the edits of retention, rate
+limits and sign-in attempts, an SSO provider (account-linking trust among
+them), an announcement (its window and audience too), a connector (its address
+among them), a webhook (the actions it forwards) and a scheduled report. Each
+lists its `changes`, every value as it was and as it became, a nested one by
+its path (`roles.user.chatRequestsPerMinute`). A deletion records what was removed: a
 deleted usage budget keeps its measure, limit, window, roles, models and how
 many per-user overrides went with it, a deleted storage allowance its values,
 and a cleared override its limit. **Sign out everywhere** records how many sessions it ended.
@@ -99,6 +104,16 @@ background task (**System health → Background work**, *Adds usage recorded
 before 0.11 to the hourly usage rollups*). Until it finishes the page reads
 the individual records as before: the numbers are the same, only slower.
 About 125,000 usage records take ten seconds.
+
+### Deleted conversations
+
+Usage records are kept when a conversation is deleted, so **Messages** (each
+reply generated, regenerations included, as usage budgets count them), tokens
+and spend do not change afterwards. The Overview tab's **Conversations**,
+**Messages sent** and **Attachments**, and its feature counts, count what is
+still stored, so they leave out anything deleted since; on an instance where
+people delete conversations, **Messages sent** can be well below the replies
+and Spend's **Messages** for the same days.
 
 ### Deleted accounts
 

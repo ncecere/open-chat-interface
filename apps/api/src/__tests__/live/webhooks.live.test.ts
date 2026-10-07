@@ -400,6 +400,31 @@ describe.skipIf(!available)('live: signed webhooks', () => {
     expect((await call('GET', `/api/admin/webhooks/${created.id}`)).status).toBe(404);
   });
 
+  it('audits nothing for an edit that changes nothing, and reads a malformed log limit as the default', async () => {
+    const created = await create({ description: 'Unchanged' });
+    const updates = async () =>
+      (
+        await pool.db
+          .select({ id: schema.auditLog.id })
+          .from(schema.auditLog)
+          .where(eq(schema.auditLog.action, 'webhook.update'))
+      ).length;
+    const before = await updates();
+    // The same values as saved: nothing changes, so no entry (#258 records only real changes).
+    const same = await ok<WebhookEndpoint>(
+      call('PATCH', `/api/admin/webhooks/${created.id}`, {
+        body: { description: 'Unchanged', enabled: true },
+      }),
+    );
+    expect(same).toMatchObject({ description: 'Unchanged', enabled: true });
+    expect(await updates()).toBe(before);
+
+    const log = await ok<{ deliveries: WebhookDelivery[] }>(
+      call('GET', `/api/admin/webhooks/${created.id}/deliveries?limit=lots`, { user: auditor }),
+    );
+    expect(log.deliveries).toEqual([]);
+  });
+
   it("records a test's outcome on the endpoint, as any delivery does (#144)", async () => {
     const created = await create();
     expect(created.lastSuccessAt).toBeNull();

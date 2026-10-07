@@ -230,15 +230,26 @@ export function SettingsModelsPage() {
       ) : (
         <div className="mt-6 flex flex-col">
           {visible.map((model) => (
+            // On a phone the capabilities go under the description, so the
+            // name and description have the row's width; beside them they
+            // were left about 130 px (#243).
             <div
               key={model.id}
-              className="flex items-start gap-4 border-b border-[var(--border-subtle)] py-4 last:border-0"
+              className="flex flex-col gap-2 border-b border-[var(--border-subtle)] py-4 last:border-0 sm:flex-row sm:items-start sm:gap-4"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <p className="font-medium text-[var(--text-primary)]">{model.displayName}</p>
-                  {model.isDefault && <Badge variant="accent">instance default</Badge>}
-                  {model.slug === personalDefault && <Badge variant="success">your default</Badge>}
+                  {model.isDefault && (
+                    <Badge variant="accent" className="whitespace-nowrap">
+                      instance default
+                    </Badge>
+                  )}
+                  {model.slug === personalDefault && (
+                    <Badge variant="success" className="whitespace-nowrap">
+                      your default
+                    </Badge>
+                  )}
                 </div>
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                   {model.providerLabel}
@@ -251,7 +262,7 @@ export function SettingsModelsPage() {
                 )}
               </div>
 
-              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+              <div className="flex flex-wrap gap-1.5 sm:shrink-0 sm:justify-end">
                 {model.capabilities.map((capability) => {
                   const meta = CAPABILITY_META[capability];
                   if (!meta) return null;

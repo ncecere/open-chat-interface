@@ -1,7 +1,8 @@
 import type { ApiErrorBody, ReadOnlyStatus } from '@oci/shared';
+import type { FieldProblem } from '~/hooks/use-clear-on-edit';
 import { noteReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
 import { noteUnauthorized } from '~/lib/session-ended';
-import { type FieldLabels, validationText } from '~/lib/validation-issues';
+import { type FieldLabels, validationProblems, validationText } from '~/lib/validation-issues';
 
 export class ApiError extends Error {
   constructor(
@@ -24,6 +25,27 @@ export function apiErrorMessage(error: unknown, fallback: string, labels?: Field
   return error instanceof ApiError
     ? validationText(error.details, error.message, labels)
     : fallback;
+}
+
+/**
+ * `apiErrorMessage` as a list of problems, each with the field it is about,
+ * for a form that keeps the problems about fields not yet corrected (#257).
+ * Anything but a validation failure is one problem about the whole attempt.
+ */
+export function apiErrorProblems(
+  error: unknown,
+  fallback: string,
+  labels?: FieldLabels,
+): FieldProblem[] {
+  const problems =
+    error instanceof ApiError
+      ? validationProblems(error.details, labels).map(({ field, text }) => ({
+          fields: field ? [field] : [],
+          text,
+        }))
+      : [];
+  if (problems.length > 0) return problems;
+  return [{ fields: [], text: apiErrorMessage(error, fallback, labels) }];
 }
 
 /**
@@ -161,7 +183,9 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** `keepalive` lets a request made as the page closes outlive it (#266). */
+  delete: <T>(path: string, options?: Pick<RequestInit, 'keepalive'>) =>
+    request<T>(path, { ...options, method: 'DELETE' }),
   /** A file response as a blob; failures are ApiErrors with the API's message. */
   download: async (path: string): Promise<DownloadedFile> => {
     const response = await send(path);

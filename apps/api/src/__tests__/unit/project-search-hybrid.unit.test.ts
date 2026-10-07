@@ -5,8 +5,13 @@ import { fakeVector } from '../../../test/fake-embeddings.js';
 
 vi.mock('../../db/index.js', () => ({ db: {} }));
 
-const { embeddingModelKey, embeddingUsageSlug, isActive, normalizeEmbeddingsSettings } =
-  await import('../../services/embeddings/config.js');
+const {
+  embeddingModelKey,
+  embeddingModelOfUsageSlug,
+  embeddingUsageSlug,
+  isActive,
+  normalizeEmbeddingsSettings,
+} = await import('../../services/embeddings/config.js');
 const { createEmbeddingModel } = await import('../../services/embeddings/model.js');
 const { embedValues } = await import('../../services/embeddings/embed.js');
 const { vectorLiteral } = await import('../../services/embeddings/storage.js');
@@ -133,6 +138,15 @@ describe('embedding job batches', () => {
 });
 
 describe('embeddings settings', () => {
+  it('names embeddings usage by its model ID, and nothing else as embeddings (#263)', () => {
+    expect(embeddingModelOfUsageSlug(embeddingUsageSlug('text-embedding-3-small'))).toBe(
+      'text-embedding-3-small',
+    );
+    // The bare prefix names no model, and a chat model is not embeddings.
+    expect(embeddingModelOfUsageSlug('embedding:')).toBeNull();
+    expect(embeddingModelOfUsageSlug('gpt-4.1-mini')).toBeNull();
+  });
+
   it('reads an unsaved or partial setting as off', () => {
     expect(normalizeEmbeddingsSettings(undefined)).toEqual({
       enabled: false,

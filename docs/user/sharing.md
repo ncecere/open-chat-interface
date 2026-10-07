@@ -54,7 +54,9 @@ Text that looks like a password, API key or access token is replaced with
 ## Revoking
 
 Revoking a link, from the conversation or from Settings → Sharing, makes it
-stop working immediately. Anybody who opened it
+stop working immediately; both ask you to confirm first, because a revoked link
+cannot be turned back on (a new link has a different address). Anybody who
+opened it
 before that keeps whatever they saved or copied — revoking removes access, not
 memory. An expired link stops working the same way.
 

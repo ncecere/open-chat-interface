@@ -98,7 +98,9 @@ export function CompactThreadDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-2rem)] max-w-lg">
+      {/* With nothing to summarise, the footer's Close is the only one: an ×
+          beside it was a second control with the same name (#246). */}
+      <DialogContent className="w-[calc(100%-2rem)] max-w-lg" closeButton={summarisable}>
         <DialogHeader>
           <DialogTitle>{COMPACT_ACTION_LABEL}</DialogTitle>
           <DialogDescription>

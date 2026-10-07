@@ -9,6 +9,7 @@ import { SkipLink } from '~/components/layout/skip-link';
 import { TopBar } from '~/components/layout/top-bar';
 import { useCommandPalette } from '~/hooks/use-command-palette';
 import { useGlobalShortcuts } from '~/hooks/use-global-shortcuts';
+import { focusComposerSoon, focusWhenReady } from '~/lib/focus-after-navigation';
 import { cn } from '~/lib/utils';
 import { TemporaryChatProvider, useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -22,7 +23,8 @@ function GlobalShortcuts({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   useGlobalShortcuts({
     onNewChat: () => {
       setTemporary(false);
-      void navigate({ to: '/' });
+      // Typing straight after the shortcut goes into the new chat (#251).
+      void navigate({ to: '/' }).then(focusComposerSoon);
     },
     onToggleSidebar,
   });
@@ -34,6 +36,7 @@ function GlobalShortcuts({ onToggleSidebar }: { onToggleSidebar: () => void }) {
  * and an inset rounded main panel below it.
  */
 const DOCKED_SIDEBAR = '(min-width: 1024px)';
+const DRAWER = 'aside[aria-label="Conversation sidebar"]';
 
 export function AppShell({ children }: { children: ReactNode }) {
   // A drawer below 1024px, as on phones: docked at 768 it left the chat 512px,
@@ -61,7 +64,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     const navigated = previousPathname.current !== pathname;
     previousPathname.current = pathname;
-    if (mobile && navigated) setSidebarOpen(false);
+    if (!mobile || !navigated) return;
+    setSidebarOpen(false);
+    // A conversation chosen in the drawer: the link hides with the drawer and
+    // focus fell to the body (#242). It goes to the page the person asked
+    // for instead, the skip link's target, unless the page took it itself.
+    if (!document.activeElement?.closest(DRAWER)) return;
+    focusWhenReady(() => document.getElementById('main-content'), {
+      until: () => {
+        const active = document.activeElement;
+        return Boolean(active && active !== document.body && !active.closest(DRAWER));
+      },
+    });
   }, [mobile, pathname]);
 
   useEffect(() => {
@@ -79,11 +93,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   function closeSidebar() {
     setSidebarOpen(false);
-    if (mobile) {
-      requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>('[aria-label="Open sidebar"]')?.focus();
-      });
-    }
+    if (!mobile) return;
+    // Back to "Open sidebar" once the page behind is no longer inert, unless
+    // the page has already taken focus (a navigation from the drawer, #242).
+    focusWhenReady(() => document.querySelector<HTMLElement>('[aria-label="Open sidebar"]'), {
+      until: () => {
+        const active = document.activeElement;
+        return Boolean(active && active !== document.body && !active.closest(DRAWER));
+      },
+    });
   }
 
   return (

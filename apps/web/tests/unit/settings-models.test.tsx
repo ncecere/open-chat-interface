@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsModelsPage } from '../../src/routes/settings/models';
 import { alerts, button, cleanup, click, renderAdmin } from './admin-test-utils';
+import { styleFor } from './css-test-utils';
 
 /**
  * Settings → Models (v0.10): a default model and reasoning level stored with
@@ -180,5 +181,31 @@ describe('Settings → Models defaults', () => {
     await choose('default-model', 'Thinker');
     await click(button('Save defaults'));
     expect(alerts()).toContain('That model is not available to your role.');
+  });
+});
+
+/**
+ * #243: at 390 px each model kept its capability chips beside its name, so
+ * the name, provider and description had about 130 px. Phone width is the
+ * compiled CSS with no `sm:` rule applied.
+ */
+describe('Settings → Models on a phone', () => {
+  it('puts the capabilities under the name, which wraps with its badges whole', async () => {
+    await render();
+    const name = [...document.querySelectorAll('p')].find(
+      (element) => element.textContent === 'Thinker',
+    )!;
+    const row = name.parentElement!.parentElement!.parentElement!;
+    expect((await styleFor(row.className))['flex-direction']).toBe('column');
+    expect((await styleFor(name.parentElement!.className))['flex-wrap']).toBe('wrap');
+    // The capabilities: the row's second part, below the name on a phone.
+    expect(row.children).toHaveLength(2);
+    const chips = row.lastElementChild!;
+    expect((await styleFor(chips.className))['justify-content']).toBeUndefined();
+
+    const badge = [...document.querySelectorAll('span')].find(
+      (element) => element.textContent === 'instance default',
+    )!;
+    expect((await styleFor(badge.className))['white-space']).toBe('nowrap');
   });
 });

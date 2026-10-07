@@ -147,20 +147,36 @@ export const updateThreadSchema = z.object({
   projectId: z.string().min(1).max(200).nullable().optional(),
 });
 
+/** Longest message a person can send or edit, after trimming. */
+export const MESSAGE_TEXT_MAX_LENGTH = 100_000;
+
+/**
+ * What the API says when a message is longer (#247): a person who pasted a
+ * long document was told only "Request validation failed", which reads like
+ * a fault and gives no way forward. The composer says the same before Send.
+ */
+export const MESSAGE_TOO_LONG_TEXT = `Messages can be up to ${MESSAGE_TEXT_MAX_LENGTH.toLocaleString('en-US')} characters. Attach long text as a file instead.`;
+
+const messageTextSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MESSAGE_TEXT_MAX_LENGTH, MESSAGE_TOO_LONG_TEXT);
+
 export const forkMessageSchema = z.object({ messageId: z.string().min(1).max(200) }).strict();
 
 /** Editing a historical turn always creates a branch; no history is rewritten. */
 export const branchMessageSchema = z
   .object({
     messageId: z.string().min(1).max(200),
-    text: z.string().trim().min(1).max(100_000),
+    text: messageTextSchema,
   })
   .strict();
 
 const inboundTextPartSchema = z
   .object({
     type: z.literal('text'),
-    text: z.string().trim().min(1).max(100_000),
+    text: messageTextSchema,
   })
   .strict();
 
@@ -192,6 +208,12 @@ export const sendMessageSchema = z
     excludedProjectFileIds: z.array(z.string().min(1).max(200)).max(20).optional(),
     temporary: z.boolean().default(false),
     trigger: z.enum(['submit-message', 'regenerate-message']).default('submit-message'),
+    /**
+     * The person's IANA time zone, as their browser gives it (#248), for the
+     * date the model is told. An unknown zone, or none, falls back to the
+     * instance's display time zone; it never refuses the message.
+     */
+    timeZone: z.string().max(100).optional(),
   })
   .strict();
 

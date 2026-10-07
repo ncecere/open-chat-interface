@@ -143,11 +143,16 @@ export async function buildModelContext(
     searchQuery
       ? (options.search ?? searchOrFailure(searchQuery))
       : Promise.resolve<PreSearch>({ results: [] }),
-    buildSystemPrompt(user.id, user.name, {
-      role: user.role,
-      threadId: thread.id,
-      artifactTools: hasTool(context.tools, 'create_artifact'),
-    }),
+    buildSystemPrompt(
+      user.id,
+      user.name,
+      {
+        role: user.role,
+        threadId: thread.id,
+        artifactTools: hasTool(context.tools, 'create_artifact'),
+      },
+      input.timeZone,
+    ),
     loadProjectContext(thread.projectId, user, input.excludedProjectFileIds ?? []),
     // Empty unless memory is on for this person and the chat is not temporary.
     loadMemorySection(

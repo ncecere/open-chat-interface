@@ -6,7 +6,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DatabaseBackup } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useId, useState } from 'react';
 import {
   AdminPageHeader,
   LoadError,
@@ -30,8 +30,8 @@ import { Badge } from '~/components/ui/badge';
 import { Field } from '~/components/ui/field';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
 
@@ -93,6 +93,7 @@ export function filesSummary(files: NonNullable<BackupRun['files']>): string {
 
 function Overview({ status }: { status: BackupStatus }) {
   const latest = status.runs[0];
+  const blockedId = useId();
 
   return (
     <div className="flex flex-col gap-4">
@@ -121,7 +122,7 @@ function Overview({ status }: { status: BackupStatus }) {
       </dl>
 
       {status.issues.length > 0 && (
-        <Notice tone="warning" title="Backups cannot run yet">
+        <Notice id={blockedId} tone="warning" title="Backups cannot run yet">
           <ul className="list-disc pl-4">
             {status.issues.map((issue) => (
               <li key={issue}>{issue}</li>
@@ -147,7 +148,7 @@ function Overview({ status }: { status: BackupStatus }) {
         queryKey={BACKUPS_QUERY_KEY}
         label="Back up now"
         running={status.running}
-        blocked={status.issues.length > 0}
+        blockedBy={status.issues.length > 0 ? blockedId : null}
         runningText="A backup is running. This page updates when it finishes."
         startedText="Backup started."
         errorMessage="The backup could not be started."
@@ -172,17 +173,21 @@ function SettingsForm({
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
+  // The errors are about the values sent: correcting a field clears its own
+  // (#217), and the others stay while their fields are still wrong (#257).
+  const [problems, setProblems] = useFieldProblems(draft);
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) =>
       api.patch<BackupStatus>('/admin/backups/settings', patch),
+    onMutate: () => setProblems([]),
     onSuccess: async (next) => {
       queryClient.setQueryData(BACKUPS_QUERY_KEY, next);
       setSaved(true);
       await queryClient.invalidateQueries({ queryKey: ['admin', 'health'] });
     },
+    onError: (cause) =>
+      setProblems(apiErrorProblems(cause, 'Backup settings could not be saved.', BACKUP_LABELS)),
   });
-  // The error is about the values sent; correcting them clears it (#217).
-  useClearOnEdit(draft, () => save.reset());
   const patch = backupChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);
@@ -282,11 +287,7 @@ function SettingsForm({
       <SaveRow
         hasChanges={hasChanges}
         isPending={save.isPending}
-        errorMessage={
-          save.error
-            ? apiErrorMessage(save.error, 'Backup settings could not be saved.', BACKUP_LABELS)
-            : null
-        }
+        errorMessage={problemsText(problems)}
         successMessage={saved && !hasChanges ? 'Backup settings saved.' : null}
       />
     </form>

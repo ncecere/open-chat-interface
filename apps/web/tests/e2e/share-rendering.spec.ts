@@ -139,3 +139,64 @@ for (const width of [390, 768, 1440]) {
     }
   });
 }
+
+test("a reply's task-list checkboxes are named by their items (#240)", async ({ page }) => {
+  await openShare(page, '- [x] Draft the survey questions\n- [ ] Conduct interviews');
+  const reply = page.getByRole('article', { name: /Assistant message/ });
+  await expect(reply.getByRole('checkbox', { name: 'Draft the survey questions' })).toBeChecked();
+  await expect(reply.getByRole('checkbox', { name: 'Conduct interviews' })).not.toBeChecked();
+  // The checkbox stands in for the bullet; the item does not show both.
+  const markers = await reply
+    .locator('li')
+    .evaluateAll((items) => items.map((item) => getComputedStyle(item).listStyleType));
+  expect(markers).toEqual(['none', 'none']);
+});
+
+const LONG_URL = `https://www.example.org/research/data-management/${'guidelines-'.repeat(6)}final`;
+
+for (const width of [390, 1440]) {
+  test(`a reply's list items wrap under their text, and a long link starts beside its bullet, at ${width} px (#241)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openShare(
+      page,
+      [
+        `- ${'Choose storage solutions that suit the organization and its data transformations. '.repeat(3)}`,
+        `- ${LONG_URL}`,
+        '',
+        '1. First step',
+        '   - A nested point that is long enough to wrap onto a second line at phone width, and at desktop width when repeated: a nested point that is long enough to wrap.',
+      ].join('\n'),
+    );
+    const reply = page.getByRole('article', { name: /Assistant message/ });
+    await expect(reply.locator('li')).toHaveCount(4);
+    const lines = await reply.locator('li').evaluateAll((items) =>
+      items.map((item) => {
+        // The item's own text, without a nested list's.
+        const range = document.createRange();
+        range.setStart(item, 0);
+        const nested = item.querySelector('ul, ol');
+        if (nested) range.setEndBefore(nested);
+        else range.setEnd(item, item.childNodes.length);
+        const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
+        const style = getComputedStyle(item);
+        return {
+          lefts: [...new Set(rects.map((rect) => Math.round(rect.left)))],
+          rows: new Set(rects.map((rect) => Math.round(rect.top))).size,
+          firstTop: Math.min(...rects.map((rect) => rect.top)),
+          contentTop: item.getBoundingClientRect().top + Number.parseFloat(style.paddingTop),
+          lineHeight: Number.parseFloat(style.lineHeight),
+        };
+      }),
+    );
+    const [wrapped, link, , nested] = lines;
+    // Wrapped lines line up with the first line's text, not under the bullet.
+    for (const item of [wrapped, nested]) {
+      expect(item!.rows).toBeGreaterThan(1);
+      expect(item!.lefts).toHaveLength(1);
+    }
+    // The address begins on the bullet's line.
+    expect(link!.firstTop - link!.contentTop).toBeLessThan(link!.lineHeight / 2);
+  });
+}

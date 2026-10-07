@@ -114,6 +114,41 @@ describe.skipIf(!available)('live Postgres: usage report arithmetic', () => {
       ],
     });
   });
+  it('names an embeddings model by its model ID, as embeddings (#263)', async () => {
+    await live.db.insert(schema.usageEvent).values([
+      {
+        organizationId,
+        userId,
+        modelSlug,
+        tokensIn: 10,
+        tokensOut: 5,
+        messageCount: 1,
+        pending: false,
+      },
+      {
+        organizationId,
+        userId,
+        modelSlug: 'embedding:text-embedding-3-small',
+        tokensIn: 247_300,
+        tokensOut: 0,
+        messageCount: 0,
+        pending: false,
+      },
+    ]);
+    const { entries } = await modelUsage(30);
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ modelSlug, displayName: 'Reporting fixture', kind: 'chat' }),
+        expect.objectContaining({
+          modelSlug: 'embedding:text-embedding-3-small',
+          displayName: 'text-embedding-3-small',
+          kind: 'embeddings',
+          messages: 0,
+          tokens: 247_300,
+        }),
+      ]),
+    );
+  });
   it('widens operands before addition in consumer totals', async () => {
     await largeEvents();
     expect(await topConsumers(30)).toEqual({

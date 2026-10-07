@@ -171,7 +171,9 @@ deliveries but not change them, send tests or see secrets.
 
 Creating, changing, rotating and deleting endpoints are audited as
 `webhook.create`, `webhook.update`, `webhook.rotate` and `webhook.delete`, and
-are kept regardless of audit-log retention.
+are kept regardless of audit-log retention. An update records each changed
+setting as it was and became, so narrowing the actions an endpoint forwards
+leaves a record of what it used to receive.
 
 ### What is sent
 

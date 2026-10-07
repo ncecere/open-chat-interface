@@ -5,6 +5,7 @@ import {
   createThreadSchema,
   DOCUMENT_FORMATS,
   forkMessageSchema,
+  MESSAGE_TOO_LONG_TEXT,
   THREAD_HISTORY_MAX_PAGE_SIZE,
   THREAD_HISTORY_PAGE_SIZE,
   THREAD_SEARCH_DEFAULT_LIMIT,
@@ -288,7 +289,7 @@ threadRoutes.post('/:id/branches', async (c) => {
 
   await assertBranchingAllowed(user.role);
 
-  const input = await parseBody(c, branchMessageSchema);
+  const input = await parseBody(c, branchMessageSchema, [MESSAGE_TOO_LONG_TEXT]);
   const result = await branchFromUserMessage(c.req.param('id'), user.id, input);
 
   return c.json(

@@ -116,6 +116,22 @@ function nameTables(scope: ParentNode) {
   });
 }
 
+/**
+ * The table's full-screen view (#246). Streamdown portals it to the body, out
+ * of the table it shows, and names its toolbar by `title` only ("Copy table",
+ * "Download table", "Exit fullscreen"). Its controls are named for the table
+ * that opened it, as that table's own are, and Exit says "full screen" as
+ * the button that opened it does.
+ */
+export function nameTableFullscreen(overlay: Element, opener: Element | null): void {
+  const which = opener?.getAttribute('aria-label')?.match(/^View table (\d+) full screen$/)?.[1];
+  const name = which ? `table ${which}` : 'table';
+  label(overlay, `${which ? `Table ${which}` : 'Table'}, full screen`);
+  label(buttonTitled(overlay, 'Copy table'), `Copy ${name}`);
+  label(buttonTitled(overlay, 'Download table'), `Download ${name}`);
+  label(buttonTitled(overlay, 'Exit fullscreen'), 'Exit full screen');
+}
+
 /** Names every Streamdown block control under `root`, numbered within its message. */
 export function nameStreamdownControls(root: ParentNode = document): void {
   const scopes = new Set<ParentNode>();

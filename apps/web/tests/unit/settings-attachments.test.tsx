@@ -3,7 +3,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsAttachmentsPage } from '../../src/routes/settings/attachments';
 import { button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
-import { clippedWithoutTooltip } from './truncation';
+import { clippedOnTouch, clippedWithoutTooltip } from './truncation';
 
 /**
  * Settings → Attachments (v0.9.1): project files are listed with their
@@ -29,10 +29,12 @@ const file = (id: string, filename: string, project: { id: string; name: string 
 
 let files: ReturnType<typeof file>[];
 let deletedBytes = 0;
+let maxTotalBytes: number | null = null;
 let features: Record<string, boolean>;
 let root: Root | undefined;
 beforeEach(() => {
   deletedBytes = 0;
+  maxTotalBytes = null;
   features = { attachments: true, projects: true };
   files = [
     file('a1', 'chat-notes.txt', null),
@@ -54,7 +56,7 @@ beforeEach(() => {
           projectFiles: { bytes: 198 * 1024, count: 1 },
           artifacts: { bytes: 100 * 1024, count: 3 },
         },
-        maxTotalBytes: null,
+        maxTotalBytes,
         maxFileCount: null,
         maxFileBytes: null,
       };
@@ -119,6 +121,12 @@ describe('Settings → Attachments', () => {
     expect(await clippedWithoutTooltip(document.body)).toEqual([]);
   });
 
+  it("wraps a file's name, which a tooltip cannot show on touch (#244)", async () => {
+    await render();
+    const clipped = await clippedOnTouch(document.body);
+    expect(clipped.filter((text) => /chat-notes\.txt|reading\.txt/.test(text))).toEqual([]);
+  });
+
   it('selects and deletes only chat files', async () => {
     await render();
     await click(document.querySelector('[aria-label="Select all visible attachments"]')!);
@@ -153,10 +161,24 @@ describe('Settings → Attachments', () => {
     expect(api.delete).toHaveBeenCalledTimes(3);
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain(
+        // No limit applies to this role, so none is spoken of (#254).
+        '6 KB of deleted files, and of conversations in the trash, is not counted in the storage used.',
+      ),
+    );
+    expect(document.body.textContent).toContain('No storage limit applies to your role.');
+    expect(document.body.textContent).not.toContain('against your limit');
+    expect(document.body.textContent).not.toContain('is in the trash');
+  });
+
+  it('says deleted files no longer count against a limit the role has (#254)', async () => {
+    maxTotalBytes = 10 * 1024 * 1024;
+    deletedBytes = 6 * 1024;
+    await render();
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain(
         '6 KB of deleted files, and of conversations in the trash, no longer counts against your limit.',
       ),
     );
-    expect(document.body.textContent).not.toContain('is in the trash');
   });
 
   it.each([

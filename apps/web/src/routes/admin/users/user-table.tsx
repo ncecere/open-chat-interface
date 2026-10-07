@@ -178,7 +178,13 @@ export function UserTable({
               </td>
               {canEdit && (
                 <td className="whitespace-nowrap px-4 py-3 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => onLimits(user)}>
+                  {/* Named for its account, as Select and Role beside it are (#260). */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Limits for ${user.email}`}
+                    onClick={() => onLimits(user)}
+                  >
                     Limits
                   </Button>
                 </td>

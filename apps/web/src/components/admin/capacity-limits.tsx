@@ -24,7 +24,8 @@ import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { type FieldProblem, problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 
 /**
  * Provider capacity (v0.11): limits OCI keeps below a provider's own rate
@@ -97,7 +98,10 @@ export function CapacityLimitsDialog({
     tokensPerMinute: target.limits?.tokensPerMinute?.toString() ?? '',
     maxConcurrentStreams: target.limits?.maxConcurrentStreams?.toString() ?? '',
   }));
-  const [error, setError] = useState<string | null>(null);
+  // A correction clears the complaint about that field (#178) and leaves the
+  // others listed while their fields are still wrong (#257).
+  const [problems, setProblems] = useFieldProblems(values);
+  const error = problemsText(problems, '\n');
   const save = useMutation({
     mutationFn: (limits: CapacityLimits) =>
       api.put(
@@ -108,16 +112,16 @@ export function CapacityLimitsDialog({
       await queryClient.invalidateQueries({ queryKey: CAPACITY_QUERY_KEY });
       onClose();
     },
-    onError: (cause) => setError(apiErrorMessage(cause, 'The limits could not be saved.')),
+    onError: (cause) => setProblems(apiErrorProblems(cause, 'The limits could not be saved.')),
   });
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    setProblems([]);
     const limits = {} as CapacityLimits;
     // Every field is checked, and every problem listed at once, as Add model
     // does (#129): one per save made correcting three fields take three (#226).
-    const problems: string[] = [];
+    const problems: FieldProblem[] = [];
     for (const { key, label } of FIELDS) {
       const raw = values[key].replace(/[,\s]/g, '');
       if (!raw) {
@@ -126,13 +130,16 @@ export function CapacityLimitsDialog({
       }
       const parsed = Number(raw);
       if (!Number.isInteger(parsed) || parsed < 1) {
-        problems.push(`${label} must be a whole number of at least 1, or empty for no limit.`);
+        problems.push({
+          fields: [key],
+          text: `${label} must be a whole number of at least 1, or empty for no limit.`,
+        });
         continue;
       }
       limits[key] = parsed;
     }
     if (problems.length > 0) {
-      setError(problems.join('\n'));
+      setProblems(problems);
       return;
     }
     save.mutate(limits);
@@ -163,11 +170,9 @@ export function CapacityLimitsDialog({
               inputMode="numeric"
               value={values[field.key]}
               placeholder="No limit"
-              onChange={(event) => {
-                // A correction clears the complaint about it (#178).
-                setError(null);
-                setValues((current) => ({ ...current, [field.key]: event.target.value }));
-              }}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, [field.key]: event.target.value }))
+              }
             />
           </Field>
         ))}

@@ -3,11 +3,12 @@ import { Readable } from 'node:stream';
 import { and, eq, isNull, lte, schema } from '@oci/db';
 import { COMPLIANCE_EXPORT_FORMAT } from '@oci/shared';
 import { db } from '../../db/index.js';
+import { errorText } from '../../lib/log-redaction.js';
 import { logger } from '../../lib/logger.js';
 import { APP_VERSION } from '../../version.js';
 import { recordAudit } from '../audit.js';
 import type { BackupTarget } from '../backups/settings.js';
-import { manualRunConflict, requestManualRun } from '../jobs/requests.js';
+import { assertManualRunPlaced, requestManualRun } from '../jobs/requests.js';
 import { runExclusively } from '../jobs/runner.js';
 import { withSpan } from '../observability/tracing.js';
 import { getDefaultOrganizationId } from '../organization.js';
@@ -321,9 +322,7 @@ export async function performComplianceExport(options: {
     );
   } catch (error) {
     const message = (
-      error instanceof ComplianceExportError
-        ? error.message
-        : `Export failed: ${error instanceof Error ? error.message : String(error)}`
+      error instanceof ComplianceExportError ? error.message : `Export failed: ${errorText(error)}`
     ).slice(0, 1_000);
     const cleaned = written.target ? await deleteObjects(written.target, written.keys) : true;
     await db
@@ -420,8 +419,10 @@ export async function startManualComplianceExport(actor: Actor): Promise<'starte
     .limit(1);
   if (running) return 'running';
   // On a `web` replica (v0.11) a worker runs it.
-  const placed = await requestManualRun({ job: COMPLIANCE_JOB, actor: actor ?? undefined });
-  if (placed === 'no-worker') throw manualRunConflict();
+  // 'started' only once a worker has taken it (#265).
+  const placed = assertManualRunPlaced(
+    await requestManualRun({ job: COMPLIANCE_JOB, actor: actor ?? undefined }),
+  );
   if (placed === 'queued') return 'started';
   void runManualComplianceExport(actor).catch((error: unknown) =>
     logger.error(

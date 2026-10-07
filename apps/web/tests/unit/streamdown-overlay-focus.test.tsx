@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Streamdown } from 'streamdown';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { nameStreamdownControls } from '../../src/components/chat/streamdown-control-names';
 import {
   installStreamdownOverlayFocus,
   uninstallStreamdownOverlayFocus,
@@ -132,4 +135,56 @@ it.each([
 it('is named for the table it shows, not for the button that opened it (#155)', async () => {
   await openOverlay();
   expect(overlay()?.getAttribute('aria-label')).toBe('Table, full screen');
+});
+
+/**
+ * #246: the full-screen view's toolbar was named only by `title` ("Copy
+ * table", "Download table", "Exit fullscreen"), unlike the table's own
+ * controls ("Copy table 1"), and every control was 22 px square.
+ */
+it('names its controls for the table that opened it, as the table names its own', async () => {
+  nameStreamdownControls(container);
+  expect(fullscreenButton().getAttribute('aria-label')).toBe('View table 1 full screen');
+  await openOverlay();
+  expect(overlay()?.getAttribute('aria-label')).toBe('Table 1, full screen');
+  // The toolbar's buttons; a link in a cell is a button too.
+  const names = [...overlay()!.querySelectorAll('button[title]')].map((button) =>
+    button.getAttribute('aria-label'),
+  );
+  expect(names).toEqual(['Copy table 1', 'Download table 1', 'Exit full screen']);
+});
+
+it('makes every table control at least 24 px square, inline and full screen', async () => {
+  // The app's own stylesheet, as written: its plain rules, minus Tailwind's.
+  const css = readFileSync(resolve(process.cwd(), 'src/styles/global.css'), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const rules = [...css.matchAll(/^([^@{}\n][^{}]*)\{([^{}]*)\}/gm)];
+  const minimum = (button: Element, property: 'min-width' | 'min-height') => {
+    let px = 0;
+    for (const [, selector, body] of rules) {
+      const matches = (part: string) => {
+        try {
+          return button.matches(part.trim());
+        } catch {
+          return false; // A pseudo-element or a keyframe step: not a selector for elements.
+        }
+      };
+      if (!selector!.split(',').some(matches)) continue;
+      const value = body!.match(new RegExp(`${property}:\\s*([\\d.]+)(rem|px)`));
+      if (value) px = Number(value[1]) * (value[2] === 'rem' ? 16 : 1);
+    }
+    return px;
+  };
+  await openOverlay();
+  const buttons = [
+    ...container.querySelectorAll('[data-streamdown="table-wrapper"] button[title]'),
+    ...overlay()!.querySelectorAll('button[title]'),
+  ];
+  expect(buttons).toHaveLength(6);
+  for (const button of buttons) {
+    expect(minimum(button, 'min-width'), button.getAttribute('title')!).toBeGreaterThanOrEqual(24);
+    expect(minimum(button, 'min-height'), button.getAttribute('title')!).toBeGreaterThanOrEqual(24);
+  }
 });

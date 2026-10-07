@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { type MouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { LoadError } from '~/components/admin/admin-ui';
 import { YourDataButtons } from '~/components/settings/your-data';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -147,7 +148,11 @@ function ConversationList({ archived }: { archived: boolean }) {
   });
 
   const unarchive = useMutation({
-    mutationFn: (id: string) => api.patch(`/threads/${id}`, { archived: false }),
+    mutationFn: (thread: ThreadSummary) => api.patch(`/threads/${thread.id}`, { archived: false }),
+    // Said, as archiving is: the row only vanished (#250).
+    onSuccess: (_, thread) => toast.success(`Restored “${thread.title}” to Active.`),
+    onError: (error, thread) =>
+      toast.error(apiErrorMessage(error, `“${thread.title}” could not be restored. Try again.`)),
     onSettled: () => invalidateConversationLists(queryClient),
   });
 
@@ -230,9 +235,12 @@ function ConversationList({ archived }: { archived: boolean }) {
           <Spinner className="mx-auto size-6" />
         </div>
       ) : history.isError ? (
-        <p role="alert" className="mt-8 text-sm text-[var(--danger)]">
-          Your conversations could not be loaded. Reload the page to try again.
-        </p>
+        // Announced, with Try again, as every other list's load error (#245).
+        <LoadError
+          title="Your conversations could not be loaded."
+          query={history}
+          className="mt-8"
+        />
       ) : threads.length === 0 ? (
         <p className="mt-10 text-sm text-[var(--text-muted)]">
           {search
@@ -291,9 +299,15 @@ function ConversationList({ archived }: { archived: boolean }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={unarchive.isPending}
+                      // Only this row's: a disabled neighbour cannot take focus.
+                      disabled={unarchive.isPending && unarchive.variables?.id === thread.id}
                       aria-label={`Restore ${thread.title}`}
-                      onClick={() => unarchive.mutate(thread.id)}
+                      onClick={(event) => {
+                        // The row leaves on refetch: focus goes to the next, not the body (#250).
+                        const row = event.currentTarget.closest('li');
+                        if (row) keepFocusWhenRemoved(row);
+                        unarchive.mutate(thread);
+                      }}
                     >
                       Restore
                     </Button>

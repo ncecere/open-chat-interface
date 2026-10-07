@@ -279,7 +279,9 @@ use, even while meaning-based search is off.
 passages are charged to the file's owner, questions to the person asking. They
 count tokens (and cost, if you set a **price** per million tokens; leave it
 blank to record usage at no cost) but no messages, and they count towards
-budgets that cover every model. A failed or slow embeddings call never fails a
+budgets that cover every model. **Usage → Spend → By model** and the scheduled
+usage report list them under the model ID, marked *embeddings*, with their
+tokens. A failed or slow embeddings call never fails a
 reply: the reply is searched by keyword instead, and the failure is logged.
 
 Changes here are audited as `embeddings.update` (with the previous and new

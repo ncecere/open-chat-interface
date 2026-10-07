@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { diffUpdate } from '../../services/settings-diff.js';
 import { sendTestDelivery } from '../../services/webhooks/delivery.js';
 import {
   createWebhook,
@@ -55,15 +56,19 @@ webhookRoutes.patch('/:id', async (c) => {
   const existing = await loadWebhookOrThrow(c.req.param('id'));
   const input = await parseBody(c, updateWebhookSchema);
   const fields = await updateWebhook(existing, input);
-  if (fields.length > 0)
+  if (fields.length > 0) {
+    const saved = await loadWebhookOrThrow(existing.id);
     await recordAudit({
       actorUserId: actor.id,
       actorEmail: actor.email,
       action: 'webhook.update',
       targetType: 'webhook',
       targetId: existing.id,
-      metadata: { url: input.url ?? existing.url, fields },
+      // Old and new: narrowing what a SIEM endpoint receives must leave a
+      // record of what it used to (#258).
+      metadata: { url: saved.url, fields, changes: diffUpdate(existing, saved, fields) },
     });
+  }
   return c.json(await getWebhook(existing.id));
 });
 

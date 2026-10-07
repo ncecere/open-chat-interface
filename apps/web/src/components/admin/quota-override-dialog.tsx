@@ -127,12 +127,17 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
           const overridden = entry.limitValue !== entry.roleLimitValue;
 
           return (
-            <div
+            // Each budget's fields and buttons are named for the budget, as the
+            // same Limit, Expires, Reason, Save and Reset repeat for each (#260).
+            <fieldset
               key={entry.policyId}
-              className="border-[var(--border-subtle)] border-b pb-5 last:border-0"
+              aria-labelledby={`override-${entry.policyId}`}
+              className="min-w-0 border-[var(--border-subtle)] border-b pb-5 last:border-0"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="font-medium text-sm">{entry.policyName}</h3>
+                <h3 id={`override-${entry.policyId}`} className="font-medium text-sm">
+                  {entry.policyName}
+                </h3>
                 <p className="text-[var(--text-muted)] text-xs">
                   Role default: {toReadable(entry.roleLimitValue, entry.metric)}{' '}
                   {unitLabel(entry.metric)}
@@ -200,6 +205,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
                     size="sm"
                     variant="ghost"
                     disabled={clear.isPending}
+                    aria-label={`Reset to default for ${entry.policyName}`}
                     onClick={() => {
                       setDrafts((current) => {
                         const next = { ...current };
@@ -217,6 +223,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
                   size="sm"
                   variant="secondary"
                   disabled={save.isPending}
+                  aria-label={`Save override for ${entry.policyName}`}
                   onClick={() => {
                     const limitValue = fromDisplay(draft.limit, entry.metric);
                     if (Number.isNaN(limitValue)) {
@@ -239,7 +246,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
                   Save
                 </Button>
               </div>
-            </div>
+            </fieldset>
           );
         })}
       </div>

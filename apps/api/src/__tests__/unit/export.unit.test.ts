@@ -84,3 +84,71 @@ describe('a reply in a Markdown export', () => {
     expect(markdown).not.toContain('hidden');
   });
 });
+
+describe('headings in a Markdown export (#255)', () => {
+  const at = new Date('2026-10-05T12:00:00Z');
+  const message = (role: 'user' | 'assistant', text: string) => ({
+    role,
+    parts: [{ type: 'text', text }],
+    modelSlug: role === 'assistant' ? 'gpt-4-1-mini' : null,
+    status: 'complete',
+    createdAt: at,
+  });
+  /** The export's outline: every heading line outside code, as a table of contents reads it. */
+  const outline = (markdown: string) =>
+    markdown
+      .replace(/```[\s\S]*?```/g, '')
+      .split('\n')
+      .filter((line) => /^#{1,6} /.test(line));
+
+  it("puts a message's own headings under its speaker, keeping code as written", () => {
+    const markdown = renderMarkdown(
+      { title: 'Colour names', createdAt: at },
+      [
+        message('user', '# My notes\n\nWhat are the colours?'),
+        message(
+          'assistant',
+          [
+            '## Colours',
+            '',
+            'Red and blue.',
+            '',
+            '# Summary',
+            '',
+            '```bash',
+            '# a comment, not a heading',
+            'echo done',
+            '```',
+            '',
+            'Shades',
+            '------',
+            '',
+            '> ### Quoted',
+            '',
+            '##### Fine print',
+            '',
+            '#hashtag is not a heading',
+          ].join('\n'),
+        ),
+      ],
+      [],
+      undefined,
+      new Map([['gpt-4-1-mini', 'GPT-4.1 mini']]),
+    );
+    expect(outline(markdown)).toEqual([
+      '# Colour names',
+      '## You',
+      '### My notes',
+      '## Assistant · GPT-4.1 mini',
+      '#### Colours',
+      '### Summary',
+      '#### Shades',
+      '###### Fine print',
+    ]);
+    expect(markdown).toContain('> ##### Quoted');
+    // Fenced code is left exactly as it was.
+    expect(markdown).toContain('```bash\n# a comment, not a heading\necho done\n```');
+    expect(markdown).toContain('#hashtag is not a heading');
+    expect(markdown).not.toContain('------');
+  });
+});

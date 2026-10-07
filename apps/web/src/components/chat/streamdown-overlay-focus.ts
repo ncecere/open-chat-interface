@@ -1,4 +1,7 @@
-import { nameStreamdownControls } from '~/components/chat/streamdown-control-names';
+import {
+  nameStreamdownControls,
+  nameTableFullscreen,
+} from '~/components/chat/streamdown-control-names';
 
 /**
  * Focus management for Streamdown's table full-screen view (WCAG 2.4.3).
@@ -19,7 +22,8 @@ import { nameStreamdownControls } from '~/components/chat/streamdown-control-nam
  *   trap makes the usual case) Escape did nothing. This listener is on the
  *   overlay itself, below that wrapper's React handler, and closes the view
  *   the way a click on its backdrop does;
- * - it is named for what it shows, not for the button that opened it.
+ * - it is named for what it shows ("Table 1, full screen"), not for the
+ *   button that opened it, and so are its controls (#246).
  */
 
 const OVERLAY_SELECTOR = '[data-streamdown="table-fullscreen"]';
@@ -62,7 +66,8 @@ export function installStreamdownOverlayFocus(doc: Document = document): void {
         : null,
     );
     if (!overlay.hasAttribute('tabindex')) overlay.setAttribute('tabindex', '-1');
-    overlay.setAttribute('aria-label', 'Table, full screen');
+    // The view and its toolbar, named for the table that opened it (#246).
+    nameTableFullscreen(overlay, openers.get(overlay) ?? null);
     overlay.addEventListener('keydown', trapTab(overlay));
     overlay.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
