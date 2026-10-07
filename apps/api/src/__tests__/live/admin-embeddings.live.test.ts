@@ -225,8 +225,18 @@ describe.skipIf(!available)('live: embeddings administration', () => {
     expect(await storedSetting()).toBeUndefined();
     expect((await audits('embeddings.test')).map((row) => row.metadata)).toEqual([
       { providerId: openai, modelId: 'small', ok: true, dimensions: 24 },
-      { providerId: openai, modelId: 'nope', ok: false },
-      { providerId: null, modelId: null, ok: false },
+      {
+        providerId: openai,
+        modelId: 'nope',
+        ok: false,
+        reason: 'The model could not embed a sample: unknown model',
+      },
+      {
+        providerId: null,
+        modelId: null,
+        ok: false,
+        reason: 'The model could not embed a sample: Choose a provider and enter a model id first',
+      },
     ]);
     expect((await request(admin, 'POST', '/embeddings/test', { extra: 1 })).status).toBe(422);
   });

@@ -172,8 +172,8 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
             type="submit"
             variant="accent"
             size="sm"
-            title={lock.title}
-            disabled={!changed || save.isPending || lock.locked}
+            locked={lock.title}
+            disabled={!changed || save.isPending}
           >
             {save.isPending && <Spinner />}
             Save defaults

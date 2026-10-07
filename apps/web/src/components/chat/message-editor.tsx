@@ -1,6 +1,6 @@
 import { FileText, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { AttachmentCard } from '~/components/chat/message-attachments';
+import { type AttachmentCard, isRemovedFile } from '~/components/chat/message-attachments';
 import { Button } from '~/components/ui/button';
 import { focusComposerSoon } from '~/lib/focus-after-navigation';
 import { focusAtEnd, keepFocusWhenRemoved, rememberPlace } from '~/lib/focus-return';
@@ -99,6 +99,7 @@ export function MessageEditor({
       <textarea
         ref={textBox}
         aria-label="Edit message text"
+        dir="auto"
         value={text}
         // Read-only, not disabled, while saving: a disabled box would take focus
         // with it (#333, #269).
@@ -131,6 +132,9 @@ export function MessageEditor({
               <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
                 {file.filename}
               </span>
+              {isRemovedFile(file) && (
+                <span className="text-xs text-[var(--text-muted)]">(no longer available)</span>
+              )}
               <button
                 type="button"
                 disabled={saving}

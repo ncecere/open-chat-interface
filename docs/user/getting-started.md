@@ -82,7 +82,10 @@ can be set later under [Settings → Customisation](settings.md#customisation).
 ## An acceptable use policy
 
 If your institution has published one, you will be asked to accept it before
-you can use the instance. This is not dismissable.
+you can use the instance. This is not dismissable, and it is not only the
+page: until you accept, the server refuses anything that uses the instance
+(sending a message, uploads, new conversations), whichever app or script is
+asking.
 
 Should the policy be revised later, you will be asked again, and told that it
 has changed rather than being shown it as though it were new.

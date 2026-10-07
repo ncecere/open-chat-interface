@@ -12,6 +12,7 @@ import { validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { failedReason } from '../../services/audit-test-details.js';
 import { rerankingSettings } from '../../services/reranking/config.js';
 import { rerankingStatus, testReranker } from '../../services/reranking/reranker.js';
 import { updateSetting } from '../../services/settings.js';
@@ -115,7 +116,9 @@ rerankingRoutes.post('/test', async (c) => {
     metadata: {
       ...target,
       ok: result.ok,
-      ...(result.ok && { latencyMs: result.latencyMs, endpoint: result.endpoint }),
+      ...(result.ok
+        ? { latencyMs: result.latencyMs, endpoint: result.endpoint }
+        : failedReason(result, result.message)),
     },
   });
   return c.json(result);

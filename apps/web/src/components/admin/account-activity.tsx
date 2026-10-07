@@ -36,6 +36,13 @@ export function activityParties(
     const onOther = entry.targetType === 'user' && entry.targetId && entry.targetId !== account.id;
     return onOther ? `By ${account.name}, to ${otherAccount(entry)}` : `By ${account.name}`;
   }
+  // Done with the account's address by somebody not signed in (a refused
+  // sign-in, a reset request, #342): "To X, by X" read as something done to the
+  // person by themselves (#375).
+  if (!entry.actorUserId && entry.actorEmail && entry.action.startsWith('auth.')) {
+    const reason = entry.metadata?.reason;
+    return `With ${entry.actorEmail}, not signed in${typeof reason === 'string' ? ` (${reason})` : ''}`;
+  }
   const actor =
     entry.actorUserId && entry.actorUserId === viewerId
       ? 'you'

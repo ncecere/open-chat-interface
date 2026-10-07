@@ -338,4 +338,40 @@ describe.skipIf(!available)('live MCP connectors', () => {
       });
     });
   });
+
+  describe('failed tests', () => {
+    it('records why a failed test failed, so the two failures can be told apart (#368)', async () => {
+      const unreachable = await createConnector({
+        name: 'Nothing listens',
+        url: 'http://127.0.0.1:9/mcp?token=SECRET-QUERY-368',
+      });
+      const notMcp = await createConnector({
+        name: 'A web page',
+        url: new URL('/not-an-mcp-endpoint', suite.ctx.mcp.url).toString(),
+      });
+      const results = [];
+      for (const connector of [unreachable, notMcp]) {
+        const result = await ok<{ ok: boolean; detail: string }>(
+          call('POST', `/api/admin/connectors/${connector.id}/test`),
+        );
+        expect(result.ok).toBe(false);
+        results.push(result.detail);
+      }
+      const tests = await audits('connector.test');
+      const reasons = [unreachable, notMcp].map(
+        (connector) =>
+          (tests.find((row) => row.targetId === connector.id)?.metadata as { reason?: string })
+            ?.reason,
+      );
+      expect(reasons[0]).toEqual(expect.stringMatching(/\S/));
+      expect(reasons[1]).toEqual(expect.stringMatching(/\S/));
+      // Same words as the page, and not the same for both.
+      expect(reasons).toEqual(results.map((detail) => detail.replace(/\s+/g, ' ').trim()));
+      expect(reasons[0]).not.toBe(reasons[1]);
+      // The address is recorded without its query.
+      const first = tests.find((row) => row.targetId === unreachable.id);
+      expect(first?.metadata).toMatchObject({ url: 'http://127.0.0.1:9/mcp', ok: false });
+      expect(JSON.stringify(tests)).not.toContain('SECRET-QUERY-368');
+    });
+  });
 });

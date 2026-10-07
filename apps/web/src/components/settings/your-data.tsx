@@ -99,8 +99,8 @@ function ImportRow({
       <Button
         variant="ghost"
         size="sm"
-        title={lock.title}
-        disabled={record.status === 'running' || deleting || lock.locked}
+        locked={lock.title}
+        disabled={record.status === 'running' || deleting}
         aria-label={active ? `Cancel import of ${record.filename}` : `Remove ${record.filename}`}
         onClick={onDelete}
       >
@@ -235,8 +235,8 @@ function ImportPanel({
           type="button"
           variant="secondary"
           size="sm"
-          title={lock.title}
-          disabled={busy || lock.locked}
+          locked={lock.title}
+          disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
           {upload.isPending ? 'Uploading…' : 'Choose export file'}

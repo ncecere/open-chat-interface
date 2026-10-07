@@ -169,8 +169,19 @@ export async function updateUser(
   // could not be found by the email once the account was deleted, and an
   // unban did not say which reason it lifted.
   const roleChanged = change.role !== undefined && change.role !== target.role;
-  const { role: _role, ...otherChanges } = change;
-  const updateMetadata = roleChanged ? otherChanges : change;
+  // A ban or an unban is recorded under its own action (#375): both were
+  // `user.update`, so the audit list and Recent activity could not tell them
+  // apart without opening Details. Like the role, the ban and its reason are
+  // left out of `user.update`, which is written only when something else
+  // changed too. A reason edited on an account that stays banned is not a ban
+  // or an unban and stays a `user.update`.
+  const banChanged = change.banned !== undefined && change.banned !== Boolean(target.banned);
+  const updateMetadata: Record<string, unknown> = { ...change };
+  if (roleChanged) delete updateMetadata.role;
+  if (banChanged) {
+    delete updateMetadata.banned;
+    delete updateMetadata.banReason;
+  }
   if (Object.keys(updateMetadata).length > 0) {
     const before = Object.fromEntries(
       (['name', 'role', 'banned', 'banReason'] as const)
@@ -184,6 +195,24 @@ export async function updateUser(
       targetType: 'user',
       targetId,
       metadata: { email: target.email, ...updateMetadata, before },
+    });
+  }
+
+  if (banChanged) {
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: change.banned ? 'user.ban' : 'user.unban',
+      targetType: 'user',
+      targetId,
+      // The same keys `user.update` recorded for it, so an entry from before
+      // this change reads the same: what it became, and what it replaced.
+      metadata: {
+        email: target.email,
+        banned: change.banned,
+        banReason: change.banReason ?? null,
+        before: { banned: Boolean(target.banned), banReason: target.banReason },
+      },
     });
   }
 

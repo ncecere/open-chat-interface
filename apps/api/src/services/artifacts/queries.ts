@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, schema } from '@oci/db';
+import { and, asc, desc, eq, isNull, schema, sql } from '@oci/db';
 import type {
   ArtifactDetail,
   ArtifactKind,
@@ -163,6 +163,44 @@ export async function artifactsForPrompt(threadId: string, userId: string, limit
         eq(schema.artifact.threadId, threadId),
         eq(schema.artifact.userId, userId),
         isNull(schema.message.supersededAt),
+      ),
+    )
+    .orderBy(desc(schema.artifact.updatedAt), desc(schema.artifact.id))
+    .limit(limit);
+}
+
+/**
+ * The artifacts of a conversation the person has edited by hand, with their
+ * latest saved content, newest change first (#366). Only these differ from
+ * what the model's own earlier tool calls show: it wrote every other version
+ * itself, and those calls are in the conversation it is sent.
+ */
+export async function editedArtifactsForPrompt(threadId: string, userId: string, limit = 10) {
+  const latest = and(
+    eq(schema.artifactVersion.artifactId, schema.artifact.id),
+    eq(schema.artifactVersion.version, schema.artifact.currentVersion),
+  );
+  return db
+    .select({
+      id: schema.artifact.id,
+      title: schema.artifact.title,
+      kind: schema.artifact.kind,
+      language: schema.artifact.language,
+      currentVersion: schema.artifact.currentVersion,
+      content: schema.artifactVersion.content,
+    })
+    .from(schema.artifact)
+    .innerJoin(schema.message, eq(schema.message.id, schema.artifact.messageId))
+    .innerJoin(schema.artifactVersion, latest)
+    .where(
+      and(
+        eq(schema.artifact.threadId, threadId),
+        eq(schema.artifact.userId, userId),
+        isNull(schema.message.supersededAt),
+        sql`exists (
+          select 1 from ${schema.artifactVersion} as edited
+          where edited.artifact_id = ${schema.artifact.id} and edited.source = 'person'
+        )`,
       ),
     )
     .orderBy(desc(schema.artifact.updatedAt), desc(schema.artifact.id))

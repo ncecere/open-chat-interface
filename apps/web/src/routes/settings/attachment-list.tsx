@@ -259,6 +259,21 @@ export function AttachmentList({
                           ·{' '}
                         </>
                       )}
+                      {/* A fork's or an edit's copy of a file is listed with its
+                          own conversation (#358). */}
+                      {attachment.conversation && (
+                        <>
+                          In{' '}
+                          <Link
+                            to="/chat/$threadId"
+                            params={{ threadId: attachment.conversation.id }}
+                            className="font-medium text-[var(--text-secondary)] hover:underline"
+                          >
+                            {attachment.conversation.title}
+                          </Link>{' '}
+                          ·{' '}
+                        </>
+                      )}
                       {/* In a composer and not sent (yet), unlike the rest (#297). */}
                       {attachment.unsent && 'Not sent · '}
                       {attachment.mimeType} · {formatBytes(attachment.sizeBytes)}
@@ -290,9 +305,10 @@ export function AttachmentList({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    disabled={isDeleting || lock.locked}
+                    disabled={isDeleting}
                     aria-label={`Delete ${attachment.filename}`}
-                    title={lock.title ?? `Delete ${attachment.filename}`}
+                    title={`Delete ${attachment.filename}`}
+                    locked={lock.title}
                     className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-on-tint)] hover:bg-[var(--danger)]/30"
                     onClick={() => onDelete([attachment.id])}
                   >

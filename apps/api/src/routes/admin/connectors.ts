@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { auditedAddress, failedReason } from '../../services/audit-test-details.js';
 import {
   createConnector,
   deleteConnector,
@@ -50,6 +51,9 @@ connectorRoutes.post('/', async (c) => {
     metadata: {
       name: created.name,
       slug: created.slug,
+      // Where it connects, without credentials or query (#374): as
+      // `connector.update` and `connector.test` record it.
+      url: auditedAddress(created.url),
       authMode: created.authMode,
       allowPrivateNetwork: created.allowPrivateNetwork,
       credential: input.sharedHeaderValue ? 'set' : 'none',
@@ -147,7 +151,14 @@ connectorRoutes.post('/:id/test', async (c) => {
     action: 'connector.test',
     targetType: 'connector',
     targetId: existing.id,
-    metadata: { slug: existing.slug, url: existing.url, ok: result.ok },
+    // A failure says why: "could not be reached" and "answered, but not as an
+    // MCP server" read differently on the page and must in the log (#368).
+    metadata: {
+      slug: existing.slug,
+      url: auditedAddress(existing.url),
+      ok: result.ok,
+      ...failedReason(result, result.detail),
+    },
   });
   return c.json(result);
 });

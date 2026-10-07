@@ -7,7 +7,16 @@ import { Toaster, toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ProjectPage } from '../../src/routes/projects/project';
-import { alerts, button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
+import {
+  alerts,
+  button,
+  cleanup,
+  click,
+  dialog,
+  expectLocked,
+  renderAdmin,
+  settle,
+} from './admin-test-utils';
 import { shownTitle, TitleProbe } from './title-probe';
 import { clippedOnTouch, untitledTruncations } from './truncation';
 
@@ -405,14 +414,12 @@ it("turns the project's changes off with the reason while read-only (#331)", asy
   try {
     await render('files');
     for (const name of ['Upload files', 'Remove outline.md']) {
-      expect(button(name).disabled, name).toBe(true);
-      expect(button(name).title, name).toBe('Read-only for maintenance');
+      expectLocked(button(name), 'Read-only for maintenance', name);
     }
     await click(tab('Settings'));
-    expect(button('Delete project').disabled).toBe(true);
+    expectLocked(button('Delete project'), 'Read-only for maintenance');
     await typeInto(field('Project name'), 'Renamed');
-    expect(button('Save changes').disabled).toBe(true);
-    expect(button('Save changes').title).toBe('Read-only for maintenance');
+    expectLocked(button('Save changes'), 'Read-only for maintenance');
   } finally {
     setReadOnlyStatus(INACTIVE_READ_ONLY_STATUS);
   }

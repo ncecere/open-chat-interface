@@ -155,8 +155,8 @@ export function ArtifactPanelBody({
                 variant="ghost"
                 size="sm"
                 onClick={() => setEditing(true)}
-                title={lock.title}
-                disabled={content === undefined || lock.locked}
+                locked={lock.title}
+                disabled={content === undefined}
               >
                 <Pencil aria-hidden="true" />
                 Edit

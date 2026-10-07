@@ -9,6 +9,7 @@ import {
   cleanup,
   click,
   dialog,
+  expectLocked,
   findButton,
   renderAdmin,
 } from './admin-test-utils';
@@ -245,8 +246,7 @@ describe('Settings → Sharing', () => {
     try {
       await render();
       for (const name of ['Revoke the link to Conversation snap', 'Revoke all']) {
-        expect(button(name).disabled, name).toBe(true);
-        expect(button(name).title, name).toBe('Read-only for maintenance');
+        expectLocked(button(name), 'Read-only for maintenance', name);
       }
       // Copying a link is reading, and stays on.
       expect(findButton('Copy')?.disabled).toBe(false);

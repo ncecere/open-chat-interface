@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { useState } from 'react';
+import { act, useState } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from '../../src/components/admin/confirm-dialog';
@@ -64,6 +64,19 @@ it('dismisses with Escape without running the action', async () => {
   await pressEscape();
   expect(dialog()).toBeNull();
   expect(onConfirm).not.toHaveBeenCalled();
+});
+
+it('gives focus back to the button that opened it, after Escape and after Cancel (#356)', async () => {
+  ({ root } = await renderAdmin(<Harness onConfirm={vi.fn().mockResolvedValue(undefined)} />));
+  for (const close of [pressEscape, () => click(button('Cancel'))]) {
+    const opener = button('Open');
+    await act(async () => opener.focus());
+    await click(opener);
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
+    await close();
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  }
 });
 
 it('runs the action once and closes on success', async () => {

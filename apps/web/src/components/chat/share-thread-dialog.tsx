@@ -123,8 +123,8 @@ function ShareLinkRow({
             variant="ghost"
             aria-label="Revoke share link"
             aria-haspopup="dialog"
-            title={lock.title}
-            disabled={status === 'revoked' || lock.locked}
+            locked={lock.title}
+            disabled={status === 'revoked'}
             onClick={onRevoke}
           >
             <Trash2 />
@@ -242,8 +242,7 @@ export function ShareThreadDialog({
             variant="ghost"
             size="icon-sm"
             aria-label="Share conversation"
-            title={lock.title}
-            disabled={lock.locked}
+            locked={lock.title}
           >
             <Share2 />
           </Button>
@@ -313,8 +312,8 @@ export function ShareThreadDialog({
             <Button
               type="button"
               variant="primary"
-              title={lock.title}
-              disabled={create.isPending || lock.locked}
+              locked={lock.title}
+              disabled={create.isPending}
               onClick={submit}
             >
               {create.isPending ? <Spinner /> : <Link2 />}

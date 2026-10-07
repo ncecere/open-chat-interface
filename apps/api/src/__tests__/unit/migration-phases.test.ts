@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  attachmentOwnRows,
   backgroundMigrations,
   describeRequirement,
   indexBuild,
@@ -249,9 +250,14 @@ describe('post-deploy folder', () => {
       ['0009_artifact_kind_code', '0.11.0', undefined],
       // Entries made with an account's address but no actor account (#342).
       ['0010_audit_log_actor_email_index', '0.11.0', 'audit_log_actor_email_idx'],
+      // Which rows use a stored object, for shared files (#358).
+      ['0011_attachment_storage_key_index', '0.11.0', 'attachment_storage_key_idx'],
+      ['0012_attachment_thumbnail_key_index', '0.11.0', 'attachment_thumbnail_key_idx'],
+      // Not 0013: the folded message-text index (#362) is optional, built by hand, and
+      // an upgrade must not wait for it (about 1 ms per message). See packages/db/optional.
     ]);
     const builds = steps.filter((step) => step.index);
-    expect(builds).toHaveLength(9);
+    expect(builds).toHaveLength(11);
     expect(builds.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -271,7 +277,7 @@ describe('post-deploy folder', () => {
 
 describe('background migrations', () => {
   it('registers test definitions only when the environment names them', () => {
-    const release = [usageRollupBackfill, ...secretReencryptionMigrations];
+    const release = [usageRollupBackfill, ...secretReencryptionMigrations, attachmentOwnRows];
     expect(backgroundMigrations({})).toEqual(release);
     expect(
       backgroundMigrations({

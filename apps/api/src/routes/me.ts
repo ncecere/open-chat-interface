@@ -346,12 +346,27 @@ meRoutes.post('/onboarding/accept-policy', async (c) => {
   const user = currentUser(c);
   const { policyId } = await parseBody(c, z.object({ policyId: z.string().min(1) }));
 
-  await acceptPolicy({
+  const ipAddress = clientIp(c);
+  const accepted = await acceptPolicy({
     userId: user.id,
     policyId,
     // Recorded alongside the acceptance because it is part of the evidence.
-    ipAddress: clientIp(c),
+    ipAddress,
   });
+
+  // Who accepted which version, and when, in the audit log too (#373): the
+  // acceptance row goes with the account when it is deleted, this entry stays
+  // (and is exempt from retention). Not repeated for an acceptance already on record.
+  if (accepted.recorded)
+    await recordAudit({
+      actorUserId: user.id,
+      actorEmail: user.email,
+      action: 'policy.accept',
+      targetType: 'usage_policy',
+      targetId: policyId,
+      ipAddress,
+      metadata: { version: accepted.version, title: accepted.title },
+    });
 
   return c.json({ ok: true });
 });

@@ -9,6 +9,12 @@ By default an instance accepts PNG, JPEG, WebP, and GIF images, PDFs, and plain
 text, up to 20 MB each and ten files per message. Your administrator can change
 all of that, so an instance may accept more or fewer types.
 
+**Spreadsheets (`.xlsx`, `.xls`), Word documents and presentations are not
+accepted by default.** CSV files are: in Excel or Sheets use **Save as / Download
+as CSV** (one file for each sheet) and attach that, or paste the cells into your
+message. For a Word document or a presentation, save or export it as a PDF, or
+paste the text. The red note under a refused file says the same.
+
 Files are checked by their **contents**, not their extension. Renaming a file to
 `.png` will not get it accepted, and a genuine PNG with the wrong extension will
 be.
@@ -71,13 +77,31 @@ conversation context. Switching models can send those contents to a different
 provider. Ask your administrator which providers are appropriate for your data.
 Deleting a file cannot recall contents already sent to a provider.
 
-Forks and edits reference the original file rather than making an independent
-copy: an edited question keeps its files unless you remove them in the edit
-box. If that file or its source conversation becomes unavailable, the fork or
-edit cannot use
-its contents. Current role and attachment-feature restrictions also apply to
-historical files; a file-free conversation can still be used when file access
-is disabled.
+A fork, and an edit that keeps its question's files (it keeps them unless you
+remove them in the edit box), get **their own copy** of each file. Deleting the
+conversation they were made from, by any route (trash, **Delete now**, Empty
+trash, your administrator's retention period or the automatic purge), never
+removes the files of a fork or an edit, and deleting a fork or an edit never
+removes the original's. The stored file is kept until the last copy goes.
+Each copy counts towards your storage allowance like any other file, and
+**Settings → Attachments** lists it with the conversation it belongs to; a fork
+is not refused for lack of space, but your next upload may be. Current role and
+attachment-feature restrictions also apply to historical files; a file-free
+conversation can still be used when file access is disabled.
+
+A file that is gone (for example one you deleted in **Settings → Attachments**)
+stays in its conversation as removed: its
+name struck through, with **No longer available**, and not as a file that will
+not open. Deleting a file never makes it vanish from the message it was sent
+with. The model is told by name, on every later turn, that it cannot read the
+file and must not guess its contents, so it says the file is unavailable rather
+than inventing an answer from it. Deleting one copy marks only that
+conversation's file: a fork's or an edit's own copy is unaffected. Removing a
+file in the composer before you send it simply removes it: nothing was sent.
+A conversation's Markdown export lists such a file as "(removed)", its JSON
+export keeps the message's part marked `removed`, and a shared page never shows
+files anyway. A file deleted before this change was dropped
+from its message at the time and cannot be brought back as a removed file.
 
 If a file is being changed or deleted while a reply is prepared, the request may
 be refused as unavailable or busy. Retry after the file operation finishes;

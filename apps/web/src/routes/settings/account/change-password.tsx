@@ -219,8 +219,8 @@ export function ChangePasswordDialog({
               <Button
                 type="submit"
                 variant="accent"
-                title={lock.title}
-                disabled={change.isPending || lock.locked}
+                locked={lock.title}
+                disabled={change.isPending}
               >
                 {change.isPending && <Spinner />}
                 Change password
@@ -241,13 +241,7 @@ export function PasswordControl({ onChange }: { onChange: () => void }) {
   if (!signIn) return null;
   if (signIn.password) {
     return (
-      <Button
-        variant="secondary"
-        size="sm"
-        title={lock.title}
-        disabled={lock.locked}
-        onClick={onChange}
-      >
+      <Button variant="secondary" size="sm" locked={lock.title} onClick={onChange}>
         Change Password
       </Button>
     );

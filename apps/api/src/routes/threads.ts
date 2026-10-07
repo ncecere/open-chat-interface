@@ -2,6 +2,7 @@ import { eq, schema } from '@oci/db';
 import {
   branchMessageSchema,
   compactThreadSchema,
+  contentDisposition,
   createThreadSchema,
   DOCUMENT_FORMATS,
   forkMessageSchema,
@@ -20,10 +21,11 @@ import { clientIp } from '../lib/client-ip.js';
 import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import { markUnavailableFiles, unavailableFileIds } from '../services/attachments/availability.js';
 import { recordAudit } from '../services/audit.js';
 import {
   assertCompactionPossible,
-  latestReplyModel,
+  defaultSummaryModel,
   NOTHING_TO_COMPACT,
 } from '../services/chat/compaction.js';
 import {
@@ -231,7 +233,7 @@ threadRoutes.get('/:id/export', async (c) => {
 
   return c.body(markdown, 200, {
     'content-type': 'text/markdown; charset=utf-8',
-    'content-disposition': `attachment; filename="${exportFilename(thread.title, timeZone)}"`,
+    'content-disposition': contentDisposition(exportFilename(thread.title, timeZone)),
     'cache-control': 'no-store',
   });
 });
@@ -363,7 +365,7 @@ threadRoutes.post('/:id/compact', async (c) => {
       limit.retryAfterSeconds,
     );
   const input = await parseBody(c, compactThreadSchema);
-  const slug = input.modelSlug ?? (await latestReplyModel(thread.id));
+  const slug = input.modelSlug ?? (await defaultSummaryModel(thread.id, user.id, user.role));
   if (!slug) throw validationFailed(NOTHING_TO_COMPACT);
   const model = await resolveModelForRole(slug, user.role);
   await assertCompactionPossible({
@@ -386,24 +388,28 @@ threadRoutes.get('/:id', async (c) => {
   const user = currentUser(c);
   const thread = await getOwnedThread(c.req.param('id'), user.id);
   const messages = await listMessages(thread.id);
+  // Files that can no longer be opened are marked in their parts (#359).
+  const gone = await unavailableFileIds(user.id, messages);
 
   return c.json({
     thread: serializeThread(thread),
-    messages: messages.map((message) => ({
-      id: message.id,
-      threadId: message.threadId,
-      role: message.role,
-      parts: message.parts,
-      modelSlug: message.modelSlug,
-      effort: message.effort,
-      parentMessageId: message.parentMessageId,
-      status: message.status,
-      errorMessage: message.errorMessage,
-      tokensIn: message.tokensIn,
-      tokensOut: message.tokensOut,
-      durationMs: message.durationMs,
-      createdAt: message.createdAt.toISOString(),
-    })),
+    messages: messages
+      .map((stored) => markUnavailableFiles(stored, gone))
+      .map((message) => ({
+        id: message.id,
+        threadId: message.threadId,
+        role: message.role,
+        parts: message.parts,
+        modelSlug: message.modelSlug,
+        effort: message.effort,
+        parentMessageId: message.parentMessageId,
+        status: message.status,
+        errorMessage: message.errorMessage,
+        tokensIn: message.tokensIn,
+        tokensOut: message.tokensOut,
+        durationMs: message.durationMs,
+        createdAt: message.createdAt.toISOString(),
+      })),
   });
 });
 

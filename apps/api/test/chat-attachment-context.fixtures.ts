@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { type createDatabase, eq, schema } from '@oci/db';
+import { type createDatabase, eq, inArray, schema } from '@oci/db';
 import type { SendMessageInput } from '@oci/shared';
 import { convertToModelMessages } from 'ai';
 import { expect } from 'vitest';
@@ -58,6 +58,49 @@ export async function imageBytes(started: StartedTurn) {
   const encoded = String(data);
   expect(encoded).not.toMatch(/^https?:/);
   return Buffer.from(encoded.replace(/^data:[^,]*,/, ''), 'base64');
+}
+
+/**
+ * Turns a fork or edit into one made before 0.11 (#358): its messages show the
+ * source's attachment ids and own no file, as the previous release left them
+ * (it stored the copy of a message with the source's parts and no row of its
+ * own). New forks have rows of their own, so the checks of what happens to a
+ * file whose source conversation goes away are made on these.
+ */
+export async function shareFilesWithSource(
+  pool: ReturnType<typeof createDatabase>,
+  threadId: string,
+) {
+  const copies = await pool.db
+    .select()
+    .from(schema.message)
+    .where(eq(schema.message.threadId, threadId));
+  for (const copy of copies) {
+    if (!copy.parentMessageId) continue;
+    const [source] = await pool.db
+      .select({ parts: schema.message.parts })
+      .from(schema.message)
+      .where(eq(schema.message.id, copy.parentMessageId));
+    // The copy keeps its own text (an edit's is new), but shows the source's files.
+    const files = source?.parts.filter((part) => part.type === 'data-attachment') ?? [];
+    if (files.length > 0) {
+      let next = 0;
+      await pool.db
+        .update(schema.message)
+        .set({
+          parts: copy.parts.map((part) =>
+            part.type === 'data-attachment' ? (files[next++] ?? part) : part,
+          ),
+        })
+        .where(eq(schema.message.id, copy.id));
+    }
+  }
+  await pool.db.delete(schema.attachment).where(
+    inArray(
+      schema.attachment.messageId,
+      copies.map((copy) => copy.id),
+    ),
+  );
 }
 
 /** What the helpers need from a suite; read when a helper runs, after the hooks. */

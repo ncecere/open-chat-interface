@@ -10,7 +10,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { Lock, LockOpen } from 'lucide-react';
-import { type FormEvent, useId, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { useAdminAccess } from '~/components/admin/admin-access';
 import { LoadError, MutationError, Notice, SettingsSection } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
@@ -176,12 +176,21 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
   const [reason, setReason] = useState('');
   const [until, setUntil] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const confirmId = `${id}-confirm`;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLFieldSetElement>(null);
   // Each problem under its field, marked invalid and described by it, until
   // that field is edited (#222, #302).
   const [problems, setProblems] = useFieldProblems({ reason, until });
   const at = (field: string) => problemsAt(problems, field);
   // Each form here asks before its edit is left behind (#45, #300).
   useReportUnsaved(reason !== '' || until !== '');
+  // The safe choice has focus when the question appears, as in every
+  // destructive dialog (#196, #356).
+  useEffect(() => {
+    if (confirming) cancelRef.current?.focus();
+  }, [confirming]);
 
   if (settings.readOnly) {
     return (
@@ -203,32 +212,62 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
     );
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  /** The form as the API will read it, or null (with the problems shown) when it is refused. */
+  function parseInput(): UpdateMaintenanceInput | null {
     const input = { readOnly: true, reason: reason.trim() || null, until: fromLocalInput(until) };
     // An expected end in the past is refused here before the confirmation,
     // as the API refuses it (#222).
     const parsed = updateMaintenanceSchema.safeParse(input);
-    if (!parsed.success) {
-      setConfirming(false);
-      setProblems(
-        validationProblems(parsed.error.issues, SWITCH_LABELS).map(({ field, text }) => ({
-          fields: field ? [field] : [],
-          text,
-        })),
-      );
-      return;
-    }
-    if (!confirming) {
-      setConfirming(true);
-      return;
-    }
+    if (parsed.success) return input;
+    closeConfirm();
+    setProblems(
+      validationProblems(parsed.error.issues, SWITCH_LABELS).map(({ field, text }) => ({
+        fields: field ? [field] : [],
+        text,
+      })),
+    );
+    return null;
+  }
+
+  /**
+   * Closes the question and puts focus back on the button that asked it. The
+   * button that had focus (Cancel or Confirm) is going away, and focus on
+   * `<body>` sent the next Tab to the skip link (#356).
+   */
+  function closeConfirm() {
+    const hadFocus = confirmRef.current?.contains(document.activeElement);
     setConfirming(false);
+    if (hadFocus) triggerRef.current?.focus();
+  }
+
+  // Enter in a field, or the button itself, asks; only the Confirm button
+  // below turns it on, so Enter in the Reason field cannot (#356).
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (parseInput()) setConfirming(true);
+  }
+
+  function confirm() {
+    const input = parseInput();
+    if (!input) return;
+    closeConfirm();
     save.mutate(input);
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key !== 'Escape' || !confirming) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // From the question or its button, focus goes back to the button; from a
+    // field it stays in the field.
+    const active = document.activeElement;
+    const from = active === triggerRef.current || confirmRef.current?.contains(active);
+    setConfirming(false);
+    if (from) triggerRef.current?.focus();
+  }
+
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-4">
+    <form noValidate onSubmit={submit} onKeyDown={handleKeyDown} className="flex flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="Reason shown to people"
@@ -266,19 +305,37 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
       )}
       <div className="flex flex-wrap items-center gap-3">
         <Button
+          ref={triggerRef}
           type="submit"
-          variant={confirming ? 'danger' : 'secondary'}
+          variant="secondary"
           disabled={save.isPending}
+          aria-expanded={confirming}
+          aria-controls={confirming ? confirmId : undefined}
         >
           {save.isPending ? <Spinner /> : <Lock />}
-          {confirming ? 'Confirm: refuse every change now' : 'Turn on read-only mode'}
+          Turn on read-only mode
         </Button>
-        {confirming && (
-          <Button type="button" variant="ghost" onClick={() => setConfirming(false)}>
-            Cancel
-          </Button>
-        )}
       </div>
+      {confirming && (
+        <fieldset
+          ref={confirmRef}
+          id={confirmId}
+          className="m-0 flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-3"
+        >
+          <legend className="sr-only">Confirm read-only mode</legend>
+          <p className="text-[var(--text-primary)] text-sm">
+            Turn on read-only mode for everyone? Every change is refused until it is turned off.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button ref={cancelRef} type="button" variant="ghost" onClick={closeConfirm}>
+              Cancel
+            </Button>
+            <Button type="button" variant="danger" onClick={confirm}>
+              Confirm: refuse every change now
+            </Button>
+          </div>
+        </fieldset>
+      )}
     </form>
   );
 }

@@ -11,7 +11,7 @@ import { getDefaultOrganizationId } from '../../services/organization.js';
 import {
   nextReportRunAt,
   retriesLeft,
-  runDueReports,
+  runDueReportsDetailed,
   sendReportNow,
 } from '../../services/reports.js';
 import { diffUpdate } from '../../services/settings-diff.js';
@@ -135,7 +135,7 @@ reportRoutes.delete('/:id', async (c) => {
  */
 reportRoutes.post('/run', async (c) => {
   const actor = currentUser(c);
-  const sent = await runDueReports();
+  const run = await runDueReportsDetailed();
 
   await recordAudit({
     actorUserId: actor.id,
@@ -143,10 +143,16 @@ reportRoutes.post('/run', async (c) => {
     action: 'report.run',
     targetType: 'scheduled_report',
     ipAddress: clientIp(c),
-    metadata: { sent },
+    // What was attempted, not only what was sent (#369).
+    metadata: {
+      due: run.due,
+      sent: run.sent,
+      failed: run.failed.length,
+      ...(run.emailNotConfigured && { emailNotConfigured: true }),
+    },
   });
 
-  return c.json({ sent });
+  return c.json(run);
 });
 
 /**

@@ -15,15 +15,17 @@ advance.
 
 The archive contains:
 
-- `conversations/` — two files per conversation, named after its title and
-  start date. The `.md` file is the readable version, the same as downloading
+- `conversations/` — two files per conversation, named after its title (in
+  any script) and start date. The `.md` file is the readable version, the same as downloading
   a single conversation: the title, then a heading for each message (**You**
   or **Assistant** with the model's name), with the message's own headings one
   level below it. The `.json` file is the complete record: every
   message as stored, including model reasoning, which the Markdown leaves out,
   and the list of attached files.
-- `attachments/` — the files you attached, in a folder per conversation. Files
-  you uploaded but never sent are in `attachments/unsent/`.
+- `attachments/` — the files you attached, in a folder per conversation. A fork
+  and an edit have a folder of their own with the files they show, so a file
+  appears once for each conversation that has it. Files you uploaded but never
+  sent are in `attachments/unsent/`.
 - `memory.json` — every [memory](memory.md) note, newest first, whether or
   not memory is switched on.
 - `manifest.json` — when the export was made, the OCI version, how many
@@ -32,7 +34,8 @@ The archive contains:
 - `README.txt` — a short description of the above.
 
 Active and archived conversations are included. Conversations in the trash,
-temporary chats and deleted files are not.
+temporary chats and deleted files are not; a message that showed a file you
+deleted still names it, marked `removed`, in its conversation's JSON.
 
 You can run one export at a time, and a few per hour. Very large exports are
 capped: past 2 GB of attached files, further files are listed in

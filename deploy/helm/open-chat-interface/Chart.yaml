@@ -8,8 +8,8 @@ type: application
 # The chart is released with the application: `version` is the release without
 # the "v" and `appVersion` is the image tag. `pnpm release:check` fails when
 # either differs from the package versions.
-version: 0.11.0
-appVersion: "v0.11.0"
+version: 0.11.1
+appVersion: "v0.11.1"
 kubeVersion: ">=1.27.0-0"
 home: https://github.com/ncecere/open-chat-interface
 sources:

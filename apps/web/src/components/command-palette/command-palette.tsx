@@ -70,6 +70,7 @@ export function CommandPalette(props: CommandPaletteProps) {
             <input
               ref={inputRef}
               role="combobox"
+              dir="auto"
               aria-label="Type a command or search your conversations"
               aria-autocomplete="list"
               aria-expanded="true"

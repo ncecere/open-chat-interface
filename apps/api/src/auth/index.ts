@@ -251,16 +251,24 @@ export const auth = betterAuth({
       // A failure returns an APIError carrying `statusCode`, not a Response.
       // Checking only for a Response records every failed attempt as a success,
       // which is precisely backwards for the events worth having.
-      const returned = ctx.context.returned as { status?: number; statusCode?: number } | undefined;
+      const returned = ctx.context.returned as
+        | { status?: number; statusCode?: number; body?: { code?: unknown } }
+        | undefined;
       const status = returned instanceof Response ? returned.status : (returned?.statusCode ?? 200);
       // A new session (sign-in, or a password change that signs other devices
       // out) names the actor; otherwise the session the request was made with
       // (for sign-out, as the before hook found it).
       const session = ctx.context.newSession ?? ctx.context.session;
 
+      const failureCode =
+        returned && !(returned instanceof Response) && typeof returned.body?.code === 'string'
+          ? returned.body.code
+          : null;
+
       await recordAuthEvent({
         path: ctx.path,
         status,
+        failureCode,
         ipAddress: clientIpFromHeaders(ctx.headers),
         userAgent: ctx.headers?.get('user-agent') ?? null,
         actorUserId: session?.user?.id ?? null,

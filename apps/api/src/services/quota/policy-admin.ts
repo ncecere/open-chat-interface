@@ -75,7 +75,7 @@ export async function createQuotaPolicy(actor: Actor, input: UpsertQuotaPolicyIn
       if (!policy) throw validationFailed('The policy could not be created.');
       await replaceRoles(tx, policy.id, input.roles);
       await replaceModels(tx, policy.id, modelSlugs);
-      return policy;
+      return { ...policy, modelSlugs };
     })
     .catch(rethrowPolicyWriteError);
 
@@ -85,12 +85,14 @@ export async function createQuotaPolicy(actor: Actor, input: UpsertQuotaPolicyIn
     action: 'quota.policy.create',
     targetType: 'quota_policy',
     targetId: created.id,
-    metadata: {
-      name: input.name,
-      metric: input.metric,
-      roles: input.roles,
-      modelSlugs: input.modelSlugs,
-    },
+    // The limit, window, zone and state too, as its update and delete entries
+    // record them (#374): the entry said a budget was created, not what it
+    // allowed.
+    metadata: policyValues({
+      ...input,
+      windowHours: normalizeWindow(input),
+      modelSlugs: created.modelSlugs,
+    }),
   });
 
   return { id: created.id };

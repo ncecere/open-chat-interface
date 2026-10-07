@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   auditedAddress,
+  destinationAuditDetails,
+  failedReason,
   redactedReason,
   searchTestAuditDetails,
 } from '../../services/audit-test-details.js';
@@ -95,5 +97,37 @@ describe('searchTestAuditDetails', () => {
         'fallback',
       ),
     ).toEqual({ fallbackReason: 'rejected key [redacted]' });
+  });
+});
+
+describe('failedReason (#368)', () => {
+  it('records the cleaned reason of a failure, and nothing for a pass', () => {
+    expect(failedReason({ ok: true }, 'ignored')).toEqual({});
+    expect(
+      failedReason({ ok: false }, 'could not reach https://u:p4ss@hooks.example.test/x', []),
+    ).toEqual({ reason: 'could not reach https://[redacted]@hooks.example.test/x' });
+  });
+
+  it('never leaves a failure without a reason', () => {
+    expect(failedReason({ ok: false }, null)).toEqual({ reason: 'No reason was given' });
+    expect(failedReason({ ok: false }, '  ')).toEqual({ reason: 'No reason was given' });
+  });
+});
+
+describe('destinationAuditDetails (#368)', () => {
+  it('names the bucket and address of a separate destination, without credentials or query', () => {
+    expect(
+      destinationAuditDetails({
+        destination: 'separate',
+        s3: { bucket: 'audit-copies', endpoint: 'https://key:secret@s3.example.test/path?sig=abc' },
+      }),
+    ).toEqual({
+      destination: 'separate',
+      bucket: 'audit-copies',
+      endpoint: 'https://s3.example.test/path',
+    });
+    expect(destinationAuditDetails({ destination: 'storage', s3: { bucket: 'x' } })).toEqual({
+      destination: 'storage',
+    });
   });
 });

@@ -1,5 +1,6 @@
-import { and, desc, eq, ilike, isNull, schema, sql } from '@oci/db';
+import { and, desc, eq, isNull, schema, sql } from '@oci/db';
 import { db } from '../db/index.js';
+import { foldedIlike } from '../lib/fold.js';
 import { containsPattern } from '../lib/like.js';
 
 /**
@@ -57,7 +58,9 @@ export async function listThreadHistory(
     eq(schema.thread.temporary, false),
     isNull(schema.thread.deletedAt),
   ];
-  if (options.search) conditions.push(ilike(schema.thread.title, containsPattern(options.search)));
+  if (options.search) {
+    conditions.push(foldedIlike(sql`${schema.thread.title}`, containsPattern(options.search)));
+  }
   if (options.before) {
     conditions.push(
       sql`(${activityMs}, ${schema.thread.id}) < (${options.before.activityAt.toISOString()}::timestamptz, ${options.before.id})`,

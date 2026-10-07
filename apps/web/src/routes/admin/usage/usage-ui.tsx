@@ -1,5 +1,6 @@
 import { LoadError } from '~/components/admin/admin-ui';
 import { Spinner } from '~/components/ui/spinner';
+import { formatActivityDay } from '~/lib/activity-series';
 import { dayIn, fillDays, type Range } from './usage-helpers';
 
 export function StatGrid({ stats }: { stats: Array<{ label: string; value: string }> }) {
@@ -42,6 +43,13 @@ export function Trend({
   }
 
   const filled = fillDays(points, range.days, dayIn(range.timezone, new Date()));
+  // Days are written as people write them ("Oct 1"), as Overview's chart does,
+  // not as the API's ISO dates (#376). Each is a calendar date already, read as
+  // such, so it does not move with the browser's zone.
+  const written = (point: { day: string; value: number }) => ({
+    ...point,
+    day: formatActivityDay(point.day),
+  });
   const peak = Math.max(1, ...filled.map((point) => point.value));
   const busiest = filled.reduce((best, point) => (point.value > best.value ? point : best));
   const active = filled.filter((point) => point.value > 0);
@@ -51,7 +59,7 @@ export function Trend({
       <div
         className="flex h-32 items-end gap-0.5"
         role="img"
-        aria-label={`${label}, ${filled[0]?.day} to ${filled.at(-1)?.day}: busiest ${describe(busiest)}; ${active.length} of ${filled.length} days had any.`}
+        aria-label={`${label}, ${formatActivityDay(filled[0]?.day ?? '')} to ${formatActivityDay(filled.at(-1)?.day ?? '')}: busiest ${describe(written(busiest))}; ${active.length} of ${filled.length} days had any.`}
       >
         {filled.map((point) => (
           <div
@@ -62,14 +70,14 @@ export function Trend({
             }}
           >
             <span className="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden whitespace-nowrap rounded bg-[var(--bg-control-hover)] px-2 py-1 text-[10px] group-hover:block">
-              {describe(point)}
+              {describe(written(point))}
             </span>
           </div>
         ))}
       </div>
       <div className="mt-2 flex justify-between text-[var(--text-muted)] text-xs">
-        <span>{filled[0]?.day}</span>
-        <span>{filled.at(-1)?.day}</span>
+        <span>{formatActivityDay(filled[0]?.day ?? '')}</span>
+        <span>{formatActivityDay(filled.at(-1)?.day ?? '')}</span>
       </div>
       <details className="mt-3 text-sm">
         <summary className="cursor-pointer text-[var(--text-secondary)]">Show the numbers</summary>
@@ -78,8 +86,10 @@ export function Trend({
           <tbody>
             {active.map((point) => (
               <tr key={point.day}>
-                <td className="py-0.5 pr-6 text-[var(--text-muted)]">{point.day}</td>
-                <td className="py-0.5">{describe(point).split(' · ').at(-1)}</td>
+                <td className="py-0.5 pr-6 text-[var(--text-muted)]">
+                  {formatActivityDay(point.day)}
+                </td>
+                <td className="py-0.5">{describe(written(point)).split(' · ').at(-1)}</td>
               </tr>
             ))}
           </tbody>

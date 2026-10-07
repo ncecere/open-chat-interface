@@ -1,5 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import {
+  contentDisposition,
   DOCUMENT_FORMAT_INFO,
   type DocumentFormat,
   MAX_DOCUMENT_EXPORT_INPUT_BYTES,
@@ -93,9 +94,12 @@ export async function renderDocument(
   return bytes as Uint8Array<ArrayBuffer>;
 }
 
-/** `attachment; filename="…"` for a safe ASCII base name and the format's extension. */
+/**
+ * `attachment` with the base name and the format's extension, as `filename*`
+ * (UTF-8, so a Japanese or Arabic title survives, #361) and an ASCII `filename`.
+ */
 export function documentDisposition(base: string, format: DocumentFormat): string {
-  return `attachment; filename="${base}.${DOCUMENT_FORMAT_INFO[format].extension}"`;
+  return contentDisposition(`${base}.${DOCUMENT_FORMAT_INFO[format].extension}`);
 }
 
 interface WorkerLimits {

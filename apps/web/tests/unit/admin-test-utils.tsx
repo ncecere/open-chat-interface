@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { expect } from 'vitest';
 import type { ZodType } from 'zod';
 import { AdminAccessProvider, type AdminRole } from '../../src/components/admin/admin-access';
 import { ApiError } from '../../src/lib/api-client';
@@ -93,6 +94,38 @@ export function dialog(): HTMLElement | null {
 
 export function alerts(scope: ParentNode = document): string[] {
   return [...scope.querySelectorAll('[role="alert"]')].map((node) => node.textContent ?? '');
+}
+
+/**
+ * A control that is off while read-only (#357): natively enabled so Tab and
+ * screen readers reach it, aria-disabled, and described by the reason, which
+ * is also its title. Returns the description.
+ */
+export function expectLocked(control: HTMLElement, reason: RegExp | string, name = ''): string {
+  expect((control as HTMLButtonElement).disabled, `${name} is focusable`).toBe(false);
+  expect(control.getAttribute('aria-disabled'), `${name} is aria-disabled`).toBe('true');
+  const description = (control.getAttribute('aria-describedby') ?? '')
+    .split(/\s+/)
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ')
+    .trim();
+  const matches = (text: string, anywhere = false) => {
+    if (typeof reason === 'string') return text.includes(reason);
+    // A control's description may carry its own hint before the reason.
+    return (anywhere ? new RegExp(reason.source.replace(/^\^/, ''), reason.flags) : reason).test(
+      text,
+    );
+  };
+  expect(matches(description, true), `${name} description "${description}"`).toBe(true);
+  expect(matches(control.title), `${name} title "${control.title}"`).toBe(true);
+  return description;
+}
+
+/** Whether a control is off, however it says so (natively, or aria-disabled). */
+export function isOff(control: HTMLElement): boolean {
+  return (
+    (control as HTMLButtonElement).disabled || control.getAttribute('aria-disabled') === 'true'
+  );
 }
 
 export async function pressEscape() {

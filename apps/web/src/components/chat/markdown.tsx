@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
 import { escapeCurrencyDollars } from '~/components/chat/markdown-currency';
+import { rehypeAutoDirection } from '~/components/chat/markdown-direction';
 import {
   DEMOTED_HEADINGS,
   HeadingLevels,
@@ -104,6 +105,12 @@ function buildMarkdownRenderer([
   // Its wide tables and code blocks scroll; make them reachable by keyboard.
   installStreamdownScrollRegions();
   const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
+  // Streamdown's own plugins with every paragraph, list, item and cell taking
+  // its own direction last (#360). Built once: Streamdown re-parses when the
+  // array changes.
+  const withDirection = (plugins: Pluggable[]): Pluggable[] => [...plugins, rehypeAutoDirection];
+  const defaultPlugins = withDirection(Object.values(defaultRehypePlugins ?? {}));
+  const conversationPlugins = ownerRehypePlugins ? withDirection(ownerRehypePlugins) : null;
   // Streamdown's own (GFM, code metadata), then single line breaks kept (#207).
   // One array for every message: Streamdown re-parses when its identity changes.
   const remarkPlugins = [...Object.values(defaultRemarkPlugins ?? {}), remarkSoftBreaks];
@@ -132,9 +139,9 @@ function buildMarkdownRenderer([
       // page's h1 (#212, #271); a task list's checkboxes are named (#240).
       components={MESSAGE_COMPONENTS}
       // Share pages pass their own URL policy and keep the visible marker.
-      {...(!skipHtml && !urlTransform && ownerRehypePlugins
-        ? { rehypePlugins: ownerRehypePlugins }
-        : {})}
+      rehypePlugins={
+        !skipHtml && !urlTransform && conversationPlugins ? conversationPlugins : defaultPlugins
+      }
       {...(skipHtml ? { skipHtml } : {})}
       {...(urlTransform
         ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
@@ -302,6 +309,11 @@ const MARKDOWN_BASE = cn(
   // to its end, so blocks were drawn at 200 px, then at their height a frame
   // later, and the replies jumped (a one-line block: 218 -> 110 px, #311).
   '[&_[data-streamdown=code-block]]:![content-visibility:visible]',
+  // Paragraphs, lists and cells take their own direction (markdown-direction.ts,
+  // #360); code does not follow them: a code block stays left to right, even
+  // in a right-to-left list item or quote, and inline code reads by its own text.
+  '[&_[data-streamdown=code-block]]:[direction:ltr] [&_pre]:text-left',
+  '[&_:not(pre)>code]:[unicode-bidi:plaintext]',
 );
 
 /**
@@ -336,12 +348,24 @@ export const MARKDOWN_PROSE = cn(
   // Streamdown puts list markers inside the text: a wrapped line started under
   // the bullet, and an item that was one long link left its bullet alone on a
   // line. Outside markers give a hanging indent (#241).
-  '[&_ul]:list-outside [&_ol]:list-outside [&_ul]:pl-6 [&_ol]:pl-6',
+  // The indent is on the side the list starts, so a right-to-left list indents
+  // from the right (#360); Streamdown's nested lists add a left one to undo.
+  '[&_ul]:list-outside [&_ol]:list-outside [&_ul]:ps-6 [&_ol]:ps-6',
+  '[&_ul:dir(rtl)]:pl-0 [&_ol:dir(rtl)]:pl-0',
+  // An item that reads the other way from its list (an Arabic item in an
+  // English list) keeps its marker inside its own text: outside, the marker
+  // would fall in the list's unpadded side.
+  '[&_:is(ul,ol):dir(ltr)>li:dir(rtl)]:list-inside [&_:is(ul,ol):dir(rtl)>li:dir(ltr)]:list-inside',
   // A task's checkbox sits where the bullet would, so its text hangs too:
   // 16 px box, 4 px margin and the space after it fill the 24 px indent.
-  '[&_.task-list-item_input]:-ml-6 [&_.task-list-item_input]:w-4',
+  '[&_.task-list-item_input]:-ms-6 [&_.task-list-item_input]:w-4',
   // A task list item shows its checkbox, not a bullet as well (#240).
-  '[&_li.task-list-item]:list-none [&_.task-list-item_input]:mr-1',
+  '[&_li.task-list-item]:list-none [&_.task-list-item_input]:me-1',
+  // Streamdown's table header is left-aligned and its quote bar is on the
+  // left: both follow the text's direction instead (#360).
+  '[&_th]:text-start',
+  '[&_blockquote:dir(rtl)]:border-l-0 [&_blockquote:dir(rtl)]:border-r-4',
+  '[&_blockquote:dir(rtl)]:pl-0 [&_blockquote:dir(rtl)]:pr-4',
 );
 
 // Cache at the wrapper boundary, before normalization and the lazy renderer.
@@ -369,7 +393,9 @@ export const Markdown = memo(function Markdown({
   return (
     <Suspense
       fallback={
-        <div className={cn('whitespace-pre-wrap wrap-anywhere', className)}>{children}</div>
+        <div dir="auto" className={cn('whitespace-pre-wrap wrap-anywhere', className)}>
+          {children}
+        </div>
       }
     >
       <HeadingLevels.Provider value={levels}>

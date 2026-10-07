@@ -33,7 +33,9 @@ each edit can be told apart in the sidebar; rename it if you prefer. Files
 sent with the question stay with it: the edit box shows them below the text,
 and the revised question is answered with them. Choose **Remove** (×) on a
 file to leave it out of the revised question; **Cancel** keeps everything as
-it was.
+it was. The edit gets its own copy of each file it keeps, so deleting the
+original conversation later does not take them away (see
+[Forks and edits keep their own files](#forks-and-edits-keep-their-own-files)).
 
 Editing, retrying and forking at a question answer with the model and
 reasoning level shown in the model picker when you do it. If a model failed or
@@ -62,6 +64,33 @@ again as it opens, as an edit does.
 This is worth reaching for more often than people do. Asking "what if we did it
 the other way?" as a fork means you end up with both answers side by side in
 the sidebar rather than one overwritten by the other.
+
+### Forks and edits keep their own files
+
+A fork, and an edit that keeps a question's files, get **their own copy of each
+file**, as they get their own copy of artifacts. Deleting the conversation they
+were made from, moving it to the trash and emptying it, an automatic purge by
+your administrator's retention period, or deleting the file from that
+conversation in **Settings → Attachments**, never removes the files of a
+conversation you kept, and the other way round: deleting a fork or an edit
+leaves the original's files alone. A file is removed from storage only when
+the last conversation that has a copy of it is deleted.
+
+Each copy counts towards your storage allowance like the file it copies, so a
+fork of a conversation with a 5 MB PDF holds 5 MB more on the meter, and
+**Settings → Attachments** lists the file once for each conversation that has
+it, saying which. Making a fork is never refused for lack of space (the file is
+already stored); an upload after it may be.
+
+If a file is gone (you deleted it in **Settings → Attachments**, for example, or
+it was lost to a deletion before copies were kept), the conversation shows it as
+removed: its name struck through with **No longer
+available**, not as a file that will not open. It stays there when you delete it
+in Settings; only files deleted before this change are missing altogether, as they
+were dropped from their messages then. The model is told by name that
+the file cannot be read and is asked not to guess at it, so it says so instead
+of answering as if it had read the file. Remove the chip in the edit box if you
+do not want to carry it into an edit.
 
 ## How messages are formatted
 
@@ -272,13 +301,17 @@ summary the model receives.
   for example "keep every figure in the budget". The dialog closes at once;
   while the summary is made, the icon shows **Summarising earlier messages…**
   and you can keep writing. Asking again meanwhile does not make a second one.
-  It uses the model of the latest reply. A conversation needs at least two
+  It uses the model selected in the message box. (If that is the model whose
+  latest reply failed, your default model is used instead, because the same
+  model would fail again.) A conversation needs at least two
   turns (since the last summary) first; until then the dialog says there is
   nothing to summarise yet.
 - **If a summary you asked for fails,** a quiet note under the conversation
   says so and why: your usage allowance ran out, the model returned an error,
-  the model took too long, or there was nothing to summarise by then. Select
-  **Retry** to ask again with the same instructions, or **Dismiss**. The note
+  the model took too long, or there was nothing to summarise by then. For a
+  model error or a timeout the note suggests choosing another model in the
+  message box. Select **Retry** to ask again with the same instructions (and
+  the model selected now), or **Dismiss**. The note
   goes away by itself when a later summary succeeds (OCI also retries a model
   error a few times in the background). Summaries OCI makes on its own are
   never reported: if one fails, the conversation simply carries on as before.
@@ -339,6 +372,15 @@ Names are 1 to 200 characters; spaces at either end are dropped. The new name
 shows straight away in the sidebar, in search and in
 [Settings → History](settings.md#history).
 
+## Right-to-left languages
+
+Arabic, Hebrew, Persian, Urdu and other right-to-left text is laid out from the
+right: each paragraph, list, quote and table cell, in your messages and in
+replies, takes its direction from its first letter, so an Arabic paragraph and
+an English one in the same reply each read their own way. The message box and
+conversation titles follow what you type in the same way. Code stays left to
+right. (Exported PDFs do the same; see [Exporting](exporting.md).)
+
 ## Finding a conversation
 
 Type in the sidebar's search box, or press `Cmd/Ctrl + K`, to search your
@@ -347,6 +389,15 @@ lines underneath, matched words highlighted, best match first.
 
 - Every word you type must appear, and each matches the start of a word:
   `migr plan` finds "migration planning". Punctuation and symbols are ignored.
+- Capitals do not matter. Accents do not matter in conversation titles:
+  `bibliotheque` finds a conversation titled "Bibliothèque" and `busqueda` finds
+  "Búsqueda", in search, the sidebar and the conversation list filter in
+  Settings → History. This applies to Latin letters; words in other scripts
+  (Arabic, Japanese, Cyrillic) match as written. In the text of messages,
+  accents matter unless your administrator has turned on accent-insensitive
+  message search (see the operations guide): then `bibliotheque` also finds
+  "bibliothèque" in a reply. Search of a project's files is separate and is not
+  covered by this.
 - Search covers titles, your messages and the replies you were shown. It does
   not search reasoning, web search sources, or the contents of attached files.
 - Archived conversations are included and marked **Archived**. Conversations

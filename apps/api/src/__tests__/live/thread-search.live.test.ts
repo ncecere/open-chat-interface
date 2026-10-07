@@ -421,7 +421,18 @@ describe.skipIf(!available)('live Postgres: conversation search', () => {
         where ${messageSearchVector('m')} @@ ${"'kangaroo':*"}::tsquery
       `);
       const statement = await tx.execute<{ 'QUERY PLAN': string }>(
-        sql`explain ${threadSearchStatement(ownerId, "'kangaroo':*", 'kangaroo', 20)}`,
+        sql`explain ${threadSearchStatement(
+          ownerId,
+          {
+            tsquery: "'kangaroo':*",
+            terms: ['kangaroo'],
+            folded: false,
+            titleTsquery: "'kangaroo':*",
+            titleTerms: ['kangaroo'],
+          },
+          'kangaroo',
+          20,
+        )}`,
       );
       return {
         predicate: predicate.map((row) => row['QUERY PLAN']).join('\n'),

@@ -2,6 +2,7 @@ import type { Attachment } from '@oci/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { ApiError, api } from '~/lib/api-client';
+import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { formatLimit } from '~/lib/utils';
 
 export interface PendingAttachment {
@@ -153,6 +154,7 @@ export function useAttachments() {
           });
 
           if (!response.ok) {
+            void notePolicyRequiredResponse(response);
             const payload = (await response.json().catch(() => null)) as {
               error?: { message?: string };
             } | null;

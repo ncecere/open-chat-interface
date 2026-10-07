@@ -428,6 +428,17 @@ describe('recent activity (#324)', () => {
             targetType: 'thread',
             targetId: 't1',
           }),
+          // The viewer banned and unbanned Dana: told apart by action (#375).
+          entry('a5', 'user.ban', { actorUserId: 'viewer', actorEmail: 'me@example.test' }),
+          entry('a6', 'user.unban', { actorUserId: 'viewer', actorEmail: 'me@example.test' }),
+          // A refused sign-in with her address, by nobody signed in: not "To Dana, by dana".
+          entry('a7', 'auth.signin.local.failure', {
+            actorUserId: null,
+            actorEmail: 'dana@example.test',
+            targetType: 'session',
+            targetId: null,
+            metadata: { status: 403, reason: 'BANNED_USER' },
+          }),
         ],
       };
     });
@@ -442,6 +453,11 @@ describe('recent activity (#324)', () => {
       expect.stringContaining('user.role.changeTo Dana Admin, by ops@example.test'),
       expect.stringContaining('user.role.changeTo Dana Admin, by you'),
       expect.stringMatching(/^thread\.exportBy Dana Admin\d|^thread\.exportBy Dana Admin[^,]/),
+      expect.stringContaining('user.banTo Dana Admin, by you'),
+      expect.stringContaining('user.unbanTo Dana Admin, by you'),
+      expect.stringContaining(
+        'auth.signin.local.failureWith dana@example.test, not signed in (BANNED_USER)',
+      ),
     ]);
   });
 });

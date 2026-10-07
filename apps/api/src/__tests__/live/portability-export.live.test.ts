@@ -229,6 +229,10 @@ describe.skipIf(!available)('live Postgres: full account export', () => {
 
     await thread(ownerId, 'Same title');
     await thread(ownerId, 'Same title');
+    // Titles in other scripts name their files after their words (#361).
+    for (const title of ['日本語の宿題', 'واجب الكتابة', 'Домашнее задание 📚']) {
+      await thread(ownerId, title);
+    }
 
     const foreign = await thread(strangerId, 'Stranger secret');
     await message(foreign, strangerId, 'user', [{ type: 'text', text: 'Stranger content' }], 0);
@@ -256,6 +260,9 @@ describe.skipIf(!available)('live Postgres: full account export', () => {
         // Colliding titles are disambiguated rather than overwritten.
         'conversations/same-title-2026-01-15.md',
         'conversations/same-title-2026-01-15-2.md',
+        'conversations/日本語の宿題-2026-01-15.md',
+        'conversations/واجب-الكتابة-2026-01-15.md',
+        'conversations/домашнее-задание-2026-01-15.md',
         'manifest.json',
         'README.txt',
       ]),
@@ -319,11 +326,11 @@ describe.skipIf(!available)('live Postgres: full account export', () => {
     expect(manifest).toMatchObject({
       exportVersion: 1,
       generator: 'open-chat-interface',
-      counts: { conversations: 4, messages: 3, attachments: 3, omittedAttachments: 0 },
+      counts: { conversations: 7, messages: 3, attachments: 3, omittedAttachments: 0 },
       truncated: false,
     });
     expect(typeof manifest.ociVersion).toBe('string');
-    expect(strFromU8(files['README.txt'] as Uint8Array)).toContain('Conversations: 4');
+    expect(strFromU8(files['README.txt'] as Uint8Array)).toContain('Conversations: 7');
 
     const audits = await live.db.execute<{ count: number }>(sql`
       select count(*)::int as count from audit_log

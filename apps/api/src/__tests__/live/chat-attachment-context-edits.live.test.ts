@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import { createDatabase, eq, schema, sql } from '@oci/db';
 import { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { attachmentHelpers, modelText } from '../../../test/chat-attachment-context.fixtures.js';
+import {
+  attachmentHelpers,
+  modelText,
+  shareFilesWithSource,
+} from '../../../test/chat-attachment-context.fixtures.js';
 import {
   createLiveDatabase,
   type LiveDatabase,
@@ -191,7 +195,14 @@ describe.skipIf(!available)('live edits of a question with files (#296)', () => 
     const [edited] = await messages(result.thread.id);
     expect(edited?.id).toBe(result.message.id);
     expect(partTypes(edited!)).toEqual(['text', 'data-attachment']);
-    expect(JSON.stringify(edited!.parts)).toContain(file.id);
+    // The edited question shows a file of its own (#358), not the original's id.
+    expect(JSON.stringify(edited!.parts)).not.toContain(file.id);
+    const [own] = await pool.db
+      .select()
+      .from(schema.attachment)
+      .where(eq(schema.attachment.messageId, edited!.id));
+    expect(own).toMatchObject({ filename: file.filename, storageKey: file.storageKey });
+    expect(JSON.stringify(edited!.parts)).toContain(own!.id);
 
     const started = await answer(
       result.thread.id,
@@ -201,7 +212,7 @@ describe.skipIf(!available)('live edits of a question with files (#296)', () => 
     const text = await modelText(started);
     expect(text).toContain('What is the lab mascot called? One line.');
     expect(text).toContain('OSPREY-ZETA');
-    // The file stays the original question's: nothing is re-allocated.
+    // The original question keeps its own row: nothing is re-allocated.
     const [stored] = await pool.db
       .select()
       .from(schema.attachment)
@@ -251,10 +262,25 @@ describe.skipIf(!available)('live edits of a question with files (#296)', () => 
     expect(response.status).toBe(404);
   });
 
-  it('follows the original question’s access: a deleted source leaves the file out', async () => {
+  it('keeps the file when the source conversation is deleted', async () => {
     const { chat, question } = await answeredWithFile();
     const response = await branch(chat.id, { messageId: question, text: 'Edited.' });
     const result = (await response.json()) as { thread: { id: string }; message: { id: string } };
+    await pool.db
+      .update(schema.thread)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.thread.id, chat.id));
+    const started = await answer(result.thread.id, result.message.id, 'Edited.');
+    const text = await modelText(started);
+    expect(text).toContain('OSPREY-ZETA');
+    expect(text).not.toMatch(/no longer available/i);
+  });
+
+  it('leaves the file out, as before, for an edit made before 0.11 whose source is deleted', async () => {
+    const { chat, question } = await answeredWithFile();
+    const response = await branch(chat.id, { messageId: question, text: 'Edited.' });
+    const result = (await response.json()) as { thread: { id: string }; message: { id: string } };
+    await shareFilesWithSource(pool, result.thread.id);
     await pool.db
       .update(schema.thread)
       .set({ deletedAt: new Date() })

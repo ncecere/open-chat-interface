@@ -33,7 +33,7 @@ import { getDefaultOrganizationId } from '../organization.js';
  * before. Within one replica nothing changes: its own changes apply at once.
  */
 
-export type CacheName = 'settings' | 'connectors' | 'webhooks';
+export type CacheName = 'settings' | 'connectors' | 'webhooks' | 'usagePolicy';
 
 interface Invalidation {
   cache: CacheName;

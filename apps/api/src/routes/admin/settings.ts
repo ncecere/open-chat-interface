@@ -16,7 +16,12 @@ import { logger } from '../../lib/logger.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
-import { redactedReason, searchTestAuditDetails } from '../../services/audit-test-details.js';
+import {
+  auditedAddress,
+  failedReason,
+  redactedReason,
+  searchTestAuditDetails,
+} from '../../services/audit-test-details.js';
 import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
 import { sendTestEmail } from '../../services/email.js';
 import {
@@ -185,10 +190,30 @@ settingsRoutes.post('/storage/test', async (c) => {
     );
   }
 
+  // Where the test went; recorded for a failure too, which used to leave no
+  // entry at all (#368).
+  const target = {
+    mode,
+    bucket: storage.s3.bucket || null,
+    endpoint: auditedAddress(storage.s3.endpoint),
+  };
   try {
     await testConfiguredS3Storage(mode);
   } catch (error) {
     logger.warn({ error, mode }, 'S3 storage health check failed');
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'storage.test',
+      targetType: 'instance',
+      metadata: {
+        ok: false,
+        ...target,
+        ...failedReason({ ok: false }, error instanceof Error ? error.message : String(error), [
+          storage.s3.accessKeyId,
+        ]),
+      },
+    });
     throw providerError(
       mode === 'write'
         ? 'S3 put/read/delete test failed. Verify the endpoint, bucket, credentials, and object permissions.'
@@ -201,7 +226,7 @@ settingsRoutes.post('/storage/test', async (c) => {
     actorEmail: actor.email,
     action: 'storage.test',
     targetType: 'instance',
-    metadata: { mode },
+    metadata: { ok: true, ...target },
   });
 
   return c.json({ ok: true, mode });

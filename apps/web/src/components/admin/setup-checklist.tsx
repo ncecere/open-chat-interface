@@ -5,6 +5,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { LoadError } from '~/components/admin/admin-ui';
 import { ProgressBar } from '~/components/admin/progress-bar';
 import { buttonVariants } from '~/components/ui/button';
+import { FOCUS_RING } from '~/components/ui/focus-ring';
 import { useSetupStatus } from '~/hooks/use-setup-status';
 import { cn } from '~/lib/utils';
 
@@ -109,7 +110,7 @@ function Disclosure({
       aria-expanded={expanded}
       aria-controls={controls}
       onClick={onToggle}
-      className="mt-4 inline-flex items-center gap-1 rounded text-[var(--text-secondary)] text-sm hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--border-strong)]"
+      className={`mt-4 inline-flex items-center gap-1 rounded text-[var(--text-secondary)] text-sm hover:text-[var(--text-primary)] ${FOCUS_RING}`}
     >
       <ChevronDown
         className={cn('size-4 transition-transform', expanded && 'rotate-180')}

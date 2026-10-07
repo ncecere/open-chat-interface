@@ -63,6 +63,12 @@ export interface AuthAuditContext {
   userAgent: string | null;
   actorUserId: string | null;
   actorEmail: string | null;
+  /**
+   * Better Auth's code for a refusal (`BANNED_USER`, `EMAIL_NOT_VERIFIED`,
+   * `INVALID_EMAIL_OR_PASSWORD`…), so a refused sign-in says why, not only
+   * `status: 403` (#375). It is the code the person was sent already.
+   */
+  failureCode?: string | null;
 }
 
 export async function recordAuthEvent(context: AuthAuditContext): Promise<void> {
@@ -84,6 +90,7 @@ export async function recordAuthEvent(context: AuthAuditContext): Promise<void> 
     ipAddress: context.ipAddress,
     metadata: {
       status: context.status,
+      ...(outcome === 'failure' && context.failureCode ? { reason: context.failureCode } : {}),
       ...(context.userAgent ? { userAgent: context.userAgent.slice(0, 300) } : {}),
     },
   });

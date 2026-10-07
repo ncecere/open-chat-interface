@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { failedReason } from '../../services/audit-test-details.js';
 import { addUrlIssue } from '../../services/connectors/network.js';
 import { diffUpdate } from '../../services/settings-diff.js';
 import { sendTestDelivery } from '../../services/webhooks/delivery.js';
@@ -143,7 +144,12 @@ webhookRoutes.post('/:id/test', async (c) => {
     action: 'webhook.test.send',
     targetType: 'webhook',
     targetId: existing.id,
-    metadata: { url: existing.url, ok: result.ok, status: result.status },
+    metadata: {
+      url: existing.url,
+      ok: result.ok,
+      status: result.status,
+      ...failedReason(result, result.error),
+    },
   });
   return c.json(result);
 });

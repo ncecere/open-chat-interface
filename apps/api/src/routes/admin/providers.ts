@@ -13,6 +13,7 @@ import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { auditedAddress } from '../../services/audit-test-details.js';
 import { capacityOverview } from '../../services/limits/capacity/overview.js';
 import { saveProviderLimits, saveQueueSettings } from '../../services/limits/capacity/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
@@ -164,7 +165,13 @@ providerRoutes.post('/', async (c) => {
     action: 'provider.create',
     targetType: 'provider',
     targetId: created?.id ?? null,
-    metadata: { kind: input.kind, label: input.label },
+    // Its address and state too, as `provider.delete` records them (#374).
+    metadata: {
+      kind: input.kind,
+      label: input.label,
+      baseUrl: auditedAddress(input.baseUrl),
+      enabled: input.enabled,
+    },
   });
 
   return c.json({ id: created?.id }, 201);

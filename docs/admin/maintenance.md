@@ -35,7 +35,11 @@ switch, archiving, restoring and deleting conversations, **Choose export
 file** for an import, deleting attachments, connecting and disconnecting a
 connector), and the controls and Save buttons of administration pages.
 Download and signing out of devices stay available. A form already open when
-read-only starts has its Save button turned off too. Somebody who sends just as
+read-only starts has its Save button turned off too. A turned-off control in
+Settings, the sidebar, the conversation header or a project looks dimmed but
+stays reachable with Tab: its description is the reason ("Read-only for
+maintenance until about …"), so a screen reader reads it, and pressing or
+tapping it shows the reason as a message instead of doing nothing. Somebody who sends just as
 read-only starts gets that explanation too, not an error, and so does a change
 that was refused before the page knew. **Forgot your password?** says password resets
 are paused, with the reason and the expected end, and that no email was sent.
@@ -51,7 +55,9 @@ for someone new (just-in-time provisioning).
 - **Turn on read-only mode**, with an optional reason (shown to everyone) and
   an expected end. The expected end is shown to people and sent to API clients
   as `Retry-After`; it must be later than now. Nothing ends by itself, so turn
-  it off when you are done.
+  it off when you are done. It asks first: focus moves to **Cancel**, and
+  only **Confirm: refuse every change now** turns it on. Escape or Cancel
+  closes the question and puts focus back on **Turn on read-only mode**.
 - **Turn off read-only mode** is the one administration control that stays
   usable while read-only. Changes are accepted again on every replica at once.
   Open pages learn it within 30 seconds: the banner goes, and so does any

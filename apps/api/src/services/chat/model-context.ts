@@ -1,6 +1,7 @@
 import { ERROR_CODES } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { AppError, validationFailed } from '../../lib/errors.js';
+import { loadEditedArtifactsSection, withEditedArtifacts } from '../artifacts/prompt.js';
 import { loadMemorySection, withMemories } from '../memory/prompt.js';
 import {
   buildGroundingContext,
@@ -16,7 +17,6 @@ import {
   inspectHistoricalAttachments,
   inspectIncomingAttachments,
   materializeAttachments,
-  UNAVAILABLE_ATTACHMENT_TEXT,
   withAttachmentContext,
 } from './attachment-context.js';
 import { type ActiveCompaction, latestCompaction } from './compaction.js';
@@ -138,33 +138,43 @@ export async function buildModelContext(
   // v0.7's single search before the reply still applies.
   const preSearch = input.webSearch && !hasTool(context.tools, 'web_search');
   const searchQuery = preSearch ? normalizeSearchQuery(textFromParts(stored.latest.parts)) : null;
-  const [newCandidates, searchResults, baseSystem, project, memories] = await Promise.all([
-    inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
-    searchQuery
-      ? (options.search ?? searchOrFailure(searchQuery))
-      : Promise.resolve<PreSearch>({ results: [] }),
-    buildSystemPrompt(
-      user.id,
-      user.name,
-      {
-        role: user.role,
-        threadId: thread.id,
-        artifactTools: hasTool(context.tools, 'create_artifact'),
-      },
-      input.timeZone,
-    ),
-    loadProjectContext(thread.projectId, user, input.excludedProjectFileIds ?? []),
-    // Empty unless memory is on for this person and the chat is not temporary.
-    loadMemorySection(
-      { userId: user.id, role: user.role, temporary: thread.temporary },
-      budget.units,
-    ),
-  ]);
+  const [newCandidates, searchResults, baseSystem, project, memories, editedArtifacts] =
+    await Promise.all([
+      inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
+      searchQuery
+        ? (options.search ?? searchOrFailure(searchQuery))
+        : Promise.resolve<PreSearch>({ results: [] }),
+      buildSystemPrompt(
+        user.id,
+        user.name,
+        {
+          role: user.role,
+          threadId: thread.id,
+          artifactTools: hasTool(context.tools, 'create_artifact'),
+        },
+        input.timeZone,
+      ),
+      loadProjectContext(thread.projectId, user, input.excludedProjectFileIds ?? []),
+      // Empty unless memory is on for this person and the chat is not temporary.
+      loadMemorySection(
+        { userId: user.id, role: user.role, temporary: thread.temporary },
+        budget.units,
+      ),
+      // The latest saved content of artifacts the person edited by hand, which
+      // the model's own earlier tool calls no longer show (#366).
+      loadEditedArtifactsSection(
+        { threadId: thread.id, userId: user.id, role: user.role },
+        budget.units,
+      ),
+    ]);
   // Project instructions follow the instance prompt and the person's own
-  // customisation, then the person's memories (at most a fixed share of the
-  // input budget), so the system prompt's cost below already includes them
-  // and a compaction summary is budgeted after them.
-  const system = withMemories(withProjectInstructions(baseSystem, project), memories);
+  // customisation, then the person's memories and hand-edited artifacts (each
+  // at most a fixed share of the input budget), so the system prompt's cost
+  // below already includes them and a compaction summary is budgeted after them.
+  const system = withEditedArtifacts(
+    withMemories(withProjectInstructions(baseSystem, project), memories),
+    editedArtifacts,
+  );
   const latest: UIMessage = preSearch
     ? {
         ...stored.latest,
@@ -207,8 +217,8 @@ export async function buildModelContext(
         (sum, file) => addCost(sum, attachmentCost(file, supportsVision)),
         emptyCost(),
       );
-      if (historical.unavailable.has(id))
-        cost = addCost(cost, textCost(UNAVAILABLE_ATTACHMENT_TEXT));
+      const notice = historical.unavailable.get(id);
+      if (notice) cost = addCost(cost, textCost(notice));
       return cost;
     };
     let required = addCost(systemCost, messageCost(latest));
@@ -304,7 +314,7 @@ export async function buildModelContext(
       asUI(message, toolsOffered),
       (historical.byMessage.get(message.id) ?? []).map((file) => loaded.get(file.id)!),
       supportsVision,
-      historical.unavailable.has(message.id),
+      historical.unavailable.get(message.id),
     );
   const uiMessages = withProjectFiles(
     [
@@ -313,7 +323,7 @@ export async function buildModelContext(
         latest,
         latestCandidates.map((file) => loaded.get(file.id)!),
         supportsVision,
-        Boolean(history.target && historical.unavailable.has(history.target.id)),
+        history.target ? historical.unavailable.get(history.target.id) : undefined,
       ),
     ],
     project,

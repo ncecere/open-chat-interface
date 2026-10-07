@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError } from '../../src/lib/api-client';
-import { AdminReportsPage, nextRunText } from '../../src/routes/admin/reports';
+import { AdminReportsPage, dueRunSummary, nextRunText } from '../../src/routes/admin/reports';
 import {
   alerts,
   button,
@@ -208,4 +208,63 @@ it('says so when Send now could not deliver, and when the automatic tries are us
   expect(alerts().join(' ')).toContain(
     'Walk monthly usage could not be sent: Email delivery failed.',
   );
+});
+
+it('words what Send due now did: what failed, what waits, and what was sent (#369)', () => {
+  const failed = { name: 'Walk9 second report', error: 'Email delivery failed' };
+  // Before: any run that sent nothing said "Nothing was due".
+  expect(dueRunSummary({ due: 1, sent: 0, failed: [failed], waiting: [] })).toEqual({
+    text: '1 report failed: Walk9 second report (Email delivery failed). It was not counted as sent.',
+    problem: true,
+  });
+  expect(dueRunSummary({ due: 3, sent: 1, failed: [failed, failed], waiting: [] }).text).toBe(
+    'Sent 1 report; 2 reports failed: Walk9 second report (Email delivery failed); Walk9 second report (Email delivery failed). They were not counted as sent.',
+  );
+  expect(dueRunSummary({ due: 0, sent: 0, failed: [], waiting: ['Walk9 second report'] })).toEqual({
+    text: 'Nothing was due. Walk9 second report failed earlier and is waiting to be tried again; use Send now to try at once.',
+    problem: false,
+  });
+  expect(dueRunSummary({ due: 0, sent: 0, failed: [], emailNotConfigured: true })).toEqual({
+    text: 'Nothing was sent: email delivery is not set up.',
+    problem: true,
+  });
+  expect(dueRunSummary({ due: 2, sent: 2, failed: [] }).text).toBe('Sent 2 reports.');
+  expect(dueRunSummary({ due: 0, sent: 0, failed: [] }).text).toBe(
+    'Nothing was due. A report is only sent once per cadence.',
+  );
+  // A server from before the fix sent only the count.
+  expect(dueRunSummary({ sent: 0 }).text).toBe(
+    'Nothing was due. A report is only sent once per cadence.',
+  );
+});
+
+it('shows a failed Send due now truthfully, and only the latest action’s result (#369)', async () => {
+  ({ root } = await renderAdmin(<AdminReportsPage />));
+  api.post.mockImplementation(async (path: string) =>
+    path === '/admin/reports/run'
+      ? {
+          due: 1,
+          sent: 0,
+          failed: [{ name: 'Walk monthly usage', error: 'Email delivery failed' }],
+          emailNotConfigured: false,
+          waiting: [],
+        }
+      : { delivered: true, error: null },
+  );
+
+  await click(button('Send due now'));
+  expect(alerts().join(' ')).toContain(
+    '1 report failed: Walk monthly usage (Email delivery failed). It was not counted as sent.',
+  );
+  expect(document.body.textContent).not.toContain('Nothing was due');
+
+  // A later action replaces it: "Sent …" never sits above a stale "failed".
+  await click(button('Send Walk monthly usage now'));
+  expect(document.body.textContent).toContain('Sent Walk monthly usage.');
+  expect(document.body.textContent).not.toContain('1 report failed');
+  expect(document.body.textContent).not.toContain('Nothing was due');
+
+  await click(button('Send due now'));
+  expect(document.body.textContent).toContain('1 report failed');
+  expect(document.body.textContent).not.toContain('Sent Walk monthly usage.');
 });

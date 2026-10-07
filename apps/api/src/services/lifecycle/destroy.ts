@@ -1,5 +1,6 @@
 import { inArray, schema, sql } from '@oci/db';
 import { db } from '../../db/index.js';
+import { giveSharersOwnRows } from '../attachments/shared-rows.js';
 import { type DeletionReason, recordDeletions } from '../compliance/deletions.js';
 
 /**
@@ -71,6 +72,25 @@ export async function destroyThreads(
         for update of ${schema.thread}${options.skipLocked ? sql` skip locked` : sql``}
       `);
       if (victims.length === 0) return [];
+      // A fork or edit made before 0.11 may still share a file with what is
+      // deleted here: it gets its own row first (#358; a no-op once the
+      // background migration has finished). The messages to follow are those
+      // that own a file and those that only show one (a fork of a fork whose
+      // middle conversation goes first would otherwise lose the link).
+      const doomed = sql.join(
+        victims.map((victim) => sql`${victim.id}`),
+        sql`, `,
+      );
+      await giveSharersOwnRows(
+        tx,
+        sql`select m.id from message m where m.thread_id in (${doomed})
+            and m.role = 'user' and jsonb_typeof(m.parts) = 'array'
+            and m.parts @> '[{"type": "data-attachment"}]'::jsonb
+          union
+          select a.message_id from attachment a
+            join message m on m.id = a.message_id where m.thread_id in (${doomed})`,
+        doomed,
+      );
       const gone = await tx
         .delete(schema.thread)
         .where(
@@ -158,6 +178,15 @@ async function destroyAttachmentBatch(
       for update of ${schema.attachment}${options.skipLocked ? sql` skip locked` : sql``}
     `);
     if (victims.length === 0) return [];
+    // As for conversations: whatever still shares one of these files gets its
+    // own row first (#358).
+    await giveSharersOwnRows(
+      tx,
+      sql`select message_id from attachment where message_id is not null and id in (${sql.join(
+        victims.map((victim) => sql`${victim.id}`),
+        sql`, `,
+      )})`,
+    );
     const gone = await tx
       .delete(schema.attachment)
       .where(

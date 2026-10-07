@@ -167,6 +167,11 @@ export const message = pgTable(
       'gin',
       sql`to_tsvector('simple'::regconfig, jsonb_path_query_array(${t.parts}, '$[*] ? (@.type == "text").text'::jsonpath))`,
     ),
+    // Not declared here: the same text with accented letters folded, so message
+    // search can ignore accents (#362), is an optional index
+    // (message_text_search_folded_idx) that an operator builds by hand from
+    // packages/db/optional/message_text_search_folded_index.sql. It is no
+    // post-deploy step: building it costs about 1 ms per message.
   ],
 );
 
@@ -195,6 +200,11 @@ export const attachment = pgTable(
     filename: text('filename').notNull(),
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
+    /**
+     * Where the file's object is stored. Several rows may name the same object
+     * (a fork's or an edit's copy of a file, #358): it is deleted only when the
+     * last of them is.
+     */
     storageKey: text('storage_key').notNull(),
     /** Durable capacity reservation; hidden from clients until the blob is committed. */
     uploadPending: boolean('upload_pending').notNull().default(false),
@@ -211,6 +221,14 @@ export const attachment = pgTable(
     index('attachment_message_idx').on(t.messageId),
     index('attachment_deleted_idx').on(t.deletedAt),
     index('attachment_project_idx').on(t.projectId).where(sql`${t.projectId} is not null`),
+    // A stored object may be used by several rows (a fork's or an edit's own
+    // row for a file it shares with its source, #358): the delete trigger
+    // (migration 0045) and the reaper look rows up by key. Built CONCURRENTLY
+    // by post-deploy steps 0011 and 0012, never by a pre-deploy migration.
+    index('attachment_storage_key_idx').on(t.storageKey),
+    index('attachment_thumbnail_key_idx')
+      .on(t.thumbnailKey)
+      .where(sql`${t.thumbnailKey} is not null`),
     check('attachment_single_owner', sql`${t.projectId} is null or ${t.messageId} is null`),
   ],
 );

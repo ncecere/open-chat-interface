@@ -102,7 +102,7 @@ describe.skipIf(!available)('live: account changes name the account (#323)', () 
         metadata: { email: TARGET_EMAIL, from: 'user', to: 'admin' },
       },
       {
-        action: 'user.update',
+        action: 'user.ban',
         metadata: {
           email: TARGET_EMAIL,
           banned: true,
@@ -111,7 +111,7 @@ describe.skipIf(!available)('live: account changes name the account (#323)', () 
         },
       },
       {
-        action: 'user.update',
+        action: 'user.unban',
         metadata: {
           email: TARGET_EMAIL,
           banned: false,
@@ -166,11 +166,46 @@ describe.skipIf(!available)('live: account changes name the account (#323)', () 
       entries: { action: string }[];
     };
     expect(entries.map((entry) => entry.action).sort()).toEqual([
+      'user.ban',
       'user.revoke_sessions',
       'user.role.change',
       'user.role.change',
+      'user.unban',
+    ]);
+  });
+
+  it('records a ban and an unban under their own actions, and other edits as user.update (#375)', async () => {
+    const person = await seedUser(live.db, state.organizationId, {
+      email: 'walk9-ban@example.test',
+    });
+    // A rename with the ban: two entries, the ban without the name.
+    await send('PATCH', `/users/${person}`, { banned: true, banReason: 'Walk9', name: 'Renamed' });
+    // Editing the reason of an account that stays banned is neither.
+    await send('PATCH', `/users/${person}`, { banReason: 'Walk9 reworded' });
+    await send('PATCH', `/users/${person}`, { banned: false });
+    // Sending the state it already has is not a ban or an unban either.
+    await send('PATCH', `/users/${person}`, { banned: false });
+    const entries = await entriesFor(person);
+    expect(entries.map((entry) => entry.action)).toEqual([
       'user.update',
+      'user.ban',
+      'user.update',
+      'user.unban',
       'user.update',
     ]);
+    expect(entries[1]?.metadata).toEqual({
+      email: 'walk9-ban@example.test',
+      banned: true,
+      banReason: 'Walk9',
+      before: { banned: false, banReason: null },
+    });
+    expect(entries[0]?.metadata).toMatchObject({ name: 'Renamed' });
+    expect(entries[0]?.metadata).not.toHaveProperty('banned');
+    expect(entries[2]?.metadata).toMatchObject({ banReason: 'Walk9 reworded' });
+    expect(entries[3]?.metadata).toMatchObject({
+      banned: false,
+      banReason: null,
+      before: { banned: true, banReason: 'Walk9 reworded' },
+    });
   });
 });

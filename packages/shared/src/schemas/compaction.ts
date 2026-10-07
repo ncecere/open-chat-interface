@@ -15,7 +15,8 @@ export const compactThreadSchema = z
     instructions: z.string().trim().max(COMPACTION_INSTRUCTIONS_MAX_LENGTH).optional(),
     /**
      * The model to summarise with and size the kept turns for: the one
-     * selected in the composer. Defaults to the conversation's latest reply.
+     * selected in the composer. Without one, the conversation's latest reply's
+     * model, or the person's default when that reply failed (#363).
      */
     modelSlug: z.string().min(1).max(200).optional(),
   })

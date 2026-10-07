@@ -307,6 +307,77 @@ list `0.11.usage-rollups` in its `requires` in `releases.json`, so an
 instance cannot reach it with the backfill unfinished. 0.12 has no first
 migration to attach it to yet, so it is not in the manifest.
 
+## Files in forks and edits
+
+A fork, and an edit that keeps its question's files, give each file an
+attachment row of its own (v0.11, #358; `apps/api/src/services/attachments/
+copies.ts`). Before, they copied the question's `data-attachment` part, so two
+conversations showed one attachment id and the file belonged to the one it was
+first sent in: deleting that conversation (trash, "Delete now", retention, a
+temporary chat expiring) deleted the row, the object and, silently, the other
+conversation's file.
+
+**What a copy is.** A normal `attachment` row, `message_id` the copied message,
+with the same `storage_key` (and `thumbnail_key`), name, type, size, extracted
+text and `created_at` as the file it copies, in the same transaction as the
+fork. Access (owner only), the storage meter, the Settings list, the trash,
+retention and every deletion therefore work per conversation with no special
+case. Several rows may name one object; **an object is deleted only when the
+last row using it is.** Each copy counts in `storage_usage` like any file (the
+delete trigger releases one row's bytes, so a row not counted would be released
+twice); a fork is never refused for lack of allowance. Product decision: the
+meter counts each copy while the bucket holds the object once.
+
+**Who guards the object.**
+
+| Where | How |
+| --- | --- |
+| Delete trigger (`0045`) | When a row is deleted while another still has its `storage_key` (or `thumbnail_key`), the object is queued **parked**: `next_attempt_at = 'infinity'`. The reaper of releases before this one takes only due entries, so it never deletes a parked object, and a row deleted last queues the object as usual. Parking, rather than not queueing, means two rows deleted at the same moment (each sees the other still there) cannot leave an object nothing queued. Looks rows up by key: `attachment_storage_key_idx` and `attachment_thumbnail_key_idx`, post-deploy steps `0011` and `0012` (until they run, a delete scans the table). |
+| Reaper (`storage/reaper.ts`) | First settles parked entries (an object nothing uses is made due; one something still uses is dropped), then checks again just before every delete, whoever queued it. |
+| Fork and edit | Lock the source rows `for share` before copying, so a file cannot be deleted between being read and copied. |
+
+**Existing forks and edits** (made before this release) share ids with their
+original and have no row. They are converted, not left to a check at purge time
+only, by the background migration `0.11.attachment-own-rows`
+(`packages/db/src/background/attachment-own-rows.ts`, SQL in
+`attachment-copies.ts`): each batch walks `message` in key order and, for a
+message whose part names another message's file of the same person, inserts the
+row, counts it in `storage_usage` and rewrites the part's `id` and `url`, in one
+statement. Idempotent: a converted message owns what it shows. It skips another
+person's file, a project file, an unfinished upload and a file the person
+removed (`deleted_reason` other than `thread`); a file whose conversation is in
+the trash is given to the sharer live. Release 0.11 writes the new shape itself,
+so nothing written after the upgrade needs it.
+
+**Rolling upgrade.**
+
+1. `migrate` (pre-deploy `0045`) only replaces the trigger function: no
+   schema change, so the previous release serves unchanged on it, and its own
+   deletes keep queueing objects as before (a plain row, or a parked one).
+2. While replicas are replaced, a new replica may fork (own rows, shared
+   object) and an old replica's reaper may run: it takes only due entries, an
+   object that another row uses is always parked, so it is not deleted.
+3. `migrate --post` builds the two indexes, then schedules the background
+   migration. Until it has finished (`isBackgroundMigrationDone`), every path
+   that deletes files (`destroyThreads`, `destroyAttachments`, a file deleted
+   in Settings) first gives the conversations that still share them their own
+   rows, in the same transaction (`services/attachments/shared-rows.ts`),
+   found through copy lineage (`parent_message_id`, indexed). Afterwards that
+   check does nothing. A fork of a fork whose middle conversation was deleted
+   *before* this release has no lineage left to follow, which is why the
+   migration reads every message rather than relying on the check.
+4. Rolling back to the previous release keeps the objects safe: the trigger is
+   in the database, so a row deleted while another uses its object still parks
+   it, and the previous reaper ignores parked entries (the next release's
+   reaper settles them). Forks the previous release makes share ids again;
+   after upgrading again, start the migration over
+   (`update background_migration set status = 'pending', cursor = null,
+   rows_processed = 0, batches = 0, attempts = 0 where name =
+   '0.11.attachment-own-rows'`), as the key-rotation job does for its own.
+
+A fork or edit never refuses for the allowance, and the Settings list names each
+row's conversation (`conversation` on `GET /api/attachments`).
+
 ## Embedding generations
 
 Vectors for meaning-based project search (v0.11, design sections 7 and 8;

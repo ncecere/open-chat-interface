@@ -74,7 +74,17 @@ describe('document rendering', () => {
 
   it('names the download with the format’s extension', () => {
     expect(documentDisposition('plan-reply-2026-10-02', 'pptx')).toBe(
-      'attachment; filename="plan-reply-2026-10-02.pptx"',
+      `attachment; filename="plan-reply-2026-10-02.pptx"; filename*=UTF-8''plan-reply-2026-10-02.pptx`,
+    );
+  });
+
+  it('keeps a Japanese or Arabic title in filename* and gives an ASCII filename (#361)', () => {
+    const header = documentDisposition('日本語の宿題-reply-2026-10-02', 'docx');
+    expect(header).toBe(
+      `attachment; filename="_-reply-2026-10-02.docx"; filename*=UTF-8''${encodeURIComponent('日本語の宿題-reply-2026-10-02.docx')}`,
+    );
+    expect(documentDisposition('واجب-v2', 'pdf')).toContain(
+      `filename*=UTF-8''${encodeURIComponent('واجب-v2.pdf')}`,
     );
   });
 });

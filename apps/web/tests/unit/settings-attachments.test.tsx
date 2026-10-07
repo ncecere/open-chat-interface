@@ -21,6 +21,7 @@ const file = (
   filename: string,
   project: { id: string; name: string } | null,
   unsent = false,
+  conversation: { id: string; title: string } | null = null,
 ) => ({
   id,
   filename,
@@ -31,6 +32,7 @@ const file = (
   createdAt: '2026-09-01T10:00:00.000Z',
   project,
   unsent,
+  conversation,
 });
 
 let files: ReturnType<typeof file>[];
@@ -88,7 +90,7 @@ describe('Settings → Attachments', () => {
     await render();
     const text = document.body.textContent ?? '';
     expect(text).toContain(
-      'Deleting a chat file removes it from its conversations, which stay, and models can no longer read it there.',
+      'Deleting a chat file deletes it: the conversation it is listed with keeps its name, shown as removed, and models can no longer read it.',
     );
     expect(text).not.toContain('unexpected behavior');
   });
@@ -114,6 +116,32 @@ describe('Settings → Attachments', () => {
         ?.parentElement?.querySelector('p')?.textContent;
     expect(details('draft.txt')).toMatch(/^Not sent · text\/plain/);
     expect(details('chat-notes.txt')).toMatch(/^text\/plain/);
+  });
+
+  it('lists a fork’s own copy of a file beside the original, each with its conversation (#358)', async () => {
+    files = [
+      file('a1', 'walk9-grant.pdf', null, false, { id: 't1', title: 'Grant questions' }),
+      file('a2', 'walk9-grant.pdf', null, false, { id: 't2', title: 'Fork of Grant questions' }),
+    ];
+    await render();
+    const rows = [...document.querySelectorAll('[data-focus-row]')];
+    expect(rows).toHaveLength(2);
+    const links = rows.map((row) =>
+      [...row.querySelectorAll<HTMLAnchorElement>('p a')].map((link) => [
+        link.getAttribute('href'),
+        link.textContent,
+      ]),
+    );
+    expect(links).toEqual([
+      [['/chat/t1', 'Grant questions']],
+      [['/chat/t2', 'Fork of Grant questions']],
+    ]);
+    expect(rows.map((row) => row.querySelector('p')?.textContent)).toEqual([
+      expect.stringMatching(/^In Grant questions · text\/plain · 2.0 KB/),
+      expect.stringMatching(/^In Fork of Grant questions · text\/plain · 2.0 KB/),
+    ]);
+    // Each has its own checkbox and delete button.
+    expect(document.querySelectorAll('[aria-label="Delete walk9-grant.pdf"]')).toHaveLength(2);
   });
 
   it('lists project files with their project, to be managed there', async () => {
@@ -150,7 +178,9 @@ describe('Settings → Attachments', () => {
     await click(button('Delete (1)'));
     // Permanent, so it asks first (#101).
     expect(api.delete).not.toHaveBeenCalled();
-    expect(dialog()?.textContent).toContain('This cannot be undone.');
+    expect(dialog()?.textContent).toContain(
+      'It stays visible in the conversation it was attached to, marked as removed. This cannot be undone.',
+    );
     await click(
       [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Delete')!,
     );
@@ -171,7 +201,7 @@ describe('Settings → Attachments', () => {
     await click(document.querySelector('[aria-label="Select all visible attachments"]')!);
     await click(button('Delete (2)'));
     expect(dialog()?.textContent).toContain(
-      'Those that were sent are removed from the conversations they were attached to',
+      'Those that were sent are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed.',
     );
   });
 
@@ -186,9 +216,9 @@ describe('Settings → Attachments', () => {
     await click(button('Delete (3)'));
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Delete 3 files?');
     expect(dialog()?.textContent).toContain(
-      'They are removed from the conversations they were attached to, and models can no longer read them there.',
+      'The files are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed.',
     );
-    expect(dialog()?.textContent).not.toContain('It is removed');
+    expect(dialog()?.textContent).not.toContain('The file is deleted');
     await click(
       [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Delete')!,
     );

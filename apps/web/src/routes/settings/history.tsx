@@ -215,8 +215,8 @@ function ConversationList({ archived }: { archived: boolean }) {
               <Button
                 variant="secondary"
                 size="sm"
-                title={lock.title}
-                disabled={bulk.isPending || lock.locked}
+                locked={lock.title}
+                disabled={bulk.isPending}
                 onClick={(event) => runBulk(event, 'archive')}
               >
                 Archive
@@ -225,8 +225,8 @@ function ConversationList({ archived }: { archived: boolean }) {
             <Button
               variant="danger"
               size="sm"
-              title={lock.title}
-              disabled={bulk.isPending || lock.locked}
+              locked={lock.title}
+              disabled={bulk.isPending}
               onClick={(event) => runBulk(event, 'delete')}
             >
               Delete
@@ -282,6 +282,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                     <Link
                       to="/chat/$threadId"
                       params={{ threadId: thread.id }}
+                      dir="auto"
                       className="block truncate text-sm text-[var(--text-primary)] hover:underline"
                       // The full text on hover when a narrow screen cuts it short (#130).
                       title={thread.title}
@@ -305,11 +306,8 @@ function ConversationList({ archived }: { archived: boolean }) {
                       variant="ghost"
                       size="sm"
                       // Only this row's: a disabled neighbour cannot take focus.
-                      title={lock.title}
-                      disabled={
-                        lock.locked ||
-                        (unarchive.isPending && unarchive.variables?.id === thread.id)
-                      }
+                      locked={lock.title}
+                      disabled={unarchive.isPending && unarchive.variables?.id === thread.id}
                       aria-label={`Restore ${thread.title}`}
                       onClick={(event) => {
                         // The row leaves on refetch: focus goes to the next, not the body (#250).

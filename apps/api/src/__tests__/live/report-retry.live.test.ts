@@ -218,4 +218,26 @@ describe.skipIf(!available)('live: scheduled reports whose email failed (#352)',
     expect(server.messages).toHaveLength(1);
     expect((await row(report.id)).lastRunAt?.getTime()).toBe(lastSent.getTime());
   });
+
+  it('says what a run attempted, so a due report that failed is not "nothing was due" (#369)', async () => {
+    const report = await addReport();
+    const first = await reports.runDueReportsDetailed(t0);
+    expect(first).toEqual({
+      due: 1,
+      sent: 0,
+      failed: [{ name: 'Fix8 daily usage', error: 'Email delivery failed' }],
+      emailNotConfigured: false,
+      waiting: [],
+    });
+
+    // Straight after: not due again, but the page can say it waits for its retry.
+    const again = await reports.runDueReportsDetailed(new Date(t0.getTime() + MINUTE));
+    expect(again).toMatchObject({ due: 0, sent: 0, failed: [], waiting: ['Fix8 daily usage'] });
+    expect((await row(report.id)).failedAttempts).toBe(1);
+
+    // Back up: sent, and the run says so.
+    await mailServerReturns();
+    const later = await reports.runDueReportsDetailed(new Date(t0.getTime() + 16 * MINUTE));
+    expect(later).toMatchObject({ due: 1, sent: 1, failed: [], waiting: [] });
+  });
 });

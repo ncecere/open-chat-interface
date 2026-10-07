@@ -293,7 +293,7 @@ it('Acceptable use › New version: a blank title and policy text are each at th
   api.get.mockResolvedValue({ policies: [] });
   ({ root } = await renderAdmin(<AdminPoliciesPage />));
   await click(button('New version'));
-  await click(document.getElementById('policy-publish')!);
+  // "Publish immediately" is off by default (#371), so this saves a draft.
   await typeInto(input('policy-title'), ' ');
   await typeIntoTextarea(document.getElementById('policy-body') as HTMLTextAreaElement, '   ');
   await submitIn('Save draft');

@@ -81,6 +81,49 @@ export function failureText(report: Pick<ScheduledReport, 'lastError' | 'retries
     : `Failed: ${reason}. It was not counted as sent. Automatic tries are used up; use Send now once email works.`;
 }
 
+/** What "Send due now" did, as the API reports it (#369); a server before it sent only `sent`. */
+export interface DueRun {
+  sent: number;
+  due?: number;
+  failed?: Array<{ name: string; error: string }>;
+  emailNotConfigured?: boolean;
+  waiting?: string[];
+}
+
+/**
+ * What a run of the due reports says (#369): what was attempted and what
+ * failed, not only what was sent. It said "Nothing was due" while a due report
+ * had just failed, because only the sent count was looked at.
+ */
+export function dueRunSummary(run: DueRun): { text: string; problem: boolean } {
+  const plural = (count: number) => `${count} report${count === 1 ? '' : 's'}`;
+  const failed = run.failed ?? [];
+  if (run.emailNotConfigured && run.sent === 0 && failed.length === 0)
+    return { text: 'Nothing was sent: email delivery is not set up.', problem: true };
+  if (failed.length > 0) {
+    const reasons = failed
+      .map((entry) => `${entry.name} (${entry.error.replace(/[.\s]+$/, '')})`)
+      .join('; ');
+    const sent = run.sent > 0 ? `Sent ${plural(run.sent)}; ` : '';
+    return {
+      text: `${sent}${failed.length === 1 ? '1 report' : `${failed.length} reports`} failed: ${reasons}. ${
+        failed.length === 1 ? 'It was' : 'They were'
+      } not counted as sent.`,
+      problem: true,
+    };
+  }
+  if (run.sent > 0) return { text: `Sent ${plural(run.sent)}.`, problem: false };
+  const waiting = run.waiting ?? [];
+  if (waiting.length > 0)
+    return {
+      text: `Nothing was due. ${new Intl.ListFormat('en', { type: 'conjunction' }).format(waiting)} failed earlier and ${
+        waiting.length === 1 ? 'is' : 'are'
+      } waiting to be tried again; use Send now to try at once.`,
+      problem: false,
+    };
+  return { text: 'Nothing was due. A report is only sent once per cadence.', problem: false };
+}
+
 /** The form's names for the fields, so each error names the one it is about (#127, #283). */
 const REPORT_LABELS = {
   name: 'Name',
@@ -205,9 +248,20 @@ export function AdminReportsPage() {
     },
   });
 
+  // Only the latest action's outcome is shown: a result from an earlier one
+  // stayed on screen beside it ("Sent …" above "Nothing was due", #369).
+  // Each action forgets the others' (never its own: resetting a mutation that
+  // is running drops its result).
+  const forgetOthers = (keep: 'toggle' | 'sendOne' | 'runNow') => {
+    if (keep !== 'toggle') toggle.reset();
+    if (keep !== 'sendOne') sendOne.reset();
+    if (keep !== 'runNow') runNow.reset();
+  };
+
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.patch(`/admin/reports/${id}`, { enabled }),
+    onMutate: () => forgetOthers('toggle'),
     onSuccess: invalidate,
   });
 
@@ -218,11 +272,13 @@ export function AdminReportsPage() {
         `/admin/reports/${report.id}/send`,
         {},
       ),
+    onMutate: () => forgetOthers('sendOne'),
     onSuccess: invalidate,
   });
 
   const runNow = useMutation({
-    mutationFn: () => api.post<{ sent: number }>('/admin/reports/run', {}),
+    mutationFn: () => api.post<DueRun>('/admin/reports/run', {}),
+    onMutate: () => forgetOthers('runNow'),
     onSuccess: invalidate,
   });
 
@@ -383,10 +439,11 @@ export function AdminReportsPage() {
         )}
 
         {runNow.data && (
-          <p className="mt-2 text-[var(--text-muted)] text-sm">
-            {runNow.data.sent === 0
-              ? 'Nothing was due. A report is only sent once per cadence.'
-              : `Sent ${runNow.data.sent} report${runNow.data.sent === 1 ? '' : 's'}.`}
+          <p
+            role={dueRunSummary(runNow.data).problem ? 'alert' : 'status'}
+            className={`mt-2 text-sm ${dueRunSummary(runNow.data).problem ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}`}
+          >
+            {dueRunSummary(runNow.data).text}
           </p>
         )}
 
@@ -400,10 +457,16 @@ export function AdminReportsPage() {
         ) : (
           <ul className="mt-3 divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
             {data.reports.map((report) => (
-              <li key={report.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              // On a phone the four actions sit below the text: beside it they
+              // took the width and left the name and details a column of one
+              // word a line (#370); the same stack as the acceptable-use rows (#168).
+              <li
+                key={report.id}
+                className="flex flex-col items-stretch gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm">{report.name}</p>
-                  <p className="text-[var(--text-muted)] text-xs">
+                  <p className="break-words text-[var(--text-muted)] text-xs [overflow-wrap:anywhere]">
                     {report.cadence} · {plural(report.windowDays, 'day')} ·{' '}
                     {report.recipients.join(', ')}
                   </p>
@@ -419,45 +482,47 @@ export function AdminReportsPage() {
                 </div>
 
                 <EditOnly>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={sendOne.isPending}
-                    // Always possible, whether or not it is due, so a report
-                    // whose email failed can be sent again (#352).
-                    aria-label={`Send ${report.name} now`}
-                    onClick={() => sendOne.mutate(report)}
-                  >
-                    {sendOne.isPending && sendOne.variables?.id === report.id
-                      ? 'Sending…'
-                      : 'Send now'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Edit ${report.name}`}
-                    onClick={() => edit(report)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={toggle.isPending}
-                    // Named for the report, as Edit is, so each row's buttons differ (#175).
-                    aria-label={`${report.enabled ? 'Pause' : 'Resume'} ${report.name}`}
-                    onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
-                  >
-                    {report.enabled ? 'Pause' : 'Resume'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Delete ${report.name}`}
-                    onClick={() => setDeleteFor(report)}
-                  >
-                    Delete
-                  </Button>
+                  <div className="-ml-2 flex flex-wrap items-center gap-1 sm:ml-0 sm:shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={sendOne.isPending}
+                      // Always possible, whether or not it is due, so a report
+                      // whose email failed can be sent again (#352).
+                      aria-label={`Send ${report.name} now`}
+                      onClick={() => sendOne.mutate(report)}
+                    >
+                      {sendOne.isPending && sendOne.variables?.id === report.id
+                        ? 'Sending…'
+                        : 'Send now'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Edit ${report.name}`}
+                      onClick={() => edit(report)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={toggle.isPending}
+                      // Named for the report, as Edit is, so each row's buttons differ (#175).
+                      aria-label={`${report.enabled ? 'Pause' : 'Resume'} ${report.name}`}
+                      onClick={() => toggle.mutate({ id: report.id, enabled: !report.enabled })}
+                    >
+                      {report.enabled ? 'Pause' : 'Resume'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Delete ${report.name}`}
+                      onClick={() => setDeleteFor(report)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </EditOnly>
               </li>
             ))}

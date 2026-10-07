@@ -359,8 +359,8 @@ export function SettingsCustomizationPage() {
           )}
           <Button
             variant="accent"
-            title={lock.title}
-            disabled={save.isPending || !dirty || lock.locked}
+            locked={lock.title}
+            disabled={save.isPending || !dirty}
             onClick={() => save.mutate({ ...draft })}
           >
             Save Preferences

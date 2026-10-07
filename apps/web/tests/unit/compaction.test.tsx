@@ -25,6 +25,7 @@ import {
 import { MessageList } from '../../src/components/chat/message-list';
 import { TopBar } from '../../src/components/layout/top-bar';
 import { COMPACTION_POLL_MS, COMPACTION_POLL_WINDOW_MS } from '../../src/hooks/use-compaction';
+import { summaryModelChoice, usePublishSummaryModel } from '../../src/hooks/use-summary-model';
 import { ApiError } from '../../src/lib/api-client';
 import { alerts, button, cleanup, click, dialog, findButton, settle } from './admin-test-utils';
 
@@ -399,5 +400,107 @@ describe('a failed summary', () => {
       'nothing_to_summarise',
       'timeout',
     ]);
+  });
+});
+
+describe('the model a summary is made with (#363)', () => {
+  const reply = (id: string, modelSlug: string, status: 'complete' | 'error'): UIMessage => ({
+    id,
+    role: 'assistant',
+    parts: [{ type: 'text', text: '' }],
+    metadata: {
+      modelSlug,
+      status,
+      ...(status === 'error' ? { errorMessage: 'The model returned an error.' } : {}),
+    },
+  });
+  const failed = [message('q1', 'user'), reply('a1', 'catalog-alpha', 'error')];
+  const worked = [message('q1', 'user'), reply('a1', 'catalog-alpha', 'complete')];
+
+  it('is the picker’s model, unless that is the model whose latest reply failed', () => {
+    expect(summaryModelChoice(worked, 'catalog-alpha')).toBe('catalog-alpha');
+    expect(summaryModelChoice(worked, 'catalog-beta')).toBe('catalog-beta');
+    // Another model chosen in the picker is used even after a failure.
+    expect(summaryModelChoice(failed, 'catalog-beta')).toBe('catalog-beta');
+    // The same model again would fail the same way: the server picks the default.
+    expect(summaryModelChoice(failed, 'catalog-alpha')).toBeNull();
+    expect(summaryModelChoice(failed, null)).toBeNull();
+    // Only the latest reply counts: an earlier failure is behind a good reply.
+    expect(
+      summaryModelChoice(
+        [...failed, message('q2', 'user'), reply('a2', 'catalog-alpha', 'complete')],
+        'catalog-alpha',
+      ),
+    ).toBe('catalog-alpha');
+    expect(summaryModelChoice([message('q1', 'user')], 'catalog-alpha')).toBe('catalog-alpha');
+  });
+
+  function Conversation({ messages, picked }: { messages: UIMessage[]; picked: string }) {
+    usePublishSummaryModel('thread-9', messages, picked);
+    return <TopBar sidebarOpen onOpenSidebar={vi.fn()} onOpenCommandPalette={vi.fn()} />;
+  }
+
+  async function summarise() {
+    await click(button(COMPACT_ACTION_LABEL));
+    await click(button('Summarise'));
+  }
+
+  it('is sent with the request from the top bar: the picker’s model', async () => {
+    api.post.mockResolvedValue({ compaction: null, pending: true });
+    await mount(<Conversation messages={failed} picked="catalog-beta" />, '/chat/thread-9');
+    await summarise();
+    expect(api.post).toHaveBeenCalledWith('/threads/thread-9/compact', {
+      modelSlug: 'catalog-beta',
+    });
+  });
+
+  it('names no model when the picker still holds the one that failed', async () => {
+    api.post.mockResolvedValue({ compaction: null, pending: true });
+    await mount(<Conversation messages={failed} picked="catalog-alpha" />, '/chat/thread-9');
+    await summarise();
+    expect(api.post).toHaveBeenCalledWith('/threads/thread-9/compact', {});
+  });
+
+  it('is what Retry sends too, and the note says what to do', async () => {
+    api.get.mockResolvedValue({
+      compaction: null,
+      pending: false,
+      failure: {
+        reason: 'model_error',
+        instructions: 'keep the figures',
+        failedAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+    api.post.mockResolvedValue({ compaction: null, pending: true, failure: null });
+    function Retrying() {
+      usePublishSummaryModel('thread-9', failed, 'catalog-beta');
+      return <CompactionFailureNotice threadId="thread-9" />;
+    }
+    await mount(<Retrying />, '/chat/thread-9');
+    const note = document.querySelector('[data-compaction-failure]')?.textContent ?? '';
+    expect(note).toContain('Choose another model');
+    expect(note).toContain('Retry');
+    await click(button('Retry'));
+    expect(api.post).toHaveBeenCalledWith('/threads/thread-9/compact', {
+      instructions: 'keep the figures',
+      modelSlug: 'catalog-beta',
+    });
+  });
+
+  it('is forgotten when the conversation closes', async () => {
+    api.post.mockResolvedValue({ compaction: null, pending: true });
+    function Closing() {
+      usePublishSummaryModel('thread-9', worked, 'catalog-alpha');
+      return null;
+    }
+    await mount(<Closing />, '/chat/thread-9');
+    await cleanup(root!);
+    root = undefined;
+    await mount(
+      <TopBar sidebarOpen onOpenSidebar={vi.fn()} onOpenCommandPalette={vi.fn()} />,
+      '/chat/thread-9',
+    );
+    await summarise();
+    expect(api.post).toHaveBeenCalledWith('/threads/thread-9/compact', {});
   });
 });

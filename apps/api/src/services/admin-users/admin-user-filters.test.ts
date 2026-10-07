@@ -341,6 +341,7 @@ describe('individual user mutations', () => {
     // A ban ends the account's sessions, as bulk ban does.
     expect(mocks.db.delete).toHaveBeenCalledTimes(1);
     expect(mocks.db.delete).toHaveBeenCalledWith(schema.session);
+    // The rename is a `user.update`; the ban is its own entry (#375).
     expect(mocks.recordAudit).toHaveBeenCalledWith({
       actorUserId: actor.id,
       actorEmail: actor.email,
@@ -348,10 +349,19 @@ describe('individual user mutations', () => {
       targetType: 'user',
       targetId: 'target',
       // Named by email, with each value as it was (#323).
+      metadata: { email: row.email, name: 'Changed', before: { name: row.name } },
+    });
+    expect(mocks.recordAudit).toHaveBeenCalledWith({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'user.ban',
+      targetType: 'user',
+      targetId: 'target',
       metadata: {
         email: row.email,
-        ...patch,
-        before: { name: row.name, banned: false, banReason: null },
+        banned: true,
+        banReason: 'Reason',
+        before: { banned: false, banReason: null },
       },
     });
   });

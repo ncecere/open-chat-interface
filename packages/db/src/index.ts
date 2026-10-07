@@ -19,6 +19,13 @@ export {
   sql,
 } from 'drizzle-orm';
 export {
+  ATTACHMENT_OWN_ROWS,
+  descendantsOf,
+  ownRowsStatement,
+  runOwnRows,
+} from './attachment-copies.js';
+export {
+  attachmentOwnRows,
   type BackgroundBatchInput,
   type BackgroundBatchResult,
   type BackgroundMigrationDefinition,

@@ -71,10 +71,17 @@ that reaches an outside service is recorded with its outcome (`smtp.test`,
 `storage.test`, `search.test`, `embeddings.test`, `reranking.test`,
 `backup.test`, `compliance.test`, `connector.test`, `webhook.test.send`),
 with where it went (for the test email, the server and the address it was sent to) and, when
-it failed, the reason, cleaned of anything that looks like a credential. A deletion records what was removed: a
+it failed, the reason, cleaned of anything that looks like a credential (a
+connector's or storage bucket's address is recorded without credentials or
+query; a failed storage test is recorded too). A deletion records what was removed: a
 deleted usage budget keeps its measure, limit, window, roles, models and how
 many per-user overrides went with it, a deleted storage allowance its values,
-and a cleared override its limit. **Sign out everywhere** records how many sessions it ended.
+and a cleared override its limit. A creation records what was created, not
+only that it was: a new usage budget its limit, window, time zone and state; a
+new connector or provider its address (without credentials or query); a set or
+cleared per-person override the person's email as well as their ID, so
+searching for the address still finds those entries after the account is
+deleted. **Sign out everywhere** records how many sessions it ended.
 
 Secret values record only whether they are set, cleared, or replaced. The value
 never enters the log.
@@ -172,7 +179,12 @@ Points worth knowing:
 - **Edit** loads a report into the form to change its name, cadence, window
   or recipients; **Pause** stops it without losing it.
 - **Send due now** exists so you can check the recipients and the content
-  without waiting a month to discover the address was wrong.
+  without waiting a month to discover the address was wrong. It says what it
+  did: how many were sent, which failed and why ("1 report failed: Name (Email
+  delivery failed). It was not counted as sent."), that a report failed earlier
+  and is waiting for its next automatic try, or that email delivery is not set
+  up. The page shows only the result of the latest action. The audit entry
+  (`report.run`) records how many were due, sent and failed.
 - **A failed send does not count as sent.** The report stays due, shows
   "Failed: Email delivery failed. It was not counted as sent, and will be tried
   again", and is tried again by the hourly check after 15 minutes, then 1 hour,

@@ -63,6 +63,32 @@ export function auditedAddress(address: string | null | undefined): string | nul
   }
 }
 
+/** `{ reason }` for a failed test, nothing for one that passed (#368). */
+export function failedReason(
+  outcome: { ok: boolean },
+  reason: string | null | undefined,
+  known: (string | null | undefined)[] = [],
+): { reason?: string } {
+  if (outcome.ok) return {};
+  return { reason: redactedReason(reason?.trim() ? reason : 'No reason was given', known) };
+}
+
+/**
+ * Where a backup or compliance destination test went: the destination, and for
+ * a separate S3 bucket its name and address (no credentials, no query).
+ */
+export function destinationAuditDetails(settings: {
+  destination: 'storage' | 'separate';
+  s3: { bucket?: string | null; endpoint?: string | null };
+}): Record<string, unknown> {
+  return {
+    destination: settings.destination,
+    ...(settings.destination === 'separate'
+      ? { bucket: settings.s3.bucket || null, endpoint: auditedAddress(settings.s3.endpoint) }
+      : {}),
+  };
+}
+
 /**
  * What a web search test tried and why it failed, for its audit entry: the
  * address (for providers that are reached at an address you choose) and, on

@@ -18,6 +18,7 @@ import {
   gate,
   modelText,
   type StartedTurn,
+  shareFilesWithSource,
 } from '../../../test/chat-attachment-context.fixtures.js';
 import {
   createLiveDatabase,
@@ -208,8 +209,11 @@ describe.skipIf(!available)('live historical attachment context', () => {
     const fork = await forkFromMessage(source.id, owner, {
       messageId: first.run.assistantMessage.id,
     });
+    // Made before 0.11: the fork and its fork show the source's files (#358).
+    await shareFilesWithSource(pool, fork.id);
     const forkMessages = await messages(fork.id);
     const leaf = await forkFromMessage(fork.id, owner, { messageId: forkMessages.at(-1)!.id });
+    await shareFilesWithSource(pool, leaf.id);
     const before = await messages(leaf.id);
     const released = state.released;
     const hydrated = gate();

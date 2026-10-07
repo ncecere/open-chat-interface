@@ -148,6 +148,8 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0008_audit_log_user_ids_index', 'pending'],
       ['0009_artifact_kind_code', 'pending'],
       ['0010_audit_log_actor_email_index', 'pending'],
+      ['0011_attachment_storage_key_index', 'pending'],
+      ['0012_attachment_thumbnail_key_index', 'pending'],
     ]);
     const [created] = report.postDeploy;
     expect(created!.statement).toMatchObject({ cost: 'concurrent-index', fast: true });
@@ -162,7 +164,7 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       invalidExists: false,
     });
     expect(created!.index!.estimatedBytes).toBeGreaterThan(0);
-    expect(report.indexes.toBuild).toBe(9);
+    expect(report.indexes.toBuild).toBe(11);
     expect(report.verdict.mode).toBe('rolling');
     expect(report.verdict.summary).toMatch(/Run `migrate --post`/);
     expect(renderReport(report)).toMatch(/Verdict: ROLLING/);
@@ -296,6 +298,8 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0.11.reencrypt-connector-tokens', 'not_scheduled'],
       ['0.11.reencrypt-webhook-secrets', 'not_scheduled'],
       ['0.11.reencrypt-settings', 'not_scheduled'],
+      // Forks and edits made before 0.11 get their own rows for shared files (#358).
+      ['0.11.attachment-own-rows', 'not_scheduled'],
     ]);
 
     expect(

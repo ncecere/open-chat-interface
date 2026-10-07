@@ -12,7 +12,15 @@ import { SettingsCustomizationPage } from '../../src/routes/settings/customizati
 import { SettingsHistoryPage } from '../../src/routes/settings/history';
 import { SettingsMemoryPage } from '../../src/routes/settings/memory';
 import { SettingsModelsPage } from '../../src/routes/settings/models';
-import { button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
+import {
+  button,
+  cleanup,
+  click,
+  dialog,
+  expectLocked,
+  renderAdmin,
+  settle,
+} from './admin-test-utils';
 
 /**
  * Every Settings control that saves something is off while the instance is
@@ -229,12 +237,13 @@ afterEach(async () => {
 const render = async (ui: React.ReactNode, path: string) => {
   ({ root } = await renderAdmin(ui, { path }));
 };
-const off = (name: string) => {
-  const control = button(name);
-  expect(control.disabled, name).toBe(true);
-  expect(control.title, name).toMatch(REASON);
+// Off, but focusable and described by the reason, so a keyboard or screen-reader
+// user meets it, not only a pointer's tooltip (#357).
+const off = (name: string) => expectLocked(button(name), REASON, name);
+const on = (name: string) => {
+  expect(button(name).disabled, name).toBe(false);
+  expect(button(name).getAttribute('aria-disabled'), name).not.toBe('true');
 };
-const on = (name: string) => expect(button(name).disabled, name).toBe(false);
 async function readOnlyBegins() {
   await act(async () => setReadOnlyStatus(ON));
   await settle();
@@ -337,8 +346,7 @@ describe('Settings → Memory while read-only (#353)', () => {
     ])
       off(name);
     const toggle = document.getElementById('memory-enabled') as HTMLButtonElement;
-    expect(toggle.disabled).toBe(true);
-    expect(toggle.title).toMatch(REASON);
+    expectLocked(toggle, REASON, 'Memory switch');
 
     await act(async () => setReadOnlyStatus(INACTIVE_READ_ONLY_STATUS));
     await settle();
@@ -350,6 +358,7 @@ describe('Settings → Memory while read-only (#353)', () => {
     ])
       on(name);
     expect(toggle.disabled).toBe(false);
+    expect(toggle.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('turns off Save in an edit left open, and the confirmations', async () => {

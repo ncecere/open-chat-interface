@@ -3,6 +3,7 @@ import type { OnboardingState, UsagePolicy } from '@oci/shared';
 import { db } from '../db/index.js';
 import { validationFailed } from '../lib/errors.js';
 import { getDefaultOrganizationId } from './organization.js';
+import { invalidatePolicyCache } from './policy-gate.js';
 
 /** The policy currently in force, or null when none has been published. */
 export async function currentPolicy() {
@@ -89,13 +90,15 @@ export async function acceptPolicy(params: {
   userId: string;
   policyId: string;
   ipAddress: string | null;
-}): Promise<void> {
+}): Promise<{ recorded: boolean; version: number; title: string }> {
   const policy = await currentPolicy();
   if (!policy || policy.id !== params.policyId) {
     throw validationFailed('That policy is no longer the current one. Reload and try again.');
   }
 
-  await db
+  // `recorded` is false for a second acceptance of the same version, which
+  // changes nothing and so is not audited again (#373).
+  const inserted = await db
     .insert(schema.usagePolicyAcceptance)
     .values({
       policyId: policy.id,
@@ -103,7 +106,9 @@ export async function acceptPolicy(params: {
       policyVersion: policy.version,
       ipAddress: params.ipAddress,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: schema.usagePolicyAcceptance.id });
+  return { recorded: inserted.length > 0, version: policy.version, title: policy.title };
 }
 
 export async function listPolicies(): Promise<UsagePolicy[]> {
@@ -120,6 +125,12 @@ export async function listPolicies(): Promise<UsagePolicy[]> {
       // Qualified by hand: Drizzle drops qualifiers in a single-table select.
       acceptanceCount: sql<number>`(select count(*) from "usage_policy_acceptance" as acceptance
         where acceptance.policy_id = "usage_policy"."id")::int`,
+      // Acceptances whose account was deleted since: the row went with the
+      // account, the audit entry that recorded it stayed (its actor is null
+      // once the account is gone) (#373).
+      deletedAcceptanceCount: sql<number>`(select count(*) from "audit_log" as entry
+        where entry.action = 'policy.accept' and entry.target_id = "usage_policy"."id"
+        and entry.actor_user_id is null)::int`,
     })
     .from(schema.usagePolicy)
     .where(eq(schema.usagePolicy.organizationId, organizationId))
@@ -133,6 +144,7 @@ export async function listPolicies(): Promise<UsagePolicy[]> {
     body: row.body,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     acceptanceCount: Number(row.acceptanceCount),
+    deletedAcceptanceCount: Number(row.deletedAcceptanceCount),
     createdAt: row.createdAt.toISOString(),
   }));
 }
@@ -173,25 +185,67 @@ export async function createPolicyVersion(params: {
     .returning({ id: schema.usagePolicy.id });
 
   if (!created) throw new Error('Failed to create the policy version');
+  // A published version changes who may use the instance at once (#367).
+  if (params.publish) invalidatePolicyCache();
   return { id: created.id, version };
 }
 
-/** Publishes a draft, which re-prompts everyone who accepted an older one. */
-export async function publishPolicy(policyId: string): Promise<boolean> {
-  const organizationId = await getDefaultOrganizationId();
+export type PublishOutcome =
+  | { outcome: 'published'; version: number; title: string }
+  | { outcome: 'not-found' }
+  /** Already published: its publish time never moves (#372). */
+  | { outcome: 'already-published'; version: number; publishedAt: Date }
+  /** Older than the version in force: it would never be shown (#372). */
+  | { outcome: 'superseded'; version: number; currentVersion: number };
 
+/**
+ * Publishes a draft, which re-prompts everyone who accepted an older one. What
+ * it published is returned so the audit entry can say which version and title
+ * (#371).
+ *
+ * Only a draft, and only one newer than the version in force (#372):
+ * publishing again moved the version's publish time (an acceptance made in
+ * between then predated the publication it was made to), and a draft older
+ * than the one in force would have been published for good and shown to nobody,
+ * since the highest published version is the one in force.
+ */
+export async function publishPolicy(policyId: string): Promise<PublishOutcome> {
+  const policy = await findPolicy(policyId);
+  if (!policy) return { outcome: 'not-found' };
+  if (policy.publishedAt)
+    return {
+      outcome: 'already-published',
+      version: policy.version,
+      publishedAt: policy.publishedAt,
+    };
+  const inForce = await currentPolicy();
+  if (inForce && inForce.version > policy.version)
+    return { outcome: 'superseded', version: policy.version, currentVersion: inForce.version };
+
+  // `published_at is null` keeps a publish that lands between the read and the
+  // write from being moved.
   const published = await db
     .update(schema.usagePolicy)
     .set({ publishedAt: new Date() })
-    .where(
-      and(
-        eq(schema.usagePolicy.id, policyId),
-        eq(schema.usagePolicy.organizationId, organizationId),
-      ),
-    )
-    .returning({ id: schema.usagePolicy.id });
+    .where(and(eq(schema.usagePolicy.id, policyId), isNull(schema.usagePolicy.publishedAt)))
+    .returning({ version: schema.usagePolicy.version, title: schema.usagePolicy.title });
 
-  return published.length > 0;
+  const [row] = published;
+  if (!row) {
+    const [now] = await db
+      .select({ publishedAt: schema.usagePolicy.publishedAt })
+      .from(schema.usagePolicy)
+      .where(eq(schema.usagePolicy.id, policyId))
+      .limit(1);
+    if (!now) return { outcome: 'not-found' };
+    return {
+      outcome: 'already-published',
+      version: policy.version,
+      publishedAt: now.publishedAt ?? new Date(),
+    };
+  }
+  invalidatePolicyCache();
+  return { outcome: 'published', ...row };
 }
 
 export type DraftChange =

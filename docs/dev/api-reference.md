@@ -285,11 +285,11 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. `unsent` marks a chat file not sent with any message. |
+| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. `unsent` marks a chat file not sent with any message. `conversation` (`id`, `title`) is the conversation a chat file was sent in, `null` for a project file or an unsent upload: a fork or an edit has a row, and so a line, of its own for each file it shows (#358). |
 | POST | `/api/attachments` | — |
-| DELETE | `/api/attachments/:id` | — |
+| DELETE | `/api/attachments/:id` | Moves a chat file to the trash. The `data-attachment` part of the message that shows it is kept and marked `removed: true` (with `filename`, `mimeType` and `sizeBytes` filled in from the row), not filtered out, so the conversation, the model's "no longer available" notice, the Markdown export and the full export's message JSON still have it after the row is purged (#378). Only the message of that row is marked: a fork's or an edit's copy is its own row (#358). Parts of files deleted before this change were already dropped and are not recovered. |
 | DELETE | `/api/attachments/:id/unsent` | Discards an upload the composer leaves unsent (moves it to the trash, as `DELETE /api/attachments/:id` does). A file sent with a message meanwhile is kept. Returns `removed`. |
-| GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. |
+| GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. Each conversation that shows a file has its own attachment id for it (#358), so the id in a message's `data-attachment` part is the one to open. |
 | GET | `/api/attachments/usage` | Consumption and the role's allowance, for the storage meter in settings. |
 
 ## `routes/auth-status.ts`
@@ -312,7 +312,7 @@ Generated from 44 route files.
 | --- | --- | --- |
 | POST | `/api/chat` | — |
 | POST | `/api/chat/:threadId/approvals` | Answers a reply's open tool approvals and continues the same assistant message under the durable claim, streaming like a new reply. |
-| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. |
+| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. A `data-attachment` part whose file can no longer be opened (deleted, expired or gone) carries `available: false` in its `data`, so the page shows it as removed (computed on read from the row, #359; a part stored with `removed: true` is marked too, #378). The same in `GET /api/threads/:id`. |
 | GET | `/api/chat/:threadId/stream` | Replays the active SSE stream after authenticating the thread owner. |
 | DELETE | `/api/chat/:threadId/stream` | Explicit stop request; also reaches a producer running in another API process via Redis. |
 
@@ -387,7 +387,7 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/me/export` | Downloads every conversation, its JSON record, and attached files as one ZIP, streamed as it is written. |
+| GET | `/api/me/export` | Downloads every conversation, its JSON record, and attached files as one ZIP, streamed as it is written. Each conversation, forks and edits included, lists the files its messages show and has its own folder of them under `attachments/` (#364). |
 | GET | `/api/me/imports` | The person's imports and their progress, newest first. |
 | POST | `/api/me/imports` | Accepts a ChatGPT or Claude export (`.zip`, or the `conversations.json` inside it) and queues it for background processing. |
 | DELETE | `/api/me/imports/:id` | Removes a queued or finished import and its stored upload; 409 while it is running. |
@@ -421,15 +421,15 @@ Generated from 44 route files.
 | --- | --- | --- |
 | GET | `/api/threads` | Live conversations, pinned first then newest, at most 200; `view=sidebar` leaves out unpinned project conversations. |
 | POST | `/api/threads` | Starts a conversation, or answers 429 with Retry-After when the person starts them faster than their role's messages per minute or already has ten unused untitled ones from the last minute (v0.10.2). |
-| GET | `/api/threads/:id` | — |
+| GET | `/api/threads/:id` | The conversation and its stored messages; a file that can no longer be opened is marked `available: false` in its `data-attachment` part, as in `GET /api/chat/:threadId/messages` (#359). |
 | PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
-| POST | `/api/threads/:id/branches` | Copies the conversation before `messageId` (a question) into a new one ending with `text` as the revised question, titled from that text. The revised question keeps the original's files, or only those listed in `attachmentIds` (each must be one of the original's; others are refused with 422). Returns `thread` and `message`, the revised question (`id`, `modelSlug`, `effort`). |
+| POST | `/api/threads/:id/branches` | Copies the conversation before `messageId` (a question) into a new one ending with `text` as the revised question, titled from that text. The revised question keeps the original's files, or only those listed in `attachmentIds` (each must be one of the original's; others are refused with 422). Returns `thread` and `message`, the revised question (`id`, `modelSlug`, `effort`). Each kept file gets an attachment row of its own in the new conversation, on the same stored object, so deleting the original never removes it (#358). |
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
 | GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start), whether a background summary is queued or being made (`pending`), and the last failure of a summary the person asked for (`failure`, v0.10). |
 | DELETE | `/api/threads/:id/compaction/failure` | Dismisses the report of a failed summary (v0.10) and returns the state as GET does. |
 | GET | `/api/threads/:id/export` | Downloads one conversation as Markdown, dated in `?timeZone=` (an IANA zone, such as the browser's; UTC when absent or unknown). |
-| POST | `/api/threads/:id/forks` | Copies the conversation through `messageId` into a new one titled "Fork of …"; returns `thread` and `message`, the copy of the message forked at (`id`, `role`, `modelSlug`, `effort`). |
+| POST | `/api/threads/:id/forks` | Copies the conversation through `messageId` into a new one titled "Fork of …"; returns `thread` and `message`, the copy of the message forked at (`id`, `role`, `modelSlug`, `effort`). Files, like artifacts, are copied: each file in the copied questions gets an attachment row of its own, counted in the person's storage (a fork is never refused for lack of allowance), on the same stored object (#358). |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |
 | GET | `/api/threads/:id/messages/:messageId/export` | Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX. |
 | DELETE | `/api/threads/:id/permanent` | Destroys a trashed thread now, without waiting out the grace window. |

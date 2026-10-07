@@ -13,15 +13,18 @@ export const COMPACTION_FAILED_TEXT = 'The summary you asked for could not be ma
 /** Why, in the person's terms. */
 export const COMPACTION_FAILURE_TEXT: Record<CompactionFailureReason, string> = {
   allowance: 'Your usage allowance ran out before it was made. Try again when it resets.',
-  model_error: 'The model returned an error.',
+  model_error:
+    'The model returned an error. Choose another model in the message box, then select Retry.',
   nothing_to_summarise: 'There was nothing to summarise yet.',
-  timeout: 'The model took too long to answer.',
+  timeout:
+    'The model took too long to answer. Select Retry, or choose another model in the message box first.',
 };
 
 /**
  * A quiet notice under the conversation when a summary the person asked for
- * ("Summarise earlier messages now") failed in the background: why, with
- * Retry (the same instructions) and Dismiss. Automatic summaries are never
+ * ("Summarise earlier messages now") failed in the background: why and what
+ * to do (#363), with Retry (the same instructions, with the model now in the
+ * picker) and Dismiss. Automatic summaries are never
  * reported; the conversation works the same either way.
  */
 export function CompactionFailureNotice({ threadId }: { threadId: string }) {

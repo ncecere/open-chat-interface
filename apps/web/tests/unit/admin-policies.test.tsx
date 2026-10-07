@@ -12,6 +12,7 @@ import {
   dialog,
   findButton,
   renderAdmin,
+  typeInto,
   typeIntoTextarea,
 } from './admin-test-utils';
 
@@ -28,6 +29,7 @@ const published: UsagePolicy = {
   body: 'Be kind to the machines.',
   publishedAt: '2026-10-01T00:00:00.000Z',
   acceptanceCount: 12,
+  deletedAcceptanceCount: 0,
   createdAt: '2026-10-01T00:00:00.000Z',
 };
 const draft: UsagePolicy = {
@@ -37,12 +39,19 @@ const draft: UsagePolicy = {
   body: 'Be kind. Typo: recieve.',
   publishedAt: null,
   acceptanceCount: 0,
+  deletedAcceptanceCount: 0,
   createdAt: '2026-10-05T00:00:00.000Z',
 };
 
 let root: Root | undefined;
 beforeEach(() => {
-  api.get.mockReset().mockResolvedValue({ policies: [draft, published] });
+  api.get
+    .mockReset()
+    .mockImplementation(async (path: string) =>
+      path.endsWith('/acceptances')
+        ? { acceptances: [], accepted: 0, deleted: 0, shown: 0 }
+        : { policies: [draft, published] },
+    );
   api.post.mockReset().mockResolvedValue({ ok: true });
   api.patch.mockReset().mockResolvedValue({ ok: true });
   api.delete.mockReset().mockResolvedValue({ ok: true });
@@ -85,11 +94,7 @@ it('clears the error once the policy text is filled in (#217)', async () => {
   await click(button('New version'));
   const body = document.getElementById('policy-body') as HTMLTextAreaElement;
   await typeIntoTextarea(body, '   ');
-  await click(
-    [...dialog()!.querySelectorAll('button')].find(
-      (candidate) => candidate.textContent?.trim() === 'Publish version',
-    )!,
-  );
+  await click(button('Save draft'));
   // In the form's words, not the API's "Body" (#228).
   expect(alerts(dialog()!)).toEqual(['Policy text is required.']);
   expect(api.post).not.toHaveBeenCalled();
@@ -128,4 +133,136 @@ it("names each version's Publish button for its version (#175)", async () => {
     'Publish Walk AUP second draft v3',
     'Publish Walk AUP draft v2',
   ]);
+});
+
+const submitButton = () =>
+  [...dialog()!.querySelectorAll('button[type="submit"]')].at(0) as HTMLButtonElement;
+
+async function fillNewVersion(title: string) {
+  await click(button('New version'));
+  await typeInto(document.getElementById('policy-title') as HTMLInputElement, title);
+  await typeIntoTextarea(
+    document.getElementById('policy-body') as HTMLTextAreaElement,
+    'Be kind to the machines, please.',
+  );
+}
+
+it('saves a draft by default: Publish immediately starts off (#371)', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await fillNewVersion('Walk9 AUP');
+  expect(document.getElementById('policy-publish')?.getAttribute('aria-checked')).toBe('false');
+  expect(submitButton().textContent).toBe('Save draft');
+
+  await click(submitButton());
+  expect(api.post).toHaveBeenCalledWith('/admin/policies', {
+    title: 'Walk9 AUP',
+    body: 'Be kind to the machines, please.',
+    publish: false,
+  });
+});
+
+it('asks before publishing from New version, naming the title and version, and says it cannot be undone (#371)', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await fillNewVersion('Walk9 AUP');
+  await click(document.getElementById('policy-publish')!);
+  // Before: this button published at once, with no question.
+  expect(submitButton().textContent).toBe('Publish version…');
+
+  await click(submitButton());
+  expect(api.post).not.toHaveBeenCalled();
+  expect(dialog()?.textContent).toContain('Publish “Walk9 AUP” as version 3?');
+  expect(dialog()?.textContent).toContain('cannot be changed or withdrawn');
+  expect(submitButton().textContent).toBe('Publish version 3');
+
+  // Back changes nothing; the form is still there, the switch still on.
+  await click(button('Back'));
+  expect(api.post).not.toHaveBeenCalled();
+  expect(document.getElementById('policy-title')).not.toBeNull();
+
+  await click(submitButton());
+  await click(submitButton());
+  expect(api.post).toHaveBeenCalledTimes(1);
+  expect(api.post).toHaveBeenCalledWith('/admin/policies', {
+    title: 'Walk9 AUP',
+    body: 'Be kind to the machines, please.',
+    publish: true,
+  });
+});
+
+it('names the policy and version in the confirmation for publishing a draft from the list (#371)', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await click(button('Publish Walk AUP draft v2'));
+  expect(dialog()?.textContent).toContain('Publish “Walk AUP draft” as v2?');
+});
+
+it('does not offer Publish on a draft older than the version in force (#372)', async () => {
+  const older = { ...draft, id: 'policy-0', version: 0, title: 'Walk AUP old draft' };
+  api.get.mockResolvedValue({
+    policies: [
+      { ...draft, version: 3, id: 'policy-3', title: 'Walk AUP newer draft' },
+      published,
+      older,
+    ],
+  });
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  // v3 is newer than v1, which is in force; v0 is older and could never be shown.
+  expect(buttonNames().filter((name) => name.startsWith('Publish'))).toEqual([
+    'Publish Walk AUP newer draft v3',
+  ]);
+  expect(document.body.textContent).toContain(
+    'Older than v1, which is in force, so it cannot be published.',
+  );
+  // It can still be reworded or discarded.
+  expect(findButton('Edit draft Walk AUP old draft v0')).toBeDefined();
+  expect(findButton('Delete draft Walk AUP old draft v0')).toBeDefined();
+});
+
+it('says how many accepted accounts were deleted since, and lists who accepted with their email (#373)', async () => {
+  const live = { ...published, acceptanceCount: 2, deletedAcceptanceCount: 1 };
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/policies') return { policies: [live] };
+    if (path === '/admin/policies/policy-1/acceptances')
+      return {
+        acceptances: [
+          {
+            email: 'physics@example.edu',
+            name: 'Walk9 Physics Two',
+            acceptedAt: '2026-10-06T14:41:00.000Z',
+            ipAddress: '198.51.100.7',
+            accountDeleted: false,
+          },
+          {
+            email: 'bell@example.edu',
+            name: null,
+            acceptedAt: '2026-10-06T14:50:00.000Z',
+            ipAddress: null,
+            accountDeleted: true,
+          },
+        ],
+        accepted: 2,
+        deleted: 1,
+        shown: 2,
+      };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  ({ root } = await renderAdmin(<AdminPoliciesPage />, { role: 'auditor' }));
+  // Before: "accepted by 2" whether or not an account had been deleted.
+  expect(document.body.textContent).toContain('accepted by 2, 1 since deleted');
+
+  await click(button('View Acceptable use v1'));
+  const text = dialog()?.textContent ?? '';
+  expect(text).toContain('Who accepted');
+  expect(text).toContain('2 accepted, 1 since deleted.');
+  expect(text).toContain('physics@example.edu');
+  expect(text).toContain('Walk9 Physics Two');
+  expect(text).toContain('bell@example.edu');
+  expect(text).toContain('account deleted');
+  expect(api.get).toHaveBeenCalledWith('/admin/policies/policy-1/acceptances');
+});
+
+it('does not ask who accepted a draft', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await click(button('View Walk AUP draft v2'));
+  expect(dialog()?.textContent).not.toContain('Who accepted');
+  expect(api.get).not.toHaveBeenCalledWith('/admin/policies/policy-2/acceptances');
 });

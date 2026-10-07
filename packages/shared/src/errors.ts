@@ -11,6 +11,12 @@ export const ERROR_CODES = {
   /** Read-only maintenance mode (v0.11): a write refused with 423 Locked. */
   READ_ONLY: 'READ_ONLY',
   /**
+   * The published acceptable use policy has not been accepted by this person
+   * (#367): a request that uses the instance is refused with 403 until they
+   * accept it (POST /api/me/onboarding/accept-policy).
+   */
+  POLICY_ACCEPTANCE_REQUIRED: 'POLICY_ACCEPTANCE_REQUIRED',
+  /**
    * A replica shutting down (v0.11.1): a new chat turn refused with 503 and
    * Retry-After before anything is stored; send it again. Not a fault.
    */

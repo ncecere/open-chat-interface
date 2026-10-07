@@ -13,12 +13,24 @@ import {
   publishPolicy,
   updatePolicyDraft,
 } from '../../services/onboarding.js';
+import { listPolicyAcceptances } from '../../services/policy-acceptances.js';
 import { diffUpdate, type SettingChange } from '../../services/settings-diff.js';
 
 export const policyRoutes = new Hono<AppBindings>();
 
 policyRoutes.get('/', async (c) => {
   return c.json({ policies: await listPolicies() });
+});
+
+/**
+ * Who accepted one version and when, with their email, for administrators and
+ * auditors (#373): the latest 200, and the counts of accounts that exist and of
+ * accounts deleted since.
+ */
+policyRoutes.get('/:id/acceptances', async (c) => {
+  const result = await listPolicyAcceptances(c.req.param('id'));
+  if (!result) throw notFound('Policy version not found');
+  return c.json(result);
 });
 
 /**
@@ -56,14 +68,27 @@ policyRoutes.post('/:id/publish', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
 
-  if (!(await publishPolicy(id))) throw notFound('Policy version not found');
+  const published = await publishPolicy(id);
+  if (published.outcome === 'not-found') throw notFound('Policy version not found');
+  if (published.outcome === 'already-published')
+    throw conflict(
+      `Version ${published.version} is already published (${published.publishedAt.toISOString()}). A published version cannot be published again or changed: its publish time is the record of when people were first asked to accept it.`,
+    );
+  if (published.outcome === 'superseded')
+    throw conflict(
+      `Version ${published.version} is older than version ${published.currentVersion}, which is in force, so nobody would ever be shown it. Create a new version with its wording instead.`,
+    );
 
+  // Which version and title, as the entry for publishing at creation has (#371):
+  // it carried only the policy's ID, so the log did not say what everybody had
+  // just been asked to accept.
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'policy.publish',
     targetType: 'usage_policy',
     targetId: id,
+    metadata: { version: published.version, title: published.title },
   });
 
   return c.json({ ok: true });

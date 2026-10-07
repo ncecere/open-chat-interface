@@ -77,9 +77,18 @@ it('renders refused links as text in a conversation, keeping share pages strict'
         'raw',
         'sanitize',
         ['harden', { allowedLinkPrefixes: ['*'], linkBlockPolicy: 'text-only' }],
+        // Each paragraph takes its own direction, last (#360).
+        expect.any(Function),
       ],
     }),
   );
+  // A share page keeps Streamdown's own plugins and hardening, with only the
+  // direction added: no text-only policy.
   await render({ children: 'A [link](plan.md)', skipHtml: true, urlTransform: () => null });
-  expect(renderStreamdown.mock.lastCall?.[0]).not.toHaveProperty('rehypePlugins');
+  expect(renderStreamdown.mock.lastCall?.[0].rehypePlugins).toEqual([
+    'raw',
+    'sanitize',
+    ['harden', { allowedLinkPrefixes: ['*'] }],
+    expect.any(Function),
+  ]);
 });

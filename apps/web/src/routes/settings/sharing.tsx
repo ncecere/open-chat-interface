@@ -115,8 +115,7 @@ function ShareLinkRow({
             size="sm"
             variant="secondary"
             aria-label={`Revoke the link to ${title}`}
-            title={lock.title}
-            disabled={lock.locked}
+            locked={lock.title}
             onClick={onRevoke}
           >
             Revoke
@@ -225,8 +224,8 @@ export function SettingsSharingPage() {
                 type="button"
                 size="sm"
                 variant="danger"
-                title={lock.title}
-                disabled={active === 0 || lock.locked}
+                locked={lock.title}
+                disabled={active === 0}
                 onClick={() => setRevokingAll(true)}
               >
                 Revoke all

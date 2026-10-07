@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lte, schema } from '@oci/db';
+import { and, desc, eq, isNull, lte, schema, sql } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
@@ -8,6 +8,7 @@ import { destroyAttachments } from '../lifecycle/destroy.js';
 import { assertRoleFeature } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { adjustStorageUsage } from '../storage/usage.js';
+import { giveSharersOwnRows } from './shared-rows.js';
 
 export { type UploadResult, uploadAttachment } from './upload.js';
 
@@ -40,7 +41,9 @@ export async function getOwnedAttachment(id: string, userId: string) {
 /**
  * Settings → Attachments: chat files (message attachments and staged
  * uploads) and, since v0.9.1, project files with the project they belong to,
- * so the list accounts for what the storage meter counts. Newest first.
+ * so the list accounts for what the storage meter counts. Newest first. A file
+ * a fork or an edit shows is listed once for each conversation that has a row
+ * for it (#358), with that conversation, and each is counted by the meter.
  */
 export async function listAttachments(userId: string) {
   return db
@@ -53,9 +56,13 @@ export async function listAttachments(userId: string) {
       messageId: schema.attachment.messageId,
       projectId: schema.attachment.projectId,
       projectName: schema.project.name,
+      threadId: schema.thread.id,
+      threadTitle: schema.thread.title,
     })
     .from(schema.attachment)
     .leftJoin(schema.project, eq(schema.project.id, schema.attachment.projectId))
+    .leftJoin(schema.message, eq(schema.message.id, schema.attachment.messageId))
+    .leftJoin(schema.thread, eq(schema.thread.id, schema.message.threadId))
     .where(
       and(
         eq(schema.attachment.userId, userId),
@@ -105,19 +112,23 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
       if (row.deletedAt) return false;
       if (row.messageId && !thread) return true;
 
+      // A fork or edit made before 0.11 may still show this file through the
+      // same row: it gets its own before this one goes (#358).
+      if (row.messageId) await giveSharersOwnRows(tx, sql`select ${row.messageId}::text`);
+
       if (row.messageId) {
         const [message] = await tx
           .select({ parts: schema.message.parts })
           .from(schema.message)
           .where(eq(schema.message.id, row.messageId));
         if (message) {
-          const parts = message.parts.filter((part) => {
-            if (part.type !== 'data-attachment') return true;
-            const data = part.data;
-            return (
-              typeof data !== 'object' || data === null || (data as { id?: unknown }).id !== id
-            );
-          });
+          // The part stays, marked removed (#378). Dropping it left no trace in
+          // the conversation and told the model nothing, so it answered about
+          // the file from imagination. Only this message's part is marked: a
+          // fork's or an edit's copy is its own row with its own id (#358).
+          const parts = message.parts.map((part) =>
+            part.type === 'data-attachment' ? markPartRemoved(part, row) : part,
+          );
           await tx
             .update(schema.message)
             .set({ parts })
@@ -132,6 +143,33 @@ export async function deleteAttachment(id: string, userId: string): Promise<void
 }
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The part of a file its owner removed, if it is that file's: `removed: true`
+ * with the name, type and size kept, so the chip, the model's notice and the
+ * exports still have them after the trash purges the row and its object.
+ * Reads also compute `available: false` from the row, which covers files that
+ * go some other way (expiry, a purge); this marker is the one that survives
+ * with the message.
+ */
+function markPartRemoved<P extends { data?: unknown }>(
+  part: P,
+  row: typeof schema.attachment.$inferSelect,
+): P {
+  const data = part.data;
+  if (typeof data !== 'object' || data === null || (data as { id?: unknown }).id !== row.id)
+    return part;
+  return {
+    ...part,
+    data: {
+      ...data,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      removed: true,
+    },
+  };
+}
 
 /** Moves one locked chat file to the trash, by its owner. */
 async function trashRow(

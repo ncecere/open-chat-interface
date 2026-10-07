@@ -71,6 +71,55 @@ test('an acceptable-use version keeps its title and actions inside the card at 3
   }
 });
 
+test('a scheduled report keeps its name and details readable at 390 px, actions below (#370)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/admin/reports', (route) =>
+    route.fulfill({
+      json: {
+        reports: [
+          {
+            id: 'report-1',
+            name: 'Walk9 second report',
+            kind: 'usage',
+            cadence: 'weekly',
+            windowDays: 7,
+            recipients: ['admin@northbrook.edu'],
+            enabled: true,
+            lastRunAt: null,
+            lastAttemptAt: null,
+            lastStatus: 'success',
+            lastError: null,
+            retriesLeft: null,
+            nextRunAt: new Date().toISOString(),
+          },
+        ],
+      },
+    }),
+  );
+  await signIn(page);
+  await page.goto('/admin/reports');
+  const name = page.getByText('Walk9 second report', { exact: true });
+  await expect(name).toBeVisible();
+  const row = page.getByRole('listitem').filter({ has: name });
+  const rowBox = (await row.boundingBox())!;
+  const nameBox = (await name.boundingBox())!;
+  // Before: the name and details were a column about 90 px wide, a word a line.
+  expect(nameBox.width).toBeGreaterThan(200);
+  expect(nameBox.height).toBeLessThan(30);
+  const details = row.getByText(/weekly · 7 days/);
+  expect((await details.boundingBox())!.height).toBeLessThan(40);
+  // The four actions sit below the text, inside the row and the viewport.
+  const buttons = await row.getByRole('button').all();
+  expect(buttons).toHaveLength(4);
+  for (const button of buttons) {
+    const box = (await button.boundingBox())!;
+    expect(box.y).toBeGreaterThan(nameBox.y + nameBox.height);
+    expect(box.x + box.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+  }
+});
+
 test('the Users table keeps each Joined date on one line at 1440 px (#170)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await signIn(page);

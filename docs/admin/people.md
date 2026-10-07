@@ -74,7 +74,13 @@ until the hold is lifted.
   they were signed out, and signing in says the account has been suspended
   (not the reason). You cannot ban yourself. **Unban** lifts it and clears the reason (through the API too, with just
   `{"banned": false}`; the audit entry keeps the reason it lifted); they can then
-  sign in again.
+  sign in again. Banning and unbanning are recorded as `user.ban` and
+  `user.unban` (not `user.update`, which stays for other edits such as a
+  rename), so the audit log and Recent activity tell them apart at a glance;
+  entries from before that change are still `user.update` with `banned: true`
+  or `false`. A refused sign-in by a banned account is recorded with its
+  reason (`BANNED_USER`) and shown in Recent activity as "With the address,
+  not signed in".
 - **Removing the last administrator** is refused, whether by changing their
   role, banning them or deleting them, singly or in bulk: at least one
   administrator who can sign in always remains (a banned administrator does

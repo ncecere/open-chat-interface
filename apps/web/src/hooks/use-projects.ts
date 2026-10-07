@@ -14,6 +14,7 @@ import {
   SIDEBAR_PROJECTS_KEY,
   updateCachedConversation,
 } from '~/lib/conversation-cache';
+import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { useCurrentUser } from './use-current-user';
 
 /** Whether this person's role may use projects; false until /me has loaded. */
@@ -138,6 +139,7 @@ export function useUploadProjectFiles(projectId: string) {
           credentials: 'same-origin',
         });
         if (!response.ok) {
+          void notePolicyRequiredResponse(response);
           const payload = (await response.json().catch(() => null)) as {
             error?: { message?: string };
           } | null;

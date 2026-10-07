@@ -268,8 +268,8 @@ function SaveRow({
       <Button
         type="submit"
         variant="primary"
-        title={lock.title}
-        disabled={disabled || state.update.isPending || lock.locked}
+        locked={lock.title}
+        disabled={disabled || state.update.isPending}
       >
         {state.update.isPending && <Spinner />}
         Save changes
@@ -401,8 +401,8 @@ function ProjectFiles({
             <Button
               type="button"
               variant="secondary"
-              title={lock.title}
-              disabled={full || upload.isPending || lock.locked}
+              locked={lock.title}
+              disabled={full || upload.isPending}
               onClick={() => inputRef.current?.click()}
             >
               {upload.isPending ? <Spinner /> : <Upload aria-hidden="true" />}
@@ -461,8 +461,8 @@ function ProjectFiles({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`Remove ${file.filename}`}
-                title={lock.title}
-                disabled={remove.isPending || lock.locked}
+                locked={lock.title}
+                disabled={remove.isPending}
                 onClick={() => remove.mutate(file.id)}
               >
                 <Trash2 />
@@ -503,7 +503,9 @@ function ProjectConversations({ projectId }: { projectId: string }) {
                 title={thread.title}
                 className="flex items-center gap-3 py-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+                <span dir="auto" className="min-w-0 flex-1 truncate">
+                  {thread.title}
+                </span>
                 <span className="shrink-0 text-xs text-[var(--text-muted)]">
                   {formatDate(thread.lastMessageAt ?? thread.updatedAt)}
                 </span>

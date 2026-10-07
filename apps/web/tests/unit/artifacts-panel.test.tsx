@@ -229,6 +229,10 @@ describe('the artifact panel', () => {
     expect(createObjectURL).toHaveBeenCalled();
     expect(artifactFilename('Plan: Q3 / Q4!', 'markdown')).toBe('plan-q3-q4.md');
     expect(artifactFilename('***', 'html')).toBe('artifact.html');
+    // Letters of every script stay in the name (#361).
+    expect(artifactFilename('日本語の宿題 Русский', 'markdown')).toBe('日本語の宿題-русский.md');
+    expect(artifactFilename('واجب الكتابة 📚', 'markdown')).toBe('واجب-الكتابة.md');
+    expect(artifactFilename('Bibliothèque', 'markdown')).toBe('bibliothèque.md');
   });
 
   it('exports a document as a file, the version shown', async () => {

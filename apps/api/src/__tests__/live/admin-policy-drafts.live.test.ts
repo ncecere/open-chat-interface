@@ -159,6 +159,53 @@ describe.skipIf(!available)('live: acceptable-use policy drafts', () => {
     expect(row).toMatchObject({ title: 'Walk AUP in force', body: 'Be kind.' });
   });
 
+  it('records which version and title a publish published, from the list or at creation (#371)', async () => {
+    const draftId = await create(false, 'Walk9 AUP to publish');
+    expect((await send('POST', `/${draftId}/publish`)).status).toBe(200);
+    const createdId = await create(true, 'Walk9 AUP published at once');
+    const publishes = await audit('policy.publish');
+    const forDraft = publishes.find((entry) => entry.targetId === draftId);
+    const forCreated = publishes.find((entry) => entry.targetId === createdId);
+    // Before: `metadata: null` for the first (only the policy's ID).
+    expect(forDraft?.metadata).toEqual({
+      version: expect.any(Number),
+      title: 'Walk9 AUP to publish',
+    });
+    expect(forCreated?.metadata).toEqual({
+      version: expect.any(Number),
+      title: 'Walk9 AUP published at once',
+    });
+  });
+
+  it('never moves the publish time of a published version, and refuses an older draft (#372)', async () => {
+    const olderDraft = await create(false, 'Walk9 older draft');
+    const inForce = await create(true, 'Walk9 in force');
+    const publishedAt = async (id: string) =>
+      (await live.db.select().from(schema.usagePolicy).where(eq(schema.usagePolicy.id, id)))[0]
+        ?.publishedAt;
+    const before = await publishedAt(inForce);
+    const entriesBefore = (await audit('policy.publish')).length;
+
+    // Publishing it again: 409, the time is where it was, nothing is recorded.
+    const again = await send('POST', `/${inForce}/publish`);
+    expect(again.status).toBe(409);
+    expect(JSON.stringify(again.body)).toContain('already published');
+    expect(await publishedAt(inForce)).toEqual(before);
+
+    // An older draft would be published for good and never shown.
+    const older = await send('POST', `/${olderDraft}/publish`);
+    expect(older.status).toBe(409);
+    expect(JSON.stringify(older.body)).toContain('is older than version');
+    expect(await publishedAt(olderDraft)).toBeNull();
+    expect((await audit('policy.publish')).length).toBe(entriesBefore);
+
+    // A draft newer than the one in force publishes as before.
+    const newer = await create(false, 'Walk9 newer draft');
+    expect((await send('POST', `/${newer}/publish`)).status).toBe(200);
+    expect(await publishedAt(newer)).toBeInstanceOf(Date);
+    expect((await audit('policy.publish')).length).toBe(entriesBefore + 1);
+  });
+
   it('answers 404 for a version that does not exist', async () => {
     expect((await send('DELETE', '/not-a-policy')).status).toBe(404);
   });

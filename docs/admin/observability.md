@@ -147,7 +147,9 @@ alert on a failed backup.
 Choose **Add endpoint** and enter:
 
 - **URL**: an `https://` address. OCI does not follow redirects.
-- **Audit actions**: one per line. `user.create` matches exactly; `user.*`
+- **Audit actions**: one per line. (A ban and an unban are `user.ban` and
+  `user.unban`; an endpoint subscribed to exactly `user.update` no longer
+  receives them, so use `user.*` or add the two.) `user.create` matches exactly; `user.*`
   matches every action that starts with `user.`. The form warns about an entry
   that matches nothing the audit log has recorded so far (often a typing
   mistake), but saves it, since the action may simply not have happened yet.

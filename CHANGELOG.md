@@ -7,16 +7,27 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from eight QA walks of v0.11.0 (issues #35–#353). Three migrations,
-`0042`, `0043` (code artifacts, #298) and `0044` (two columns that let a failed
-scheduled report be tried again, #352; no table rewrite), run with `migrate` as
-usual. Four new post-deploy steps run with `migrate --post` after every replica
-runs the new release, as for any release: `0007`, `0008` and `0010` index the
-audit log so a person's trail includes bulk actions done to them and entries
-made with their address alone (#216, #342; until they run, the trail is
-complete but slower on a large audit log), and `0009` enables code artifacts
-(#298; until it runs, code stays in the reply, so a replica of the previous
-release never sees the new kind). The PostgreSQL driver patch
+## [0.11.1] - 2026-10-07
+
+Fixes from nine QA walks of v0.11.0 (issues #35–#378). Four migrations,
+`0042`, `0043` (code artifacts, #298), `0044` (two columns that let a failed
+scheduled report be tried again, #352; no table rewrite) and `0045` (a delete
+trigger that keeps a stored file while another conversation still uses it,
+#358; no schema change), run with `migrate` as usual. Six post-deploy steps
+run with `migrate --post` after every replica runs the new release, as for any
+release: `0007`, `0008` and `0010` index the audit log (#216, #342), `0009`
+enables code artifacts (#298; until it runs, code stays in the reply, so a
+replica of the previous release never sees the new kind), `0011` and `0012`
+index stored files for the delete trigger (#358; until they run, deleting a
+file scans the attachments table). Message-text search stays exact about
+accents unless you build the optional index by hand (#362; see
+`docs/OPERATIONS.md`, "Accent-insensitive conversation search"). A background
+migration, `0.11.attachment-own-rows` (visible on System health), gives forks
+and edits that already share their original's files their own copies (#358);
+until it finishes, every delete protects them anyway. **Upgrade note for the
+data-loss fix:** rolling back to the previous release makes new forks share
+files again; the SQL to reset the migration afterwards is in
+`docs/dev/database.md`, "Files in forks and edits". The PostgreSQL driver patch
 (`patches/postgres@3.4.9.patch`) is applied by `pnpm install`.
 
 ### Added
@@ -117,6 +128,65 @@ release never sees the new kind). The PostgreSQL driver patch
 - **Wording:** sign-in errors (#97), ban reasons (#77), trait suggestions
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
+
+### Fixed after a ninth QA walk (#355–#376)
+
+- **Data loss:** deleting a conversation no longer deletes the files of the
+  forks and edits made from it. A fork or edit gets its own copy of each file,
+  the stored object is deleted only when the last copy goes, and forks that
+  already exist are protected and converted in the background. This holds on
+  every path: trash, Delete now, Empty trash, automatic purge, retention,
+  temporary-chat expiry, bulk delete, projects and legal holds. A copy counts
+  against the person's storage allowance (#358). A file that is gone shows as
+  removed, and the model is told by name instead of inventing its content
+  (#359); the full export lists the files of forks and edits (#364). Deleting
+  a file in Settings no longer strips it from its message: the part stays,
+  marked removed, with its name, type and size, so the chip reads "No longer
+  available", the model is told by name on every later turn, a fork's own copy
+  is unaffected, and the exports list it as removed (#378). Messages whose file
+  was deleted before this release were already stripped and cannot be recovered.
+- **Accessibility:** the keyboard focus ring on filled buttons is visible from
+  the first frame, in every theme and accent (#355); "Turn on read-only mode"
+  confirms like other destructive dialogs, with focus on Cancel (#356);
+  read-only controls stay focusable and give their reason (#357).
+- **Chat:** right-to-left text is laid out from the right (#360); file names
+  keep Japanese, Arabic, Russian and other letters (#361); conversation titles
+  in search, the sidebar and Settings → History ignore accents, and message text
+  does too once the optional index is built (#362, next item); Summarise uses the picker's model (#363); a refused
+  spreadsheet says what to do (#365); the model reads the latest version of a
+  document the person edited (#366).
+- **Accent-insensitive search is partly optional** (#362). Titles ignore accents
+  with no setup. Message text stays exact about accents (`bibliotheque` does not
+  find "bibliothèque" in a reply) unless an operator builds an optional index by
+  hand: `packages/db/optional/message_text_search_folded_index.sql`, not run by
+  `migrate --post`, about 1 to 1.5 ms per message (100,000 messages: about 2.5
+  minutes). The API starts using it by itself once it exists and is valid.
+  Product decision: it was a post-deploy step (`0013`) in earlier builds of this
+  release, but its build time made upgrades of large databases wait minutes.
+- **The acceptable use policy is enforced by the API** (#367). Until a person
+  has accepted the published version, every write that uses the instance (chat,
+  uploads, new conversations and projects, tool approvals, memory, imports,
+  settings) is refused with `403 POLICY_ACCEPTANCE_REQUIRED`; reading,
+  accepting, signing in and out, deleting their account and the whole
+  administration API stay open. It applies to every role. **An API-only client
+  that has never accepted now gets 403 on writes**: sign in as it and accept
+  once. The web app shows the acceptance page on that error.
+- **Acceptable use:** New version no longer publishes without asking: "Publish
+  immediately" starts off and publishing asks first (#371); a published
+  version cannot be published again, and an older draft is not offered Publish
+  (#372); acceptances are audited as `policy.accept`, listed with email on the
+  version's View, and the count says "N accepted, M since deleted" when accounts
+  were deleted (#373).
+- **Audit:** failed Test entries for Compliance, Reranking, Embeddings,
+  Connector, Webhook and Storage record the reason and target (#368); budget,
+  connector and provider creation record their limit, window and address, and
+  override entries carry the person's email (#374); ban and unban are
+  `user.ban` and `user.unban` instead of `user.update` (a webhook subscribed to
+  exactly `user.update` no longer receives bans), and a refused sign-in records
+  why (#375); `policy.publish` records the version and title (#371).
+- **Reports:** Send due now says what was sent and what failed and shows only
+  the latest result (#369); the list stacks on a phone (#370). **Usage** charts
+  write their days as "Oct 1" (#376).
 
 ### Fixed after an eighth QA walk (#333–#353)
 
@@ -1592,7 +1662,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.11.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.11.1...main
+[0.11.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.1
 [0.11.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.0
 [0.10.2]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.2
 [0.10.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.1

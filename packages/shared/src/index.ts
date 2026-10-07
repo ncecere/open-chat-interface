@@ -5,6 +5,7 @@ export * from './code-languages.js';
 export * from './constants.js';
 export * from './documents.js';
 export * from './errors.js';
+export * from './file-names.js';
 export * from './markdown-plain.js';
 export * from './model-labs.js';
 export * from './quota-labels.js';
