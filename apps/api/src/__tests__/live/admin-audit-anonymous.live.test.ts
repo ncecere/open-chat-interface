@@ -41,10 +41,16 @@ interface Listing {
   total: number;
 }
 
-const attempt = (path: string, status: number, email: string | null) =>
+const attempt = (
+  path: string,
+  status: number,
+  email: string | null,
+  failureCode: string | null = null,
+) =>
   recordAuthEvent({
     path,
     status,
+    failureCode,
     ipAddress: '203.0.113.9',
     userAgent: 'test',
     actorUserId: null,
@@ -106,6 +112,20 @@ describe.skipIf(!available)('live: anonymous events in a person’s audit trail 
     // Only that address: another account's, a longer address and none at all stay out.
     const theirs = await list({ userId: other });
     expect(theirs.entries.map((entry) => entry.action)).toEqual(['auth.signin.local.failure']);
+  });
+
+  it('says why a sign-in was refused, not only its status (#375)', async () => {
+    await attempt('/sign-in/email', 403, 'banned.person@example.test', 'BANNED_USER');
+    await attempt('/sign-in/email', 200, 'banned.person@example.test', 'IGNORED_ON_SUCCESS');
+    const { entries } = await list({ search: 'banned.person@example.test' });
+    const refused = entries.find((entry) => entry.action === 'auth.signin.local.failure') as
+      | { metadata: Record<string, unknown> }
+      | undefined;
+    expect(refused?.metadata).toMatchObject({ status: 403, reason: 'BANNED_USER' });
+    const passed = entries.find((entry) => entry.action === 'auth.signin.local.success') as
+      | { metadata: Record<string, unknown> }
+      | undefined;
+    expect(passed?.metadata).not.toHaveProperty('reason');
   });
 
   it('shows them in Recent activity on the account page', async () => {

@@ -134,6 +134,10 @@ export const PROTECTED_AUDIT_ACTIONS = [
   'user.update',
   'user.delete',
   'user.role.change',
+  // A ban was a `user.update`, which is protected; it keeps that protection
+  // under its own actions (#375).
+  'user.ban',
+  'user.unban',
   // Bulk access changes name every affected account in one entry.
   'user.bulk.set_role',
   'user.bulk.ban',
