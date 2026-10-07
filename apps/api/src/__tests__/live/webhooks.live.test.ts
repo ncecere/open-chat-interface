@@ -469,4 +469,33 @@ describe.skipIf(!available)('live: signed webhooks', () => {
     await delivery.processWebhookDeliveries();
     expect(await pool.db.select().from(schema.webhookDelivery)).toHaveLength(0);
   });
+
+  it('records why a failed test failed, and where it went (#368)', async () => {
+    // Nothing listens on port 9: the endpoint cannot be reached.
+    const dead = await create({ url: 'http://127.0.0.1:9/' });
+    const test = await ok<{ ok: boolean; status: number | null; error: string | null }>(
+      call('POST', `/api/admin/webhooks/${dead.id}/test`),
+    );
+    expect(test).toMatchObject({ ok: false, status: null });
+    const [entry] = await pool.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.targetId, dead.id));
+    const recorded = (
+      await pool.db
+        .select()
+        .from(schema.auditLog)
+        .where(eq(schema.auditLog.action, 'webhook.test.send'))
+    ).find((row) => row.targetId === dead.id);
+    expect(entry).toBeDefined();
+    expect(recorded?.metadata).toEqual({
+      url: 'http://127.0.0.1:9/',
+      ok: false,
+      status: null,
+      reason: expect.stringMatching(/\S/),
+    });
+    expect(recorded?.metadata).toMatchObject({
+      reason: (test.error ?? '').replace(/\s+/g, ' ').trim(),
+    });
+  });
 });

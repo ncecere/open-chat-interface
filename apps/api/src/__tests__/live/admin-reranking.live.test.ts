@@ -272,13 +272,33 @@ describe.skipIf(!available)('live: reranking administration', () => {
       endpoint: `${server.baseUrl}/rerank`,
     });
     expect(tests.slice(1)).toEqual([
-      { providerId: ids.Local, modelId: 'empty', ok: false },
-      { providerId: ids.Local, modelId: 'missing', ok: false },
-      { providerId: ids['Keyless gateway'], modelId: 'x', ok: false },
-      { providerId: ids.Claude, modelId: 'x', ok: false },
-      { providerId: ids.Off, modelId: 'x', ok: false },
-      { providerId: 'gone', modelId: 'x', ok: false },
-      { providerId: null, modelId: null, ok: false },
+      { providerId: ids.Local, modelId: 'empty', ok: false, reason: expect.any(String) },
+      { providerId: ids.Local, modelId: 'missing', ok: false, reason: expect.any(String) },
+      {
+        providerId: ids['Keyless gateway'],
+        modelId: 'x',
+        ok: false,
+        reason: 'The model could not rerank a sample: Keyless gateway has no API key configured',
+      },
+      { providerId: ids.Claude, modelId: 'x', ok: false, reason: expect.any(String) },
+      {
+        providerId: ids.Off,
+        modelId: 'x',
+        ok: false,
+        reason: 'The model could not rerank a sample: Off is disabled',
+      },
+      {
+        providerId: 'gone',
+        modelId: 'x',
+        ok: false,
+        reason: 'The model could not rerank a sample: The reranking provider no longer exists',
+      },
+      {
+        providerId: null,
+        modelId: null,
+        ok: false,
+        reason: 'The model could not rerank a sample: Choose a provider and enter a model id first',
+      },
     ]);
     expect(JSON.stringify(tests)).not.toContain(KEY);
     expect((await request(admin, 'POST', '/reranking/test', { extra: 1 })).status).toBe(422);

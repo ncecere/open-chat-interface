@@ -9,6 +9,7 @@ import { conflict, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { destinationAuditDetails, failedReason } from '../../services/audit-test-details.js';
 import { resetCursorToNow } from '../../services/compliance/cursor.js';
 import {
   complianceStatus,
@@ -97,22 +98,27 @@ complianceRoutes.post('/run', async (c) => {
 /** Writes, reads back and deletes a small object at the saved destination. */
 complianceRoutes.post('/test', async (c) => {
   const actor = currentUser(c);
+  const settings = await complianceSettings();
   let result: { ok: boolean; detail: string };
   try {
-    await testComplianceTarget(await complianceSettings());
+    await testComplianceTarget(settings);
     result = { ok: true, detail: 'The destination accepted, returned and deleted a test object.' };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     result = { ok: false, detail: message.slice(0, 300) };
   }
   // Audited as every other Test button is: it reaches an address an
-  // administrator chose (#287).
+  // administrator chose (#287). A failure says where and why (#343, #368).
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'compliance.test',
     targetType: 'instance',
-    metadata: { ok: result.ok },
+    metadata: {
+      ok: result.ok,
+      ...destinationAuditDetails(settings),
+      ...failedReason(result, result.detail),
+    },
   });
   return c.json(result);
 });

@@ -14,6 +14,7 @@ import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { failedReason } from '../../services/audit-test-details.js';
 import { embeddingsSettings } from '../../services/embeddings/config.js';
 import { testEmbeddingModel } from '../../services/embeddings/embed.js';
 import {
@@ -200,7 +201,11 @@ embeddingsRoutes.post('/test', async (c) => {
     actorEmail: actor.email,
     action: 'embeddings.test',
     targetType: 'instance',
-    metadata: { ...target, ok: result.ok, ...(result.ok && { dimensions: result.dimensions }) },
+    metadata: {
+      ...target,
+      ok: result.ok,
+      ...(result.ok ? { dimensions: result.dimensions } : failedReason(result, result.message)),
+    },
   });
   return c.json(result);
 });
