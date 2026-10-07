@@ -525,6 +525,13 @@ published version cannot be changed or withdrawn. Once published, the wording
 is fixed. **View** shows the full text of any version, drafts and
 published ones alike, to administrators and auditors.
 
+**Publish** is offered only where it can take effect. A published version is
+never published again (the API answers `409`; its publish time is the record of
+when people were first asked to accept it), and a draft older than the version
+in force is not offered Publish at all (the API answers `409`): the highest
+published version is the one in force, so publishing an older one would be
+permanent yet shown to nobody. Write a new version instead.
+
 Publishing is audited as `policy.publish` with the version and title
 (whether the version was published at creation or from the list). Each edit of
 a draft is audited as `policy.update`, with the title as it was

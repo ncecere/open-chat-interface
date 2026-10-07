@@ -186,3 +186,25 @@ it('names the policy and version in the confirmation for publishing a draft from
   await click(button('Publish Walk AUP draft v2'));
   expect(dialog()?.textContent).toContain('Publish “Walk AUP draft” as v2?');
 });
+
+it('does not offer Publish on a draft older than the version in force (#372)', async () => {
+  const older = { ...draft, id: 'policy-0', version: 0, title: 'Walk AUP old draft' };
+  api.get.mockResolvedValue({
+    policies: [
+      { ...draft, version: 3, id: 'policy-3', title: 'Walk AUP newer draft' },
+      published,
+      older,
+    ],
+  });
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  // v3 is newer than v1, which is in force; v0 is older and could never be shown.
+  expect(buttonNames().filter((name) => name.startsWith('Publish'))).toEqual([
+    'Publish Walk AUP newer draft v3',
+  ]);
+  expect(document.body.textContent).toContain(
+    'Older than v1, which is in force, so it cannot be published.',
+  );
+  // It can still be reworded or discarded.
+  expect(findButton('Edit draft Walk AUP old draft v0')).toBeDefined();
+  expect(findButton('Delete draft Walk AUP old draft v0')).toBeDefined();
+});

@@ -300,79 +300,93 @@ export function AdminPoliciesPage() {
 
         {policies.length > 0 && (
           <RowList>
-            {policies.map((policy) => (
-              // On a phone the actions sit below the title: side by side, the
-              // non-shrinking actions took the whole width and the title
-              // collapsed to nothing while Publish ran out of the card (#168).
-              <Row
-                key={policy.id}
-                className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-medium">{policy.title}</p>
-                    <Badge variant="neutral">v{policy.version}</Badge>
-                    {policy.id === current?.id ? (
-                      <Badge variant="accent">in force</Badge>
-                    ) : policy.publishedAt ? (
-                      <Badge variant="outline">superseded</Badge>
-                    ) : (
-                      <Badge variant="outline">draft</Badge>
+            {policies.map((policy) => {
+              // A draft older than the version in force would be published for
+              // good and shown to nobody, so it is not offered (#372).
+              const olderDraft =
+                !policy.publishedAt && current !== null && policy.version < current.version;
+              return (
+                // On a phone the actions sit below the title: side by side, the
+                // non-shrinking actions took the whole width and the title
+                // collapsed to nothing while Publish ran out of the card (#168).
+                <Row
+                  key={policy.id}
+                  className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-medium">{policy.title}</p>
+                      <Badge variant="neutral">v{policy.version}</Badge>
+                      {policy.id === current?.id ? (
+                        <Badge variant="accent">in force</Badge>
+                      ) : policy.publishedAt ? (
+                        <Badge variant="outline">superseded</Badge>
+                      ) : (
+                        <Badge variant="outline">draft</Badge>
+                      )}
+                    </div>
+                    <p className="text-[var(--text-muted)] text-xs">
+                      {policy.publishedAt
+                        ? `Published ${formatDate(policy.publishedAt)}`
+                        : 'Not published'}
+                      {` · accepted by ${policy.acceptanceCount}`}
+                    </p>
+                    {olderDraft && (
+                      <p className="mt-0.5 text-[var(--text-muted)] text-xs">
+                        Older than v{current?.version}, which is in force, so it cannot be
+                        published. Delete it, or write a new version.
+                      </p>
                     )}
                   </div>
-                  <p className="text-[var(--text-muted)] text-xs">
-                    {policy.publishedAt
-                      ? `Published ${formatDate(policy.publishedAt)}`
-                      : 'Not published'}
-                    {` · accepted by ${policy.acceptanceCount}`}
-                  </p>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`View ${policy.title} v${policy.version}`}
-                    onClick={() => setViewing(policy)}
-                  >
-                    <Eye />
-                    View
-                  </Button>
-                  {!policy.publishedAt && (
-                    <EditOnly>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Edit draft ${policy.title} v${policy.version}`}
-                        onClick={() => setEditing(policy)}
-                      >
-                        <Pencil />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Delete draft ${policy.title} v${policy.version}`}
-                        onClick={() => setDeleting(policy)}
-                      >
-                        <Trash2 />
-                        Delete
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        // Named for its version, as View, Edit and Delete are (#175).
-                        aria-label={`Publish ${policy.title} v${policy.version}`}
-                        onClick={() => setPublishing(policy)}
-                      >
-                        <Send />
-                        Publish
-                      </Button>
-                    </EditOnly>
-                  )}
-                </div>
-              </Row>
-            ))}
+                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`View ${policy.title} v${policy.version}`}
+                      onClick={() => setViewing(policy)}
+                    >
+                      <Eye />
+                      View
+                    </Button>
+                    {!policy.publishedAt && (
+                      <EditOnly>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Edit draft ${policy.title} v${policy.version}`}
+                          onClick={() => setEditing(policy)}
+                        >
+                          <Pencil />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Delete draft ${policy.title} v${policy.version}`}
+                          onClick={() => setDeleting(policy)}
+                        >
+                          <Trash2 />
+                          Delete
+                        </Button>
+                        {!olderDraft && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            // Named for its version, as View, Edit and Delete are (#175).
+                            aria-label={`Publish ${policy.title} v${policy.version}`}
+                            onClick={() => setPublishing(policy)}
+                          >
+                            <Send />
+                            Publish
+                          </Button>
+                        )}
+                      </EditOnly>
+                    )}
+                  </div>
+                </Row>
+              );
+            })}
           </RowList>
         )}
 

@@ -58,6 +58,14 @@ policyRoutes.post('/:id/publish', async (c) => {
 
   const published = await publishPolicy(id);
   if (published.outcome === 'not-found') throw notFound('Policy version not found');
+  if (published.outcome === 'already-published')
+    throw conflict(
+      `Version ${published.version} is already published (${published.publishedAt.toISOString()}). A published version cannot be published again or changed: its publish time is the record of when people were first asked to accept it.`,
+    );
+  if (published.outcome === 'superseded')
+    throw conflict(
+      `Version ${published.version} is older than version ${published.currentVersion}, which is in force, so nobody would ever be shown it. Create a new version with its wording instead.`,
+    );
 
   // Which version and title, as the entry for publishing at creation has (#371):
   // it carried only the policy's ID, so the log did not say what everybody had

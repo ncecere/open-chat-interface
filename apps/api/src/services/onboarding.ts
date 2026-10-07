@@ -179,29 +179,60 @@ export async function createPolicyVersion(params: {
   return { id: created.id, version };
 }
 
+export type PublishOutcome =
+  | { outcome: 'published'; version: number; title: string }
+  | { outcome: 'not-found' }
+  /** Already published: its publish time never moves (#372). */
+  | { outcome: 'already-published'; version: number; publishedAt: Date }
+  /** Older than the version in force: it would never be shown (#372). */
+  | { outcome: 'superseded'; version: number; currentVersion: number };
+
 /**
  * Publishes a draft, which re-prompts everyone who accepted an older one. What
  * it published is returned so the audit entry can say which version and title
  * (#371).
+ *
+ * Only a draft, and only one newer than the version in force (#372):
+ * publishing again moved the version's publish time (an acceptance made in
+ * between then predated the publication it was made to), and a draft older
+ * than the one in force would have been published for good and shown to nobody,
+ * since the highest published version is the one in force.
  */
-export async function publishPolicy(
-  policyId: string,
-): Promise<{ outcome: 'published'; version: number; title: string } | { outcome: 'not-found' }> {
-  const organizationId = await getDefaultOrganizationId();
+export async function publishPolicy(policyId: string): Promise<PublishOutcome> {
+  const policy = await findPolicy(policyId);
+  if (!policy) return { outcome: 'not-found' };
+  if (policy.publishedAt)
+    return {
+      outcome: 'already-published',
+      version: policy.version,
+      publishedAt: policy.publishedAt,
+    };
+  const inForce = await currentPolicy();
+  if (inForce && inForce.version > policy.version)
+    return { outcome: 'superseded', version: policy.version, currentVersion: inForce.version };
 
+  // `published_at is null` keeps a publish that lands between the read and the
+  // write from being moved.
   const published = await db
     .update(schema.usagePolicy)
     .set({ publishedAt: new Date() })
-    .where(
-      and(
-        eq(schema.usagePolicy.id, policyId),
-        eq(schema.usagePolicy.organizationId, organizationId),
-      ),
-    )
+    .where(and(eq(schema.usagePolicy.id, policyId), isNull(schema.usagePolicy.publishedAt)))
     .returning({ version: schema.usagePolicy.version, title: schema.usagePolicy.title });
 
   const [row] = published;
-  if (!row) return { outcome: 'not-found' };
+  if (!row) {
+    const [now] = await db
+      .select({ publishedAt: schema.usagePolicy.publishedAt })
+      .from(schema.usagePolicy)
+      .where(eq(schema.usagePolicy.id, policyId))
+      .limit(1);
+    if (!now) return { outcome: 'not-found' };
+    return {
+      outcome: 'already-published',
+      version: policy.version,
+      publishedAt: now.publishedAt ?? new Date(),
+    };
+  }
   invalidatePolicyCache();
   return { outcome: 'published', ...row };
 }
