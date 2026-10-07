@@ -60,6 +60,7 @@ export function copiesHarness(ctx: {
   async function appFor(userId: string) {
     const { threadRoutes } = await import('../src/routes/threads.js');
     const { attachmentRoutes } = await import('../src/routes/attachments.js');
+    const { portabilityRoutes } = await import('../src/routes/portability.js');
     const { errorHandler } = await import('../src/middleware/error-handler.js');
     const app = new Hono<AppBindings>();
     app.onError(errorHandler);
@@ -77,6 +78,7 @@ export function copiesHarness(ctx: {
     });
     app.route('/api/threads', threadRoutes);
     app.route('/api/attachments', attachmentRoutes);
+    app.route('/api/me', portabilityRoutes);
     return app;
   }
 

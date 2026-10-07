@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, schema } from '@oci/db';
+import { and, asc, desc, eq, isNull, schema } from '@oci/db';
 import { EXPORT_ARCHIVE_VERSION } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
@@ -13,6 +13,7 @@ import {
   safeTitleSlug,
 } from '../export.js';
 import { getStorageDriver } from '../storage/index.js';
+import { type AttachmentRow, attachmentsForMessages } from './export-attachments.js';
 import { NameAllocator, safeEntrySegment, ZIP_MAX_ENTRIES, ZipStreamWriter } from './zip-writer.js';
 
 interface ExportLimits {
@@ -35,10 +36,6 @@ const DEFAULT_EXPORT_LIMITS: ExportLimits = {
 };
 
 type ThreadRow = typeof schema.thread.$inferSelect;
-type AttachmentRow = Pick<
-  typeof schema.attachment.$inferSelect,
-  'id' | 'messageId' | 'filename' | 'mimeType' | 'sizeBytes' | 'storageKey' | 'createdAt'
->;
 
 interface ExportedAttachment {
   id: string;
@@ -132,41 +129,6 @@ async function exportableThreads(userId: string, limit: number) {
     )
     .orderBy(asc(schema.thread.createdAt), asc(schema.thread.id))
     .limit(limit);
-}
-
-/** Ready, live attachments owned by this person on the given messages. */
-async function attachmentsForMessages(
-  userId: string,
-  messageIds: string[],
-): Promise<AttachmentRow[]> {
-  if (messageIds.length === 0) return [];
-  const rows: AttachmentRow[] = [];
-  // Bounded IN-lists keep a very long conversation from building a huge query.
-  for (let index = 0; index < messageIds.length; index += 1_000) {
-    rows.push(
-      ...(await db
-        .select({
-          id: schema.attachment.id,
-          messageId: schema.attachment.messageId,
-          filename: schema.attachment.filename,
-          mimeType: schema.attachment.mimeType,
-          sizeBytes: schema.attachment.sizeBytes,
-          storageKey: schema.attachment.storageKey,
-          createdAt: schema.attachment.createdAt,
-        })
-        .from(schema.attachment)
-        .where(
-          and(
-            eq(schema.attachment.userId, userId),
-            inArray(schema.attachment.messageId, messageIds.slice(index, index + 1_000)),
-            isNull(schema.attachment.deletedAt),
-            eq(schema.attachment.uploadPending, false),
-          ),
-        )
-        .orderBy(asc(schema.attachment.createdAt), asc(schema.attachment.id))),
-    );
-  }
-  return rows;
 }
 
 const attachmentColumns = {
@@ -379,10 +341,7 @@ export async function* exportArchive(
 
     const attachments = yield* writeAttachments(
       `attachments/${name}`,
-      await attachmentsForMessages(
-        owner.id,
-        messages.map((message) => message.id),
-      ),
+      await attachmentsForMessages(owner.id, messages),
     );
 
     // Summaries made when the conversation outgrew its model, oldest first.

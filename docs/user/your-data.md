@@ -22,8 +22,10 @@ The archive contains:
   level below it. The `.json` file is the complete record: every
   message as stored, including model reasoning, which the Markdown leaves out,
   and the list of attached files.
-- `attachments/` — the files you attached, in a folder per conversation. Files
-  you uploaded but never sent are in `attachments/unsent/`.
+- `attachments/` — the files you attached, in a folder per conversation. A fork
+  and an edit have a folder of their own with the files they show, so a file
+  appears once for each conversation that has it. Files you uploaded but never
+  sent are in `attachments/unsent/`.
 - `memory.json` — every [memory](memory.md) note, newest first, whether or
   not memory is switched on.
 - `manifest.json` — when the export was made, the OCI version, how many

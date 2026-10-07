@@ -387,7 +387,7 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/me/export` | Downloads every conversation, its JSON record, and attached files as one ZIP, streamed as it is written. |
+| GET | `/api/me/export` | Downloads every conversation, its JSON record, and attached files as one ZIP, streamed as it is written. Each conversation, forks and edits included, lists the files its messages show and has its own folder of them under `attachments/` (#364). |
 | GET | `/api/me/imports` | The person's imports and their progress, newest first. |
 | POST | `/api/me/imports` | Accepts a ChatGPT or Claude export (`.zip`, or the `conversations.json` inside it) and queues it for background processing. |
 | DELETE | `/api/me/imports/:id` | Removes a queued or finished import and its stored upload; 409 while it is running. |
