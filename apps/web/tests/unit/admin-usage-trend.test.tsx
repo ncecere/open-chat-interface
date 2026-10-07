@@ -47,7 +47,7 @@ beforeEach(() => {
       return {
         range: { days: 30, timezone: 'UTC', exact: true },
         totals: { messages: 1, tokens: 10, costMicros: 0, activeUsers: 1 },
-        daily: [],
+        daily: [{ day: '2026-10-04', costMicros: 5_000, messages: 1, activeUsers: 1 }],
         models: {
           entries: [
             { ...row, modelSlug: 'gpt-4-1-mini', displayName: 'GPT-4.1 mini', enabled: true },
@@ -94,11 +94,14 @@ it('says what the chart shows in words, for anyone who cannot hover', async () =
   ({ root } = await renderAdmin(<AdminUsagePage />, { path: '/admin/usage?range=30' }));
   const chart = document.querySelector('[role="img"]');
   expect(chart?.getAttribute('aria-label')).toBe(
-    'Daily replies, 2026-09-06 to 2026-10-05: busiest 2026-10-05 · 42 replies; 1 of 30 days had any.',
+    'Daily replies, Sep 6 to Oct 5: busiest Oct 5 · 42 replies; 1 of 30 days had any.',
   );
   expect(chart?.children).toHaveLength(30);
-  // Both ends of the axis, not the same date twice.
-  expect(document.body.textContent).toContain('2026-09-06');
+  // Both ends of the axis, not the same date twice, written as Overview writes
+  // them ("Oct 1"), not as ISO dates (#376).
+  const axis = [...document.querySelectorAll('span')].map((span) => span.textContent);
+  expect(axis).toEqual(expect.arrayContaining(['Sep 6', 'Oct 5']));
+  expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   const numbers = document.querySelector('details');
   expect(numbers?.querySelector('summary')?.textContent).toBe('Show the numbers');
   expect(numbers?.textContent).toContain('42 replies');
@@ -162,4 +165,21 @@ it('shows every spend figure in cents, and a sliver of a cent as <$0.01 (#88)', 
   expect(money(4_999)).toBe('<$0.01');
   expect(money(5_000)).toBe('$0.01');
   expect(money(1_234_567_890)).toBe('$1,234.57');
+});
+
+it('writes the spend chart’s days the same way, in its axis, label and numbers (#376)', async () => {
+  ({ root } = await renderAdmin(
+    <ThemeProvider>
+      <AdminUsagePage />
+    </ThemeProvider>,
+    { path: '/admin/usage?tab=spend&range=30' },
+  ));
+  const chart = document.querySelector('[role="img"]');
+  expect(chart?.getAttribute('aria-label')).toBe(
+    'Daily spend, Sep 6 to Oct 5: busiest Oct 4 · $0.01; 1 of 30 days had any.',
+  );
+  const axis = [...document.querySelectorAll('span')].map((span) => span.textContent);
+  expect(axis).toEqual(expect.arrayContaining(['Sep 6', 'Oct 5']));
+  expect(document.querySelector('details')?.textContent).toContain('Oct 4');
+  expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
 });
