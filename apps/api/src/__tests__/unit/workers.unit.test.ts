@@ -180,6 +180,22 @@ describe('whether any replica runs background jobs', () => {
     expect((await workersHealthCheck()).detail).toMatch(/ran in the last minute/);
   });
 
+  it('warns, rather than blaming Redis, when Redis is up but no worker is beating', async () => {
+    // What the QA walk saw right after stopping the worker (#119).
+    const redis = fakeRedis();
+    mocks.redis = redis;
+    redis.scores.set('v', Date.now());
+    redis.values.set(
+      'oci:{replicas}:replica:v',
+      JSON.stringify({ id: 'v', role: 'web', host: 'v' }),
+    );
+    mocks.lastSweep = new Date(Date.now() - 5_000);
+    const check = await workersHealthCheck();
+    expect(check.status).toBe('warn');
+    expect(check.detail).toContain('no worker has checked in: one may have just stopped');
+    expect(check.detail).not.toContain('no Redis');
+  });
+
   it('is nothing: web replicas only, no recent run', async () => {
     const redis = fakeRedis();
     mocks.redis = redis;

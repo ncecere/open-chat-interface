@@ -1,7 +1,17 @@
 import { logger } from '../../lib/logger.js';
 import { isPdf, isText } from './validate.js';
 
-const MAX_EXTRACTED_CHARS = 200_000;
+/**
+ * Text kept from one file. Above what project search can split into passages
+ * (MAX_CHUNKS_PER_FILE: 2,000 passages, between about 1.3 and 2 million
+ * characters depending on how the text breaks), so the indexer decides
+ * how much of a large project file is searchable and records when it is not
+ * all (`project_file_index.truncated`), which the Files tab shows. It was
+ * 200,000, which silently cut large files to their start, with nothing saying
+ * so. Chat attachments are bounded separately by the context budget
+ * (MAX_INPUT_UNITS): a file this large is never sent to a model whole.
+ */
+export const MAX_EXTRACTED_CHARS = 4_000_000;
 
 /**
  * Pulls text out of documents so models without native file support still

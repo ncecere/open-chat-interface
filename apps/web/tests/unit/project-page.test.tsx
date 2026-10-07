@@ -3,6 +3,7 @@ import type { ProjectFile, ProjectSummary, ThreadSummary } from '@oci/shared';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ProjectPage } from '../../src/routes/projects/project';
 import { alerts, button, cleanup, click, dialog, renderAdmin, settle } from './admin-test-utils';
 
@@ -77,9 +78,14 @@ afterEach(async () => {
 });
 
 async function render(tab?: string) {
-  ({ root } = await renderAdmin(<ProjectPage projectId="project-1" />, {
-    path: tab ? `/projects/project-1?tab=${tab}` : '/projects/project-1',
-  }));
+  ({ root } = await renderAdmin(
+    <TemporaryChatProvider>
+      <ProjectPage projectId="project-1" />
+    </TemporaryChatProvider>,
+    {
+      path: tab ? `/projects/project-1?tab=${tab}` : '/projects/project-1',
+    },
+  ));
 }
 
 function tab(name: string): HTMLButtonElement {
@@ -165,6 +171,12 @@ describe('project page', () => {
       },
       { ...FILE, id: 'file-3', filename: 'photo.png', index: { status: 'no-text', passages: 0 } },
       { ...FILE, id: 'file-4', filename: 'old.pdf', index: { status: 'pending', passages: 0 } },
+      {
+        ...FILE,
+        id: 'file-5',
+        filename: 'handbook.md',
+        index: { status: 'indexed', passages: 2000, truncated: true },
+      },
     ];
     await render('files');
 
@@ -173,6 +185,9 @@ describe('project page', () => {
       rows.find((row) => row.textContent?.includes(name))?.querySelector('[data-index-status]')
         ?.textContent;
     expect(status('outline.md')).toBe('Searchable · 3 passages');
+    expect(status('handbook.md')).toBe(
+      'Partly searchable · first 2,000 passages; the rest of the file is too long to search',
+    );
     expect(status('one.txt')).toBe('Searchable · 1 passage');
     expect(status('photo.png')).toBe('No text to search');
     expect(status('old.pdf')).toBe('Waiting to be indexed');
@@ -265,6 +280,10 @@ describe('project page', () => {
     await render();
     expect(document.body.textContent).toContain('Projects are not available for your role.');
     expect(api.get).not.toHaveBeenCalledWith('/projects/project-1');
+    // The same unavailable layout as a missing project or conversation, with
+    // a way on (#113).
+    expect(document.querySelector('h1')?.textContent).toBe('Projects unavailable');
+    expect([...document.querySelectorAll('a')].map((a) => a.textContent)).toContain('New chat');
   });
 
   it('reports a missing project', async () => {
@@ -274,5 +293,14 @@ describe('project page', () => {
     };
     await render();
     expect(document.querySelector('h1')?.textContent).toBe('Project not found');
+    // Announced, centred like "Conversation unavailable", with New chat (#113).
+    expect(document.querySelector('[role="alert"] h1')?.textContent).toBe('Project not found');
+    expect([...document.querySelectorAll('a')].map((a) => a.textContent)).toContain('New chat');
   });
+});
+
+it('switches temporary-chat mode off, since nothing in a project is temporary', async () => {
+  sessionStorage.setItem('oci.temporaryChat', 'true');
+  await render();
+  expect(sessionStorage.getItem('oci.temporaryChat')).toBeNull();
 });

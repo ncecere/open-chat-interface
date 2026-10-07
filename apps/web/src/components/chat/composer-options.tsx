@@ -4,6 +4,7 @@ import { type ChangeEvent, type ComponentPropsWithoutRef, forwardRef, useRef } f
 import { ModelPicker } from '~/components/chat/model-picker';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSub,
@@ -23,6 +24,8 @@ export interface ComposerOptionsProps {
   onWebSearchChange: (enabled: boolean) => void;
   webSearchAvailable?: boolean;
   attachmentsAvailable?: boolean;
+  /** Why attaching is paused for now (read-only maintenance): shown, disabled, with it. */
+  attachmentsPausedReason?: string;
   onAttachFiles?: (files: File[]) => void;
 }
 
@@ -45,6 +48,8 @@ const Pill = forwardRef<
       ref={ref}
       type="button"
       aria-label={label}
+      // A toggle says whether it is on, not only with its border (#92).
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
       className={cn(
@@ -73,6 +78,7 @@ export function ComposerOptions({
   onWebSearchChange,
   webSearchAvailable = true,
   attachmentsAvailable = true,
+  attachmentsPausedReason,
   onAttachFiles,
 }: ComposerOptionsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -100,66 +106,83 @@ export function ComposerOptions({
             <Plus className="size-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top" className="min-w-56 md:hidden">
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger disabled={!supportsEffort}>
-              <Brain />
-              <span className="flex-1 capitalize">Reasoning: {effort}</span>
-              <ChevronRight className="ml-auto" />
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
+        {/* Below the composer where there is room (a new chat, where above is
+            the greeting it would cover, #102); Radix flips it above when there
+            is not, as in a conversation. */}
+        <DropdownMenuContent align="start" side="bottom" className="min-w-56 md:hidden">
+          {/* Only for a model that offers reasoning levels, as the user guide
+              says; a greyed "Instant" on every other model explained nothing (#95). */}
+          {supportsEffort && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Brain />
+                <span className="flex-1 capitalize">Reasoning: {effort}</span>
+                <ChevronRight className="ml-auto" />
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {availableEfforts.map((option) => (
+                  <DropdownMenuItem
+                    key={option}
+                    onSelect={() => onEffortChange(option)}
+                    className="capitalize"
+                  >
+                    <span className="w-4">{option === effort && <Check />}</span>
+                    {option}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
+          {/* On or off, announced as checked: "Search disabled" read as if the
+              feature were unavailable (#92). */}
+          <DropdownMenuCheckboxItem
+            disabled={!supportsSearch}
+            checked={webSearch}
+            onCheckedChange={(checked) => onWebSearchChange(checked === true)}
+          >
+            <Globe />
+            Search the web
+          </DropdownMenuCheckboxItem>
+          {/* Not offered where attachments are not allowed (for this role, or
+              while read-only), as the user guide says, rather than a disabled
+              control with no reason (#99). */}
+          {attachmentsAvailable && (
+            <DropdownMenuItem
+              disabled={!onAttachFiles || Boolean(attachmentsPausedReason)}
+              onSelect={() => fileInputRef.current?.click()}
+            >
+              <Paperclip />
+              Attach
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
+
+      {supportsEffort && (
+        <div className="hidden md:block">
+          <DropdownMenu>
+            {/* Pill renders a real button, so the trigger's ARIA belongs on it
+            directly; a wrapping span would receive button semantics it
+            cannot legally carry. */}
+            <DropdownMenuTrigger asChild>
+              <Pill icon={Zap} label={effort} className="capitalize" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top">
               {availableEfforts.map((option) => (
                 <DropdownMenuItem
                   key={option}
                   onSelect={() => onEffortChange(option)}
                   className="capitalize"
                 >
-                  <span className="w-4">{option === effort && <Check />}</span>
                   {option}
                 </DropdownMenuItem>
               ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuItem
-            disabled={!supportsSearch}
-            onSelect={() => onWebSearchChange(!webSearch)}
-          >
-            <Globe />
-            Search {webSearch ? 'enabled' : 'disabled'}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!attachmentsAvailable || !onAttachFiles}
-            onSelect={() => fileInputRef.current?.click()}
-          >
-            <Paperclip />
-            Attach
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <ModelPicker models={models} selected={selectedModel} onSelect={onSelectModel} />
-
-      <div className="hidden md:block">
-        <DropdownMenu>
-          {/* Pill renders a real button, so the trigger's ARIA belongs on it
-            directly; a wrapping span would receive button semantics it
-            cannot legally carry. */}
-          <DropdownMenuTrigger asChild disabled={!supportsEffort}>
-            <Pill icon={Zap} label={effort} disabled={!supportsEffort} className="capitalize" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top">
-            {availableEfforts.map((option) => (
-              <DropdownMenuItem
-                key={option}
-                onSelect={() => onEffortChange(option)}
-                className="capitalize"
-              >
-                {option}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
 
       <Pill
         icon={Globe}
@@ -178,13 +201,16 @@ export function ComposerOptions({
         aria-label="Attach a file"
         onChange={handleFileChange}
       />
-      <Pill
-        icon={Paperclip}
-        label="Attach"
-        disabled={!attachmentsAvailable || !onAttachFiles}
-        onClick={() => fileInputRef.current?.click()}
-        className="hidden md:inline-flex"
-      />
+      {attachmentsAvailable && (
+        <Pill
+          icon={Paperclip}
+          label="Attach"
+          disabled={!onAttachFiles || Boolean(attachmentsPausedReason)}
+          title={attachmentsPausedReason}
+          onClick={() => fileInputRef.current?.click()}
+          className="hidden md:inline-flex"
+        />
+      )}
     </>
   );
 }

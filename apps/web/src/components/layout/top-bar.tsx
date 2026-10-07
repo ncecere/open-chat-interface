@@ -9,6 +9,7 @@ import { MoveToProjectDialog } from '~/components/projects/project-dialogs';
 import { Button } from '~/components/ui/button';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
+import { useConversationUnavailable } from '~/lib/conversation-cache';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
@@ -31,6 +32,10 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
   const { data } = useCurrentUser();
   const { temporary, setTemporary } = useTemporaryChat();
   const available = data?.features.temporaryChat ?? false;
+  // A conversation that does not exist (or is not yours) gets no actions:
+  // each could only fail (#103).
+  const unavailable = useConversationUnavailable(params.threadId);
+  const threadId = unavailable ? undefined : params.threadId;
 
   useEffect(() => {
     if (data && !available && temporary) setTemporary(false);
@@ -54,7 +59,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
       {!sidebarOpen && (
         <div
           data-floating-controls
-          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
         >
           <Button
             variant="ghost"
@@ -90,10 +95,10 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
 
       <div
         data-floating-controls
-        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl bg-[var(--bg-pill)] p-1"
+        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
       >
-        {params.threadId && <RenameConversationControl threadId={params.threadId} />}
-        {params.threadId && (
+        {threadId && <RenameConversationControl threadId={threadId} />}
+        {threadId && (
           <Button
             variant="ghost"
             size="icon-sm"
@@ -103,18 +108,14 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
           >
             {/* A plain link so the browser handles the download; the response
                 carries its own filename. */}
-            <a href={`/api/threads/${params.threadId}/export`} download>
+            <a href={`/api/threads/${threadId}/export`} download>
               <Download />
             </a>
           </Button>
         )}
-        {params.threadId && data?.features.shareLinks && (
-          <ShareThreadDialog threadId={params.threadId} />
-        )}
-        {params.threadId && data?.features.projects && (
-          <MoveToProjectControl threadId={params.threadId} />
-        )}
-        {params.threadId && <CompactConversationControl threadId={params.threadId} />}
+        {threadId && data?.features.shareLinks && <ShareThreadDialog threadId={threadId} />}
+        {threadId && data?.features.projects && <MoveToProjectControl threadId={threadId} />}
+        {threadId && <CompactConversationControl threadId={threadId} />}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -166,7 +167,10 @@ function MoveToProjectControl({ threadId }: { threadId: string }) {
   const [open, setOpen] = useState(false);
   // From the sidebar's cached lists, or the conversation's own history when
   // the sidebar does not list it (an older project conversation).
-  const current = useOpenConversation(threadId)?.thread.projectId ?? null;
+  const conversation = useOpenConversation(threadId)?.thread;
+  const current = conversation?.projectId ?? null;
+  // Temporary chats cannot join a project; offering it only led to a refusal (#91).
+  if (conversation?.temporary) return null;
 
   return (
     <>

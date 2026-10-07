@@ -143,6 +143,11 @@ before a new user turn is saved. Shorten it, remove files, or choose a model wit
 more context. The application also has fixed safety ceilings, so choosing a
 larger model does not remove every limit.
 
+Whenever a message is refused like this, or because you are sending too quickly
+or have reached a usage limit, it is not sent: its text goes back into the
+message box and its files stay attached, so you can send it again once the
+reason is dealt with. The conversation is left as it was.
+
 ## Long conversations
 
 When a conversation grows long, OCI summarises its earlier messages in the
@@ -230,8 +235,9 @@ under its project, not in the date groupings.
   a project, which show the project's name after their title.
 - **Rename** one with its pencil; see
   [Renaming a conversation](#renaming-a-conversation).
-- **Archive** one to remove it from the list without deleting it. Archived
-  conversations remain under [Settings → History](settings.md#history).
+- **Archive** one to remove it from the list without deleting it. A notice
+  confirms it, with **Undo**; archived conversations remain under
+  [Settings → History](settings.md#history).
 - **Search** finds conversations by title and by what was said in them,
   including those in projects. See
   [Finding a conversation](#finding-a-conversation).

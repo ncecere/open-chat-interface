@@ -143,6 +143,8 @@ export function ProviderFormDialog({
           <Input
             id="provider-label"
             value={label}
+            // The API's limit (upsertProviderSchema), so it cannot be overrun.
+            maxLength={80}
             onChange={(event) => setLabel(event.target.value)}
             placeholder={PROVIDER_KIND_LABELS[kind]}
             required={Boolean(provider)}
@@ -202,7 +204,11 @@ export function ProviderFormDialog({
           <Field
             label="API key"
             htmlFor="provider-api-key"
-            hint="Leave blank for endpoints that need no key."
+            hint={
+              kind === 'openai-compatible'
+                ? 'Leave blank for endpoints that need no key.'
+                : 'Required while the provider is enabled.'
+            }
           >
             <Input
               id="provider-api-key"
@@ -211,6 +217,7 @@ export function ProviderFormDialog({
               onChange={(event) => setApiKey(event.target.value)}
               placeholder="sk-..."
               autoComplete="off"
+              required={kind !== 'openai-compatible' && enabled}
             />
           </Field>
         )}
@@ -230,7 +237,7 @@ export function ProviderFormDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           >
             {error}
           </p>

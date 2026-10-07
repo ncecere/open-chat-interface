@@ -112,7 +112,7 @@ function PublicShareState({
 }) {
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
-      <section className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-6 text-center shadow-[var(--shadow-popover)] sm:p-8">
+      <section className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 text-center sm:p-8">
         <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
           <Link2Off className="size-5 text-[var(--text-secondary)]" aria-hidden="true" />
         </span>
@@ -211,7 +211,15 @@ const SHARED_PROSE = cn(
   '[&_a]:text-[var(--accent-bright)] [&_a]:underline-offset-2',
   '[&_strong]:text-[var(--text-primary)]',
   '[&_code]:rounded [&_code]:bg-[var(--bg-control)] [&_code]:px-1 [&_code]:py-0.5',
-  '[&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
+  // The code block's body scrolls (and is a keyboard-reachable region); a
+  // second, nested scroller on the pre could not be reached by keyboard.
+  '[&_pre]:max-w-full [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--border-subtle)]',
+  // Squeezed to the reply's width, a table with many columns left a prose
+  // column one word wide (rows 200+ px tall in the QA walk). A table may be as
+  // wide as its content, never narrower than the reply, with long cells
+  // wrapping at a readable width; a wide one scrolls (a focusable region).
+  '[&_[data-streamdown=table]]:w-max [&_[data-streamdown=table]]:min-w-full',
+  '[&_[data-streamdown=table-cell]]:max-w-[22rem]',
   '[&_hr]:border-[var(--border-subtle)]',
   '[&_li::marker]:text-[var(--accent-bright)]',
 );

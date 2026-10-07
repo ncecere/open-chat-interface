@@ -1,9 +1,10 @@
 import { type AdminUser, USER_ROLES, type UserRole } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { MutationError } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Select } from '~/components/ui/select';
+import { useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
@@ -59,6 +60,12 @@ export function UserRoleSelect({
   const queryClient = useQueryClient();
   const [confirmRole, setConfirmRole] = useState<UserRole | null>(null);
   const name = user.name || user.email;
+  const noteId = useId();
+  // The server refuses to remove your own administrator role, and for an
+  // administrator any change does. Say so beside the control instead of
+  // offering a confirmation about yourself in the third person that then
+  // fails (#76).
+  const ownAdminRole = useCurrentUser().data?.user.id === user.id && user.role === 'admin';
 
   async function applyRole(role: UserRole) {
     await api.patch(`/admin/users/${user.id}`, { role });
@@ -89,9 +96,18 @@ export function UserRoleSelect({
         value={shown}
         onChange={select}
         options={ROLE_OPTIONS}
-        disabled={change.isPending}
+        disabled={change.isPending || ownAdminRole}
+        aria-describedby={ownAdminRole ? noteId : undefined}
         className={cn('h-8 w-32', className)}
       />
+      {ownAdminRole && (
+        <p
+          id={noteId}
+          className="mt-1 basis-full whitespace-normal text-xs text-[var(--text-muted)]"
+        >
+          You cannot remove your own administrator role. Ask another administrator.
+        </p>
+      )}
       <MutationError
         error={change.error}
         message="The role could not be changed."

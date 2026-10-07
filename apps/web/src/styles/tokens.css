@@ -84,6 +84,8 @@
    */
   --danger-solid: oklch(50.5% 0.213 27.325);
   --danger-foreground: oklch(97.1% 0.013 17.38);
+  /* Text on a danger tint: the light foreground reads well on dark tints. */
+  --danger-on-tint: var(--danger-foreground);
 
   --shadow-popover: 0 24px 48px -12px rgb(0 0 0 / 0.6);
   --sidebar-gradient: none;
@@ -129,14 +131,24 @@
 
   --text-primary: oklch(14.5% 0 0);
   --text-secondary: oklch(37.1% 0 0);
-  --text-muted: oklch(55.6% 0 0);
+  /* #636363: 5:1 on the sidebar and control greys (was 4.34:1). */
+  --text-muted: oklch(50% 0 0);
   --text-faint: oklch(65% 0 0);
 
-  --success: oklch(59.6% 0.145 163.225);
-  --warning: oklch(66.6% 0.179 58.318);
-  --danger: oklch(57.7% 0.245 27.325);
+  /*
+   * WCAG AA (4.5:1) on the light surfaces and on their own 15–20 % tints,
+   * which badges and notices use: Tailwind emerald-800, amber-800 and red-800.
+   * The 600 shades measured 3.06:1 (success), 2.93:1 (warning) and, for text,
+   * 3.6:1 (danger).
+   */
+  --success: oklch(43.2% 0.095 166.913);
+  --warning: oklch(47.3% 0.137 46.201);
+  --danger: oklch(44.4% 0.177 26.899);
+  /* Solid danger buttons keep the brighter red under white text. */
   --danger-solid: oklch(57.7% 0.245 27.325);
   --danger-foreground: oklch(98.5% 0 0);
+  /* Danger text on the page or on a danger tint (notices, errors, badges). */
+  --danger-on-tint: var(--danger);
 
   --shadow-popover: 0 20px 40px -16px rgb(0 0 0 / 0.16);
   --sidebar-gradient: none;
@@ -357,4 +369,13 @@
   --color-danger: var(--danger);
   --color-danger-solid: var(--danger-solid);
   --color-danger-foreground: var(--danger-foreground);
+
+  /*
+   * Streamdown's built-in overlays and menus (table full screen, Mermaid full
+   * screen, the table copy and download menus, the link check) use shadcn's
+   * token names. Without these, `bg-background` generates nothing and those
+   * surfaces are transparent over the conversation.
+   */
+  --color-background: var(--bg-root);
+  --color-foreground: var(--text-primary);
 }

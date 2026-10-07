@@ -109,6 +109,10 @@ describe('Settings → Memory', () => {
     expect(api.patch).toHaveBeenCalledWith('/memory/m1', { content: 'Teaches organic chemistry' });
 
     await click(findButton('Delete memory: Prefers metric units')!);
+    // It asks first, as Delete all does (#101).
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Delete this memory?');
+    await click(findButton('Confirm: delete memory: Prefers metric units')!);
     expect(api.delete).toHaveBeenCalledWith('/memory/m2');
   });
 

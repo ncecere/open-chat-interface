@@ -16,6 +16,7 @@ import { deliverVerificationEmail } from './email-verification.js';
 import { ac, roles } from './permissions.js';
 import { enforceAuthRequestPolicy, enforceSelfServicePolicy } from './policy.js';
 import { applySsoProvisioning, SsoRoleRequiredError } from './provisioning.js';
+import { assertSsoLinkAllowed } from './sso-linking.js';
 
 const env = loadEnv();
 
@@ -92,6 +93,15 @@ export const auth = betterAuth({
   },
 
   databaseHooks: {
+    account: {
+      create: {
+        // "Trust for account linking": an untrusted SSO provider may not attach
+        // its login to an account that already exists (auth/sso-linking.ts).
+        before: async (account) => {
+          await assertSsoLinkAllowed(account);
+        },
+      },
+    },
     user: {
       create: {
         before: async (user) => {
@@ -266,10 +276,12 @@ export const auth = betterAuth({
     }),
     sso({
       /**
-       * The SSO plugin links a login to an existing account only when the
-       * provider is domain-verified and the email domain matches. OCI drives
-       * `domainVerified` from the administrator's "trust for account linking"
-       * toggle, so linking stays off until an operator vouches for the IdP.
+       * With domain verification on, the plugin refuses every sign-in from a
+       * provider whose `domainVerified` is false, and links a login to an
+       * existing account when it is true and the email domain matches. OCI
+       * keeps `domainVerified` true for every provider, so they can all sign
+       * people in, and enforces "trust for account linking" itself in the
+       * account hook above (auth/sso-linking.ts).
        */
       domainVerification: { enabled: true },
       provisionUser: async ({ user, token, userInfo, provider }) => {

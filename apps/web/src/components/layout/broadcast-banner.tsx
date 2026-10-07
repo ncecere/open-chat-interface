@@ -1,6 +1,7 @@
 import type { ActiveBroadcast } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Info, TriangleAlert, X } from 'lucide-react';
+import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { api } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
@@ -79,7 +80,7 @@ export function BroadcastBanner() {
             <div className="min-w-0 flex-1">
               <p className="font-medium text-[var(--text-primary)]">{broadcast.title}</p>
               <p className="mt-0.5 leading-relaxed text-[var(--text-secondary)]">
-                {broadcast.body}
+                <InlineMarkdown text={broadcast.body} />
               </p>
             </div>
             {broadcast.dismissable && (

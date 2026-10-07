@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
@@ -12,6 +13,7 @@ import { authClient } from '~/lib/auth-client';
 
 export function SignupPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: status, isLoading } = useAuthStatus();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -40,11 +42,13 @@ export function SignupPage() {
       setSubmitting(false);
       return;
     }
+    // As on sign-in: nothing cached while signed out may describe the new account.
+    queryClient.clear();
     await navigate({ to: '/' });
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-12">
+    <main className="flex min-h-dvh justify-center px-4 pt-[12vh] pb-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <Wordmark
@@ -124,7 +128,7 @@ export function SignupPage() {
                 <p className="text-xs text-[var(--text-muted)]">Use at least 12 characters.</p>
               </div>
               {error && (
-                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]">
+                <p className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]">
                   {error}
                 </p>
               )}

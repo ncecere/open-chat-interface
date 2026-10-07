@@ -60,7 +60,8 @@ interface SpendResponse {
     modelSlug: string;
     displayName: string | null;
     labId: string | null;
-    enabled: boolean;
+    /** Null when not in the chat catalog (an embedding model, or one since removed). */
+    enabled: boolean | null;
     messages: number;
     tokens: number;
     costMicros: number;
@@ -111,9 +112,15 @@ const RANGE_TABS: readonly PillTab<RangeTabId>[] = USAGE_RANGES.map((range) => (
   label: `${range} days`,
 }));
 
-function money(micros: number): string {
+/**
+ * One precision for every spend figure on the page, card and tables alike
+ * (#88): cents, with thousands separators, and "<$0.01" for a cost too small
+ * to show in cents rather than a run of zeros.
+ */
+export function money(micros: number): string {
   const dollars = micros / MICROS_PER_DOLLAR;
-  return `$${dollars.toFixed(micros > 0 && dollars < 0.01 ? 4 : 2)}`;
+  if (micros > 0 && dollars < 0.005) return '<$0.01';
+  return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function compact(value: number): string {
@@ -146,35 +153,76 @@ function StatGrid({ stats }: { stats: Array<{ label: string; value: string }> })
   );
 }
 
+/** YYYY-MM-DD for `date` in `timeZone`. */
+function dayIn(timeZone: string, date: Date): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * Every day of the range, oldest first, with days that recorded nothing as 0.
+ * The API returns only days with data, which drew one active day as a block
+ * filling the whole 30-day chart, both axis labels the same date.
+ */
+export function fillDays(
+  points: Array<{ day: string; value: number }>,
+  days: number,
+  endDay: string,
+): Array<{ day: string; value: number }> {
+  const values = new Map(points.map((point) => [point.day, point.value]));
+  const end = Date.parse(`${endDay}T00:00:00Z`);
+  if (Number.isNaN(end) || days < 1) return points;
+  return Array.from({ length: days }, (_, index) => {
+    const day = new Date(end - (days - 1 - index) * 86_400_000).toISOString().slice(0, 10);
+    return { day, value: values.get(day) ?? 0 };
+  });
+}
+
 /**
  * A daily trend drawn as plain bars.
  *
  * A charting dependency would be a lot of weight for this; the project already
- * draws its usage meters the same way.
+ * draws its usage meters the same way. The bars are a picture: its name says
+ * the total and the busiest day, and "Show the numbers" lists every day for
+ * keyboard, touch and screen-reader users.
  */
 function Trend({
   points,
+  range,
   label,
   describe,
 }: {
   points: Array<{ day: string; value: number }>;
+  range: Range;
   label: string;
   describe: (point: { day: string; value: number }) => string;
 }) {
-  const peak = Math.max(1, ...points.map((point) => point.value));
-
   if (points.length === 0) {
     return <p className="text-[var(--text-muted)] text-sm">Nothing recorded in this range.</p>;
   }
 
+  const filled = fillDays(points, range.days, dayIn(range.timezone, new Date()));
+  const peak = Math.max(1, ...filled.map((point) => point.value));
+  const busiest = filled.reduce((best, point) => (point.value > best.value ? point : best));
+  const active = filled.filter((point) => point.value > 0);
+
   return (
     <div>
-      <div className="flex h-32 items-end gap-0.5" role="img" aria-label={label}>
-        {points.map((point) => (
+      <div
+        className="flex h-32 items-end gap-0.5"
+        role="img"
+        aria-label={`${label}, ${filled[0]?.day} to ${filled.at(-1)?.day}: busiest ${describe(busiest)}; ${active.length} of ${filled.length} days had any.`}
+      >
+        {filled.map((point) => (
           <div
             key={point.day}
             className="group relative min-w-0 flex-1 rounded-t bg-[var(--accent)]/70 transition-colors hover:bg-[var(--accent)]"
-            style={{ height: `${Math.max(2, (point.value / peak) * 100)}%` }}
+            style={{
+              height: point.value > 0 ? `${Math.max(2, (point.value / peak) * 100)}%` : '0',
+            }}
           >
             <span className="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden whitespace-nowrap rounded bg-[var(--bg-control-hover)] px-2 py-1 text-[10px] group-hover:block">
               {describe(point)}
@@ -183,9 +231,24 @@ function Trend({
         ))}
       </div>
       <div className="mt-2 flex justify-between text-[var(--text-muted)] text-xs">
-        <span>{points[0]?.day}</span>
-        <span>{points.at(-1)?.day}</span>
+        <span>{filled[0]?.day}</span>
+        <span>{filled.at(-1)?.day}</span>
       </div>
+      <details className="mt-3 text-sm">
+        <summary className="cursor-pointer text-[var(--text-secondary)]">Show the numbers</summary>
+        <table className="mt-2 text-sm">
+          <caption className="sr-only">{label}, days with any</caption>
+          <tbody>
+            {active.map((point) => (
+              <tr key={point.day}>
+                <td className="py-0.5 pr-6 text-[var(--text-muted)]">{point.day}</td>
+                <td className="py-0.5">{describe(point).split(' · ').at(-1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-1 text-[var(--text-muted)] text-xs">Days not listed had none.</p>
+      </details>
     </div>
   );
 }
@@ -216,15 +279,25 @@ function PeopleList({
   }
 
   return (
-    <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+    <section
+      // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+      tabIndex={0}
+      aria-label="Usage by person"
+      className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+    >
       {entries.map((entry) => (
         <div
           key={entry.userId}
           className="flex items-center justify-between gap-4 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
         >
           <div className="min-w-0">
-            <p className="truncate font-medium text-sm">{entry.name}</p>
-            <p className="truncate text-[var(--text-muted)] text-xs">{entry.email}</p>
+            <p className="truncate font-medium text-sm" title={entry.name}>
+              {entry.name}
+            </p>
+            <p className="truncate text-[var(--text-muted)] text-xs" title={entry.email}>
+              {entry.email}
+            </p>
           </div>
           <div className="shrink-0 text-right">
             <p className="text-sm">{entry.primary}</p>
@@ -232,7 +305,7 @@ function PeopleList({
           </div>
         </div>
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -274,12 +347,15 @@ function OverviewTab({ days }: { days: number }) {
 
       <SettingsSection
         title="Activity over time"
-        description={`Messages per day, with days ending at midnight ${data.range.timezone}.`}
+        description={`Replies generated per day (regenerations included, so this can exceed Messages sent), with days ending at midnight ${data.range.timezone}.`}
       >
         <Trend
-          label="Daily message volume"
+          label="Daily replies"
+          range={data.range}
           points={data.daily.map((entry) => ({ day: entry.day, value: entry.messages }))}
-          describe={(point) => `${point.day} · ${point.value} messages`}
+          describe={(point) =>
+            `${point.day} · ${point.value.toLocaleString()} ${point.value === 1 ? 'reply' : 'replies'}`
+          }
         />
       </SettingsSection>
 
@@ -336,6 +412,7 @@ function SpendTab({ days }: { days: number }) {
       >
         <Trend
           label="Daily spend"
+          range={data.range}
           points={data.daily.map((entry) => ({ day: entry.day, value: entry.costMicros }))}
           describe={(point) => `${point.day} · ${money(point.value)}`}
         />
@@ -348,7 +425,13 @@ function SpendTab({ days }: { days: number }) {
         {data.models.entries.length === 0 ? (
           <p className="text-[var(--text-muted)] text-sm">Nothing recorded in this range.</p>
         ) : (
-          <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+          <section
+            // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+            tabIndex={0}
+            aria-label="Usage by model"
+            className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+          >
             <table className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-[var(--border-subtle)] border-b text-left text-[var(--text-muted)] text-xs uppercase tracking-wider">
@@ -368,8 +451,11 @@ function SpendTab({ days }: { days: number }) {
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-2">
                         <LabLogo labId={model.labId} />
-                        <span className="truncate">{model.displayName ?? model.modelSlug}</span>
-                        {!model.enabled && <Badge variant="outline">removed</Badge>}
+                        <span className="truncate" title={model.displayName ?? model.modelSlug}>
+                          {model.displayName ?? model.modelSlug}
+                        </span>
+                        {model.enabled === false && <Badge variant="outline">disabled</Badge>}
+                        {model.enabled === null && <Badge variant="outline">not in catalog</Badge>}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[var(--text-secondary)]">
@@ -383,7 +469,7 @@ function SpendTab({ days }: { days: number }) {
                     </td>
                     <td className="px-4 py-3">
                       {model.errors > 0 ? (
-                        <span className="text-[var(--danger-foreground)]">{model.errors}</span>
+                        <span className="text-[var(--danger-on-tint)]">{model.errors}</span>
                       ) : (
                         <span className="text-[var(--text-muted)]">0</span>
                       )}
@@ -397,7 +483,7 @@ function SpendTab({ days }: { days: number }) {
               total={data.models.totalCount}
               noun="models used"
             />
-          </div>
+          </section>
         )}
       </SettingsSection>
 
@@ -476,14 +562,22 @@ function LimitsTab({ days }: { days: number }) {
           No one was stopped by a limit in this range.
         </p>
       ) : (
-        <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+        <section
+          // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+          tabIndex={0}
+          aria-label="Limit refusals"
+          className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+        >
           {data.denials.entries.map((denial) => (
             <div
               key={`${denial.policyId}-${denial.policyName}`}
               className="flex items-center justify-between gap-4 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
             >
               <div className="min-w-0">
-                <p className="truncate font-medium text-sm">{denial.policyName}</p>
+                <p className="truncate font-medium text-sm" title={denial.policyName}>
+                  {denial.policyName}
+                </p>
                 <p className="text-[var(--text-muted)] text-xs">
                   {denial.usersAffected} {denial.usersAffected === 1 ? 'person' : 'people'} affected
                 </p>
@@ -493,7 +587,7 @@ function LimitsTab({ days }: { days: number }) {
               </Badge>
             </div>
           ))}
-        </div>
+        </section>
       )}
       <TruncationNote
         shown={data.denials.entries.length}

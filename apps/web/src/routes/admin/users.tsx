@@ -1,8 +1,9 @@
 import { type AdminUser, USER_ROLES } from '@oci/shared';
 import { useSearch } from '@tanstack/react-router';
+import { Users } from 'lucide-react';
 import { useState } from 'react';
 import { useAdminAccess } from '~/components/admin/admin-access';
-import { AdminPageHeader, LoadError } from '~/components/admin/admin-ui';
+import { AdminPageHeader, EmptyState, LoadError } from '~/components/admin/admin-ui';
 import { QuotaOverrideDialog } from '~/components/admin/quota-override-dialog';
 import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
@@ -82,14 +83,34 @@ export function AdminUsersPage() {
           {/* Saving a view and bulk changes are writes; auditors only browse. */}
           {canEdit && <SavedUserViews views={views} />}
           {canEdit && <UserBulkToolbar selection={selection} />}
-          <UserTable
-            users={data.users}
-            sort={sort}
-            direction={direction}
-            onSort={directory.toggleSort}
-            selection={selection}
-            onLimits={setLimitsFor}
-          />
+          {data.users.length === 0 ? (
+            // Bare column headers read as a broken table; say nothing matched.
+            <div className="flex flex-col items-center gap-3">
+              <EmptyState icon={Users} title="No accounts match these filters.">
+                Try another search, or clear the filters to see everyone.
+              </EmptyState>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  directory.changeFilter('search', '');
+                  directory.changeFilter('role', 'all');
+                  directory.changeFilter('status', 'all');
+                }}
+              >
+                Clear filters
+              </Button>
+            </div>
+          ) : (
+            <UserTable
+              users={data.users}
+              sort={sort}
+              direction={direction}
+              onSort={directory.toggleSort}
+              selection={selection}
+              onLimits={setLimitsFor}
+            />
+          )}
         </div>
       )}
 

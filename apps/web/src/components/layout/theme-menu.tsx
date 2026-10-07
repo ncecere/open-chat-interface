@@ -1,11 +1,13 @@
 import { Link } from '@tanstack/react-router';
-import { Check, Monitor, Moon, Settings2, Sun } from 'lucide-react';
+import { Monitor, Moon, Settings2, Sun } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
@@ -30,13 +32,17 @@ export function ThemeMenu() {
 
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuLabel>Theme</DropdownMenuLabel>
-        {THEME_OPTIONS.map((option) => (
-          <DropdownMenuItem key={option.value} onSelect={() => setTheme(option.value)}>
-            <option.icon />
-            <span className="flex-1">{option.label}</span>
-            {theme === option.value && <Check className="text-[var(--accent-bright)]" />}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuRadioGroup
+          value={theme}
+          onValueChange={(value) => setTheme(value as (typeof THEME_OPTIONS)[number]['value'])}
+        >
+          {THEME_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              <option.icon />
+              <span className="flex-1">{option.label}</span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
 
         <DropdownMenuSeparator />
 

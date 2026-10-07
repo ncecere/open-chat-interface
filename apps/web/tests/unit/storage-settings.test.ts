@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bytesFromMb,
   changedStorageSettings,
   makeDraft,
+  mbFromBytes,
   parseMimeTypes,
   type StorageSettings,
   validateDraft,
@@ -35,7 +37,7 @@ describe('storage drafts and patches', () => {
   it('creates editable strings without including the local path or saved credential state', () => {
     expect(makeDraft(settings())).toEqual({
       driver: 'local',
-      maxFileBytes: '10485760',
+      maxFileMb: '10',
       maxFilesPerMessage: '5',
       allowedMimeTypes: 'image/png\napplication/pdf',
       bucket: 'attachments',
@@ -101,13 +103,13 @@ describe('storage drafts and patches', () => {
       endpoint: ' https://s3.example.com ',
       accessKeyId: ' new-access-id ',
       forcePathStyle: true,
-      maxFileBytes: '2048',
+      maxFileMb: '2',
       maxFilesPerMessage: '2',
       allowedMimeTypes: 'text/plain, image/png\ntext/plain',
     };
     expect(changedStorageSettings(saved, draft, 'replace', 'new-secret')).toEqual({
       driver: 's3',
-      maxFileBytes: 2048,
+      maxFileBytes: 2 * 1024 * 1024,
       maxFilesPerMessage: 2,
       allowedMimeTypes: ['text/plain', 'image/png'],
       s3: {
@@ -152,36 +154,40 @@ describe('storage drafts and patches', () => {
     });
   });
 
-  it('does not serialize non-integer numeric drafts into patches', () => {
+  it('does not serialize invalid numeric drafts into patches', () => {
     const saved = settings();
-    const draft = { ...makeDraft(saved), maxFileBytes: '1.5', maxFilesPerMessage: 'NaN' };
+    const draft = { ...makeDraft(saved), maxFileMb: 'abc', maxFilesPerMessage: 'NaN' };
     expect(changedStorageSettings(saved, draft, 'keep', '')).toEqual({});
     expect(validateDraft(draft, true, 'keep', '')).toEqual({
-      maxFileBytes: 'File size must be a positive whole number of bytes.',
+      maxFileMb: 'File size must be a positive number of MB.',
       maxFilesPerMessage: 'File count must be a positive whole number.',
     });
   });
 });
 
 describe('storage draft validation', () => {
+  it.each(['', '0', '-1', 'NaN', 'Infinity', '1e300'])('rejects an invalid size: %s', (value) => {
+    const draft = { ...makeDraft(settings()), maxFileMb: value };
+    expect(validateDraft(draft, true, 'keep', '')).toEqual({
+      maxFileMb: 'File size must be a positive number of MB.',
+    });
+  });
+
   it.each(['', '0', '-1', '1.5', 'NaN', 'Infinity', '9007199254740992'])(
-    'rejects invalid size and count: %s',
+    'rejects an invalid count: %s',
     (value) => {
-      const draft = { ...makeDraft(settings()), maxFileBytes: value, maxFilesPerMessage: value };
+      const draft = { ...makeDraft(settings()), maxFilesPerMessage: value };
       expect(validateDraft(draft, true, 'keep', '')).toEqual({
-        maxFileBytes: 'File size must be a positive whole number of bytes.',
         maxFilesPerMessage: 'File count must be a positive whole number.',
       });
     },
   );
 
-  it('accepts positive safe integer bounds', () => {
-    const draft = {
-      ...makeDraft(settings()),
-      maxFileBytes: '9007199254740991',
-      maxFilesPerMessage: '1',
-    };
-    expect(validateDraft(draft, true, 'keep', '')).toEqual({});
+  it('accepts a fraction of a MB and large bounds', () => {
+    for (const maxFileMb of ['0.5', '1.5', '1000000']) {
+      const draft = { ...makeDraft(settings()), maxFileMb, maxFilesPerMessage: '1' };
+      expect(validateDraft(draft, true, 'keep', '')).toEqual({});
+    }
   });
 
   it.each(['image', '/png', 'image/', 'image/png/extra', 'image /png'])(
@@ -256,5 +262,19 @@ describe('storage draft validation', () => {
       });
       expect(validateDraft(draft, true, 'replace', ' ')).toEqual({});
     }
+  });
+
+  it('takes the file size in MB, as Roles & access does (#86)', () => {
+    expect(mbFromBytes(26_214_400)).toBe('25');
+    expect(mbFromBytes(1_500_000)).toBe('1.431');
+    expect(bytesFromMb('0.5')).toBe(524_288);
+    expect(bytesFromMb('')).toBeNaN();
+    expect(bytesFromMb('-1')).toBeNaN();
+    // A saved size that is not a round number of MB is not a change until edited.
+    const odd = { ...settings(), maxFileBytes: 1_500_000 };
+    expect(changedStorageSettings(odd, makeDraft(odd), 'keep', '')).toEqual({});
+    expect(validateDraft({ ...makeDraft(odd), maxFileMb: 'abc' }, true, 'keep', '')).toMatchObject({
+      maxFileMb: 'File size must be a positive number of MB.',
+    });
   });
 });

@@ -17,6 +17,7 @@ import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
+import { sendTestEmail } from '../../services/email.js';
 import {
   runSearch,
   storedFallbackSearchKey,
@@ -140,10 +141,27 @@ settingsRoutes.get('/', async (c) => {
       port: smtp.port,
       secure: smtp.secure,
       fromAddress: smtp.fromAddress,
+      // Whether credentials are stored, never the values (#115).
+      hasUsername: Boolean(smtp.username),
+      hasPassword: Boolean(smtp.encryptedPassword),
     },
   };
 
   return c.json(payload);
+});
+
+/** Sends a test message to the administrator asking, with the saved settings (#115). */
+settingsRoutes.post('/smtp/test', async (c) => {
+  const actor = currentUser(c);
+  const result = await sendTestEmail(actor.email);
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'smtp.test',
+    targetType: 'instance',
+    metadata: { ok: result.ok },
+  });
+  return c.json(result);
 });
 
 settingsRoutes.post('/storage/test', async (c) => {

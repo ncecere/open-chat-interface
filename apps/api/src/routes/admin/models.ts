@@ -270,7 +270,28 @@ modelRoutes.delete('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
 
-  await db.delete(schema.model).where(eq(schema.model.id, id));
+  const [current] = await db
+    .select({ isDefault: schema.model.isDefault })
+    .from(schema.model)
+    .where(eq(schema.model.id, id))
+    .limit(1);
+  // New chats start on the default model; removing it would leave none.
+  if (current?.isDefault) {
+    throw conflict(
+      'This is the default model, which new chats start on. Make another model the default first, then remove this one.',
+    );
+  }
+
+  const [deleted] = await db.delete(schema.model).where(eq(schema.model.id, id)).returning({
+    slug: schema.model.slug,
+    displayName: schema.model.displayName,
+    upstreamModelId: schema.model.upstreamModelId,
+    providerId: schema.model.providerId,
+    isDefault: schema.model.isDefault,
+  });
+  // An unknown id used to answer ok and write a model.delete entry for a
+  // model that never existed.
+  if (!deleted) throw notFound('Model not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -278,6 +299,7 @@ modelRoutes.delete('/:id', async (c) => {
     action: 'model.delete',
     targetType: 'model',
     targetId: id,
+    metadata: deleted,
   });
 
   return c.json({ ok: true });

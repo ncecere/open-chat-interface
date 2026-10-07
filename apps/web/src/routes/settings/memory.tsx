@@ -40,6 +40,7 @@ function MemoryRow({
   maxChars: number;
 }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [draft, setDraft] = useState(entry.content);
   const editId = useId();
   const save = useMemoryMutation((content: string) =>
@@ -121,16 +122,38 @@ function MemoryRow({
                 Edit
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label={`Delete memory: ${entry.content}`}
-              disabled={remove.isPending}
-              onClick={() => remove.mutate(undefined)}
-            >
-              {remove.isPending && <Spinner />}
-              Delete
-            </Button>
+            {/* Asks first, as Delete all does: it cannot be undone (#101). */}
+            {confirmingDelete ? (
+              <>
+                <span className="self-center text-xs text-[var(--text-secondary)]">
+                  Delete this memory?
+                </span>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  aria-label={`Confirm: delete memory: ${entry.content}`}
+                  disabled={remove.isPending}
+                  onClick={() =>
+                    remove.mutate(undefined, { onSettled: () => setConfirmingDelete(false) })
+                  }
+                >
+                  {remove.isPending && <Spinner />}
+                  Delete
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Delete memory: ${entry.content}`}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete
+              </Button>
+            )}
           </div>
         </div>
       )}

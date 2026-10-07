@@ -557,7 +557,7 @@ function DraftBody({
             <p className="p-4 text-sm text-[var(--text-muted)]">Preparing…</p>
           )}
           {!writing && draft.state !== 'saved' && (
-            <p role="alert" className="px-4 pb-4 text-sm text-[var(--danger-foreground)]">
+            <p role="alert" className="px-4 pb-4 text-sm text-[var(--danger-on-tint)]">
               This artifact was not saved.
             </p>
           )}
@@ -738,7 +738,7 @@ function ArtifactPanelBody({
                 Loading…
               </p>
             ) : loadError || content === undefined ? (
-              <p role="alert" className="p-4 text-sm text-[var(--danger-foreground)]">
+              <p role="alert" className="p-4 text-sm text-[var(--danger-on-tint)]">
                 This artifact could not be loaded.
               </p>
             ) : view === 'source' ? (
@@ -895,7 +895,7 @@ function DocumentEditor({
         className="min-h-0 flex-1 resize-none rounded-lg border border-[var(--border-strong)] bg-[var(--bg-control)] p-3 font-mono text-sm leading-relaxed text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--accent-bright)]"
       />
       {save.error && (
-        <p role="alert" className="text-sm text-[var(--danger-foreground)]">
+        <p role="alert" className="text-sm text-[var(--danger-on-tint)]">
           {save.error instanceof ApiError ? save.error.message : 'The document could not be saved.'}
         </p>
       )}

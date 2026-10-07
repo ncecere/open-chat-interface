@@ -11,7 +11,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Check, Cpu, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditableFieldset, EditOnly, useAdminAccess } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
@@ -92,8 +92,14 @@ function ModelRow({
   const [expanded, setExpanded] = useState(false);
   const [displayName, setDisplayName] = useState(model.displayName);
 
+  /** The name last sent, until the server's changes; so Enter and blur save once. */
+  const lastSentName = useRef<string | null>(null);
+
   // Follow the server value whenever it changes, including after a refetch.
-  useEffect(() => setDisplayName(model.displayName), [model.displayName]);
+  useEffect(() => {
+    setDisplayName(model.displayName);
+    lastSentName.current = null;
+  }, [model.displayName]);
 
   const update = useMutation({
     mutationFn: (patch: Record<string, unknown>) => api.patch(`/admin/models/${model.id}`, patch),
@@ -104,8 +110,24 @@ function ModelRow({
         queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
         queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
       ]),
-    onError: () => setDisplayName(model.displayName),
+    onError: () => {
+      setDisplayName(model.displayName);
+      lastSentName.current = null;
+    },
   });
+
+  /** Saves a changed, non-blank name; otherwise puts the saved one back. */
+  function commitDisplayName() {
+    const next = displayName.trim();
+    // Enter, then leaving the field: one save, not two.
+    if (next === lastSentName.current) return;
+    if (next && next !== model.displayName) {
+      lastSentName.current = next;
+      update.mutate({ displayName: next });
+    } else {
+      setDisplayName(model.displayName);
+    }
+  }
 
   function toggleCapability(capability: ModelCapability) {
     const next = model.capabilities.includes(capability)
@@ -191,11 +213,14 @@ function ModelRow({
                 id={`name-${model.id}`}
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
-                onBlur={() => {
-                  const next = displayName.trim();
-                  if (next && next !== model.displayName) {
-                    update.mutate({ displayName: next });
-                  } else {
+                onBlur={commitDisplayName}
+                // Enter saves as leaving the field does; Escape puts the name back (#79).
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitDisplayName();
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
                     setDisplayName(model.displayName);
                   }
                 }}
@@ -495,7 +520,13 @@ export function AdminModelsPage() {
         open={Boolean(removeFor)}
         onOpenChange={(open) => !open && setRemoveFor(null)}
         title={`Remove ${removeFor?.displayName ?? 'model'}?`}
-        description="It will disappear from the catalog and users will no longer be able to select it. The provider and its key are not affected. This action cannot be undone."
+        description={
+          removeFor?.isDefault
+            ? 'This is the default model, which new chats start on, so it cannot be removed. Make another model the default first.'
+            : 'It will disappear from the catalog and users will no longer be able to select it. The provider and its key are not affected. This action cannot be undone.'
+        }
+        // The API refuses too; this says why before anyone tries.
+        confirmDisabled={Boolean(removeFor?.isDefault)}
         confirmLabel="Remove model"
         pendingLabel="Removing…"
         errorMessage="The model could not be removed."

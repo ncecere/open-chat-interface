@@ -95,18 +95,29 @@ async function activeShareLinkCount(userId: string): Promise<number> {
 
 meRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const [preferences, features, search, chat, own, signIn, memoryEntries, connectors, shareLinks] =
-    await Promise.all([
-      loadPreferences(user.id),
-      getSetting('features'),
-      getSetting('search'),
-      getSetting('chat'),
-      roleFeatures(user.role),
-      signInMethodsFor(user),
-      memoryEntryCount(user.id),
-      userConnectors(user),
-      activeShareLinkCount(user.id),
-    ]);
+  const [
+    preferences,
+    features,
+    search,
+    chat,
+    storage,
+    own,
+    signIn,
+    memoryEntries,
+    connectors,
+    shareLinks,
+  ] = await Promise.all([
+    loadPreferences(user.id),
+    getSetting('features'),
+    getSetting('search'),
+    getSetting('chat'),
+    getSetting('storage'),
+    roleFeatures(user.role),
+    signInMethodsFor(user),
+    memoryEntryCount(user.id),
+    userConnectors(user),
+    activeShareLinkCount(user.id),
+  ]);
   const { reasoningEfforts, ...effective } = combineFeatures(features, search, own);
   const instanceEffort: ReasoningEffort = chat.defaultEffort ?? 'instant';
   // The catalog is read only when a model is saved, so most requests skip it.
@@ -158,6 +169,13 @@ meRoutes.get('/', async (c) => {
       /** Saved defaults that no longer apply and are ignored (v0.10). */
       defaultProblems: personal.problems,
       reasoningEfforts,
+      /**
+       * Attachment limits the composer checks before uploading (v0.11.1), so a
+       * file over them is refused at once instead of uploading, counting
+       * against storage, and failing only when the message is sent.
+       */
+      maxFilesPerMessage: storage.maxFilesPerMessage,
+      maxFileBytes: storage.maxFileBytes,
     },
   });
 });

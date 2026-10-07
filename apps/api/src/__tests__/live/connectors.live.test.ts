@@ -562,6 +562,21 @@ describe.skipIf(!available)('live MCP connectors', () => {
       expect(audit?.metadata).toEqual({ slug: 'docs', added: 0, updated: 1, missing: 2 });
     });
 
+    it('shows the contact a test made as soon as it answers (#84)', async () => {
+      mcp.tools = [{ name: 'search', annotations: { readOnlyHint: true } }];
+      const connector = await createConnector({});
+      expect(connector.lastContactAt).toBeNull();
+      const result = await ok<{ ok: boolean }>(
+        call('POST', `/api/admin/connectors/${connector.id}/test`),
+      );
+      expect(result.ok).toBe(true);
+      // No waiting: the list read straight after the test already has it.
+      const { connectors } = await ok<{ connectors: Connector[] }>(
+        call('GET', '/api/admin/connectors'),
+      );
+      expect(connectors.find((entry) => entry.id === connector.id)?.lastContactAt).not.toBeNull();
+    });
+
     it('lets a read tool be marked write freely, but a write tool read only with confirmation', async () => {
       const connector = await docsConnector();
       const search = connector.tools.find((tool) => tool.name === 'search')!;

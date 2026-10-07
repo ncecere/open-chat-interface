@@ -225,7 +225,8 @@ export function AttachmentList({
                       target="_blank"
                       rel="noreferrer"
                       title={attachment.filename}
-                      className="group flex min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--text-primary)] hover:underline"
+                      // 24px tall at least: the WCAG 2.2 target size (#105).
+                      className="group flex min-h-6 min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--text-primary)] hover:underline"
                     >
                       <span className="truncate">{attachment.filename}</span>
                       <ExternalLink className="size-3 shrink-0 text-[var(--text-secondary)]" />
@@ -277,7 +278,7 @@ export function AttachmentList({
                     disabled={isDeleting}
                     aria-label={`Delete ${attachment.filename}`}
                     title={`Delete ${attachment.filename}`}
-                    className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-foreground)] hover:bg-[var(--danger)]/30"
+                    className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-on-tint)] hover:bg-[var(--danger)]/30"
                     onClick={() => onDelete([attachment.id])}
                   >
                     {isDeleting ? <Spinner className="size-3.5" /> : <Trash2 />}

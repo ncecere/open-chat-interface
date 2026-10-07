@@ -147,7 +147,11 @@ export function WorkBlock({
           presearch: true,
         },
       ];
-    if (entry.type === 'tool') return [workStepOf(summarizeToolPart(entry.part), entry.part)];
+    if (entry.type === 'tool') {
+      const step = workStepOf(summarizeToolPart(entry.part), entry.part);
+      // Still running once the reply has ended: it was stopped mid-way.
+      return [!streaming && step.state === 'running' ? { ...step, state: 'stopped' } : step];
+    }
     return [];
   });
   const hasReasoning = work.some((entry) => entry.type === 'reasoning');

@@ -46,9 +46,13 @@ export async function connectedConnectorIds(userId: string): Promise<Set<string>
   return new Set(rows.map((row) => row.connectorId));
 }
 
-/** Notes a successful exchange, for the Connectors and System health pages. */
-export function recordContact(connectorId: string): void {
-  void db
+/**
+ * Notes a successful exchange, for the Connectors and System health pages.
+ * Never rejects; awaited, so a page that refetches straight after a test
+ * shows the contact (#84).
+ */
+export async function recordContact(connectorId: string): Promise<void> {
+  await db
     .update(schema.connector)
     .set({ lastContactAt: new Date() })
     .where(eq(schema.connector.id, connectorId))
@@ -57,9 +61,9 @@ export function recordContact(connectorId: string): void {
     );
 }
 
-/** Notes a failure with the same safe wording people see; never a credential or response body. */
-export function recordFailure(connectorId: string, message: string): void {
-  void db
+/** Notes a failure with the same safe wording people see; never a credential or response body. Never rejects. */
+export async function recordFailure(connectorId: string, message: string): Promise<void> {
+  await db
     .update(schema.connector)
     .set({ lastError: message.slice(0, 300), lastErrorAt: new Date() })
     .where(eq(schema.connector.id, connectorId))

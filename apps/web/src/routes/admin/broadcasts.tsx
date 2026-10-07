@@ -30,6 +30,7 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Field } from '~/components/ui/field';
+import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
@@ -155,7 +156,11 @@ function BroadcastDialog({
           />
         </Field>
 
-        <Field label="Message" htmlFor="broadcast-body">
+        <Field
+          label="Message"
+          htmlFor="broadcast-body"
+          hint="**Bold** and [links](https://example.edu) are formatted; other Markdown is shown as typed."
+        >
           <Textarea
             id="broadcast-body"
             rows={4}
@@ -278,7 +283,7 @@ function BroadcastDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-foreground)] text-xs"
+            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
           >
             {error}
           </p>
@@ -376,6 +381,11 @@ export function AdminBroadcastsPage() {
                     ? ` · dismissed by ${broadcast.dismissalCount}`
                     : ''}
                   {broadcast.dismissable ? '' : ' · cannot be dismissed'}
+                </p>
+                {/* The message itself, for everyone who can open this page:
+                    auditors have no edit dialog to read it in (#87). */}
+                <p className="mt-1 break-words text-[var(--text-secondary)] text-sm">
+                  <InlineMarkdown text={broadcast.body} />
                 </p>
               </div>
 

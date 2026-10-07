@@ -2,12 +2,14 @@ import type { StoredFile } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Files, FileText, ImageIcon, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { StorageMeter } from '~/components/settings/storage-meter';
 import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
 import { api } from '~/lib/api-client';
@@ -75,20 +77,25 @@ function FilterMenu({ value, onChange }: FilterMenuProps) {
         align="start"
         className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-40"
       >
-        {FILTERS.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            className={cn(
-              'text-xs',
-              option.value === value && 'bg-[var(--bg-control)] text-[var(--text-primary)]',
-            )}
-            aria-checked={option.value === value}
-            onSelect={() => onChange(option.value)}
-          >
-            <option.icon />
-            {option.label}
-          </DropdownMenuItem>
-        ))}
+        {/* One choice of four: radio items, announced as checked (#114). */}
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => onChange(next as AttachmentFilter)}
+        >
+          {FILTERS.map((option) => (
+            <DropdownMenuRadioItem
+              key={option.value}
+              value={option.value}
+              className={cn(
+                'text-xs',
+                option.value === value && 'bg-[var(--bg-control)] text-[var(--text-primary)]',
+              )}
+            >
+              <option.icon />
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -107,6 +114,15 @@ export function SettingsAttachmentsPage() {
     queryFn: () => api.get<{ attachments: StoredFile[] }>('/attachments'),
     select: (result) => result.attachments,
   });
+
+  const [confirming, setConfirming] = useState<string[] | null>(null);
+  const confirmName =
+    confirming?.length === 1
+      ? attachments.data?.find((file) => file.id === confirming[0])?.filename
+      : undefined;
+  const confirmTitle = confirmName
+    ? `Delete ${confirmName}?`
+    : `Delete ${confirming?.length ?? 0} files?`;
 
   const remove = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -212,7 +228,7 @@ export function SettingsAttachmentsPage() {
             size="sm"
             className="sm:ml-auto"
             disabled={selected.size > 0 && [...selected].every((id) => deletingIds.has(id))}
-            onClick={() => remove.mutate([...selected])}
+            onClick={() => setConfirming([...selected])}
           >
             <Trash2 />
             Delete ({selected.size})
@@ -223,7 +239,7 @@ export function SettingsAttachmentsPage() {
       {deleteError && (
         <div
           role="alert"
-          className="mt-3 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+          className="mt-3 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
           {deleteError}
         </div>
@@ -241,7 +257,20 @@ export function SettingsAttachmentsPage() {
         onSort={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
         onToggle={toggle}
         onToggleAll={toggleAllVisible}
-        onDelete={(ids) => remove.mutate(ids)}
+        onDelete={(ids) => setConfirming(ids)}
+      />
+
+      {/* Deleting is permanent, so it asks first (#101). Failures are reported
+          on the page, as before. */}
+      <ConfirmDialog
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={confirmTitle}
+        description="It is removed from the conversations it was attached to, and models can no longer read it there. This cannot be undone."
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        errorMessage="The files could not be deleted."
+        onConfirm={() => remove.mutateAsync(confirming ?? [])}
       />
     </div>
   );

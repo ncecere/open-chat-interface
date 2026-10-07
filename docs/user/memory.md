@@ -51,7 +51,7 @@ new ones, whatever your setting.
 (*Added by you* or *Saved by a model*) and when it last changed.
 
 - **Edit** changes a note's text.
-- **Delete** removes one note.
+- **Delete** removes one note, after asking you to confirm.
 - **Delete all…** removes every note, after asking you to confirm. This cannot
   be undone.
 

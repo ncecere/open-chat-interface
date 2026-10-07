@@ -21,8 +21,12 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
   // The count is captured when the dialog opens: a successful ban clears the
   // selection while the dialog is still closing.
   const [banCount, setBanCount] = useState<number | null>(null);
+  // Granting administrator access asks first, as the per-account role
+  // selector does; other roles apply at once.
+  const [adminCount, setAdminCount] = useState<number | null>(null);
   const count = selected.size;
   const banAccounts = describeAccounts(banCount ?? count);
+  const adminAccounts = describeAccounts(adminCount ?? count);
 
   return (
     <>
@@ -46,7 +50,11 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
               size="sm"
               variant="secondary"
               disabled={bulk.isPending}
-              onClick={() => bulk.mutate({ action: 'set_role', role: bulkRole })}
+              onClick={() =>
+                bulkRole === 'admin'
+                  ? setAdminCount(count)
+                  : bulk.mutate({ action: 'set_role', role: bulkRole })
+              }
             >
               Apply role
             </Button>
@@ -72,8 +80,8 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
           </span>
         </section>
       )}
-      {/* The ban dialog reports its own failure while it is open. */}
-      {banCount === null && (
+      {/* The ban and admin dialogs report their own failure while open. */}
+      {banCount === null && adminCount === null && (
         <MutationError
           error={bulk.error}
           message={
@@ -98,6 +106,17 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
         pendingLabel="Banning…"
         errorMessage={BULK_ACTION_FAILURES.ban ?? ''}
         onConfirm={() => bulk.mutateAsync({ action: 'ban' })}
+      />
+
+      <ConfirmDialog
+        open={adminCount !== null}
+        onOpenChange={(open) => !open && setAdminCount(null)}
+        title={`Make ${adminAccounts} administrators?`}
+        description="Administrators can see and change every setting, manage every account (including other administrators), and read the audit log. Your own account is never included."
+        confirmLabel={`Make ${adminAccounts} administrators`}
+        pendingLabel="Applying…"
+        errorMessage={BULK_ACTION_FAILURES.set_role ?? ''}
+        onConfirm={() => bulk.mutateAsync({ action: 'set_role', role: 'admin' })}
       />
     </>
   );

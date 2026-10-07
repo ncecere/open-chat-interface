@@ -7,7 +7,15 @@ import {
 } from '@oci/shared';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { FileText, MessageSquarePlus, Trash2, Upload } from 'lucide-react';
-import { type ChangeEvent, type FormEvent, type ReactNode, useId, useRef, useState } from 'react';
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -21,6 +29,7 @@ import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
 import { Spinner } from '~/components/ui/spinner';
+import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import {
   useDeleteProject,
@@ -37,6 +46,8 @@ import {
   type ProjectTab,
   validateProjectSearch,
 } from '~/lib/chat-search-params';
+import { usePageTitle } from '~/lib/document-title';
+import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -64,7 +75,11 @@ const ROW = 'flex items-center gap-3 border-b border-[var(--border-subtle)] py-3
 function indexStatusLabel(index: ProjectFile['index'] | undefined): string {
   switch (index?.status) {
     case 'indexed':
-      return `Searchable · ${index.passages} ${index.passages === 1 ? 'passage' : 'passages'}`;
+      // Said in the row itself, not a tooltip: a long file whose end cannot be
+      // searched otherwise looks fully searchable and answers come up empty.
+      return index.truncated
+        ? `Partly searchable · first ${index.passages.toLocaleString()} passages; the rest of the file is too long to search`
+        : `Searchable · ${index.passages} ${index.passages === 1 ? 'passage' : 'passages'}`;
     case 'no-text':
       return 'No text to search';
     default:
@@ -110,15 +125,27 @@ function Section({
 export function ProjectPage({ projectId }: { projectId: string }) {
   const { data: me } = useCurrentUser();
   const project = useProject(me?.features.projects ? projectId : undefined);
+  // Nothing started from a project is temporary; do not leave the top bar's
+  // temporary-chat control highlighted here.
+  const { temporary, setTemporary } = useTemporaryChat();
+  useEffect(() => {
+    if (temporary) setTemporary(false);
+  }, [temporary, setTemporary]);
+  // The project by name in the tab, rather than the app name alone (#110).
+  usePageTitle(project.data?.name ?? 'Project');
 
   if (me && !me.features.projects) {
     return (
-      <PageFrame>
-        <h1 className="text-2xl font-bold">Projects</h1>
-        <p className="mt-3 text-sm text-[var(--text-muted)]">
-          Projects are not available for your role.
-        </p>
-      </PageFrame>
+      <UnavailableState
+        title="Projects unavailable"
+        actions={
+          <Button asChild>
+            <Link to="/">New chat</Link>
+          </Button>
+        }
+      >
+        Projects are not available for your role.
+      </UnavailableState>
     );
   }
 
@@ -135,17 +162,30 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   if (project.error || !project.data) {
     const missing = project.error instanceof ApiError && project.error.status === 404;
     return (
-      <PageFrame>
-        <h1 className="text-2xl font-bold">{missing ? 'Project not found' : 'Project'}</h1>
-        <p role="alert" className="mt-3 text-sm text-[var(--text-muted)]">
-          {missing
-            ? 'This project does not exist or was deleted.'
-            : apiErrorMessage(project.error, 'The project could not be loaded.')}
-        </p>
-        <Link to="/" className="mt-4 inline-block text-sm text-[var(--accent-bright)] underline">
-          Back to chat
-        </Link>
-      </PageFrame>
+      <UnavailableState
+        alert
+        title={missing ? 'Project not found' : 'Could not load project'}
+        actions={
+          missing ? (
+            <Button asChild>
+              <Link to="/">New chat</Link>
+            </Button>
+          ) : (
+            <>
+              <Button type="button" onClick={() => void project.refetch()}>
+                Retry
+              </Button>
+              <Link to="/" className="text-sm underline">
+                New chat
+              </Link>
+            </>
+          )
+        }
+      >
+        {missing
+          ? 'This project does not exist or was deleted.'
+          : apiErrorMessage(project.error, 'The project could not be loaded.')}
+      </UnavailableState>
     );
   }
 
@@ -250,7 +290,7 @@ function SaveRow({
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {state.update.error && (
-        <p role="alert" className="mr-auto text-xs text-[var(--danger-foreground)]">
+        <p role="alert" className="mr-auto text-xs text-[var(--danger-on-tint)]">
           {apiErrorMessage(state.update.error, 'The project could not be saved.')}
         </p>
       )}
@@ -403,12 +443,12 @@ function ProjectFiles({
         </p>
       )}
       {upload.error && (
-        <p role="alert" className="mb-3 text-xs text-[var(--danger-foreground)]">
+        <p role="alert" className="mb-3 text-xs text-[var(--danger-on-tint)]">
           {apiErrorMessage(upload.error, 'A file could not be uploaded.')}
         </p>
       )}
       {remove.error && (
-        <p role="alert" className="mb-3 text-xs text-[var(--danger-foreground)]">
+        <p role="alert" className="mb-3 text-xs text-[var(--danger-on-tint)]">
           {apiErrorMessage(remove.error, 'The file could not be removed.')}
         </p>
       )}
@@ -468,7 +508,7 @@ function ProjectConversations({ projectId }: { projectId: string }) {
           <Spinner /> Loading conversations…
         </p>
       ) : threads.error ? (
-        <p role="alert" className="text-sm text-[var(--danger-foreground)]">
+        <p role="alert" className="text-sm text-[var(--danger-on-tint)]">
           {apiErrorMessage(threads.error, 'Conversations could not be loaded.')}
         </p>
       ) : (threads.data?.length ?? 0) === 0 ? (
@@ -532,7 +572,7 @@ function DeleteProjectSection({ project }: { project: ProjectSummary }) {
             </DialogDescription>
           </DialogHeader>
           {remove.error && (
-            <p role="alert" className="text-xs text-[var(--danger-foreground)]">
+            <p role="alert" className="text-xs text-[var(--danger-on-tint)]">
               {apiErrorMessage(remove.error, 'The project could not be deleted.')}
             </p>
           )}

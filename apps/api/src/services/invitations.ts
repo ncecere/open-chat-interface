@@ -96,8 +96,12 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{
       assertUsableInvite(invite);
 
       const email = input.email.trim().toLowerCase();
+      // Whoever is here holds the link, so saying the address differs gives
+      // nothing away; "invalid" made people abandon an invitation that works.
       if (invite.email && invite.email.trim().toLowerCase() !== email) {
-        throw validationFailed(INVALID_INVITE_MESSAGE);
+        throw validationFailed(
+          'This invitation was sent to a different email address. Use the address it was sent to.',
+        );
       }
 
       const [existing] = await tx

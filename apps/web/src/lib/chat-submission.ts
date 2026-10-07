@@ -19,6 +19,27 @@ export function readChatSubmission(body: RequestInit['body'] | undefined) {
   }
 }
 
+/**
+ * A new message the server refused before saving it (any 4xx: rate limit,
+ * quota, too many files, a model the role cannot use). Null for anything else,
+ * including a retry or regenerate, whose user message is already saved.
+ */
+export function readRefusedSubmission(
+  body: RequestInit['body'] | undefined,
+): { clientMessageId: string; text: string } | null {
+  if (typeof body !== 'string') return null;
+  try {
+    const value = JSON.parse(body) as { trigger?: unknown; messages?: UIMessage[] } | null;
+    const user = value?.messages?.[0];
+    if (value?.trigger !== 'submit-message' || user?.role !== 'user' || typeof user.id !== 'string')
+      return null;
+    const text = user.parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+    return { clientMessageId: user.id, text };
+  } catch {
+    return null;
+  }
+}
+
 /** Only persisted user references confirm that an ambiguously sent file was allocated. */
 export function confirmedAttachmentIds(messages: UIMessage[]): string[] {
   return [

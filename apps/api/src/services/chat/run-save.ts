@@ -10,6 +10,7 @@ import { touchThread } from '../threads.js';
 import type { PreparedTurn } from './prepare-turn.js';
 import { type AcquiredRun, settleUsage } from './run-lifecycle.js';
 import { INTERRUPTED_REPLY_MESSAGE } from './run-recovery.js';
+import { settledParts } from './settled-parts.js';
 
 export type ReplyUsage = {
   inputTokens?: number | null;
@@ -77,6 +78,7 @@ export async function persistAssistant(
   unadmitted?: { errorMessage?: string },
 ) {
   const usage = await getUsage();
+  const parts = settledParts(responseMessage.parts);
   const tokensIn = usage?.inputTokens ?? null;
   const tokensOut = usage?.outputTokens ?? null;
   const durationMs = Date.now() - startedAt;
@@ -87,7 +89,7 @@ export async function persistAssistant(
         db
           .update(schema.message)
           .set({
-            parts: responseMessage.parts as unknown as Record<string, unknown>[],
+            parts: parts as unknown as Record<string, unknown>[],
             status,
             errorMessage: unadmitted?.errorMessage
               ? unadmitted.errorMessage
@@ -134,7 +136,7 @@ export async function persistAssistant(
         role: user.role,
         threadId: thread.id,
         messageId: assistantMessage.id,
-        parts: responseMessage.parts,
+        parts,
       });
     } catch (error) {
       logger.warn({ error, threadId: thread.id }, 'Saving detected artifacts failed');

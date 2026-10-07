@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Button } from '~/components/ui/button';
+import { UnavailableState } from '~/components/ui/unavailable-state';
 
 export function ConversationLoadError({
   unavailable,
@@ -11,25 +12,30 @@ export function ConversationLoadError({
   retrying?: boolean;
 }) {
   return (
-    <div className="flex h-full items-center justify-center p-6">
-      <section role="alert" className="max-w-md space-y-4 text-center">
-        <h1 className="text-lg font-semibold">
-          {unavailable ? 'Conversation unavailable' : 'Could not load conversation'}
-        </h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          {unavailable
-            ? 'This conversation may have been deleted, expired, or is not available to your account.'
-            : 'Check your connection and try again. No message has been sent from this loading screen.'}
-        </p>
-        <div className="flex items-center justify-center gap-4">
-          <Button type="button" onClick={retry} disabled={retrying}>
-            Retry
+    <UnavailableState
+      alert
+      title={unavailable ? 'Conversation unavailable' : 'Could not load conversation'}
+      actions={
+        unavailable ? (
+          // Retrying cannot bring back a conversation that is gone (#103).
+          <Button asChild>
+            <Link to="/">New chat</Link>
           </Button>
-          <Link to="/" className="text-sm underline">
-            New chat
-          </Link>
-        </div>
-      </section>
-    </div>
+        ) : (
+          <>
+            <Button type="button" onClick={retry} disabled={retrying}>
+              Retry
+            </Button>
+            <Link to="/" className="text-sm underline">
+              New chat
+            </Link>
+          </>
+        )
+      }
+    >
+      {unavailable
+        ? 'This conversation may have been deleted, expired, or is not available to your account.'
+        : 'Check your connection and try again. No message has been sent from this loading screen.'}
+    </UnavailableState>
   );
 }

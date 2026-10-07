@@ -11,6 +11,7 @@ import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { EFFORT_LABELS } from '~/components/admin/role-features-form';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
@@ -88,6 +89,7 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
 
   const normalizedDraft = normalizedPrompt(draft);
   const hasChanges = saved !== normalizedDraft;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: (defaultSystemPrompt: string | null) =>
@@ -223,6 +225,8 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const hasChanges = featuresChanged(saved, draft);
+
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: (features: Features) => api.patch<{ ok: boolean }>('/admin/settings', { features }),

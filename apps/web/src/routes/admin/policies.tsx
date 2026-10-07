@@ -1,17 +1,17 @@
-import { type UsagePolicy, upsertUsagePolicySchema } from '@oci/shared';
+import { type UsagePolicy, updatePolicyDraftSchema, upsertUsagePolicySchema } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Send } from 'lucide-react';
+import { Eye, FileText, Pencil, Send, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
   EmptyState,
   LoadError,
-  MutationError,
   Notice,
   Row,
   RowList,
 } from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -28,17 +28,35 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { ApiError, api } from '~/lib/api-client';
 
-function PolicyDialog({ latest, onClose }: { latest: UsagePolicy | null; onClose: () => void }) {
+/**
+ * Writes a new version, or rewords a draft (`draft`). A published version is
+ * never edited: people may have accepted its wording.
+ */
+function PolicyDialog({
+  latest,
+  draft,
+  onClose,
+}: {
+  latest: UsagePolicy | null;
+  draft?: UsagePolicy;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
-  // Prefilled from the current version, since a new one is usually an edit of
-  // the old rather than a fresh document.
-  const [title, setTitle] = useState(latest?.title ?? 'Acceptable use policy');
-  const [body, setBody] = useState(latest?.body ?? '');
+  // A new version is prefilled from the current one, since it is usually an
+  // edit of the old rather than a fresh document.
+  const source = draft ?? latest;
+  const [title, setTitle] = useState(source?.title ?? 'Acceptable use policy');
+  const [body, setBody] = useState(source?.body ?? '');
   const [publish, setPublish] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const edited =
+    title !== (source?.title ?? 'Acceptable use policy') || body !== (source?.body ?? '');
 
   const save = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => api.post('/admin/policies', payload),
+    mutationFn: (payload: Record<string, unknown>) =>
+      draft
+        ? api.patch(`/admin/policies/${draft.id}`, payload)
+        : api.post('/admin/policies', payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] });
       onClose();
@@ -51,7 +69,9 @@ function PolicyDialog({ latest, onClose }: { latest: UsagePolicy | null; onClose
     event.preventDefault();
     setError(null);
 
-    const parsed = upsertUsagePolicySchema.safeParse({ title, body, publish });
+    const parsed = draft
+      ? updatePolicyDraftSchema.safeParse({ title, body })
+      : upsertUsagePolicySchema.safeParse({ title, body, publish });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Check the policy fields.');
       return;
@@ -60,12 +80,13 @@ function PolicyDialog({ latest, onClose }: { latest: UsagePolicy | null; onClose
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
-        <DialogTitle>New policy version</DialogTitle>
+        <DialogTitle>{draft ? `Edit draft v${draft.version}` : 'New policy version'}</DialogTitle>
         <DialogDescription>
-          Publishing asks everyone to accept again, including people who accepted an earlier
-          version.
+          {draft
+            ? 'Nobody has been asked to accept this draft yet, so its wording can still change.'
+            : 'Publishing asks everyone to accept again, including people who accepted an earlier version.'}
         </DialogDescription>
       </DialogHeader>
 
@@ -94,22 +115,24 @@ function PolicyDialog({ latest, onClose }: { latest: UsagePolicy | null; onClose
           />
         </Field>
 
-        <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
-          <div>
-            <label htmlFor="policy-publish" className="font-medium text-sm">
-              Publish immediately
-            </label>
-            <p className="mt-0.5 text-[var(--text-muted)] text-xs">
-              Turn off to save a draft that nobody is asked to accept yet.
-            </p>
+        {!draft && (
+          <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
+            <div>
+              <label htmlFor="policy-publish" className="font-medium text-sm">
+                Publish immediately
+              </label>
+              <p className="mt-0.5 text-[var(--text-muted)] text-xs">
+                Turn off to save a draft that nobody is asked to accept yet.
+              </p>
+            </div>
+            <Switch id="policy-publish" checked={publish} onCheckedChange={setPublish} />
           </div>
-          <Switch id="policy-publish" checked={publish} onCheckedChange={setPublish} />
-        </div>
+        )}
 
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-foreground)] text-xs"
+            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
           >
             {error}
           </p>
@@ -121,7 +144,7 @@ function PolicyDialog({ latest, onClose }: { latest: UsagePolicy | null; onClose
           </Button>
           <Button type="submit" variant="primary" disabled={save.isPending}>
             {save.isPending && <Spinner />}
-            {publish ? 'Publish version' : 'Save draft'}
+            {draft ? 'Save draft' : publish ? 'Publish version' : 'Save draft'}
           </Button>
         </DialogFooter>
       </form>
@@ -129,20 +152,46 @@ function PolicyDialog({ latest, onClose }: { latest: UsagePolicy | null; onClose
   );
 }
 
+/** The full wording of any version, for admins and auditors alike. */
+function ViewPolicyDialog({ policy, onClose }: { policy: UsagePolicy; onClose: () => void }) {
+  return (
+    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>
+          {policy.title} (v{policy.version})
+        </DialogTitle>
+        <DialogDescription>
+          {policy.publishedAt
+            ? `Published ${new Date(policy.publishedAt).toLocaleDateString()} · accepted by ${policy.acceptanceCount}`
+            : 'Draft: nobody has been asked to accept it yet.'}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="whitespace-pre-wrap rounded-xl border border-[var(--border-subtle)] p-4 text-sm">
+        {policy.body}
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
 export function AdminPoliciesPage() {
   const queryClient = useQueryClient();
   const [composing, setComposing] = useState(false);
+  const [viewing, setViewing] = useState<UsagePolicy | null>(null);
+  const [editing, setEditing] = useState<UsagePolicy | null>(null);
+  const [deleting, setDeleting] = useState<UsagePolicy | null>(null);
+  const [publishing, setPublishing] = useState<UsagePolicy | null>(null);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] });
 
   const policiesQuery = useQuery({
     queryKey: ['admin', 'policies'],
     queryFn: () => api.get<{ policies: UsagePolicy[] }>('/admin/policies'),
   });
   const { data, isLoading } = policiesQuery;
-
-  const publish = useMutation({
-    mutationFn: (id: string) => api.post(`/admin/policies/${id}/publish`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] }),
-  });
 
   const policies = data?.policies ?? [];
   const current = policies.find((policy) => policy.publishedAt) ?? null;
@@ -166,8 +215,6 @@ export function AdminPoliciesPage() {
         {policiesQuery.isError && !data && (
           <LoadError title="Policies could not be loaded." query={policiesQuery} />
         )}
-
-        <MutationError error={publish.error} message="The policy could not be published." />
 
         {!isLoading && data && policies.length === 0 && (
           <EmptyState icon={FileText} title="No policy has been published.">
@@ -201,19 +248,43 @@ export function AdminPoliciesPage() {
                   </p>
                 </div>
 
-                {!policy.publishedAt && (
-                  <EditOnly>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={publish.isPending}
-                      onClick={() => publish.mutate(policy.id)}
-                    >
-                      <Send />
-                      Publish
-                    </Button>
-                  </EditOnly>
-                )}
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`View ${policy.title} v${policy.version}`}
+                    onClick={() => setViewing(policy)}
+                  >
+                    <Eye />
+                    View
+                  </Button>
+                  {!policy.publishedAt && (
+                    <EditOnly>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Edit draft ${policy.title} v${policy.version}`}
+                        onClick={() => setEditing(policy)}
+                      >
+                        <Pencil />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Delete draft ${policy.title} v${policy.version}`}
+                        onClick={() => setDeleting(policy)}
+                      >
+                        <Trash2 />
+                        Delete
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => setPublishing(policy)}>
+                        <Send />
+                        Publish
+                      </Button>
+                    </EditOnly>
+                  )}
+                </div>
               </Row>
             ))}
           </RowList>
@@ -229,6 +300,44 @@ export function AdminPoliciesPage() {
       <Dialog open={composing} onOpenChange={(open) => !open && setComposing(false)}>
         {composing && <PolicyDialog latest={current} onClose={() => setComposing(false)} />}
       </Dialog>
+
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        {editing && (
+          <PolicyDialog latest={current} draft={editing} onClose={() => setEditing(null)} />
+        )}
+      </Dialog>
+
+      <Dialog open={viewing !== null} onOpenChange={(open) => !open && setViewing(null)}>
+        {viewing && <ViewPolicyDialog policy={viewing} onClose={() => setViewing(null)} />}
+      </Dialog>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title={`Delete draft v${deleting?.version ?? ''}?`}
+        description={`"${deleting?.title ?? ''}" has not been published, so nobody has accepted it. Deleting it cannot be undone.`}
+        confirmLabel="Delete draft"
+        pendingLabel="Deleting…"
+        errorMessage="The draft could not be deleted."
+        onConfirm={async () => {
+          if (deleting) await api.delete(`/admin/policies/${deleting.id}`);
+          await refresh();
+        }}
+      />
+
+      <ConfirmDialog
+        open={publishing !== null}
+        onOpenChange={(open) => !open && setPublishing(null)}
+        title={`Publish v${publishing?.version ?? ''}?`}
+        description="Everyone, including people who accepted an earlier version, must accept this wording before they can use the instance again. A published version cannot be changed or withdrawn."
+        confirmLabel="Publish"
+        pendingLabel="Publishing…"
+        errorMessage="The policy could not be published."
+        onConfirm={async () => {
+          if (publishing) await api.post(`/admin/policies/${publishing.id}/publish`);
+          await refresh();
+        }}
+      />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { ariaKeyShortcuts, OPEN_MODEL_PICKER_EVENT } from '~/lib/keyboard-shortc
 import { cn } from '~/lib/utils';
 import { labsFrom, matchesCapabilities, matchesSearch } from './model-picker-data';
 import { ModelPickerFilters } from './model-picker-filters';
-import { ModelPickerDetails, ModelPickerOption } from './model-picker-presentation';
+import { ModelPickerDetails, ModelPickerOption, modelOptionId } from './model-picker-presentation';
 
 export const ModelPicker = memo(function ModelPicker({
   models,
@@ -32,6 +32,8 @@ export const ModelPicker = memo(function ModelPicker({
    * the screen as the pointer moves between them.
    */
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  // The option the arrow keys are on; focus stays in the search box.
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [detailsOnLeft, setDetailsOnLeft] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -124,6 +126,24 @@ export const ModelPicker = memo(function ModelPicker({
     [models, query, labFilter, capabilityFilters, combineFilters],
   );
 
+  // The arrow keys' option: kept while it still matches, otherwise the
+  // current model if it matches, otherwise the first match. So typing
+  // "haiku" and pressing Enter picks Haiku.
+  const active =
+    visible.find((model) => model.id === activeId) ??
+    visible.find((model) => model.id === selected?.id) ??
+    visible[0] ??
+    null;
+
+  function moveActive(step: 1 | -1) {
+    if (visible.length === 0) return;
+    const index = active ? visible.indexOf(active) : -1;
+    const next = visible[(index + step + visible.length) % visible.length];
+    if (!next) return;
+    setActiveId(next.id);
+    document.getElementById(modelOptionId(next.id))?.scrollIntoView({ block: 'nearest' });
+  }
+
   // A card left open for a model that filtering has just removed would describe
   // something no longer on screen.
   const detailsModel = visible.find((model) => model.id === detailsFor) ?? null;
@@ -139,6 +159,7 @@ export const ModelPicker = memo(function ModelPicker({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
+        setActiveId(null);
         if (!nextOpen) {
           setFiltersOpen(false);
           setDetailsFor(null);
@@ -150,11 +171,13 @@ export const ModelPicker = memo(function ModelPicker({
         aria-haspopup="listbox"
         aria-label={`Select model. Current model: ${selected?.displayName ?? 'none'}`}
         aria-keyshortcuts={ariaKeyShortcuts('model-picker')}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]"
+        // One line: a narrow composer row cuts a long name short rather than
+        // wrapping it ("GPT-4.1 / mini", #109); the full name is in the label.
+        className="inline-flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]"
       >
-        {selected && <LabLogo labId={selected.labId} className="size-3.5" />}
-        {selected?.displayName ?? 'Select model'}
-        <ChevronDown className="size-4 text-[var(--text-muted)]" />
+        {selected && <LabLogo labId={selected.labId} className="size-3.5 shrink-0" />}
+        <span className="min-w-0 truncate">{selected?.displayName ?? 'Select model'}</span>
+        <ChevronDown className="size-4 shrink-0 text-[var(--text-muted)]" />
       </PopoverTrigger>
 
       <PopoverContent
@@ -166,7 +189,10 @@ export const ModelPicker = memo(function ModelPicker({
         }}
         aria-label="Choose a model"
         ref={panelRef}
-        className="relative w-[min(29rem,calc(100vw-1rem))] p-0"
+        // Never taller than the space Radix measures on the chosen side: from
+        // the mid-screen composer on a phone it opened past the top edge,
+        // hiding the search box.
+        className="relative flex max-h-[var(--radix-popover-content-available-height)] w-[min(29rem,calc(100vw-1rem))] flex-col p-0"
       >
         <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5">
           <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
@@ -177,8 +203,33 @@ export const ModelPicker = memo(function ModelPicker({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             // Keep normal Escape handling so the menu remains keyboard-closeable.
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="model-picker-listbox"
+            aria-autocomplete="list"
+            aria-activedescendant={active ? modelOptionId(active.id) : undefined}
             onKeyDown={(event) => {
               if (event.key !== 'Escape') event.stopPropagation();
+              // The listbox pattern: arrows move through the matches and Enter
+              // picks one, so a search never needs a dozen Tabs to reach it.
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                moveActive(event.key === 'ArrowDown' ? 1 : -1);
+              } else if (event.key === 'Enter' && active) {
+                event.preventDefault();
+                onSelect(active);
+                setOpen(false);
+              } else if (
+                // Details for the highlighted model, from the keyboard: the
+                // row's Details button is for the pointer (#114).
+                event.key === 'ArrowRight' &&
+                active &&
+                canShowDetails &&
+                event.currentTarget.selectionStart === event.currentTarget.value.length
+              ) {
+                event.preventDefault();
+                showDetails(active.id);
+              }
             }}
             className="h-9 w-full bg-transparent text-[0.9375rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
           />
@@ -192,7 +243,7 @@ export const ModelPicker = memo(function ModelPicker({
           />
         </div>
 
-        <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-64 overflow-hidden rounded-b-xl">
+        <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-32 shrink overflow-hidden rounded-b-xl">
           {labs.length > 1 && (
             <fieldset className="scrollbar-thin m-0 flex shrink-0 flex-col items-center gap-1 overflow-y-auto border-0 border-r border-[var(--border-subtle)] p-2">
               <legend className="sr-only">Filter by lab</legend>
@@ -232,6 +283,7 @@ export const ModelPicker = memo(function ModelPicker({
           )}
 
           <div
+            id="model-picker-listbox"
             role="listbox"
             aria-label="Models"
             className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-1.5"
@@ -246,6 +298,7 @@ export const ModelPicker = memo(function ModelPicker({
                   key={model.id}
                   model={model}
                   selected={selected?.id === model.id}
+                  active={active?.id === model.id}
                   canShowDetails={canShowDetails}
                   detailsOpen={detailsFor === model.id}
                   onSelect={(model) => {

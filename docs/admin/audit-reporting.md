@@ -132,7 +132,11 @@ Points worth knowing:
 
 - **Due-ness is decided from the last send**, not a calendar expression. A
   replica that was down over a boundary sends once when it returns rather than
-  skipping the period.
+  skipping the period. Each report shows when it is next sent: a day, week or
+  30 days after its last send, checked hourly ("within the hour" once due), or
+  **Paused**.
+- **Edit** loads a report into the form to change its name, cadence, window
+  or recipients; **Pause** stops it without losing it.
 - **Send due now** exists so you can check the recipients and the content
   without waiting a month to discover the address was wrong.
 - **A failure is recorded on the report**, not only in the logs, so you can see a

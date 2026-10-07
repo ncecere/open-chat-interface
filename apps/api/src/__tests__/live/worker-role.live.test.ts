@@ -106,7 +106,8 @@ describe.skipIf(!available)('live web-to-worker job requests', () => {
     // A worker's sweep ran just now: some replica runs jobs.
     await pool.db.insert(schema.jobRun).values({ jobName: 'chat.recover-interrupted-replies' });
     expect(await jobs.runOrQueueJobNow('retention.share-links')).toBe('queued');
-    expect(await jobs.runOrQueueJobNow('no.such-job')).toBeNull();
+    // An unknown job is a 404, not a quiet skip (#82).
+    await expect(jobs.runOrQueueJobNow('no.such-job')).rejects.toMatchObject({ status: 404 });
     await vi.waitFor(
       async () =>
         expect(await runs('retention.share-links')).toMatchObject([{ status: 'success' }]),
@@ -115,6 +116,7 @@ describe.skipIf(!available)('live web-to-worker job requests', () => {
     // On a replica that runs jobs, "Run now" runs it right there.
     state.role = 'all';
     expect(await jobs.runOrQueueJobNow('retention.share-links')).toBe(0);
+    await expect(jobs.runOrQueueJobNow('no.such-job')).rejects.toMatchObject({ status: 404 });
   });
 
   it('keeps hearing requests after a failover drops its listening connection', async () => {

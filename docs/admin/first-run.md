@@ -33,7 +33,8 @@ Each item has one of three states:
 - **Needs attention** — something is missing or broken. Items marked
   **Required** count towards the progress bar.
 - **Not set up** — optional, and currently off.
-- **Complete** — hidden behind **Show completed** until you want to see it.
+- **Complete** — hidden behind **Show completed** until you want to see it
+  (once setup is complete, behind **Show setup details**).
 
 Items needing attention are listed first. Once every required item is complete
 the panel collapses to **Setup complete**, but anything optional that is

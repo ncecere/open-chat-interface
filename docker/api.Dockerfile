@@ -23,7 +23,10 @@ RUN pnpm --filter @oci/api... build
 RUN node apps/api/scripts/prune-pdf-fonts.mjs
 
 FROM base AS runtime
-ARG OCI_VERSION=dev
+# Empty unless the build passes it (the release workflows do). The API then
+# reports the release version from apps/api/src/version.ts rather than "dev",
+# which a local or Compose build showed everywhere (#55).
+ARG OCI_VERSION=
 ARG OCI_REVISION=unknown
 ARG OCI_SOURCE=https://github.com/ncecere/open-chat-interface
 ARG OCI_CREATED=unknown

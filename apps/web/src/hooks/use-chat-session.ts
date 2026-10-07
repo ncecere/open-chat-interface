@@ -14,7 +14,12 @@ import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { fetchRetryingDrain } from '~/lib/chat-retry';
-import { confirmedAttachmentIds, confirmPromptId, readChatSubmission } from '~/lib/chat-submission';
+import {
+  confirmedAttachmentIds,
+  confirmPromptId,
+  readChatSubmission,
+  readRefusedSubmission,
+} from '~/lib/chat-submission';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { startingModel } from '~/lib/starting-model';
@@ -63,6 +68,9 @@ export function useChatSession(options: {
       promptId: string | null,
     ) => void
   >(() => {});
+  const refuseSubmission = useRef<
+    (refused: NonNullable<ReturnType<typeof readRefusedSubmission>>) => void
+  >(() => {});
   const clearRun = useCallback(
     (id: string) => setRunId((current) => (current === id ? null : current)),
     [],
@@ -100,6 +108,12 @@ export function useChatSession(options: {
         const submission = sending ? readChatSubmission(init?.body) : null;
         if (submission)
           acceptSubmission.current(submission, response.headers.get('X-OCI-Prompt-Message-Id'));
+      }
+      // Refused before it was saved (429, 409, 422, 403…): nothing of this
+      // message exists on the server, so it must not vanish from the composer.
+      if (sending && response.status >= 400 && response.status < 500 && scope.request === request) {
+        const refused = readRefusedSubmission(init?.body);
+        if (refused) refuseSubmission.current(refused);
       }
       return response;
     },
@@ -231,6 +245,12 @@ export function useChatSession(options: {
   const { stop: stopChat, sendMessage, setMessages, addToolApprovalResponse } = chat;
   sendAgain.current = () => {
     if (scope.active) void chat.regenerate();
+  };
+  refuseSubmission.current = ({ clientMessageId, text }) => {
+    // Back into the composer (unless something new was typed meanwhile), and
+    // the bubble goes: it was never saved, and a reload would drop it anyway.
+    setDraft((current) => (current.trim() ? current : text));
+    chat.setMessages((current) => current.filter((message) => message.id !== clientMessageId));
   };
   acceptSubmission.current = (submission, promptId) => {
     consumeFiles(submission.attachmentIds);

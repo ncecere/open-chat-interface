@@ -2,9 +2,10 @@
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SUGGESTED_TRAITS, withTrait } from '../../src/lib/traits';
 import { ThemeProvider } from '../../src/providers/theme-provider';
 import { SettingsCustomizationPage } from '../../src/routes/settings/customization';
-import { button, cleanup, click, renderAdmin } from './admin-test-utils';
+import { button, cleanup, click, findButton, renderAdmin } from './admin-test-utils';
 
 /**
  * Settings → Customization (v0.9.1): Appearance, a working "Invert Send/New
@@ -131,5 +132,29 @@ describe('Settings → Customization', () => {
       additionalContext: null,
     });
     expect(document.body.textContent).toContain('Saved');
+  });
+
+  it('offers the introduction’s traits, and Thorough replaces Concise (#96)', async () => {
+    await render();
+    const offered = new Set<string>(SUGGESTED_TRAITS);
+    const suggestions = () =>
+      [...document.querySelectorAll('button')]
+        .map((candidate) => candidate.textContent?.trim() ?? '')
+        .filter((text) => offered.has(text));
+    // 'concise' is already chosen, so it is not offered again.
+    expect(suggestions()).toEqual(SUGGESTED_TRAITS.filter((trait) => trait !== 'concise'));
+    await click(button('thorough'));
+    expect(findButton('concise×')).toBeUndefined();
+    expect(button('thorough×')).toBeTruthy();
+  });
+});
+
+describe('choosing traits', () => {
+  it('drops the opposite of a trait, whatever its case', () => {
+    expect(withTrait(['Concise', 'patient'], 'thorough')).toEqual(['patient', 'thorough']);
+    expect(withTrait(['formal'], 'casual')).toEqual(['casual']);
+    expect(withTrait(['direct'], 'patient')).toEqual(['direct', 'patient']);
+    expect(withTrait(['direct'], 'Direct')).toEqual(['direct']);
+    expect(withTrait(['direct'], '  ')).toEqual(['direct']);
   });
 });

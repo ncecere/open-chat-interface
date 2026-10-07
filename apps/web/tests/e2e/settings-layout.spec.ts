@@ -78,8 +78,7 @@ test('settings fit the window and offer every section without wrapping', async (
   await expect(page).toHaveURL(/\/settings\/models$/);
   expect(await sidewaysOverflow(page)).toBeLessThanOrEqual(0);
 
-  // Shortcuts and help are cards on every settings page.
-  await expect(page.getByRole('heading', { name: 'Keyboard Shortcuts' })).toBeVisible();
+  // Help is a card on every settings page; shortcuts too, given a mouse (below).
   await expect(page.getByRole('heading', { name: 'Need help?' })).toBeVisible();
 
   // The retired tabs' addresses land on Settings.
@@ -98,8 +97,15 @@ test('the header offers Light, Dark and System, and the wide avatar is 96px', as
   await page.goto('/settings/customization');
   await expect(page.getByRole('button', { name: 'Toggle theme' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Appearance settings' }).click();
-  await page.getByRole('menuitem', { name: 'Light' }).click();
+  // Radio items: the current theme is announced as checked (#92).
+  await page.getByRole('menuitemradio', { name: 'Light' }).click();
   await expect(page.locator('html')).toHaveClass(/\blight\b/);
+  await page.getByRole('button', { name: 'Appearance settings' }).click();
+  await expect(page.getByRole('menuitemradio', { name: 'Light' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await page.keyboard.press('Escape');
   // The Appearance row in Customization reflects the same choice.
   await expect(page.getByRole('radio', { name: 'Light' })).toBeChecked();
   await page.locator('[role="radiogroup"] label', { hasText: 'Dark' }).click();
@@ -110,4 +116,44 @@ test('the header offers Light, Dark and System, and the wide avatar is 96px', as
   const box = await avatar.boundingBox();
   const wide = (page.viewportSize()?.width ?? 0) >= 1024;
   expect(box?.width).toBe(wide ? 96 : 48);
+});
+
+test('lists keyboard shortcuts only where there is a mouse or trackpad (#106)', async ({
+  page,
+}, testInfo) => {
+  await signIn(page);
+  await page.goto('/settings');
+  // The card beside it, shown everywhere: the side column has rendered.
+  await expect(page.getByRole('heading', { name: 'Need help?' })).toBeVisible();
+  const card = page.getByRole('heading', { name: 'Keyboard Shortcuts' });
+  // mobile-chromium emulates a Pixel 7: a touch screen and no fine pointer.
+  if (testInfo.project.use.hasTouch) await expect(card).toBeHidden();
+  else await expect(card).toBeVisible();
+});
+
+test('attachment links are at least 24px tall, the WCAG 2.2 target size (#105)', async ({
+  page,
+}) => {
+  await signIn(page);
+  const upload = await page.request.post('/api/attachments', {
+    headers: { origin: new URL(page.url()).origin },
+    multipart: {
+      files: { name: 'walk-target-size.txt', mimeType: 'text/plain', buffer: Buffer.from('Walk') },
+    },
+  });
+  expect(upload.ok()).toBe(true);
+  const { attachments } = (await upload.json()) as { attachments: Array<{ id: string }> };
+  try {
+    await page.goto('/settings/attachments');
+    const link = page.getByRole('link', { name: 'walk-target-size.txt' }).first();
+    await expect(link).toBeVisible();
+    const box = await link.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(24);
+  } finally {
+    for (const { id } of attachments) {
+      await page.request.delete(`/api/attachments/${id}`, {
+        headers: { origin: new URL(page.url()).origin },
+      });
+    }
+  }
 });

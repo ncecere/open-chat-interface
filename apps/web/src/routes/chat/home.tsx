@@ -41,8 +41,13 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const { data: models = EMPTY_MODELS } = useModels();
   const navigate = useNavigate();
   const { mutateAsync: createThread } = useCreateThread();
-  const { temporary: temporaryMode } = useTemporaryChat();
+  const { temporary: temporaryMode, setTemporary } = useTemporaryChat();
   const temporary = temporaryMode && !projectId;
+  // A project chat is never temporary, so the mode is switched off here
+  // rather than left highlighted in the top bar over a chat that will be kept.
+  useEffect(() => {
+    if (projectId && temporaryMode) setTemporary(false);
+  }, [projectId, temporaryMode, setTemporary]);
 
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
   const [draft, setDraftValue] = useState('');
@@ -153,22 +158,21 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   return (
     <div className="flex h-full flex-col justify-center md:justify-normal">
       {/* Desktop uses the upper-middle region; mobile centers the compact prompt. */}
-      <div className="flex-none px-4 md:flex-1 md:overflow-y-auto md:pt-[18vh]">
+      {/* On phones, room between the greeting and the centred composer (#102). */}
+      <div className="flex-none px-4 pb-8 md:flex-1 md:overflow-y-auto md:pt-[18vh] md:pb-0">
         <div className="mx-auto w-full max-w-[41.75rem]">
           <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-left md:text-[1.875rem]">
             {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}
             {temporary ? (
               'Temporary chat'
             ) : (
-              <>
-                How can I help you{firstName ? ',' : '?'}
-                {firstName && (
-                  <>
-                    <span className="block md:hidden">{firstName}?</span>
-                    <span className="hidden md:inline"> {firstName}?</span>
-                  </>
-                )}
-              </>
+              // One text item, so the flex gap (for the icon) never lands after
+              // the comma, and the name is in the DOM once, not once per
+              // breakpoint (#94). On phones the name wraps to its own line.
+              <span>
+                How can I help you{firstName ? ', ' : '?'}
+                {firstName && <span className="block md:inline">{firstName}?</span>}
+              </span>
             )}
           </h1>
           {temporary && (
@@ -231,7 +235,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
           {startError && (
             <p
               role="alert"
-              className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+              className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
             >
               {startError}
             </p>

@@ -78,12 +78,17 @@ export async function noteReadOnlyResponse(response: Response): Promise<void> {
   }
 }
 
-/** "14:30" today, or "Mon 5 Oct, 14:30" on another day, in the person's own zone. */
+/**
+ * "14:30" today, "Mon 5 Oct, 14:30" on another day this year, and with the
+ * year in another year ("Sun 10 Jan 2027, 14:30", #81), in the person's own zone.
+ */
 export function formatReadOnlyTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
   const sameDay = date.toDateString() === now.toDateString();
+  const sameYear = date.getFullYear() === now.getFullYear();
   return date.toLocaleString(undefined, {
     ...(sameDay ? {} : { weekday: 'short', day: 'numeric', month: 'short' }),
+    ...(sameYear ? {} : { year: 'numeric' }),
     hour: '2-digit',
     minute: '2-digit',
   });

@@ -2,7 +2,7 @@ import { type Attachment, REASONING_EFFORTS, type ReasoningEffort } from '@oci/s
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, Clock } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThreadArtifactsProvider } from '~/components/artifacts/artifacts-provider';
 import { CompactionFailureNotice } from '~/components/chat/compaction-failure-notice';
@@ -14,10 +14,12 @@ import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
 import { useCompaction } from '~/hooks/use-compaction';
 import { useHistoryPages } from '~/hooks/use-history-pages';
+import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getInitialHistory, type HistoryIsland } from '~/lib/chat-history';
+import { usePageTitle } from '~/lib/document-title';
 import { conversationChoice } from '~/lib/starting-model';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -291,6 +293,10 @@ function ThreadConversation({
     wasStreaming.current = session.streaming;
   }, [refetchCompaction, session.streaming]);
 
+  const conversationTitle = useOpenConversation(threadId)?.thread.title;
+  const pageName = temporary ? 'Temporary chat' : conversationTitle || 'Conversation';
+  usePageTitle(pageName);
+
   if (session.recovery.unavailable)
     return (
       <ConversationLoadError
@@ -300,6 +306,15 @@ function ThreadConversation({
       />
     );
 
+  // The fallback for a reply this page cannot follow: only once replay has
+  // ended (or never started) and the server still has it pending. While the
+  // replay is connected, the reply itself is on screen (#90).
+  const waitingOnServer =
+    session.recovery.remotePending &&
+    !session.recovery.resuming &&
+    session.status !== 'streaming' &&
+    session.status !== 'submitted';
+
   return (
     <ThreadArtifactsProvider
       threadId={threadId}
@@ -307,6 +322,8 @@ function ThreadConversation({
       streaming={session.streaming}
       canEdit={session.features?.artifacts ?? false}
     >
+      {/* The conversation's name, for the tab and as the page's heading (#110). */}
+      <h1 className="sr-only">{pageName}</h1>
       <div className="flex h-full flex-col">
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
@@ -340,15 +357,12 @@ function ThreadConversation({
               />
               <CompactionFailureNotice threadId={threadId} />
 
-              {(session.error ||
-                session.recovery.error ||
-                session.recovery.remotePending ||
-                replies.error) && (
+              {(session.error || session.recovery.error || waitingOnServer || replies.error) && (
                 <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
                   {(session.recovery.error || session.error || replies.error) && (
                     <p
                       role="alert"
-                      className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-foreground)]"
+                      className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
                     >
                       {session.recovery.error ||
                         (session.error && chatErrorText(session.error)) ||
@@ -356,7 +370,7 @@ function ThreadConversation({
                         'Something went wrong generating a response.'}
                     </p>
                   )}
-                  {session.recovery.remotePending && (
+                  {waitingOnServer && (
                     <p role="status" className="text-sm text-[var(--text-muted)]">
                       A reply is pending on the server. You can stop it or wait for saved messages.
                     </p>
@@ -392,6 +406,15 @@ function ThreadConversation({
           )}
         </div>
 
+        {/* Kept on screen for the whole conversation: once the first message
+            was sent, the home page's "Temporary chat" heading was gone and
+            only the highlighted clock said so. */}
+        {temporary && (
+          <p className="flex items-center justify-center gap-1.5 px-4 pb-1.5 text-[var(--text-muted)] text-xs">
+            <Clock className="size-3.5 text-[var(--accent-bright)]" aria-hidden="true" />
+            Temporary chat: kept out of history and deleted 24 hours after it started.
+          </p>
+        )}
         <Composer
           autoFocus={carriedFocus}
           value={session.draft}

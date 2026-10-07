@@ -118,8 +118,13 @@ describe('Connectors admin page', () => {
     await render();
     await click(document.getElementById('connector-tool-t1')!);
     expect(api.patch).toHaveBeenCalledWith('/admin/connectors/c1/tools/t1', { enabled: true });
+    const listReads = () =>
+      api.get.mock.calls.filter(([path]) => path === '/admin/connectors').length;
+    const before = listReads();
     await click(button('Test connection'));
     expect(api.post).toHaveBeenCalledWith('/admin/connectors/c1/test');
+    // The row's "Last contact" follows the test, without Refresh (#84).
+    await vi.waitFor(() => expect(listReads()).toBeGreaterThan(before));
     expect(document.body.textContent).toContain(
       'Connection works. Connected to Docs 1.0 · 2 tools',
     );

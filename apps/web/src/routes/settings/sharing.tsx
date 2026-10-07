@@ -193,8 +193,10 @@ export function SettingsSharingPage() {
         </p>
       ) : list.length === 0 ? (
         <p className="mt-10 text-sm text-[var(--text-muted)]">
-          You have not shared any conversations. To share one, open it and choose Share
-          conversation.
+          {/* No instructions for something this account cannot do (#99). */}
+          {sharingOff
+            ? 'You have no share links.'
+            : 'You have not shared any conversations. To share one, open it and choose Share conversation.'}
         </p>
       ) : (
         <section className="mt-8" aria-labelledby="share-links-heading">

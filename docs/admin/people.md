@@ -9,8 +9,8 @@ status. All three are applied **on the server**, so they describe every account
 rather than the page in front of you — which matters once the directory is
 larger than one page.
 
-Sorting works the same way. Sorting by messages finds the heaviest users across
-the whole instance, not the heaviest fifty on this page.
+Sorting works the same way. Sorting by **Threads** finds the busiest people
+across the whole instance, not the busiest fifty on this page.
 
 The list can also be opened already filtered to one role: the people count on
 [Roles & access](governance.md#roles-and-access) links here that way.
@@ -19,8 +19,8 @@ The list can also be opened already filtered to one role: the people count on
 
 Each row has a role selector offering all four roles. A change applies as soon
 as you pick it, except one that grants or removes administrator access, which
-asks for confirmation first. You cannot remove your own administrator role; the
-server refuses and the reason is shown beside the control.
+asks for confirmation first. You cannot remove your own administrator role: on
+your own account the role control is disabled, with the reason beside it.
 
 ### Saved views
 
@@ -151,8 +151,13 @@ When registration is invite-only or closed, an invitation is how somebody gets
 an account. Each carries a role, so you decide what they will be before they
 arrive.
 
-Links expire. An unused invitation can be revoked, which is worth doing when
-somebody's circumstances change between offer and acceptance.
+Links expire after 7 days unless you choose another number (1–365), or clear
+it for a link that never expires. An unused invitation can be revoked, which is
+worth doing when somebody's circumstances change between offer and acceptance.
+
+An address that already has an account cannot be invited (change the
+account's role instead), and an address can have only one pending invitation
+at a time: revoke it to send a new one, for example with a different role.
 
 Invitations need email to be configured. Without SMTP you can still create one,
 but you will have to deliver the link yourself.

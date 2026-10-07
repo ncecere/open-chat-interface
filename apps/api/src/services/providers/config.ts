@@ -10,7 +10,7 @@ export interface ProviderCredentialState {
 }
 
 export interface ProviderConfigurationIssue {
-  field: 'kind' | 'label' | 'baseUrl';
+  field: 'kind' | 'label' | 'baseUrl' | 'apiKey';
   message: string;
 }
 
@@ -57,6 +57,14 @@ export function getProviderConfigurationIssues(
       field: 'baseUrl',
       message: 'OpenAI-compatible providers require a base URL.',
     });
+  }
+
+  // OpenAI, Anthropic and Google always need a key; an empty Add provider
+  // form used to create an enabled OpenAI provider that could never answer.
+  // OpenAI-compatible endpoints may genuinely need none, and a disabled
+  // provider can wait for its key.
+  if (provider.enabled && provider.kind !== 'openai-compatible' && !provider.encryptedApiKey) {
+    issues.push({ field: 'apiKey', message: 'An API key is required for this provider.' });
   }
 
   if (provider.baseUrl) {

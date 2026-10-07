@@ -30,6 +30,7 @@ import {
   IntervalField,
   RetentionField,
 } from '~/components/admin/operations/schedule';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { ADMIN_USERS_QUERY_KEY } from '~/components/admin/user-role-select';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -183,6 +184,7 @@ function SettingsForm({
   });
   const patch = complianceChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   function submit(event: FormEvent) {
     event.preventDefault();

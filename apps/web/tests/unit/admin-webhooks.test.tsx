@@ -2,7 +2,12 @@
 import type { WebhookEndpoint } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AdminWebhooksPage, parseActions, webhookChanges } from '../../src/routes/admin/webhooks';
+import {
+  AdminWebhooksPage,
+  parseActions,
+  unmatchedActions,
+  webhookChanges,
+} from '../../src/routes/admin/webhooks';
 import {
   button,
   cleanup,
@@ -131,6 +136,27 @@ describe('Webhooks admin page', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('whsec_shown_once');
     await click(button('Done'));
     expect(document.querySelector('input[aria-label="Signing secret"]')).toBeNull();
+  });
+
+  it('warns about an action nothing recorded matches, and still saves it (#83)', async () => {
+    expect(
+      unmatchedActions(
+        ['user.*', 'backup.run', 'walk.nonexistent.action', 'walk.*'],
+        ['user.create', 'backup.run'],
+      ),
+    ).toEqual(['walk.nonexistent.action', 'walk.*']);
+
+    webhooks = [];
+    await render();
+    await click(button('Add endpoint'));
+    const actions = document.getElementById('webhook-actions') as HTMLTextAreaElement;
+    await act(actions, 'user.*\nwalk.nonexistent.action');
+    const warning = document.getElementById(actions.getAttribute('aria-describedby') ?? '');
+    expect(warning?.textContent).toContain(
+      'Nothing recorded so far matches walk.nonexistent.action.',
+    );
+    await act(actions, 'user.*');
+    expect(actions.getAttribute('aria-describedby')).toBeNull();
   });
 
   it('sends a test, rotates the secret after confirming, and shows the delivery log', async () => {

@@ -2,6 +2,7 @@ import type { ThreadSummary } from '@oci/shared';
 import type { QueryClient } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useSyncExternalStore } from 'react';
+import { ApiError } from './api-client';
 import type { ChatHistory } from './chat-history';
 
 /**
@@ -65,4 +66,23 @@ export function useCachedConversation(threadId: string | undefined) {
   return useSyncExternalStore(subscribe, () =>
     threadId ? queryClient.getQueryData<ChatHistory>(chatHistoryKey(threadId))?.thread : undefined,
   );
+}
+
+/**
+ * Whether the conversation at this address failed to load because it does not
+ * exist or is not this person's (401, 403 or 404). The top bar then offers
+ * none of its actions, which could only fail (#103).
+ */
+export function useConversationUnavailable(threadId: string | undefined): boolean {
+  const queryClient = useQueryClient();
+  const subscribe = useCallback(
+    (notify: () => void) => queryClient.getQueryCache().subscribe(notify),
+    [queryClient],
+  );
+  return useSyncExternalStore(subscribe, () => {
+    if (!threadId) return false;
+    const state = queryClient.getQueryState(chatHistoryKey(threadId));
+    const error = state?.status === 'error' ? state.error : null;
+    return error instanceof ApiError && [401, 403, 404].includes(error.status);
+  });
 }

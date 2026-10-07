@@ -100,15 +100,55 @@ the user list and sign them out together.
 OIDC and SAML are both supported. The form asks for what the protocol needs;
 what follows are the fields whose consequences are not obvious.
 
+### Before adding an OIDC provider
+
+OCI reads an OIDC provider's discovery document
+(`<issuer>/.well-known/openid-configuration`) only from an origin listed in
+`AUTH_TRUSTED_ORIGINS`, whether the provider is public (Google, Microsoft Entra,
+Okta) or on your own network. This guards against the server being pointed at
+an internal address. Add the issuer's origin, for example
+`AUTH_TRUSTED_ORIGINS=https://login.microsoftonline.com`, on every API replica
+and restart them before adding the provider; otherwise **Add provider** refuses
+and names the origin to add. SAML providers need no entry: their details are
+entered on the form, not discovered.
+
 ### Allowed email domains
 
 Blank accepts any domain the provider asserts. Set this when the provider serves
-more people than should reach your instance.
+more people than should reach your instance. Enter domains only (`northbrook.edu`), separated by
+commas or spaces, without `@`.
+
+### Before enabling a provider
+
+A new provider starts **disabled**, so nobody can use it while you finish and
+check its settings; turn on **Provider enabled** when it is ready. A SAML
+provider's IdP certificate must be the identity provider's signing certificate
+(PEM, or the base64 body from its metadata); anything else is refused.
+
+Two limits of the current SSO library to know about:
+
+- **SAML metadata and signed assertions.** The SP metadata OCI publishes says
+  `WantAssertionsSigned="false"` even with **Require signed assertions** on;
+  the setting itself is applied when a response is checked. Tell the identity
+  provider's administrators to sign assertions rather than relying on the
+  metadata flag.
+- **Changing credentials.** A provider's protocol settings, client secret or
+  IdP certificate cannot be edited. To rotate one, add the provider again with
+  a new provider ID, then delete the old one.
 
 ### Trust for account linking
 
-Off by default. When on, a sign-in attaches to an existing local account with
-the same address.
+Off by default. It decides only what happens when somebody signs in through
+this provider with the address of an account that already exists (one with a
+password, or another provider's sign-in):
+
+- **Off:** that sign-in is refused, and the sign-in page says an account with
+  that address already exists. People without an account are still signed in
+  (and provisioned, if just-in-time provisioning is on), and people who have
+  signed in through this provider before keep signing in.
+- **On:** the sign-in attaches to the existing account, provided the address
+  is in the provider's first allowed domain and the existing account's email
+  address has been verified.
 
 Only enable this for a provider that genuinely verifies email ownership. One
 that does not could be used to take over an account by asserting somebody else's

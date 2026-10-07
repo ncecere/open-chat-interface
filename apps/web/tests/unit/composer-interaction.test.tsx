@@ -193,6 +193,42 @@ describe('Composer interaction', () => {
     expect(button('Send message').className).not.toContain('text-[var(--text-primary)]');
   });
 
+  it('offers the reasoning level only for a model that has levels (#95)', async () => {
+    await render();
+    expect(container.querySelector('button[aria-label="low"]')).not.toBeNull();
+
+    const plain: CatalogModel = {
+      ...model,
+      id: 'plain',
+      slug: 'plain',
+      capabilities: [],
+      supportedEfforts: [],
+    };
+    await render({ models: [plain], selectedModel: plain, effort: 'instant' });
+    // Not a greyed-out "Instant": no control at all, as the user guide says.
+    expect(container.querySelector('button[aria-label="instant"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/instant/i);
+  });
+
+  it('says whether Search is on, as a toggle and in the phone menu (#92)', async () => {
+    await render({ webSearch: true });
+    expect(button('Search').getAttribute('aria-pressed')).toBe('true');
+    await render({ webSearch: false });
+    expect(button('Search').getAttribute('aria-pressed')).toBe('false');
+    // The reasoning pill opens a menu; it is not a toggle.
+    expect(button('low').hasAttribute('aria-pressed')).toBe(false);
+
+    await act(async () => {
+      button('More composer options').dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: false }),
+      );
+    });
+    const item = document.querySelector('[role="menuitemcheckbox"]');
+    expect(item?.textContent).toBe('Search the web');
+    expect(item?.getAttribute('aria-checked')).toBe('false');
+    expect(document.body.textContent).not.toContain('Search disabled');
+  });
+
   it('focuses the message field on mount only when asked', async () => {
     await render();
     expect(document.activeElement).not.toBe(textarea());
@@ -282,9 +318,9 @@ describe('Composer interaction', () => {
     expect(input.multiple).toBe(true);
     await act(() => button('Attach').click());
     expect(open).toHaveBeenCalledOnce();
+    // Not allowed for this role: not offered at all, as the user guide says (#99).
     await render({ attachmentsAvailable: false });
-    expect(button('Attach').disabled).toBe(true);
-    await act(() => button('Attach').click());
+    expect(container.querySelector('button[aria-label="Attach"]')).toBeNull();
     await render({ attachmentsAvailable: true, onAttachFiles: undefined });
     expect(button('Attach').disabled).toBe(true);
     await act(() => button('Attach').click());
@@ -327,9 +363,10 @@ describe('Composer interaction', () => {
     await render();
     expect(button('low').disabled).toBe(false);
     expect(button('low').getAttribute('aria-haspopup')).toBe('menu');
+    // Without levels (or a model) the control goes rather than greying out (#95).
     await render({ selectedModel: { ...model, capabilities: [], supportedEfforts: [] } });
-    expect(button('low').disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="low"]')).toBeNull();
     await render({ selectedModel: null });
-    expect(button('low').disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="low"]')).toBeNull();
   });
 });

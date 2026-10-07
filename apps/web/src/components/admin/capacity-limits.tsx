@@ -166,7 +166,7 @@ export function CapacityLimitsDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           >
             {error}
           </p>
@@ -224,7 +224,8 @@ const PRIORITY_LABELS: Record<QueuePriority, string> = {
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Administrators',
   auditor: 'Auditors',
-  user: 'Members',
+  // "User" everywhere else in administration (#86).
+  user: 'Users',
   restricted: 'Restricted',
 };
 
@@ -302,7 +303,13 @@ export function ProviderCapacitySection() {
             </p>
           )}
           {overview.data.providers.length > 0 && (
-            <div className="overflow-x-auto">
+            <section
+              // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+              tabIndex={0}
+              aria-label="Capacity by provider"
+              className="overflow-x-auto"
+            >
               <table className="w-full min-w-[36rem] text-left text-sm">
                 <caption className="sr-only">Capacity by provider</caption>
                 <thead className="text-xs text-[var(--text-muted)]">
@@ -371,7 +378,7 @@ export function ProviderCapacitySection() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </section>
           )}
 
           <EditableFieldset>

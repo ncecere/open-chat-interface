@@ -32,6 +32,8 @@ vi.mock('../../src/lib/api-client', async (importOriginal) => ({
   api,
 }));
 vi.mock('../../src/components/layout/theme-menu', () => ({ ThemeMenu: () => null }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+vi.mock('sonner', () => ({ toast }));
 vi.mock('../../src/providers/temporary-chat-provider', () => ({
   useTemporaryChat: () => ({ temporary: false, setTemporary: vi.fn() }),
 }));
@@ -183,7 +185,7 @@ async function pressEnter() {
 }
 
 function renameButtons(): HTMLButtonElement[] {
-  return [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Rename thread"]')];
+  return [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Rename thread: "]')];
 }
 
 describe('renaming from the sidebar', () => {
@@ -206,6 +208,34 @@ describe('renaming from the sidebar', () => {
     expect(dialog()).toBeNull();
     expect(rowTitles()).toContain('Lisbon itinerary');
     expect(rowTitles()).not.toContain('Trip plans');
+  });
+
+  it("names each row's controls for the row, not N copies of one name (#111)", async () => {
+    await render();
+    const labels = [...document.querySelectorAll('nav button[aria-label], button[aria-label]')]
+      .map((button) => button.getAttribute('aria-label') ?? '')
+      .filter((label) => / thread: /.test(label));
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        'Pin thread: Trip plans',
+        'Rename thread: Trip plans',
+        'Archive thread: Trip plans',
+      ]),
+    );
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('says a conversation was archived and offers Undo (#101)', async () => {
+    await render();
+    api.patch.mockResolvedValue({ thread: thread('t1', 'Trip plans', { archived: true }) });
+    await click(button('Archive thread: Trip plans'));
+    expect(api.patch).toHaveBeenCalledWith('/threads/t1', { archived: true });
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
+    const [message, options] = toast.success.mock.calls[0]!;
+    expect(message).toBe('Conversation archived');
+    expect(options.description).toBe('Trip plans');
+    await act(async () => options.action.onClick());
+    expect(api.patch).toHaveBeenLastCalledWith('/threads/t1', { archived: false });
   });
 
   it('cancels on Escape without saving', async () => {
@@ -253,7 +283,7 @@ describe('renaming from the sidebar', () => {
     await render();
     const projectRow = document.querySelector('ul[aria-label="Conversations in Thesis"]');
     const rename = projectRow?.querySelector<HTMLButtonElement>(
-      'button[aria-label="Rename thread"]',
+      'button[aria-label^="Rename thread: "]',
     );
     expect(rename).toBeTruthy();
     await click(rename!);
@@ -280,6 +310,38 @@ describe('renaming from the top bar', () => {
       'Lisbon itinerary',
     );
     expect(rowTitles()).toContain('Lisbon itinerary');
+  });
+
+  it('offers Move to project for a saved conversation but not a temporary one (#91)', async () => {
+    const { client } = await render('/chat/tmp');
+    expect(findButton('Move to project')).toBeTruthy();
+    // A temporary chat the sidebar does not list: its history says what it is.
+    await act(async () => {
+      client.setQueryData<ChatHistory>(chatHistoryKey('tmp'), {
+        thread: { ...thread('tmp', 'Walk temporary'), temporary: true },
+        messages: [],
+      } as unknown as ChatHistory);
+    });
+    expect(findButton('Move to project')).toBeUndefined();
+    expect(findButton('Rename conversation')).toBeTruthy();
+  });
+
+  it('offers no conversation actions for one that does not exist (#103)', async () => {
+    const { client } = await render('/chat/walk-does-not-exist');
+    const action = (label: string) => document.querySelector(`[aria-label="${label}"]`);
+    expect(action('Download this conversation')).not.toBeNull();
+    expect(action('Rename conversation')).not.toBeNull();
+    await act(async () => {
+      await client.prefetchQuery({
+        queryKey: chatHistoryKey('walk-does-not-exist'),
+        queryFn: () => Promise.reject(new ApiError(404, 'NOT_FOUND', 'Thread not found')),
+        retry: false,
+      });
+    });
+    for (const label of ['Rename conversation', 'Download this conversation', 'Move to project'])
+      expect(action(label), label).toBeNull();
+    // The page's own controls stay.
+    expect(action('Start temporary chat')).not.toBeNull();
   });
 
   it('is not shown away from a conversation', async () => {

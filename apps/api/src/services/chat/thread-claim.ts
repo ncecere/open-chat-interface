@@ -1,9 +1,10 @@
 import { and, eq, isNull, schema } from '@oci/db';
+import { ERROR_CODES } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { conflict, notFound } from '../../lib/errors.js';
+import { AppError, conflict, notFound } from '../../lib/errors.js';
 import { nextPosition } from '../threads.js';
 import { denyOpenApprovals } from './pending-approvals.js';
-import { recoverStaleClaim } from './run-recovery.js';
+import { recoverStaleClaim, runLiveness } from './run-recovery.js';
 import type { TurnContext } from './turn-context.js';
 
 export type ChatTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -38,11 +39,38 @@ export async function lockChatThread(tx: ChatTransaction, threadId: string, user
   return thread;
 }
 
+const GENERATING_MESSAGE = 'A response is already being generated for this thread';
+
 /** The thread's open claim belongs to a producer that may be gone. */
 class ActiveClaim extends Error {
-  constructor(readonly messageId: string) {
-    super('A response is already being generated for this thread');
+  constructor(
+    readonly messageId: string,
+    /** When the producer last refreshed the claim. */
+    readonly updatedAt: Date,
+  ) {
+    super(GENERATING_MESSAGE);
   }
+}
+
+/**
+ * The refusal while a claim is open but not yet recoverable. A live producer
+ * refreshes the claim every second heartbeat; one silent for longer than that
+ * (and a margin) is almost certainly a server that stopped, whose reply is
+ * recovered once it has been silent for `staleMs`. Saying "already being
+ * generated" then is wrong, and for up to 20 s after a crash (#121).
+ */
+export function claimRefusal(updatedAt: Date, now = Date.now()) {
+  const silentMs = now - updatedAt.getTime();
+  const interruptedAfterMs = 2 * runLiveness.heartbeatMs + 2_000;
+  if (silentMs <= interruptedAfterMs) return conflict(GENERATING_MESSAGE);
+  const seconds = Math.max(1, Math.ceil((runLiveness.staleMs - silentMs) / 1000));
+  return new AppError(
+    ERROR_CODES.CONFLICT,
+    `The previous reply in this conversation was interrupted and is being recovered. Send your message again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+    409,
+    undefined,
+    seconds,
+  );
 }
 
 /**
@@ -61,11 +89,11 @@ export async function claimThread(context: TurnContext, runId: string): Promise<
       threadId: context.thread.id,
       userId: context.user.id,
     }).catch(() => false);
-    if (!recovered) throw conflict(error.message);
+    if (!recovered) throw claimRefusal(error.updatedAt);
     try {
       return await claimOnce(context, runId);
     } catch (retry) {
-      throw retry instanceof ActiveClaim ? conflict(retry.message) : retry;
+      throw retry instanceof ActiveClaim ? claimRefusal(retry.updatedAt) : retry;
     }
   }
 }
@@ -75,7 +103,7 @@ async function claimOnce(context: TurnContext, runId: string): Promise<{ id: str
   const { claim, auditDenials } = await db.transaction(async (tx) => {
     await lockChatThread(tx, thread.id, user.id);
     const [active] = await tx
-      .select({ id: schema.message.id })
+      .select({ id: schema.message.id, updatedAt: schema.message.updatedAt })
       .from(schema.message)
       .where(
         and(
@@ -85,7 +113,7 @@ async function claimOnce(context: TurnContext, runId: string): Promise<{ id: str
         ),
       )
       .limit(1);
-    if (active) throw new ActiveClaim(active.id);
+    if (active) throw new ActiveClaim(active.id, active.updatedAt);
     // Sending a message instead of answering denies open approvals, so the
     // model never sees a dangling call.
     const auditDenials = await denyOpenApprovals(tx, thread.id, user.id);

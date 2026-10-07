@@ -211,6 +211,14 @@ describe('Settings → Sharing', () => {
     expect(findButton('Revoke all')).toBeUndefined();
   });
 
+  it('does not explain how to share to someone who may not (#99)', async () => {
+    features = { shareLinks: false };
+    pages[0] = { links: [], total: 0, active: 0, nextOffset: null };
+    await render();
+    expect(document.body.textContent).toContain('You have no share links.');
+    expect(document.body.textContent).not.toContain('To share one');
+  });
+
   it('reports a list that could not be loaded', async () => {
     api.get.mockImplementation(async (path: string) => {
       if (path === '/me') return { user: { id: 'u1' }, features };

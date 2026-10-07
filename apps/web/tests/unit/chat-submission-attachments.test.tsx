@@ -312,7 +312,10 @@ it('keeps original A retryable when HTTP 400 resolves the SDK send instead of re
   expect(session.error?.message).toContain('Preparation rejected');
   expect(posts).toHaveLength(1); // No automatic retry or history hydration.
   expect(posts[0]?.attachmentIds).toEqual([A.id]);
-  expect(userCards()).toEqual([card(A)]);
+  // Refused before it was saved: text and file stay in the composer to send
+  // again, and no bubble pretends the message was sent.
+  expect(userCards()).toBeUndefined();
+  expect(session.draft).toBe('Question');
   expect(session.attachments.readyIds).toEqual([A.id]);
   expect(session.attachments.items[0]?.status).toBe('ready');
 });
@@ -330,7 +333,7 @@ it('retains both rejected A and B uploaded while preparation headers were pendin
   expect(send.settled()).toBe(true);
   expect(posts).toHaveLength(1);
   expect(posts[0]?.attachmentIds).toEqual([A.id]);
-  expect(userCards()).toEqual([card(A)]);
+  expect(userCards()).toBeUndefined();
   expect(session.attachments.readyIds).toEqual([A.id, B.id]);
   expect(session.attachments.items.map((item) => item.status)).toEqual(['ready', 'ready']);
 });

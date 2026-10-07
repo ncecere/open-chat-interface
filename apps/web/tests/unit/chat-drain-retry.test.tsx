@@ -45,7 +45,7 @@ function Harness() {
 const refusal = (retryAfter: string | null = '0') =>
   new Response(
     JSON.stringify({
-      error: { code: 'INTERNAL_ERROR', message: 'This server is restarting.' },
+      error: { code: 'SERVER_RESTARTING', message: 'This server is restarting.' },
     }),
     {
       status: 503,

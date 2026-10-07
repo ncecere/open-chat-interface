@@ -148,8 +148,11 @@ Choose **Add endpoint** and enter:
 
 - **URL**: an `https://` address. OCI does not follow redirects.
 - **Audit actions**: one per line. `user.create` matches exactly; `user.*`
-  matches every action that starts with `user.`. Or turn on **Send every audit
-  event** (this includes `tool.call`, one per tool call, which can be a lot).
+  matches every action that starts with `user.`. The form warns about an entry
+  that matches nothing the audit log has recorded so far (often a typing
+  mistake), but saves it, since the action may simply not have happened yet.
+  Or turn on **Send every audit event** (this includes `tool.call`, one per
+  tool call, which can be a lot).
 - **Allow private network**: like [connectors](connectors.md#private-networks),
   endpoints must be public HTTPS addresses unless this is on; it allows plain
   `http://` and private, loopback and link-local addresses. Cloud metadata

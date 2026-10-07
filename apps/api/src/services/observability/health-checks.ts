@@ -33,18 +33,29 @@ function sizeLabel(bytes: number | null): string {
 export async function backupHealthCheck(now = new Date()): Promise<Check> {
   const base = { id: 'backups', label: 'Backups' } as const;
   const settings = await backupSettings();
-  // Off is a deliberate choice; earlier runs are history, not a problem.
-  if (!settings.enabled)
-    return {
-      ...base,
-      status: 'ok',
-      detail: 'Off. Turn on under Backups unless this instance is backed up another way.',
-    };
   const [latest] = await db
     .select()
     .from(schema.backupRun)
     .orderBy(desc(schema.backupRun.startedAt))
     .limit(1);
+  // Off is a deliberate choice and old runs are history, but a backup that
+  // was just tried and failed (a manual run, a destination test gone wrong)
+  // is not "ok": it said so while the run's history showed the failure.
+  if (!settings.enabled) {
+    const recentFailure =
+      latest?.status === 'failed' && now.getTime() - latest.startedAt.getTime() < 7 * DAY_MS;
+    return recentFailure
+      ? {
+          ...base,
+          status: 'warn',
+          detail: `Off, and the latest backup (${latest.startedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC) failed${latest.errorMessage ? `: ${latest.errorMessage.slice(0, 200)}` : ''}`,
+        }
+      : {
+          ...base,
+          status: 'ok',
+          detail: 'Off. Turn on under Backups unless this instance is backed up another way.',
+        };
+  }
   const [success] = await db
     .select()
     .from(schema.backupRun)

@@ -1,6 +1,8 @@
 import type { Attachment } from '@oci/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCurrentUser } from '~/hooks/use-current-user';
 import { ApiError, api } from '~/lib/api-client';
+import { formatBytes } from '~/lib/utils';
 
 export interface PendingAttachment {
   localId: string;
@@ -31,6 +33,18 @@ function deleteAttachment(id: string) {
 export function useAttachments() {
   const [items, setItems] = useState<PendingAttachment[]>([]);
   const resources = useRef(new Map<string, AttachmentResource>());
+  // The instance's limits, checked before uploading: a file over them would
+  // otherwise upload, count against storage, and fail only on send.
+  const chat = useCurrentUser().data?.chat;
+  const limits = useRef({ maxFiles: Infinity, maxBytes: Infinity });
+  limits.current = {
+    maxFiles: chat?.maxFilesPerMessage ?? Infinity,
+    maxBytes: chat?.maxFileBytes ?? Infinity,
+  };
+  // Files already attached (failed ones are never sent, so they do not count),
+  // read synchronously so two quick picks cannot both use the last slot.
+  const attached = useRef(0);
+  attached.current = items.filter((item) => item.status !== 'error').length;
 
   useEffect(
     () => () => {
@@ -43,7 +57,34 @@ export function useAttachments() {
     [],
   );
 
-  const upload = useCallback(async (files: File[]) => {
+  const upload = useCallback(async (picked: File[]) => {
+    if (picked.length === 0) return;
+
+    const { maxFiles, maxBytes } = limits.current;
+    const refused: PendingAttachment[] = [];
+    const files: File[] = [];
+    for (const file of picked) {
+      const reason =
+        file.size > maxBytes
+          ? `${file.name} is larger than the ${formatBytes(maxBytes)} limit, so it was not uploaded.`
+          : attached.current + files.length >= maxFiles
+            ? `Only ${maxFiles} files can be sent with one message, so this one was not attached. Remove a file to add another.`
+            : null;
+      if (reason) {
+        refused.push({
+          localId: crypto.randomUUID(),
+          filename: file.name,
+          sizeBytes: file.size,
+          mimeType: file.type,
+          status: 'error',
+          error: reason,
+        });
+      } else {
+        files.push(file);
+      }
+    }
+    attached.current += files.length;
+    if (refused.length > 0) setItems((current) => [...current, ...refused]);
     if (files.length === 0) return;
 
     const pending: PendingAttachment[] = files.map((file) => {

@@ -21,13 +21,28 @@ const AUTH_PAGES: Record<string, string> = {
   '/auth/accept-invite': 'Accept invitation',
 };
 
+const SETTINGS_SECTIONS: Record<string, string> = {
+  '': 'Account',
+  '/customization': 'Customization',
+  '/memory': 'Memory',
+  '/history': 'History',
+  '/models': 'Models',
+  '/sharing': 'Sharing',
+  '/connectors': 'Connectors',
+  '/attachments': 'Attachments',
+};
+
 /** The page's own part of the title, or null where the app name alone is right. */
 export function pageTitleFor(pathname: string): string | null {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   const auth = AUTH_PAGES[path];
   if (auth) return auth;
   if (path.startsWith('/share/')) return 'Shared conversation';
-  if (path === '/settings' || path.startsWith('/settings/')) return 'Settings';
+  if (path === '/settings' || path.startsWith('/settings/')) {
+    // Each section by name, as admin pages are (#110).
+    const section = SETTINGS_SECTIONS[path.slice('/settings'.length)];
+    return section ? `${section}${SEPARATOR}Settings` : 'Settings';
+  }
   if (path === '/admin' || path.startsWith('/admin/')) {
     const active = findActiveAdminNav(path);
     return active ? `${active.item.label}${SEPARATOR}Admin` : 'Admin';

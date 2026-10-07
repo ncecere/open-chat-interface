@@ -1,4 +1,4 @@
-import { count, desc, eq, schema } from '@oci/db';
+import { and, count, desc, eq, schema } from '@oci/db';
 import {
   capacityLimitsSchema,
   type Provider,
@@ -9,7 +9,7 @@ import {
 import { Hono } from 'hono';
 import { db } from '../../db/index.js';
 import { credentialHint, decryptSecret, encryptSecret } from '../../lib/crypto.js';
-import { notFound, validationFailed } from '../../lib/errors.js';
+import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
@@ -117,7 +117,8 @@ providerRoutes.post('/', async (c) => {
     label: input.label,
     baseUrl: input.baseUrl ?? null,
     enabled: input.enabled,
-    encryptedApiKey: null,
+    // Only whether a key was given matters here; it is encrypted below.
+    encryptedApiKey: input.apiKey ? 'provided' : null,
     credentialHint: null,
   });
   if (issues.length > 0) {
@@ -216,7 +217,19 @@ providerRoutes.patch('/:id', async (c) => {
 providerRoutes.delete('/:id', async (c) => {
   const actor = currentUser(c);
   const id = c.req.param('id');
-  await loadProviderOrThrow(id);
+  const provider = await loadProviderOrThrow(id);
+
+  // Its models go with it (cascade); refuse rather than remove the default.
+  const [defaultModel] = await db
+    .select({ displayName: schema.model.displayName })
+    .from(schema.model)
+    .where(and(eq(schema.model.providerId, id), eq(schema.model.isDefault, true)))
+    .limit(1);
+  if (defaultModel) {
+    throw conflict(
+      `This provider supplies the default model, ${defaultModel.displayName}. Make a model from another provider the default first, then delete this provider.`,
+    );
+  }
 
   await db.delete(schema.provider).where(eq(schema.provider.id, id));
 
@@ -226,6 +239,8 @@ providerRoutes.delete('/:id', async (c) => {
     action: 'provider.delete',
     targetType: 'provider',
     targetId: id,
+    // The row is gone, so the entry says what it was (never the key).
+    metadata: { label: provider.label, kind: provider.kind, baseUrl: provider.baseUrl },
   });
 
   return c.json({ ok: true });

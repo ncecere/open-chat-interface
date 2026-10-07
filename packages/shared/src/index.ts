@@ -4,6 +4,7 @@ export * from './constants.js';
 export * from './documents.js';
 export * from './errors.js';
 export * from './model-labs.js';
+export * from './quota-labels.js';
 export * from './reasoning.js';
 export * from './role-features.js';
 export * from './schemas/account.js';

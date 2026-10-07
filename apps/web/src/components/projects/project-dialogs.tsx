@@ -87,7 +87,7 @@ function CreateProjectForm({ onDone }: { onDone: () => void }) {
       {create.error && (
         <p
           role="alert"
-          className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+          className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
           {apiErrorMessage(create.error, 'The project could not be created.')}
         </p>
@@ -173,7 +173,7 @@ function MoveToProjectForm({
           <Spinner /> Loading projects…
         </p>
       ) : projects.error ? (
-        <p role="alert" className="py-2 text-sm text-[var(--danger-foreground)]">
+        <p role="alert" className="py-2 text-sm text-[var(--danger-on-tint)]">
           {apiErrorMessage(projects.error, 'Projects could not be loaded.')}
         </p>
       ) : (
@@ -216,7 +216,7 @@ function MoveToProjectForm({
       {move.error && (
         <p
           role="alert"
-          className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+          className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
           {apiErrorMessage(move.error, 'The conversation could not be moved.')}
         </p>

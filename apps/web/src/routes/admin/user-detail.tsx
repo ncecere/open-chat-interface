@@ -213,9 +213,20 @@ export function AdminUserDetailPage() {
           <Ban className="mt-0.5 size-4 shrink-0 text-[var(--danger)]" aria-hidden="true" />
           <div className="min-w-0">
             <p className="font-medium text-[var(--text-primary)]">This account is banned</p>
-            <p className="mt-1 break-words text-[var(--text-muted)]">
-              {user.banReason ? `Reason: ${user.banReason}` : 'No reason was recorded.'} They cannot
-              sign in until the ban is lifted.
+            <p className="mt-1 text-[var(--text-muted)]">
+              They cannot sign in until the ban is lifted.
+            </p>
+            {/* The reason is the admin's own words, often without a full stop:
+                its own line, so it never runs into the sentence after it (#77). */}
+            <p className="mt-1 whitespace-pre-line break-words text-[var(--text-muted)]">
+              {user.banReason ? (
+                <>
+                  <span className="font-medium text-[var(--text-primary)]">Reason:</span>{' '}
+                  {user.banReason}
+                </>
+              ) : (
+                'No reason was recorded.'
+              )}
             </p>
           </div>
         </div>
@@ -253,7 +264,13 @@ export function AdminUserDetailPage() {
         {sessions.length === 0 ? (
           <Empty>No active sessions.</Empty>
         ) : (
-          <div className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+          <section
+            // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+            tabIndex={0}
+            aria-label="Active sessions"
+            className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+          >
             <table className="w-full min-w-[32rem] text-sm">
               <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
                 <tr>
@@ -271,14 +288,17 @@ export function AdminUserDetailPage() {
                       {formatTimeUntil(session.expiresAt)}
                     </td>
                     <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
-                    <td className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs">
+                    <td
+                      className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs"
+                      title={session.userAgent ?? undefined}
+                    >
                       {session.userAgent ?? '—'}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         )}
       </Section>
 
@@ -294,7 +314,9 @@ export function AdminUserDetailPage() {
                 {/* Titles only. An administrator managing an account has no
                     reason to read its contents, and this page should not be
                     the thing that makes that easy. */}
-                <span className="truncate text-sm">{thread.title || 'Untitled'}</span>
+                <span className="truncate text-sm" title={thread.title || undefined}>
+                  {thread.title || 'Untitled'}
+                </span>
                 <span className="shrink-0 text-[var(--text-muted)] text-xs">
                   {formatRelativeTime(thread.updatedAt)}
                 </span>
@@ -309,7 +331,9 @@ export function AdminUserDetailPage() {
         <p className="mb-3 text-xs">
           <Link
             to="/admin/audit"
-            search={{ search: user.email }}
+            // By id, as actor or target, so actions taken *on* this account
+            // are included (they carry the admin's email, not this one).
+            search={{ user: user.id, userEmail: user.email }}
             className="text-[var(--accent-bright)] hover:underline"
           >
             See every event for this account

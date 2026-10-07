@@ -12,6 +12,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { MutationError } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
@@ -116,6 +117,7 @@ export function RoleFeaturesForm({
 
   const changes = roleFeatureChanges(saved, draft);
   const hasChanges = Object.keys(changes).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: () => api.put(`/admin/roles/${role}`, changes),

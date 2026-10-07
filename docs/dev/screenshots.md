@@ -34,12 +34,17 @@ whole set was taken on a phone.
 **Seed first.** A development database accumulates test artefacts, and
 "Reserve inflight" in a screenshot tells a reader nothing good.
 
-**Pin the clock.** `DEMO_NOW` in `seed-demo.ts` fixes every timestamp. Without
-it every run rewrites every image with no change worth reviewing.
+**Seed on the day you capture.** Every seeded timestamp is relative to 14:30
+UTC on the day the seed runs, so the interface's relative times ("3 days ago")
+come out the same at every capture, and seeded usage stays inside the Usage
+page's 90 days. Re-seed before capturing. To pin a date instead (for dates
+shown in full), set `DEMO_NOW` to an ISO timestamp when seeding.
 
 **Never photograph your own account's preferences.** The demonstration seed
 overwrites the administrator's name and personalisation for this reason — the
-first run of this harness published a real name and real settings.
+first run of this harness published a real name and real settings. It uses the
+earliest-created administrator who is not a demo person (normally the one who
+installed the instance); set `DEMO_ADMIN_EMAIL` to choose another.
 
 **Assert, do not guard.** A capture wrapped in `if (await x.isVisible())`
 silently produces no image when a selector stops matching. Assert visibility so

@@ -341,6 +341,9 @@ describe('Settings → Account', () => {
       expect(rows[0]?.textContent).toContain('Chrome on macOS');
       expect(rows[0]?.textContent).toContain('This device');
       expect(rows[0]?.querySelector('button')).toBeNull();
+      // This device is in use as you read it (#98); others say when they were.
+      expect(rows[0]?.textContent).toContain('Active now');
+      expect(rows[1]?.textContent).toContain('Last active');
       expect(rows[1]?.textContent).toContain('Safari on iPhone');
       expect(rows[1]?.textContent).toContain('198.51.100.x');
 

@@ -83,6 +83,11 @@ export const projectFileIndexSchema = z.object({
   status: z.enum(['indexed', 'pending', 'no-text']),
   /** Searchable passages the file was split into. */
   passages: z.number().int().nonnegative(),
+  /**
+   * The file was longer than one file's passage limit, so only its start is
+   * searchable. Absent from an older API, which reads as false.
+   */
+  truncated: z.boolean().optional(),
 });
 
 /** A project file is an attachment owned by the project rather than a message. */

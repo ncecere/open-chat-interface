@@ -1,21 +1,32 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { type ComponentProps, useEffect, useRef } from 'react';
+import { type ComponentProps, useRef } from 'react';
 import { cn } from '~/lib/utils';
 
 export const Dialog = DialogPrimitive.Root;
+
+const DISCARD_QUESTION = 'Discard what you have entered?';
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
 
 export function DialogContent({
   className,
   children,
+  onOpenAutoFocus,
   onCloseAutoFocus,
+  onEscapeKeyDown,
+  onPointerDownOutside,
   closeButton = true,
+  confirmDiscard = false,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> & {
   /** False when the dialog lays out its own Close button (use DialogClose). */
   closeButton?: boolean;
+  /**
+   * The form inside has unsaved input: Escape or a click outside asks before
+   * discarding it, instead of closing at once (#45). Cancel and × still close.
+   */
+  confirmDiscard?: boolean;
 }) {
   /**
    * WCAG 2.4.3 Focus Order.
@@ -24,12 +35,14 @@ export function DialogContent({
    * Radix has no trigger to hand focus back to and it falls to the body.
    * Remembering the element that was focused at open time and restoring it
    * keeps a keyboard user where they were.
+   *
+   * The opener is read in onOpenAutoFocus, which Radix fires on every open
+   * before it moves focus into the dialog. An effect cannot do this: this
+   * component stays mounted while the dialog is closed, and a child's effects
+   * (Radix's FocusScope) run before a parent's, so an effect sees either the
+   * page-load focus or an element inside the dialog, never the opener.
    */
   const openerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    openerRef.current = document.activeElement as HTMLElement | null;
-  }, []);
 
   return (
     <DialogPrimitive.Portal>
@@ -41,6 +54,22 @@ export function DialogContent({
           'shadow-[var(--shadow-popover)]',
           className,
         )}
+        onEscapeKeyDown={(event) => {
+          onEscapeKeyDown?.(event);
+          if (!event.defaultPrevented && confirmDiscard && !window.confirm(DISCARD_QUESTION))
+            event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          onPointerDownOutside?.(event);
+          if (!event.defaultPrevented && confirmDiscard && !window.confirm(DISCARD_QUESTION))
+            event.preventDefault();
+        }}
+        onOpenAutoFocus={(event) => {
+          const active = document.activeElement;
+          openerRef.current =
+            active instanceof HTMLElement && active !== document.body ? active : null;
+          onOpenAutoFocus?.(event);
+        }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
           if (event.defaultPrevented) return;

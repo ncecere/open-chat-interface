@@ -159,17 +159,20 @@ it('recovers an accepted errored stream through canonical history without losing
   ).toHaveLength(1);
 });
 
-it('does not erase an unaccepted failed prompt with an automatic history refresh', async () => {
+it('keeps an unaccepted failed prompt in the composer, without a history refresh', async () => {
   const fetch = vi.fn(async () => new Response('Request rejected', { status: 400 }));
   vi.stubGlobal('fetch', fetch);
   await act(() => root.render(<Harness />));
   await act(() => session.send('Question'));
   expect(session.status).toBe('error');
-  expect(session.messages.at(-1)?.parts).toContainEqual({ type: 'text', text: 'Question' });
+  // Refused before it was saved: the text goes back where it can be sent
+  // again, and no bubble pretends it was sent.
+  expect(session.draft).toBe('Question');
+  expect(session.messages.some((message) => message.role === 'user')).toBe(false);
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('does not let an older manual refresh erase a newer rejected prompt', async () => {
+it('does not let an older manual refresh lose a newer rejected prompt', async () => {
   const oldRead = deferred<Response>();
   let reads = 0;
   const fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -191,10 +194,8 @@ it('does not let an older manual refresh erase a newer rejected prompt', async (
     );
   });
   expect(session.status).toBe('error');
-  expect(session.messages.at(-1)?.parts).toContainEqual({
-    type: 'text',
-    text: 'Keep this rejected prompt',
-  });
+  // The older refresh resolving later must not lose the rejected text.
+  expect(session.draft).toBe('Keep this rejected prompt');
   expect(reads).toBe(1);
 });
 

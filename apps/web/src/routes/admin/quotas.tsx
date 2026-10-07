@@ -92,7 +92,9 @@ export function AdminQuotasPage() {
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-medium">{policy.name}</p>
+                  <p className="truncate font-medium" title={policy.name}>
+                    {policy.name}
+                  </p>
                   <Badge variant="neutral">{formatLimit(policy)}</Badge>
                   {!policy.enabled && <Badge variant="warning">not enforced</Badge>}
                   {policy.roles.length === 0 && <Badge variant="warning">no roles</Badge>}
@@ -109,7 +111,10 @@ export function AdminQuotasPage() {
                     </Badge>
                   )}
                 </div>
-                <p className="truncate text-xs text-[var(--text-muted)]">
+                <p
+                  className="truncate text-xs text-[var(--text-muted)]"
+                  title={`${formatWindow(policy)}${policy.roles.length > 0 ? ` · ${policy.roles.join(', ')}` : ''}${policy.description ? ` · ${policy.description}` : ''}`}
+                >
                   {formatWindow(policy)}
                   {policy.roles.length > 0 ? ` · ${policy.roles.join(', ')}` : ''}
                   {policy.description ? ` · ${policy.description}` : ''}

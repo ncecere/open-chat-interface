@@ -25,6 +25,7 @@ import {
 } from '~/components/admin/operations/destination';
 import { formatRunTime, RunHistory, RunNowControl } from '~/components/admin/operations/runs';
 import { formatHourUtc, HourField, RetentionField } from '~/components/admin/operations/schedule';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Field } from '~/components/ui/field';
 import { Select } from '~/components/ui/select';
@@ -181,6 +182,7 @@ function SettingsForm({
   });
   const patch = backupChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   function submit(event: FormEvent) {
     event.preventDefault();

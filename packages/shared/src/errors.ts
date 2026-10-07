@@ -10,6 +10,11 @@ export const ERROR_CODES = {
   REGISTRATION_DISABLED: 'REGISTRATION_DISABLED',
   /** Read-only maintenance mode (v0.11): a write refused with 423 Locked. */
   READ_ONLY: 'READ_ONLY',
+  /**
+   * A replica shutting down (v0.11.1): a new chat turn refused with 503 and
+   * Retry-After before anything is stored; send it again. Not a fault.
+   */
+  SERVER_RESTARTING: 'SERVER_RESTARTING',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 

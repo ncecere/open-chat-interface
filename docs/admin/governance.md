@@ -292,7 +292,9 @@ labels.
 **Models → Usage budgets** (`/admin/quotas`). A budget — a quota policy —
 caps consumption, and is applied to one or more roles. A role can carry several
 at once and every one is enforced; each person gets the full amount on their
-own. Three things to decide.
+own. Its name is for administrators: people see what a budget counts and its
+period ("You have reached your message limit for today"), never its name.
+Three things to decide.
 
 ### What to measure
 
@@ -350,7 +352,10 @@ account page. Set an expiry where the need is temporary.
 How much each person in a role may hold in attachments: total storage, number of
 stored files, and the largest single file. A blank total or file count means no
 limit; a blank per-file size falls back to the instance upload limit on
-[Storage](operations.md#storage). **Enforce allowance** switches the allowance off without losing the values; a
+[Storage](operations.md#storage). Any value you enter must be greater than 0
+(the file count a whole number), at most 1,024 GB in total and 1,024 MB per
+file; 0 is refused rather than read as "no limit". To stop a role storing files
+at all, turn off its attachments feature instead. **Enforce allowance** switches the allowance off without losing the values; a
 role with nothing saved is unlimited. Set on **People → Roles & access**.
 
 Artifact versions count towards total storage (not towards the file count)
@@ -483,6 +488,14 @@ Consequences:
   as though it were new.
 - **A version somebody accepted cannot be deleted.** The database refuses,
   because deleting it would destroy the record of what they agreed to.
+
+### Drafts
+
+Turn off **Publish immediately** to save a draft. Nobody is asked to accept a
+draft, so it can still be reworded (**Edit**) or discarded (**Delete**) until
+you **Publish** it, which asks for confirmation first. Once published, the
+wording is fixed. **View** shows the full text of any version, drafts and
+published ones alike, to administrators and auditors.
 
 ### What is recorded
 

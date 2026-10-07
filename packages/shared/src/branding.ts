@@ -50,3 +50,23 @@ export function diagramAccent(branding: {
 export function instanceName(appName: string | null | undefined): string {
   return appName?.trim() || DEFAULT_APP_NAME;
 }
+
+// This package compiles without DOM or Node types; both runtimes provide URL.
+declare const URL: new (input: string) => { protocol: string; username: string; password: string };
+
+/**
+ * A logo address the sign-in page may load: http(s) without credentials, or a
+ * root-relative path on this instance. Shared by the Branding form and the
+ * settings API, which stored anything (a `javascript:` URL included).
+ */
+export function isSafeImageUrl(value: string): boolean {
+  if (value.startsWith('/') && !value.startsWith('//')) return true;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password
+    );
+  } catch {
+    return false;
+  }
+}

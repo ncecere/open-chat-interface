@@ -159,7 +159,7 @@ describe.skipIf(!available)('live: only relevant project passages are used', () 
       [HANDBOOK, 'text/plain'],
     ] as const) {
       const bytes = await readFile(new URL(filename, FIXTURES));
-      // As uploaded: the handbook is longer than extraction keeps (200,000 characters).
+      // As uploaded: the whole handbook (242,355 characters) is kept and indexed (#35).
       const text = (await extractText(mimeType, bytes))!;
       const [row] = await pool.db
         .insert(schema.attachment)
@@ -237,7 +237,7 @@ describe.skipIf(!available)('live: only relevant project passages are used', () 
   it('is a project too large to include whole, so its files are searched', () => {
     const budget = contextBudget(MODEL);
     expect(budget.units).toBe(128_000);
-    expect(files.get(HANDBOOK)!.text.length).toBe(200_000);
+    expect(files.get(HANDBOOK)!.text.length).toBe(242_355);
     expect(files.get(HANDBOOK)!.text).toContain('AMBER-42');
     expect(budget.units * PROJECT_PASSAGE_SHARE).toBe(64_000);
   });
@@ -314,8 +314,10 @@ describe.skipIf(!available)('live: only relevant project passages are used', () 
     const chunks = counts(started)[HANDBOOK] ?? 0;
     expect(Object.keys(counts(started))).toEqual([HANDBOOK]);
     expect(chunks).toBeGreaterThan(5);
-    // The annual leave sections only: well under the 50-odd chunks the share holds.
-    expect(chunks).toBeLessThanOrEqual(20);
+    // The nine Annual Leave sections only (three of them past character
+    // 200,000, which extraction used to drop): well under the 50-odd chunks
+    // the share holds.
+    expect(chunks).toBeLessThanOrEqual(30);
     for (const passage of passages) expect(passage).toMatch(/leave/i);
   });
 });

@@ -73,6 +73,9 @@ Locked out? `pnpm --filter @oci/api admin:promote you@example.com`.
 ```bash
 cd docker
 docker compose up -d --build
+# Once the API is up, run the post-deploy phase once (indexes, background
+# migrations, the current encryption format). Every upgrade runs it too.
+docker compose --profile tools run --rm migrate-post
 ```
 
 ### Deploy a released version
@@ -90,6 +93,7 @@ export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
 cd docker
 docker compose pull api web migrate
 docker compose up -d --no-build
+docker compose --profile tools run --rm migrate-post
 ```
 
 The images are public, so pulling them needs no registry login. From v0.11 they are published for `linux/amd64` and `linux/arm64` under the same tags (earlier releases: `linux/amd64` only). Unset `OCI_API_IMAGE` and
@@ -108,7 +112,10 @@ verification, and rollback constraints.
 
 The API applies migrations and seeds default settings on boot, so a fresh stack
 comes up without a separate migration step. Both operations are idempotent and
-an existing deployment passes straight through.
+an existing deployment passes straight through. The post-deploy phase
+(`migrate-post`) is separate because, on an upgrade, it must wait until every
+replica runs the new release; on a new install, run it once as shown above.
+Until it has run, **System health → Encryption keys** says so.
 
 Set `INITIAL_ADMIN_EMAIL` to create the first administrator. Leaving
 `INITIAL_ADMIN_PASSWORD` unset (or empty, as in `.env.example`) prints a
@@ -165,8 +172,9 @@ Two constraints to know before scaling:
   replica, so a revoked session may remain usable on other replicas until that
   cache expires.
 
-Self-hosted OIDC/SAML identity providers on private networks must be listed in
-`AUTH_TRUSTED_ORIGINS`; otherwise discovery is refused as unroutable.
+Every OIDC identity provider's origin must be listed in `AUTH_TRUSTED_ORIGINS`,
+public ones (Google, Entra, Okta) included; OCI reads discovery documents only
+from trusted origins. See [Identity](docs/admin/identity.md#before-adding-an-oidc-provider).
 
 ## Accessibility
 
@@ -255,10 +263,12 @@ test-only and must never be reused.
 
 ### Account linking
 
-When two providers assert the same email, the second sign-in is refused unless
-that provider is marked **Trust for account linking**. The toggle is off by
-default and, once enabled, linking still requires the email domain to match the
-provider's allowed domains.
+A sign-in through a provider whose address matches an existing account (one
+with a password or another provider's sign-in) is refused unless that provider
+is marked **Trust for account linking**. The toggle is off by default and does
+not affect anybody else: new people are signed in either way. Once enabled,
+linking still requires the email domain to match the provider's allowed domains
+and the existing account's address to be verified.
 
 Enable it only for an identity provider that genuinely verifies email
 ownership. One that does not could assert an existing user's address and take

@@ -1,4 +1,5 @@
 import type { UsageAllowance, UsageSummary } from '@oci/shared';
+import { quotaLimitName } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Info } from 'lucide-react';
 import { api } from '~/lib/api-client';
@@ -46,6 +47,10 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
   // about when a user is close to their limit.
   const low = allowance.severity === 'critical' || allowance.severity === 'exceeded';
   const countdown = formatCountdown(allowance.resetsAt);
+  const name = quotaLimitName(allowance.metric);
+  const label = `${name.charAt(0).toUpperCase()}${name.slice(1)}${
+    allowance.modelSlugs.length > 0 ? ' (some models)' : ''
+  }`;
 
   // Round toward zero so a nearly spent allowance never reads as a full 1%,
   // but anything still usable stays visible rather than showing 0%.
@@ -55,11 +60,15 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-sm text-[var(--text-secondary)]">{allowance.name}</span>
+        {/* What is counted, not the policy's name, which is the
+            administrator's (#93); in full on hover if the rail cuts it. */}
+        <span className="truncate text-sm text-[var(--text-secondary)]" title={label}>
+          {label}
+        </span>
         <span
           className={cn(
             'shrink-0 text-xs',
-            low ? 'text-[var(--danger-foreground)]' : 'text-[var(--text-muted)]',
+            low ? 'text-[var(--danger-on-tint)]' : 'text-[var(--text-muted)]',
           )}
         >
           {percentRemaining}% left

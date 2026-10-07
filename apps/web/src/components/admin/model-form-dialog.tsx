@@ -1,5 +1,6 @@
 import {
   type AdminModel,
+  DEFAULT_MODEL_ROLES,
   DEFAULT_OUTPUT_TOKENS,
   FALLBACK_CONTEXT_WINDOW,
   MICROS_PER_DOLLAR,
@@ -121,7 +122,8 @@ function initialDraft(model: AdminModel | null, providers: Provider[]): ModelDra
         outputPrice: '',
         capabilities: [],
         supportedEfforts: [],
-        visibleToRoles: [...USER_ROLES],
+        // As the API and Discover models: not auditors, who review, not chat.
+        visibleToRoles: [...DEFAULT_MODEL_ROLES],
         enabled: true,
         isDefault: false,
       };
@@ -165,6 +167,57 @@ function ChoicePills<Value extends string>({
   );
 }
 
+/** The form's labels, for naming a field in a validation message. */
+const FIELD_LABELS: Record<string, string> = {
+  providerId: 'Provider',
+  labId: 'Lab',
+  upstreamModelId: 'Upstream model ID',
+  displayName: 'Display name',
+  slug: 'OCI slug',
+  description: 'Description',
+  contextWindow: 'Context window',
+  maxOutputTokens: 'Max output',
+  sortOrder: 'Sort order',
+  inputPriceMicros: 'Input price',
+  outputPriceMicros: 'Output price',
+  capabilities: 'Capabilities',
+  supportedEfforts: 'Reasoning efforts',
+  visibleToRoles: 'Visible to roles',
+};
+
+/** One sentence per invalid field, in form order. */
+export function modelFieldProblems(
+  issues: ReadonlyArray<{
+    path: PropertyKey[];
+    message: string;
+    code: string;
+    origin?: string;
+    maximum?: unknown;
+  }>,
+): string[] {
+  const order = Object.keys(FIELD_LABELS);
+  const byField = new Map<string, string>();
+  for (const issue of issues) {
+    const key = String(issue.path[0] ?? '');
+    if (byField.has(key)) continue;
+    const label = FIELD_LABELS[key];
+    // The schema's own sentences already name the field.
+    const text = issue.origin === 'string' && label;
+    const sentence =
+      text && issue.code === 'too_small'
+        ? `${label} is required.`
+        : text && issue.code === 'too_big'
+          ? `${label} must be at most ${Number(issue.maximum).toLocaleString('en-US')} characters.`
+          : label && !issue.message.startsWith(label.replace('OCI ', ''))
+            ? `${label}: ${issue.message}`
+            : issue.message;
+    byField.set(key, sentence);
+  }
+  return [...byField.entries()]
+    .sort(([a], [b]) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99))
+    .map(([, sentence]) => sentence);
+}
+
 export function ModelFormDialog({
   model,
   providers,
@@ -203,31 +256,33 @@ export function ModelFormDialog({
     event.preventDefault();
     setError(null);
 
+    // Every problem at once, named by the form's own labels, rather than one
+    // per attempt (#79).
+    const problems: string[] = [];
     const contextWindow = parseTokenCount(draft.contextWindow);
     const maxOutputTokens = parseTokenCount(draft.maxOutputTokens);
-    if (Number.isNaN(contextWindow) || Number.isNaN(maxOutputTokens)) {
-      setError(
-        `${Number.isNaN(contextWindow) ? 'Context window' : 'Max output'} must be a whole number of tokens.`,
-      );
-      return;
+    if (Number.isNaN(contextWindow)) {
+      problems.push('Context window must be a whole number of tokens.');
+    }
+    if (Number.isNaN(maxOutputTokens)) {
+      problems.push('Max output must be a whole number of tokens.');
     }
     const parsed = upsertModelSchema.safeParse({
       ...draft,
       labId: draft.labId || null,
       description: draft.description.trim() || null,
-      contextWindow,
-      maxOutputTokens,
+      contextWindow: Number.isNaN(contextWindow) ? null : contextWindow,
+      maxOutputTokens: Number.isNaN(maxOutputTokens) ? null : maxOutputTokens,
       sortOrder: Number(draft.sortOrder || 0),
       inputPriceMicros: toPriceMicros(draft.inputPrice),
       outputPriceMicros: toPriceMicros(draft.outputPrice),
     });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the model fields.');
-      return;
-    }
-    const limits = modelLimitsProblem(contextWindow, maxOutputTokens);
-    if (limits) {
-      setError(limits);
+    if (!parsed.success) problems.push(...modelFieldProblems(parsed.error.issues));
+    const limits =
+      problems.length === 0 ? modelLimitsProblem(contextWindow, maxOutputTokens) : null;
+    if (limits) problems.push(limits);
+    if (!parsed.success || problems.length > 0) {
+      setError(problems.length > 0 ? problems.join('\n') : 'Check the model fields.');
       return;
     }
     save.mutate(parsed.data);
@@ -471,7 +526,7 @@ export function ModelFormDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-sm text-[var(--danger-foreground)]"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-sm text-[var(--danger-on-tint)]"
           >
             {error}
           </p>

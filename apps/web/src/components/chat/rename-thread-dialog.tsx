@@ -84,7 +84,7 @@ function RenameThreadForm({
       {update.error && (
         <p
           role="alert"
-          className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+          className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
           {apiErrorMessage(update.error, 'The conversation could not be renamed.')}
         </p>

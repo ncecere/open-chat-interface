@@ -32,15 +32,19 @@ function GlobalShortcuts({ onToggleSidebar }: { onToggleSidebar: () => void }) {
  * Desktop shell: sidebar, a full-width top bar carrying the global controls,
  * and an inset rounded main panel below it.
  */
+const DOCKED_SIDEBAR = '(min-width: 1024px)';
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const [mobile, setMobile] = useState(() => !window.matchMedia('(min-width: 768px)').matches);
+  // A drawer below 1024px, as on phones: docked at 768 it left the chat 512px,
+  // wrapping the model name and squeezing Send (#109).
+  const [mobile, setMobile] = useState(() => !window.matchMedia(DOCKED_SIDEBAR).matches);
   const [sidebarOpen, setSidebarOpen] = useState(() => !mobile);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const previousPathname = useRef(pathname);
   const commandPalette = useCommandPalette();
 
   useEffect(() => {
-    const query = window.matchMedia('(min-width: 768px)');
+    const query = window.matchMedia(DOCKED_SIDEBAR);
     const onChange = (event: MediaQueryListEvent) => {
       setMobile(!event.matches);
       setSidebarOpen(event.matches);
@@ -97,9 +101,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             onOpenCommandPalette={commandPalette.show}
           />
           {/* Above the panel rather than inside it, so an announcement is not
-              lost when the conversation scrolls. */}
-          <ReadOnlyBanner />
-          <BroadcastBanner />
+              lost when the conversation scrolls. Pushed below the top bar's
+              floating controls (absolute, top-6, about 4rem tall), which
+              otherwise covered the banner and its Dismiss button; with no
+              banner the wrapper is empty and takes no space. */}
+          <div data-banners className="pt-[4.25rem] empty:hidden">
+            <ReadOnlyBanner />
+            <BroadcastBanner />
+          </div>
           <main className="min-h-0 flex-1 rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
             {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs
                 keyboard access per WCAG 2.1.1, and this doubles as the skip-link target */}

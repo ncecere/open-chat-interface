@@ -44,6 +44,15 @@ export function parseActions(text: string): string[] {
   ];
 }
 
+/** The entries (actions, or prefixes such as `user.*`) that match no recorded action. */
+export function unmatchedActions(actions: string[], known: string[]): string[] {
+  return actions.filter((action) =>
+    action.endsWith('.*')
+      ? !known.some((name) => name.startsWith(action.slice(0, -1)))
+      : !known.includes(action),
+  );
+}
+
 interface Draft {
   url: string;
   description: string;
@@ -122,6 +131,13 @@ function WebhookFormDialog({
     allowPrivateNetwork: endpoint?.allowPrivateNetwork ?? false,
   });
   const [error, setError] = useState<string | null>(null);
+  // A name that can never match was accepted silently (#83). Only a warning:
+  // the list is what this instance has recorded, and an action may not have
+  // happened yet.
+  const unmatched =
+    draft.allActions || knownActions.length === 0
+      ? []
+      : unmatchedActions(parseActions(draft.actions), knownActions);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
@@ -210,12 +226,19 @@ function WebhookFormDialog({
           >
             <Textarea
               id="webhook-actions"
+              aria-describedby={unmatched.length > 0 ? 'webhook-actions-unmatched' : undefined}
               rows={5}
               value={draft.actions}
               placeholder={'user.*\nbackup.run'}
               onChange={(event) => set('actions', event.target.value)}
             />
           </Field>
+        )}
+        {unmatched.length > 0 && (
+          <p id="webhook-actions-unmatched" role="status" className="text-xs text-[var(--warning)]">
+            Nothing recorded so far matches {unmatched.join(', ')}. Check the spelling; it is saved
+            anyway, in case the action has simply not happened yet.
+          </p>
         )}
         {!draft.allActions && knownActions.length > 0 && (
           <p className="text-xs text-[var(--text-muted)]">

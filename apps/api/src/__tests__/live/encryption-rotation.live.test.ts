@@ -248,9 +248,13 @@ describe.skipIf(!available)('live: rotating ENCRYPTION_KEY', { timeout: 120_000 
     expect(await rotation.refreshCiphertextFormat()).toBe(false);
     expect(crypto.encryptSecret('x').startsWith(crypto.CIPHERTEXT_PREFIX)).toBe(false);
     expect(await rotation.scheduleReencryption(pool.sql)).toBe(0);
+    // Says what is happening (the older format, not a previous key) and what
+    // to run, as a warning: a new install has not finished setup until then.
     expect(await rotation.encryptionHealthCheck(pool.sql)).toMatchObject({
-      status: 'ok',
-      detail: expect.stringContaining(`Previous keys still in use: ${usage.total} values`),
+      status: 'warn',
+      detail: expect.stringContaining(
+        `${usage.total} values stored in the format before v0.11, because the post-deploy phase has not run`,
+      ),
     });
   });
 
@@ -331,7 +335,7 @@ describe.skipIf(!available)('live: rotating ENCRYPTION_KEY', { timeout: 120_000 
     state.previous = undefined;
     expect(await rotation.encryptionHealthCheck(pool.sql)).toMatchObject({
       status: 'ok',
-      detail: expect.stringContaining('Previous keys still in use: 0 values'),
+      detail: expect.stringContaining('Previous keys still in use: none'),
     });
     expect(await everySecret()).toEqual(before);
   });

@@ -10,6 +10,7 @@ import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, Notice, SettingsSection } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
@@ -96,6 +97,16 @@ type DraftErrors = {
   fallbackBaseUrl?: string;
   fallbackApiKey?: string;
 };
+
+/**
+ * The search services' messages point to "the Web search page" wherever they
+ * are shown (health, a failed reply); here, that is this page (#86).
+ */
+export function onThisPage(message: string): string {
+  return message
+    .replace(/\. An administrator needs to check it on the Web search page\./, '. Check it here.')
+    .replace(/ on the Web search page\./, ' here.');
+}
 
 /** The fallback provider (v0.10) needs its own address or key and a service of its own. */
 function validateFallback(
@@ -285,6 +296,7 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
   const fallbackInfo = draft.fallbackProvider ? SEARCH_PROVIDERS[draft.fallbackProvider] : null;
   const fallbackTarget = fallbackTestTarget(draft, fallbackKey);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const test = useMutation({
     mutationFn: () =>
@@ -613,8 +625,12 @@ function SearchSettingsForm({ settings }: { settings: InstanceSettings }) {
             )}
             {(test.data?.ok === false || test.error) && (
               <p role="alert" className="text-sm text-[var(--danger)]">
-                {test.data?.message ??
-                  (test.error instanceof ApiError ? test.error.message : 'The test could not run.')}
+                {onThisPage(
+                  test.data?.message ??
+                    (test.error instanceof ApiError
+                      ? test.error.message
+                      : 'The test could not run.'),
+                )}
               </p>
             )}
             {test.data?.fallback && fallbackInfo && (
@@ -654,7 +670,7 @@ function FallbackTestResult({
     </p>
   ) : (
     <p role="alert" className="text-sm text-[var(--danger)]">
-      Fallback: {result.message ?? `${name} test search failed.`}
+      Fallback: {onThisPage(result.message ?? `${name} test search failed.`)}
     </p>
   );
 }

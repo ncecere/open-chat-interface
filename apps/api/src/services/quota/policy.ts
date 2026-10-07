@@ -2,6 +2,7 @@ import {
   MICROS_PER_DOLLAR,
   type QuotaMetric,
   type QuotaWindowKind,
+  quotaLimitName,
   TOKENS_PER_PRICE_UNIT,
   USAGE_CRITICAL_THRESHOLD,
   USAGE_WARNING_THRESHOLD,
@@ -141,13 +142,14 @@ export function buildAllowance(
  *
  * Deliberately omits the underlying number: messages, tokens, and spend are
  * three different units, and the last is instance cost rather than something a
- * user should be shown. The policy name and window are what they can act on.
- * `describeLimit` remains for administrative surfaces.
+ * user should be shown. Nor does it name the policy: that name is the
+ * administrator's (#93). What is counted and the window are what they can
+ * act on. `describeLimit` remains for administrative surfaces.
  *
  * A model-scoped policy says so, since other models remain usable.
  */
 export function limitMessage(policy: EvaluablePolicy): string {
-  const base = `You have reached your ${policy.name} limit for ${describeWindow(policy)}.`;
+  const base = `You have reached your ${quotaLimitName(policy.metric)} for ${describeWindow(policy)}.`;
   if (policy.modelSlugs.length === 0) return base;
   return `${base} Other models are still available.`;
 }

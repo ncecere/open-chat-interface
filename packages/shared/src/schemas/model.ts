@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { MODEL_CAPABILITIES, PROVIDER_KINDS, REASONING_EFFORTS, USER_ROLES } from '../constants.js';
+import {
+  DEFAULT_MODEL_ROLES,
+  MODEL_CAPABILITIES,
+  PROVIDER_KINDS,
+  REASONING_EFFORTS,
+  USER_ROLES,
+} from '../constants.js';
 import { patchSchema } from './patch.js';
 
 export const modelCapabilitySchema = z.enum(MODEL_CAPABILITIES);
@@ -111,7 +117,7 @@ export const upsertModelSchema = z.object({
   inputPriceMicros: tokenPriceSchema,
   outputPriceMicros: tokenPriceSchema,
   enabled: z.boolean().default(true),
-  visibleToRoles: z.array(z.enum(USER_ROLES)).default(['admin', 'user', 'restricted']),
+  visibleToRoles: z.array(z.enum(USER_ROLES)).default([...DEFAULT_MODEL_ROLES]),
   isDefault: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
 });

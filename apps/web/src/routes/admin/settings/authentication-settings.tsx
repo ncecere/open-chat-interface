@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -66,6 +67,7 @@ export function AuthenticationSettingsForm({
 
   const patch = changedSettings(savedSettings, draft);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: (changes: AuthSettingsPatch) =>

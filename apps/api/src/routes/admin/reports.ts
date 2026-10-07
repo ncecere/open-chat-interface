@@ -9,7 +9,7 @@ import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
-import { runDueReports } from '../../services/reports.js';
+import { nextReportRunAt, runDueReports } from '../../services/reports.js';
 
 export const reportRoutes = new Hono<AppBindings>();
 
@@ -27,10 +27,12 @@ reportRoutes.get('/', async (c) => {
     .from(schema.scheduledReport)
     .orderBy(desc(schema.scheduledReport.createdAt));
 
+  const now = new Date();
   return c.json({
     reports: rows.map((row) => ({
       ...row,
       lastRunAt: row.lastRunAt?.toISOString() ?? null,
+      nextRunAt: nextReportRunAt(row, now)?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     })),
@@ -93,9 +95,15 @@ reportRoutes.delete('/:id', async (c) => {
   const deleted = await db
     .delete(schema.scheduledReport)
     .where(eq(schema.scheduledReport.id, id))
-    .returning({ id: schema.scheduledReport.id });
+    .returning({
+      name: schema.scheduledReport.name,
+      kind: schema.scheduledReport.kind,
+      cadence: schema.scheduledReport.cadence,
+      recipients: schema.scheduledReport.recipients,
+    });
 
-  if (deleted.length === 0) throw notFound('Report not found');
+  const [report] = deleted;
+  if (!report) throw notFound('Report not found');
 
   await recordAudit({
     actorUserId: actor.id,
@@ -103,6 +111,7 @@ reportRoutes.delete('/:id', async (c) => {
     action: 'report.delete',
     targetType: 'scheduled_report',
     targetId: id,
+    metadata: report,
     ipAddress: clientIp(c),
   });
 

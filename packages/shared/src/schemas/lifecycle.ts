@@ -19,12 +19,35 @@ export const storagePolicySchema = z.object({
   enabled: z.boolean(),
 });
 
+/** Largest values a storage allowance accepts (1 TiB in total, 1 GiB per file). */
+export const STORAGE_POLICY_MAX_TOTAL_BYTES = 1_099_511_627_776;
+export const STORAGE_POLICY_MAX_FILE_COUNT = 1_000_000;
+export const STORAGE_POLICY_MAX_FILE_BYTES = 1_073_741_824;
+
 export const upsertStoragePolicySchema = z
   .object({
     role: z.enum(USER_ROLES),
-    maxTotalBytes: z.number().int().positive().max(1_099_511_627_776).nullable().optional(),
-    maxFileCount: z.number().int().positive().max(1_000_000).nullable().optional(),
-    maxFileBytes: z.number().int().positive().max(1_073_741_824).nullable().optional(),
+    maxTotalBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(STORAGE_POLICY_MAX_TOTAL_BYTES)
+      .nullable()
+      .optional(),
+    maxFileCount: z
+      .number()
+      .int()
+      .positive()
+      .max(STORAGE_POLICY_MAX_FILE_COUNT)
+      .nullable()
+      .optional(),
+    maxFileBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(STORAGE_POLICY_MAX_FILE_BYTES)
+      .nullable()
+      .optional(),
     enabled: z.boolean().default(true),
   })
   .strict();
@@ -63,6 +86,16 @@ export const storageUsageSchema = z.object({
   maxFileBytes: z.number().int().positive().nullable(),
 });
 
+/** Whether the runtime knows this IANA zone (an unknown one was saved and silently read as UTC). */
+function isTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const retentionSettingsSchema = z.object({
   /** Grace period before soft-deleted content is destroyed. */
   trashRetentionDays: z.number().int().min(MIN_TRASH_RETENTION_DAYS).max(MAX_TRASH_RETENTION_DAYS),
@@ -79,7 +112,11 @@ export const retentionSettingsSchema = z.object({
    */
   memoryRetentionDays: z.number().int().min(1).max(3_650).nullable(),
   /** IANA zone for reporting only; limits reset on their own policy's zone. */
-  displayTimezone: z.string().min(1).max(64),
+  displayTimezone: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine(isTimeZone, 'Use an IANA time zone such as Europe/London or America/New_York.'),
 });
 
 export const updateRetentionSettingsSchema = retentionSettingsSchema.partial().strict();

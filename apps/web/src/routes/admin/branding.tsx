@@ -3,6 +3,7 @@ import {
   type ColorTheme,
   type InstanceSettings,
   instanceSettingsSchema,
+  isSafeImageUrl,
   THEME_MODES,
   type ThemeMode,
   updateInstanceSettingsSchema,
@@ -12,6 +13,7 @@ import { Check, CheckCircle2, Monitor, Moon, RotateCcw, Sun } from 'lucide-react
 import { type FormEvent, useRef, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, SettingsSection } from '~/components/admin/admin-ui';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { TurnsMark } from '~/components/brand/turns-mark';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -93,19 +95,6 @@ function changedBranding(saved: BrandingSettings, draft: BrandingSettings): Bran
   }
 
   return patch;
-}
-
-function isSafeImageUrl(value: string): boolean {
-  if (value.startsWith('/') && !value.startsWith('//')) return true;
-
-  try {
-    const url = new URL(value);
-    return (
-      (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password
-    );
-  } catch {
-    return false;
-  }
 }
 
 function validateBranding(settings: BrandingSettings): BrandingErrors {
@@ -260,6 +249,7 @@ function BrandingForm({ initialSettings }: { initialSettings: BrandingSettings }
 
   const patch = changedBranding(saved, draft);
   const hasChanges = Object.keys(patch).length > 0;
+  useReportUnsaved(hasChanges);
 
   const save = useMutation({
     mutationFn: (changes: BrandingPatch) =>
@@ -590,10 +580,15 @@ function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }) {
             className="h-10 w-auto max-w-40 rounded border border-[var(--border-subtle)] bg-[var(--bg-control)] object-contain p-1"
           />
         )}
+        {/* Opened by the button below, which is what keyboard users reach;
+            named for assistive technology, and out of the Tab order so it is
+            not a second, unexplained stop beside the button. */}
         <input
           ref={inputRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          aria-label="Logo image file (PNG, JPEG or WebP)"
+          tabIndex={-1}
           className="sr-only"
           onChange={(event) => {
             const file = event.target.files?.[0];

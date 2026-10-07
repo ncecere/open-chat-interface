@@ -1,5 +1,9 @@
 import { type ComponentProps, lazy, memo, Suspense } from 'react';
 import { MARKDOWN_LINK_SAFETY } from '~/components/chat/external-link-warning';
+import {
+  installStreamdownOverlayFocus,
+  installStreamdownScrollRegions,
+} from '~/components/chat/streamdown-overlay-focus';
 import { cn } from '~/lib/utils';
 
 /**
@@ -23,6 +27,10 @@ const StreamdownMarkdown = lazy(() =>
       { createMathPlugin },
       { createEditorialMermaidPlugin },
     ]) => {
+      // Streamdown's table full-screen view does not manage focus itself.
+      installStreamdownOverlayFocus();
+      // Its wide tables and code blocks scroll; make them reachable by keyboard.
+      installStreamdownScrollRegions();
       const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
       // Single-dollar inline math is off by default, but models commonly emit it.
       // Mermaid itself loads only when a diagram is first rendered.
@@ -195,6 +203,12 @@ export const MARKDOWN_PROSE = cn(
   // Shiki emits one span per line. Without the gutter they need to be blocks
   // again, or every line collapses onto one row.
   '[&_pre_code]:block [&_pre_code>span]:block',
+  // Squeezed to the reply's width, a table with many columns left a prose
+  // column one word wide (rows 200+ px tall in the QA walk). A table may be as
+  // wide as its content, never narrower than the reply, with long cells
+  // wrapping at a readable width; a wide one scrolls (a focusable region).
+  '[&_[data-streamdown=table]]:w-max [&_[data-streamdown=table]]:min-w-full',
+  '[&_[data-streamdown=table-cell]]:max-w-[22rem]',
   '[&_hr]:border-[var(--border-subtle)]',
   '[&_li::marker]:text-[var(--accent-bright)]',
 );

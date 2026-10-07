@@ -185,6 +185,16 @@ describe('Providers & Models', () => {
     );
   });
 
+  it('explains that the default model cannot be removed, and holds the button back', async () => {
+    ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
+    await click(button('Remove Model m1'));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Make another model the default first',
+    );
+    expect(button('Remove model').disabled).toBe(true);
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
   it('offers only usable models as the default and saves the choice atomically', async () => {
     ({ root } = await renderAdmin(<AdminModelsPage />, { path: '/admin/models?tab=models' }));
     const select = document.getElementById('default-model') as HTMLSelectElement;
@@ -356,6 +366,17 @@ describe('Web search', () => {
     ({ root } = await renderAdmin(<AdminSearchPage />));
     expect(document.body.textContent).toContain('Web search is not available');
     expect(document.body.textContent).toContain('Web search is unavailable: no credential.');
+  });
+});
+
+describe('Branding logo', () => {
+  it('names the logo file input and keeps it out of the Tab order', async () => {
+    ({ root } = await renderAdmin(<AdminBrandingPage />));
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input?.getAttribute('aria-label')).toBe('Logo image file (PNG, JPEG or WebP)');
+    // The visible Upload logo button is the keyboard route to it.
+    expect(input?.tabIndex).toBe(-1);
+    expect(button('Upload logo')).toBeTruthy();
   });
 });
 

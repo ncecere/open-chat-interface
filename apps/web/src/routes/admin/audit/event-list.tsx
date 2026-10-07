@@ -20,7 +20,16 @@ export function DesktopEventTable({
   onToggle: (id: string) => void;
 }) {
   return (
-    <div className="relative hidden overflow-x-auto md:block">
+    // The table needs 48rem; beside the admin navigation that only fits from
+    // xl (1280px). Narrower, it clipped Details off the right edge, so the
+    // card list is used up to there.
+    <section
+      // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+      tabIndex={0}
+      aria-label="Audit events"
+      className="relative hidden overflow-x-auto xl:block"
+    >
       <table className="w-full min-w-[48rem] table-fixed text-left text-sm">
         <caption className="sr-only">Administrative and security audit events</caption>
         <thead>
@@ -79,7 +88,10 @@ export function DesktopEventTable({
                     </Badge>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <p className="truncate font-mono text-xs text-[var(--text-secondary)]">
+                    <p
+                      className="truncate font-mono text-xs text-[var(--text-secondary)]"
+                      title={targetLabel(entry)}
+                    >
                       <TargetCell entry={entry} />
                     </p>
                   </td>
@@ -104,7 +116,7 @@ export function DesktopEventTable({
           })}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }
 
@@ -118,7 +130,7 @@ export function MobileEventList({
   onToggle: (id: string) => void;
 }) {
   return (
-    <ul className="divide-y divide-[var(--border-subtle)] md:hidden">
+    <ul className="divide-y divide-[var(--border-subtle)] xl:hidden">
       {entries.map((entry) => {
         const expanded = expandedIds.has(entry.id);
         const detailsId = `audit-details-mobile-${entry.id}`;

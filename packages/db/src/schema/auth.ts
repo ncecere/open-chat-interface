@@ -112,8 +112,9 @@ export const ssoProvider = pgTable(
      */
     trustedForLinking: boolean('trusted_for_linking').notNull().default(false),
     /**
-     * Read by the SSO plugin's linking check. Kept in sync with
-     * `trustedForLinking`, which is the administrator-facing control.
+     * Read by the SSO plugin, which refuses every sign-in from a provider whose
+     * domain is not verified. OCI keeps it true for every provider; linking is
+     * governed by `trustedForLinking` (apps/api/src/auth/sso-linking.ts).
      */
     domainVerified: boolean('domain_verified').notNull().default(false),
     allowedDomains: jsonb('allowed_domains').$type<string[]>().notNull().default([]),

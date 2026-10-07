@@ -256,6 +256,56 @@ describe('Roles & access', () => {
     expect(upsertStoragePolicySchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
   });
 
+  it('refuses 0 and negative storage limits instead of saving them as unlimited', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=restricted' }));
+
+    await typeInto(input('storage-restricted-total'), '-1');
+    await typeInto(input('storage-restricted-file'), '0');
+
+    expect(input('storage-restricted-total').getAttribute('aria-invalid')).toBe('true');
+    expect(input('storage-restricted-file').getAttribute('aria-invalid')).toBe('true');
+    expect(input('storage-restricted-total').getAttribute('aria-describedby')).toBe(
+      'storage-restricted-total-error',
+    );
+    expect(alerts().join(' ')).toContain('Enter a number greater than 0');
+    expect(button('Save allowance').disabled).toBe(true);
+
+    await click(button('Save allowance'));
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('refuses a fractional file count and limits beyond the maximum', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=restricted' }));
+
+    await typeInto(input('storage-restricted-count'), '2.5');
+    await typeInto(input('storage-restricted-total'), '2048');
+
+    const messages = alerts().join(' ');
+    expect(messages).toContain('Enter a whole number');
+    expect(messages).toContain('The largest allowed is 1,024 GB');
+    expect(button('Save allowance').disabled).toBe(true);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('saves again once an invalid storage limit is cleared to mean no limit', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=restricted' }));
+
+    await typeInto(input('storage-restricted-count'), '0');
+    expect(button('Save allowance').disabled).toBe(true);
+    await typeInto(input('storage-restricted-count'), '');
+    await typeInto(input('storage-restricted-file'), '5');
+    await click(button('Save allowance'));
+
+    expect(api.put).toHaveBeenCalledWith('/admin/lifecycle/storage-policies/restricted', {
+      role: 'restricted',
+      maxTotalBytes: null,
+      maxFileCount: null,
+      maxFileBytes: 5 * 1024 * 1024,
+      enabled: true,
+    });
+    expect(upsertStoragePolicySchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
+  });
+
   it('saves instance-wide limits without touching any role', async () => {
     ({ root } = await renderAdmin(<AdminRolesPage />));
 

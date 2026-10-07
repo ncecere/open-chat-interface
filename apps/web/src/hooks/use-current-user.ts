@@ -61,6 +61,10 @@ interface CurrentChatDefaults {
   defaultModelSlug?: string | null;
   /** Saved defaults that no longer apply and are ignored (v0.10). */
   defaultProblems?: PersonalDefaultProblem[];
+  /** Files one message may carry (v0.11.1; absent from an older API). */
+  maxFilesPerMessage?: number;
+  /** Largest file the instance accepts, in bytes (v0.11.1; absent from an older API). */
+  maxFileBytes?: number;
 }
 
 /** What Settings needs to hide sections with nothing in them (v0.9.1). */
@@ -97,7 +101,10 @@ export function useCurrentUser() {
         throw error;
       }
     },
-    staleTime: 30_000,
+    // A signed-in answer is reused for 30 s; an anonymous one never is. Signing
+    // out refetches /me while the app is still mounted, and a cached `null`
+    // that counted as fresh was handed to the next account to sign in.
+    staleTime: (query) => (query.state.data === null ? 0 : 30_000),
     retry: false,
   });
 }

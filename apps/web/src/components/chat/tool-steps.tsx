@@ -13,9 +13,9 @@ import type { UIMessage } from 'ai';
 import { ChevronDown, Globe2, ShieldQuestion, Wrench } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ArtifactToolStep } from '~/components/artifacts/artifact-tool-step';
-import { SafeExternalLink } from '~/components/chat/external-link-warning';
 import { MemoryNote } from '~/components/chat/memory-note';
 import type { ToolPlace } from '~/components/chat/message-content';
+import { SourceList } from '~/components/chat/search-grounding';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
@@ -78,20 +78,10 @@ function ResultSummary({ part, step }: { part: ToolPart; step: ToolStepSummary }
         : [];
     });
     if (links.length === 0) return <p className="text-[var(--text-muted)]">No results.</p>;
-    return (
-      <ul className="space-y-1">
-        {links.map((link) => (
-          <li key={link.url} className="min-w-0 truncate">
-            <SafeExternalLink
-              href={link.url}
-              className="text-[var(--accent-bright)] underline-offset-2 hover:underline"
-            >
-              {link.title}
-            </SafeExternalLink>
-          </li>
-        ))}
-      </ul>
-    );
+    // The search-before-a-reply's list: title, the address it opens and the
+    // site's mark, through the external-link check. A bare title list read as
+    // text, not as sources. Snippets stay out (a summary, not raw output).
+    return <SourceList sources={links} />;
   }
   return <p className="text-[var(--text-muted)]">Finished.</p>;
 }

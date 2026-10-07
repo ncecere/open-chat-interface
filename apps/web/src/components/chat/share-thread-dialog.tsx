@@ -291,7 +291,7 @@ export function ShareThreadDialog({
 
         {(formError || create.error) && (
           <p
-            className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+            className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
             role="alert"
           >
             {formError ?? apiErrorMessage(create.error, 'Failed to create share link.')}
@@ -304,7 +304,7 @@ export function ShareThreadDialog({
         )}
         {revoke.error && (
           <p
-            className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+            className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
             role="alert"
           >
             {apiErrorMessage(revoke.error, 'Failed to revoke share link.')}
@@ -323,7 +323,7 @@ export function ShareThreadDialog({
           )}
           {loadError && (
             <p
-              className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-foreground)]"
+              className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
               role="alert"
             >
               {apiErrorMessage(loadError, 'Failed to load share links.')}

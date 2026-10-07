@@ -206,7 +206,8 @@ describe('SSO provider request mapping', () => {
       success: true,
       data: {
         label: 'Company SSO',
-        enabled: true,
+        // A new provider's draft starts off (#53).
+        enabled: false,
         jitProvisioning: true,
         trustedForLinking: false,
         allowedDomains: [],

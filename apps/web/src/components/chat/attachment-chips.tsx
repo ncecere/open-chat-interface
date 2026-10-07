@@ -11,55 +11,75 @@ export function AttachmentChips({
   onRemove: (localId: string) => void;
 }) {
   if (items.length === 0) return null;
+  const failures = items.filter((item) => item.status === 'error');
 
   return (
-    <div className="mb-3 flex flex-wrap gap-2">
-      {items.map((item) => {
-        const isImage = item.mimeType.startsWith('image/');
-        const failed = item.status === 'error';
+    <div className="mb-3">
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => {
+          const isImage = item.mimeType.startsWith('image/');
+          const failed = item.status === 'error';
 
-        return (
-          <div
-            key={item.localId}
-            className={cn(
-              'group relative flex items-center gap-2 rounded-lg border px-2 py-1.5',
-              failed
-                ? 'border-[var(--danger)]/50 bg-[var(--danger)]/10'
-                : 'border-[var(--border-strong)] bg-[var(--bg-control-alt)]',
-            )}
-            title={failed ? item.error : `${item.filename} · ${formatBytes(item.sizeBytes)}`}
-          >
-            {isImage && item.previewUrl ? (
-              <img src={item.previewUrl} alt="" className="size-7 shrink-0 rounded object-cover" />
-            ) : (
-              <span className="flex size-7 shrink-0 items-center justify-center rounded bg-[var(--bg-control-hover)]">
-                {failed ? (
-                  <AlertCircle className="size-3.5 text-[var(--danger-foreground)]" />
-                ) : (
-                  <FileText className="size-3.5 text-[var(--text-muted)]" />
-                )}
-              </span>
-            )}
-
-            <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
-              {item.filename}
-            </span>
-
-            {item.status === 'uploading' && (
-              <span className="text-[0.625rem] text-[var(--text-muted)]">uploading…</span>
-            )}
-
-            <button
-              type="button"
-              onClick={() => onRemove(item.localId)}
-              aria-label={`Remove ${item.filename}`}
-              className="rounded p-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+          return (
+            <div
+              key={item.localId}
+              className={cn(
+                'group relative flex items-center gap-2 rounded-lg border px-2 py-1.5',
+                failed
+                  ? 'border-[var(--danger)]/50 bg-[var(--danger)]/10'
+                  : 'border-[var(--border-strong)] bg-[var(--bg-control-alt)]',
+              )}
+              title={failed ? item.error : `${item.filename} · ${formatBytes(item.sizeBytes)}`}
+              aria-describedby={failed ? `attachment-error-${item.localId}` : undefined}
             >
-              <X className="size-3.5" />
-            </button>
-          </div>
-        );
-      })}
+              {/* A refused "image" may not be one (a renamed archive): no preview. */}
+              {isImage && item.previewUrl && !failed ? (
+                <img
+                  src={item.previewUrl}
+                  alt=""
+                  className="size-7 shrink-0 rounded object-cover"
+                />
+              ) : (
+                <span className="flex size-7 shrink-0 items-center justify-center rounded bg-[var(--bg-control-hover)]">
+                  {failed ? (
+                    <AlertCircle className="size-3.5 text-[var(--danger)]" aria-hidden="true" />
+                  ) : (
+                    <FileText className="size-3.5 text-[var(--text-muted)]" />
+                  )}
+                </span>
+              )}
+
+              <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
+                {item.filename}
+              </span>
+
+              {item.status === 'uploading' && (
+                <span className="text-[0.625rem] text-[var(--text-muted)]">uploading…</span>
+              )}
+
+              <button
+                type="button"
+                onClick={() => onRemove(item.localId)}
+                aria-label={`Remove ${item.filename}`}
+                className="rounded p-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {/* The reason, in words: a tooltip reaches neither keyboard, touch nor
+        screen-reader users. Announced as each failure appears. */}
+      {failures.length > 0 && (
+        <ul role="alert" className="mt-2 flex flex-col gap-1 text-[var(--danger)] text-xs">
+          {failures.map((item) => (
+            <li key={item.localId} id={`attachment-error-${item.localId}`}>
+              {item.filename}: {item.error ?? 'This file could not be attached.'}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

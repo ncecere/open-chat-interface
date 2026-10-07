@@ -87,7 +87,9 @@ export async function validateUpload(params: {
   }
 
   if (!params.allowedMimeTypes.includes(mimeType)) {
-    throw validationFailed(`${filename} is a ${mimeType} file, which is not allowed here`);
+    throw validationFailed(
+      `${filename} is ${/^[aeiou]/i.test(mimeType) ? 'an' : 'a'} ${mimeType} file, which is not allowed here`,
+    );
   }
 
   if (mimeType === 'application/json') {

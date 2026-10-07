@@ -13,6 +13,7 @@ import {
 import { jobMayContinue } from '../jobs/runner.js';
 import { lockUsageOwner, settleLockedEvent } from '../quota/settlement.js';
 import { isRunActiveHere } from './active-runs.js';
+import { settledParts } from './settled-parts.js';
 
 /**
  * Replies whose producer is gone (v0.11 design, item 13 and the rolling-upgrade
@@ -146,15 +147,8 @@ async function rebuildReply(
     latest = message;
   }
   if (failed || !latest) return null;
-  // Nothing more will arrive: text and reasoning are as written, and a tool
-  // call whose input never finished was never run, so it is left out.
-  return latest.parts.flatMap((part) => {
-    const state = (part as { state?: unknown }).state;
-    if ((part.type === 'text' || part.type === 'reasoning') && state === 'streaming')
-      return [{ ...part, state: 'done' as const }];
-    if (state === 'input-streaming') return [];
-    return [part];
-  });
+  // Nothing more will arrive (the rule every saved reply follows).
+  return settledParts(latest.parts);
 }
 
 async function settleReservation(identity: RunIdentity): Promise<void> {

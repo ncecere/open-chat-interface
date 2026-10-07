@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { PanelLeft, Search, UserRoundPlus } from 'lucide-react';
+import { PanelLeft, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Wordmark } from '~/components/brand/wordmark';
 import { SidebarProjects } from '~/components/layout/sidebar-projects';
@@ -48,8 +48,8 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       inert={!open ? true : undefined}
       className={cn(
         'fixed inset-y-0 left-0 z-50 flex h-dvh w-full shrink-0 flex-col bg-[var(--bg-app)] bg-[image:var(--sidebar-gradient)]',
-        'transition-transform duration-200 ease-out md:static md:z-auto md:w-64 md:transition-[margin]',
-        open ? 'translate-x-0 md:ml-0' : '-translate-x-full md:-ml-64 md:translate-x-0',
+        'transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:transition-[margin]',
+        open ? 'translate-x-0 lg:ml-0' : '-translate-x-full lg:-ml-64 lg:translate-x-0',
       )}
     >
       <div className="flex h-14 items-center px-3">
@@ -75,7 +75,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
         </Link>
       </div>
 
-      <div className="hidden px-3 pb-2 md:block">
+      <div className="hidden px-3 pb-2 lg:block">
         <Button
           variant="primary"
           className="h-9 w-full font-semibold"
@@ -122,16 +122,13 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
         )}
       </nav>
 
-      <div className="hidden items-center gap-1 p-2 md:flex">
+      <div className="hidden items-center gap-1 p-2 lg:flex">
         <div className="min-w-0 flex-1">
           <UserMenu />
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label="New profile">
-          <UserRoundPlus />
-        </Button>
       </div>
 
-      <div className="flex items-center justify-between px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:hidden">
+      <div className="flex items-center justify-between px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:hidden">
         <Button
           variant="accent"
           className="h-11 rounded-full px-5"

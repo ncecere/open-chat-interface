@@ -71,6 +71,8 @@ vi.mock('../../src/providers/temporary-chat-provider', () => ({
   },
 }));
 vi.mock('../../src/hooks/use-chat-session', () => ({ useChatSession: mocks.useChatSession }));
+// The page names itself from the sidebar's lists, which this suite does not load.
+vi.mock('../../src/hooks/use-open-conversation', () => ({ useOpenConversation: () => undefined }));
 vi.mock('../../src/hooks/use-threads', () => ({
   useBranchMessage: () => ({ mutateAsync: mocks.branch }),
   useForkMessage: () => ({ mutateAsync: mocks.fork }),
@@ -260,6 +262,10 @@ describe('ChatThreadPage loading boundary', () => {
       expect(container.textContent).toContain('Conversation unavailable');
       expect(container.textContent).not.toContain('Private API detail');
       expectNoSpinner();
+      // Retrying cannot bring back a conversation that is gone (#103).
+      expect(
+        [...container.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Retry'),
+      ).toBe(false);
       const navigation = control(/back|new chat/i);
       await act(() => navigation.click());
       const returnedHome = mocks.navigate.mock.calls.some(([options]) => options?.to === '/');
@@ -452,5 +458,36 @@ describe('ChatThreadPage loading boundary', () => {
     expect(container.textContent).not.toContain('Could not load conversation');
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.regenerate).not.toHaveBeenCalled();
+  });
+});
+
+describe('a reply pending after a reload (#90)', () => {
+  function withRecovery(state: { status: string; resuming: boolean; remotePending: boolean }) {
+    const base = mocks.useChatSession.getMockImplementation()!;
+    mocks.useChatSession.mockImplementation((options: never) => {
+      const session = base(options);
+      return {
+        ...session,
+        status: state.status,
+        recovery: { ...session.recovery, ...state },
+      };
+    });
+  }
+  const notice = () => container.textContent?.includes('A reply is pending on the server') ?? false;
+
+  it('does not offer the fallback while the replay is connected', async () => {
+    setQuery('success', null, emptyThread());
+    withRecovery({ status: 'streaming', resuming: true, remotePending: true });
+    await render();
+    expect(notice()).toBe(false);
+    expect(container.textContent).not.toContain('Reload saved messages');
+  });
+
+  it('offers it once the replay has ended and the server still has the reply pending', async () => {
+    setQuery('success', null, emptyThread());
+    withRecovery({ status: 'ready', resuming: false, remotePending: true });
+    await render();
+    expect(notice()).toBe(true);
+    expect(container.textContent).toContain('Reload saved messages');
   });
 });

@@ -294,7 +294,8 @@ describe.skipIf(!available)('live: usage kept after an account is deleted', () =
     expect(body).toContain('Cost:          $6.00');
     expect(body).toContain('Active people: 1');
     expect(body).toContain(`  ${DELETED_ACCOUNTS_LABEL}  5 messages`);
-    expect(body).toContain('  here@example.test  1 messages');
+    // One message, not "1 messages" (#78).
+    expect(body).toMatch(/^ {2}here@example\.test {2}1 message$/m);
     expect(body).not.toContain('gone@example.test');
   });
 
