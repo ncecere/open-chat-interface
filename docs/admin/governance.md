@@ -17,7 +17,9 @@ For each role:
   that role.
 - **Models** — how many of the available models (enabled, on an enabled
   provider) the role can see. Visibility is set per model on
-  [Providers & Models](models-providers.md).
+  [Providers & Models](models-providers.md). People in a role that sees none
+  are told on the chat page that no models are available to their role and
+  to ask an administrator.
 - **Features** — editable switches for web search, file attachments, share
   links, temporary chats, branching, projects, artifacts and deleting one's
   own account, plus the reasoning levels the role may choose. See [Features and reasoning levels](#features-and-reasoning-levels).

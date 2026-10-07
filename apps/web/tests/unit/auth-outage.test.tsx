@@ -2,9 +2,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginPage } from '../../src/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '../../src/routes/auth/password-reset';
+import { SignupPage } from '../../src/routes/auth/signup';
 
 /**
  * The sign-in and password-reset pages during an outage (#288). With the
@@ -222,4 +223,99 @@ it('does not call a working reset link invalid while the database is down', asyn
   await submit();
   expect(alertText()).toBe('Password reset is temporarily unavailable. Try again in a moment.');
   expect(container.textContent).not.toContain('invalid or expired');
+});
+
+/**
+ * #307: in a long outage each check of the status took 12–16 s to fail. A
+ * query with no data goes back to pending for every 5 s refetch, so Forgot
+ * password showed a bare spinner, with no text and no Try again, while each
+ * check was out, and sign-in and sign-up dropped their forms for one. Real
+ * timers would make this a minute long; the query's own timers run faked.
+ */
+describe('while the status is re-checked during an outage (#307)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Fails as the API does with the database's name unresolvable: after 15 s. */
+  const slowOutage = () =>
+    new Promise<Response>((resolve) => setTimeout(() => resolve(outage()), 15_000));
+  const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+  const tryAgain = () =>
+    [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Try again'),
+    );
+
+  /** Fails the first load (and its one retry) at once, then answers slowly. */
+  function failingStatus() {
+    let checks = 0;
+    const routes: Record<string, () => Response | Promise<Response>> = {
+      '/api/auth/status': () => (++checks <= 2 ? outage() : slowOutage()),
+    };
+    serve(routes);
+    return {
+      routes,
+      checks: () => checks,
+    };
+  }
+
+  it('keeps Forgot password\'s "temporarily unavailable" card and Try again up', async () => {
+    const status = failingStatus();
+    await render(<ForgotPasswordPage />, '/auth/forgot-password');
+    await advance(1_200);
+    expect(container.textContent).toContain('Password reset temporarily unavailable');
+    expect(tryAgain()).toBeDefined();
+
+    // The 5 s check goes out and takes 15 s to fail: the card stays all along.
+    for (let second = 0; second < 20; second += 1) {
+      await advance(1_000);
+      expect(container.querySelector('[role="status"]')?.textContent).toBe(
+        'The service is temporarily unavailable. Try again in a moment.',
+      );
+      expect(tryAgain()).toBeDefined();
+    }
+    expect(status.checks()).toBeGreaterThan(2);
+
+    // The database is back: the next check shows the form, with no reload.
+    status.routes['/api/auth/status'] = () => Response.json(STATUS);
+    await advance(20_000);
+    expect(container.querySelector('#reset-email')).not.toBeNull();
+  });
+
+  it('keeps the sign-in form, and what was typed, while the status is re-checked', async () => {
+    const status = failingStatus();
+    await render(<LoginPage />, '/auth/login');
+    await advance(1_200);
+    await fill('#email', 'm.bell@northbrook.edu');
+    for (let second = 0; second < 20; second += 1) {
+      await advance(1_000);
+      expect(container.querySelector<HTMLInputElement>('#email')?.value).toBe(
+        'm.bell@northbrook.edu',
+      );
+    }
+    expect(status.checks()).toBeGreaterThan(2);
+  });
+
+  it('says sign-up is temporarily unavailable, not closed, and keeps saying it', async () => {
+    const status = failingStatus();
+    await render(<SignupPage />, '/auth/signup');
+    await advance(1_200);
+    for (let second = 0; second < 20; second += 1) {
+      await advance(1_000);
+      expect(container.textContent).toContain('Registration temporarily unavailable');
+      expect(container.textContent).not.toContain('not accepting open account registrations');
+      expect(tryAgain()).toBeDefined();
+    }
+    expect(status.checks()).toBeGreaterThan(2);
+
+    status.routes['/api/auth/status'] = () =>
+      Response.json({ ...STATUS, registrationMode: 'open' });
+    // Try again joins the check already out, then the next one answers.
+    await act(async () => tryAgain()!.click());
+    await advance(20_000);
+    expect(container.querySelector('#signup-email')).not.toBeNull();
+  });
 });

@@ -14,6 +14,7 @@ import {
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { uploadImportFile } from '~/lib/import-upload';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn, formatBytes, formatRelativeTime } from '~/lib/utils';
 
 const IMPORTS_KEY = ['me', 'imports'] as const;
@@ -114,6 +115,8 @@ function useImports() {
   const [progress, setProgress] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
   const previous = useRef(new Map<string, ImportStatus>());
 
   const imports = useQuery({

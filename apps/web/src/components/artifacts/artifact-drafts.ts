@@ -29,6 +29,8 @@ export interface ArtifactDraft {
   mode: 'content' | 'edits' | 'unknown';
   title: string | null;
   kind: ArtifactKind | null;
+  /** A code artifact's language, as the call gives it (#298). */
+  language: string | null;
   /** The text written so far (`content` mode). */
   content: string;
   edits: ArtifactEdit[];
@@ -80,6 +82,7 @@ export function artifactDraftOf(messageId: string, part: unknown): ArtifactDraft
     kind: (ARTIFACT_KINDS as readonly string[]).includes(kind ?? '')
       ? (kind as ArtifactKind)
       : null,
+    language: text(input.language),
     content: content ?? '',
     edits,
     artifactId: result?.artifactId ?? text(input.artifactId),

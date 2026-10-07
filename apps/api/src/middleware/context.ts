@@ -1,6 +1,8 @@
 import { USER_ROLES, type UserRole } from '@oci/shared';
+import { APIError } from 'better-auth/api';
 import { createMiddleware } from 'hono/factory';
 import { auth } from '../auth/index.js';
+import { SESSION_LOOKUP_FAILED } from '../lib/db-connection.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { noteSessionActivity } from '../services/account-sessions.js';
@@ -29,9 +31,29 @@ export function normalizeSessionRole(value: unknown): UserRole {
     : 'restricted';
 }
 
+/**
+ * The person's session. Better Auth re-throws a failed lookup query as a bare
+ * INTERNAL_SERVER_ERROR APIError, without its cause; nothing else has run
+ * for the request yet, so it is reported as a lost database connection: the
+ * error handler then marks the answer retryable, and reads are run again
+ * (middleware/read-retry.ts) instead of answering a plain 500.
+ */
+async function lookUpSession(headers: Headers) {
+  try {
+    return await auth.api.getSession({ headers });
+  } catch (error) {
+    if (error instanceof APIError && error.status === 'INTERNAL_SERVER_ERROR') {
+      throw Object.assign(new Error('The session could not be looked up', { cause: error }), {
+        code: SESSION_LOOKUP_FAILED,
+      });
+    }
+    throw error;
+  }
+}
+
 /** Resolves the session for every request without rejecting anonymous ones. */
 export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const session = await lookUpSession(c.req.raw.headers);
 
   if (session?.user) {
     const raw = session.user as typeof session.user & {

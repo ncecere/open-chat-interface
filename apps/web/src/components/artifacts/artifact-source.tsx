@@ -1,14 +1,17 @@
-import type { ArtifactKind } from '@oci/shared';
+import { type ArtifactKind, normalizeCodeLanguage } from '@oci/shared';
 import { useEffect, useRef, useState } from 'react';
 import { HighlightedCode, MARKDOWN_PROSE } from '~/components/chat/markdown';
 import { cn } from '~/lib/utils';
 
 /**
  * The Shiki language for an artifact's source. Mermaid uses its `mmd` alias:
- * a `mermaid` fence would be drawn as a diagram rather than shown as code.
+ * a `mermaid` fence would be drawn as a diagram rather than shown as code. A
+ * code artifact's is its own language (#298).
  */
-export function sourceLanguage(kind: ArtifactKind | null): string {
+export function sourceLanguage(kind: ArtifactKind | null, language?: string | null): string {
   switch (kind) {
+    case 'code':
+      return normalizeCodeLanguage(language);
     case 'html':
       return 'html';
     case 'svg':
@@ -66,10 +69,13 @@ const PLAIN =
  */
 export function ArtifactSource({
   kind,
+  language,
   content,
   writing = false,
 }: {
   kind: ArtifactKind | null;
+  /** A code artifact's language (#298). */
+  language?: string | null;
   content: string;
   writing?: boolean;
 }) {
@@ -99,7 +105,7 @@ export function ArtifactSource({
         '[&_[data-streamdown=code-block]]:!my-0',
       )}
     >
-      <HighlightedCode source={highlighted} language={sourceLanguage(kind)} />
+      <HighlightedCode source={highlighted} language={sourceLanguage(kind, language)} />
     </div>
   );
 }

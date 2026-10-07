@@ -46,7 +46,10 @@ describe.skipIf(!available)('live: invitations', () => {
     });
     return {
       status: response.status,
-      body: (await response.json()) as { url?: string; error: { message: string } },
+      body: (await response.json()) as {
+        url?: string;
+        error: { message: string; details?: unknown };
+      },
     };
   }
 
@@ -80,6 +83,8 @@ describe.skipIf(!available)('live: invitations', () => {
     const { status, body } = await invite({ email: 'P.Nair@northbrook.edu', role: 'admin' });
     expect(status).toBe(409);
     expect(body.error.message).toContain('already exists');
+    // About the address, so the form shows it at its Email field (#302).
+    expect(body.error.details).toEqual([{ path: ['email'], message: body.error.message }]);
   });
 
   it('allows one pending invitation per address', async () => {
@@ -87,6 +92,9 @@ describe.skipIf(!available)('live: invitations', () => {
     const second = await invite({ email: 'walk.new@northbrook.edu', role: 'admin' });
     expect(second.status).toBe(409);
     expect(second.body.error.message).toContain('Revoke it first');
+    expect(second.body.error.details).toEqual([
+      { path: ['email'], message: second.body.error.message },
+    ]);
   });
 
   it('says when an invitation is for a different address', async () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REASONING_EFFORTS } from '../constants.js';
+import { MAX_FILES_PER_MESSAGE, REASONING_EFFORTS } from '../constants.js';
 
 export const threadSummarySchema = z.object({
   id: z.string(),
@@ -80,6 +80,12 @@ export const attachmentSchema = z.object({
  */
 export const storedFileSchema = attachmentSchema.extend({
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
+  /**
+   * A chat file not sent with any message (#297): in a composer now. The
+   * composer discards its uploads when it is left, and uploads unsent for a
+   * day are deleted.
+   */
+  unsent: z.boolean().default(false),
 });
 
 /** GET /api/threads?view=history: one page, newest activity first. */
@@ -170,6 +176,12 @@ export const branchMessageSchema = z
   .object({
     messageId: z.string().min(1).max(200),
     text: messageTextSchema,
+    /**
+     * Which of the question's own files the edited question keeps, by id
+     * (#296): the person may remove one in the edit box. Absent keeps them
+     * all, as a fork and Retry do. Ids of any other file are refused.
+     */
+    attachmentIds: z.array(z.string().min(1).max(200)).max(MAX_FILES_PER_MESSAGE).optional(),
   })
   .strict();
 

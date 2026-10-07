@@ -292,7 +292,7 @@ describe('memoized transcript correctness', () => {
     expect(container.textContent).toContain('Branch failed');
     expect(editor.disabled).toBe(false);
     await submit();
-    expect(onEdit).toHaveBeenLastCalledWith('question', 'Edited question');
+    expect(onEdit).toHaveBeenLastCalledWith('question', 'Edited question', []);
     expect(container.querySelector('textarea')).toBeNull();
   });
 });

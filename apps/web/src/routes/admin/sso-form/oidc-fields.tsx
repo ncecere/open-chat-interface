@@ -1,4 +1,4 @@
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import type { ProtocolDraft } from './provider-draft';
 import { ToggleField } from './toggle-field';
@@ -7,10 +7,13 @@ export function OidcFields({
   protocol,
   disabled,
   onChange,
+  errorAt,
 }: {
   protocol: ProtocolDraft;
   disabled: boolean;
   onChange: (protocol: ProtocolDraft) => void;
+  /** The problem shown at a field, by its key in the draft (#302). */
+  errorAt: (field: string) => string | null;
 }) {
   const set = <Key extends keyof ProtocolDraft>(key: Key, value: ProtocolDraft[Key]) =>
     onChange({ ...protocol, [key]: value });
@@ -20,9 +23,10 @@ export function OidcFields({
       <h3 id="oidc-heading" className="text-sm font-semibold text-[var(--text-primary)]">
         OpenID Connect configuration
       </h3>
-      <Field label="Issuer URL" htmlFor="oidc-issuer">
+      <Field label="Issuer URL" htmlFor="oidc-issuer" error={errorAt('issuer')}>
         <Input
           id="oidc-issuer"
+          {...invalidFieldProps('oidc-issuer', errorAt('issuer'))}
           type="url"
           value={protocol.issuer}
           disabled={disabled}
@@ -33,9 +37,10 @@ export function OidcFields({
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Client ID" htmlFor="oidc-client-id">
+        <Field label="Client ID" htmlFor="oidc-client-id" error={errorAt('clientId')}>
           <Input
             id="oidc-client-id"
+            {...invalidFieldProps('oidc-client-id', errorAt('clientId'))}
             value={protocol.clientId}
             disabled={disabled}
             required
@@ -47,10 +52,12 @@ export function OidcFields({
         <Field
           label="Client secret"
           htmlFor="oidc-client-secret"
+          error={errorAt('clientSecret')}
           hint="Sent once and never displayed again."
         >
           <Input
             id="oidc-client-secret"
+            {...invalidFieldProps('oidc-client-secret', errorAt('clientSecret'))}
             type="password"
             value={protocol.clientSecret}
             disabled={disabled}
@@ -64,10 +71,12 @@ export function OidcFields({
       <Field
         label="Discovery URL (optional)"
         htmlFor="oidc-discovery"
+        error={errorAt('discoveryUrl')}
         hint="Defaults to the issuer's /.well-known/openid-configuration endpoint."
       >
         <Input
           id="oidc-discovery"
+          {...invalidFieldProps('oidc-discovery', errorAt('discoveryUrl'))}
           type="url"
           value={protocol.discoveryUrl}
           disabled={disabled}
@@ -77,9 +86,15 @@ export function OidcFields({
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Scopes" htmlFor="oidc-scopes" hint="Separate scopes with spaces or commas.">
+        <Field
+          label="Scopes"
+          htmlFor="oidc-scopes"
+          error={errorAt('scopes')}
+          hint="Separate scopes with spaces or commas."
+        >
           <Input
             id="oidc-scopes"
+            {...invalidFieldProps('oidc-scopes', errorAt('scopes'))}
             value={protocol.scopes}
             disabled={disabled}
             required

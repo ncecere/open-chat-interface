@@ -302,6 +302,13 @@
       "when": 1790539200022,
       "tag": "0042_sso_providers_may_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790539200023,
+      "tag": "0043_code_artifacts",
+      "breakpoints": true
     }
   ]
 }

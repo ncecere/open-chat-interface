@@ -1,5 +1,6 @@
 import { INACTIVE_READ_ONLY_STATUS, type ReadOnlyStatus } from '@oci/shared';
 import { useSyncExternalStore } from 'react';
+import { TIME_OF_DAY } from './utils';
 
 /**
  * Read-only maintenance mode in the browser (v0.11 design, section 9).
@@ -32,14 +33,17 @@ export function setReadOnlyStatus(next: ReadOnlyStatus): void {
   for (const listener of listeners) listener();
 }
 
-function subscribe(listener: () => void): () => void {
+/** Calls `listener` whenever the status changes; returns the unsubscribe. */
+export function subscribeReadOnlyStatus(listener: () => void): () => void {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /** The current status; re-renders when it changes. */
 export function useReadOnlyStatus(): ReadOnlyStatus {
-  return useSyncExternalStore(subscribe, readOnlyStatus, readOnlyStatus);
+  return useSyncExternalStore(subscribeReadOnlyStatus, readOnlyStatus, readOnlyStatus);
 }
 
 /** Whether a value has the shape of `GET /api/maintenance`'s answer. */
@@ -94,7 +98,9 @@ export async function noteReadOnlyResponse(response: Response): Promise<void> {
  * the year in another year ("Sun 10 Jan 2027, 14:30 GMT", #81), in the
  * person's own zone, named: a scheduled window's announcement gives its times
  * in the instance's zone, and an unnamed local time beside it read as a
- * different time (#160).
+ * different time (#160). The time of day is written as every admin list
+ * writes it (`formatDateTime`, "6:30 AM"): a two-digit hour gave "07:30 AM"
+ * here beside "6:30 AM" there (#305).
  */
 export function formatReadOnlyTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
@@ -103,17 +109,19 @@ export function formatReadOnlyTime(iso: string, now = new Date()): string {
   return date.toLocaleString(undefined, {
     ...(sameDay ? {} : { weekday: 'short', day: 'numeric', month: 'short' }),
     ...(sameYear ? {} : { year: 'numeric' }),
-    hour: '2-digit',
-    minute: '2-digit',
+    ...TIME_OF_DAY,
     timeZoneName: 'short',
   });
 }
+
+/** How every refusal's text (`readOnlyMessage`) begins. */
+export const READ_ONLY_MESSAGE_START = 'Read-only for maintenance';
 
 /** One sentence for people: why changes are paused, and until when if known. */
 export function readOnlyMessage(status: ReadOnlyStatus, now = new Date()): string {
   const until = status.until ? ` until about ${formatReadOnlyTime(status.until, now)}` : '';
   const reason = status.reason ? ` ${status.reason.trim().replace(/([^.!?])$/, '$1.')}` : '';
-  return `Read-only for maintenance${until}: you can read, search and export, but changes can’t be saved.${reason}`;
+  return `${READ_ONLY_MESSAGE_START}${until}: you can read, search and export, but changes can’t be saved.${reason}`;
 }
 
 /**

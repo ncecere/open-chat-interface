@@ -19,6 +19,7 @@ export function serializeArtifact(row: ArtifactRow, sizeBytes: number): Artifact
     sourceKey: row.sourceKey,
     title: row.title,
     kind: row.kind,
+    language: row.language,
     currentVersion: row.currentVersion,
     sizeBytes,
     createdAt: row.createdAt.toISOString(),

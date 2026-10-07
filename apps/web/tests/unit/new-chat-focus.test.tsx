@@ -194,7 +194,7 @@ describe('a new chat takes the cursor (#251)', () => {
   it("after the palette's New chat, once the palette has closed", async () => {
     device('narrow');
     const router = await renderApp('/chat/t1');
-    const search = button('Search commands and threads');
+    const search = button('Search commands and conversations');
     search.focus();
     await act(async () => search.click());
     await frames();

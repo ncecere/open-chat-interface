@@ -2,6 +2,7 @@ import { ARTIFACT_LIBRARIES, diagramAccent, type UserRole } from '@oci/shared';
 import { roleFeatures } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { describeArtifact } from '../tools/artifacts.js';
+import { codeArtifactsReady } from './code-kind.js';
 import { artifactsForPrompt } from './store.js';
 
 /**
@@ -10,6 +11,18 @@ import { artifactsForPrompt } from './store.js';
  */
 export const PROGRAM_CODE_IN_CHAT =
   'Program code in any language (examples, functions, implementations, scripts, configuration) belongs in ordinary fenced code blocks in your reply, one block per language or file, never in an artifact, unless the person asks for an artifact.';
+
+/**
+ * Asked for code "as an artifact", a model with only HTML, SVG, Mermaid and
+ * Markdown wrapped the script in an HTML page (#298): its preview dropped
+ * text in angle brackets and it downloaded as `.html`. Code has a kind of its
+ * own, made only with the tool; without it, or until every replica reads the
+ * new kind (code-kind.ts), code stays in the reply.
+ */
+export const CODE_ARTIFACTS =
+  'When the person asks for code as an artifact, create a code artifact (kind code, with its language) holding the code alone; never wrap code in an HTML page or a document.';
+export const CODE_ARTIFACTS_WITHOUT_TOOLS =
+  'Code is never saved as an artifact here: when the person asks for code as an artifact, write it in a fenced code block in your reply and say that code is not saved as an artifact; never wrap code in an HTML page.';
 
 /**
  * For a role without artifacts (#277). With no word on them, a model asked
@@ -71,6 +84,7 @@ export async function artifactGuidance(context: {
       ? 'Create one with the create_artifact tool and revise it with update_artifact, preferring small find-and-replace edits; or write it as a single fenced code block (```html, ```svg or ```mermaid). Use a Markdown artifact only for a long prose document the person asked for, such as a report, letter or plan; tables, lists and short answers go in your reply, and anything you put in an artifact is not repeated in your reply.'
       : 'Write each one as a single fenced code block (```html, ```svg or ```mermaid); HTML should be a complete document.',
     PROGRAM_CODE_IN_CHAT,
+    context.tools && (await codeArtifactsReady()) ? CODE_ARTIFACTS : CODE_ARTIFACTS_WITHOUT_TOOLS,
     'Never link to an artifact in your text: a card for it appears below your reply on its own.',
     'Artifacts run in a sandbox without network access: inline all styles, scripts and images (no external URLs, fonts or requests).',
     `For charts, include ${libraries}.`,

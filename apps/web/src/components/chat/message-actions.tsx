@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
-import { messageExcerpt } from '~/lib/message-excerpt';
+import { messageExcerpt, quotedMessage } from '~/lib/message-excerpt';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
@@ -60,6 +60,7 @@ export function MessageActions({
   modelSlug,
   effort,
   searched,
+  position,
 }: {
   text: string;
   onRetry?: () => void;
@@ -70,12 +71,15 @@ export function MessageActions({
   modelSlug?: string | null;
   effort?: string | null;
   searched?: boolean;
+  /** Its place, when another message opens with the same words: "reply 3" (#293). */
+  position?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   // Every message has these controls; its opening words tell them apart (#194):
   // "Copy message “Walk3 table: give me a small…”".
+  // And "Copy message “Again.” (question 2)" when another opens alike (#293).
   const excerpt = useMemo(() => messageExcerpt(text), [text]);
-  const about = excerpt ? ` “${excerpt}”` : '';
+  const about = excerpt ? ` ${quotedMessage(excerpt, position)}` : '';
   // Read-only maintenance mode (v0.11): forking, editing and retrying write.
   const readOnly = useReadOnlyStatus();
   const lockedTitle = readOnly.active ? readOnlyShortReason(readOnly) : undefined;

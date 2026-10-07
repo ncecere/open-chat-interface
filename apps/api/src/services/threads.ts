@@ -23,6 +23,7 @@ import { forbidden, notFound, rateLimited, validationFailed } from '../lib/error
 import { containsPattern } from '../lib/like.js';
 import { copyArtifactsToFork } from './artifacts/store.js';
 import { copyCompactionToFork } from './chat/compaction-fork.js';
+import { editedQuestionParts } from './chat/message-parts.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
 import { notOnLegalHold } from './compliance/holds.js';
 import { destroyThreads } from './lifecycle/destroy.js';
@@ -348,46 +349,64 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
 
     // The fork reads as the conversation did through the selected message:
     // one reply per turn, never the alternatives a retry left behind.
-    const copiedMessages = pathThrough(sourceMessages, selected.id) ?? [];
-    const copies = await tx
-      .insert(schema.message)
-      .values(
-        copiedMessages.map((message) => ({
-          threadId: fork.id,
-          userId,
-          role: message.role,
-          parts: message.parts,
-          position: message.position,
-          parentMessageId: message.id,
-          modelSlug: message.modelSlug,
-          effort: message.effort,
-          webSearchUsed: message.webSearchUsed,
-          status: message.status,
-          errorMessage: message.errorMessage,
-          tokensIn: message.tokensIn,
-          tokensOut: message.tokensOut,
-          durationMs: message.durationMs,
-          createdAt: message.createdAt,
-          updatedAt: message.updatedAt,
-        })),
-      )
-      .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
-    const copied = new Map(copies.map((copy) => [copy.sourceId!, copy.id]));
-    await copyCompactionToFork(tx, {
+    await copyMessagesInto(tx, {
       sourceThreadId: sourceThread.id,
       threadId: fork.id,
       userId,
-      copied,
-    });
-    await copyArtifactsToFork(tx, {
-      sourceThreadId: sourceThread.id,
-      threadId: fork.id,
-      userId,
-      copied,
+      messages: pathThrough(sourceMessages, selected.id) ?? [],
     });
 
     return fork;
   });
+}
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Copies messages into a fork or edit as new rows that keep their source ids
+ * as lineage, with the compaction summary and artifacts made along them.
+ */
+async function copyMessagesInto(
+  tx: Transaction,
+  input: {
+    sourceThreadId: string;
+    threadId: string;
+    userId: string;
+    messages: (typeof schema.message.$inferSelect)[];
+  },
+) {
+  if (input.messages.length === 0) return;
+  const copies = await tx
+    .insert(schema.message)
+    .values(
+      input.messages.map((message) => ({
+        threadId: input.threadId,
+        userId: input.userId,
+        role: message.role,
+        parts: message.parts,
+        position: message.position,
+        parentMessageId: message.id,
+        modelSlug: message.modelSlug,
+        effort: message.effort,
+        webSearchUsed: message.webSearchUsed,
+        status: message.status,
+        errorMessage: message.errorMessage,
+        tokensIn: message.tokensIn,
+        tokensOut: message.tokensOut,
+        durationMs: message.durationMs,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+      })),
+    )
+    .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
+  const target = {
+    sourceThreadId: input.sourceThreadId,
+    threadId: input.threadId,
+    userId: input.userId,
+    copied: new Map(copies.map((copy) => [copy.sourceId!, copy.id])),
+  };
+  await copyCompactionToFork(tx, target);
+  await copyArtifactsToFork(tx, target);
 }
 
 /**
@@ -424,7 +443,8 @@ export async function forkedMessage(forkId: string, sourceMessageId: string) {
 
 /**
  * Creates an immutable edit branch from a user turn. History is copied only
- * from server-owned rows; the replacement is a single validated text part.
+ * from server-owned rows; the replacement is the validated text with the
+ * question's own files (see `editedQuestionParts`).
  */
 export async function branchFromUserMessage(
   threadId: string,
@@ -452,6 +472,7 @@ export async function branchFromUserMessage(
     if (selected.role !== 'user') {
       throw validationFailed('Only user messages can be edited');
     }
+    const parts = editedQuestionParts(selected.parts, input.text, input.attachmentIds);
 
     const [branch] = await tx
       .insert(schema.thread)
@@ -473,47 +494,14 @@ export async function branchFromUserMessage(
 
     if (!branch) throw new Error('Failed to create branch');
 
-    const priorMessages = sourceMessages
-      .slice(0, selectedIndex)
-      .filter((message) => message.supersededAt === null);
-    if (priorMessages.length > 0) {
-      const copies = await tx
-        .insert(schema.message)
-        .values(
-          priorMessages.map((message) => ({
-            threadId: branch.id,
-            userId,
-            role: message.role,
-            parts: message.parts,
-            position: message.position,
-            parentMessageId: message.id,
-            modelSlug: message.modelSlug,
-            effort: message.effort,
-            webSearchUsed: message.webSearchUsed,
-            status: message.status,
-            errorMessage: message.errorMessage,
-            tokensIn: message.tokensIn,
-            tokensOut: message.tokensOut,
-            durationMs: message.durationMs,
-            createdAt: message.createdAt,
-            updatedAt: message.updatedAt,
-          })),
-        )
-        .returning({ id: schema.message.id, sourceId: schema.message.parentMessageId });
-      const copied = new Map(copies.map((copy) => [copy.sourceId!, copy.id]));
-      await copyCompactionToFork(tx, {
-        sourceThreadId: sourceThread.id,
-        threadId: branch.id,
-        userId,
-        copied,
-      });
-      await copyArtifactsToFork(tx, {
-        sourceThreadId: sourceThread.id,
-        threadId: branch.id,
-        userId,
-        copied,
-      });
-    }
+    await copyMessagesInto(tx, {
+      sourceThreadId: sourceThread.id,
+      threadId: branch.id,
+      userId,
+      messages: sourceMessages
+        .slice(0, selectedIndex)
+        .filter((message) => message.supersededAt === null),
+    });
 
     const [replacement] = await tx
       .insert(schema.message)
@@ -521,7 +509,7 @@ export async function branchFromUserMessage(
         threadId: branch.id,
         userId,
         role: 'user',
-        parts: [{ type: 'text', text: input.text }],
+        parts,
         position: selected.position,
         parentMessageId: selected.id,
         modelSlug: selected.modelSlug,

@@ -5,6 +5,7 @@ import { useContext, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { apiErrorMessage } from '~/lib/api-client';
 import { MEMORY_QUERY_KEY, undoMemoryStep } from '~/lib/memory';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 type Status = 'idle' | 'pending' | 'undone';
 
@@ -29,6 +30,8 @@ export function MemoryNote({
   const queryClient = useContext(QueryClientContext);
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
 
   async function undo() {
     setStatus('pending');

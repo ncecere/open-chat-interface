@@ -115,13 +115,17 @@ describe('provider capacity', () => {
     await typeInto(input('tokensPerMinute'), '1.5');
     await typeInto(input('maxConcurrentStreams'), 'abc');
     await click(button('Save limits'));
+    // Each under its own field, which is marked invalid and described by it (#302).
     expect(alerts(form)).toEqual([
-      [
-        'Requests per minute must be a whole number of at least 1, or empty for no limit.',
-        'Tokens per minute must be a whole number of at least 1, or empty for no limit.',
-        'Replies at once must be a whole number of at least 1, or empty for no limit.',
-      ].join('\n'),
+      'Requests per minute must be a whole number of at least 1, or empty for no limit.',
+      'Tokens per minute must be a whole number of at least 1, or empty for no limit.',
+      'Replies at once must be a whole number of at least 1, or empty for no limit.',
     ]);
+    expect(input('tokensPerMinute').getAttribute('aria-invalid')).toBe('true');
+    // The error first, then the field's hint (#295).
+    expect(input('tokensPerMinute').getAttribute('aria-describedby')).toBe(
+      'capacity-tokensPerMinute-error capacity-tokensPerMinute-hint',
+    );
     expect(api.put).not.toHaveBeenCalled();
   });
 
@@ -134,13 +138,11 @@ describe('provider capacity', () => {
     await typeInto(input('tokensPerMinute'), '1.5');
     await typeInto(input('maxConcurrentStreams'), 'abc');
     await click(button('Save limits'));
-    expect(alerts(form)[0]?.split('\n')).toHaveLength(3);
+    expect(alerts(form)).toHaveLength(3);
     await typeInto(input('requestsPerMinute'), '60');
     expect(alerts(form)).toEqual([
-      [
-        'Tokens per minute must be a whole number of at least 1, or empty for no limit.',
-        'Replies at once must be a whole number of at least 1, or empty for no limit.',
-      ].join('\n'),
+      'Tokens per minute must be a whole number of at least 1, or empty for no limit.',
+      'Replies at once must be a whole number of at least 1, or empty for no limit.',
     ]);
     await typeInto(input('tokensPerMinute'), '');
     await typeInto(input('maxConcurrentStreams'), '4');

@@ -405,7 +405,7 @@ test('project conversations live under their project in the sidebar', async ({
   const pinnedRow = page.getByRole('link', { name: /^Research pinned\s*, in project Research$/ });
   await pinnedRow
     .locator('xpath=..')
-    .getByRole('button', { name: /^Unpin thread: / })
+    .getByRole('button', { name: /^Unpin conversation: / })
     .focus();
   await page.keyboard.press('Enter');
   await expect(tree.getByRole('link').first()).toHaveText('Research pinned');

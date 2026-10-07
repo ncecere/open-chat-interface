@@ -7,7 +7,7 @@ import {
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { SettingsSection } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, fieldErrorId, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import {
@@ -72,10 +72,13 @@ export function FallbackProviderSection({
         <Field
           label="Fallback provider"
           htmlFor="search-fallback-provider"
-          hint={errors.fallbackProvider}
+          error={errors.fallbackProvider ?? null}
         >
           <Select
             id="search-fallback-provider"
+            aria-describedby={
+              errors.fallbackProvider ? fieldErrorId('search-fallback-provider') : undefined
+            }
             value={draft.fallbackProvider ?? 'none'}
             disabled={disabled}
             onChange={(next) => {
@@ -102,7 +105,8 @@ export function FallbackProviderSection({
           <Field
             label={`Fallback ${info.fieldLabel}`}
             htmlFor="search-fallback-base-url"
-            hint={errors.fallbackBaseUrl ?? info.fieldHint}
+            error={errors.fallbackBaseUrl ?? null}
+            hint={info.fieldHint}
           >
             <Input
               id="search-fallback-base-url"
@@ -110,7 +114,7 @@ export function FallbackProviderSection({
               value={draft.fallbackBaseUrl}
               placeholder="https://search2.example.edu"
               disabled={disabled}
-              aria-invalid={Boolean(errors.fallbackBaseUrl)}
+              {...invalidFieldProps('search-fallback-base-url', errors.fallbackBaseUrl ?? null)}
               onChange={(event) => onDraftChange({ fallbackBaseUrl: event.target.value })}
             />
           </Field>
@@ -171,7 +175,8 @@ export function FallbackProviderSection({
           <Field
             label={savedKey ? `New fallback ${info.fieldLabel}` : `Fallback ${info.fieldLabel}`}
             htmlFor="search-fallback-api-key"
-            hint={errors.fallbackApiKey ?? `${info.fieldHint} Encrypted and never shown again.`}
+            error={errors.fallbackApiKey ?? null}
+            hint={`${info.fieldHint} Encrypted and never shown again.`}
           >
             <Input
               id="search-fallback-api-key"
@@ -180,7 +185,7 @@ export function FallbackProviderSection({
               maxLength={501}
               autoComplete="new-password"
               disabled={disabled}
-              aria-invalid={Boolean(errors.fallbackApiKey)}
+              {...invalidFieldProps('search-fallback-api-key', errors.fallbackApiKey ?? null)}
               onChange={(event) =>
                 onFallbackKeyChange({ action: 'replace', value: event.target.value })
               }

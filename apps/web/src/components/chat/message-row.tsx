@@ -8,7 +8,7 @@ import { ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { CapacityNote, CapacityWait, capacityWaitOf } from '~/components/chat/capacity-wait';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
-import { MessageAttachments } from '~/components/chat/message-attachments';
+import { attachmentsOf, MessageAttachments } from '~/components/chat/message-attachments';
 import {
   contextLimitedOf,
   failureOf,
@@ -20,7 +20,7 @@ import {
   textOf,
   type WorkEntry,
 } from '~/components/chat/message-content';
-import { MessageEditor } from '~/components/chat/message-editor';
+import { type EditMessage, MessageEditor } from '~/components/chat/message-editor';
 import { ProjectSearchNote } from '~/components/chat/project-search-note';
 import { ReplyFailureNote } from '~/components/chat/reply-outcome-note';
 import { type ReplySwitch, ReplySwitcher } from '~/components/chat/reply-switcher';
@@ -43,13 +43,30 @@ interface MessageRowProps {
   editing: boolean;
   onEditingChange: Dispatch<SetStateAction<string | null>>;
   onRetry?: () => void;
-  onEdit?: (messageId: string, text: string) => Promise<void>;
+  onEdit?: EditMessage;
   onFork?: (messageId: string) => Promise<void>;
   replySwitch?: ReplySwitch;
   /** Answers this reply's open approvals; only the latest reply can be answered. */
   onAnswerApproval?: AnswerApproval;
   /** Stops the latest reply; offered while it waits for its model. */
   onStop?: () => void;
+  /** Its place, when another message opens with the same words: "reply 3" (#293). */
+  position?: string | null;
+}
+
+/**
+ * A message's opening words, as its row names it. Cached by message: the SDK
+ * keeps a finished message's object, so the list can work out which openings
+ * repeat (#293) without reading every message again on each streamed token.
+ */
+const excerpts = new WeakMap<UIMessage, string | null>();
+export function messageExcerptOf(message: UIMessage): string | null {
+  let excerpt = excerpts.get(message);
+  if (excerpt === undefined) {
+    excerpt = messageExcerpt(textOf(shownReply(message)));
+    excerpts.set(message, excerpt);
+  }
+  return excerpt;
 }
 
 /**
@@ -70,13 +87,16 @@ export const MessageRow = memo(function MessageRow({
   replySwitch,
   onAnswerApproval,
   onStop,
+  position,
 }: MessageRowProps) {
   // Without artifact attempts declined as reply content (#201).
   const message = shownReply(stored);
   const text = textOf(message);
   // The message's opening words, which its code blocks' and tables' names
-  // also carry, as its own controls' do (#271).
-  const excerpt = messageExcerpt(text) ?? undefined;
+  // also carry, as its own controls' do (#271), with its place when another
+  // message opens alike (#293).
+  const excerpt = messageExcerptOf(stored) ?? undefined;
+  const place = (excerpt && position) || undefined;
 
   if (message.role === 'user') {
     return (
@@ -84,6 +104,7 @@ export const MessageRow = memo(function MessageRow({
         className="group flex flex-col items-end"
         aria-label="Your message"
         data-excerpt={excerpt}
+        data-position={place}
         data-message-id={message.id}
         data-message-role="user"
       >
@@ -91,6 +112,7 @@ export const MessageRow = memo(function MessageRow({
           <MessageEditor
             messageId={message.id}
             initialText={text}
+            attachments={attachmentsOf(message)}
             onEdit={onEdit}
             onClose={() => onEditingChange((current) => (current === message.id ? null : current))}
           />
@@ -102,6 +124,7 @@ export const MessageRow = memo(function MessageRow({
             </div>
             <MessageActions
               text={text}
+              position={place}
               onFork={onFork && !streaming ? () => onFork(message.id) : undefined}
               onEdit={onEdit && !streaming ? () => onEditingChange(message.id) : undefined}
             />
@@ -123,6 +146,7 @@ export const MessageRow = memo(function MessageRow({
       className="group flex flex-col"
       aria-label="Assistant message"
       data-excerpt={excerpt}
+      data-position={place}
       data-message-id={message.id}
     >
       {contextLimitedOf(message) && (
@@ -162,6 +186,7 @@ export const MessageRow = memo(function MessageRow({
           {!streaming && (
             <MessageActions
               text={text}
+              position={place}
               onFork={
                 onFork && metadata.status !== 'streaming' ? () => onFork(message.id) : undefined
               }

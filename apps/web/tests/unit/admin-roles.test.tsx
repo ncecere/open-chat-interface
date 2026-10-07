@@ -234,7 +234,15 @@ describe('Roles & access', () => {
     ({ root } = await renderAdmin(<AdminRolesPage />));
     await typeInto(input('rate-user-upload'), '0');
 
-    expect(alerts().join(' ')).toContain('uploads per minute');
+    // At the field, which is marked invalid and described by it as well as its source (#302).
+    const upload = input('rate-user-upload');
+    expect(upload.getAttribute('aria-invalid')).toBe('true');
+    expect(upload.getAttribute('aria-describedby')).toBe(
+      'rate-user-upload-source rate-user-upload-error',
+    );
+    expect(document.getElementById('rate-user-upload-error')?.textContent).toBe(
+      'Enter a whole number of 1 or more.',
+    );
     expect(button('Save rate limits').disabled).toBe(true);
     expect(api.put).not.toHaveBeenCalled();
   });

@@ -8,6 +8,8 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { z } from 'zod';
+import type { FieldProblem } from '~/hooks/use-clear-on-edit';
+import { validationProblems } from '~/lib/validation-issues';
 
 export const policySchema = z.object({
   label: z.string().trim().min(1, 'Enter a display name.').max(80),
@@ -150,9 +152,53 @@ export type PatchSsoProviderBody = Omit<
   claimMappings: ClaimMappings;
 };
 
+/**
+ * A refused draft: `error` is the first problem, and `problems` every one,
+ * each with the form field it is about, so the form shows them all at once
+ * at their fields (#302).
+ */
 export type ProviderDraftResult<Body> =
   | { success: true; data: Body }
-  | { success: false; error: string };
+  | { success: false; error: string; problems: FieldProblem[] };
+
+/** The form's names for the fields, so each error names the one it is about (#127). */
+const SSO_LABELS = {
+  label: 'Display name',
+  allowedDomains: 'Allowed email domains',
+  roleRequiredMessage: 'Message for a refused sign-in',
+  claimEmail: 'Email claim',
+  claimName: 'Display name claim',
+  claimImage: 'Picture claim',
+  claimSubject: 'Subject claim',
+  claim: 'Role mapping claim',
+  value: 'Role mapping value',
+  providerId: 'Provider ID',
+  issuer: 'Issuer',
+  clientId: 'Client ID',
+  clientSecret: 'Client secret',
+  discoveryUrl: 'Discovery URL',
+  scopes: 'Scopes',
+  entryPoint: 'Single sign-on URL',
+  idpCertificate: 'IdP signing certificate',
+  audience: 'SP entity ID / audience',
+};
+
+type Issues = ReadonlyArray<{ path: PropertyKey[]; message: string }>;
+
+function issueProblems(issues: Issues): FieldProblem[] {
+  return validationProblems(issues, SSO_LABELS).map(({ field, text }) => ({
+    fields: field ? [field] : [],
+    text,
+  }));
+}
+
+function refused(issues: Issues, fallback: string) {
+  return {
+    success: false as const,
+    error: issues[0]?.message ?? fallback,
+    problems: issueProblems(issues),
+  };
+}
 
 export function toPatchBody(policy: PolicyDraft): ProviderDraftResult<PatchSsoProviderBody> {
   const result = policySchema.safeParse({
@@ -160,9 +206,7 @@ export function toPatchBody(policy: PolicyDraft): ProviderDraftResult<PatchSsoPr
     allowedDomains: splitList(policy.allowedDomains).map((domain) => domain.toLowerCase()),
     claimRoleMappings: policy.claimRoleMappings,
   });
-  if (!result.success) {
-    return { success: false, error: result.error.issues[0]?.message ?? 'Check the access policy.' };
-  }
+  if (!result.success) return refused(result.error.issues, 'Check the access policy.');
 
   const { claimEmail, claimName, claimImage, claimSubject, roleRequiredMessage, ...policyRest } =
     result.data;
@@ -188,9 +232,16 @@ export function toCreateBody(
   policy: PolicyDraft,
   protocol: ProtocolDraft,
 ): ProviderDraftResult<CreateSsoProviderInput> {
-  // Policy validation must run before protocol validation, even for a new provider.
+  // Policy validation must run before protocol validation, even for a new
+  // provider: its problem is the first. The protocol is checked as well, so
+  // every problem is listed at once (#302).
   const submitted = toPatchBody(policy);
-  if (!submitted.success) return submitted;
+  // A refused policy is stood in for by one that passes, so only the
+  // protocol's own problems come from this check.
+  const checked = submitted.success
+    ? submitted
+    : toPatchBody({ ...EMPTY_POLICY, label: 'Placeholder' });
+  if (!checked.success) throw new Error('The placeholder policy is refused');
 
   const protocolFields =
     protocol.kind === 'oidc'
@@ -215,15 +266,17 @@ export function toCreateBody(
         };
 
   const result = createSsoProviderSchema.safeParse({
-    ...submitted.data,
+    ...checked.data,
     providerId: protocol.providerId,
     ...protocolFields,
   });
-  if (!result.success) {
+  if (!submitted.success) {
+    if (result.success) return submitted;
     return {
-      success: false,
-      error: result.error.issues[0]?.message ?? 'Check the provider configuration.',
+      ...submitted,
+      problems: [...submitted.problems, ...issueProblems(result.error.issues)],
     };
   }
+  if (!result.success) return refused(result.error.issues, 'Check the provider configuration.');
   return { success: true, data: result.data };
 }

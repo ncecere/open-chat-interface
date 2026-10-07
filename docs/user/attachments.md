@@ -17,6 +17,11 @@ A file that is refused, or that could not be uploaded, stays above the composer
 in red with the reason beneath it, so you can see which one it was. Remove it
 with its ×, or choose **New Chat** to start again with an empty composer.
 
+A file you attach but do not send is discarded when you remove it with its ×,
+choose **New Chat**, or open another conversation, and it stops counting
+towards your storage. One left behind any other way (closing the tab, say) is
+deleted after a day.
+
 ## The model has to be able to read it
 
 Images require a model with **vision**. Otherwise the model receives an
@@ -66,8 +71,10 @@ conversation context. Switching models can send those contents to a different
 provider. Ask your administrator which providers are appropriate for your data.
 Deleting a file cannot recall contents already sent to a provider.
 
-Forks reference the original file rather than making an independent copy. If
-that file or its source conversation becomes unavailable, the fork cannot use
+Forks and edits reference the original file rather than making an independent
+copy: an edited question keeps its files unless you remove them in the edit
+box. If that file or its source conversation becomes unavailable, the fork or
+edit cannot use
 its contents. Current role and attachment-feature restrictions also apply to
 historical files; a file-free conversation can still be used when file access
 is disabled.

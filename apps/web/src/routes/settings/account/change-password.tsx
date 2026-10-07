@@ -14,6 +14,7 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import {
   type AuthResult,
   authErrorMessage,
@@ -36,6 +37,8 @@ export function ChangePasswordDialog({
   const [confirm, setConfirm] = useState('');
   const [revokeOthers, setRevokeOthers] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
   const [done, setDone] = useState<string | null>(null);
 
   const change = useMutation({

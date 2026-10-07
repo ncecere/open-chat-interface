@@ -262,7 +262,7 @@ export function AdminUserDetailPage() {
       {/* Borders are drawn per cell so the rules stay right when the four
           figures wrap into two rows on a phone. */}
       <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-l sm:[&>*:nth-child(n+3)]:border-t-0">
-        <Stat label="Threads" value={String(user.threadCount)} />
+        <Stat label="Conversations" value={String(user.threadCount)} />
         <Stat label="Messages" value={String(user.messageCount)} />
         <Stat label="Storage" value={formatBytes(storage.bytesUsed)} />
         <Stat label="Files" value={String(storage.fileCount)} />

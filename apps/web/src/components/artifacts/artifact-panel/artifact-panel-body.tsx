@@ -1,7 +1,7 @@
 import {
-  ARTIFACT_KIND_LABELS,
   type ArtifactDetail,
   type ArtifactVersionDetail,
+  artifactKindLabel,
   type DocumentFormat,
 } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
@@ -98,7 +98,7 @@ export function ArtifactPanelBody({
         title={title}
         description={
           <>
-            {ARTIFACT_KIND_LABELS[artifact.kind]} · version {shownVersion}
+            {artifactKindLabel(artifact.kind, artifact.language)} · version {shownVersion}
             {older !== null ? ` of ${current}` : ''}
           </>
         }
@@ -118,7 +118,9 @@ export function ArtifactPanelBody({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => content !== undefined && download(title, artifact.kind, content)}
+              onClick={() =>
+                content !== undefined && download(title, artifact.kind, content, artifact.language)
+              }
               disabled={content === undefined}
             >
               <Download aria-hidden="true" />
@@ -194,10 +196,11 @@ export function ArtifactPanelBody({
                 This artifact could not be loaded.
               </p>
             ) : view === 'source' ? (
-              <ArtifactSource kind={artifact.kind} content={content} />
+              <ArtifactSource kind={artifact.kind} language={artifact.language} content={content} />
             ) : (
               <ArtifactPreview
                 kind={artifact.kind}
+                language={artifact.language}
                 content={content}
                 title={title}
                 markdownProps={context?.markdownProps}

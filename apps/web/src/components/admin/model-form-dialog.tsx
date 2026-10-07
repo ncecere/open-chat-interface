@@ -1,22 +1,18 @@
 import {
   type AdminModel,
-  DEFAULT_MODEL_ROLES,
   DEFAULT_OUTPUT_TOKENS,
   FALLBACK_CONTEXT_WINDOW,
-  MICROS_PER_DOLLAR,
   MODEL_CAPABILITIES,
   MODEL_LABS,
-  type ModelCapability,
   modelLimitsProblem,
   type Provider,
   REASONING_EFFORTS,
-  type ReasoningEffort,
   USER_ROLES,
-  type UserRole,
   upsertModelSchema,
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { CAPABILITY_LABELS } from '~/components/chat/model-picker-data';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Button } from '~/components/ui/button';
@@ -27,109 +23,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { type FieldProblem, problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import {
+  type FieldProblem,
+  problemsAt,
+  problemsElsewhere,
+  useFieldProblems,
+} from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorProblems } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
+import {
+  draftField,
+  formatTokens,
+  initialDraft,
+  modelFieldProblems,
+  parseTokenCount,
+  slugify,
+  toPriceMicros,
+} from './model-form-draft';
 
-interface ModelDraft {
-  providerId: string;
-  labId: string;
-  upstreamModelId: string;
-  slug: string;
-  displayName: string;
-  description: string;
-  contextWindow: string;
-  maxOutputTokens: string;
-  sortOrder: string;
-  /** Dollars per million tokens, converted to micro-dollars on submit. */
-  inputPrice: string;
-  outputPrice: string;
-  capabilities: ModelCapability[];
-  supportedEfforts: ReasoningEffort[];
-  visibleToRoles: UserRole[];
-  enabled: boolean;
-  isDefault: boolean;
-}
-
-/** Prices are stored as micro-dollars per million tokens but edited in dollars. */
-function toPriceInput(micros: number | null): string {
-  return micros === null ? '' : (micros / MICROS_PER_DOLLAR).toString();
-}
-
-function toPriceMicros(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? Math.round(parsed * MICROS_PER_DOLLAR) : null;
-}
-
-/**
- * A token count typed in the form: blank is unknown (null), thousands
- * separators are allowed, anything else that is not a whole number is NaN so
- * validation reports it.
- */
-export function parseTokenCount(value: string): number | null {
-  const digits = value.replace(/[\s,_]/g, '');
-  if (!digits) return null;
-  return /^\d+$/.test(digits) ? Number(digits) : Number.NaN;
-}
-
-const formatTokens = (value: number) => value.toLocaleString('en-US');
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
-}
-
-function initialDraft(model: AdminModel | null, providers: Provider[]): ModelDraft {
-  return model
-    ? {
-        providerId: model.providerId,
-        labId: model.labId ?? '',
-        upstreamModelId: model.upstreamModelId,
-        slug: model.slug,
-        displayName: model.displayName,
-        description: model.description ?? '',
-        contextWindow: model.contextWindow?.toString() ?? '',
-        maxOutputTokens: model.maxOutputTokens?.toString() ?? '',
-        sortOrder: model.sortOrder.toString(),
-        inputPrice: toPriceInput(model.inputPriceMicros),
-        outputPrice: toPriceInput(model.outputPriceMicros),
-        capabilities: model.capabilities,
-        supportedEfforts: model.supportedEfforts,
-        visibleToRoles: model.visibleToRoles,
-        enabled: model.enabled,
-        isDefault: model.isDefault,
-      }
-    : {
-        providerId: providers.find((provider) => provider.enabled)?.id ?? providers[0]?.id ?? '',
-        labId: '',
-        upstreamModelId: '',
-        slug: '',
-        displayName: '',
-        description: '',
-        contextWindow: '',
-        maxOutputTokens: '',
-        sortOrder: '0',
-        inputPrice: '',
-        outputPrice: '',
-        capabilities: [],
-        supportedEfforts: [],
-        // As the API and Discover models: not auditors, who review, not chat.
-        visibleToRoles: [...DEFAULT_MODEL_ROLES],
-        enabled: true,
-        isDefault: false,
-      };
-}
+export { modelFieldProblems, parseTokenCount } from './model-form-draft';
 
 function toggleValue<Value extends string>(values: Value[], value: Value): Value[] {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
@@ -173,63 +91,18 @@ function ChoicePills<Value extends string>({
   );
 }
 
-/** The form's labels, for naming a field in a validation message. */
-const FIELD_LABELS: Record<string, string> = {
-  providerId: 'Provider',
-  labId: 'Lab',
-  upstreamModelId: 'Upstream model ID',
-  displayName: 'Display name',
-  slug: 'OCI slug',
-  description: 'Description',
-  contextWindow: 'Context window',
-  maxOutputTokens: 'Max output',
-  sortOrder: 'Sort order',
-  inputPriceMicros: 'Input price',
-  outputPriceMicros: 'Output price',
-  capabilities: 'Capabilities',
-  supportedEfforts: 'Reasoning efforts',
-  visibleToRoles: 'Visible to roles',
-};
-
-/** The form field a schema key is edited in, where the two differ. */
-const DRAFT_FIELDS: Record<string, keyof ModelDraft> = {
-  inputPriceMicros: 'inputPrice',
-  outputPriceMicros: 'outputPrice',
-};
-const draftField = (key: string) => DRAFT_FIELDS[key] ?? key;
-
-/** One sentence per invalid field, in form order, with the form field it is about. */
-export function modelFieldProblems(
-  issues: ReadonlyArray<{
-    path: PropertyKey[];
-    message: string;
-    code: string;
-    origin?: string;
-    maximum?: unknown;
-  }>,
-): FieldProblem[] {
-  const order = Object.keys(FIELD_LABELS);
-  const byField = new Map<string, string>();
-  for (const issue of issues) {
-    const key = String(issue.path[0] ?? '');
-    if (byField.has(key)) continue;
-    const label = FIELD_LABELS[key];
-    // The schema's own sentences already name the field.
-    const text = issue.origin === 'string' && label;
-    const sentence =
-      text && issue.code === 'too_small'
-        ? `${label} is required.`
-        : text && issue.code === 'too_big'
-          ? `${label} must be at most ${Number(issue.maximum).toLocaleString('en-US')} characters.`
-          : label && !issue.message.startsWith(label.replace('OCI ', ''))
-            ? `${label}: ${issue.message}`
-            : issue.message;
-    byField.set(key, sentence);
-  }
-  return [...byField.entries()]
-    .sort(([a], [b]) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99))
-    .map(([key, text]) => ({ fields: [draftField(key)], text }));
-}
+/** The form fields that show their own errors; any other is shown at the foot (#302). */
+const FIELDS_SHOWN = [
+  'upstreamModelId',
+  'displayName',
+  'slug',
+  'description',
+  'contextWindow',
+  'maxOutputTokens',
+  'sortOrder',
+  'inputPrice',
+  'outputPrice',
+];
 
 export function ModelFormDialog({
   model,
@@ -245,8 +118,12 @@ export function ModelFormDialog({
   const [slugTouched, setSlugTouched] = useState(Boolean(model));
   // The listed problems were about the form as it was submitted; each goes
   // once its own field changes (#178), and the rest stay until fixed (#257).
-  const [problems, setProblems] = useFieldProblems(draft);
-  const error = problemsText(problems, '\n');
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems(draft, form);
+  const edited = useEditedSince(draft); // Escape asks before discarding (#300).
+  // Each problem under its field, marked invalid and described by it (#302).
+  const at = (field: string) => problemsAt(problems, field);
+  const error = problemsElsewhere(problems, FIELDS_SHOWN);
 
   // Whether thinking can be surfaced at all depends on the wire protocol, so
   // the guidance follows whichever provider is selected.
@@ -328,7 +205,7 @@ export function ModelFormDialog({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{model ? 'Edit model' : 'Add model'}</DialogTitle>
         <DialogDescription>
@@ -336,7 +213,7 @@ export function ModelFormDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={submit} className="flex flex-col gap-5">
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Provider" htmlFor="model-provider">
             <Select
@@ -372,9 +249,14 @@ export function ModelFormDialog({
             </div>
           </Field>
 
-          <Field label="Upstream model ID" htmlFor="upstream-model-id">
+          <Field
+            label="Upstream model ID"
+            htmlFor="upstream-model-id"
+            error={at('upstreamModelId')}
+          >
             <Input
               id="upstream-model-id"
+              {...invalidFieldProps('upstream-model-id', at('upstreamModelId'))}
               value={draft.upstreamModelId}
               placeholder="gpt-4o-mini"
               onChange={(event) => {
@@ -388,9 +270,10 @@ export function ModelFormDialog({
             />
           </Field>
 
-          <Field label="Display name" htmlFor="model-display-name">
+          <Field label="Display name" htmlFor="model-display-name" error={at('displayName')}>
             <Input
               id="model-display-name"
+              {...invalidFieldProps('model-display-name', at('displayName'))}
               value={draft.displayName}
               placeholder="GPT-4o Mini"
               onChange={(event) =>
@@ -402,10 +285,12 @@ export function ModelFormDialog({
           <Field
             label="OCI slug"
             htmlFor="model-slug"
+            error={at('slug')}
             hint="Lowercase letters, numbers, and dashes."
           >
             <Input
               id="model-slug"
+              {...invalidFieldProps('model-slug', at('slug'))}
               value={draft.slug}
               placeholder="gpt-4o-mini"
               onChange={(event) => {
@@ -416,9 +301,10 @@ export function ModelFormDialog({
           </Field>
         </div>
 
-        <Field label="Description" htmlFor="model-description">
+        <Field label="Description" htmlFor="model-description" error={at('description')}>
           <Textarea
             id="model-description"
+            {...invalidFieldProps('model-description', at('description'))}
             rows={3}
             value={draft.description}
             onChange={(event) =>
@@ -436,10 +322,12 @@ export function ModelFormDialog({
           <Field
             label="Context window"
             htmlFor="model-context-window"
+            error={at('contextWindow')}
             hint={`Tokens the model accepts, input and output together. Leave blank if unknown: OCI then assumes ${formatTokens(FALLBACK_CONTEXT_WINDOW)}.`}
           >
             <Input
               id="model-context-window"
+              {...invalidFieldProps('model-context-window', at('contextWindow'))}
               inputMode="numeric"
               autoComplete="off"
               placeholder={formatTokens(FALLBACK_CONTEXT_WINDOW)}
@@ -452,10 +340,12 @@ export function ModelFormDialog({
           <Field
             label="Max output"
             htmlFor="model-max-output"
+            error={at('maxOutputTokens')}
             hint={`Most tokens the model writes in one reply. Leave blank if unknown: OCI then reserves ${formatTokens(DEFAULT_OUTPUT_TOKENS)}, or a quarter of the context window if that is smaller.`}
           >
             <Input
               id="model-max-output"
+              {...invalidFieldProps('model-max-output', at('maxOutputTokens'))}
               inputMode="numeric"
               autoComplete="off"
               placeholder={formatTokens(DEFAULT_OUTPUT_TOKENS)}
@@ -468,9 +358,10 @@ export function ModelFormDialog({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Sort order" htmlFor="model-sort-order">
+          <Field label="Sort order" htmlFor="model-sort-order" error={at('sortOrder')}>
             <Input
               id="model-sort-order"
+              {...invalidFieldProps('model-sort-order', at('sortOrder'))}
               type="number"
               value={draft.sortOrder}
               onChange={(event) =>
@@ -484,10 +375,12 @@ export function ModelFormDialog({
           <Field
             label="Input price"
             htmlFor="model-input-price"
+            error={at('inputPrice')}
             hint="US dollars per million input tokens. Leave blank if unpriced."
           >
             <Input
               id="model-input-price"
+              {...invalidFieldProps('model-input-price', at('inputPrice'))}
               type="number"
               min={0}
               step="0.01"
@@ -501,10 +394,12 @@ export function ModelFormDialog({
           <Field
             label="Output price"
             htmlFor="model-output-price"
+            error={at('outputPrice')}
             hint="US dollars per million output tokens."
           >
             <Input
               id="model-output-price"
+              {...invalidFieldProps('model-output-price', at('outputPrice'))}
               type="number"
               min={0}
               step="0.01"

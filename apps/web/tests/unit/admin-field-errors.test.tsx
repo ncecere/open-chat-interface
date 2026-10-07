@@ -155,17 +155,65 @@ it('Connectors: every problem at once, each at its field; the private-network sw
   expect(fieldError('connector-slug')).not.toBeNull();
 });
 
-it('Connectors: a missing name and URL are each reported at their field', async () => {
+/** The API's refusal of `body`: the schema's issues, then the URL's network rule (#283). */
+function refusal(schema: Parameters<typeof validationFailure>[0], body: Record<string, unknown>) {
+  const result = schema.safeParse(body);
+  const details = result.success ? [] : JSON.parse(JSON.stringify(result.error.issues));
+  if (
+    typeof body.url === 'string' &&
+    body.url.startsWith('http://') &&
+    !body.allowPrivateNetwork &&
+    !details.some((issue: { path: unknown[] }) => issue.path[0] === 'url')
+  )
+    details.push({ code: 'custom', path: ['url'], message: HTTPS_ONLY });
+  return new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', details);
+}
+
+const HTTPS_ONLY =
+  'Use an https:// address. Plain http:// is allowed only with “Allow private network”.';
+
+it('Connectors: a missing name and an http:// URL are both reported by one save (#301)', async () => {
   api.get.mockResolvedValue({ connectors: [] });
+  api.post.mockImplementation(async (_path: string, body: Record<string, unknown>) => {
+    throw refusal(createConnectorSchema, body);
+  });
   ({ root } = await renderAdmin(<AdminConnectorsPage />, { path: '/admin/connectors' }));
   await click(button('Add connector'));
+  await typeInto(input('connector-url'), 'http://mcp.example.test/mcp');
   await submitIn('Add connector');
-  expect(api.post).not.toHaveBeenCalled();
-  expect(fieldError('connector-name')).toBe('Enter a name for the connector.');
-  expect(fieldError('connector-url')).toBe('Enter the server’s URL.');
-  await typeInto(input('connector-name'), 'Fix5');
+  expect(api.post).toHaveBeenCalledOnce();
+  expect(fieldError('connector-name')).toBe('Name is required.');
+  expect(fieldError('connector-url')).toBe(`Server URL: ${HTTPS_ONLY}`);
+  await typeInto(input('connector-name'), 'Fix6');
   expect(fieldError('connector-name')).toBeNull();
-  expect(fieldError('connector-url')).toBe('Enter the server’s URL.');
+  expect(fieldError('connector-url')).toBe(`Server URL: ${HTTPS_ONLY}`);
+});
+
+it('Webhooks: an http:// URL and an empty action list are both reported by one save (#301)', async () => {
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/webhooks') return { webhooks: [] };
+    if (path === '/admin/audit/actions') return { actions: [] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  api.post.mockImplementation(async (_path: string, body: Record<string, unknown>) => {
+    throw refusal(createWebhookSchema, body);
+  });
+  ({ root } = await renderAdmin(<AdminWebhooksPage />, { path: '/admin/webhooks' }));
+  await click(button('Add endpoint'));
+  await typeInto(input('webhook-url'), 'http://webhook-echo:8080/walk6');
+  await submitIn('Add endpoint');
+  expect(api.post).toHaveBeenCalledOnce();
+  expect(fieldError('webhook-url')).toBe(`URL: ${HTTPS_ONLY}`);
+  expect(fieldError('webhook-actions')).toBe(
+    'Audit actions: Choose at least one audit action, or all of them.',
+  );
+  // An empty URL is the API's to report too, at the URL.
+  await typeInto(input('webhook-url'), '');
+  await submitIn('Add endpoint');
+  expect(fieldError('webhook-url')).toBe(
+    'URL: Enter the endpoint’s full URL, such as https://hooks.example.com/oci.',
+  );
+  expect(fieldError('webhook-actions')).not.toBeNull();
 });
 
 it('Webhooks: the URL error names the URL, sits at it, and goes when private network is allowed', async () => {

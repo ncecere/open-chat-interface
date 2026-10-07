@@ -487,3 +487,24 @@ it("sends the browser's time zone with each message, in a body the API accepts (
   expect(sendMessageSchema.safeParse(posts[0]).success).toBe(true);
   await (await accept(send)).finish();
 });
+
+// Leaving a conversation (New Chat, another conversation) with files attached
+// and unsent kept them stored and counted as if sent (#297).
+it('discards unsent uploads when the conversation page is left, as the × does', async () => {
+  await mount();
+  await uploadReady(A);
+  await act(() => root.unmount());
+  expect(deletions).toEqual([`/api/attachments/${A.id}/unsent`]);
+  root = createRoot(container);
+});
+
+it('never discards files being sent when the page is left before the reply starts', async () => {
+  await mount();
+  await uploadReady(A);
+  await startSend();
+  await uploadReady(B);
+  await act(() => root.unmount());
+  // A is the server's now; B was only attached.
+  expect(deletions).toEqual([`/api/attachments/${B.id}/unsent`]);
+  root = createRoot(container);
+});

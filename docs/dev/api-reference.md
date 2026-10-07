@@ -275,9 +275,9 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/artifacts` | `GET /api/artifacts?threadId=…`: every artifact of one conversation, oldest first. |
+| GET | `/api/artifacts` | `GET /api/artifacts?threadId=…`: every artifact of one conversation, oldest first. Each has a `kind` (`html`, `svg`, `mermaid`, `markdown` or `code`) and a `language`: a code artifact's (`python`, `bash`, ...), null for the other kinds (#298). |
 | GET | `/api/artifacts/:id` | The artifact, its versions (newest first) and the current version's content. |
-| GET | `/api/artifacts/:id/export` | Downloads a Markdown artifact (the current version, or `?version=`) as DOCX, PDF, XLSX or PPTX. |
+| GET | `/api/artifacts/:id/export` | Downloads a Markdown artifact (the current version, or `?version=`) as DOCX, PDF, XLSX or PPTX. Other kinds, code included, are refused with 422. |
 | POST | `/api/artifacts/:id/versions` | A person's edit of a Markdown document, saved as a new version. |
 | GET | `/api/artifacts/:id/versions/:version` | — |
 
@@ -285,9 +285,10 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. |
+| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. `unsent` marks a chat file not sent with any message. |
 | POST | `/api/attachments` | — |
 | DELETE | `/api/attachments/:id` | — |
+| DELETE | `/api/attachments/:id/unsent` | Discards an upload the composer leaves unsent (moves it to the trash, as `DELETE /api/attachments/:id` does). A file sent with a message meanwhile is kept. Returns `removed`. |
 | GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. |
 | GET | `/api/attachments/usage` | Consumption and the role's allowance, for the storage meter in settings. |
 
@@ -380,7 +381,7 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/models` | — |
+| GET | `/api/models` | The models the person's role may use, and whether an empty list is the role's doing. |
 
 ## `routes/portability.ts`
 
@@ -423,7 +424,7 @@ Generated from 44 route files.
 | GET | `/api/threads/:id` | — |
 | PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
-| POST | `/api/threads/:id/branches` | Copies the conversation before `messageId` (a question) into a new one ending with `text` as the revised question, titled from that text; returns `thread` and `message`, the revised question (`id`, `modelSlug`, `effort`). |
+| POST | `/api/threads/:id/branches` | Copies the conversation before `messageId` (a question) into a new one ending with `text` as the revised question, titled from that text. The revised question keeps the original's files, or only those listed in `attachmentIds` (each must be one of the original's; others are refused with 422). Returns `thread` and `message`, the revised question (`id`, `modelSlug`, `effort`). |
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
 | GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start), whether a background summary is queued or being made (`pending`), and the last failure of a summary the person asked for (`failure`, v0.10). |
 | DELETE | `/api/threads/:id/compaction/failure` | Dismisses the report of a failed summary (v0.10) and returns the state as GET does. |

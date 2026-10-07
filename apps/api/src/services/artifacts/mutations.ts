@@ -1,14 +1,15 @@
 import { and, eq, isNull, schema, sql } from '@oci/db';
 import {
-  ARTIFACT_KIND_LABELS,
   type ArtifactKind,
   type ArtifactSummary,
   type ArtifactVersionSource,
   artifactByteLength,
+  artifactKindLabel,
   cleanArtifactTitle,
   MAX_ARTIFACT_BYTES,
   MAX_ARTIFACT_VERSIONS,
   MAX_ARTIFACTS_PER_THREAD,
+  normalizeCodeLanguage,
   type UserRole,
 } from '@oci/shared';
 import { db } from '../../db/index.js';
@@ -94,10 +95,13 @@ export async function createArtifact(params: {
   sourceKey: string;
   title: string;
   kind: ArtifactKind;
+  /** A code artifact's language (#298); ignored for the other kinds. */
+  language?: string | null;
   content: string;
 }): Promise<{ artifact: ArtifactSummary; created: boolean }> {
   const bytes = assertArtifactContent(params.content);
-  const title = cleanArtifactTitle(params.title) || ARTIFACT_KIND_LABELS[params.kind];
+  const language = params.kind === 'code' ? normalizeCodeLanguage(params.language) : null;
+  const title = cleanArtifactTitle(params.title) || artifactKindLabel(params.kind, language);
   const limits = await getStorageLimits(params.role);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -117,7 +121,7 @@ export async function createArtifact(params: {
       throw validationFailed(
         `A conversation can hold at most ${MAX_ARTIFACTS_PER_THREAD} artifacts. Update an existing one instead.`,
       );
-    const row = await insertArtifact(tx, { ...params, title }, bytes);
+    const row = await insertArtifact(tx, { ...params, title, language }, bytes);
     if (!row) throw conflict('The artifact was created at the same time; try again.');
     return { artifact: serializeArtifact(row, bytes), created: true };
   });
@@ -132,6 +136,7 @@ export async function insertArtifact(
     sourceKey: string;
     title: string;
     kind: ArtifactKind;
+    language?: string | null;
     content: string;
   },
   bytes: number,
@@ -145,6 +150,7 @@ export async function insertArtifact(
       sourceKey: params.sourceKey,
       title: params.title,
       kind: params.kind,
+      language: params.language ?? null,
       currentVersion: 1,
     })
     .onConflictDoNothing({ target: [schema.artifact.messageId, schema.artifact.sourceKey] })

@@ -1,5 +1,8 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { Label } from '~/components/ui/label';
+import { FieldHintContext, fieldHintId } from './field-hint';
+
+export { describedByIds, fieldHintId, useFieldDescribedBy } from './field-hint';
 
 /** The id of the error shown under the control `id`, which the control points at. */
 export const fieldErrorId = (id: string) => `${id}-error`;
@@ -22,24 +25,35 @@ export function invalidFieldProps(id: string, error: string | null, describedBy?
  * is what is wrong with this field's value, shown under the control and
  * announced, as Branding does; give the control `invalidFieldProps` so it is
  * marked invalid and described by it (#283).
+ *
+ * The hint describes the shared controls inside (Input, Textarea, Select,
+ * Switch) on its own (#295); its id is `fieldHintId(htmlFor)`, or `hintId`,
+ * for a control built by hand to point at.
  */
 export function Field({
   label,
   htmlFor,
   hint,
   error,
+  hintId: givenHintId,
   children,
 }: {
   label: string;
   htmlFor?: string;
   hint?: string;
   error?: string | null;
+  /** The hint's id, when a control without `htmlFor` points at it by hand. */
+  hintId?: string;
   children: ReactNode;
 }) {
+  const autoId = useId();
+  const hintId = hint
+    ? (givenHintId ?? (htmlFor ? fieldHintId(htmlFor) : `${autoId}-hint`))
+    : undefined;
   return (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
+      <FieldHintContext.Provider value={hintId}>{children}</FieldHintContext.Provider>
       {error && (
         <p
           id={htmlFor ? fieldErrorId(htmlFor) : undefined}
@@ -49,7 +63,11 @@ export function Field({
           {error}
         </p>
       )}
-      {hint && <p className="text-xs text-[var(--text-muted)]">{hint}</p>}
+      {hint && (
+        <p id={hintId} className="text-xs text-[var(--text-muted)]">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

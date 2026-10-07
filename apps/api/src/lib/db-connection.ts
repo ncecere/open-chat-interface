@@ -25,6 +25,15 @@
  * CONNECTION_DESTROYED is left out on purpose: it is this process closing
  * its own pool on shutdown, which retrying would only prolong.
  */
+/**
+ * Better Auth's getSession answers a session lookup whose query failed with a
+ * bare "Failed to get session" APIError, dropping the database error. The
+ * lookup is the request's only work at that point, so its failure is the
+ * database's: the session middleware marks it with this code (the failover
+ * drill met 57P03 "the database system is shutting down" this way).
+ */
+export const SESSION_LOOKUP_FAILED = 'SESSION_LOOKUP_FAILED';
+
 export const CONNECTION_ERROR_CODES: ReadonlySet<string> = new Set([
   '57P01',
   '57P02',
@@ -48,6 +57,7 @@ export const CONNECTION_ERROR_CODES: ReadonlySet<string> = new Set([
   'CONNECTION_CLOSED',
   'CONNECTION_ENDED',
   'CONNECT_TIMEOUT',
+  SESSION_LOOKUP_FAILED,
 ]);
 
 function codeOf(error: unknown): string | undefined {

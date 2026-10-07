@@ -19,6 +19,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 type AuthSettings = Pick<
   InstanceSettings,
@@ -64,6 +65,8 @@ export function AuthenticationSettingsForm({
   const [showLocalAuthWarning, setShowLocalAuthWarning] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
 
   const patch = changedSettings(savedSettings, draft);
   const hasChanges = Object.keys(patch).length > 0;

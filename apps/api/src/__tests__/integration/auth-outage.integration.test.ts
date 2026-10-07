@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 // An address where nothing listens, whatever the environment provides: CI
@@ -41,6 +42,36 @@ async function expectLostConnection(response: Response) {
     error: { code: 'INTERNAL_ERROR', retryable: true },
   });
 }
+
+/** The cookie a signed-in browser sends: a token signed with the instance's secret. */
+function signedInCookie(): string {
+  const token = 'outagesessiontoken0123456789abcd';
+  const signature = createHmac('sha256', process.env.AUTH_SECRET!).update(token).digest('base64');
+  return `oci.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+}
+
+describe('a signed-in request with the database unreachable', () => {
+  // The failover drill: during a Patroni switchover the session lookup on an
+  // ordinary route met "the database system is shutting down" (57P03), and
+  // Better Auth's getSession re-threw it as a bare "Failed to get session",
+  // so the answer was a plain 500 the client could not tell from a bug. The
+  // request itself never ran, so it is a lost connection like any other.
+  it('answers a read and a write as a lost connection', async () => {
+    const cookie = signedInCookie();
+    await expectLostConnection(
+      await fetchHandler(new Request(`${ORIGIN}/api/me`, { headers: { cookie, origin: ORIGIN } })),
+    );
+    await expectLostConnection(
+      await fetchHandler(
+        new Request(`${ORIGIN}/api/threads`, {
+          method: 'POST',
+          headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' },
+          body: JSON.stringify({ title: 'Outage' }),
+        }),
+      ),
+    );
+  });
+});
 
 describe('auth requests with the database unreachable (#288)', () => {
   it('answers the sign-in page status as a lost connection', async () => {

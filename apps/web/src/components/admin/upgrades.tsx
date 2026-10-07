@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { LoadError, MutationError, Notice } from '~/components/admin/admin-ui';
 import { ProgressBar } from '~/components/admin/progress-bar';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -216,6 +217,8 @@ function Pace({ migration }: { migration: BackgroundMigrationSummary }) {
   });
   const changed =
     batchSize !== String(migration.batchSize) || pauseMs !== String(migration.pauseMs);
+  // Leaving the page asks first, as every admin form does (#45, #300).
+  useReportUnsaved(changed);
   const id = `migration-${migration.name.replace(/[^A-Za-z0-9]/g, '-')}`;
   return (
     <form

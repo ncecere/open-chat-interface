@@ -57,7 +57,8 @@ with the new password.
 
 If the page says **password reset is temporarily unavailable**, the service
 could not be reached just then; the form comes back by itself once it can be,
-or choose **Try again**.
+or choose **Try again**. The account registration page says **registration
+temporarily unavailable** in the same situation.
 
 ## The introduction
 
@@ -91,7 +92,7 @@ have already decided against.
 
 The conversation is given a title automatically from what you asked, and
 appears in the sidebar. To rename it, point at it in the list and choose the
-pencil (**Rename thread**), or use the pencil at the top right of the open
+pencil (**Rename conversation**), or use the pencil at the top right of the open
 conversation; see [Renaming](conversations.md#renaming-a-conversation).
 
 ## Choosing a model

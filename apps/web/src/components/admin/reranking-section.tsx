@@ -11,7 +11,7 @@ import { EditOnly } from '~/components/admin/admin-access';
 import { LoadError, MutationError, SaveRow, SettingsSection } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
@@ -163,10 +163,10 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
         <Field
           label="Price"
           htmlFor="reranking-price"
+          // Under the field in error colour, not in place of its hint (#302).
+          error={invalidPrice ? 'Enter a price of zero or more, or leave it blank.' : null}
           hint={
-            invalidPrice
-              ? 'Enter a price of zero or more, or leave it blank.'
-              : 'US dollars per 1,000 searches (reranked messages). Leave blank to record usage at no cost.'
+            'US dollars per 1,000 searches (reranked messages). Leave blank to record usage at no cost.'
           }
         >
           <Input
@@ -176,7 +176,10 @@ function RerankingForm({ status }: { status: RerankingStatus }) {
             step="0.01"
             value={draft.price}
             placeholder="2.00"
-            aria-invalid={invalidPrice}
+            {...invalidFieldProps(
+              'reranking-price',
+              invalidPrice ? 'Enter a price of zero or more, or leave it blank.' : null,
+            )}
             disabled={save.isPending}
             onChange={(event) => edit({ price: event.target.value })}
           />

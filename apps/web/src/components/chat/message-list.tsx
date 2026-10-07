@@ -5,12 +5,14 @@ import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { capacityWaitOf } from '~/components/chat/capacity-wait';
 import { CompactionDivider } from '~/components/chat/compaction-divider';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
-import { MessageRow } from '~/components/chat/message-row';
+import type { EditMessage } from '~/components/chat/message-editor';
+import { MessageRow, messageExcerptOf } from '~/components/chat/message-row';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
 import { replySearchOf, SearchLoading } from '~/components/chat/search-grounding';
 import { type AnswerApproval, toolLimitOf, toolStepsOf } from '~/components/chat/tool-steps';
 import type { HistoryControls } from '~/hooks/use-history-pages';
 import { useWindowedRows } from '~/hooks/use-windowed-rows';
+import { repeatedOpeningPositions } from '~/lib/message-excerpt';
 
 interface MessageListProps {
   messages: UIMessage[];
@@ -19,7 +21,7 @@ interface MessageListProps {
   streaming: boolean;
   onRetry: () => void;
   searching?: boolean;
-  onEdit?: (messageId: string, text: string) => Promise<void>;
+  onEdit?: EditMessage;
   onFork?: (messageId: string) => Promise<void>;
   /** Switching between the latest turn's replies; shown on the last reply only. */
   replySwitch?: ReplySwitch;
@@ -105,6 +107,15 @@ export const MessageList = memo(function MessageList({
   // Once the search's step is in the reply's block, the wait is for the model.
   const searched = lastIsAssistant && replySearchOf(last).presearch !== null;
 
+  // Messages that open with the same words are also named by their place (#293).
+  const positions = useMemo(
+    () =>
+      repeatedOpeningPositions(
+        messages.map((message) => ({ role: message.role, excerpt: messageExcerptOf(message) })),
+      ),
+    [messages],
+  );
+
   const gapAfter = history?.gapAfter ?? null;
   const items = useMemo<Item[]>(() => {
     const list: Item[] = messages.map((message, index) => ({
@@ -188,6 +199,7 @@ export const MessageList = memo(function MessageList({
           onStop={index === messages.length - 1 ? onStop : undefined}
           onFork={onFork}
           onEdit={onEdit}
+          position={positions[index]}
         />
       </>
     );

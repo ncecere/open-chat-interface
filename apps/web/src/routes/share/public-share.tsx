@@ -16,7 +16,7 @@ import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { ApiError, api } from '~/lib/api-client';
 import { usePageTitle } from '~/lib/document-title';
-import { messageExcerpt } from '~/lib/message-excerpt';
+import { messageExcerpt, repeatedOpeningPositions } from '~/lib/message-excerpt';
 
 interface PublicTextPart {
   type: 'text';
@@ -220,24 +220,38 @@ function SharedWork({ steps }: { steps: PublicToolStepPart[] }) {
   );
 }
 
-function SharedMessage({ message }: { message: PublicShareResponse['messages'][number] }) {
-  const text = message.parts
+type SharedMessageData = PublicShareResponse['messages'][number];
+
+const sharedTextOf = (message: SharedMessageData) =>
+  message.parts
     .filter((part): part is PublicTextPart => part.type === 'text')
     .map((part) => part.text)
     .join('\n');
 
-  if (
-    !text &&
-    !message.parts.some((part) => part.type === 'source-url' || part.type === 'tool-step')
-  )
-    return null;
+/** A message with nothing to show (no text, sources or steps) is left out. */
+const isShown = (message: SharedMessageData) =>
+  Boolean(sharedTextOf(message)) ||
+  message.parts.some((part) => part.type === 'source-url' || part.type === 'tool-step');
+
+function SharedMessage({
+  message,
+  position,
+}: {
+  message: SharedMessageData;
+  /** Its place, when another message opens with the same words (#293). */
+  position: string | null;
+}) {
+  const text = sharedTextOf(message);
+  const excerpt = messageExcerpt(text) ?? undefined;
+  const place = (excerpt && position) || undefined;
 
   if (message.role === 'user') {
     return (
       <article
         className="flex flex-col items-end"
         aria-label="User message"
-        data-excerpt={messageExcerpt(text) ?? undefined}
+        data-excerpt={excerpt}
+        data-position={place}
       >
         <div className="max-w-[90%] rounded-2xl border border-[var(--border-user-message)] bg-[var(--bg-user-message)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)] sm:max-w-[85%]">
           <Markdown skipHtml urlTransform={publicMarkdownUrl}>
@@ -250,7 +264,7 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
 
   return (
     // Its opening words name its code blocks and tables (#271).
-    <article aria-label="Assistant message" data-excerpt={messageExcerpt(text) ?? undefined}>
+    <article aria-label="Assistant message" data-excerpt={excerpt} data-position={place}>
       <Sources parts={message.parts} />
       {/* The work, then what it made, then the text in the order it was written. */}
       <SharedWork
@@ -344,6 +358,14 @@ export function PublicSharePage({ slug }: { slug: string }) {
 
   if (!query.data) return null;
   const { thread, messages, expiresAt, snapshot } = query.data;
+  const shown = messages.filter(isShown);
+  // Messages that open with the same words are also named by their place (#293).
+  const positions = repeatedOpeningPositions(
+    shown.map((message) => ({
+      role: message.role,
+      excerpt: messageExcerpt(sharedTextOf(message)),
+    })),
+  );
   const sharedAtLabel = formatDate(thread.sharedAt);
   const expiryLabel = expiresAt ? formatDate(expiresAt) : null;
 
@@ -391,8 +413,12 @@ export function PublicSharePage({ slug }: { slug: string }) {
             markdownProps={PUBLIC_MARKDOWN}
           >
             <div className="flex flex-col gap-7">
-              {messages.map((message) => (
-                <SharedMessage key={message.id} message={message} />
+              {shown.map((message, index) => (
+                <SharedMessage
+                  key={message.id}
+                  message={message}
+                  position={positions[index] ?? null}
+                />
               ))}
             </div>
           </PublicArtifactsProvider>

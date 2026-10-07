@@ -28,6 +28,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { formatDate } from '~/lib/utils';
 import { validationText } from '~/lib/validation-issues';
 
@@ -55,6 +56,8 @@ function PolicyDialog({
   const [body, setBody] = useState(source?.body ?? '');
   const [publish, setPublish] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
   const edited =
     title !== (source?.title ?? 'Acceptable use policy') || body !== (source?.body ?? '');
 

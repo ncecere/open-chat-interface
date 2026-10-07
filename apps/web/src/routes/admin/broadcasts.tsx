@@ -19,6 +19,7 @@ import {
   RowList,
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -29,7 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field, invalidFieldProps } from '~/components/ui/field';
+import { Field, fieldHintId, invalidFieldProps } from '~/components/ui/field';
 import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
@@ -150,6 +151,8 @@ function BroadcastDialog({
   // goes when that field is corrected (#217, #283).
   const form = useRef<HTMLFormElement>(null);
   const [problems, setProblems] = useFieldProblems(draft, form);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince(draft);
   const error = problemsElsewhere(problems, FIELDS_SHOWN);
   const at = (field: keyof Draft) => problemsAt(problems, field);
 
@@ -205,7 +208,7 @@ function BroadcastDialog({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{broadcast ? 'Edit announcement' : 'New announcement'}</DialogTitle>
         <DialogDescription>
@@ -263,7 +266,13 @@ function BroadcastDialog({
           </Field>
 
           <Field label="Audience" htmlFor="broadcast-roles" hint="Leave empty for everyone.">
-            <div id="broadcast-roles" className="flex flex-wrap gap-1.5">
+            {/* A group of toggles, named and described as one field (#295). */}
+            <fieldset
+              id="broadcast-roles"
+              aria-label="Audience"
+              aria-describedby={fieldHintId('broadcast-roles')}
+              className="m-0 flex min-w-0 flex-wrap gap-1.5 border-0 p-0"
+            >
               {USER_ROLES.map((role) => {
                 const selected = draft.audienceRoles.includes(role);
                 return (
@@ -290,7 +299,7 @@ function BroadcastDialog({
                   </button>
                 );
               })}
-            </div>
+            </fieldset>
           </Field>
         </div>
 

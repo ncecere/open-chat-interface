@@ -1,5 +1,5 @@
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CircleAlert, CircleCheck, type LucideIcon, Play, TriangleAlert } from 'lucide-react';
+import { CircleAlert, CircleCheck, LoaderCircle, type LucideIcon, Play } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { EmptyState, MutationError } from '~/components/admin/admin-ui';
@@ -27,9 +27,17 @@ export interface OperationRun {
 /** A local date and time, or a dash when there is none. */
 export const formatRunTime = (iso: string | null) => (iso ? formatDateTime(iso) : '—');
 
+/**
+ * A run in progress, here and on Health's background jobs: a neutral turning
+ * circle. It was the yellow warning triangle, so a run that was fine looked
+ * like a problem until it finished (#305).
+ */
+export const RunningIcon = LoaderCircle;
+export const RUNNING_ICON_CLASS =
+  'animate-spin text-[var(--text-muted)] motion-reduce:animate-none';
+
 export function RunStatusIcon({ status }: { status: OperationRun['status'] }) {
-  const Icon =
-    status === 'failed' ? CircleAlert : status === 'running' ? TriangleAlert : CircleCheck;
+  const Icon = status === 'failed' ? CircleAlert : status === 'running' ? RunningIcon : CircleCheck;
   return (
     <Icon
       role="img"
@@ -39,7 +47,7 @@ export function RunStatusIcon({ status }: { status: OperationRun['status'] }) {
         status === 'failed'
           ? 'text-[var(--danger)]'
           : status === 'running'
-            ? 'text-[var(--warning)]'
+            ? RUNNING_ICON_CLASS
             : 'text-[var(--success)]',
       )}
     />

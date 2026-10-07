@@ -52,6 +52,7 @@ const toRef = (artifact: ArtifactSummary): ArtifactRef => ({
   sourceKey: artifact.sourceKey,
   title: artifact.title,
   kind: artifact.kind,
+  language: artifact.language,
   version: artifact.currentVersion,
 });
 
@@ -438,6 +439,7 @@ export function PublicArtifactsProvider({
           sourceKey: artifact.sourceKey,
           title: artifact.title,
           kind: artifact.kind,
+          language: artifact.language,
           version: artifact.version,
           content: artifact.content,
         }),

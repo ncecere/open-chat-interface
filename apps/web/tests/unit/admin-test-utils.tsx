@@ -22,15 +22,21 @@ type TestRouter = ReturnType<typeof createRouter>;
  */
 export async function renderAdmin(
   ui: ReactNode,
-  { path = '/', role = 'admin' }: { path?: string; role?: AdminRole } = {},
+  {
+    path = '/',
+    role = 'admin',
+    queryClient,
+  }: { path?: string; role?: AdminRole; queryClient?: QueryClient } = {},
 ): Promise<{ root: Root; container: HTMLElement; router: TestRouter }> {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const client =
+    queryClient ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
   const rootRoute = createRootRoute({
     component: () => <AdminAccessProvider role={role}>{ui}</AdminAccessProvider>,
   });

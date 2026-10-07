@@ -4,6 +4,7 @@ import { Check, Copy, Link2, MailPlus, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, Row, RowList } from '~/components/admin/admin-ui';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -14,13 +15,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 import { formatDateTime } from '~/lib/utils';
-import { validationText } from '~/lib/validation-issues';
+import { validationProblems } from '~/lib/validation-issues';
 
 interface InvitesResponse {
   invites: Array<Omit<Invite, 'token'>>;
@@ -31,6 +33,9 @@ interface CreatedInvite {
   url: string;
   emailDelivered: boolean;
 }
+
+/** The form's names for the fields, so each error names the one it is about (#127). */
+const INVITE_LABELS = { email: 'Email', expiresInDays: 'Expires in days' };
 
 type ListedInvite = InvitesResponse['invites'][number];
 type InviteStatus = 'active' | 'redeemed' | 'expired';
@@ -53,24 +58,28 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
   const [role, setRole] = useState<UserRole>('user');
   // Links expire unless the admin chooses otherwise (docs/admin/people.md).
   const [expiresInDays, setExpiresInDays] = useState('7');
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'copied' | 'failed' | null>(null);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const changed = useEditedSince({ email, role, expiresInDays });
+
+  // Each problem is shown under its field, which is marked invalid and
+  // described by it, and goes when that field is edited (#178, #302): an
+  // address that already has an account is about the Email field.
+  const [problems, setProblems] = useFieldProblems({ email, role, expiresInDays });
+  const at = (field: string) => problemsAt(problems, field);
+  const formError = problemsElsewhere(problems, ['email', 'expiresInDays']);
 
   const create = useMutation({
     mutationFn: (body: ReturnType<typeof createInviteSchema.parse>) =>
       api.post<CreatedInvite>('/admin/invites', body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] }),
+    onError: (error) =>
+      setProblems(apiErrorProblems(error, 'Failed to create invitation.', INVITE_LABELS)),
   });
-
-  /** Any edit clears the last attempt's error, which is about what was sent (#178). */
-  function edited() {
-    setValidationError(null);
-    if (create.isError) create.reset();
-  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setValidationError(null);
+    setProblems([]);
     create.reset();
 
     const result = createInviteSchema.safeParse({
@@ -80,7 +89,12 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     });
 
     if (!result.success) {
-      setValidationError(validationText(result.error.issues, 'Check the invitation details.'));
+      setProblems(
+        validationProblems(result.error.issues, INVITE_LABELS).map(({ field, text }) => ({
+          fields: field ? [field] : [],
+          text,
+        })),
+      );
       return;
     }
 
@@ -162,12 +176,8 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const formError =
-    validationError ??
-    (create.error && apiErrorMessage(create.error, 'Failed to create invitation.'));
-
   return (
-    <DialogContent className="w-[calc(100%-2rem)]">
+    <DialogContent className="w-[calc(100%-2rem)]" confirmDiscard={changed}>
       <DialogHeader>
         <DialogTitle>Create invitation</DialogTitle>
         <DialogDescription>
@@ -180,15 +190,14 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           label="Email (optional)"
           htmlFor="invite-email"
           hint="Leave blank for a shareable link."
+          error={at('email')}
         >
           <Input
             id="invite-email"
+            {...invalidFieldProps('invite-email', at('email'))}
             type="email"
             value={email}
-            onChange={(event) => {
-              edited();
-              setEmail(event.target.value);
-            }}
+            onChange={(event) => setEmail(event.target.value)}
             placeholder="person@example.com"
             autoComplete="email"
             maxLength={320}
@@ -199,10 +208,7 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           <Select
             id="invite-role"
             value={role}
-            onChange={(next) => {
-              edited();
-              setRole(next as UserRole);
-            }}
+            onChange={(next) => setRole(next as UserRole)}
             options={USER_ROLES.map((option) => ({
               value: option,
               label: option.charAt(0).toUpperCase() + option.slice(1),
@@ -214,19 +220,18 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
           label="Expires in days"
           htmlFor="invite-expiry"
           hint="Between 1 and 365 days. Clear it for a link that never expires."
+          error={at('expiresInDays')}
         >
           <Input
             id="invite-expiry"
+            {...invalidFieldProps('invite-expiry', at('expiresInDays'))}
             type="number"
             min={1}
             max={365}
             step={1}
             inputMode="numeric"
             value={expiresInDays}
-            onChange={(event) => {
-              edited();
-              setExpiresInDays(event.target.value);
-            }}
+            onChange={(event) => setExpiresInDays(event.target.value)}
             placeholder="No expiration"
           />
         </Field>

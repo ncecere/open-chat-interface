@@ -70,7 +70,7 @@ export function CommandPalette(props: CommandPaletteProps) {
             <input
               ref={inputRef}
               role="combobox"
-              aria-label="Type a command or search your threads"
+              aria-label="Type a command or search your conversations"
               aria-autocomplete="list"
               aria-expanded="true"
               aria-controls={LISTBOX_ID}
@@ -80,7 +80,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Type a command or search your threads..."
+              placeholder="Type a command or search your conversations..."
               className="h-full min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
             />
             {showThreadProgress && <Spinner className="shrink-0" />}
@@ -173,7 +173,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 
             {items.length === 0 && !showThreadProgress && (
               <p className="px-3 py-10 text-center text-sm text-[var(--text-muted)]">
-                No commands or threads found.
+                No commands or conversations found.
               </p>
             )}
           </div>

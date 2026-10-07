@@ -1,6 +1,7 @@
 import type { CreateSsoProviderInput, SsoProviderSummary } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -9,12 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { OidcFields } from './sso-form/oidc-fields';
 import { PolicyFields } from './sso-form/policy-fields';
 import {
@@ -29,6 +31,26 @@ import {
 } from './sso-form/provider-draft';
 import { SamlFields } from './sso-form/saml-fields';
 
+/** The fields that show their own errors; any other is shown at the foot (#302). */
+const FIELDS_SHOWN = [
+  'providerId',
+  'issuer',
+  'clientId',
+  'clientSecret',
+  'discoveryUrl',
+  'scopes',
+  'entryPoint',
+  'idpCertificate',
+  'audience',
+  'label',
+  'allowedDomains',
+  'roleRequiredMessage',
+  'claimEmail',
+  'claimName',
+  'claimImage',
+  'claimSubject',
+];
+
 export function SsoProviderForm({
   provider,
   onClose,
@@ -40,7 +62,13 @@ export function SsoProviderForm({
   const editing = Boolean(provider);
   const [policy, setPolicy] = useState<PolicyDraft>(() => policyFromProvider(provider));
   const [protocol, setProtocol] = useState<ProtocolDraft>(EMPTY_PROTOCOL);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince({ policy, protocol });
+  // Every problem at once, each under its field, which is marked invalid and
+  // described by it, until that field is edited (#283, #302).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems({ ...policy, ...protocol }, form);
+  const errorAt = (field: string) => problemsAt(problems, field);
 
   const save = useMutation({
     mutationFn: async (body: CreateSsoProviderInput | PatchSsoProviderBody) => {
@@ -50,6 +78,8 @@ export function SsoProviderForm({
         await api.post<{ providerId: string }>('/admin/sso/providers', body);
       }
     },
+    onError: (cause) =>
+      setProblems(apiErrorProblems(cause, 'The SSO provider could not be saved.')),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin', 'sso', 'providers'] }),
@@ -61,23 +91,24 @@ export function SsoProviderForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setValidationError(null);
+    setProblems([]);
     save.reset();
 
     const result = provider ? toPatchBody(policy) : toCreateBody(policy, protocol);
     if (!result.success) {
-      setValidationError(result.error);
+      setProblems(result.problems);
       return;
     }
     save.mutate(result.data);
   }
 
-  const formError =
-    validationError ??
-    (save.error ? apiErrorMessage(save.error, 'The SSO provider could not be saved.') : null);
+  const formError = problemsElsewhere(problems, FIELDS_SHOWN);
 
   return (
-    <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
+    <DialogContent
+      className="max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto p-4 sm:p-6"
+      confirmDiscard={edited}
+    >
       <DialogHeader>
         <DialogTitle>{editing ? `Edit ${provider?.label}` : 'Add SSO provider'}</DialogTitle>
         <DialogDescription>
@@ -87,7 +118,7 @@ export function SsoProviderForm({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={submit} className="flex flex-col gap-6">
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-6">
         {provider ? (
           <section
             className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)] p-4"
@@ -136,9 +167,11 @@ export function SsoProviderForm({
                 label="Provider ID"
                 htmlFor="sso-provider-id"
                 hint="Lowercase letters, numbers, and dashes only."
+                error={errorAt('providerId')}
               >
                 <Input
                   id="sso-provider-id"
+                  {...invalidFieldProps('sso-provider-id', errorAt('providerId'))}
                   value={protocol.providerId}
                   disabled={save.isPending}
                   required
@@ -152,19 +185,34 @@ export function SsoProviderForm({
             </section>
 
             {protocol.kind === 'oidc' ? (
-              <OidcFields protocol={protocol} disabled={save.isPending} onChange={setProtocol} />
+              <OidcFields
+                protocol={protocol}
+                disabled={save.isPending}
+                onChange={setProtocol}
+                errorAt={errorAt}
+              />
             ) : (
-              <SamlFields protocol={protocol} disabled={save.isPending} onChange={setProtocol} />
+              <SamlFields
+                protocol={protocol}
+                disabled={save.isPending}
+                onChange={setProtocol}
+                errorAt={errorAt}
+              />
             )}
           </>
         )}
 
-        <PolicyFields policy={policy} disabled={save.isPending} onChange={setPolicy} />
+        <PolicyFields
+          policy={policy}
+          disabled={save.isPending}
+          onChange={setPolicy}
+          errorAt={errorAt}
+        />
 
         {formError && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-sm text-[var(--danger-on-tint)]"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-sm text-[var(--danger-on-tint)]"
           >
             {formError}
           </p>

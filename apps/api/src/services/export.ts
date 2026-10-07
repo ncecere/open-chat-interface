@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, schema } from '@oci/db';
 import {
-  ARTIFACT_KIND_LABELS,
   type ArtifactKind,
+  artifactKindLabel,
   artifactOfToolPart,
   isDeclinedArtifactPart,
   isToolPart,
@@ -148,6 +148,8 @@ interface ExportArtifactReference {
   messageId: string;
   title: string;
   kind: ArtifactKind;
+  /** A code artifact's language, which names it ("Python", #298). */
+  language?: string | null;
   /** Versions made by each reply, so a reply that revised an artifact says so. */
   versions: Array<{ version: number; messageId: string | null }>;
 }
@@ -175,7 +177,7 @@ function artifactLines(
       .filter((version) => version.messageId === messageId)
       .map((version) => ({
         key: artifact.id ? `${artifact.id}:${version.version}` : null,
-        line: `_Artifact \u201c${artifact.title}\u201d (${ARTIFACT_KIND_LABELS[artifact.kind]}, version ${version.version}${
+        line: `_Artifact \u201c${artifact.title}\u201d (${artifactKindLabel(artifact.kind, artifact.language)}, version ${version.version}${
           version.version === lastListed && version.version < latest
             ? `; the latest is version ${latest}`
             : ''

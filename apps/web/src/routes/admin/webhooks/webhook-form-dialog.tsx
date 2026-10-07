@@ -1,6 +1,7 @@
 import type { WebhookEndpoint, WebhookWithSecret } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useRef, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -99,6 +100,8 @@ export function WebhookFormDialog({
   // goes when that field is corrected (#217, #283).
   const form = useRef<HTMLFormElement>(null);
   const [problems, setProblems] = useFieldProblems(draft, form);
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince(draft);
   const report = (found: FieldProblem[]) => setProblems(linkFields(found, LINKED_FIELDS));
   const at = (field: keyof Draft) => problemsAt(problems, field);
   const error = problemsElsewhere(problems, FIELDS_SHOWN);
@@ -129,16 +132,9 @@ export function WebhookFormDialog({
   function submit(event: FormEvent) {
     event.preventDefault();
     setProblems([]);
-    const missing: FieldProblem[] = [
-      ...(draft.url.trim() ? [] : [{ fields: ['url'], text: 'Enter the endpoint’s URL.' }]),
-      ...(!draft.allActions && parseActions(draft.actions).length === 0
-        ? [{ fields: ['actions'], text: 'Choose at least one audit action, or send all of them.' }]
-        : []),
-    ];
-    if (missing.length > 0) {
-      report(missing);
-      return;
-    }
+    // No check of its own first: the API reports a missing URL or action
+    // list together with the URL's network rule, which only it can check.
+    // Stopping at the form's own check left that one for the next save (#301).
     if (endpoint) {
       const patch = webhookChanges(endpoint, draft);
       if (Object.keys(patch).length === 0) onClose();
@@ -156,7 +152,7 @@ export function WebhookFormDialog({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>{endpoint ? 'Edit webhook endpoint' : 'Add webhook endpoint'}</DialogTitle>
         <DialogDescription>

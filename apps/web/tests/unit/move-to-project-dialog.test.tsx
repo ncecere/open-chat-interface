@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import type { ProjectSummary } from '@oci/shared';
-import { useState } from 'react';
+import { act, useState } from 'react';
 import type { Root } from 'react-dom/client';
+import { Toaster, toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MoveToProjectDialog } from '../../src/components/projects/project-dialogs';
 import { alerts, button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
@@ -30,16 +31,26 @@ let root: Root | undefined;
 function Harness({ current }: { current: string | null }) {
   const [open, setOpen] = useState(true);
   return (
-    <MoveToProjectDialog
-      threadId="thread-1"
-      currentProjectId={current}
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) closed();
-        setOpen(next);
-      }}
-    />
+    <>
+      <MoveToProjectDialog
+        threadId="thread-1"
+        currentProjectId={current}
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) closed();
+          setOpen(next);
+        }}
+      />
+      <Toaster />
+    </>
   );
+}
+
+/** The notice's text, from Sonner's own polite live region; null when there is none. */
+function announced(): string | null {
+  const region = document.querySelector('[aria-live="polite"]');
+  const notice = region?.querySelector('[data-sonner-toast]');
+  return notice?.textContent ?? null;
 }
 
 beforeEach(() => {
@@ -52,6 +63,7 @@ beforeEach(() => {
   api.patch.mockReset().mockResolvedValue({ thread: { id: 'thread-1' } });
 });
 afterEach(async () => {
+  await act(async () => toast.dismiss());
   if (root) await cleanup(root);
   root = undefined;
 });
@@ -87,6 +99,8 @@ describe('move to project dialog', () => {
     expect(api.patch).toHaveBeenCalledExactlyOnceWith('/threads/thread-1', { projectId: 'p2' });
     expect(closed).toHaveBeenCalled();
     expect(dialog()).toBeNull();
+    // Said, and announced: the conversation on screen does not change (#294).
+    await vi.waitFor(() => expect(announced()).toContain('Conversation moved to “Grants”.'));
   });
 
   it('takes the conversation out of its project with No project', async () => {
@@ -94,6 +108,7 @@ describe('move to project dialog', () => {
     await click(radio('No project'));
     await click(button('Move'));
     expect(api.patch).toHaveBeenCalledExactlyOnceWith('/threads/thread-1', { projectId: null });
+    await vi.waitFor(() => expect(announced()).toContain('Conversation moved out of “Thesis”.'));
   });
 
   it('keeps the dialog open and explains a refused move', async () => {
@@ -107,5 +122,6 @@ describe('move to project dialog', () => {
     expect(alerts()).toContain('Project not found');
     expect(dialog()).not.toBeNull();
     expect(closed).not.toHaveBeenCalled();
+    expect(announced()).toBeNull();
   });
 });

@@ -12,13 +12,20 @@ import { useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { EFFORT_LABELS } from '~/components/admin/role-features-form';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
+import { Select } from '~/components/ui/select';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 type Features = InstanceSettings['features'];
 type FeatureKey = keyof Features;
+
+const EFFORT_OPTIONS = REASONING_EFFORTS.map((effort) => ({
+  value: effort,
+  label: EFFORT_LABELS[effort],
+}));
 
 /**
  * Web search is switched on the Web search page, together with its provider.
@@ -86,6 +93,8 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
   const [draft, setDraft] = useState(() => normalizedPrompt(initialPrompt) ?? '');
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
 
   const normalizedDraft = normalizedPrompt(draft);
   const hasChanges = saved !== normalizedDraft;
@@ -153,6 +162,10 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
   const [draft, setDraft] = useState<ReasoningEffort>(initialEffort ?? 'instant');
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
+  // Each of this page's sections asks before its edit is left behind (#300).
+  useReportUnsaved(draft !== saved);
 
   const save = useMutation({
     mutationFn: (defaultEffort: ReasoningEffort) =>
@@ -185,23 +198,21 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
         htmlFor="default-effort"
         hint="Where new conversations start. When the selected model or a person's role does not allow it, the composer uses Instant instead. Allowed levels per role are set on Roles & access."
       >
-        <select
+        {/* The shared Select, as every other dropdown on these pages: the
+            native one showed the system's arrow and menu (#305). It reads
+            the Field's hint itself. */}
+        <Select
           id="default-effort"
-          className="h-9 w-full max-w-xs rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-3 text-sm text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="max-w-xs"
           value={draft}
           disabled={save.isPending}
-          onChange={(event) => {
-            setDraft(event.target.value as ReasoningEffort);
+          options={EFFORT_OPTIONS}
+          onChange={(value) => {
+            setDraft(value as ReasoningEffort);
             setErrorMessage(null);
             setSuccessMessage(false);
           }}
-        >
-          {REASONING_EFFORTS.map((effort) => (
-            <option key={effort} value={effort}>
-              {EFFORT_LABELS[effort]}
-            </option>
-          ))}
-        </select>
+        />
       </Field>
 
       <SaveRow
@@ -221,6 +232,8 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
   const [draft, setDraft] = useState(settings.features);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
 
   const hasChanges = featuresChanged(saved, draft);
 
@@ -317,8 +330,13 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
   const [draft, setDraft] = useState(String(initialSteps ?? DEFAULT_MAX_TOOL_STEPS));
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
   const value = Number(draft);
   const valid = /^\d+$/.test(draft) && value >= MIN_TOOL_STEPS && value <= MAX_TOOL_STEPS;
+  useReportUnsaved(draft !== String(saved));
+  // Shown under the field and described by it, not beside Save (#302).
+  const [fieldError, setFieldError] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: (maxToolSteps: number) =>
@@ -344,7 +362,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
       onSubmit={(event) => {
         event.preventDefault();
         if (!valid) {
-          setErrorMessage(`Enter a whole number from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}.`);
+          setFieldError(`Enter a whole number from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}.`);
           return;
         }
         if (value !== saved) save.mutate(value);
@@ -353,6 +371,7 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
       <Field
         label="Tool step limit"
         htmlFor="max-tool-steps"
+        error={fieldError}
         hint={`Steps one reply may spend using tools, from ${MIN_TOOL_STEPS} to ${MAX_TOOL_STEPS}. A reply that reaches it answers with what it found, with a note. Default ${DEFAULT_MAX_TOOL_STEPS}.`}
       >
         <Input
@@ -364,10 +383,12 @@ function ToolStepLimitForm({ initialSteps }: { initialSteps: number }) {
           step={1}
           className="max-w-32"
           value={draft}
+          {...invalidFieldProps('max-tool-steps', fieldError)}
           aria-invalid={!valid}
           disabled={save.isPending}
           onChange={(event) => {
             setDraft(event.target.value);
+            setFieldError(null);
             setErrorMessage(null);
             setSuccessMessage(false);
           }}
@@ -392,6 +413,9 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
   const [draft, setDraft] = useState(initialEnabled ?? true);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
+  useReportUnsaved(draft !== saved);
 
   const save = useMutation({
     mutationFn: (autoCompact: boolean) =>
@@ -451,6 +475,9 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
   const [draft, setDraft] = useState(initialEnabled ?? true);
   const [successMessage, setSuccessMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
+  useReportUnsaved(draft !== saved);
 
   const save = useMutation({
     mutationFn: (diagramGuidance: boolean) =>

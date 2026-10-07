@@ -70,6 +70,14 @@ function formatAhead(date: Date, minutes: number): string {
   return `on ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
+/**
+ * The time of day as `timeStyle: 'short'` writes it ("6:30 AM", "18:30"), for
+ * formats that also name the zone, which `timeStyle` cannot be combined with.
+ * One hour style everywhere: the read-only notices' "07:30 AM" sat beside the
+ * admin lists' "6:30 AM" (#305).
+ */
+export const TIME_OF_DAY = { hour: 'numeric', minute: '2-digit' } as const;
+
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',

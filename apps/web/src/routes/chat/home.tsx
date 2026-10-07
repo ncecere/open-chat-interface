@@ -8,10 +8,11 @@ import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
-import { useModels } from '~/hooks/use-models';
+import { useModels, useModelsHiddenFromRole } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
 import { clearRestoredDraft, peekRestoredDraft } from '~/lib/unused-conversation';
@@ -41,6 +42,7 @@ const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
 export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const { data } = useCurrentUser();
   const modelsQuery = useModels();
+  const hiddenFromRole = useModelsHiddenFromRole();
   const models = modelsQuery.data ?? EMPTY_MODELS;
   // Until the models and the person's features arrive, nothing is said about
   // them: "No models are available yet" was shown for as long as the request
@@ -73,6 +75,8 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   const creating = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(startError, () => setStartError(null));
   const setDraft = useCallback((value: string) => {
     setDraftValue(value);
     if (started.current && !creating.current) {
@@ -84,7 +88,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   // A model picked here applies to the conversation it starts; otherwise the
   // person's own default (Settings → Models), then the instance default.
   const [modelSlug, setModelSlug] = useState<string | null>(null);
-  const { items: attachmentItems, upload, remove } = useAttachments();
+  const { items: attachmentItems, upload, remove, handOver: handOverUploads } = useAttachments();
   useEffect(() => forgetBrowserModel(), []);
   // A new chat is there to be typed in: the cursor starts in the box, however
   // the person arrived (#251). Not on a touch-only device (see touchOnly).
@@ -137,9 +141,20 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
       }
 
       sessionStorage.setItem(PENDING_THREAD_KEY, thread.id);
+      // The conversation sends them: this page must not discard them as it goes (#297).
+      handOverUploads(readyAttachments.map((file) => file.id));
       await navigate({ to: '/chat/$threadId', params: { threadId: thread.id } });
     },
-    [createThread, temporary, projectId, effort, webSearch, attachmentItems, navigate],
+    [
+      createThread,
+      temporary,
+      projectId,
+      effort,
+      webSearch,
+      attachmentItems,
+      handOverUploads,
+      navigate,
+    ],
   );
 
   const startThread = useCallback(
@@ -243,8 +258,11 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
 
           {modelsQuery.isSuccess && models.length === 0 && (
             <p className="mt-8 rounded-xl bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
-              No models are available yet. An administrator needs to add a provider and enable a
-              model in the catalog.
+              {/* Kept from every model by their role, the person needs to ask, not
+                  wait for the instance to be set up (#303). */}
+              {hiddenFromRole
+                ? 'No models are available to your role. Ask an administrator.'
+                : 'No models are available yet. An administrator needs to add a provider and enable a model in the catalog.'}
             </p>
           )}
           {modelsQuery.isError && (

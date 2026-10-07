@@ -292,7 +292,7 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
     expect(row).toMatchObject({ status: 'pending', batch_size: 10 });
   });
 
-  it('applies the bundled steps: the message, thread and audit log indexes', async () => {
+  it('applies the bundled steps: the message, thread and audit log indexes, and the artifact kind check', async () => {
     const result = await runPostMigrations(live.connectionString, { logger: quiet });
     expect(result.steps.map((step) => [step.name, step.outcome])).toEqual([
       ['0001_message_created_at_index', 'applied'],
@@ -303,6 +303,7 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
       ['0006_thread_created_at_index', 'applied'],
       ['0007_audit_log_target_index', 'applied'],
       ['0008_audit_log_user_ids_index', 'applied'],
+      ['0009_artifact_kind_code', 'applied'],
     ]);
     for (const name of [
       'message_created_at_idx',

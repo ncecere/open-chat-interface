@@ -44,6 +44,7 @@ const summary = (overrides: Partial<ArtifactSummary>): ArtifactSummary => ({
   sourceKey: 'block:0',
   title: 'Chart',
   kind: 'html',
+  language: null,
   currentVersion: 1,
   sizeBytes: 40,
   createdAt: '2026-01-01T00:00:00.000Z',

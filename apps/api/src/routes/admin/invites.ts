@@ -42,6 +42,9 @@ inviteRoutes.get('/', async (c) => {
   return c.json({ invites });
 });
 
+/** A refusal about the address, which the form shows at its Email field (#302). */
+const emailConflict = (message: string) => conflict(message, [{ path: ['email'], message }]);
+
 inviteRoutes.post('/', async (c) => {
   const actor = currentUser(c);
   const input = await parseBody(c, createInviteSchema);
@@ -57,7 +60,7 @@ inviteRoutes.post('/', async (c) => {
       .where(sql`lower(${schema.user.email}) = ${input.email}`)
       .limit(1);
     if (account) {
-      throw conflict(
+      throw emailConflict(
         'An account with this email address already exists. Change its role on its account page instead.',
       );
     }
@@ -73,7 +76,7 @@ inviteRoutes.post('/', async (c) => {
       )
       .limit(1);
     if (pending) {
-      throw conflict(
+      throw emailConflict(
         'This address already has a pending invitation. Revoke it first to send a new one.',
       );
     }

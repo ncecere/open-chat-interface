@@ -1,4 +1,4 @@
-import { ARTIFACT_KIND_LABELS, type ToolStepSummary, toolKey } from '@oci/shared';
+import { artifactKindLabel, type ToolStepSummary, toolKey } from '@oci/shared';
 import { ArrowDown, ChevronDown, FileCode2, Wrench } from 'lucide-react';
 import { type MouseEvent, useEffect, useId, useState } from 'react';
 import { ArtifactCardButton, artifactMeta } from '~/components/artifacts/artifact-card';
@@ -99,6 +99,7 @@ function artifactStepOf(
     saved,
     title: draft.title ?? saved?.title ?? existing?.title ?? null,
     kind: draft.kind ?? saved?.kind ?? existing?.kind ?? null,
+    language: draft.language ?? saved?.language ?? existing?.language ?? null,
     writing: draft.state === 'writing' && streaming,
     failed: isFailed(draft, streaming),
   };
@@ -156,6 +157,7 @@ export function ArtifactToolStep({
   const waited = useElapsedSeconds(preparing);
   if (!info || !artifacts || info.failed) return null;
   const { draft, existing, saved, title, kind, writing } = info;
+  const kindName = kind ? artifactKindLabel(kind, info.language) : null;
   const cardKey = toolKey(draft.toolCallId);
   const openDraft = artifacts.openDraft;
 
@@ -184,13 +186,13 @@ export function ArtifactToolStep({
     const name = title ?? 'Artifact';
     card = {
       title: name,
-      meta: `${kind ? ARTIFACT_KIND_LABELS[kind] : 'Artifact'}${draft.version ? ` · version ${draft.version}` : ''}`,
+      meta: `${kindName ?? 'Artifact'}${draft.version ? ` · version ${draft.version}` : ''}`,
       label: `Open artifact: ${name}`,
       onOpen: openDraft ? () => openDraft(messageId, draft.toolCallId) : undefined,
       live: false,
     };
   } else {
-    const kindLabel = kind ? `${ARTIFACT_KIND_LABELS[kind]} · ` : '';
+    const kindLabel = kindName ? `${kindName} · ` : '';
     card = {
       title: preparing ? `Preparing ${title ?? 'artifact'}…` : liveLabel(draft, title),
       meta: preparing
@@ -257,6 +259,7 @@ export function ArtifactToolStep({
             part={part}
             title={title}
             kind={kind}
+            language={info.language}
             writing={writing}
             saved={saved}
             artifacts={artifacts}
@@ -350,6 +353,7 @@ export function ArtifactStepRow({
             part={part}
             title={title}
             kind={info.kind}
+            language={info.language}
             writing={info.writing}
             saved={info.saved}
             artifacts={artifacts}
@@ -370,6 +374,7 @@ function ArtifactStepDetails({
   part,
   title,
   kind,
+  language,
   writing,
   saved,
   artifacts,
@@ -378,6 +383,7 @@ function ArtifactStepDetails({
   part: ToolPart;
   title: string | null;
   kind: ArtifactDraft['kind'];
+  language: string | null;
   writing: boolean;
   saved: ArtifactRef | undefined;
   artifacts: ArtifactsContextValue | null;
@@ -394,7 +400,7 @@ function ArtifactStepDetails({
         <dt className="text-[var(--text-muted)]">Title</dt>
         <dd className="min-w-0 break-words">{title ?? '—'}</dd>
         <dt className="text-[var(--text-muted)]">Kind</dt>
-        <dd>{kind ? ARTIFACT_KIND_LABELS[kind] : '—'}</dd>
+        <dd>{kind ? artifactKindLabel(kind, language) : '—'}</dd>
         {size && (
           <>
             <dt className="text-[var(--text-muted)]">Size</dt>

@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Spinner } from '~/components/ui/spinner';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 /**
  * Uploads a logo file rather than requiring one to be hosted elsewhere.
@@ -16,6 +17,8 @@ export function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
 
   const upload = useMutation({
     mutationFn: async (file: File) => {
@@ -46,6 +49,7 @@ export function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }
   return (
     <Field
       label="Logo file"
+      hintId="logo-file-hint"
       hint="PNG, JPEG, or WebP up to 1 MB. Shown in place of the Open Chat Interface mark and name, and used as the browser tab icon."
     >
       <div className="flex flex-wrap items-center gap-3">
@@ -78,6 +82,8 @@ export function LogoUpload({ currentLogoUrl }: { currentLogoUrl: string | null }
           variant="secondary"
           size="sm"
           disabled={upload.isPending}
+          // The formats and size it takes, read with it (#295).
+          aria-describedby="logo-file-hint"
           onClick={() => inputRef.current?.click()}
         >
           {upload.isPending && <Spinner />}

@@ -24,7 +24,9 @@ export const forbidden = (message = 'You do not have permission to do that') =>
 export const notFound = (message = 'Not found') =>
   new AppError(ERROR_CODES.NOT_FOUND, message, 404);
 
-export const conflict = (message: string) => new AppError(ERROR_CODES.CONFLICT, message, 409);
+/** `details` may name the field the conflict is about, as a validation failure's do (#302). */
+export const conflict = (message: string, details?: unknown) =>
+  new AppError(ERROR_CODES.CONFLICT, message, 409, details);
 
 export const validationFailed = (message: string, details?: unknown) =>
   new AppError(ERROR_CODES.VALIDATION_FAILED, message, 422, details);

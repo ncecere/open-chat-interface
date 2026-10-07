@@ -5,6 +5,7 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { authClient } from '~/lib/auth-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { type AuthResult, authErrorMessage } from './account-helpers';
 
 export function NameRow({ name, editable }: { name: string; editable: boolean }) {
@@ -13,6 +14,8 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
   const [saved, setSaved] = useState(false);
   const trimmed = draft.trim();
   const inputRef = useRef<HTMLInputElement>(null);

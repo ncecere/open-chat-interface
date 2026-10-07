@@ -121,7 +121,7 @@ describe('Settings → Customization', () => {
     expect(button('Save Preferences').disabled).toBe(true);
 
     // Removing a trait is a change.
-    await click(button('concise×'));
+    await click(button('Remove trait: concise'));
     expect(button('Save Preferences').disabled).toBe(false);
     await type(name, 'Ada L.');
     await click(button('Save Preferences'));
@@ -136,16 +136,58 @@ describe('Settings → Customization', () => {
 
   it('offers the introduction’s traits, and Thorough replaces Concise (#96)', async () => {
     await render();
-    const offered = new Set<string>(SUGGESTED_TRAITS);
     const suggestions = () =>
-      [...document.querySelectorAll('button')]
-        .map((candidate) => candidate.textContent?.trim() ?? '')
-        .filter((text) => offered.has(text));
+      [...document.querySelectorAll('[aria-label="Suggested traits"] button')].map(
+        (candidate) => candidate.textContent?.trim() ?? '',
+      );
     // 'concise' is already chosen, so it is not offered again.
     expect(suggestions()).toEqual(SUGGESTED_TRAITS.filter((trait) => trait !== 'concise'));
-    await click(button('thorough'));
-    expect(findButton('concise×')).toBeUndefined();
-    expect(button('thorough×')).toBeTruthy();
+    await click(button('Add trait: thorough'));
+    expect(findButton('Remove trait: concise')).toBeUndefined();
+    expect(button('Remove trait: thorough')).toBeTruthy();
+  });
+
+  /**
+   * #299: chosen traits (pressing removes one) and suggestions (pressing adds
+   * one) were both plain buttons named only "direct", "concise", so a screen
+   * reader could not tell them apart, and the pressed button vanished with
+   * focus on it.
+   */
+  it('says what each trait button does, keeps focus, and announces the change (#299)', async () => {
+    await render();
+    const names = (list: string) =>
+      [...document.querySelectorAll(`[aria-label="${list}"] button`)].map((candidate) =>
+        candidate.getAttribute('aria-label'),
+      );
+    expect(names('Chosen traits')).toEqual(['Remove trait: concise']);
+    expect(names('Suggested traits')).toEqual(
+      SUGGESTED_TRAITS.filter((trait) => trait !== 'concise').map((trait) => `Add trait: ${trait}`),
+    );
+    // The visible text, the trait, starts the name (WCAG 2.5.3).
+    expect(button('Add trait: direct').textContent).toBe('direct');
+    const status = () => document.querySelector('[role="status"]')?.textContent;
+
+    // Adding moves the suggestion up; focus goes to the suggestion now in its place.
+    const direct = button('Add trait: direct');
+    direct.focus();
+    await click(direct);
+    expect(names('Chosen traits')).toEqual(['Remove trait: concise', 'Remove trait: direct']);
+    expect(status()).toBe('Added direct.');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Add trait: patient');
+
+    // Thorough replaces Concise, and says so.
+    await click(button('Add trait: thorough'));
+    expect(status()).toBe('Added thorough. Removed concise.');
+
+    // Removing one moves focus to the chosen trait now in its place, then back to the field.
+    const first = button('Remove trait: direct');
+    first.focus();
+    await click(first);
+    expect(status()).toBe('Removed direct.');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Remove trait: thorough');
+    await click(button('Remove trait: thorough'));
+    expect(document.querySelector('[aria-label="Chosen traits"]')).toBeNull();
+    expect(document.activeElement?.id).toBe('traits');
   });
 });
 

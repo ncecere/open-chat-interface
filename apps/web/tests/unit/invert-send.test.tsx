@@ -187,7 +187,7 @@ describe('the message editor', () => {
         }),
       );
     });
-    expect(onEdit).toHaveBeenCalledWith('m1', 'Draft');
+    expect(onEdit).toHaveBeenCalledWith('m1', 'Draft', []);
   });
 });
 

@@ -352,6 +352,7 @@ describe.skipIf(!available)('live artifacts', () => {
           sourceKey: 'block:0',
           title: 'Keys',
           kind: 'svg',
+          language: null,
           version: 1,
           content: expect.stringContaining('[REDACTED]'),
         },

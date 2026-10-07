@@ -2,8 +2,9 @@ import { inArray, schema } from '@oci/db';
 import { USER_ROLES } from '@oci/shared';
 import { z } from 'zod';
 import { db } from '../../db/index.js';
-import { validationFailed } from '../../lib/errors.js';
+import { conflict, validationFailed } from '../../lib/errors.js';
 import { recordAudit } from '../audit.js';
+import { administratorRemains, LAST_ADMIN_BULK_MESSAGE, lockAdministrators } from './last-admin.js';
 import type { AdminUserActor } from './mutations.js';
 
 /** Bound each operation so one request cannot rewrite the entire directory. */
@@ -46,22 +47,32 @@ export async function applyBulkUserAction(
   if (input.action === 'set_role' && input.role) {
     const role = input.role;
     previousRoles = await db.transaction(async (tx) => {
+      // A demotion locks every administrator first and refuses to leave none,
+      // as a single change and deletion do (#304).
+      const admins = role === 'admin' ? [] : await lockAdministrators(tx);
       const before = await tx
         .select({ id: schema.user.id, role: schema.user.role })
         .from(schema.user)
         .where(inArray(schema.user.id, targets))
+        .orderBy(schema.user.id)
         .for('update');
+      if (role !== 'admin') refuseLeavingNoAdministrator(admins, targets);
       await tx.update(schema.user).set({ role }).where(inArray(schema.user.id, targets));
       return Object.fromEntries(before.map((row) => [row.id, row.role]));
     });
     affected = Object.keys(previousRoles).length;
   } else if (input.action === 'ban' || input.action === 'unban') {
     const banned = input.action === 'ban';
-    const rows = await db
-      .update(schema.user)
-      .set({ banned, banReason: banned ? (input.reason ?? null) : null })
-      .where(inArray(schema.user.id, targets))
-      .returning({ id: schema.user.id });
+    const rows = await db.transaction(async (tx) => {
+      // A ban locks every administrator first and refuses to leave none who
+      // can sign in, as a single ban and deletion do (#304).
+      if (banned) refuseLeavingNoAdministrator(await lockAdministrators(tx), targets);
+      return tx
+        .update(schema.user)
+        .set({ banned, banReason: banned ? (input.reason ?? null) : null })
+        .where(inArray(schema.user.id, targets))
+        .returning({ id: schema.user.id });
+    });
     affected = rows.length;
 
     // A ban that leaves the session alive is not a ban until it expires.
@@ -93,6 +104,20 @@ export async function applyBulkUserAction(
     },
   });
   return { affected, skippedSelf, ...(sessionsEnded !== undefined ? { sessionsEnded } : {}) };
+}
+
+/**
+ * Refuses the whole operation when it would leave no administrator who can
+ * sign in: every administrator among `targets` stops being one (#304).
+ */
+function refuseLeavingNoAdministrator(
+  admins: ReadonlyArray<{ id: string; banned: boolean }>,
+  targets: readonly string[],
+) {
+  const leaving = admins.filter((admin) => !admin.banned && targets.includes(admin.id));
+  if (leaving.length > 0 && !administratorRemains(admins, targets)) {
+    throw conflict(LAST_ADMIN_BULK_MESSAGE);
+  }
 }
 
 /** Ends every session of these accounts and says how many there were. */

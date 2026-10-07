@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { codeLanguageInfo } from './code-languages.js';
 
 /**
  * Artifacts (v0.9): substantial HTML, SVG, Mermaid and Markdown content kept
@@ -8,7 +9,12 @@ import { z } from 'zod';
  * may ask OCI to inline. See docs/dev/v0.9-design.md, "Artifacts".
  */
 
-export const ARTIFACT_KINDS = ['html', 'svg', 'mermaid', 'markdown'] as const;
+/**
+ * `code` (#298): program code the person asked to have as an artifact, in its
+ * `language`. Never made from a reply's fenced blocks: code in a reply stays
+ * a code block.
+ */
+export const ARTIFACT_KINDS = ['html', 'svg', 'mermaid', 'markdown', 'code'] as const;
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 
 /** Largest content of one version, in UTF-8 bytes. Larger content is refused. */
@@ -30,6 +36,7 @@ export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
   svg: 'SVG',
   mermaid: 'Mermaid',
   markdown: 'Document',
+  code: 'Code',
 };
 
 /** File extension and MIME type offered for a download. */
@@ -38,7 +45,31 @@ export const ARTIFACT_FILE_TYPES: Record<ArtifactKind, { extension: string; mime
   svg: { extension: 'svg', mimeType: 'image/svg+xml' },
   mermaid: { extension: 'mmd', mimeType: 'text/plain' },
   markdown: { extension: 'md', mimeType: 'text/markdown' },
+  code: { extension: 'txt', mimeType: 'text/plain' },
 };
+
+/**
+ * An artifact's kind as people read it; a code artifact by its language
+ * ("Python"). A kind a later release adds reads "Artifact" here rather than
+ * "undefined": during a rolling upgrade this release may meet one (#298).
+ */
+export function artifactKindLabel(kind: ArtifactKind, language?: string | null): string {
+  if (kind === 'code') return codeLanguageInfo(language).label;
+  return ARTIFACT_KIND_LABELS[kind] ?? 'Artifact';
+}
+
+/**
+ * The file type of a download; a code artifact's follows its language
+ * (`.py`), and a kind a later release adds is plain text.
+ */
+export function artifactFileType(
+  kind: ArtifactKind,
+  language?: string | null,
+): { extension: string; mimeType: string } {
+  if (kind === 'code')
+    return { extension: codeLanguageInfo(language).extension, mimeType: 'text/plain' };
+  return ARTIFACT_FILE_TYPES[kind] ?? { extension: 'txt', mimeType: 'text/plain' };
+}
 
 /**
  * Libraries a sandboxed frame may use. OCI inlines the code (served from its
@@ -100,7 +131,7 @@ export interface FencedBlock {
 
 export interface ArtifactBlock extends FencedBlock {
   key: string;
-  kind: Exclude<ArtifactKind, 'markdown'>;
+  kind: Exclude<ArtifactKind, 'markdown' | 'code'>;
   title: string;
 }
 
@@ -329,6 +360,8 @@ export const artifactSummarySchema = z.object({
   sourceKey: z.string(),
   title: z.string(),
   kind: z.enum(ARTIFACT_KINDS),
+  /** A code artifact's language (`python`); null for the other kinds (#298). */
+  language: z.string().nullable(),
   currentVersion: z.number().int().positive(),
   sizeBytes: z.number().int().nonnegative(),
   createdAt: z.string(),
@@ -373,6 +406,8 @@ export interface PublicArtifact {
   sourceKey: string;
   title: string;
   kind: ArtifactKind;
+  /** A code artifact's language; null for the other kinds (#298). */
+  language: string | null;
   version: number;
   content: string;
 }

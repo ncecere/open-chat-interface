@@ -8,7 +8,8 @@ import { message, thread } from './chat.js';
 
 /**
  * A versioned artifact (migration 0032): an HTML page, SVG image, Mermaid
- * diagram or Markdown document kept as an object of its own. It belongs to
+ * diagram, Markdown document or (migration 0043, #298) program code in
+ * `language`, kept as an object of its own. It belongs to
  * the conversation and the reply that created it, and cascades with the
  * thread, its owner and that reply. `sourceKey` says where it came from
  * (`block:<n>`, a fenced block of the reply, or `tool:<call id>`), so
@@ -30,6 +31,8 @@ export const artifact = pgTable(
     sourceKey: text('source_key').notNull(),
     title: text('title').notNull(),
     kind: text('kind').$type<ArtifactKind>().notNull(),
+    /** A code artifact's language (`python`, `bash`, ...); null for the other kinds. */
+    language: text('language'),
     currentVersion: integer('current_version').notNull().default(1),
     ...timestamps(),
   },
@@ -37,7 +40,8 @@ export const artifact = pgTable(
     uniqueIndex('artifact_message_source_unique').on(t.messageId, t.sourceKey),
     index('artifact_thread_idx').on(t.threadId, t.createdAt),
     index('artifact_user_idx').on(t.userId),
-    check('artifact_kind', sql`${t.kind} in ('html', 'svg', 'mermaid', 'markdown')`),
+    check('artifact_kind', sql`${t.kind} in ('html', 'svg', 'mermaid', 'markdown', 'code')`),
+    check('artifact_language_length', sql`char_length(${t.language}) between 1 and 32`),
     check('artifact_title_length', sql`char_length(${t.title}) between 1 and 200`),
     check('artifact_source_key_length', sql`char_length(${t.sourceKey}) between 1 and 300`),
     check('artifact_current_version', sql`${t.currentVersion} >= 1`),

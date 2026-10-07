@@ -76,7 +76,7 @@ async function archive() {
       <Toaster />
     </>,
   ));
-  await click(button('Archive thread: Trip plans'));
+  await click(button('Archive conversation: Trip plans'));
   await vi.waitFor(() => expect(notice()).toContain('Conversation archived'));
 }
 
@@ -121,6 +121,6 @@ describe('the archive notice with Undo (#205)', () => {
     expect(writes).toEqual(['/api/threads/t1 archived=true', '/api/threads/t1 archived=false']);
     expect(notice()).toBeNull();
     expect(findButton('Undo')).toBeUndefined();
-    await vi.waitFor(() => expect(findButton('Archive thread: Trip plans')).toBeDefined());
+    await vi.waitFor(() => expect(findButton('Archive conversation: Trip plans')).toBeDefined());
   });
 });

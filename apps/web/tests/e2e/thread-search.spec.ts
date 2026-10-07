@@ -168,7 +168,7 @@ test('sidebar search shows the matching line and opens the conversation at it', 
   const openSidebar = page.getByRole('button', { name: 'Open sidebar' });
   if (await openSidebar.isVisible()) await openSidebar.click();
 
-  await page.getByRole('textbox', { name: 'Search your threads' }).fill('quok');
+  await page.getByRole('textbox', { name: 'Search your conversations', exact: true }).fill('quok');
 
   const results = page.getByRole('list', { name: 'Search results' });
   const result = results.getByRole('link', { name: /Search fixture conversation/ });
@@ -193,7 +193,7 @@ test('the command palette opens a match from the keyboard', async ({ page }) => 
   await signIn(page);
 
   await page.keyboard.press('ControlOrMeta+k');
-  const input = page.getByRole('combobox', { name: 'Type a command or search your threads' });
+  const input = page.getByRole('combobox', { name: 'Type a command or search your conversations' });
   await expect(input).toBeFocused();
   await input.fill('quokka');
 

@@ -52,7 +52,22 @@ export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
   return <UnsavedChangesContext.Provider value={value}>{children}</UnsavedChangesContext.Provider>;
 }
 
-/** Tells the admin layout whether this form has unsaved changes. */
+/**
+ * Whether `values` differ, by content, from what they were when the form was
+ * opened. A dialog form passes it to DialogContent's `confirmDiscard`, so
+ * Escape or a click outside asks before throwing its edits away (#45, #300).
+ * `values` must be JSON (a Set is passed as an array).
+ */
+export function useEditedSince(values: unknown): boolean {
+  const [initial] = useState(() => JSON.stringify(values));
+  return JSON.stringify(values) !== initial;
+}
+
+/**
+ * Tells the admin layout whether this form has unsaved changes. Every admin
+ * form with a Save button calls it (#300): one that did not lost its edit
+ * without a word when the person left the page.
+ */
 export function useReportUnsaved(dirty: boolean): void {
   const context = useContext(UnsavedChangesContext);
   const id = useId();

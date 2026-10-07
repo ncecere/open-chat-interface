@@ -10,6 +10,8 @@ export interface ArtifactRef {
   sourceKey: string;
   title: string;
   kind: ArtifactKind;
+  /** A code artifact's language (#298). */
+  language?: string | null;
   version: number;
   /** Given on share links, where the panel shows this one version only. */
   content?: string;

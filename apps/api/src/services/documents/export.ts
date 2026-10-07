@@ -1,5 +1,5 @@
 import { and, eq, schema } from '@oci/db';
-import { ARTIFACT_KIND_LABELS, DOCUMENT_FORMAT_INFO, type DocumentFormat } from '@oci/shared';
+import { artifactKindLabel, DOCUMENT_FORMAT_INFO, type DocumentFormat } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { conflict, notFound, rateLimited, validationFailed } from '../../lib/errors.js';
 import { artifactVersionForExport, replyText } from '../artifacts/store.js';
@@ -125,7 +125,7 @@ export async function exportReply(params: {
 }
 
 const ONLY_MARKDOWN_ARTIFACTS =
-  'Only documents (Markdown artifacts) can be exported as files. Download HTML, SVG and Mermaid artifacts as they are.';
+  'Only documents (Markdown artifacts) can be exported as files. Download HTML, SVG, Mermaid and code artifacts as they are.';
 
 /** A Markdown artifact (the current version, or `version`) as a document. */
 export async function exportArtifact(params: {
@@ -141,7 +141,7 @@ export async function exportArtifact(params: {
     );
   if (artifact.kind !== 'markdown')
     throw validationFailed(
-      `${ONLY_MARKDOWN_ARTIFACTS} (This one is ${ARTIFACT_KIND_LABELS[artifact.kind]}.)`,
+      `${ONLY_MARKDOWN_ARTIFACTS} (This one is ${artifactKindLabel(artifact.kind, artifact.language)}.)`,
     );
   const file = await generate(
     params.userId,

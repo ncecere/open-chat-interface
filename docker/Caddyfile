@@ -35,81 +35,105 @@
 	}
 }
 
+# How the web container reaches the API, shared by its two proxies below.
+(api_upstream) {
+	# Compose assigns one DNS name to every API replica. Re-resolving it
+	# lets Caddy discover replicas as they scale; without this it pins to
+	# whichever address it saw first. Every 2 s, so a replica that has
+	# exited (and left DNS) is forgotten quickly; Docker's resolver is local.
+	dynamic a {
+		name {$API_UPSTREAM_HOST:api}
+		port {$API_UPSTREAM_PORT:3000}
+		refresh 2s
+	}
+
+	# The API trusts exactly one client address: the one worked out above.
+	# Replace whatever chain arrived, and drop the other client-address
+	# headers a client could send straight through.
+	header_up X-Forwarded-For {client_ip}
+	header_up -X-Real-IP
+	header_up -CF-Connecting-IP
+	header_up -True-Client-IP
+	header_up -Forwarded
+
+	# Streaming responses must not be buffered.
+	flush_interval -1
+
+	# Sessions are cookie-signed and stream resume goes through Redis, so
+	# no affinity is required; a failed replica is simply retried.
+	lb_try_duration 5s
+	# Each try also looks the API name up again, so with no replica up a
+	# request made 50 lookups at 100 ms. 250 ms halves that, and adds at
+	# most 150 ms before a failed connection is tried on another replica
+	# or, for chat turns, a replica marked down is tried again (#289).
+	lb_try_interval 250ms
+
+	transport http {
+		# Replicas are on the same network: a connection that takes more
+		# than a second is going to a replica that has gone.
+		dial_timeout 1s
+		# Below the API's 65 s keep-alive, so Caddy never sends a request on
+		# a connection the API is closing (a 502 for anything but GET).
+		keepalive 30s
+	}
+}
+
 :8080 {
 	encode gzip zstd
 
 	# API and auth traffic goes to the Hono service. Keeping this same-origin
 	# means session cookies need no CORS or SameSite=None handling.
 	handle /api/* {
-		reverse_proxy {$API_UPSTREAM:api:3000} {
-			# Compose assigns one DNS name to every API replica. Re-resolving it
-			# lets Caddy discover replicas as they scale; without this it pins to
-			# whichever address it saw first. Every 2 s, so a replica that has
-			# exited (and left DNS) is forgotten quickly; Docker's resolver is local.
-			dynamic a {
-				name {$API_UPSTREAM_HOST:api}
-				port {$API_UPSTREAM_PORT:3000}
-				refresh 2s
-			}
+		# New chat turns (a message, and continuing after tool approvals): the
+		# requests a draining replica refuses (apps/api/src/lib/drain.ts).
+		@chatTurn {
+			method POST
+			path_regexp ^/api/chat(/[^/]+/approvals)?/?$
+		}
 
-			# The API trusts exactly one client address: the one worked out above.
-			# Replace whatever chain arrived, and drop the other client-address
-			# headers a client could send straight through.
-			header_up X-Forwarded-For {client_ip}
-			header_up -X-Real-IP
-			header_up -CF-Connecting-IP
-			header_up -True-Client-IP
-			header_up -Forwarded
-
-			# Streaming responses must not be buffered.
-			flush_interval -1
-
-			# Sessions are cookie-signed and stream resume goes through Redis, so
-			# no affinity is required; a failed replica is simply retried.
+		# Caddy runs no active health checks for dynamic upstreams, so a
+		# replica leaves rotation through passive checks on real requests. A
+		# replica shutting down refuses new chat turns with 503 (see
+		# docs/OPERATIONS.md, "Shutting down and draining"); one that has exited
+		# refuses or times out connections. Either takes it out of rotation for
+		# chat turns for 3 s, and every further refused turn or failed
+		# connection takes it out again, so the client's resend of a refused turn
+		# goes to another replica.
+		#
+		# Longer than the client's resends: a refused turn is sent again after
+		# Retry-After (1 s), up to twice, about 2 s after the first. Each web
+		# replica keeps its own mark, and a resend can arrive through another
+		# web replica, so a 2 s mark could expire on the first one just before
+		# the last resend reached it: all three tries landed on the draining
+		# replica (seen in the rolling-upgrade test).
+		#
+		# Shorter than lb_try_duration, so that with a single replica (the
+		# default Compose stack) a turn that arrives while it is marked waits
+		# out the 3 s rather than failing with "no upstreams" (#117).
+		reverse_proxy @chatTurn {$API_UPSTREAM:api:3000} {
+			import api_upstream
+			# A reply streams for a while, so the replica with the fewest in progress.
 			lb_policy least_conn
-			lb_try_duration 5s
-			# Each try also looks the API name up again, so with no replica up a
-			# request made 50 lookups at 100 ms. 250 ms halves that, and adds at
-			# most 150 ms before a failed connection is tried on another replica
-			# or a replica marked down (fail_duration below) is tried again (#289).
-			lb_try_interval 250ms
-
-			# Caddy runs no active health checks for dynamic upstreams, so a
-			# replica leaves rotation through passive checks on real requests.
-			# A replica shutting down refuses new chat turns with 503 (and reports
-			# 503 on /api/health/ready); one that has exited refuses or times out
-			# connections. Either takes it out for 3 s, and every further refused
-			# turn or failed connection takes it out again, so the client's retry
-			# goes to another replica. The API answers 503 only when a replica
-			# cannot serve: shutting down, or its database unreachable. See
-			# docs/OPERATIONS.md, "Shutting down and draining".
-			#
-			# Longer than the client's resends: a refused turn is sent again after
-			# Retry-After (1 s), up to twice, about 2 s after the first. Each web
-			# replica keeps its own mark, and a resend can arrive through another
-			# web replica, so a 2 s mark could expire on the first one just before
-			# the last resend reached it: all three tries landed on the draining
-			# replica (seen in the rolling-upgrade test).
-			#
-			# Shorter than lb_try_duration on purpose: with a single replica (the
-			# default Compose stack) there is nowhere else to go, and a request
-			# that arrives while it is marked waits out the 3 s and is then served
-			# by the draining replica, which still answers everything but new
-			# chat turns. At 10 s, one refused turn made every request (resuming
-			# the reply still being written included) fail with "no upstreams"
-			# (#117).
 			fail_duration 3s
 			max_fails 1
 			unhealthy_status 503
+		}
 
-			transport http {
-				# Replicas are on the same network: a connection that takes more
-				# than a second is going to a replica that has gone.
-				dial_timeout 1s
-				# Below the API's 65 s keep-alive, so Caddy never sends a request on
-				# a connection the API is closing (a 502 for anything but GET).
-				keepalive 30s
-			}
+		# Everything else. A draining replica answers all of it as usual (only
+		# new turns are refused), so it is not taken out of rotation for these;
+		# and it must not look at the chat turns' marks either. Caddy keeps
+		# one failure count per replica address, shared by every proxy, and
+		# applies each proxy's own max_fails to it: with the marks counting here
+		# too, a single replica refusing the turns that several tabs sent and
+		# resent was marked again each time a queued turn reached it, and a
+		# request waiting meanwhile could wait the whole 5 s and fail with "no
+		# upstreams available" (#306). So no passive checks here: a failed
+		# connection is tried again on the next replica in turn (round robin)
+		# within lb_try_duration, and a replica that has exited leaves at the
+		# next lookup (2 s).
+		reverse_proxy {$API_UPSTREAM:api:3000} {
+			import api_upstream
+			lb_policy round_robin
 		}
 	}
 

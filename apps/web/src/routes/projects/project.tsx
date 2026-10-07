@@ -551,7 +551,7 @@ function DeleteProjectSection({ project }: { project: ProjectSummary }) {
   const navigate = useNavigate();
 
   async function confirm() {
-    await remove.mutateAsync(project.id);
+    await remove.mutateAsync({ id: project.id, name: project.name });
     setOpen(false);
     await navigate({ to: '/' });
   }

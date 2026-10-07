@@ -14,6 +14,7 @@ import {
 } from '~/components/ui/dropdown-menu';
 import { type CurrentFeatures, useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn } from '~/lib/utils';
 import { AttachmentList } from '~/routes/settings/attachment-list';
 
@@ -122,6 +123,8 @@ export function SettingsAttachmentsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(deleteError, () => setDeleteError(null));
 
   const attachments = useQuery({
     queryKey: ['attachments'],

@@ -1,5 +1,5 @@
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import type { StorageSettingsController } from './use-storage-settings';
 
@@ -30,6 +30,10 @@ export function S3CredentialEditor({
     save,
     beginEdit,
   } = controller;
+
+  // Each problem is shown under its field, in error colour, which is marked
+  // invalid and described by it, not in place of the hint (#302).
+  const fieldError = (message?: string) => (showValidation && message) || null;
 
   return (
     <>
@@ -76,11 +80,8 @@ export function S3CredentialEditor({
         <Field
           label={saved.s3.hasCredential ? 'Replacement secret access key' : 'Secret access key'}
           htmlFor="s3-secret-access-key"
-          hint={
-            showValidation && validation.secretAccessKey
-              ? validation.secretAccessKey
-              : 'Leave blank to keep the stored value. Use Clear for explicit removal.'
-          }
+          error={fieldError(validation.secretAccessKey)}
+          hint={'Leave blank to keep the stored value. Use Clear for explicit removal.'}
         >
           <Input
             id="s3-secret-access-key"
@@ -89,7 +90,7 @@ export function S3CredentialEditor({
             maxLength={2_049}
             autoComplete="new-password"
             disabled={save.isPending}
-            aria-invalid={showValidation && Boolean(validation.secretAccessKey)}
+            {...invalidFieldProps('s3-secret-access-key', fieldError(validation.secretAccessKey))}
             onChange={(event) => {
               beginEdit();
               setSecretAccessKey(event.target.value);

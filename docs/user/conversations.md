@@ -18,13 +18,22 @@ Screen readers and voice control hear which message each control acts on, by
 its opening words: **Copy message “Walk3 table: give me a small…”**, **Fork
 conversation at “…”**. Code blocks and tables are numbered within their
 message and named by its opening words too: **Copy code block 2 (Python) in
-“Here is the plan…”**, **Download table 1 in “Here is the plan…”**.
+“Here is the plan…”**, **Download table 1 in “Here is the plan…”**. When
+two messages open with the same words (two replies that begin alike, or two
+"Again." questions), their place among the questions or replies shown is
+added too: **Edit
+message “Again.” (question 2)**, **Copy table 1 in “Here is the short Python
+example you…” (reply 3)**.
 
 ### Editing, retrying and forking preserve the original
 
 Editing creates a new conversation with your revised question; the original
 stays as it was. The new conversation is titled from your revised question, so
-each edit can be told apart in the sidebar; rename it if you prefer.
+each edit can be told apart in the sidebar; rename it if you prefer. Files
+sent with the question stay with it: the edit box shows them below the text,
+and the revised question is answered with them. Choose **Remove** (×) on a
+file to leave it out of the revised question; **Cancel** keeps everything as
+it was.
 
 Editing, retrying and forking at a question answer with the model and
 reasoning level shown in the model picker when you do it. If a model failed or
@@ -288,9 +297,9 @@ under its project, not in the date groupings.
 ## Renaming a conversation
 
 A conversation is named automatically from your first message. To change the
-name, point at the conversation in the sidebar and choose the pencil
-(**Rename thread**), or, with the conversation open, choose the pencil at the
-top right (**Rename conversation**). Type the new name and press Enter to save,
+name, point at the conversation in the sidebar and choose the pencil, or, with
+the conversation open, choose the pencil at the top right (both are **Rename
+conversation**). Type the new name and press Enter to save,
 or Escape to leave it as it was.
 
 Names are 1 to 200 characters; spaces at either end are dropped. The new name

@@ -5,6 +5,7 @@ import { IntroductionWizard } from '~/components/onboarding/introduction-wizard'
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
+import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
 /**
  * The acceptable use policy.
@@ -18,6 +19,8 @@ function PolicyGate({ policy }: { policy: NonNullable<OnboardingState['pendingPo
   const queryClient = useQueryClient();
   const [readToEnd, setReadToEnd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A read-only refusal goes once changes are accepted again (#308).
+  useClearReadOnlyRefusal(error, () => setError(null));
 
   const accept = useMutation({
     mutationFn: () => api.post('/me/onboarding/accept-policy', { policyId: policy.id }),

@@ -146,6 +146,7 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0006_thread_created_at_index', 'pending'],
       ['0007_audit_log_target_index', 'pending'],
       ['0008_audit_log_user_ids_index', 'pending'],
+      ['0009_artifact_kind_code', 'pending'],
     ]);
     const [created] = report.postDeploy;
     expect(created!.statement).toMatchObject({ cost: 'concurrent-index', fast: true });

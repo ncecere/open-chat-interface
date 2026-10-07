@@ -1,5 +1,5 @@
-import { ARTIFACT_KIND_LABELS, type ArtifactKind } from '@oci/shared';
-import { ChevronRight, FileCode2, FileImage, FileText, Workflow } from 'lucide-react';
+import { type ArtifactKind, artifactKindLabel } from '@oci/shared';
+import { ChevronRight, FileCode2, FileImage, FileTerminal, FileText, Workflow } from 'lucide-react';
 import { type ArtifactRef, useArtifacts } from '~/components/artifacts/artifacts-context';
 import { cn } from '~/lib/utils';
 
@@ -8,11 +8,12 @@ const ARTIFACT_ICONS: Record<ArtifactKind, typeof FileCode2> = {
   svg: FileImage,
   mermaid: Workflow,
   markdown: FileText,
+  code: FileTerminal,
 };
 
-/** "HTML · version 2" */
-export function artifactMeta(artifact: Pick<ArtifactRef, 'kind' | 'version'>): string {
-  return `${ARTIFACT_KIND_LABELS[artifact.kind]} · version ${artifact.version}`;
+/** "HTML · version 2"; a code artifact by its language, "Python · version 1" (#298). */
+export function artifactMeta(artifact: Pick<ArtifactRef, 'kind' | 'version' | 'language'>): string {
+  return `${artifactKindLabel(artifact.kind, artifact.language)} · version ${artifact.version}`;
 }
 
 /**
@@ -49,7 +50,10 @@ export function ArtifactCardButton({
   className?: string;
 }) {
   const docked = useArtifacts()?.docked ?? false;
-  const Icon = kind ? ARTIFACT_ICONS[kind] : FileCode2;
+  // A kind a later release adds has no icon here; without the fallback the
+  // card had no component to draw and broke the conversation, as the
+  // previous release does on a code artifact (#298).
+  const Icon = (kind && ARTIFACT_ICONS[kind]) || FileCode2;
   return (
     <button
       type="button"

@@ -6,6 +6,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -74,6 +75,8 @@ function unitLabel(metric: QuotaMetric): string {
 export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, OverrideDraft>>({});
+  // Escape or a click outside asks before throwing edits away (#45, #300).
+  const edited = useEditedSince(drafts);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'users', user.id, 'quota-overrides'],
@@ -150,7 +153,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
   });
 
   return (
-    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" confirmDiscard={edited}>
       <DialogHeader>
         <DialogTitle>Usage limits for {user.name}</DialogTitle>
         <DialogDescription>

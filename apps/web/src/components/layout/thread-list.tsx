@@ -71,8 +71,8 @@ export function ThreadRow({
           params={{ threadId: thread.parentThreadId }}
           // Each row's controls are named for the row, as memory's are, so a
           // screen reader's list of buttons is not N copies of one name (#111).
-          aria-label={`Go to parent thread of: ${thread.title}`}
-          title="Go to parent thread"
+          aria-label={`Go to parent conversation of: ${thread.title}`}
+          title="Go to parent conversation"
           // 24 × 24, the WCAG 2.2 target floor; it was the 14 px icon plus
           // padding, 22 × 22, right against the row's link (#193).
           className="ml-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -114,7 +114,7 @@ export function ThreadRow({
       >
         <button
           type="button"
-          aria-label={`${thread.pinned ? 'Unpin' : 'Pin'} thread: ${thread.title}`}
+          aria-label={`${thread.pinned ? 'Unpin' : 'Pin'} conversation: ${thread.title}`}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={() => update.mutate({ id: thread.id, pinned: !thread.pinned })}
@@ -124,7 +124,7 @@ export function ThreadRow({
         </button>
         <button
           type="button"
-          aria-label={`Rename thread: ${thread.title}`}
+          aria-label={`Rename conversation: ${thread.title}`}
           aria-haspopup="dialog"
           disabled={readOnly.active}
           title={lockedTitle}
@@ -135,7 +135,7 @@ export function ThreadRow({
         </button>
         <button
           type="button"
-          aria-label={`Archive thread: ${thread.title}`}
+          aria-label={`Archive conversation: ${thread.title}`}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={(event) => {

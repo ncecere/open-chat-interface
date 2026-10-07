@@ -10,6 +10,7 @@ import { ChatHomePage } from '../../src/routes/chat/home';
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   navigate: vi.fn(),
+  handOver: vi.fn(),
   composer: undefined as ComponentProps<typeof Composer> | undefined,
   models: [
     {
@@ -28,7 +29,10 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate }));
-vi.mock('../../src/hooks/use-models', () => ({ useModels: () => ({ data: mocks.models }) }));
+vi.mock('../../src/hooks/use-models', () => ({
+  useModels: () => ({ data: mocks.models }),
+  useModelsHiddenFromRole: () => false,
+}));
 vi.mock('../../src/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: undefined }),
 }));
@@ -43,6 +47,7 @@ vi.mock('../../src/hooks/use-attachments', () => ({
     items: [{ localId: 'local', status: 'ready', attachment: mocks.file }],
     upload: vi.fn(),
     remove: vi.fn(),
+    handOver: mocks.handOver,
   }),
 }));
 vi.mock('../../src/components/chat/composer', () => ({
@@ -77,6 +82,8 @@ it('scopes the complete prompt/upload handover before navigating to its new thre
     expect(sessionStorage.getItem('oci.pendingThreadId')).toBe('destination');
     expect(sessionStorage.getItem('oci.pendingPrompt')).toBe('Question');
     expect(JSON.parse(sessionStorage.getItem('oci.pendingAttachments')!)).toEqual([mocks.file]);
+    // The conversation sends them: this page must not discard them as it goes (#297).
+    expect(mocks.handOver).toHaveBeenCalledExactlyOnceWith([mocks.file.id]);
   });
   await act(() => mocks.composer!.onSubmit());
   expect(mocks.create).toHaveBeenCalledExactlyOnceWith({ temporary: false });

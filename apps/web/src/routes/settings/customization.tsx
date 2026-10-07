@@ -1,12 +1,13 @@
 import type { ThemeMode } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Monitor, Moon, Plus, Sun } from 'lucide-react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useState } from 'react';
+import { TraitChips, traitChange } from '~/components/settings/trait-chips';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api, apiErrorMessage } from '~/lib/api-client';
-import { SUGGESTED_TRAITS, withTrait } from '~/lib/traits';
+import { withTrait } from '~/lib/traits';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
 
@@ -204,6 +205,7 @@ export function SettingsCustomizationPage() {
   const [occupation, setOccupation] = useState('');
   const [traitDraft, setTraitDraft] = useState('');
   const [traits, setTraits] = useState<string[]>([]);
+  const [traitStatus, setTraitStatus] = useState('');
   const [context, setContext] = useState('');
   const [saved, setSaved] = useState(false);
 
@@ -242,10 +244,15 @@ export function SettingsCustomizationPage() {
     },
   });
 
+  function changeTraits(next: string[]) {
+    setTraitStatus(traitChange(traits, next));
+    setTraits(next);
+  }
+
   function addTrait(trait: string) {
     if (!trait.trim()) return;
     // The same suggestions as the introduction; an opposite is replaced (#96).
-    setTraits((current) => withTrait(current, trait));
+    changeTraits(withTrait(traits, trait));
     setTraitDraft('');
   }
 
@@ -301,35 +308,11 @@ export function SettingsCustomizationPage() {
             max={LIMITS.trait}
           />
 
-          {traits.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {traits.map((trait) => (
-                <button
-                  key={trait}
-                  type="button"
-                  onClick={() => setTraits((current) => current.filter((entry) => entry !== trait))}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-[var(--accent-foreground)]"
-                >
-                  {trait}
-                  <span aria-hidden>×</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {SUGGESTED_TRAITS.filter((trait) => !traits.includes(trait)).map((trait) => (
-              <button
-                key={trait}
-                type="button"
-                onClick={() => addTrait(trait)}
-                className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-control-alt)] px-2.5 py-1 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-              >
-                {trait}
-                <Plus className="size-3" />
-              </button>
-            ))}
-          </div>
+          <TraitChips traits={traits} onChange={changeTraits} inputId="traits" />
+          {/* What a press or Enter did, as the chips' changes are not otherwise heard (#299). */}
+          <p role="status" className="sr-only">
+            {traitStatus}
+          </p>
         </div>
 
         <div>

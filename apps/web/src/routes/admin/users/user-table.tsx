@@ -110,7 +110,7 @@ export function UserTable({
               onSort={onSort}
             />
             <SortableHeader
-              label="Threads"
+              label="Conversations"
               sortKey="threads"
               active={sort}
               direction={direction}

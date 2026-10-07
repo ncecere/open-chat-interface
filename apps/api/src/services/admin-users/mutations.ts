@@ -14,6 +14,12 @@ import {
   isLegalHoldViolation,
   isOnLegalHold,
 } from '../compliance/holds.js';
+import {
+  administratorRemains,
+  LAST_ADMIN_BAN_MESSAGE,
+  LAST_ADMIN_ROLE_MESSAGE,
+  lockAdministrators,
+} from './last-admin.js';
 
 export const LAST_ADMIN_DELETION_MESSAGE =
   'This is the last administrator account, so it cannot be deleted. Make someone else an administrator first.';
@@ -87,30 +93,46 @@ export async function updateUser(
   targetId: string,
   patch: z.infer<typeof updateUserSchema>,
 ) {
-  const [target] = await db
-    .select({ id: schema.user.id, role: schema.user.role })
-    .from(schema.user)
-    .where(eq(schema.user.id, targetId))
-    .limit(1);
+  // A demotion or a ban can take an administrator away: like deletion, it
+  // locks every administrator first and refuses to leave none, so two
+  // administrators demoting or banning each other at once cannot both
+  // succeed (#304).
+  const demotes = patch.role !== undefined && patch.role !== 'admin';
+  const bans = patch.banned === true;
+  const { target, updated } = await db.transaction(async (tx) => {
+    const admins = demotes || bans ? await lockAdministrators(tx) : [];
+    const [target] = await tx
+      .select({ id: schema.user.id, role: schema.user.role, banned: schema.user.banned })
+      .from(schema.user)
+      .where(eq(schema.user.id, targetId))
+      .limit(1)
+      .for('update');
 
-  if (!target) throw notFound('User not found');
-  if (targetId === actor.id && patch.role && patch.role !== 'admin') {
-    throw validationFailed('You cannot remove your own administrator role');
-  }
-  if (targetId === actor.id && patch.banned) {
-    throw validationFailed('You cannot ban your own account');
-  }
+    if (!target) throw notFound('User not found');
+    if (targetId === actor.id && patch.role && patch.role !== 'admin') {
+      throw validationFailed('You cannot remove your own administrator role');
+    }
+    if (targetId === actor.id && patch.banned) {
+      throw validationFailed('You cannot ban your own account');
+    }
+    // Only an administrator who can sign in is taken away by this change.
+    const working = target.role === 'admin' && !target.banned;
+    if (working && (demotes || bans) && !administratorRemains(admins, [targetId])) {
+      throw conflict(demotes ? LAST_ADMIN_ROLE_MESSAGE : LAST_ADMIN_BAN_MESSAGE);
+    }
 
-  const [updated] = await db
-    .update(schema.user)
-    .set({
-      ...(patch.name !== undefined && { name: patch.name }),
-      ...(patch.role !== undefined && { role: patch.role }),
-      ...(patch.banned !== undefined && { banned: patch.banned }),
-      ...(patch.banReason !== undefined && { banReason: patch.banReason }),
-    })
-    .where(eq(schema.user.id, targetId))
-    .returning({ id: schema.user.id });
+    const [updated] = await tx
+      .update(schema.user)
+      .set({
+        ...(patch.name !== undefined && { name: patch.name }),
+        ...(patch.role !== undefined && { role: patch.role }),
+        ...(patch.banned !== undefined && { banned: patch.banned }),
+        ...(patch.banReason !== undefined && { banReason: patch.banReason }),
+      })
+      .where(eq(schema.user.id, targetId))
+      .returning({ id: schema.user.id });
+    return { target, updated };
+  });
 
   // A ban that leaves sessions alive is not a ban until they expire. Bulk ban
   // already ends them; a single-account ban must too.
@@ -205,12 +227,8 @@ export async function deleteUser(
     await db.transaction(async (tx) => {
       // Lock every administrator first, so two administrators deleting each
       // other at the same time cannot both succeed and leave nobody in charge.
-      const admins = await tx
-        .select({ id: schema.user.id })
-        .from(schema.user)
-        .where(eq(schema.user.role, 'admin'))
-        .orderBy(schema.user.id)
-        .for('update');
+      // One who is banned does not count as remaining (#304).
+      const admins = await lockAdministrators(tx);
       const [target] = await tx
         .select({ email: schema.user.email, role: schema.user.role })
         .from(schema.user)
@@ -218,7 +236,7 @@ export async function deleteUser(
         .limit(1)
         .for('update');
       if (!target) throw notFound('User not found');
-      if (target.role === 'admin' && !admins.some((admin) => admin.id !== targetId)) {
+      if (target.role === 'admin' && !administratorRemains(admins, [targetId])) {
         throw conflict(self ? LAST_ADMIN_SELF_DELETION_MESSAGE : LAST_ADMIN_DELETION_MESSAGE);
       }
       // Recorded first, in this transaction (the owner's email is read from the

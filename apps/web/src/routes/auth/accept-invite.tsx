@@ -174,7 +174,7 @@ export function AcceptInvitePage() {
                 <Label htmlFor="invite-password">Password</Label>
                 <Input
                   id="invite-password"
-                  {...fieldErrorProps('invite-error', error, false)}
+                  {...fieldErrorProps('invite-error', error, false, 'invite-password-hint')}
                   type="password"
                   autoComplete="new-password"
                   required
@@ -183,7 +183,9 @@ export function AcceptInvitePage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-                <p className="text-xs text-[var(--text-muted)]">Use at least 12 characters.</p>
+                <p id="invite-password-hint" className="text-xs text-[var(--text-muted)]">
+                  Use at least 12 characters.
+                </p>
               </div>
 
               {error && <AuthFormError id="invite-error">{error}</AuthFormError>}
