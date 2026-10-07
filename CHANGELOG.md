@@ -7,16 +7,24 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-Fixes from eight QA walks of v0.11.0 (issues #35–#353). Three migrations,
-`0042`, `0043` (code artifacts, #298) and `0044` (two columns that let a failed
-scheduled report be tried again, #352; no table rewrite), run with `migrate` as
-usual. Four new post-deploy steps run with `migrate --post` after every replica
-runs the new release, as for any release: `0007`, `0008` and `0010` index the
-audit log so a person's trail includes bulk actions done to them and entries
-made with their address alone (#216, #342; until they run, the trail is
-complete but slower on a large audit log), and `0009` enables code artifacts
-(#298; until it runs, code stays in the reply, so a replica of the previous
-release never sees the new kind). The PostgreSQL driver patch
+Fixes from nine QA walks of v0.11.0 (issues #35–#376). Four migrations,
+`0042`, `0043` (code artifacts, #298), `0044` (two columns that let a failed
+scheduled report be tried again, #352; no table rewrite) and `0045` (a delete
+trigger that keeps a stored file while another conversation still uses it,
+#358; no schema change), run with `migrate` as usual. Seven post-deploy steps
+run with `migrate --post` after every replica runs the new release, as for any
+release: `0007`, `0008` and `0010` index the audit log (#216, #342), `0009`
+enables code artifacts (#298; until it runs, code stays in the reply, so a
+replica of the previous release never sees the new kind), `0011` and `0012`
+index stored files for the delete trigger (#358; until they run, deleting a
+file scans the attachments table), and `0013` indexes message text without
+accents (#362; until it runs, search stays exact about accents). A background
+migration, `0.11.attachment-own-rows` (visible on System health), gives forks
+and edits that already share their original's files their own copies (#358);
+until it finishes, every delete protects them anyway. **Upgrade note for the
+data-loss fix:** rolling back to the previous release makes new forks share
+files again; the SQL to reset the migration afterwards is in
+`docs/dev/database.md`, "Files in forks and edits". The PostgreSQL driver patch
 (`patches/postgres@3.4.9.patch`) is applied by `pnpm install`.
 
 ### Added
@@ -118,8 +126,26 @@ release never sees the new kind). The PostgreSQL driver patch
   (#96), restricted-role pages (#99), and docs that had drifted from the
   interface (#86).
 
-### Fixed after a ninth QA walk: administration (#367–#376)
+### Fixed after a ninth QA walk (#355–#376)
 
+- **Data loss:** deleting a conversation no longer deletes the files of the
+  forks and edits made from it. A fork or edit gets its own copy of each file,
+  the stored object is deleted only when the last copy goes, and forks that
+  already exist are protected and converted in the background. This holds on
+  every path: trash, Delete now, Empty trash, automatic purge, retention,
+  temporary-chat expiry, bulk delete, projects and legal holds. A copy counts
+  against the person's storage allowance (#358). A file that is gone shows as
+  removed, and the model is told by name instead of inventing its content
+  (#359); the full export lists the files of forks and edits (#364).
+- **Accessibility:** the keyboard focus ring on filled buttons is visible from
+  the first frame, in every theme and accent (#355); "Turn on read-only mode"
+  confirms like other destructive dialogs, with focus on Cancel (#356);
+  read-only controls stay focusable and give their reason (#357).
+- **Chat:** right-to-left text is laid out from the right (#360); file names
+  keep Japanese, Arabic, Russian and other letters (#361); conversation search
+  ignores accents (#362); Summarise uses the picker's model (#363); a refused
+  spreadsheet says what to do (#365); the model reads the latest version of a
+  document the person edited (#366).
 - **The acceptable use policy is enforced by the API** (#367). Until a person
   has accepted the published version, every write that uses the instance (chat,
   uploads, new conversations and projects, tool approvals, memory, imports,
