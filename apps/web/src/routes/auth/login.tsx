@@ -3,7 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { AuthFormError, fieldErrorProps, useFocusAfterRender } from '~/components/auth/form-error';
+import {
+  AuthFormError,
+  authFormProblems,
+  emailProblem,
+  fieldErrorProps,
+  useFocusAfterRender,
+} from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -36,6 +42,13 @@ const SSO_ERROR_TEXT: Record<string, string> = {
   ACCOUNT_NOT_LINKED: ACCOUNT_EXISTS,
 };
 
+/** A correct password for an address not yet verified (#330). */
+export function unverifiedMessage(email: string, canSendEmail: boolean): string {
+  return canSendEmail
+    ? `Your email address is not verified yet. A verification link is on its way to ${email}: open it to finish signing in. It can take a few minutes, so check your spam folder too.`
+    : 'Your email address is not verified yet, and this service cannot send email right now. Ask an administrator.';
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -47,10 +60,14 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [needsVerification, setNeedsVerification] = useState(false);
+  // When a refused sign-in for an unverified address sent a new link (#330).
+  const [verificationSentAt, setVerificationSentAt] = useState<number | null>(null);
+  const needsVerification = verificationSentAt !== null;
   const focusAfterRender = useFocusAfterRender();
   // Only wrong credentials are about the fields; a rate limit is not (#183).
   const invalidCredentials = error === WRONG_CREDENTIALS;
+  // The fields the form's own check found empty or malformed (#320's sweep).
+  const [missing, setMissing] = useState<string[]>([]);
   // Sent here because the session ended while the app was open (#165).
   const [signedOut] = useState(() =>
     new URLSearchParams(window.location.search).has(SIGNED_OUT_PARAM),
@@ -62,13 +79,33 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    setNeedsVerification(false);
+    setVerificationSentAt(null);
+    const problems = authFormProblems([
+      { id: 'email', problem: emailProblem(email) },
+      { id: 'password', problem: password ? null : 'Enter your password.' },
+    ]);
+    setMissing(problems?.ids ?? []);
+    if (problems) {
+      setError(problems.message);
+      focusAfterRender(problems.ids[0]!);
+      return;
+    }
     setSubmitting(true);
 
     const result = await answered(authClient.signIn.email({ email, password }));
 
     if (result.error) {
-      setNeedsVerification(result.error.code === 'EMAIL_NOT_VERIFIED');
+      const unverified = result.error.code === 'EMAIL_NOT_VERIFIED';
+      setVerificationSentAt(unverified ? Date.now() : null);
+      if (unverified) {
+        // Only after the right password, so it says nothing about who has an
+        // account. The bare "Email not verified" sent people to Resend for a
+        // duplicate of the link this sign-in had just sent (#330).
+        setError(unverifiedMessage(email.trim(), status?.smtpConfigured !== false));
+        focusAfterRender('login-submit');
+        setSubmitting(false);
+        return;
+      }
       // The service failing (its database unreachable, the API restarting) is
       // not the person's doing, so it is not worded as a wrong password (#288).
       const failed = isServiceFailure(result.error);
@@ -172,7 +209,7 @@ export function LoginPage() {
           </div>
         ) : (
           <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
               {signedOut && !error && (
                 <p
                   role="status"
@@ -196,7 +233,11 @@ export function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
-                  {...fieldErrorProps('login-error', error, invalidCredentials)}
+                  {...fieldErrorProps(
+                    'login-error',
+                    error,
+                    invalidCredentials || missing.includes('email'),
+                  )}
                   type="email"
                   autoComplete="email"
                   required
@@ -210,7 +251,11 @@ export function LoginPage() {
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
-                  {...fieldErrorProps('login-error', error, invalidCredentials)}
+                  {...fieldErrorProps(
+                    'login-error',
+                    error,
+                    invalidCredentials || missing.includes('password'),
+                  )}
                   type="password"
                   autoComplete="current-password"
                   required
@@ -231,7 +276,13 @@ export function LoginPage() {
                 {submitting ? <Spinner className="text-white" /> : <KeyRound />}
                 Sign in
               </Button>
-              {needsVerification && <ResendVerification key={email} email={email} />}
+              {needsVerification && status?.smtpConfigured !== false && (
+                <ResendVerification
+                  key={email}
+                  email={email}
+                  sentAt={verificationSentAt ?? undefined}
+                />
+              )}
               {status?.localAuthEnabled && status.smtpConfigured && (
                 <Link
                   to="/auth/forgot-password"

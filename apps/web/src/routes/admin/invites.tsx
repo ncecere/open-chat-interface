@@ -185,7 +185,7 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label="Email (optional)"
           htmlFor="invite-email"

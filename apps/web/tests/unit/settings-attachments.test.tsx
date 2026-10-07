@@ -158,6 +158,23 @@ describe('Settings → Attachments', () => {
     expect(api.delete).toHaveBeenCalledWith('/attachments/a1');
   });
 
+  it('says a file that was never sent was never sent, alone or among others (#316)', async () => {
+    files = [file('a1', 'sent.txt', null), file('a3', 'draft.txt', null, true)];
+    await render();
+    await click(document.querySelector('[aria-label="Delete draft.txt"]')!);
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Delete draft.txt?');
+    expect(dialog()?.textContent).toContain('It was never sent. This cannot be undone.');
+    expect(dialog()?.textContent).not.toContain('conversations');
+    await click(
+      [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Cancel')!,
+    );
+    await click(document.querySelector('[aria-label="Select all visible attachments"]')!);
+    await click(button('Delete (2)'));
+    expect(dialog()?.textContent).toContain(
+      'Those that were sent are removed from the conversations they were attached to',
+    );
+  });
+
   it('says "they" for several files, and does not put deleted files in a trash (#179)', async () => {
     files = [
       file('a1', 'one.txt', null),

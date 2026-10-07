@@ -397,3 +397,23 @@ it('switches temporary-chat mode off, since nothing in a project is temporary', 
   await render();
   expect(sessionStorage.getItem('oci.temporaryChat')).toBeNull();
 });
+
+it("turns the project's changes off with the reason while read-only (#331)", async () => {
+  const { setReadOnlyStatus } = await import('../../src/lib/read-only');
+  const { INACTIVE_READ_ONLY_STATUS } = await import('@oci/shared');
+  setReadOnlyStatus({ ...INACTIVE_READ_ONLY_STATUS, active: true, source: 'administrator' });
+  try {
+    await render('files');
+    for (const name of ['Upload files', 'Remove outline.md']) {
+      expect(button(name).disabled, name).toBe(true);
+      expect(button(name).title, name).toBe('Read-only for maintenance');
+    }
+    await click(tab('Settings'));
+    expect(button('Delete project').disabled).toBe(true);
+    await typeInto(field('Project name'), 'Renamed');
+    expect(button('Save changes').disabled).toBe(true);
+    expect(button('Save changes').title).toBe('Read-only for maintenance');
+  } finally {
+    setReadOnlyStatus(INACTIVE_READ_ONLY_STATUS);
+  }
+});

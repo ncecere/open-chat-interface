@@ -16,16 +16,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { deleteProjectText } from '~/components/projects/delete-project-text';
 import { Button } from '~/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '~/components/ui/dialog';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
@@ -33,7 +24,6 @@ import { Spinner } from '~/components/ui/spinner';
 import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import {
-  useDeleteProject,
   useDeleteProjectFile,
   useProject,
   useProjectFiles,
@@ -48,7 +38,9 @@ import {
   validateProjectSearch,
 } from '~/lib/chat-search-params';
 import { usePageTitle } from '~/lib/document-title';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
+import { DeleteProjectSection, Section } from './project-sections';
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -86,37 +78,6 @@ function indexStatusLabel(index: ProjectFile['index'] | undefined): string {
     default:
       return 'Waiting to be indexed';
   }
-}
-
-/** A titled part of a tab, laid out like the sections of the settings pages: no card. */
-function Section({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description?: ReactNode;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} className="mt-12 first:mt-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 id={headingId} className="text-xl font-bold">
-            {title}
-          </h2>
-          {description && (
-            <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">{description}</p>
-          )}
-        </div>
-        {action}
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  );
 }
 
 /**
@@ -292,6 +253,8 @@ function SaveRow({
   dirty: boolean;
   disabled: boolean;
 }) {
+  // The project's changes are refused while read-only: off, with the reason (#331).
+  const lock = useReadOnlyLock();
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {state.update.error && (
@@ -302,7 +265,12 @@ function SaveRow({
       <p role="status" className="text-sm text-[var(--success)]">
         {state.saved && !dirty ? 'Saved' : ''}
       </p>
-      <Button type="submit" variant="primary" disabled={disabled || state.update.isPending}>
+      <Button
+        type="submit"
+        variant="primary"
+        title={lock.title}
+        disabled={disabled || state.update.isPending || lock.locked}
+      >
         {state.update.isPending && <Spinner />}
         Save changes
       </Button>
@@ -396,6 +364,7 @@ function ProjectFiles({
   const files = useProjectFiles(projectId);
   const upload = useUploadProjectFiles(projectId);
   const remove = useDeleteProjectFile(projectId);
+  const lock = useReadOnlyLock();
   const inputRef = useRef<HTMLInputElement>(null);
   const count = files.data?.length ?? 0;
   const full = count >= MAX_FILES_PER_PROJECT;
@@ -432,7 +401,8 @@ function ProjectFiles({
             <Button
               type="button"
               variant="secondary"
-              disabled={full || upload.isPending}
+              title={lock.title}
+              disabled={full || upload.isPending || lock.locked}
               onClick={() => inputRef.current?.click()}
             >
               {upload.isPending ? <Spinner /> : <Upload aria-hidden="true" />}
@@ -491,7 +461,8 @@ function ProjectFiles({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`Remove ${file.filename}`}
-                disabled={remove.isPending}
+                title={lock.title}
+                disabled={remove.isPending || lock.locked}
                 onClick={() => remove.mutate(file.id)}
               >
                 <Trash2 />
@@ -541,59 +512,6 @@ function ProjectConversations({ projectId }: { projectId: string }) {
           ))}
         </ul>
       )}
-    </Section>
-  );
-}
-
-function DeleteProjectSection({ project }: { project: ProjectSummary }) {
-  const [open, setOpen] = useState(false);
-  const remove = useDeleteProject();
-  const navigate = useNavigate();
-
-  async function confirm() {
-    await remove.mutateAsync({ id: project.id, name: project.name });
-    setOpen(false);
-    await navigate({ to: '/' });
-  }
-
-  return (
-    <Section
-      title="Delete project"
-      description="Conversations are kept and leave the project. Its files are deleted."
-    >
-      <Button type="button" variant="danger" onClick={() => setOpen(true)}>
-        <Trash2 aria-hidden="true" />
-        Delete project
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[calc(100%-2rem)]">
-          <DialogHeader>
-            <DialogTitle>Delete “{project.name}”?</DialogTitle>
-            <DialogDescription>
-              {deleteProjectText(project.threadCount, project.fileCount)}
-            </DialogDescription>
-          </DialogHeader>
-          {remove.error && (
-            <p role="alert" className="text-xs text-[var(--danger-on-tint)]">
-              {apiErrorMessage(remove.error, 'The project could not be deleted.')}
-            </p>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              disabled={remove.isPending}
-              onClick={() => void confirm().catch(() => undefined)}
-            >
-              {remove.isPending && <Spinner />}
-              Delete project
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Section>
   );
 }

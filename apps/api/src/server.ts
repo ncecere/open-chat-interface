@@ -22,6 +22,7 @@ import { logger } from './lib/logger.js';
 import { watchRedisRequirement } from './lib/redis-requirement.js';
 import { processRole } from './lib/role.js';
 import { withReadRetry } from './middleware/read-retry.js';
+import { accountEmailsInFlight } from './services/account-email-delivery.js';
 import { startCacheBus } from './services/cache-bus/index.js';
 import { activeRunCount, interruptActiveRuns } from './services/chat/active-runs.js';
 import {
@@ -156,6 +157,8 @@ async function main() {
     workInProgress: () =>
       activeRunCount() +
       chatTurnsBeingAdmitted() +
+      // Sent after the request answered (#328); a restart should not drop one.
+      accountEmailsInFlight() +
       (Date.now() < jobsUntil.at ? runningJobCount() : 0),
     interruptWork: interruptActiveRuns,
     openStreams: chatReplayCount,

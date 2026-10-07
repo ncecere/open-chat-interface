@@ -2,6 +2,7 @@ import type { ThemeMode } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useState } from 'react';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { TraitChips, traitChange } from '~/components/settings/trait-chips';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
@@ -30,6 +31,8 @@ function CountedInput({
   multiline?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
+  // The limit is heard with the field, not only seen beside it (#310).
+  const countId = `${id}-count`;
   const shared = cn(
     'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/60 px-3 text-sm',
     'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
@@ -43,6 +46,7 @@ function CountedInput({
           id={id}
           rows={5}
           maxLength={max}
+          aria-describedby={countId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
@@ -52,6 +56,7 @@ function CountedInput({
         <input
           id={id}
           maxLength={max}
+          aria-describedby={countId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
@@ -59,8 +64,12 @@ function CountedInput({
           className={cn(shared, 'h-11 pr-16')}
         />
       )}
-      <span className="pointer-events-none absolute bottom-2.5 right-3 text-xs text-[var(--text-muted)]">
+      <span
+        id={countId}
+        className="pointer-events-none absolute bottom-2.5 right-3 text-xs text-[var(--text-muted)]"
+      >
         {value.length}/{max}
+        <span className="sr-only"> characters</span>
       </span>
     </div>
   );
@@ -234,6 +243,8 @@ export function SettingsCustomizationPage() {
       }
     : null;
   const dirty = stored !== null && !samePersonalisation(draft, stored);
+  // Leaving with an edit not saved asks first (#314).
+  useReportUnsaved(dirty);
 
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) => api.patch('/me/preferences', patch),
@@ -333,6 +344,10 @@ export function SettingsCustomizationPage() {
           <span role="status" className="text-xs text-[var(--success)]">
             {saved ? 'Saved' : ''}
           </span>
+          {/* An edit looked applied until Save was pressed (#314). */}
+          {dirty && !save.isPending && (
+            <span className="text-xs text-[var(--text-muted)]">Not saved yet</span>
+          )}
           {save.isError && (
             <span role="alert" className="text-xs text-[var(--danger)]">
               {/* A read-only refusal gives its reason, not "Try again" (#159). */}

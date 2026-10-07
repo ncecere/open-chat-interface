@@ -68,7 +68,8 @@ contact your administrator**; an administrator can delete it under People.
 What you set at the top is sent with every message, which is why it changes
 replies without you repeating yourself.
 
-- **What to call you** — used when a reply addresses you directly.
+- **What to call you** — used when a reply addresses you directly, and in the
+  greeting on a new chat.
 - **What you do** — saves explaining your field every time. "Research
   administrator" produces different examples from "undergraduate".
 - **Traits** — how replies should read. "Concise" is the one most people want
@@ -79,7 +80,10 @@ replies without you repeating yourself.
 
 Being specific pays off more than being thorough. Three precise sentences beat a
 paragraph of generalities. **Save Preferences** becomes available once you have
-changed something.
+changed something, and *Not saved yet* shows beside it until you press it. If
+you leave the page (or switch to another settings section) with a change not
+saved, you are asked first; this holds for every settings section with a Save
+button, including a memory typed but not yet added.
 
 Further down are choices about the interface itself, all kept in this browser:
 
@@ -141,7 +145,8 @@ and delete. See [Memory](memory.md).
   composer uses the nearest one the model has; on a model with none, the
   setting waits for one that has.
 
-**Save defaults** stores them with your account. A conversation starts from
+**Save defaults** stores them with your account; choosing in the menus alone
+does not (*Not saved yet* shows until you save, and leaving asks first). A conversation starts from
 the model and level you picked in it, or last used in it; a new one starts
 from your defaults, then the instance's. Picking a different model or level
 in a conversation changes that conversation only.
@@ -187,7 +192,8 @@ storage limit. Deleting asks you to confirm, since it cannot be undone; a
 deleted file is removed from its conversations, which stay, and models can no
 longer read it there. Project files show the project they
 belong to; open the project to delete them. A file attached in a chat and not
-sent yet is marked **Not sent**.
+sent yet is marked **Not sent**; deleting it says so, since it is in no
+conversation.
 
 ## Keyboard shortcuts and help
 

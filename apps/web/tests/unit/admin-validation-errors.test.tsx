@@ -59,6 +59,20 @@ async function saveRetention(field: string, value: string, body: Record<string, 
   return document.querySelector('[role="alert"]')?.textContent;
 }
 
+it('Retention: the Keep pinned conversations switch is described by what it does (#310)', async () => {
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/lifecycle/retention') return retention;
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  ({ root } = await renderAdmin(<AdminRetentionPage />));
+  const ids = document.getElementById('exempt-pinned')?.getAttribute('aria-describedby') ?? '';
+  const described = ids
+    .split(' ')
+    .map((id) => document.getElementById(id)?.textContent)
+    .join(' ');
+  expect(described).toContain('Pinned conversations are never removed automatically.');
+});
+
 it('Retention names the time zone field and the rule', async () => {
   expect(
     await saveRetention('display-timezone', 'Mars/Olympus', { displayTimezone: 'Mars/Olympus' }),
@@ -139,8 +153,10 @@ it('the usage budget dialog caps a rolling window at the API limit', async () =>
   await click(rolling);
   const length = document.getElementById('policy-window-hours') as HTMLInputElement;
   await typeInto(length, '100000');
-  // The browser refuses it before anything is sent, saying what the maximum is.
-  expect(length.validity.rangeOverflow).toBe(true);
+  // Refused before anything is sent, at the field, saying what the maximum is (#320).
   await createPolicy();
   expect(api.post).not.toHaveBeenCalled();
+  expect(document.getElementById('policy-window-hours-error')?.textContent).toBe(
+    'Window length (hours) must be at most 8,760.',
+  );
 });

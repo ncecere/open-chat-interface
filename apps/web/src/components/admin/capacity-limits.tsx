@@ -1,5 +1,6 @@
 import {
   type CapacityLimits,
+  capacityLimitsSchema,
   type ProviderCapacityOverview,
   QUEUE_PRIORITIES,
   type QueuePriority,
@@ -150,6 +151,15 @@ export function CapacityLimitsDialog({
       }
       limits[key] = parsed;
     }
+    // The API's maximums too, so a number too large is reported with one
+    // that is not a number rather than one save later (#320).
+    const checked = capacityLimitsSchema.safeParse(limits);
+    for (const issue of checked.success ? [] : checked.error.issues) {
+      const key = String(issue.path[0]);
+      if (!problems.some((problem) => problem.fields[0] === key)) {
+        problems.push({ fields: [key], text: issue.message });
+      }
+    }
     if (problems.length > 0) {
       setProblems(problems);
       return;
@@ -169,7 +179,7 @@ export function CapacityLimitsDialog({
           instead of failing.
         </DialogDescription>
       </DialogHeader>
-      <form onSubmit={submit} className="flex flex-col gap-4">
+      <form noValidate onSubmit={submit} className="flex flex-col gap-4">
         {FIELDS.map((field) => (
           <Field
             key={field.key}
@@ -412,7 +422,7 @@ export function ProviderCapacitySection() {
           )}
 
           <EditableFieldset>
-            <form onSubmit={submit} className="flex flex-col gap-4">
+            <form noValidate onSubmit={submit} className="flex flex-col gap-4">
               <Field
                 label="Longest wait (seconds)"
                 htmlFor="capacity-max-wait"

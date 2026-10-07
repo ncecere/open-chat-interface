@@ -150,8 +150,10 @@ If the server cannot be reached (for example while it restarts), the page says
 so and keeps checking, less often the longer it lasts (at most every 15
 seconds), and shows the saved reply once the server answers.
 You can also choose **Reload saved messages**. This does not resend a failed
-request; copy any unsaved message text before replacing local history. A draft
-you are typing stays in the composer during recovery.
+request. If the last message you sent failed and is not among the saved
+messages, its text goes back into the message box (see
+[When a message is not sent](#when-a-message-is-not-sent)). A draft you are
+typing stays in the composer during recovery.
 
 A pending reply may still be running. You can wait or request **Stop**; a local
 reader closing is not proof that the server stopped. After **Stop** the page
@@ -196,6 +198,27 @@ first message of a new chat and you leave it without sending again (for
 another page, or by closing or reloading the tab), the empty chat is removed
 rather than left in your history as "New Chat". Reloading the tab opens a new
 chat with your text back in the message box; attach any files again.
+
+## When a message is not sent
+
+If the server's database is briefly unavailable when you send a message (for
+example during a failover), the server waits up to about 10 seconds for it,
+and your message is sent as usual if the database is back by then. If it is
+not, the page says **The connection to the database was interrupted, so your
+message was not sent. Send it again in a moment.** The message is handled like
+a refused one: its text goes back into the message box, and a new chat left
+empty is removed when you leave it.
+
+Sometimes a send fails in a way that leaves it unclear whether the message was
+saved: the connection dropped before the server answered, or the server failed
+after it had started saving. The message stays on screen as sent while the
+page checks the saved messages. It checks by itself, and keeps checking while
+the server cannot be reached. If the message was saved, it stays, with the
+reply's own failure note and **Try again**. If it was not, the message is
+removed from the conversation, its text goes back into the message box, and
+the page says **Your message could not be saved, so it is back in the message
+box. Send it again.** Anything you typed while the page was checking is kept,
+after the returned text.
 
 ## Long conversations
 

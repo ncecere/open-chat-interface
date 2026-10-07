@@ -108,7 +108,12 @@ never returned. The form shows whether one is set.
 
 **Verification interacts with this.** Requiring email verification does not
 switch itself off when SMTP is missing or failing; new accounts simply stay
-unverified and cannot sign in until mail is delivered. The Authentication page
+unverified and cannot sign in until mail is delivered. If sending fails,
+[System health](operations.md) warns, with the time and the mail server's
+reason, until an email is delivered again. A failed password reset or
+verification email is tried again after one minute and after five minutes,
+with the same link; a restart of the API drops those retries, and people can
+still ask again. The Authentication page
 warns when verification is required without email configured, and the
 [setup checklist](first-run.md#5-set-up-email-delivery) marks email as required
 in that case.

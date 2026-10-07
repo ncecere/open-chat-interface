@@ -8,6 +8,7 @@ import { useAutoRetry } from '~/hooks/use-auto-retry';
 import { useExpandedProjects } from '~/hooks/use-expanded-projects';
 import { type OpenConversation, useOpenConversation } from '~/hooks/use-open-conversation';
 import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
 /** The sidebar's Projects section; absent when the person's role cannot use projects. */
@@ -39,6 +40,8 @@ function ProjectsSection() {
   const { expanded, toggle } = useExpandedProjects(projects);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // Off while read-only, as the conversations' Pin, Rename and Archive are (#331).
+  const lock = useReadOnlyLock();
 
   const routeProject = params.projectId ?? open?.thread.projectId ?? undefined;
   const autoProject = routeProject && routeProject !== dismissed ? routeProject : undefined;
@@ -63,9 +66,10 @@ function ProjectsSection() {
         <button
           type="button"
           aria-label="New project"
-          title="New project"
+          title={lock.title ?? 'New project'}
+          disabled={lock.locked}
           onClick={() => setCreating(true)}
-          className="flex size-6 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
+          className="flex size-6 items-center justify-center rounded text-[var(--text-muted)] enabled:hover:bg-[var(--bg-control)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus className="size-3.5" aria-hidden="true" />
         </button>
@@ -78,8 +82,10 @@ function ProjectsSection() {
       ) : (projects?.length ?? 0) === 0 ? (
         <button
           type="button"
+          title={lock.title}
+          disabled={lock.locked}
           onClick={() => setCreating(true)}
-          className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-[var(--text-muted)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
+          className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-[var(--text-muted)] enabled:hover:bg-[var(--bg-control)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           Create a project to group conversations with shared instructions and files.
         </button>

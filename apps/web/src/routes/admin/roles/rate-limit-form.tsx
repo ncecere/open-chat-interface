@@ -66,9 +66,11 @@ export function RateLimitForm({ access }: { access: RoleAccess }) {
       <div className="grid gap-4 sm:grid-cols-3">
         {RATE_FIELDS.map(({ key, label, max }) => {
           const id = `rate-${role}-${RATE_FIELD_IDS[key]}`;
-          // Each field's problem under it, marked invalid and described by it (#302).
+          // Each field's problem under it, marked invalid and described by it
+          // (#302), giving the allowed range: "of 1 or more" did not explain
+          // why 20,000 uploads a minute was refused (#321).
           const fieldError = invalid.some((field) => field.key === key)
-            ? 'Enter a whole number of 1 or more.'
+            ? `Enter a whole number from 1 to ${max.toLocaleString('en-US')}.`
             : null;
           return (
             <Field key={key} label={label} htmlFor={id} error={fieldError}>

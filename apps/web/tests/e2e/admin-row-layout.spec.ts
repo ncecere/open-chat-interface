@@ -91,3 +91,48 @@ test('the Users table keeps each Joined date on one line at 1440 px (#170)', asy
   });
   expect(joined.filter((cell) => cell.lines > 1)).toEqual([]);
 });
+
+const account = (index: number, email: string) => ({
+  id: `layout-user-${index}`,
+  email,
+  name: `Layout Person ${index}`,
+  image: null,
+  role: 'user',
+  emailVerified: true,
+  banned: false,
+  banReason: null,
+  lastSeenAt: null,
+  threadCount: 1234,
+  messageCount: 0,
+  createdAt: '2026-04-20T12:00:00.000Z',
+  legalHold: false,
+});
+
+for (const width of [768, 1024]) {
+  test(`the Users table keeps Limits in view at ${width} px (#319)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route('**/api/admin/users?*', (route) =>
+      route.fulfill({
+        json: {
+          users: [
+            account(1, 'walk7-resilience-invitee2@example.edu'),
+            account(2, 'o.fitzgerald@northbrook.edu'),
+          ],
+          total: 2,
+        },
+      }),
+    );
+    await signIn(page);
+    await page.goto('/admin/users');
+    const table = page.getByRole('region', { name: 'Accounts' });
+    await expect(table.getByRole('button', { name: /^Limits for / }).first()).toBeVisible();
+    // Since "Threads" became "Conversations" (#305) the table needed 750 px
+    // and cut Limits off in a 718 or 686 px area, with nothing showing that
+    // it scrolled sideways.
+    const { scrollWidth, clientWidth } = await table.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  });
+}

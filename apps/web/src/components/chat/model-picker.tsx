@@ -180,7 +180,9 @@ export const ModelPicker = memo(function ModelPicker({
         aria-label={`Select model. Current model: ${selected?.displayName ?? 'none'}`}
         aria-keyshortcuts={ariaKeyShortcuts('model-picker')}
         // One line: a narrow composer row cuts a long name short rather than
-        // wrapping it ("GPT-4.1 / mini", #109); the full name is in the label.
+        // wrapping it ("GPT-4.1 / mini", #109); the full name is in the label,
+        // in a tooltip for a pointer, and (on touch) in the list it opens (#312).
+        title={selected?.displayName}
         className="inline-flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]"
       >
         {selected && <LabLogo labId={selected.labId} className="size-3.5 shrink-0" />}

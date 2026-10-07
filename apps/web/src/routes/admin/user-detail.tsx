@@ -3,6 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Ban, Scale } from 'lucide-react';
 import { useState } from 'react';
+import {
+  type AccountActivityEntry,
+  AccountActivityList,
+} from '~/components/admin/account-activity';
 import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
@@ -36,15 +40,6 @@ interface ThreadRow {
   updatedAt: string;
 }
 
-interface AuditRow {
-  id: string;
-  action: string;
-  actorEmail: string | null;
-  targetType: string | null;
-  ipAddress: string | null;
-  createdAt: string;
-}
-
 interface UserDetail {
   user: AdminUser;
   /** Null (or absent, before v0.9) when the person is not on legal hold. */
@@ -55,7 +50,7 @@ interface UserDetail {
   /** Every unexpired session (absent before v0.11.1, when the list was the count). */
   sessionCount?: number;
   recentThreads: ThreadRow[];
-  audit: AuditRow[];
+  audit: AccountActivityEntry[];
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -358,23 +353,7 @@ export function AdminUserDetailPage() {
         {audit.length === 0 ? (
           <Empty>No recorded events.</Empty>
         ) : (
-          <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
-            {audit.map((entry) => (
-              <li key={entry.id} className="flex items-center gap-3 px-4 py-2.5">
-                <code className="rounded bg-[var(--bg-control-alt)] px-1.5 py-0.5 text-xs">
-                  {entry.action}
-                </code>
-                {entry.ipAddress && (
-                  <span className="font-mono text-[var(--text-muted)] text-xs">
-                    {entry.ipAddress}
-                  </span>
-                )}
-                <span className="ml-auto shrink-0 text-[var(--text-muted)] text-xs">
-                  {formatRelativeTime(entry.createdAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <AccountActivityList entries={audit} account={{ id: user.id, name }} />
         )}
       </Section>
 

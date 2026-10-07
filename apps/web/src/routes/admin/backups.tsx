@@ -21,6 +21,7 @@ import {
   DestinationTest,
   destinationChanges,
   destinationDraftFrom,
+  S3_BUCKET_FIELDS,
   S3BucketFields,
 } from '~/components/admin/operations/destination';
 import { formatRunTime, RunHistory, RunNowControl } from '~/components/admin/operations/runs';
@@ -30,7 +31,7 @@ import { Badge } from '~/components/ui/badge';
 import { Field } from '~/components/ui/field';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorProblems } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
@@ -191,6 +192,13 @@ function SettingsForm({
   const patch = backupChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);
+  // Each refusal under the field it names; any other beside Save (#302, #317's sweep).
+  const at = (field: string) => problemsAt(problems, field);
+  const shown = [
+    'keepDaily',
+    'keepWeekly',
+    ...(draft.destination === 'separate' ? S3_BUCKET_FIELDS : []),
+  ];
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -258,6 +266,7 @@ function SettingsForm({
           }}
           hasCredential={status.settings.s3.hasCredential}
           prefixHint="Folder for backups, ending with /."
+          errorAt={at}
         />
       )}
 
@@ -269,6 +278,7 @@ function SettingsForm({
           min={1}
           max={90}
           value={draft.keepDaily}
+          error={at('keepDaily')}
           onChange={(value) => set('keepDaily', value)}
         />
         <RetentionField
@@ -278,6 +288,7 @@ function SettingsForm({
           min={0}
           max={104}
           value={draft.keepWeekly}
+          error={at('keepWeekly')}
           onChange={(value) => set('keepWeekly', value)}
         />
       </div>
@@ -287,7 +298,7 @@ function SettingsForm({
       <SaveRow
         hasChanges={hasChanges}
         isPending={save.isPending}
-        errorMessage={problemsText(problems)}
+        errorMessage={problemsElsewhere(problems, shown)}
         successMessage={saved && !hasChanges ? 'Backup settings saved.' : null}
       />
     </form>

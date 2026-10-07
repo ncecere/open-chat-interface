@@ -60,5 +60,25 @@ it('prevents duplicate sends while a request is pending', async () => {
   await act(async () => container.querySelector('button')!.click());
   expect(sendVerificationEmail).toHaveBeenCalledOnce();
   await act(async () => finish({ error: null }));
-  expect(container.querySelector('button')?.disabled).toBe(false);
+  // Not again at once: the API would skip a second email within the minute (#330).
+  expect(container.querySelector('button')?.disabled).toBe(true);
+  expect(container.textContent).toContain('You can ask again in a minute.');
+});
+
+it('offers another request a minute after the last one (#330)', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    sendVerificationEmail.mockResolvedValue({ data: { status: true }, error: null });
+    await act(() => root.render(<ResendVerification email="pending@example.test" />));
+    await act(async () => container.querySelector('button')!.click());
+    expect(container.querySelector('button')?.disabled).toBe(true);
+    await act(async () => vi.advanceTimersByTime(59_000));
+    expect(container.querySelector('button')?.disabled).toBe(true);
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(container.querySelector('button')?.disabled).toBe(false);
+    await act(async () => container.querySelector('button')!.click());
+    expect(sendVerificationEmail).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });

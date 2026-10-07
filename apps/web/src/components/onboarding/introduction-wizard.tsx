@@ -21,7 +21,7 @@ const STEPS = [
     icon: UserRound,
     title: 'What should we call you?',
     description:
-      'Used when a reply addresses you directly. Your account name is used if you leave this blank.',
+      'Used to greet you and when a reply addresses you directly. Your account name is used if you leave this blank.',
   },
   {
     id: 'traits',
@@ -69,7 +69,9 @@ export function IntroductionWizard() {
             traits: draft.traits,
             additionalContext: draft.additionalContext.trim() || null,
           }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me', 'onboarding'] }),
+    // All of ['me'], not only the onboarding state: the home page's greeting
+    // reads the name given here from /me (#315).
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
   });
 
   const isLast = step === STEPS.length - 1;

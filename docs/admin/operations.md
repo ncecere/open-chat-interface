@@ -20,7 +20,7 @@ reported. The checks refresh every 30 seconds while the page is open; the old
 | Model providers | — | None enabled |
 | Models | — | None enabled |
 | Background jobs | Failures in the last day | One started over an hour ago and never finished |
-| Email delivery | Not configured | — |
+| Email delivery | Not configured, or the latest email failed (says how many since the last one delivered, when, and the mail server's reason); a delivered email, including **Send test email**, clears it | — |
 | Attachment storage | Uploads never attached to a message that the hourly cleanup has not removed: it deletes uploads unsent for a day, so a warning means the cleanup is not running | — |
 | Connectors | An enabled [connector](connectors.md)'s latest exchange failed | — |
 | Backups | On, but no [backup](backups.md) completed in over a day, or objects were missing from the last one | The latest backup failed |

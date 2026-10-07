@@ -91,3 +91,43 @@ export function AuthOutcomeHeading({
     </h1>
   );
 }
+
+/** One field's check: its id, and what is wrong with it or null. */
+export interface AuthFieldCheck {
+  id: string;
+  problem: string | null;
+}
+
+/**
+ * Every empty or malformed field of an auth form, at once and in the app's
+ * words. The forms set noValidate: the browser's own bubble stopped at the
+ * first `required` or `type="email"` field, in its own language, and went on
+ * the next click without marking the field (#320's sweep). Null when there
+ * are none; otherwise the message for the form's error, and the fields it
+ * is about (marked invalid and described by it).
+ */
+export function authFormProblems(
+  checks: readonly AuthFieldCheck[],
+): { ids: string[]; message: string } | null {
+  const failing = checks.filter((check) => check.problem);
+  if (failing.length === 0) return null;
+  return {
+    ids: failing.map((check) => check.id),
+    message: failing.map((check) => check.problem).join(' '),
+  };
+}
+
+const EMAIL_ADDRESS = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** What is wrong with a typed email address, or null. */
+export function emailProblem(email: string): string | null {
+  if (!email.trim()) return 'Enter your email address.';
+  return EMAIL_ADDRESS.test(email.trim())
+    ? null
+    : 'Enter an email address such as you@example.com.';
+}
+
+/** What is wrong with a new password's length, or null (the instance's rule: 12 to 200). */
+export function newPasswordProblem(password: string): string | null {
+  return password.length < 12 ? 'Use at least 12 characters for your password.' : null;
+}

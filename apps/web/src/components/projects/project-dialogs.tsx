@@ -174,7 +174,7 @@ function MoveToProjectForm({
   const unchanged = selected === (currentProjectId ?? '');
 
   return (
-    <form onSubmit={(event) => void submit(event).catch(() => undefined)}>
+    <form noValidate onSubmit={(event) => void submit(event).catch(() => undefined)}>
       {projects.isLoading ? (
         <p className="flex items-center gap-2 py-4 text-sm text-[var(--text-muted)]">
           <Spinner /> Loading projects…

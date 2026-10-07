@@ -9,6 +9,7 @@ import { db } from '../db/index.js';
 import { clientIpFromHeaders } from '../lib/client-ip.js';
 import { isConnectionError } from '../lib/db-connection.js';
 import { logger } from '../lib/logger.js';
+import { sendAfterResponse } from '../services/account-email-delivery.js';
 import {
   RESET_LINK_TTL_SECONDS,
   sendPasswordResetEmail,
@@ -164,12 +165,16 @@ export const auth = betterAuth({
     requireEmailVerification: false,
     // Set here, not left to Better Auth's default, because the email states it (#184).
     resetPasswordTokenExpiresIn: RESET_LINK_TTL_SECONDS,
+    // After answering, so the response time does not say whether the address
+    // has an account (#328). The token row is already written by now.
     sendResetPassword: async ({ user, url }) => {
-      await sendPasswordResetEmail({
-        to: user.email,
-        url,
-        expiresInSeconds: RESET_LINK_TTL_SECONDS,
-      });
+      sendAfterResponse('password-reset', user.id, () =>
+        sendPasswordResetEmail({
+          to: user.email,
+          url,
+          expiresInSeconds: RESET_LINK_TTL_SECONDS,
+        }),
+      );
     },
     // A reset is what someone uses after losing control of their account, so
     // it ends every session, as Change Password does with "Sign out of all

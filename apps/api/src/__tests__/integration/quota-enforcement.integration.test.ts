@@ -107,7 +107,9 @@ function runTransaction() {
       insert: () => ({
         values: (row: Record<string, unknown>) => {
           reservedRow = row;
-          return { returning: () => Promise.resolve([{ id: row.id ?? 'reservation-1' }]) };
+          const returning = () => Promise.resolve([{ id: row.id ?? 'reservation-1' }]);
+          // The run's ID is inserted once (#326): a repeat finds its own row.
+          return { returning, onConflictDoNothing: () => ({ returning }) };
         },
       }),
     }),

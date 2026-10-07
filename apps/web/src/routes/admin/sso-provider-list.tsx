@@ -123,7 +123,9 @@ function ProviderRow({
             checked={provider.enabled}
             disabled={toggle.isPending || !canEdit}
             onCheckedChange={(enabled) => toggle.mutate(enabled)}
-            aria-label={`${provider.enabled ? 'Disable' : 'Enable'} ${provider.label}`}
+            // One name whatever its state, which aria-checked gives (#325): "Disable
+            // Walk Keycloak, switch, on" sounded as if it were off. As the model switches.
+            aria-label={`Enable ${provider.label}`}
           />
           <EditOnly>
             <Button

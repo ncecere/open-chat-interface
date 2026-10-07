@@ -87,7 +87,7 @@ function RetentionForm({
   }
 
   return (
-    <form ref={form} onSubmit={submit} className="flex flex-col gap-5 pb-10">
+    <form noValidate ref={form} onSubmit={submit} className="flex flex-col gap-5 pb-10">
       <EditableFieldset className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
@@ -256,14 +256,17 @@ function RetentionForm({
               </label>
               <ConfigSourceBadge id="exempt-pinned-source" source={sources?.exemptPinnedThreads} />
             </div>
-            <p className="mt-0.5 text-[var(--text-muted)] text-xs">
+            <p id="exempt-pinned-hint" className="mt-0.5 text-[var(--text-muted)] text-xs">
               Pinned conversations are never removed automatically. The user marked them
               deliberately.
             </p>
           </div>
           <Switch
             id="exempt-pinned"
-            aria-describedby={sources ? 'exempt-pinned-source' : undefined}
+            // Described by what it does, not only by where its value comes from (#310).
+            aria-describedby={
+              sources ? 'exempt-pinned-hint exempt-pinned-source' : 'exempt-pinned-hint'
+            }
             checked={draft.exemptPinnedThreads}
             onCheckedChange={(exemptPinnedThreads) =>
               setDraft((current) => ({ ...current, exemptPinnedThreads }))

@@ -9,6 +9,7 @@ import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 
 const MY_SHARE_LINKS_KEY = ['me', 'share-links'] as const;
 
@@ -52,6 +53,8 @@ function ShareLinkRow({
 }) {
   const status = statusOf(link);
   const title = link.threadTitle || 'Untitled conversation';
+  // A change, refused while read-only: off, with the reason (#331).
+  const lock = useReadOnlyLock();
   return (
     <li
       className="flex flex-col gap-3 border-b border-[var(--border-subtle)] py-4 last:border-0 sm:flex-row sm:items-start"
@@ -112,6 +115,8 @@ function ShareLinkRow({
             size="sm"
             variant="secondary"
             aria-label={`Revoke the link to ${title}`}
+            title={lock.title}
+            disabled={lock.locked}
             onClick={onRevoke}
           >
             Revoke
@@ -134,6 +139,7 @@ export function SettingsSharingPage() {
   const [revokingAll, setRevokingAll] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const lock = useReadOnlyLock();
 
   const links = useInfiniteQuery({
     queryKey: MY_SHARE_LINKS_KEY,
@@ -219,7 +225,8 @@ export function SettingsSharingPage() {
                 type="button"
                 size="sm"
                 variant="danger"
-                disabled={active === 0}
+                title={lock.title}
+                disabled={active === 0 || lock.locked}
                 onClick={() => setRevokingAll(true)}
               >
                 Revoke all

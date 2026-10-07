@@ -228,7 +228,7 @@ function Switch({ settings, save }: { settings: MaintenanceSettings; save: Save 
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="Reason shown to people"
@@ -315,6 +315,7 @@ function ScheduledWindow({ settings, save }: { settings: MaintenanceSettings; sa
 
   return (
     <form
+      noValidate
       onSubmit={submit}
       className="flex flex-col gap-4 border-t border-[var(--border-subtle)] pt-5"
     >

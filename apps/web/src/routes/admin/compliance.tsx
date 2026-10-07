@@ -8,7 +8,6 @@ import {
   AdminPageHeader,
   EmptyState,
   LoadError,
-  MutationError,
   Notice,
   SaveRow,
   SettingsSection,
@@ -21,6 +20,7 @@ import {
   DestinationTest,
   destinationChanges,
   destinationDraftFrom,
+  S3_BUCKET_FIELDS,
   S3BucketFields,
 } from '~/components/admin/operations/destination';
 import { formatRunTime, RunHistory, RunNowControl } from '~/components/admin/operations/runs';
@@ -37,12 +37,12 @@ import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { formatRelativeTime } from '~/lib/utils';
 import { formatBytes } from '~/routes/admin/lifecycle-shared';
-
-export const COMPLIANCE_QUERY_KEY = ['admin', 'compliance'] as const;
+import { PlaceHoldForm } from './compliance/place-hold-form';
+import { COMPLIANCE_QUERY_KEY } from './compliance/query-key';
 
 const SCHEDULES: Array<{ value: ComplianceSchedule; label: string }> = [
   { value: 'hourly', label: 'Every hour' },
@@ -187,13 +187,23 @@ function SettingsForm({
       setSaved(true);
       await queryClient.invalidateQueries({ queryKey: ['admin', 'health'] });
     },
+    onError: (cause) =>
+      setProblems(
+        apiErrorProblems(cause, 'Compliance settings could not be saved.', {
+          keepDays: 'Delete exported objects after (days)',
+        }),
+      ),
   });
+  // Each refusal under the field it names, until edited; any other beside Save (#317's sweep).
+  const [problems, setProblems] = useFieldProblems(draft);
+  const at = (field: string) => problemsAt(problems, field);
   const patch = complianceChanges(status, draft);
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    setProblems([]);
     if (hasChanges) save.mutate(patch);
   }
 
@@ -262,6 +272,7 @@ function SettingsForm({
           }}
           hasCredential={status.settings.s3.hasCredential}
           prefixHint="Folder for exports, ending with /."
+          errorAt={at}
         />
       )}
 
@@ -273,6 +284,7 @@ function SettingsForm({
         max={3650}
         placeholder="Keep"
         value={draft.keepDays}
+        error={at('keepDays')}
         onChange={(value) => set('keepDays', value)}
       />
 
@@ -281,76 +293,12 @@ function SettingsForm({
       <SaveRow
         hasChanges={hasChanges}
         isPending={save.isPending}
-        errorMessage={
-          save.error ? apiErrorMessage(save.error, 'Compliance settings could not be saved.') : null
-        }
+        errorMessage={problemsElsewhere(problems, [
+          'keepDays',
+          ...(draft.destination === 'separate' ? S3_BUCKET_FIELDS : []),
+        ])}
         successMessage={saved && !hasChanges ? 'Compliance settings saved.' : null}
       />
-    </form>
-  );
-}
-
-function PlaceHoldForm() {
-  const queryClient = useQueryClient();
-  const [email, setEmail] = useState('');
-  const [reason, setReason] = useState('');
-  const place = useMutation({
-    mutationFn: () =>
-      api.post<{ hold: LegalHold }>('/admin/compliance/holds', {
-        email: email.trim(),
-        reason: reason.trim(),
-      }),
-    onSuccess: async () => {
-      setEmail('');
-      setReason('');
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: COMPLIANCE_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_USERS_QUERY_KEY }),
-      ]);
-    },
-  });
-  // "No account has that address" is about the address sent (#217).
-  useClearOnEdit({ email, reason }, () => place.reset());
-
-  return (
-    <form
-      className="flex flex-col gap-3"
-      noValidate
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (email.trim() && reason.trim()) place.mutate();
-      }}
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Person’s email address" htmlFor="hold-email">
-          <Input
-            id="hold-email"
-            type="email"
-            autoComplete="off"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </Field>
-        <Field
-          label="Reason"
-          htmlFor="hold-reason"
-          hint="A matter or case reference. Recorded in the audit log."
-        >
-          <Input
-            id="hold-reason"
-            value={reason}
-            maxLength={1000}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </Field>
-      </div>
-      <div>
-        <Button type="submit" disabled={place.isPending || !email.trim() || !reason.trim()}>
-          {place.isPending ? <Spinner /> : <FileLock />}
-          Place hold
-        </Button>
-      </div>
-      <MutationError error={place.error} message="The hold could not be placed." />
     </form>
   );
 }

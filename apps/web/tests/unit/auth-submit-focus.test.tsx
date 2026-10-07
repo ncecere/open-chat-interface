@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginPage } from '../../src/routes/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '../../src/routes/auth/password-reset';
+import { fillAuthForm } from './auth-test-utils';
 
 /**
  * #190: after submitting sign-in, Forgot password or a reset, focus fell to
@@ -84,6 +85,7 @@ async function submit(id: string, value: string) {
     button.disabled = true;
   });
   fixup.observe(button, { attributes: true, attributeFilter: ['disabled'] });
+  await fillAuthForm(container);
   await act(async () => {
     container
       .querySelector('form')!
@@ -131,7 +133,7 @@ describe('forgot password', () => {
     expect(focused().tagName).toBe('H1');
     expect(focused().textContent).toBe('Check your email');
     const message = document.getElementById(focused().getAttribute('aria-describedby')!);
-    expect(message?.textContent).toContain('If an account exists');
+    expect(message?.textContent).toContain('If an account uses this address');
   });
 
   it('starts as usual when opened: nothing is focused before a submit', async () => {

@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { safeReturnPath } from '../../src/lib/return-path';
 import { LoginPage } from '../../src/routes/auth/login';
+import { fillAuthForm } from './auth-test-utils';
 
 /**
  * #225: signing in from a link to /admin/webhooks always landed on the chat
@@ -86,6 +87,7 @@ async function signInAt(path: string) {
       </QueryClientProvider>,
     ),
   );
+  await fillAuthForm(container);
   await act(async () => {
     container
       .querySelector('form')!

@@ -15,7 +15,10 @@ function ModelAttribution({ slug, effort }: { slug: string | null; effort: strin
 
   return (
     <span className="ml-1 inline-flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-[var(--text-muted)]">
-      <span className="max-w-52 truncate">{model?.displayName ?? slug}</span>
+      {/* A long name is cut short; its tooltip has it in full (#312). */}
+      <span className="max-w-52 truncate" title={model?.displayName ?? slug}>
+        {model?.displayName ?? slug}
+      </span>
       {effort && <span className="capitalize">({effort})</span>}
     </span>
   );

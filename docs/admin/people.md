@@ -46,8 +46,12 @@ It shows their totals, storage, **active sessions with the address and client
 each came from** (the ten newest, with the total above them, such as "Showing
 the 10 most recent of 616 active sessions"), their limits, recent conversation titles, and their audit
 trail — matched as actor, as target and among the accounts a bulk action named,
-so something done *to* them appears beside things they did. Searching the audit
-log for their email finds the same entries. **See every event for this account** opens the audit log
+so something done *to* them appears beside things they did. Each entry says
+which: "By Ama Okafor, to j.weber@…" for something they did to another account,
+"To Ama Okafor, by admin@…" (or "by you") for something done to them. Searching the audit
+log for their email finds the same entries, even after the account is deleted:
+a role change, ban, unban, rename or sign-out records the account's email, and
+the log's **Target** column shows it. **See every event for this account** opens the audit log
 filtered to their address.
 
 Conversation **titles only**. An administrator managing an account has no reason
@@ -151,8 +155,8 @@ Three behaviours worth knowing:
   with.
 - **A ban revokes sessions in the same action**, exactly as a single-account ban
   does.
-- **The audit entry names every account affected**, not just a count, so the
-  action can be checked afterwards.
+- **The audit entry names every account affected**, by ID and email, not
+  just a count, so the action can be checked afterwards.
 
 Bounded at two hundred per request, so a single action cannot rewrite the
 directory by accident.

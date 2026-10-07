@@ -149,6 +149,21 @@ describe('provider capacity', () => {
     expect(alerts(form)).toEqual([]);
   });
 
+  it('reports a number over the maximum with one that is not a number, in one save (#320)', async () => {
+    ({ root } = await renderAdmin(<ProvidersSection />));
+    await click(button('Capacity limits for Primary OpenAI'));
+    const form = dialog()!;
+    const input = (id: string) => form.querySelector<HTMLInputElement>(`#capacity-${id}`)!;
+    await typeInto(input('requestsPerMinute'), '2000000');
+    await typeInto(input('maxConcurrentStreams'), 'abc');
+    await click(button('Save limits'));
+    expect(alerts(form)).toEqual([
+      'Requests per minute can be at most 1,000,000.',
+      'Replies at once must be a whole number of at least 1, or empty for no limit.',
+    ]);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
   it('saves the longest wait and role priority', async () => {
     ({ root } = await renderAdmin(<ProvidersSection />));
     await typeInto(document.querySelector<HTMLInputElement>('#capacity-max-wait')!, '2');

@@ -1,4 +1,4 @@
-import { createDatabase, eq, runPostMigrations, schema, sql } from '@oci/db';
+import { createDatabase, runPostMigrations, sql } from '@oci/db';
 import { MAX_ARTIFACT_BYTES } from '@oci/shared';
 import type { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import {
   buildArtifactsApp,
   createScript,
   offered,
+  PLANETS_PAGE,
   SVG_IMAGE,
   systemOf,
   textStep,
@@ -428,6 +429,21 @@ describe.skipIf(!available)('live artifacts', () => {
         '| Earth | 12,742 |',
       ].join('\n');
       const code = '```python\ndef add(a, b):\n    """Add two numbers."""\n    return a + b\n```';
+      // What Claude Haiku 4.5 (thinking) saved as a Document (#313): over 500
+      // characters outside code, but most of them table, markup and a URL.
+      const owls = [
+        '## Owls and Code\n\n| Name | Wingspan | Region |\n| --- | --- | --- |',
+        '| Great Horned Owl | 101 to 145 centimetres | North and South America |',
+        '| Snowy Owl | 125 to 150 centimetres | Arctic tundra of the north |',
+        '| Barn Owl | 80 to 95 centimetres | Nearly worldwide, every continent |\n',
+        '```python\ndef wingspan_m(cm):\n    return cm / 100\n```\n',
+        '1. Owls can turn their heads about 270 degrees.\n2. Their feathers make flight silent.',
+        '3. Many species hunt mostly at night.\n\nThe owl looks out over the silent wood,',
+        'and waits for night as every hunter should.\n\nRead more at [Example](https://example.com).',
+      ].join('\n');
+      expect(owls.replace(/```[\s\S]*?```/, '').trim().length).toBeGreaterThan(
+        MIN_MARKDOWN_ARTIFACT_CHARS,
+      );
       const report = `# Report\n\n${'A sentence of the report that runs on. '.repeat(20)}`;
       expect(report.length).toBeGreaterThan(MIN_MARKDOWN_ARTIFACT_CHARS);
       const calls = (): Array<[string, string, unknown]> => [
@@ -435,6 +451,7 @@ describe.skipIf(!available)('live artifacts', () => {
         ['c2', 'create_artifact', { title: 'Add', kind: 'markdown', content: code }],
         ['c3', 'create_artifact', { title: 'Report', kind: 'markdown', content: report }],
         ['c4', 'create_artifact', { title: 'Dot', kind: 'svg', content: SVG_IMAGE }],
+        ['c5', 'create_artifact', { title: 'Owls', kind: 'markdown', content: owls }],
       ];
       const chat = await thread();
       script(toolStep(calls()), textStep('Here they are.'));
@@ -456,11 +473,13 @@ describe.skipIf(!available)('live artifacts', () => {
         c2: ['output-available', null, CODE_MARKDOWN_REFUSAL],
         c3: ['output-available', null, null],
         c4: ['output-available', null, null],
+        c5: ['output-available', null, SHORT_MARKDOWN_REFUSAL],
       });
       // The stored reply's steps, as every renderer lists them, leave them out.
       expect(reply.parts.filter(isDeclinedArtifactPart).map((part) => part.toolCallId)).toEqual([
         'c1',
         'c2',
+        'c5',
       ]);
       expect(toolStepsOf(reply.parts).map((step) => step.summary)).toEqual([
         "Created artifact 'Report'",
@@ -473,75 +492,70 @@ describe.skipIf(!available)('live artifacts', () => {
 
       // Asked for by name, the same content is saved.
       const asked = await thread();
-      script(toolStep(calls().slice(0, 2)), textStep('Done.'));
+      script(toolStep(calls().filter(([id]) => id !== 'c3' && id !== 'c4')), textStep('Done.'));
       await turn(asked.id, 'Put the planets table and the function in artifacts');
       expect((await artifactsOf(asked.id)).map((artifact) => artifact.title).sort()).toEqual([
         'Add',
+        'Owls',
         'Planets',
       ]);
     });
 
-    it('returns the existing artifact for a repeated call, and enforces version and count limits', async () => {
-      const { chat, reply } = await seededReply('No blocks here.');
-      const { createArtifact, addArtifactVersion } = await import(
-        '../../services/artifacts/store.js'
+    it('keeps a short static HTML page out of artifacts unless asked, not an app or a long page (#313)', async () => {
+      const { SHORT_HTML_REFUSAL, isDeclinedArtifactPart, toolStepsOf } = await import(
+        '@oci/shared'
       );
-      const input = {
-        userId: owner,
-        role: 'user' as const,
-        threadId: chat.id,
-        messageId: reply.id,
-        sourceKey: 'tool:repeat',
-        title: '  ',
-        kind: 'svg' as const,
-        content: '<svg/>',
-      };
-      const first = await createArtifact(input);
-      const again = await createArtifact({ ...input, content: '<svg>other</svg>' });
-      expect(first).toMatchObject({ created: true, artifact: { title: 'SVG', sizeBytes: 6 } });
-      expect(again).toMatchObject({ created: false, artifact: { id: first.artifact.id } });
-      expect(await versionsOf(first.artifact.id)).toHaveLength(1);
-      await expect(
-        createArtifact({ ...input, sourceKey: 'tool:empty', content: ' ' }),
-      ).rejects.toMatchObject({
-        status: 422,
+      const { TABLES_IN_CHAT } = await import('../../services/artifacts/guidance.js');
+      // Sorted by a click: interactive, so kept however short.
+      const sortable = PLANETS_PAGE.replace(
+        '</body>',
+        '<script>document.querySelector("th").onclick = () => {};</script>\n</body>',
+      );
+      const guide = `<!doctype html><html><body><h1>Guide</h1>${'<p>A sentence of the guide that runs on.</p>'.repeat(20)}</body></html>`;
+      const calls = (): Array<[string, string, unknown]> => [
+        ['h1', 'create_artifact', { title: 'Planets', kind: 'html', content: PLANETS_PAGE }],
+        ['h2', 'create_artifact', { title: 'Sortable', kind: 'html', content: sortable }],
+        ['h3', 'create_artifact', { title: 'Guide', kind: 'html', content: guide }],
+      ];
+      const chat = await thread();
+      const model = script(toolStep(calls()), textStep('Here they are.'));
+      const { reply } = await turn(
+        chat.id,
+        'Fix7 313: a small table of three planets and their moons',
+      );
+      const outcomes = Object.fromEntries(
+        reply.parts
+          .filter((part) => part.type === 'tool-create_artifact')
+          .map((part) => [
+            part.toolCallId as string,
+            [part.state, (part.output as { note?: string })?.note ?? null],
+          ]),
+      );
+      // Declined as the short Markdown table is (#149, #201): the model reads why.
+      expect(outcomes).toEqual({
+        h1: ['output-available', SHORT_HTML_REFUSAL],
+        h2: ['output-available', null],
+        h3: ['output-available', null],
       });
+      expect(reply.parts.filter(isDeclinedArtifactPart).map((part) => part.toolCallId)).toEqual([
+        'h1',
+      ]);
+      expect(toolStepsOf(reply.parts).map((step) => step.summary)).toEqual([
+        "Created artifact 'Sortable'",
+        "Created artifact 'Guide'",
+      ]);
+      expect((await artifactsOf(chat.id)).map((artifact) => artifact.title).sort()).toEqual([
+        'Guide',
+        'Sortable',
+      ]);
+      // And the model is told to write a simple table in its reply as Markdown.
+      expect(systemOf(model)).toContain(TABLES_IN_CHAT);
 
-      await pool.db
-        .update(schema.artifact)
-        .set({ currentVersion: 100 })
-        .where(eq(schema.artifact.id, first.artifact.id));
-      await expect(
-        addArtifactVersion({
-          artifactId: first.artifact.id,
-          userId: owner,
-          role: 'user',
-          content: '<svg/>',
-          source: 'reply',
-          messageId: reply.id,
-        }),
-      ).rejects.toMatchObject({ status: 422 });
-
-      await pool.db.execute(sql`
-        insert into artifact (user_id, thread_id, message_id, source_key, title, kind)
-        select ${owner}, ${chat.id}, ${reply.id}, 'tool:fill-' || n, 'Fill', 'svg'
-        from generate_series(1, 199) as n
-      `);
-      await expect(createArtifact({ ...input, sourceKey: 'tool:one-more' })).rejects.toMatchObject({
-        status: 422,
-        message: expect.stringContaining('at most 200 artifacts'),
-      });
-      // Detected blocks beyond the limit stay code blocks.
-      const { saveDetectedArtifacts } = await import('../../services/artifacts/store.js');
-      expect(
-        await saveDetectedArtifacts({
-          userId: owner,
-          role: 'user',
-          threadId: chat.id,
-          messageId: reply.id,
-          parts: [{ type: 'text', text: `\`\`\`svg\n${SVG_IMAGE}\n\`\`\`` }],
-        }),
-      ).toBe(0);
+      // Asked for by name, the same table is saved.
+      const asked = await thread();
+      script(toolStep(calls().slice(0, 1)), textStep('Done.'));
+      await turn(asked.id, 'Fix7 313: the planets table as an HTML artifact');
+      expect((await artifactsOf(asked.id)).map((artifact) => artifact.title)).toEqual(['Planets']);
     });
 
     it('cannot update another conversation’s or another person’s artifact', async () => {

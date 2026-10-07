@@ -93,13 +93,9 @@ export function ProviderFormDialog({
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setProblems([]);
-
-    if (requiresBaseUrl && !trimmedBaseUrl) {
-      setProblems([
-        { fields: ['baseUrl'], text: 'OpenAI-compatible providers require a base URL.' },
-      ]);
-      return;
-    }
+    // No check of its own first: the API reports a missing base URL with a
+    // blank name or a missing key in one refusal, each at its field; stopping
+    // at the base URL left the others for the next save (#301, #320).
 
     save.mutate(
       provider
@@ -131,7 +127,7 @@ export function ProviderFormDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label="Provider type"
           htmlFor="provider-kind"
@@ -253,11 +249,16 @@ export function ProviderFormDialog({
             <label htmlFor="provider-enabled" className="text-sm font-medium">
               Enabled
             </label>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            <p id="provider-enabled-hint" className="mt-0.5 text-xs text-[var(--text-muted)]">
               Disabling stops new requests without removing the catalog models.
             </p>
           </div>
-          <Switch id="provider-enabled" checked={enabled} onCheckedChange={setEnabled} />
+          <Switch
+            id="provider-enabled"
+            aria-describedby="provider-enabled-hint"
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
         </div>
 
         {error && (

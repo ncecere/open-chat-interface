@@ -241,9 +241,30 @@ describe('Roles & access', () => {
       'rate-user-upload-source rate-user-upload-error',
     );
     expect(document.getElementById('rate-user-upload-error')?.textContent).toBe(
-      'Enter a whole number of 1 or more.',
+      'Enter a whole number from 1 to 10,000.',
     );
     expect(button('Save rate limits').disabled).toBe(true);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('describes the Enforce allowance switch by what off means (#310)', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />, { path: '/admin/roles?role=auditor' }));
+    const id = document.getElementById('storage-auditor-enabled')?.getAttribute('aria-describedby');
+    expect(document.getElementById(id ?? '')?.textContent).toBe(
+      'No allowance is saved for this role, so storage is unlimited.',
+    );
+  });
+
+  it('gives the allowed range when a rate limit is over its maximum (#321)', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />));
+    await typeInto(input('rate-user-upload'), '20000');
+    await typeInto(input('rate-user-concurrent'), '101');
+    expect(document.getElementById('rate-user-upload-error')?.textContent).toBe(
+      'Enter a whole number from 1 to 10,000.',
+    );
+    expect(document.getElementById('rate-user-concurrent-error')?.textContent).toBe(
+      'Enter a whole number from 1 to 100.',
+    );
     expect(api.put).not.toHaveBeenCalled();
   });
 
@@ -368,6 +389,22 @@ describe('Roles & access', () => {
       reserve: { costMicros: 100_000 },
     });
     expect(updateRateLimitSettingsSchema.safeParse(api.put.mock.calls[0]?.[1]).success).toBe(true);
+  });
+
+  it('shows each refused instance-wide limit at its field, with its range (#321’s sweep)', async () => {
+    ({ root } = await renderAdmin(<AdminRolesPage />));
+    await typeInto(input('rate-auth'), '5000');
+    await typeInto(input('reserve-tokens'), '0');
+    const errorAt = (id: string) => {
+      const control = input(id);
+      if (control.getAttribute('aria-invalid') !== 'true') return null;
+      expect(control.getAttribute('aria-describedby')?.split(' ')).toContain(`${id}-error`);
+      return document.getElementById(`${id}-error`)?.textContent ?? null;
+    };
+    expect(errorAt('rate-auth')).toBe('Enter a whole number from 1 to 1,000.');
+    expect(errorAt('reserve-tokens')).toBe('Enter a whole number from 1 to 10,000,000.');
+    expect(errorAt('reserve-cost')).toBeNull();
+    expect(button('Save instance-wide limits').disabled).toBe(true);
   });
 
   it('reports a rejected save next to the form', async () => {

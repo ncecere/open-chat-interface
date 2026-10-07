@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
+import { UnsavedChangesGuard } from '~/components/admin/unsaved-changes';
 import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { SkipLink } from '~/components/layout/skip-link';
 import { ThemeMenu } from '~/components/layout/theme-menu';
@@ -234,69 +235,73 @@ export function SettingsLayout() {
   }
 
   return (
-    <div className="min-h-dvh bg-[var(--bg-settings)]">
-      {/* Past Back to Chat, the menus and the section tabs to the page (#173). */}
-      <SkipLink />
-      <div className="mx-auto w-full max-w-[75rem] px-4 py-6 sm:px-6">
-        <header className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/">
-              <ArrowLeft />
-              Back to Chat
-            </Link>
-          </Button>
-
-          <div className="flex items-center gap-1">
-            <ThemeMenu />
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              Sign out
+    // Leaving a section with an edit not saved asks first, as administration
+    // does (#45, #300): a default model picked and not saved looked applied (#314).
+    <UnsavedChangesGuard>
+      <div className="min-h-dvh bg-[var(--bg-settings)]">
+        {/* Past Back to Chat, the menus and the section tabs to the page (#173). */}
+        <SkipLink />
+        <div className="mx-auto w-full max-w-[75rem] px-4 py-6 sm:px-6">
+          <header className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/">
+                <ArrowLeft />
+                Back to Chat
+              </Link>
             </Button>
-          </div>
-        </header>
 
-        {/*
+            <div className="flex items-center gap-1">
+              <ThemeMenu />
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                Sign out
+              </Button>
+            </div>
+          </header>
+
+          {/*
           One grid, one copy of each part. Wide: identity and cards in a left
           column beside the page. Narrow: identity, then the page, then the cards.
         */}
-        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-10">
-          {/* Landmarks of their own, like the page beside them: they were
+          <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-10">
+            {/* Landmarks of their own, like the page beside them: they were
               outside every landmark, so landmark navigation skipped them (#272). */}
-          <section aria-label="Your profile" className="lg:col-start-1 lg:row-start-1">
-            <Identity />
-          </section>
+            <section aria-label="Your profile" className="lg:col-start-1 lg:row-start-1">
+              <Identity />
+            </section>
 
-          <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-            <SectionNav pathname={pathname} />
-            {/* The section itself is the page's main landmark and the skip
+            <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              <SectionNav pathname={pathname} />
+              {/* The section itself is the page's main landmark and the skip
                 link's target, as in the chat shell and admin (#173). */}
-            <main id="main-content" tabIndex={-1} className="outline-none">
-              {/* Read-only maintenance mode (v0.11): why changes are not saved. */}
-              <ReadOnlyBanner className="mt-6 rounded-xl border" />
-              {/* The page and the cards are shown once the page's first data is
+              <main id="main-content" tabIndex={-1} className="outline-none">
+                {/* Read-only maintenance mode (v0.11): why changes are not saved. */}
+                <ReadOnlyBanner className="mt-6 rounded-xl border" />
+                {/* The page and the cards are shown once the page's first data is
                   in: on phones the cards follow the page, and were pushed down
                   in view as it filled in (#104). */}
-              <div className="relative mt-8 lg:pb-16" aria-busy={!loaded}>
-                {!loaded && <LoadingOverlay label="Loading settings" />}
-                <div className={loaded ? undefined : 'invisible'}>
-                  <Outlet />
+                <div className="relative mt-8 lg:pb-16" aria-busy={!loaded}>
+                  {!loaded && <LoadingOverlay label="Loading settings" />}
+                  <div className={loaded ? undefined : 'invisible'}>
+                    <Outlet />
+                  </div>
                 </div>
-              </div>
-            </main>
-          </div>
+              </main>
+            </div>
 
-          <aside
-            aria-label="Usage and help"
-            className={cn(
-              'flex flex-col gap-6 pb-16 lg:col-start-1 lg:row-start-2 lg:self-start',
-              !loaded && 'invisible',
-            )}
-          >
-            <UsageLimits />
-            <ShortcutsCard />
-            <HelpCard />
-          </aside>
+            <aside
+              aria-label="Usage and help"
+              className={cn(
+                'flex flex-col gap-6 pb-16 lg:col-start-1 lg:row-start-2 lg:self-start',
+                !loaded && 'invisible',
+              )}
+            >
+              <UsageLimits />
+              <ShortcutsCard />
+              <HelpCard />
+            </aside>
+          </div>
         </div>
       </div>
-    </div>
+    </UnsavedChangesGuard>
   );
 }

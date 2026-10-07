@@ -1,4 +1,4 @@
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 
@@ -72,6 +72,7 @@ export function RetentionField({
   max,
   placeholder,
   value,
+  error = null,
   onChange,
 }: {
   id: string;
@@ -81,12 +82,15 @@ export function RetentionField({
   max: number;
   placeholder?: string;
   value: string;
+  /** A refusal of the value, shown under it and tied to it (#302, #317's sweep). */
+  error?: string | null;
   onChange: (value: string) => void;
 }) {
   return (
-    <Field label={label} htmlFor={id} hint={hint}>
+    <Field label={label} htmlFor={id} hint={hint} error={error}>
       <Input
         id={id}
+        {...invalidFieldProps(id, error)}
         type="number"
         min={min}
         max={max}

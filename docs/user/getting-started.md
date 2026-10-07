@@ -35,6 +35,10 @@ These messages mean different things:
 - **"Check your email and password"** means the credentials themselves were
   wrong. Note that a nonexistent account and a wrong password produce the same
   message, deliberately, so this does not confirm whether an account exists.
+- **"Your email address is not verified yet"** means the password was right but
+  you have not opened the verification link. Signing in has just sent you a
+  new one; check your spam folder if it is not in your inbox. **Resend
+  verification email** offers another after a minute.
 - **"This account has been suspended"** means an administrator has suspended
   (banned) the account. Ask them if you think it is a mistake.
 - **"Sign-in is temporarily unavailable"** means the service could not check
@@ -51,7 +55,9 @@ on.
 
 **Forgot your password?** on the sign-in page emails you a link to choose a new
 one, if the instance can send email. The link works for 1 hour; after that, ask
-for a new one. Choosing a new password this way signs
+for a new one. The page answers the same way, and just as quickly, whether or
+not the address has an account, so it does not confirm that one exists; the
+email is sent just after it answers. Choosing a new password this way signs
 your account out everywhere, including any device you have lost; sign in again
 with the new password.
 

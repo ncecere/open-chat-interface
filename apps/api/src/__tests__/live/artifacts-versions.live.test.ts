@@ -126,11 +126,14 @@ describe.skipIf(!available)('live artifacts', () => {
     await live?.destroy();
   });
 
-  const { artifactsOf, get, post, seededReply, thread, turn } = artifactHelpers(state, () => ({
-    pool,
-    owner,
-    app,
-  }));
+  const { artifactsOf, get, post, seededReply, thread, turn, versionsOf } = artifactHelpers(
+    state,
+    () => ({
+      pool,
+      owner,
+      app,
+    }),
+  );
 
   describe('versions API', () => {
     it('lists, reads and edits documents as new versions; HTML is changed through the model', async () => {
@@ -365,6 +368,69 @@ describe.skipIf(!available)('live artifacts', () => {
         version: 2,
         content: '<svg><title>Later</title></svg>',
       });
+    });
+
+    it('returns the existing artifact for a repeated call, and enforces version and count limits', async () => {
+      const { chat, reply } = await seededReply('No blocks here.');
+      const { createArtifact, addArtifactVersion } = await import(
+        '../../services/artifacts/store.js'
+      );
+      const input = {
+        userId: owner,
+        role: 'user' as const,
+        threadId: chat.id,
+        messageId: reply.id,
+        sourceKey: 'tool:repeat',
+        title: '  ',
+        kind: 'svg' as const,
+        content: '<svg/>',
+      };
+      const first = await createArtifact(input);
+      const again = await createArtifact({ ...input, content: '<svg>other</svg>' });
+      expect(first).toMatchObject({ created: true, artifact: { title: 'SVG', sizeBytes: 6 } });
+      expect(again).toMatchObject({ created: false, artifact: { id: first.artifact.id } });
+      expect(await versionsOf(first.artifact.id)).toHaveLength(1);
+      await expect(
+        createArtifact({ ...input, sourceKey: 'tool:empty', content: ' ' }),
+      ).rejects.toMatchObject({
+        status: 422,
+      });
+
+      await pool.db
+        .update(schema.artifact)
+        .set({ currentVersion: 100 })
+        .where(eq(schema.artifact.id, first.artifact.id));
+      await expect(
+        addArtifactVersion({
+          artifactId: first.artifact.id,
+          userId: owner,
+          role: 'user',
+          content: '<svg/>',
+          source: 'reply',
+          messageId: reply.id,
+        }),
+      ).rejects.toMatchObject({ status: 422 });
+
+      await pool.db.execute(sql`
+        insert into artifact (user_id, thread_id, message_id, source_key, title, kind)
+        select ${owner}, ${chat.id}, ${reply.id}, 'tool:fill-' || n, 'Fill', 'svg'
+        from generate_series(1, 199) as n
+      `);
+      await expect(createArtifact({ ...input, sourceKey: 'tool:one-more' })).rejects.toMatchObject({
+        status: 422,
+        message: expect.stringContaining('at most 200 artifacts'),
+      });
+      // Detected blocks beyond the limit stay code blocks.
+      const { saveDetectedArtifacts } = await import('../../services/artifacts/store.js');
+      expect(
+        await saveDetectedArtifacts({
+          userId: owner,
+          role: 'user',
+          threadId: chat.id,
+          messageId: reply.id,
+          parts: [{ type: 'text', text: `\`\`\`svg\n${SVG_IMAGE}\n\`\`\`` }],
+        }),
+      ).toBe(0);
     });
   });
 });

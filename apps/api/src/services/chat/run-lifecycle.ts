@@ -6,6 +6,7 @@ import { failRunSetup, type RunResources } from './run-cleanup.js';
 import { startRunHeartbeat } from './run-recovery.js';
 import { claimThread } from './thread-claim.js';
 import type { TurnContext } from './turn-context.js';
+import { retryTurnStep } from './turn-patience.js';
 
 export type AcquiredRun = RunResources & {
   startedAt: number;
@@ -50,12 +51,16 @@ export async function acquireRun(context: TurnContext): Promise<AcquiredRun> {
       modelSlug: resolved.slug,
       pricing: { inputPriceMicros: null, outputPriceMicros: null },
     };
-    const reservation = await reserveQuotaForRun({
-      userId: user.id,
-      role: user.role,
-      modelSlug: resolved.slug,
-      runId: runIdentity.runId,
-    });
+    // Keyed by the run's ID, so an attempt whose commit was lost is found, not
+    // repeated (#326).
+    const reservation = await retryTurnStep(context.admission?.deadline, 'reservation', () =>
+      reserveQuotaForRun({
+        userId: user.id,
+        role: user.role,
+        modelSlug: resolved.slug,
+        runId: runIdentity.runId,
+      }),
+    );
     resources.reservation = reservation;
     return { ...resources, startedAt, assistantMessage, reservation };
   } catch (error) {

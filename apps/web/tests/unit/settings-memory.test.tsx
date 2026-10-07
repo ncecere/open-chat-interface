@@ -98,6 +98,31 @@ describe('Settings → Memory', () => {
     expect(api.post).toHaveBeenCalledWith('/memory', { content: 'Likes  tea' });
   });
 
+  it('says in words that a memory is too long, tied to the field and to Add (#310)', async () => {
+    await render();
+    const textarea = document.getElementById('memory-new') as HTMLTextAreaElement;
+    // The limit is heard with the field before anything is wrong.
+    expect(textarea.getAttribute('aria-describedby')).toBe('memory-new-count');
+    expect(document.getElementById('memory-new-count')?.textContent).toBe('0/500 characters');
+    expect(textarea.getAttribute('aria-invalid')).toBeNull();
+
+    await type(textarea, 'x'.repeat(520));
+    expect(textarea.getAttribute('aria-invalid')).toBe('true');
+    expect(textarea.getAttribute('aria-describedby')).toBe('memory-new-count memory-new-error');
+    const error = document.getElementById('memory-new-error');
+    expect(error?.getAttribute('role')).toBe('alert');
+    expect(error?.textContent).toBe(
+      'A memory can be at most 500 characters; this one has 520. Shorten it to save it.',
+    );
+    const add = findButton('Add')!;
+    expect(add.disabled).toBe(true);
+    expect(add.getAttribute('aria-describedby')).toBe('memory-new-error');
+
+    await type(textarea, 'Likes tea');
+    expect(document.getElementById('memory-new-error')).toBeNull();
+    expect(textarea.getAttribute('aria-invalid')).toBeNull();
+  });
+
   it('edits and deletes one memory', async () => {
     await render();
     await click(findButton('Edit memory: Teaches chemistry')!);

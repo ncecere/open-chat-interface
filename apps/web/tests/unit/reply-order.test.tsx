@@ -23,6 +23,7 @@ vi.mock('../../src/lib/api-client', async (importOriginal) => ({
 vi.mock('../../src/components/chat/markdown', () => ({
   MARKDOWN_PROSE: '',
   Markdown: ({ children }: { children: string }) => <div data-markdown>{children}</div>,
+  useMarkdownRendererReady: () => true,
 }));
 vi.mock('../../src/hooks/use-models', () => ({ useModels: () => ({ data: [] }) }));
 

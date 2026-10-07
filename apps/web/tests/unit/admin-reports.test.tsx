@@ -99,9 +99,13 @@ it('clears a refused report’s error once the recipients are corrected (#217)',
   await typeInto(document.getElementById('report-name') as HTMLInputElement, 'Walk3');
   const recipients = document.getElementById('report-recipients') as HTMLInputElement;
   await typeInto(recipients, 'ops@example.edu, not-an-email');
-  // Named by the form before anything is sent, rather than as "item 2" (#283).
+  api.post.mockRejectedValueOnce(
+    new ApiError(422, 'VALIDATION_FAILED', 'Request validation failed', [
+      { code: 'invalid_format', format: 'email', path: ['recipients', 1], message: 'Invalid' },
+    ]),
+  );
+  // Named by the form, rather than as the API's "item 2" (#283).
   await click(button('Add report'));
-  expect(api.post).not.toHaveBeenCalled();
   expect(alerts().join(' ')).toContain('Recipients: not-an-email is not an email address.');
   await typeInto(recipients, 'ops@example.edu');
   expect(alerts()).toEqual([]);

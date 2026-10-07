@@ -7,7 +7,15 @@ separate object with its own versions, which you can open, copy and download.
 ## What becomes an artifact
 
 - **HTML pages.** An HTML code block that is a whole page, or at least ten
-  lines long. Short snippets stay ordinary code blocks.
+  lines long. Short snippets stay ordinary code blocks. Models that can use
+  tools can also create a page or small app. A page that only shows a little
+  text, such as a styled table or a short list, is not saved unless you ask
+  for an artifact: when it has only a few hundred characters of visible text
+  (its styles and markup do not count) and nothing a reply cannot show
+  (scripts, forms, buttons and other controls, a canvas, drawings, images or
+  animation), the model writes it in its reply as Markdown instead, a table
+  as an ordinary table. Its card may appear while the page is being written
+  and goes away once the page is declined; no step or artifact is left.
 - **SVG images.** Any complete SVG.
 - **Mermaid diagrams** of three lines or more. The diagram still appears in the
   reply, with a card below it.
@@ -15,8 +23,10 @@ separate object with its own versions, which you can open, copy and download.
   long document you ask for, such as a report or plan, and revise it later.
   Program code, tables, lists and short answers stay in the reply unless you
   ask for an artifact: OCI does not save a document that is mostly code or
-  only a few hundred characters long, and the model writes it in its reply
-  instead. Such an attempt is not shown in the reply: no step, no card and
+  has only a few hundred characters of text (tables, code and formatting do
+  not count as text), and the model writes it in its reply instead. When a
+  model does save a document, its reply says in a sentence or two what the
+  document holds. Such an attempt is not shown in the reply: no step, no card and
   no artifact panel. A long document's card appears once enough of it has
   been written to keep. To get a short one anyway, say "artifact" in your
   message; its card then appears when it is saved.

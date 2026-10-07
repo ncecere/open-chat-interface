@@ -19,6 +19,7 @@ import { getDefaultOrganizationId } from '../../services/organization.js';
 import {
   applyProviderPatch,
   getProviderConfigurationIssues,
+  withConfigurationIssues,
 } from '../../services/providers/config.js';
 import { discoverModels } from '../../services/providers/registry.js';
 
@@ -109,7 +110,23 @@ providerRoutes.put('/:id/capacity', async (c) => {
 
 providerRoutes.post('/', async (c) => {
   const actor = currentUser(c);
-  const input = await parseBody(c, upsertProviderSchema);
+  // The configuration rules are checked with the body's schema, so a bad
+  // base URL and a missing key are refused together (#283).
+  const input = await parseBody(
+    c,
+    withConfigurationIssues(upsertProviderSchema, (body) =>
+      body.kind
+        ? {
+            kind: body.kind,
+            label: body.label ?? '',
+            baseUrl: body.baseUrl ?? null,
+            enabled: body.enabled ?? true,
+            encryptedApiKey: body.apiKey ? 'provided' : null,
+            credentialHint: null,
+          }
+        : null,
+    ),
+  );
   const organizationId = await getDefaultOrganizationId();
 
   const issues = getProviderConfigurationIssues({
@@ -158,7 +175,19 @@ providerRoutes.patch('/:id', async (c) => {
   const id = c.req.param('id');
   const existing = await loadProviderOrThrow(id);
 
-  const input = await parseBody(c, updateProviderSchema);
+  // Checked against what the provider would become, with the body's schema,
+  // so every problem is refused at once (#283).
+  const input = await parseBody(
+    c,
+    withConfigurationIssues(updateProviderSchema, (body) =>
+      applyProviderPatch(
+        existing,
+        body,
+        () => 'provided',
+        () => '',
+      ),
+    ),
+  );
   const next = applyProviderPatch(existing, input, encryptSecret, credentialHint);
 
   // Catalog entries are bound to a provider's wire protocol, so switching kind

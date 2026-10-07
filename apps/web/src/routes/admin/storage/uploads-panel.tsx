@@ -19,15 +19,15 @@ export function UploadsPanel({
 }: {
   controller: Pick<
     StorageSettingsController,
-    'draft' | 'setDraft' | 'showValidation' | 'validation' | 'save' | 'beginEdit'
+    'draft' | 'setDraft' | 'validation' | 'save' | 'beginEdit'
   >;
 }) {
-  const { draft, setDraft, showValidation, validation, save, beginEdit } = controller;
+  const { draft, setDraft, validation, save, beginEdit } = controller;
   const maxFileBytes = bytesFromMb(draft.maxFileMb);
 
   // Each problem is shown under its field, in error colour, which is marked
   // invalid and described by it, not in place of the hint (#302).
-  const fieldError = (message?: string) => (showValidation && message) || null;
+  const fieldError = (message?: string) => message || null;
 
   return (
     <SettingsSection

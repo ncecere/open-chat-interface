@@ -189,7 +189,7 @@ A `POST` with a JSON body:
   "createdAt": "2026-10-02T09:14:03.120Z",
   "actor": { "id": "u_123", "email": "admin@example.com" },
   "target": { "type": "user", "id": "u_456" },
-  "metadata": { "from": "user", "to": "auditor" }
+  "metadata": { "email": "j.weber@example.com", "from": "user", "to": "auditor" }
 }
 ```
 

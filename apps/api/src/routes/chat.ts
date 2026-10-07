@@ -16,6 +16,7 @@ import { type HistoryPageRequest, readConversationPage } from '../services/chat/
 import { readOwnedRunState } from '../services/chat/run-state.js';
 import { setupTurn } from '../services/chat/setup-turn.js';
 import { streamResponse } from '../services/chat/stream-response.js';
+import { noteTurnSaving, retryTurnStep, turnDeadline } from '../services/chat/turn-patience.js';
 import { cancelActiveChatRun, resumeActiveChatRun } from '../services/chat-streams.js';
 import { chatRateLimit } from '../services/limits/rate-limit.js';
 import { requestStartedAt } from '../services/observability/request-timing.js';
@@ -28,10 +29,15 @@ chatRoutes.use('*', requireAuth);
 
 chatRoutes.post('/', async (c) => {
   const user = currentUser(c);
+  // Waits out a database outage up to its saving, within ~10 s of arrival (#326).
+  const deadline = turnDeadline(c.req.raw);
 
   // Checked before any work: a quota bounds how much is consumed over a window,
-  // this bounds how fast requests arrive.
-  const limit = await chatRateLimit(user.id, user.role);
+  // this bounds how fast requests arrive. Repeated only when its settings read
+  // failed, before anything was counted.
+  const limit = await retryTurnStep(deadline, 'rate limit', () =>
+    chatRateLimit(user.id, user.role),
+  );
   if (!limit.allowed) {
     throw rateLimited(
       'You are sending messages too quickly. Try again in a moment.',
@@ -41,7 +47,10 @@ chatRoutes.post('/', async (c) => {
 
   // A message that is too long says so, and what to do instead (#247).
   const input = await parseBody(c, sendMessageSchema, [MESSAGE_TOO_LONG_TEXT]);
-  const { turn, run } = await setupTurn(user, input);
+  const { turn, run } = await setupTurn(user, input, {
+    deadline,
+    onSaving: () => noteTurnSaving(c.req.raw),
+  });
   return streamResponse(turn, run, { receivedAt: requestStartedAt(c.req.raw) });
 });
 

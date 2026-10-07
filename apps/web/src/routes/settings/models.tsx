@@ -7,6 +7,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Brain, CheckCircle2, Eye, FileText, Image, Wrench, Zap } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
@@ -61,6 +62,8 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
   const levels = target ? effectiveSupportedEfforts(target) : [];
   const instanceEffort = me?.chat?.instanceDefaultEffort ?? me?.chat?.defaultEffort ?? 'instant';
   const changed = (model || null) !== savedModel || (effort || null) !== savedEffort;
+  // A chosen default looked applied; leaving without Save dropped it (#314).
+  useReportUnsaved(changed);
 
   const save = useMutation({
     mutationFn: () =>
@@ -166,6 +169,9 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
             {save.isPending && <Spinner />}
             Save defaults
           </Button>
+          {changed && !save.isPending && (
+            <span className="text-sm text-[var(--text-muted)]">Not saved yet</span>
+          )}
           {saved && !changed && (
             <span role="status" className="flex items-center gap-1.5 text-sm text-[var(--success)]">
               <CheckCircle2 className="size-4" aria-hidden="true" />

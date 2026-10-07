@@ -2,7 +2,7 @@ import type { InstanceSettings } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Notice, SaveRow, SettingsSection, ToggleSetting } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
@@ -14,12 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { api, apiErrorMessage } from '~/lib/api-client';
-import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
+import { api, apiErrorProblems } from '~/lib/api-client';
 
 type AuthSettings = Pick<
   InstanceSettings,
@@ -32,6 +32,22 @@ const REGISTRATION_DESCRIPTIONS: Record<AuthSettings['registrationMode'], string
   invite_only: 'Only people with a valid invitation can create an account.',
   closed: 'New accounts cannot be created through the sign-up page.',
 };
+
+/** The form's names for the fields, so a refusal names the one it is about (#127). */
+const AUTH_LABELS = {
+  registrationMode: 'Registration mode',
+  sessionLifetimeDays: 'Session length (days)',
+};
+
+const SESSION_DAYS = { min: 1, max: 365 };
+
+/** What is wrong with the typed session length, or null (#320). */
+export function sessionDaysProblem(text: string): string | null {
+  const days = Number(text);
+  return /^\d+$/.test(text.trim()) && days >= SESSION_DAYS.min && days <= SESSION_DAYS.max
+    ? null
+    : `Enter a whole number of days from ${SESSION_DAYS.min} to ${SESSION_DAYS.max}.`;
+}
 
 function changedSettings(saved: AuthSettings, draft: AuthSettings): AuthSettingsPatch {
   const patch: AuthSettingsPatch = {};
@@ -62,13 +78,25 @@ export function AuthenticationSettingsForm({
   const queryClient = useQueryClient();
   const [savedSettings, setSavedSettings] = useState(initialSettings);
   const [draft, setDraft] = useState(initialSettings);
+  // Typed as text, so a cleared field is not taken for 0 (#320).
+  const [sessionDays, setSessionDays] = useState(String(initialSettings.sessionLifetimeDays));
   const [showLocalAuthWarning, setShowLocalAuthWarning] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // A read-only refusal goes once changes are accepted again (#308).
-  useClearReadOnlyRefusal(errorMessage, () => setErrorMessage(null));
+  // The form's own check and the API's refusal, each under its field and
+  // kept until that field is edited, not the browser's bubble (#320). A
+  // read-only refusal goes once changes are accepted again (#308).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems(
+    { ...draft, sessionLifetimeDays: sessionDays },
+    form,
+  );
+  const errorMessage = problemsElsewhere(problems, Object.keys(AUTH_LABELS));
+  const sessionError = problemsAt(problems, 'sessionLifetimeDays');
 
-  const patch = changedSettings(savedSettings, draft);
+  const patch = changedSettings(savedSettings, {
+    ...draft,
+    sessionLifetimeDays: Number(sessionDays),
+  });
   const hasChanges = Object.keys(patch).length > 0;
   useReportUnsaved(hasChanges);
 
@@ -77,7 +105,8 @@ export function AuthenticationSettingsForm({
       api.patch<{ ok: boolean }>('/admin/settings', changes),
     onSuccess: (_response, changes) => {
       setSavedSettings((current) => ({ ...current, ...changes }));
-      setErrorMessage(null);
+      setDraft((current) => ({ ...current, ...changes }));
+      setProblems([]);
       setSavedMessage(true);
       queryClient.setQueryData<InstanceSettings>(['admin', 'settings'], (current) =>
         current ? { ...current, ...changes } : current,
@@ -87,13 +116,12 @@ export function AuthenticationSettingsForm({
     },
     onError: (error) => {
       setSavedMessage(false);
-      setErrorMessage(apiErrorMessage(error, 'Unable to save authentication settings.'));
+      setProblems(apiErrorProblems(error, 'Unable to save authentication settings.', AUTH_LABELS));
     },
   });
 
   function beginEdit() {
     setSavedMessage(false);
-    setErrorMessage(null);
     save.reset();
   }
 
@@ -113,9 +141,17 @@ export function AuthenticationSettingsForm({
   return (
     <>
       <form
+        ref={form}
         className="flex flex-col gap-8"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          const invalid = sessionDaysProblem(sessionDays);
+          if (invalid) {
+            setProblems([{ fields: ['sessionLifetimeDays'], text: invalid }]);
+            return;
+          }
+          setProblems([]);
           if (hasChanges) save.mutate(patch);
         }}
       >
@@ -126,6 +162,7 @@ export function AuthenticationSettingsForm({
           <Field
             label="Registration mode"
             htmlFor="registration-mode"
+            error={problemsAt(problems, 'registrationMode')}
             hint={REGISTRATION_DESCRIPTIONS[draft.registrationMode]}
           >
             <Select
@@ -177,6 +214,7 @@ export function AuthenticationSettingsForm({
             <Field
               label="Session length (days)"
               htmlFor="session-lifetime"
+              error={sessionError}
               hint="How long somebody stays signed in. Shortening this does not end sessions already issued; those keep their original expiry."
             >
               <Input
@@ -184,14 +222,15 @@ export function AuthenticationSettingsForm({
                 type="number"
                 min={1}
                 max={365}
-                value={draft.sessionLifetimeDays}
+                step={1}
+                inputMode="numeric"
+                value={sessionDays}
                 disabled={save.isPending}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    sessionLifetimeDays: Number(event.target.value),
-                  }))
-                }
+                {...invalidFieldProps('session-lifetime', sessionError)}
+                onChange={(event) => {
+                  beginEdit();
+                  setSessionDays(event.target.value);
+                }}
               />
             </Field>
           </div>

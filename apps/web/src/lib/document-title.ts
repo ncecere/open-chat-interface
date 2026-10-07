@@ -19,6 +19,7 @@ const AUTH_PAGES: Record<string, string> = {
   '/auth/forgot-password': 'Forgot password',
   '/auth/reset-password': 'Reset password',
   '/auth/accept-invite': 'Accept invitation',
+  '/auth/verify-email': 'Verify email',
 };
 
 const SETTINGS_SECTIONS: Record<string, string> = {

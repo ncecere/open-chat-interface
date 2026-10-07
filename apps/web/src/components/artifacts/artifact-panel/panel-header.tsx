@@ -14,14 +14,21 @@ export interface Chrome {
   onToggleFullScreen?: () => void;
 }
 
+/**
+ * The title wraps: beside Copy and Download it was cut to "Walk7 Research
+ * Dataset ..." with no way to read the rest, and a tooltip would not help on
+ * touch (#312, as #244).
+ */
+const HEADING_WRAP = 'break-words text-base [overflow-wrap:anywhere]';
+
 function PanelHeading({ chrome, children }: { chrome: Chrome; children: ReactNode }) {
-  if (!chrome.docked) return <DialogTitle className="truncate text-base">{children}</DialogTitle>;
+  if (!chrome.docked) return <DialogTitle className={HEADING_WRAP}>{children}</DialogTitle>;
   return (
     <h2
       id={chrome.headingId}
       tabIndex={-1}
       data-panel-heading=""
-      className="truncate text-base font-semibold outline-none"
+      className={`${HEADING_WRAP} font-semibold outline-none`}
     >
       {children}
     </h2>

@@ -44,6 +44,12 @@ export async function applyBulkUserAction(
   // `{from, to}` (#221). Read under the update's row locks, so it is the
   // role this change replaced.
   let previousRoles: Record<string, string> | undefined;
+  // Each banned or unbanned account's ban as it was, so an unban says which
+  // reason it lifted (#323).
+  let previousBans: Record<string, { banned: boolean; banReason: string | null }> | undefined;
+  // The accounts' emails, so the entry names them and is found by an email
+  // even after an account is deleted (#323).
+  let emails: string[] = [];
   if (input.action === 'set_role' && input.role) {
     const role = input.role;
     previousRoles = await db.transaction(async (tx) => {
@@ -51,13 +57,14 @@ export async function applyBulkUserAction(
       // as a single change and deletion do (#304).
       const admins = role === 'admin' ? [] : await lockAdministrators(tx);
       const before = await tx
-        .select({ id: schema.user.id, role: schema.user.role })
+        .select({ id: schema.user.id, email: schema.user.email, role: schema.user.role })
         .from(schema.user)
         .where(inArray(schema.user.id, targets))
         .orderBy(schema.user.id)
         .for('update');
       if (role !== 'admin') refuseLeavingNoAdministrator(admins, targets);
       await tx.update(schema.user).set({ role }).where(inArray(schema.user.id, targets));
+      emails = before.map((row) => row.email);
       return Object.fromEntries(before.map((row) => [row.id, row.role]));
     });
     affected = Object.keys(previousRoles).length;
@@ -67,22 +74,38 @@ export async function applyBulkUserAction(
       // A ban locks every administrator first and refuses to leave none who
       // can sign in, as a single ban and deletion do (#304).
       if (banned) refuseLeavingNoAdministrator(await lockAdministrators(tx), targets);
-      return tx
+      const before = await tx
+        .select({
+          id: schema.user.id,
+          email: schema.user.email,
+          banned: schema.user.banned,
+          banReason: schema.user.banReason,
+        })
+        .from(schema.user)
+        .where(inArray(schema.user.id, targets))
+        .orderBy(schema.user.id)
+        .for('update');
+      await tx
         .update(schema.user)
         .set({ banned, banReason: banned ? (input.reason ?? null) : null })
-        .where(inArray(schema.user.id, targets))
-        .returning({ id: schema.user.id });
+        .where(inArray(schema.user.id, targets));
+      return before;
     });
     affected = rows.length;
+    emails = rows.map((row) => row.email);
+    previousBans = Object.fromEntries(
+      rows.map((row) => [row.id, { banned: row.banned, banReason: row.banReason }]),
+    );
 
     // A ban that leaves the session alive is not a ban until it expires.
     if (banned) sessionsEnded = await endSessions(targets);
   } else {
     const accounts = await db
-      .select({ id: schema.user.id })
+      .select({ id: schema.user.id, email: schema.user.email })
       .from(schema.user)
       .where(inArray(schema.user.id, targets));
     affected = accounts.length;
+    emails = accounts.map((row) => row.email);
     sessionsEnded = await endSessions(targets);
   }
 
@@ -99,8 +122,10 @@ export async function applyBulkUserAction(
       ...(sessionsEnded !== undefined ? { sessionsEnded } : {}),
       ...(input.role ? { role: input.role } : {}),
       ...(previousRoles ? { previousRoles } : {}),
+      ...(previousBans ? { previousBans } : {}),
       // Name the accounts so the audit entry can be checked afterwards.
       userIds: targets,
+      emails,
     },
   });
   return { affected, skippedSelf, ...(sessionsEnded !== undefined ? { sessionsEnded } : {}) };

@@ -5,6 +5,11 @@ import { ZodError } from 'zod';
 import { AppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import {
+  MESSAGE_NOT_SENT_TEXT,
+  MESSAGE_SAVED_HEADER,
+  turnNotSaved,
+} from '../services/chat/turn-patience.js';
+import {
   HELD_ACCOUNT_DELETION_MESSAGE,
   isLegalHoldViolation,
 } from '../services/compliance/hold-errors.js';
@@ -12,6 +17,15 @@ import { errors } from '../services/observability/metrics.js';
 import { lostConnectionDuring, RETRYABLE_HEADER, RETRYABLE_REASON } from './read-retry.js';
 
 export function errorHandler(error: Error, c: Context): Response {
+  const response = answer(error, c);
+  // A new message that failed before it could be stored (#326): the browser
+  // puts its text back in the message box instead of leaving a "sent" bubble
+  // that was never saved.
+  if (turnNotSaved(c.req.raw)) response.headers.set(MESSAGE_SAVED_HEADER, 'no');
+  return response;
+}
+
+function answer(error: Error, c: Context): Response {
   if (error instanceof AppError) {
     const body: ApiErrorBody = {
       error: { code: error.code, message: error.message, details: error.details },
@@ -61,8 +75,9 @@ export function errorHandler(error: Error, c: Context): Response {
       {
         error: {
           code: ERROR_CODES.INTERNAL_ERROR,
-          message:
-            'The connection to the database was interrupted. Try again; if you were saving something, check whether it was saved first.',
+          message: turnNotSaved(c.req.raw)
+            ? MESSAGE_NOT_SENT_TEXT
+            : 'The connection to the database was interrupted. Try again; if you were saving something, check whether it was saved first.',
           retryable: true,
         },
       },

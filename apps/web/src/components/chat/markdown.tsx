@@ -1,4 +1,13 @@
-import { type ComponentProps, lazy, memo, Suspense, useMemo } from 'react';
+import {
+  type ComponentProps,
+  type ComponentType,
+  lazy,
+  memo,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { MessageLink } from '~/components/chat/external-link-warning';
 import {
   DEMOTED_HEADINGS,
@@ -28,58 +37,111 @@ const loadRenderer = () =>
     import('~/components/chat/mermaid-plugin'),
   ]);
 
-const StreamdownMarkdown = lazy(() =>
-  loadRenderer().then(
-    ([
-      { Streamdown, defaultRehypePlugins, defaultRemarkPlugins },
-      { code },
-      { createMathPlugin },
-      { createEditorialMermaidPlugin },
-    ]) => {
-      // Streamdown's table full-screen view does not manage focus itself.
-      installStreamdownOverlayFocus();
-      // Its wide tables and code blocks scroll; make them reachable by keyboard.
-      installStreamdownScrollRegions();
-      const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
-      // Streamdown's own (GFM, code metadata), then single line breaks kept (#207).
-      // One array for every message: Streamdown re-parses when its identity changes.
-      const remarkPlugins = [...Object.values(defaultRemarkPlugins ?? {}), remarkSoftBreaks];
-      // Single-dollar inline math is off by default, but models commonly emit it.
-      // Mermaid itself loads only when a diagram is first rendered.
-      const plugins = {
-        code,
-        math: createMathPlugin({ singleDollarTextMath: true }),
-        mermaid: createEditorialMermaidPlugin(),
-      };
+interface Renderers {
+  markdown: ComponentType<MarkdownProps>;
+  code: ComponentType<HighlightedCodeProps>;
+}
 
-      return {
-        default: ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
-          <Streamdown
-            plugins={plugins}
-            className={cn(MARKDOWN_BASE, className)}
-            remarkPlugins={remarkPlugins}
-            translations={TRANSLATIONS}
-            // The reference interface shows plain code without a gutter.
-            lineNumbers={false}
-            // Links are real links that warn before leaving the instance (#174),
-            // not Streamdown's link-safety buttons; headings sit below the
-            // page's h1 (#212, #271); a task list's checkboxes are named (#240).
-            components={MESSAGE_COMPONENTS}
-            // Share pages pass their own URL policy and keep the visible marker.
-            {...(!skipHtml && !urlTransform && ownerRehypePlugins
-              ? { rehypePlugins: ownerRehypePlugins }
-              : {})}
-            {...(skipHtml ? { skipHtml } : {})}
-            {...(urlTransform
-              ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
-              : {})}
-          >
-            {normalizeMathDelimiters(children)}
-          </Streamdown>
-        ),
-      };
-    },
-  ),
+/**
+ * The renderers once their chunk has loaded. A `React.lazy` component suspends
+ * once even when its module is already there, so a reply could show its
+ * Markdown source for a frame first; read from here, a loaded renderer draws
+ * the final Markdown on the first paint (#311).
+ */
+let renderers: Renderers | null = null;
+let loadingRenderers: Promise<Renderers> | null = null;
+
+/**
+ * Starts loading the Markdown renderer, once; resolves when it is ready. On a
+ * slow connection a saved conversation showed its replies as Markdown source
+ * for 1-2 s, then jumped as code blocks and tables appeared (CLS 0.10, #311):
+ * the conversation now loads the renderer beside its history and waits for
+ * both (useMarkdownRendererReady).
+ */
+export function preloadMarkdownRenderer(): Promise<Renderers> {
+  loadingRenderers ??= loadRenderer().then((modules) => {
+    renderers = {
+      markdown: buildMarkdownRenderer(modules),
+      code: buildCodeRenderer(modules),
+    };
+    return renderers;
+  });
+  return loadingRenderers;
+}
+
+/**
+ * Whether the Markdown renderer is ready, loading it when `wanted`. A failed
+ * load counts as ready, so the replies show as text, as they did before,
+ * rather than the conversation waiting for ever.
+ */
+export function useMarkdownRendererReady(wanted = true): boolean {
+  const [ready, setReady] = useState(() => renderers !== null);
+  useEffect(() => {
+    if (!wanted || ready) return;
+    let active = true;
+    const done = () => {
+      if (active) setReady(true);
+    };
+    preloadMarkdownRenderer().then(done, done);
+    return () => {
+      active = false;
+    };
+  }, [wanted, ready]);
+  return ready || !wanted;
+}
+
+type RendererModules = Awaited<ReturnType<typeof loadRenderer>>;
+
+function buildMarkdownRenderer([
+  { Streamdown, defaultRehypePlugins, defaultRemarkPlugins },
+  { code },
+  { createMathPlugin },
+  { createEditorialMermaidPlugin },
+]: RendererModules): ComponentType<MarkdownProps> {
+  // Streamdown's table full-screen view does not manage focus itself.
+  installStreamdownOverlayFocus();
+  // Its wide tables and code blocks scroll; make them reachable by keyboard.
+  installStreamdownScrollRegions();
+  const ownerRehypePlugins = conversationRehypePlugins(defaultRehypePlugins);
+  // Streamdown's own (GFM, code metadata), then single line breaks kept (#207).
+  // One array for every message: Streamdown re-parses when its identity changes.
+  const remarkPlugins = [...Object.values(defaultRemarkPlugins ?? {}), remarkSoftBreaks];
+  // Single-dollar inline math is off by default, but models commonly emit it.
+  // Mermaid itself loads only when a diagram is first rendered.
+  const plugins = {
+    code,
+    math: createMathPlugin({ singleDollarTextMath: true }),
+    mermaid: createEditorialMermaidPlugin(),
+  };
+
+  return ({ children, className, skipHtml, urlTransform }: MarkdownProps) => (
+    <Streamdown
+      plugins={plugins}
+      className={cn(MARKDOWN_BASE, className)}
+      remarkPlugins={remarkPlugins}
+      translations={TRANSLATIONS}
+      // The reference interface shows plain code without a gutter.
+      lineNumbers={false}
+      // Links are real links that warn before leaving the instance (#174),
+      // not Streamdown's link-safety buttons; headings sit below the
+      // page's h1 (#212, #271); a task list's checkboxes are named (#240).
+      components={MESSAGE_COMPONENTS}
+      // Share pages pass their own URL policy and keep the visible marker.
+      {...(!skipHtml && !urlTransform && ownerRehypePlugins
+        ? { rehypePlugins: ownerRehypePlugins }
+        : {})}
+      {...(skipHtml ? { skipHtml } : {})}
+      {...(urlTransform
+        ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
+        : {})}
+    >
+      {normalizeMathDelimiters(children)}
+    </Streamdown>
+  );
+}
+
+const StreamdownMarkdown = lazy(() =>
+  preloadMarkdownRenderer().then((loaded) => ({ default: loaded.markdown })),
 );
 
 /** "Copy Code" was the one title-cased tooltip among the reply's controls (#194). */
@@ -139,23 +201,26 @@ export function normalizeMathDelimiters(markdown: string): string {
  * Markdown. The block's own copy and download controls are hidden; the caller
  * offers its own.
  */
+function buildCodeRenderer([
+  { Streamdown },
+  { code },
+]: RendererModules): ComponentType<HighlightedCodeProps> {
+  const plugins = { code };
+  return ({ source, language, className }: HighlightedCodeProps) => (
+    <Streamdown
+      plugins={plugins}
+      mode="static"
+      controls={false}
+      lineNumbers={false}
+      className={cn(MARKDOWN_BASE, className)}
+    >
+      {codeFence(source, language)}
+    </Streamdown>
+  );
+}
+
 const StreamdownCode = lazy(() =>
-  loadRenderer().then(([{ Streamdown }, { code }]) => {
-    const plugins = { code };
-    return {
-      default: ({ source, language, className }: HighlightedCodeProps) => (
-        <Streamdown
-          plugins={plugins}
-          mode="static"
-          controls={false}
-          lineNumbers={false}
-          className={cn(MARKDOWN_BASE, className)}
-        >
-          {codeFence(source, language)}
-        </Streamdown>
-      ),
-    };
-  }),
+  preloadMarkdownRenderer().then((loaded) => ({ default: loaded.code })),
 );
 
 /** A fenced code block that holds `source` exactly, whatever backticks it contains. */
@@ -178,6 +243,9 @@ export const HighlightedCode = memo(function HighlightedCode({
   language,
   className,
 }: HighlightedCodeProps) {
+  // Already loaded: drawn at once, without a Suspense frame of plain text (#311).
+  const Loaded = renderers?.code;
+  if (Loaded) return <Loaded source={source} language={language} className={className} />;
   return (
     <Suspense
       fallback={
@@ -216,7 +284,14 @@ export interface MarkdownProps {
  * no longer sets the column's minimum width either. Code blocks keep their
  * lines (`pre` does not wrap) unless the person turned code wrapping on.
  */
-const MARKDOWN_BASE = 'wrap-anywhere [&_pre_code]:block [&_pre_code>span]:block';
+const MARKDOWN_BASE = cn(
+  'wrap-anywhere [&_pre_code]:block [&_pre_code>span]:block',
+  // Streamdown skips laying out a code block until it is on screen
+  // (content-visibility: auto, 200 px assumed). A conversation opens scrolled
+  // to its end, so blocks were drawn at 200 px, then at their height a frame
+  // later, and the replies jumped (a one-line block: 218 -> 110 px, #311).
+  '[&_[data-streamdown=code-block]]:![content-visibility:visible]',
+);
 
 /**
  * Shared prose styling so chat and public shares render identically (#186:
@@ -268,6 +343,17 @@ export const Markdown = memo(function Markdown({
 }: MarkdownProps) {
   // Its headings continue from the page's h1 without skipping a level (#271).
   const levels = useMemo(() => headingLevelsOf(children), [children]);
+  // Already loaded: the final Markdown on the first paint, without a Suspense
+  // frame of Markdown source (#311).
+  const Loaded = renderers?.markdown;
+  if (Loaded)
+    return (
+      <HeadingLevels.Provider value={levels}>
+        <Loaded className={className} skipHtml={skipHtml} urlTransform={urlTransform}>
+          {children}
+        </Loaded>
+      </HeadingLevels.Provider>
+    );
   return (
     <Suspense
       fallback={

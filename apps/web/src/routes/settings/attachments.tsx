@@ -115,6 +115,22 @@ function emptyHint(features: CurrentFeatures | undefined): string | undefined {
   return 'Uploading files is not available for your role.';
 }
 
+/**
+ * What deleting does, for the files chosen. A file marked "Not sent" (#297)
+ * was never in a conversation, and the dialog said it would be removed from
+ * the conversations it was attached to (#316).
+ */
+function deleteDescription(count: number, unsent: number): string {
+  if (count <= 1)
+    return unsent
+      ? 'It was never sent. This cannot be undone.'
+      : 'It is removed from the conversations it was attached to, and models can no longer read it there. This cannot be undone.';
+  if (unsent === count) return 'They were never sent. This cannot be undone.';
+  return unsent
+    ? 'Those that were sent are removed from the conversations they were attached to, and models can no longer read them there. This cannot be undone.'
+    : 'They are removed from the conversations they were attached to, and models can no longer read them there. This cannot be undone.';
+}
+
 export function SettingsAttachmentsPage() {
   const queryClient = useQueryClient();
   const features = useCurrentUser().data?.features;
@@ -140,6 +156,9 @@ export function SettingsAttachmentsPage() {
   const confirmTitle = confirmName
     ? `Delete ${confirmName}?`
     : `Delete ${confirming?.length ?? 0} files?`;
+  const confirmUnsent = (confirming ?? []).filter(
+    (id) => attachments.data?.find((file) => file.id === id)?.unsent,
+  ).length;
 
   const remove = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -285,11 +304,7 @@ export function SettingsAttachmentsPage() {
         onOpenChange={(open) => !open && setConfirming(null)}
         title={confirmTitle}
         // Said in the plural for several files (#179).
-        description={
-          (confirming?.length ?? 0) > 1
-            ? 'They are removed from the conversations they were attached to, and models can no longer read them there. This cannot be undone.'
-            : 'It is removed from the conversations it was attached to, and models can no longer read it there. This cannot be undone.'
-        }
+        description={deleteDescription(confirming?.length ?? 0, confirmUnsent)}
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         errorMessage="The files could not be deleted."

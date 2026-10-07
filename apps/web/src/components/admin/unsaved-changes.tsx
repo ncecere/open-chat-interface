@@ -16,7 +16,8 @@ import {
  * and leaving the page, switching a role tab or closing the browser tab threw
  * them away without a word (#45). Each form reports whether it has unsaved
  * changes; while any does, the admin layout asks before navigating away, and
- * the browser asks before the tab is closed or reloaded.
+ * the browser asks before the tab is closed or reloaded. The settings layout
+ * guards a person's own settings the same way (#314).
  */
 export const LEAVE_WITH_UNSAVED_CHANGES =
   'You have unsaved changes on this page. Leave without saving them?';
@@ -64,9 +65,9 @@ export function useEditedSince(values: unknown): boolean {
 }
 
 /**
- * Tells the admin layout whether this form has unsaved changes. Every admin
- * form with a Save button calls it (#300): one that did not lost its edit
- * without a word when the person left the page.
+ * Tells the admin or settings layout whether this form has unsaved changes.
+ * Every form with a Save button there calls it (#300, #314): one that did not
+ * lost its edit without a word when the person left the page.
  */
 export function useReportUnsaved(dirty: boolean): void {
   const context = useContext(UnsavedChangesContext);

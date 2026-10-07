@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { EditOnly } from '~/components/admin/admin-access';
 import { MutationError } from '~/components/admin/admin-ui';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
@@ -110,6 +110,16 @@ export function DestinationSelect({
   );
 }
 
+/** The separate bucket's fields, by the API's names: each shows its own refusal. */
+export const S3_BUCKET_FIELDS: Array<keyof DestinationDraft> = [
+  'bucket',
+  'region',
+  'endpoint',
+  'prefix',
+  'accessKeyId',
+  'secretAccessKey',
+];
+
 /**
  * The separate bucket's fields: bucket, region, endpoint, key prefix, access
  * key ID, a write-only secret (reported only as set or not set) and
@@ -121,25 +131,30 @@ export function S3BucketFields({
   onChange,
   hasCredential,
   prefixHint,
+  errorAt = () => null,
 }: {
   idPrefix: string;
   draft: DestinationDraft;
   onChange: (change: Partial<DestinationDraft>) => void;
   hasCredential: boolean;
   prefixHint: string;
+  /** A refusal of a field, shown under it and tied to it (#302, #317's sweep). */
+  errorAt?: (field: keyof DestinationDraft) => string | null;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Bucket" htmlFor={`${idPrefix}-bucket`}>
+      <Field label="Bucket" htmlFor={`${idPrefix}-bucket`} error={errorAt('bucket')}>
         <Input
           id={`${idPrefix}-bucket`}
+          {...invalidFieldProps(`${idPrefix}-bucket`, errorAt('bucket'))}
           value={draft.bucket}
           onChange={(e) => onChange({ bucket: e.target.value })}
         />
       </Field>
-      <Field label="Region" htmlFor={`${idPrefix}-region`}>
+      <Field label="Region" htmlFor={`${idPrefix}-region`} error={errorAt('region')}>
         <Input
           id={`${idPrefix}-region`}
+          {...invalidFieldProps(`${idPrefix}-region`, errorAt('region'))}
           value={draft.region}
           onChange={(e) => onChange({ region: e.target.value })}
         />
@@ -147,25 +162,38 @@ export function S3BucketFields({
       <Field
         label="Endpoint (optional)"
         htmlFor={`${idPrefix}-endpoint`}
+        error={errorAt('endpoint')}
         hint="For MinIO and other S3-compatible services."
       >
         <Input
           id={`${idPrefix}-endpoint`}
+          {...invalidFieldProps(`${idPrefix}-endpoint`, errorAt('endpoint'))}
           value={draft.endpoint}
           placeholder="https://s3.example.com"
           onChange={(e) => onChange({ endpoint: e.target.value })}
         />
       </Field>
-      <Field label="Key prefix" htmlFor={`${idPrefix}-prefix`} hint={prefixHint}>
+      <Field
+        label="Key prefix"
+        htmlFor={`${idPrefix}-prefix`}
+        error={errorAt('prefix')}
+        hint={prefixHint}
+      >
         <Input
           id={`${idPrefix}-prefix`}
+          {...invalidFieldProps(`${idPrefix}-prefix`, errorAt('prefix'))}
           value={draft.prefix}
           onChange={(e) => onChange({ prefix: e.target.value })}
         />
       </Field>
-      <Field label="Access key ID" htmlFor={`${idPrefix}-access-key`}>
+      <Field
+        label="Access key ID"
+        htmlFor={`${idPrefix}-access-key`}
+        error={errorAt('accessKeyId')}
+      >
         <Input
           id={`${idPrefix}-access-key`}
+          {...invalidFieldProps(`${idPrefix}-access-key`, errorAt('accessKeyId'))}
           value={draft.accessKeyId}
           autoComplete="off"
           onChange={(e) => onChange({ accessKeyId: e.target.value })}
@@ -174,6 +202,7 @@ export function S3BucketFields({
       <Field
         label="Secret access key"
         htmlFor={`${idPrefix}-secret`}
+        error={errorAt('secretAccessKey')}
         hint={
           hasCredential
             ? 'Set. Leave empty to keep it; stored encrypted and never shown again.'
@@ -182,6 +211,7 @@ export function S3BucketFields({
       >
         <Input
           id={`${idPrefix}-secret`}
+          {...invalidFieldProps(`${idPrefix}-secret`, errorAt('secretAccessKey'))}
           type="password"
           autoComplete="off"
           value={draft.secretAccessKey}

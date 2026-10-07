@@ -54,7 +54,9 @@ A settings entry records what a value **was** as well as what it became, so
 do the entries for a storage allowance, a model edit (a rename names both names,
 a switch which way it went), a usage budget edit (its limit, window, roles and
 models), a person's limit override (the override it replaced), a bulk role
-change (each account's previous role) and read-only mode (the reason and
+change (each account's previous role), a ban or unban, single or bulk (the
+ban and reason it replaced, so an unban says which reason it lifted), an
+account's rename (the name before) and read-only mode (the reason and
 expected end before, and the end as saved), and the edits of retention, rate
 limits and sign-in attempts, an SSO provider (account-linking trust among
 them), an announcement (its window and audience too), a connector (its address

@@ -3,13 +3,13 @@ import {
   ARTIFACT_NOT_SAVED,
   type ArtifactKind,
   applyArtifactEdits,
+  artifactFloorRefusal,
   artifactKindLabel,
   type DeclinedArtifactResult,
   MAX_ARTIFACT_BYTES,
   MAX_ARTIFACT_EDITS,
   MAX_ARTIFACT_TITLE_LENGTH,
   MAX_CODE_LANGUAGE_LENGTH,
-  markdownArtifactRefusal,
   toolKey,
 } from '@oci/shared';
 import { z } from 'zod';
@@ -58,14 +58,15 @@ const contentSchema = z
 const createArtifactTool: ToolDefinition = {
   id: 'create_artifact',
   label: 'Create artifact',
+  // "Say ... what it holds": a reply of only "Done!" left the person nothing to read or copy (#313).
   description: [
     'Save content the person will want to see rendered as an artifact they can open, preview, copy and download:',
     'an HTML page or small app (a complete, self-contained document), an SVG image or diagram,',
     'a Mermaid diagram, or a long prose document they asked for (a report, letter or plan) as Markdown.',
     'Program code goes in fenced code blocks in your reply, one per language or file, unless the person asks for it as an artifact:',
     'then save it as kind code with its language (for example python), the code alone, never wrapped in an HTML page.',
-    'Never use it for tables, lists or short answers: write those in your reply.',
-    'Do not repeat the content in your reply or link to it; a card appears on its own. Returns the artifact id for later updates.',
+    'Never use it for tables, lists or short answers, in Markdown or as an HTML page: write those in your reply, a table as a Markdown table.',
+    'Do not repeat the content in your reply or link to it; a card appears on its own. Say in your reply, in a sentence or two, what it holds. Returns the artifact id for later updates.',
   ].join(' '),
   kind: 'read',
   source: 'builtin',
@@ -98,15 +99,14 @@ const createArtifactTool: ToolDefinition = {
         return { saved: false, note: CODE_ARTIFACT_REFUSAL } satisfies DeclinedArtifactResult;
     }
     // The guidance alone did not stop small tables and functions becoming
-    // Markdown artifacts (#149); see markdownArtifactRefusal in @oci/shared.
+    // Markdown artifacts (#149), nor a small table becoming a styled HTML page
+    // (#313); see artifactFloorRefusal in @oci/shared.
     // Declined as a result, not thrown as an error (#201): nothing failed,
     // and a failed step showed the person "3 steps failed" and this note to
     // the model word for word. The conversation leaves such a call out.
-    if (kind === 'markdown') {
-      const refusal = markdownArtifactRefusal(content);
-      if (refusal && !(await personAskedForArtifact(caller.threadId)))
-        return { saved: false, note: refusal } satisfies DeclinedArtifactResult;
-    }
+    const refusal = artifactFloorRefusal(kind, content);
+    if (refusal && !(await personAskedForArtifact(caller.threadId)))
+      return { saved: false, note: refusal } satisfies DeclinedArtifactResult;
     const { artifact } = await createArtifact({
       userId: caller.userId,
       role: caller.role,

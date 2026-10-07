@@ -1,19 +1,26 @@
 import {
   applyArtifactEdits,
   artifactByteLength,
+  artifactFloorRefusal,
   artifactOfToolPart,
   blockKind,
   blockTitle,
   cleanArtifactTitle,
   detectArtifactBlocks,
   fencedBlocks,
+  htmlArtifactRefusal,
+  htmlVisibleText,
   MAX_ARTIFACT_BYTES,
+  MIN_HTML_ARTIFACT_CHARS,
   requestedLibraries,
+  SHORT_HTML_REFUSAL,
+  SHORT_MARKDOWN_REFUSAL,
   splitArtifactSegments,
   summarizeToolPart,
   toolLabel,
 } from '@oci/shared';
 import { describe, expect, it } from 'vitest';
+import { PLANETS_PAGE } from '../../../test/artifacts.fixtures.js';
 import { diagramGuidance } from '../../services/artifacts/guidance.js';
 import { renderMarkdown } from '../../services/export.js';
 
@@ -194,6 +201,65 @@ describe('artifact tool steps', () => {
     expect(
       artifactOfToolPart({ type: 'tool-web_search', toolCallId: 'w', state: 'output-available' }),
     ).toBeNull();
+  });
+});
+
+describe('the floor under HTML artifacts (#313)', () => {
+  const page = (body: string, head = '<style>td { padding: 4px; }</style>') =>
+    `<!doctype html><html><head><title>T</title>${head}</head><body>${body}</body></html>`;
+
+  it('measures the text a page shows, not its head, styles, scripts or markup', () => {
+    expect(htmlVisibleText(PLANETS_PAGE)).toBe(
+      'Planets and Their Moons Planet Moons Notable moons Earth 1 The Moon Mars 2 Phobos _ Deimos Jupiter 95 Io, Europa, Ganymede, Callisto',
+    );
+    expect(htmlVisibleText('<p>Hi <!-- note --><b>there</b></p><template>x</template>')).toBe(
+      'Hi there',
+    );
+    // Still being written: an open style or tag is not text yet.
+    expect(htmlVisibleText('<style>body { color: red; }')).toBe('');
+    expect(htmlVisibleText('<p>One</p><p class="a')).toBe('One');
+    expect(htmlVisibleText('<p>1 < 2</p>')).toBe('1 < 2');
+  });
+
+  it('declines a short static page such as a styled table', () => {
+    expect(PLANETS_PAGE.length).toBeGreaterThan(MIN_HTML_ARTIFACT_CHARS);
+    expect(htmlArtifactRefusal(PLANETS_PAGE)).toBe(SHORT_HTML_REFUSAL);
+    expect(artifactFloorRefusal('html', PLANETS_PAGE)).toBe(SHORT_HTML_REFUSAL);
+    expect(htmlArtifactRefusal(page('<ul><li>One</li><li>Two</li></ul>'))).toBe(SHORT_HTML_REFUSAL);
+    // Hover styles and links are still a page the reply can hold.
+    expect(
+      htmlArtifactRefusal(page('<a href="https://example.com">x</a>', '<style>a:hover{}</style>')),
+    ).toBe(SHORT_HTML_REFUSAL);
+  });
+
+  it('keeps a page with substantial text, or one that does more than show text', () => {
+    expect(
+      htmlArtifactRefusal(page(`<p>${'A sentence that runs on. '.repeat(25)}</p>`)),
+    ).toBeNull();
+    for (const live of [
+      '<script>alert(1)</script>',
+      '<script data-oci-library="chartjs"></script>',
+      '<form><label>Name <input name="n"></label></form>',
+      '<button type="button">Go</button>',
+      '<select><option>A</option></select>',
+      '<textarea></textarea>',
+      '<canvas id="c"></canvas>',
+      '<svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg>',
+      '<img src="data:image/png;base64,AA" alt="">',
+      '<details><summary>More</summary>Hidden</details>',
+      '<p onclick="this.remove()">Click</p>',
+      '<p contenteditable>Edit me</p>',
+    ])
+      expect(htmlArtifactRefusal(page(live)), live).toBeNull();
+    expect(
+      htmlArtifactRefusal(page('<div class="spin">Hi</div>', '<style>@keyframes s {}</style>')),
+    ).toBeNull();
+  });
+
+  it('holds only Markdown and HTML to a floor', () => {
+    expect(artifactFloorRefusal('markdown', '| a |\n| - |\n| 1 |')).toBe(SHORT_MARKDOWN_REFUSAL);
+    for (const kind of ['svg', 'mermaid', 'code'])
+      expect(artifactFloorRefusal(kind, '<svg/>'), kind).toBeNull();
   });
 });
 

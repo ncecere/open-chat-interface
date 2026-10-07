@@ -25,7 +25,11 @@ A refused change is answered before the server does anything with it, so
 nothing is half-saved. People see a banner saying why and until when, in the
 chat, in Settings and in administration. The message box, upload, edit, fork
 and retry buttons are off, with the reason, as are the sidebar's pin, rename
-and archive buttons and the controls and Save buttons of administration pages. In personal Settings a save is refused with
+and archive buttons and **New project**, the conversation header's rename,
+share, move to project and summarise buttons, a project's save, upload,
+remove-file and delete buttons, an artifact's **Edit**, the **Revoke**
+buttons under Settings → Sharing, and the controls and Save buttons of
+administration pages. Download stays available. In personal Settings a save is refused with
 the same explanation. Somebody who sends just as read-only starts gets that
 explanation too, not an error. **Forgot your password?** says password resets
 are paused, with the reason and the expected end, and that no email was sent.

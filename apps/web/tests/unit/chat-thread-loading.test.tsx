@@ -3,7 +3,8 @@ import type { Attachment } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { preloadMarkdownRenderer } from '../../src/components/chat/markdown';
 import { ApiError } from '../../src/lib/api-client';
 import { ChatThreadPage } from '../../src/routes/chat/thread';
 
@@ -168,6 +169,8 @@ async function render() {
   await act(() => root.render(<ChatThreadPage threadId={threadId} />));
 }
 
+// A conversation with replies opens once the Markdown renderer is ready (#311).
+beforeAll(() => preloadMarkdownRenderer().then(() => undefined), 30_000);
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();

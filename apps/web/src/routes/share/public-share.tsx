@@ -6,7 +6,7 @@ import { PublicArtifactsProvider } from '~/components/artifacts/artifacts-provid
 import { CreatedArtifactCards, ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { Wordmark } from '~/components/brand/wordmark';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
-import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
+import { MARKDOWN_PROSE, Markdown, useMarkdownRendererReady } from '~/components/chat/markdown';
 import { partGroupsOf } from '~/components/chat/message-content';
 import { WorkDisclosure } from '~/components/chat/reply-work';
 import { type WorkStep, workSummary } from '~/components/chat/work-summary';
@@ -307,8 +307,11 @@ export function PublicSharePage({ slug }: { slug: string }) {
   // `/auth/status` is public, so the header carries the instance's branding.
   const branding = useAuthStatus().data?.branding;
   usePageTitle(query.data?.thread.title);
+  // Loaded beside the conversation, which shows once both are here, rather
+  // than as Markdown source that jumps when the renderer arrives (#311).
+  const rendererReady = useMarkdownRendererReady();
 
-  if (query.isLoading) {
+  if (query.isLoading || (query.data && !rendererReady)) {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-3" aria-busy="true">
         <Spinner className="size-6" />

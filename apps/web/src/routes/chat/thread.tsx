@@ -8,6 +8,7 @@ import { ThreadArtifactsProvider } from '~/components/artifacts/artifacts-provid
 import { CompactionFailureNotice } from '~/components/chat/compaction-failure-notice';
 import { Composer } from '~/components/chat/composer';
 import { ConversationLoadError } from '~/components/chat/conversation-load-error';
+import { preloadMarkdownRenderer, useMarkdownRendererReady } from '~/components/chat/markdown';
 import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
@@ -382,14 +383,20 @@ function ThreadConversation({
               />
               <CompactionFailureNotice threadId={threadId} />
 
-              {(session.error || session.recovery.error || waitingOnServer || replies.error) && (
+              {(session.error ||
+                session.notice ||
+                session.recovery.error ||
+                waitingOnServer ||
+                replies.error) && (
                 <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
-                  {(session.recovery.error || session.error || replies.error) && (
+                  {(session.notice || session.recovery.error || session.error || replies.error) && (
                     <p
                       role="alert"
                       className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
                     >
-                      {session.recovery.error ||
+                      {/* A message that turned out not to be saved (#326). */}
+                      {session.notice ||
+                        session.recovery.error ||
                         (session.error && chatErrorText(session.error)) ||
                         replies.error ||
                         'Something went wrong generating a response.'}
@@ -528,6 +535,18 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
     if (data && !isError) setTemporary(data.thread.temporary);
   }, [data, isError, setTemporary]);
 
+  // The Markdown renderer loads beside the history, and a conversation with
+  // replies opens once both are here: on a slow connection its replies showed
+  // as Markdown source for 1-2 s, then jumped as code blocks and tables
+  // appeared (CLS up to 0.10, #311). A new conversation does not wait.
+  useEffect(() => {
+    preloadMarkdownRenderer().catch(() => undefined);
+  }, []);
+  const hasReplies = Boolean(
+    data?.messages.some((message) => message.role === 'assistant') || data?.before?.length,
+  );
+  const rendererReady = useMarkdownRendererReady(hasReplies);
+
   if (isError || error || fetchStatus === 'paused' || (!isLoading && !data)) {
     return (
       <ConversationLoadError
@@ -539,7 +558,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
       />
     );
   }
-  if (isLoading || !data)
+  if (isLoading || !data || !rendererReady)
     return (
       <div role="status" aria-label="Loading conversation" className="h-full">
         <FullPageSpinner />

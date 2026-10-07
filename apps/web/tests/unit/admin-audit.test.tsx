@@ -92,6 +92,25 @@ it('lets the keyboard reach the scrolling metadata block (#192)', async () => {
   }
 });
 
+it('names a changed account by the email its entry records, linking to it (#323)', async () => {
+  listing = {
+    entries: [
+      { ...EVENT, metadata: { email: 'walk7-target@example.test', banned: true } as never },
+      { ...EVENT, id: 'event-2', targetId: 'old-entry', metadata: { banned: false } },
+    ],
+    total: 2,
+  };
+  ({ root } = await renderAdmin(<AdminAuditPage />, { path: '/admin/audit' }));
+  const targets = [...document.querySelectorAll<HTMLAnchorElement>('a[href^="/admin/users/"]')];
+  expect(targets.map((link) => [link.textContent, link.getAttribute('href')])).toEqual(
+    expect.arrayContaining([
+      ['user: walk7-target@example.test', '/admin/users/demo-user-009'],
+      // An entry recorded before, with no email, still shows the ID.
+      ['user: old-entry', '/admin/users/old-entry'],
+    ]),
+  );
+});
+
 it('says nothing matched, not that the log is empty, when filters exclude every event', async () => {
   ({ root } = await renderAdmin(<AdminAuditPage />, { path: '/admin/audit' }));
   listing = { entries: [], total: 0 };

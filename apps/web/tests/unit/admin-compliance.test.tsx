@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { ComplianceStatus, LegalHold } from '@oci/shared';
+import { type ComplianceStatus, type LegalHold, updateComplianceSettingsSchema } from '@oci/shared';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../src/lib/api-client';
@@ -17,6 +17,7 @@ import {
   findButton,
   renderAdmin,
   typeInto,
+  validationFailure,
 } from './admin-test-utils';
 
 const api = vi.hoisted(() => ({
@@ -214,6 +215,23 @@ describe('Compliance admin page', () => {
       keepDays: 365,
       s3: { secretAccessKey: 'new-secret' },
     });
+  });
+
+  it('shows a refused setting at its field, not beside Save (#317’s sweep)', async () => {
+    api.patch.mockRejectedValueOnce(
+      validationFailure(updateComplianceSettingsSchema, { keepDays: 5000 }),
+    );
+    await render();
+    const keep = document.getElementById('compliance-keep-days') as HTMLInputElement;
+    await typeInto(keep, '5000');
+    await click(button('Save changes'));
+    expect(keep.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById('compliance-keep-days-error')?.textContent).toBe(
+      'Delete exported objects after (days) must be at most 3,650.',
+    );
+    expect(alerts().filter((text) => text.includes('3,650'))).toHaveLength(1);
+    await typeInto(keep, '365');
+    expect(document.getElementById('compliance-keep-days-error')).toBeNull();
   });
 
   it('places a hold with a reason and lifts one after confirming', async () => {

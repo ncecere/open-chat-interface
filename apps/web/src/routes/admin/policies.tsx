@@ -1,7 +1,7 @@
 import { type UsagePolicy, updatePolicyDraftSchema, upsertUsagePolicySchema } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, FileText, Pencil, Send, Trash2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
@@ -22,15 +22,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
-import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
+import {
+  type FieldProblem,
+  problemsAt,
+  problemsElsewhere,
+  useFieldProblems,
+} from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { formatDate } from '~/lib/utils';
-import { validationText } from '~/lib/validation-issues';
+import { validationProblems } from '~/lib/validation-issues';
 
 /** The form's names for the fields, as errors should use them (#228). */
 const POLICY_LABELS = { title: 'Title', body: 'Policy text' };
@@ -55,9 +59,14 @@ function PolicyDialog({
   const [title, setTitle] = useState(source?.title ?? 'Acceptable use policy');
   const [body, setBody] = useState(source?.body ?? '');
   const [publish, setPublish] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  // A read-only refusal goes once changes are accepted again (#308).
-  useClearReadOnlyRefusal(error, () => setError(null));
+  // Each problem under its field, which is marked invalid and described by
+  // it, until that field is edited; only one about no field (a failed save)
+  // at the foot (#283, #322). A read-only refusal goes once changes are
+  // accepted again (#308).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems({ title, body, publish }, form);
+  const at = (field: keyof typeof POLICY_LABELS) => problemsAt(problems, field);
+  const error = problemsElsewhere(problems, Object.keys(POLICY_LABELS));
   const edited =
     title !== (source?.title ?? 'Acceptable use policy') || body !== (source?.body ?? '');
 
@@ -71,20 +80,21 @@ function PolicyDialog({
       onClose();
     },
     onError: (cause) =>
-      setError(apiErrorMessage(cause, 'The policy could not be saved.', POLICY_LABELS)),
+      setProblems(apiErrorProblems(cause, 'The policy could not be saved.', POLICY_LABELS)),
   });
-  // The error is about the values sent; correcting them clears it (#217).
-  useClearOnEdit({ title, body, publish }, () => setError(null));
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    setProblems([]);
 
     const parsed = draft
       ? updatePolicyDraftSchema.safeParse({ title, body })
       : upsertUsagePolicySchema.safeParse({ title, body, publish });
     if (!parsed.success) {
-      setError(validationText(parsed.error.issues, 'Check the policy fields.', POLICY_LABELS));
+      const found: FieldProblem[] = validationProblems(parsed.error.issues, POLICY_LABELS).map(
+        ({ field, text }) => ({ fields: field ? [field] : [], text }),
+      );
+      setProblems(found.length > 0 ? found : [{ fields: [], text: 'Check the policy fields.' }]);
       return;
     }
     save.mutate(parsed.data);
@@ -101,10 +111,11 @@ function PolicyDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={submit} className="flex flex-col gap-5">
-        <Field label="Title" htmlFor="policy-title">
+      <form noValidate onSubmit={submit} className="flex flex-col gap-5">
+        <Field label="Title" htmlFor="policy-title" error={at('title')}>
           <Input
             id="policy-title"
+            {...invalidFieldProps('policy-title', at('title'))}
             value={title}
             maxLength={160}
             required
@@ -115,10 +126,12 @@ function PolicyDialog({
         <Field
           label="Policy text"
           htmlFor="policy-body"
+          error={at('body')}
           hint="Shown in full before anyone can use the instance."
         >
           <Textarea
             id="policy-body"
+            {...invalidFieldProps('policy-body', at('body'))}
             rows={14}
             value={body}
             required
@@ -132,18 +145,23 @@ function PolicyDialog({
               <label htmlFor="policy-publish" className="font-medium text-sm">
                 Publish immediately
               </label>
-              <p className="mt-0.5 text-[var(--text-muted)] text-xs">
+              <p id="policy-publish-hint" className="mt-0.5 text-[var(--text-muted)] text-xs">
                 Turn off to save a draft that nobody is asked to accept yet.
               </p>
             </div>
-            <Switch id="policy-publish" checked={publish} onCheckedChange={setPublish} />
+            <Switch
+              id="policy-publish"
+              aria-describedby="policy-publish-hint"
+              checked={publish}
+              onCheckedChange={setPublish}
+            />
           </div>
         )}
 
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
           >
             {error}
           </p>

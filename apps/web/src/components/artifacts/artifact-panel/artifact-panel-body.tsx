@@ -13,6 +13,7 @@ import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/e
 import { Button } from '~/components/ui/button';
 import { PillTabs } from '~/components/ui/pill-tabs';
 import { api } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { ArtifactPreview } from './artifact-preview';
 import { DocumentEditor } from './document-editor';
 import { type Chrome, PanelHeader } from './panel-header';
@@ -37,6 +38,8 @@ export function ArtifactPanelBody({
   const [selected, setSelected] = useState<number | null>(artifact.openVersion ?? null);
   const [copied, setCopied] = useState(false);
   const viewId = useId();
+  // Saving a version is a change: Edit is off while read-only (#331).
+  const lock = useReadOnlyLock();
 
   const detail = useQuery({
     queryKey: ['artifact', id],
@@ -139,7 +142,8 @@ export function ArtifactPanelBody({
                 variant="ghost"
                 size="sm"
                 onClick={() => setEditing(true)}
-                disabled={content === undefined}
+                title={lock.title}
+                disabled={content === undefined || lock.locked}
               >
                 <Pencil aria-hidden="true" />
                 Edit

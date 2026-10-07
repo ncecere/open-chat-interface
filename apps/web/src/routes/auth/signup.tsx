@@ -2,7 +2,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { AuthFormError, fieldErrorProps } from '~/components/auth/form-error';
+import {
+  AuthFormError,
+  authFormProblems,
+  emailProblem,
+  fieldErrorProps,
+  newPasswordProblem,
+} from '~/components/auth/form-error';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { AuthStatusUnavailable } from '~/components/auth/status-unavailable';
 import { Wordmark } from '~/components/brand/wordmark';
@@ -25,12 +31,25 @@ export function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState(false);
+  // The fields the form's own check found empty or malformed (#320's sweep).
+  const [missing, setMissing] = useState<string[]>([]);
 
   const registrationAvailable = status?.localAuthEnabled && status.registrationMode === 'open';
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const problems = authFormProblems([
+      { id: 'signup-name', problem: name.trim() ? null : 'Enter your name.' },
+      { id: 'signup-email', problem: emailProblem(email) },
+      { id: 'signup-password', problem: newPasswordProblem(password) },
+    ]);
+    setMissing(problems?.ids ?? []);
+    if (problems) {
+      setError(problems.message);
+      document.getElementById(problems.ids[0]!)?.focus();
+      return;
+    }
     setSubmitting(true);
 
     const result = await authClient.signUp.email({ name, email, password });
@@ -74,8 +93,10 @@ export function SignupPage() {
               <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
               <h1 className="text-lg font-semibold">Check your email</h1>
               <p className="text-sm text-[var(--text-muted)]">
-                Follow the verification link before signing in. If it does not arrive, you can
-                request another email below.
+                {/* It can be delayed, or not go out while mail is failing (#327). */}
+                Follow the verification link we are sending you before signing in. It can take a few
+                minutes, so check your spam folder too. If it does not arrive, request another
+                below, or ask an administrator to check email delivery.
               </p>
               <ResendVerification email={email} />
               <Button asChild variant="primary" className="w-full">
@@ -95,11 +116,12 @@ export function SignupPage() {
               </Button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="signup-name">Name</Label>
                 <Input
                   id="signup-name"
+                  {...fieldErrorProps('signup-error', error, missing.includes('signup-name'))}
                   autoComplete="name"
                   required
                   maxLength={120}
@@ -111,7 +133,7 @@ export function SignupPage() {
                 <Label htmlFor="signup-email">Email</Label>
                 <Input
                   id="signup-email"
-                  {...fieldErrorProps('signup-error', error, false)}
+                  {...fieldErrorProps('signup-error', error, missing.includes('signup-email'))}
                   type="email"
                   autoComplete="email"
                   required
@@ -124,7 +146,12 @@ export function SignupPage() {
                 <Label htmlFor="signup-password">Password</Label>
                 <Input
                   id="signup-password"
-                  {...fieldErrorProps('signup-error', error, false, 'signup-password-hint')}
+                  {...fieldErrorProps(
+                    'signup-error',
+                    error,
+                    missing.includes('signup-password'),
+                    'signup-password-hint',
+                  )}
                   type="password"
                   autoComplete="new-password"
                   required

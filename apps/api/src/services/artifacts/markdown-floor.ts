@@ -4,8 +4,8 @@ import { db } from '../../db/index.js';
 import { replyText } from './detection.js';
 
 /**
- * The floor under Markdown artifacts (#149) itself is in @oci/shared
- * (`markdownArtifactRefusal`), where the conversation also reads it (#201).
+ * The floor under Markdown and HTML artifacts (#149, #313) itself is in
+ * @oci/shared (`artifactFloorRefusal`), where the conversation also reads it (#201).
  */
 
 /**

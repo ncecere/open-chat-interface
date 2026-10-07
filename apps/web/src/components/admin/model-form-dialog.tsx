@@ -213,7 +213,7 @@ export function ModelFormDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form ref={form} onSubmit={submit} className="flex flex-col gap-5">
+      <form noValidate ref={form} onSubmit={submit} className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Provider" htmlFor="model-provider">
             <Select

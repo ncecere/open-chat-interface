@@ -10,7 +10,7 @@ import {
   upsertQuotaPolicySchema,
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { ModelScopePicker } from '~/components/admin/model-scope-picker';
 import { Button } from '~/components/ui/button';
 import {
@@ -20,15 +20,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { api, apiErrorMessage } from '~/lib/api-client';
-import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
-import { validationText } from '~/lib/validation-issues';
+import { validationProblems } from '~/lib/validation-issues';
 
 const METRIC_LABELS: Record<QuotaMetric, string> = {
   messages: 'Messages',
@@ -51,6 +51,8 @@ const WINDOW_LABELS: Record<QuotaWindowKind, string> = {
 
 /** The dialog's names for the fields, as the schema names them (#127). */
 const POLICY_LABELS = {
+  name: 'Name',
+  description: 'Description',
   metric: 'Measure',
   limitValue: 'Limit',
   windowKind: 'Window',
@@ -140,9 +142,14 @@ export function QuotaPolicyDialog({
   // Compared as JSON: the draft is plain data, and only a real edit counts.
   const [initial] = useState(() => JSON.stringify(initialDraft(policy)));
   const edited = JSON.stringify(draft) !== initial;
-  const [error, setError] = useState<string | null>(null);
-  // A read-only refusal goes once changes are accepted again (#308).
-  useClearReadOnlyRefusal(error, () => setError(null));
+  // Every problem at once, each under its field (marked invalid and described
+  // by it) until that field is edited, rather than one line at the foot or
+  // the browser's bubble (#283, #320). A read-only refusal goes once changes
+  // are accepted again (#308).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems(draft, form);
+  const at = (field: keyof typeof POLICY_LABELS) => problemsAt(problems, field);
+  const error = problemsElsewhere(problems, Object.keys(POLICY_LABELS));
 
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -155,14 +162,14 @@ export function QuotaPolicyDialog({
       onClose();
     },
     onError: (cause) =>
-      setError(apiErrorMessage(cause, 'The budget could not be saved.', POLICY_LABELS)),
+      setProblems(apiErrorProblems(cause, 'The budget could not be saved.', POLICY_LABELS)),
   });
 
   const isRolling = draft.windowKind === 'rolling';
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    setProblems([]);
 
     const parsed = upsertQuotaPolicySchema.safeParse({
       name: draft.name,
@@ -178,7 +185,12 @@ export function QuotaPolicyDialog({
     });
 
     if (!parsed.success) {
-      setError(validationText(parsed.error.issues, 'Check the budget fields.', POLICY_LABELS));
+      const found = validationProblems(parsed.error.issues, POLICY_LABELS);
+      setProblems(
+        found.length > 0
+          ? found.map(({ field, text }) => ({ fields: field ? [field] : [], text }))
+          : [{ fields: [], text: 'Check the budget fields.' }],
+      );
       return;
     }
     save.mutate(parsed.data);
@@ -194,10 +206,11 @@ export function QuotaPolicyDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={submit} className="flex flex-col gap-5">
-        <Field label="Name" htmlFor="policy-name">
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-5" noValidate>
+        <Field label="Name" htmlFor="policy-name" error={at('name')}>
           <Input
             id="policy-name"
+            {...invalidFieldProps('policy-name', at('name'))}
             value={draft.name}
             placeholder="Standard daily allowance"
             required
@@ -205,9 +218,10 @@ export function QuotaPolicyDialog({
           />
         </Field>
 
-        <Field label="Description" htmlFor="policy-description">
+        <Field label="Description" htmlFor="policy-description" error={at('description')}>
           <Textarea
             id="policy-description"
+            {...invalidFieldProps('policy-description', at('description'))}
             rows={2}
             value={draft.description}
             onChange={(event) =>
@@ -217,7 +231,12 @@ export function QuotaPolicyDialog({
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Measure" htmlFor="policy-metric" hint={METRIC_HINTS[draft.metric]}>
+          <Field
+            label="Measure"
+            htmlFor="policy-metric"
+            error={at('metric')}
+            hint={METRIC_HINTS[draft.metric]}
+          >
             <Select
               id="policy-metric"
               value={draft.metric}
@@ -234,9 +253,11 @@ export function QuotaPolicyDialog({
           <Field
             label={draft.metric === 'cost' ? 'Limit (US dollars)' : 'Limit'}
             htmlFor="policy-limit"
+            error={at('limitValue')}
           >
             <Input
               id="policy-limit"
+              {...invalidFieldProps('policy-limit', at('limitValue'))}
               type="number"
               min={draft.metric === 'cost' ? '0.01' : '1'}
               step={draft.metric === 'cost' ? '0.01' : '1'}
@@ -251,7 +272,7 @@ export function QuotaPolicyDialog({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Window" htmlFor="policy-window">
+          <Field label="Window" htmlFor="policy-window" error={at('windowKind')}>
             <Select
               id="policy-window"
               value={draft.windowKind}
@@ -269,13 +290,15 @@ export function QuotaPolicyDialog({
             <Field
               label="Window length (hours)"
               htmlFor="policy-window-hours"
+              error={at('windowHours')}
               hint="Usage frees up continuously as it ages out."
             >
               <Input
                 id="policy-window-hours"
+                {...invalidFieldProps('policy-window-hours', at('windowHours'))}
                 type="number"
                 min="1"
-                // The API's limit (a year), so the browser says so before saving (#127).
+                // The API's limit (a year), checked before saving (#127).
                 max="8760"
                 step="1"
                 value={draft.windowHours}
@@ -289,6 +312,7 @@ export function QuotaPolicyDialog({
             <Field
               label="Reset timezone"
               htmlFor="policy-timezone"
+              error={at('timezone')}
               hint="Calendar windows reset at midnight in this zone."
             >
               <Select
@@ -304,7 +328,7 @@ export function QuotaPolicyDialog({
           )}
         </div>
 
-        <Field label="Applies to roles" htmlFor="policy-roles">
+        <Field label="Applies to roles" htmlFor="policy-roles" error={at('roles')}>
           <div id="policy-roles" className="flex flex-wrap gap-1.5">
             {USER_ROLES.map((role) => {
               const selected = draft.roles.includes(role);
@@ -335,7 +359,7 @@ export function QuotaPolicyDialog({
           </div>
         </Field>
 
-        <Field label="Applies to models">
+        <Field label="Applies to models" error={at('modelSlugs')}>
           <ModelScopePicker
             selected={draft.modelSlugs}
             onChange={(modelSlugs) => setDraft((current) => ({ ...current, modelSlugs }))}
@@ -347,12 +371,13 @@ export function QuotaPolicyDialog({
             <label htmlFor="policy-enabled" className="text-sm font-medium">
               Enforced
             </label>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            <p id="policy-enabled-hint" className="mt-0.5 text-xs text-[var(--text-muted)]">
               Turn off to keep the budget without applying it.
             </p>
           </div>
           <Switch
             id="policy-enabled"
+            aria-describedby="policy-enabled-hint"
             checked={draft.enabled}
             onCheckedChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
           />
@@ -361,7 +386,7 @@ export function QuotaPolicyDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           >
             {error}
           </p>

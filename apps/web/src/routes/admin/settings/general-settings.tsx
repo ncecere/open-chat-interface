@@ -120,6 +120,7 @@ function DefaultPromptForm({ initialPrompt }: { initialPrompt: string | null }) 
 
   return (
     <form
+      noValidate
       className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault();
@@ -187,6 +188,7 @@ function DefaultEffortForm({ initialEffort }: { initialEffort: ReasoningEffort }
 
   return (
     <form
+      noValidate
       className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault();
@@ -266,6 +268,7 @@ function FeatureSettingsForm({ settings }: { settings: InstanceSettings }) {
 
   return (
     <form
+      noValidate
       className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault();
@@ -436,6 +439,7 @@ function AutoCompactForm({ initialEnabled }: { initialEnabled: boolean }) {
 
   return (
     <form
+      noValidate
       className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault();
@@ -498,6 +502,7 @@ function DiagramGuidanceForm({ initialEnabled }: { initialEnabled: boolean }) {
 
   return (
     <form
+      noValidate
       className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault();

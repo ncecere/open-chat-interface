@@ -4,7 +4,9 @@ import { type FormEvent, useState } from 'react';
 import {
   AuthFormError,
   AuthOutcomeHeading,
+  emailProblem,
   fieldErrorProps,
+  newPasswordProblem,
   useFocusAfterRender,
 } from '~/components/auth/form-error';
 import { AuthStatusUnavailable } from '~/components/auth/status-unavailable';
@@ -24,7 +26,7 @@ import { authReadOnlyRefusal, passwordResetPausedMessage } from '~/lib/read-only
  * were centred, so each sat at its own height), and a subtitle under the
  * wordmark as on sign-in (#112).
  */
-function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?: string }) {
+export function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?: string }) {
   const { data: status } = useAuthStatus();
   return (
     <main className="flex min-h-dvh justify-center px-4 pt-[12vh] pb-12">
@@ -46,6 +48,9 @@ function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?
   );
 }
 
+export const RESET_SENT_MESSAGE =
+  'If an account uses this address, a password reset link is on its way. It can take a few minutes, so check your spam folder too. If nothing arrives, this service may not be able to send email right now: ask an administrator.';
+
 export function ForgotPasswordPage() {
   const { data: status, unavailable, refetch } = useAuthStatus();
   const [email, setEmail] = useState('');
@@ -62,6 +67,13 @@ export function ForgotPasswordPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    // The app's own words, not the browser's bubble (#320's sweep).
+    const problem = emailProblem(email);
+    if (problem) {
+      setError(problem);
+      focusAfterRender('reset-email');
+      return;
+    }
     setSubmitting(true);
     const result = await answered(
       authClient.requestPasswordReset({ email, redirectTo: '/auth/reset-password' }),
@@ -111,8 +123,11 @@ export function ForgotPasswordPage() {
           <AuthOutcomeHeading focus={submitted} describedBy="reset-sent-message">
             Check your email
           </AuthOutcomeHeading>
+          {/* "Has been sent" was not known when it said so, and an empty inbox
+              then had no explanation (#327). Still the same words whether or
+              not an account exists (#328). */}
           <p id="reset-sent-message" className="text-sm text-[var(--text-muted)]">
-            If an account exists, a password reset link has been sent.
+            {RESET_SENT_MESSAGE}
           </p>
           <Button asChild className="w-full">
             <Link to="/auth/login">Return to sign in</Link>
@@ -138,7 +153,7 @@ export function ForgotPasswordPage() {
           </Button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           <div className="text-center">
             <h1 className="text-lg font-semibold">Reset your password</h1>
           </div>
@@ -146,7 +161,7 @@ export function ForgotPasswordPage() {
             <Label htmlFor="reset-email">Email</Label>
             <Input
               id="reset-email"
-              {...fieldErrorProps('reset-request-error', error, false)}
+              {...fieldErrorProps('reset-request-error', error, error === emailProblem(email))}
               type="email"
               autoComplete="email"
               required
@@ -194,6 +209,12 @@ export function ResetPasswordPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const problem = newPasswordProblem(password);
+    if (problem) {
+      setError(problem);
+      focusAfterRender('new-password');
+      return;
+    }
     setSubmitting(true);
     const result = await answered(authClient.resetPassword({ newPassword: password, token }));
     setSubmitted(true);
@@ -249,7 +270,7 @@ export function ResetPasswordPage() {
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           <div className="text-center">
             <h1 className="text-lg font-semibold">Choose a new password</h1>
           </div>

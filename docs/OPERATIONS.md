@@ -1724,8 +1724,25 @@ Patroni cluster under load; the design and the results are in
   longer, the reply is saved once it is back by the recovery described in
   [Recovering an interrupted chat run](#recovering-an-interrupted-chat-run): a
   reply that had finished is saved as complete (its token counts unknown), not
-  as interrupted. A new message whose saving meets the failover is retried for
-  up to 10 s.
+  as interrupted.
+- **New messages** (`POST /api/chat`) wait out the failover for up to 10 s
+  from when the request arrived. That covers each step up to the message's
+  saving: the session lookup, the conversation's reads, its claim, the usage
+  reservation and the save itself. Nothing is written twice. If the
+  database is back within the 10 s, the message is saved and answered as
+  usual, a little later. If it is not, the request answers the retryable
+  `500` described above. When it failed before the message could be stored
+  it also carries `X-OCI-Message-Saved: no`, and says "The connection to the
+  database was interrupted, so your message was not sent. Send it again in a
+  moment." The person's text then goes back into the message box, and the
+  message does not stay on screen as sent. Without that header the message may
+  have been stored, so the page reloads the saved messages by itself (and keeps
+  trying while they cannot be read). A message that is there stays, with its
+  failed reply and **Try again**. One that is not is removed, and its text
+  goes back into the message box with "Your message could not be saved, so it
+  is back in the message box. Send it again." A new chat whose first message
+  was not saved is removed when the person leaves it, as for any refused first
+  message.
 - **Background jobs** stop after the batch in hand when their lock goes with
   the old primary, and the next tick continues on the new one. Imports resume
   where they stopped. A tick whose lock connection is closed as it opens

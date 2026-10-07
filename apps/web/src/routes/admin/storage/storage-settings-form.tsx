@@ -50,11 +50,13 @@ export function StorageSettingsForm({ initialSettings }: { initialSettings: Stor
     hasChanges,
     save,
     submitChanges,
+    form,
   } = controller;
 
   return (
     <>
       <form
+        ref={form}
         className="flex flex-col gap-8"
         noValidate
         onSubmit={(event) => {

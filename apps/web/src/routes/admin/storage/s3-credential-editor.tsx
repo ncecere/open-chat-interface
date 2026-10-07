@@ -13,7 +13,6 @@ export function S3CredentialEditor({
     | 'setCredentialAction'
     | 'secretAccessKey'
     | 'setSecretAccessKey'
-    | 'showValidation'
     | 'validation'
     | 'save'
     | 'beginEdit'
@@ -25,7 +24,6 @@ export function S3CredentialEditor({
     setCredentialAction,
     secretAccessKey,
     setSecretAccessKey,
-    showValidation,
     validation,
     save,
     beginEdit,
@@ -33,7 +31,7 @@ export function S3CredentialEditor({
 
   // Each problem is shown under its field, in error colour, which is marked
   // invalid and described by it, not in place of the hint (#302).
-  const fieldError = (message?: string) => (showValidation && message) || null;
+  const fieldError = (message?: string) => message || null;
 
   return (
     <>

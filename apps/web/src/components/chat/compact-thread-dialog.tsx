@@ -19,6 +19,7 @@ import {
   useCompactThread,
 } from '~/hooks/use-compaction';
 import { apiErrorMessage } from '~/lib/api-client';
+import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
 export const COMPACT_ACTION_LABEL = 'Summarise earlier messages now';
@@ -36,6 +37,8 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
   const [open, setOpen] = useState(false);
   const pending = useCompactionPending(threadId);
   const summarisable = useCompactionSummarisable(threadId) || pending;
+  // Summarising saves a summary: off while read-only, with the reason (#331).
+  const lock = useReadOnlyLock();
   return (
     <>
       <Button
@@ -43,12 +46,14 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
         size="icon-sm"
         aria-label={COMPACT_ACTION_LABEL}
         title={
-          pending
+          lock.title ??
+          (pending
             ? COMPACTION_PENDING_TEXT
             : summarisable
               ? COMPACT_ACTION_LABEL
-              : 'Nothing to summarise yet'
+              : 'Nothing to summarise yet')
         }
+        disabled={lock.locked}
         aria-haspopup="dialog"
         data-compaction-pending={pending || undefined}
         onClick={() => setOpen(true)}
@@ -148,7 +153,7 @@ function CompactThreadForm({
   }
 
   return (
-    <form onSubmit={(event) => void submit(event).catch(() => undefined)}>
+    <form noValidate onSubmit={(event) => void submit(event).catch(() => undefined)}>
       {pending && (
         <p className="mb-3 text-xs text-[var(--text-muted)]">
           {COMPACTION_PENDING_TEXT} Asking again does not start a second summary.

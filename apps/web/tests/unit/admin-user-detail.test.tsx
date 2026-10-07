@@ -386,6 +386,66 @@ describe('deleting an account', () => {
   });
 });
 
+describe('recent activity (#324)', () => {
+  it('says what the person did and what was done to them, and by whom', async () => {
+    const entry = (id: string, action: string, extra: Record<string, unknown>) => ({
+      id,
+      action,
+      actorUserId: null,
+      actorEmail: null,
+      targetType: 'user',
+      targetId: 'user-1',
+      metadata: null,
+      ipAddress: null,
+      createdAt: '2026-10-06T09:00:00.000Z',
+      ...extra,
+    });
+    const fallback = api.get.getMockImplementation();
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/me') return { user: { id: 'viewer' }, preferences: {}, features: {} };
+      const result = await fallback?.(path);
+      if (path !== '/admin/users/user-1') return result;
+      return {
+        ...result,
+        audit: [
+          // Dana banned someone else.
+          entry('a1', 'user.update', {
+            actorUserId: 'user-1',
+            actorEmail: 'dana@example.test',
+            targetId: 'other',
+            metadata: { email: 'walk7-target@example.test', banned: true },
+          }),
+          // Another administrator demoted Dana.
+          entry('a2', 'user.role.change', {
+            actorUserId: 'admin-2',
+            actorEmail: 'ops@example.test',
+          }),
+          // The viewer changed her role.
+          entry('a3', 'user.role.change', { actorUserId: 'viewer', actorEmail: 'me@example.test' }),
+          // Dana did something of her own.
+          entry('a4', 'thread.export', {
+            actorUserId: 'user-1',
+            targetType: 'thread',
+            targetId: 't1',
+          }),
+        ],
+      };
+    });
+    ({ root } = await renderDetail());
+    await settle();
+    const section = [...document.querySelectorAll('section')].find((candidate) =>
+      candidate.textContent?.includes('Recent activity'),
+    )!;
+    const rows = [...section.querySelectorAll('li')].map((row) => row.textContent);
+    expect(rows).toEqual([
+      expect.stringContaining('user.updateBy Dana Admin, to walk7-target@example.test'),
+      expect.stringContaining('user.role.changeTo Dana Admin, by ops@example.test'),
+      expect.stringContaining('user.role.changeTo Dana Admin, by you'),
+      expect.stringMatching(/^thread\.exportBy Dana Admin\d|^thread\.exportBy Dana Admin[^,]/),
+    ]);
+  });
+});
+
 describe('user limits', () => {
   it('shows each budget with an accessible progress bar, remaining and reset', async () => {
     ({ root } = await renderDetail());

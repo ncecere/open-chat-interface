@@ -200,6 +200,12 @@ describe('bulk user actions', () => {
   it('excludes self, bans before removing sessions and preserves the audit payload', async () => {
     const update = query([{ id: 'target' }]);
     mocks.db.update.mockReturnValueOnce(update);
+    // The administrators, locked first; then each account's ban as it was (#323).
+    mocks.db.select
+      .mockReturnValueOnce(query([]))
+      .mockReturnValueOnce(
+        query([{ id: 'target', email: row.email, banned: false, banReason: null }]),
+      );
     expect(
       await applyBulkUserAction(
         actor,
@@ -232,7 +238,9 @@ describe('bulk user actions', () => {
         affected: 1,
         sessionsEnded: 0,
         role: 'user',
+        previousBans: { target: { banned: false, banReason: null } },
         userIds: ['target', 'target'],
+        emails: [row.email],
       },
     });
   });
@@ -339,7 +347,12 @@ describe('individual user mutations', () => {
       action: 'user.update',
       targetType: 'user',
       targetId: 'target',
-      metadata: patch,
+      // Named by email, with each value as it was (#323).
+      metadata: {
+        email: row.email,
+        ...patch,
+        before: { name: row.name, banned: false, banReason: null },
+      },
     });
   });
 
