@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, schema, sql } from '@oci/db';
-import type { ConversationCompaction } from '@oci/shared';
+import type { ConversationCompaction, UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
+import { listAvailableModels } from '../models.js';
 import { getSetting } from '../settings.js';
 import { activeMessage } from './reply-path.js';
 
@@ -52,10 +53,21 @@ export async function latestCompaction(
   return row ? { ...row.compaction, firstKeptPosition: row.position } : null;
 }
 
-/** The model of the conversation's latest reply, for compacting without a choice. */
-export async function latestReplyModel(threadId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ modelSlug: schema.message.modelSlug })
+/**
+ * The model "Summarise earlier messages now" uses when the request names none:
+ * the one that wrote the conversation's latest reply, unless that reply failed
+ * (#363). A model that just failed would fail the summary too, and the person
+ * has no way to know, so the person's own default model, then the instance
+ * default, stands in; the failed one only when nothing else is available.
+ * Null when no reply recorded a model.
+ */
+export async function defaultSummaryModel(
+  threadId: string,
+  userId: string,
+  role: UserRole,
+): Promise<string | null> {
+  const [latest] = await db
+    .select({ modelSlug: schema.message.modelSlug, status: schema.message.status })
     .from(schema.message)
     .where(
       and(
@@ -67,7 +79,23 @@ export async function latestReplyModel(threadId: string): Promise<string | null>
     )
     .orderBy(desc(schema.message.position), desc(schema.message.createdAt))
     .limit(1);
-  return row?.modelSlug ?? null;
+  if (!latest?.modelSlug) return null;
+  if (latest.status !== 'error') return latest.modelSlug;
+
+  const [preference] = await db
+    .select({ modelSlug: schema.userPreference.defaultModelSlug })
+    .from(schema.userPreference)
+    .where(eq(schema.userPreference.userId, userId))
+    .limit(1);
+  const catalog = await listAvailableModels(role);
+  const usable = (slug: string | null | undefined) =>
+    slug && slug !== latest.modelSlug && catalog.some((model) => model.slug === slug) ? slug : null;
+  return (
+    usable(preference?.modelSlug) ??
+    usable(catalog.find((model) => model.isDefault)?.slug) ??
+    usable(catalog[0]?.slug) ??
+    latest.modelSlug
+  );
 }
 
 /**

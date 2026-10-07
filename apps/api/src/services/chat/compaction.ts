@@ -24,8 +24,8 @@ import { contextBudget } from './context-budget.js';
 export {
   type ActiveCompaction,
   autoCompactEnabled,
+  defaultSummaryModel,
   latestCompaction,
-  latestReplyModel,
   serializeCompaction,
 } from './compaction-records.js';
 export { summaryMaxTokens } from './compaction-summary.js';

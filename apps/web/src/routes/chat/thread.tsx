@@ -17,6 +17,7 @@ import { useCompaction } from '~/hooks/use-compaction';
 import { useHistoryPages } from '~/hooks/use-history-pages';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useReplySwitcher } from '~/hooks/use-reply-switcher';
+import { usePublishSummaryModel } from '~/hooks/use-summary-model';
 import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { useRemoveUnusedConversation } from '~/hooks/use-unused-conversation';
 import { ApiError, chatErrorText } from '~/lib/api-client';
@@ -161,6 +162,8 @@ function ThreadConversation({
     projectId,
   });
   const selectedModelSlug = selectedModel?.slug;
+  // "Summarise earlier messages" uses the picker's model, not a failed one (#363).
+  usePublishSummaryModel(threadId, session.messages, selectedModelSlug);
   const navigate = useNavigate();
   const { mutateAsync: branchMessage } = useBranchMessage();
   const { mutateAsync: forkMessage } = useForkMessage();

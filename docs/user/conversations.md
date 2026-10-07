@@ -272,13 +272,17 @@ summary the model receives.
   for example "keep every figure in the budget". The dialog closes at once;
   while the summary is made, the icon shows **Summarising earlier messages…**
   and you can keep writing. Asking again meanwhile does not make a second one.
-  It uses the model of the latest reply. A conversation needs at least two
+  It uses the model selected in the message box. (If that is the model whose
+  latest reply failed, your default model is used instead, because the same
+  model would fail again.) A conversation needs at least two
   turns (since the last summary) first; until then the dialog says there is
   nothing to summarise yet.
 - **If a summary you asked for fails,** a quiet note under the conversation
   says so and why: your usage allowance ran out, the model returned an error,
-  the model took too long, or there was nothing to summarise by then. Select
-  **Retry** to ask again with the same instructions, or **Dismiss**. The note
+  the model took too long, or there was nothing to summarise by then. For a
+  model error or a timeout the note suggests choosing another model in the
+  message box. Select **Retry** to ask again with the same instructions (and
+  the model selected now), or **Dismiss**. The note
   goes away by itself when a later summary succeeds (OCI also retries a model
   error a few times in the background). Summaries OCI makes on its own are
   never reported: if one fails, the conversation simply carries on as before.

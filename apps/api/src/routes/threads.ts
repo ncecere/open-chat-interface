@@ -24,7 +24,7 @@ import { parseBody, parseQuery } from '../middleware/validate.js';
 import { recordAudit } from '../services/audit.js';
 import {
   assertCompactionPossible,
-  latestReplyModel,
+  defaultSummaryModel,
   NOTHING_TO_COMPACT,
 } from '../services/chat/compaction.js';
 import {
@@ -364,7 +364,7 @@ threadRoutes.post('/:id/compact', async (c) => {
       limit.retryAfterSeconds,
     );
   const input = await parseBody(c, compactThreadSchema);
-  const slug = input.modelSlug ?? (await latestReplyModel(thread.id));
+  const slug = input.modelSlug ?? (await defaultSummaryModel(thread.id, user.id, user.role));
   if (!slug) throw validationFailed(NOTHING_TO_COMPACT);
   const model = await resolveModelForRole(slug, user.role);
   await assertCompactionPossible({

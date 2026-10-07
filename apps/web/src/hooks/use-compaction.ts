@@ -1,5 +1,6 @@
 import type { CompactionState } from '@oci/shared';
 import { type Query, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { publishedSummaryModel } from '~/hooks/use-summary-model';
 import { api } from '~/lib/api-client';
 
 const compactionQueryKey = (threadId: string) => ['thread', threadId, 'compaction'] as const;
@@ -91,11 +92,14 @@ export function useDismissCompactionFailure(threadId: string) {
 export function useCompactThread(threadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (instructions: string) =>
-      api.post<CompactionState>(
-        `/threads/${encodeURIComponent(threadId)}/compact`,
-        instructions.trim() ? { instructions: instructions.trim() } : {},
-      ),
+    mutationFn: (instructions: string) => {
+      // The model in the composer's picker, when the conversation has one to name (#363).
+      const modelSlug = publishedSummaryModel(threadId);
+      return api.post<CompactionState>(`/threads/${encodeURIComponent(threadId)}/compact`, {
+        ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
+        ...(modelSlug ? { modelSlug } : {}),
+      });
+    },
     onSuccess: (data) => {
       queryClient.setQueryData(compactionQueryKey(threadId), data);
     },
