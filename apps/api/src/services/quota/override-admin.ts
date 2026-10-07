@@ -7,6 +7,21 @@ import { policiesForUser } from './policy-queries.js';
 
 type Actor = { id: string; email: string };
 
+/**
+ * The person an override is about, by email, for its audit entries (#374): they
+ * named the person only by ID, so a search for the address found them while the
+ * account existed and missed them once it was deleted, as every other entry
+ * about an account has recorded the email since #323.
+ */
+async function emailOf(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ email: schema.user.email })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId))
+    .limit(1);
+  return row?.email ?? null;
+}
+
 export async function listUserOverrides(userId: string) {
   const { policies } = await policiesForUser(userId);
 
@@ -135,6 +150,7 @@ export async function setUserOverride(
     targetType: 'user',
     targetId: userId,
     metadata: {
+      email: await emailOf(userId),
       policyId: input.policyId,
       policyName: policy.name,
       roleLimitValue: Number(policy.limitValue),
@@ -173,7 +189,11 @@ export async function clearUserOverride(actor: Actor, userId: string, policyId: 
     targetType: 'user',
     targetId: userId,
     // What was removed, as other deletes record (#148, #221).
-    metadata: { policyId, previous: overrideValues(cleared) },
+    metadata: {
+      email: await emailOf(userId),
+      policyId,
+      previous: overrideValues(cleared),
+    },
   });
 
   return { ok: true };

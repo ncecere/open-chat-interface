@@ -76,7 +76,12 @@ connector's or storage bucket's address is recorded without credentials or
 query; a failed storage test is recorded too). A deletion records what was removed: a
 deleted usage budget keeps its measure, limit, window, roles, models and how
 many per-user overrides went with it, a deleted storage allowance its values,
-and a cleared override its limit. **Sign out everywhere** records how many sessions it ended.
+and a cleared override its limit. A creation records what was created, not
+only that it was: a new usage budget its limit, window, time zone and state; a
+new connector or provider its address (without credentials or query); a set or
+cleared per-person override the person's email as well as their ID, so
+searching for the address still finds those entries after the account is
+deleted. **Sign out everywhere** records how many sessions it ended.
 
 Secret values record only whether they are set, cleared, or replaced. The value
 never enters the log.

@@ -51,6 +51,9 @@ connectorRoutes.post('/', async (c) => {
     metadata: {
       name: created.name,
       slug: created.slug,
+      // Where it connects, without credentials or query (#374): as
+      // `connector.update` and `connector.test` record it.
+      url: auditedAddress(created.url),
       authMode: created.authMode,
       allowPrivateNetwork: created.allowPrivateNetwork,
       credential: input.sharedHeaderValue ? 'set' : 'none',
