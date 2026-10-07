@@ -162,6 +162,27 @@ describe.skipIf(!available)('live: more audit entries record the previous value 
       { key: 'audienceRoles', before: ['user'], after: ['user', 'admin'] },
       { key: 'endsAt', before: null, after: '2026-10-07T10:00:00.000Z' },
     ]);
+
+    // The same values again change nothing, and are not recorded (#287).
+    const count = async () =>
+      (
+        await live.db
+          .select()
+          .from(schema.auditLog)
+          .where(eq(schema.auditLog.action, 'broadcast.update'))
+      ).length;
+    const before = await count();
+    await send('PUT', `/broadcasts/${broadcast!.id}`, {
+      title: 'Walk4 announcement',
+      body: 'Body',
+      level: 'info',
+      audienceRoles: ['user', 'admin'],
+      dismissable: broadcast!.dismissable,
+      published: true,
+      startsAt: '2026-10-06T10:00:00.000Z',
+      endsAt: '2026-10-07T10:00:00.000Z',
+    });
+    expect(await count()).toBe(before);
   });
 
   it('connector: the old and new server address', async () => {

@@ -152,7 +152,7 @@ function ThreadConversation({
     initialWebSearch: carriedSearch,
     temporary,
   });
-  const { send, stop, regenerate, selectedModel } = session;
+  const { send, stop, regenerate, selectedModel, effort: selectedEffort } = session;
   // Its first message refused and nothing saved: not left in the history as
   // an empty "New Chat" once the person leaves, the app or the tab (#234, #266).
   useRemoveUnusedConversation(threadId, session.refused && session.messages.length === 0, {
@@ -234,7 +234,14 @@ function ThreadConversation({
     await send();
   }, [send, replySettled]);
 
-  /** The new conversation answers its last question once it opens. */
+  /**
+   * The new conversation answers its last question once it opens, with the
+   * model and level shown in the picker now, as Retry does (#275). The
+   * question's recorded model came first, so a person who had switched away
+   * from a failing model (or to an approved provider) had the edit sent to the
+   * old one, and the new conversation's picker switched back to it. The
+   * recorded choice applies only while the picker has none.
+   */
   const answerInBranch = useCallback(
     (
       branchId: string,
@@ -245,13 +252,12 @@ function ThreadConversation({
         JSON.stringify({
           threadId: branchId,
           messageId: message.id,
-          modelSlug: message.modelSlug ?? selectedModelSlug ?? null,
-          // Without a recorded level the new thread starts at the instance default.
-          effort: message.effort ?? undefined,
+          modelSlug: selectedModelSlug ?? message.modelSlug ?? null,
+          effort: selectedModelSlug ? selectedEffort : (message.effort ?? undefined),
         } satisfies PendingBranchResponse),
       );
     },
-    [selectedModelSlug],
+    [selectedModelSlug, selectedEffort],
   );
 
   const forkAtMessage = useCallback(

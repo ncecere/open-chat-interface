@@ -13,6 +13,26 @@
 		client_ip_headers X-Forwarded-For
 		trusted_proxies_strict
 	}
+
+	# While the API cannot be reached, the proxy looks its name up again on
+	# every try within lb_try_duration and logs each failed lookup at error
+	# level ("failed getting dynamic upstreams"): about 47 lines a request at
+	# a 100 ms interval, over 1,000 for one 40-second API restart (#289). The
+	# proxy's own messages go to a logger of their own that keeps the first
+	# of each message every 10 s and one in 1,000 after it. Every failed
+	# request still logs its own error (logger http.log.error), so an outage
+	# shows as one line per request, plus the cause every 10 s.
+	log default {
+		exclude http.handlers.reverse_proxy
+	}
+	log proxy {
+		include http.handlers.reverse_proxy
+		sampling {
+			interval 10s
+			first 1
+			thereafter 1000
+		}
+	}
 }
 
 :8080 {
@@ -48,7 +68,11 @@
 			# no affinity is required; a failed replica is simply retried.
 			lb_policy least_conn
 			lb_try_duration 5s
-			lb_try_interval 100ms
+			# Each try also looks the API name up again, so with no replica up a
+			# request made 50 lookups at 100 ms. 250 ms halves that, and adds at
+			# most 150 ms before a failed connection is tried on another replica
+			# or a replica marked down (fail_duration below) is tried again (#289).
+			lb_try_interval 250ms
 
 			# Caddy runs no active health checks for dynamic upstreams, so a
 			# replica leaves rotation through passive checks on real requests.

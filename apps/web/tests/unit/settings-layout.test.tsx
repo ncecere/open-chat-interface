@@ -50,7 +50,8 @@ describe('settings layout', () => {
   it('has eight sections on one row that never wraps', async () => {
     await render();
     const nav = container.querySelector('nav[aria-label="Settings sections"]')!;
-    const labels = [...nav.querySelectorAll('a')].map((link) => link.textContent);
+    const row = nav.querySelector('[data-section-tabs]')!;
+    const labels = [...row.querySelectorAll('a')].map((link) => link.textContent);
     expect(labels).toEqual([
       'Account',
       'Customization',
@@ -61,18 +62,20 @@ describe('settings layout', () => {
       'Connectors',
       'Attachments',
     ]);
-    expect(nav.className).toContain('flex-nowrap');
-    expect(nav.className).not.toContain('flex-wrap ');
+    expect(row.className).toContain('flex-nowrap');
+    expect(row.className).not.toContain('flex-wrap ');
     expect(nav.querySelector('[aria-current="page"]')?.textContent).toBe('History');
   });
 
   it('offers one section menu instead of the tabs where they do not fit', async () => {
     await render();
-    const nav = container.querySelector('nav[aria-label="Settings sections"]')!;
+    const row = container.querySelector('[data-section-tabs]')!;
     const menu = container.querySelector('[aria-label="Settings section"]')!;
     // A container query swaps them at the same width, so exactly one shows.
-    expect(nav.className).toContain('hidden');
-    expect(nav.className).toContain('@[50rem]:inline-flex');
+    expect(row.className).toContain('hidden');
+    expect(row.className).toContain('@[50rem]:inline-flex');
+    // Both are in the one navigation landmark (#272).
+    expect(menu.closest('nav[aria-label="Settings sections"]')).not.toBeNull();
     expect(menu.closest('.\\@\\[50rem\\]\\:hidden')).not.toBeNull();
     expect(menu.textContent).toContain('History');
   });
@@ -88,6 +91,31 @@ describe('settings layout', () => {
     const first = container.querySelector<HTMLElement>('a[href], button');
     expect(first?.textContent).toBe('Skip to main content');
     expect(first?.getAttribute('href')).toBe('#main-content');
+  });
+
+  // #272: the profile and the cards beside the page were outside every landmark.
+  it('puts all of its content in a landmark, the side cards titled by headings', async () => {
+    await render();
+    await settle();
+    const landmarks = 'header, nav, main, aside, footer, section[aria-label]';
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const outside: string[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement!;
+      // The skip link comes before every landmark, as it should (axe allows it).
+      if (!node.textContent?.trim() || parent.closest('a[href="#main-content"]')) continue;
+      if (!parent.closest(landmarks)) outside.push(node.textContent);
+    }
+    expect(outside).toEqual([]);
+
+    const profile = container.querySelector('section[aria-label="Your profile"]');
+    expect(profile?.textContent).toContain('Bitop Admin');
+    const aside = container.querySelector('aside[aria-label="Usage and help"]');
+    expect([...aside!.querySelectorAll('h2')].map((heading) => heading.textContent)).toEqual([
+      'Usage Limits',
+      'Keyboard Shortcuts',
+      'Need help?',
+    ]);
   });
 
   it('keeps shortcuts and help in cards instead of tabs of their own', async () => {

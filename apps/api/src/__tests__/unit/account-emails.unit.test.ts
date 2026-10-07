@@ -31,7 +31,7 @@ vi.mock('../../db/index.js', () => ({ db: {} }));
 
 const { sendInviteEmail, sendVerificationEmail, sendPasswordResetEmail, actionEmailHtml } =
   await import('../../services/email.js');
-const { messageCount, modelLine } = await import('../../services/reports.js');
+const { messageCount, modelLine, reportHeading } = await import('../../services/reports.js');
 
 beforeEach(() => {
   sent.length = 0;
@@ -86,6 +86,11 @@ describe('account emails', () => {
 });
 
 describe('the usage report', () => {
+  it('opens with "last 1 day", not "last 1 days" (#286)', () => {
+    expect(reportHeading('OCI', 1)).toBe('OCI usage, last 1 day');
+    expect(reportHeading('OCI', 30)).toBe('OCI usage, last 30 days');
+  });
+
   it('counts one message as one message', () => {
     expect(messageCount(1)).toBe('1 message');
     expect(messageCount(0)).toBe('0 messages');

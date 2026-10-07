@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { CheckCircle2, KeyRound, Lock, Mail } from 'lucide-react';
+import { CheckCircle2, KeyRound, Lock, Mail, RotateCw } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import {
   AuthFormError,
@@ -15,6 +15,7 @@ import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
+import { answered, isServiceFailure, PASSWORD_RESET_UNAVAILABLE } from '~/lib/auth-unavailable';
 import { authReadOnlyRefusal, passwordResetPausedMessage } from '~/lib/read-only';
 
 /**
@@ -45,7 +46,9 @@ function AuthCard({ children, subtitle }: { children: React.ReactNode; subtitle?
 }
 
 export function ForgotPasswordPage() {
-  const { data: status } = useAuthStatus();
+  const { data: status, isError, refetch } = useAuthStatus();
+  // A retry asked for with the button; the 5 s background refetch does not show.
+  const [retrying, setRetrying] = useState(false);
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
@@ -61,10 +64,9 @@ export function ForgotPasswordPage() {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
-    const result = await authClient.requestPasswordReset({
-      email,
-      redirectTo: '/auth/reset-password',
-    });
+    const result = await answered(
+      authClient.requestPasswordReset({ email, redirectTo: '/auth/reset-password' }),
+    );
     setSubmitting(false);
     setSubmitted(true);
     // A refusal (read-only, rate limit, server error) does not depend on
@@ -72,7 +74,11 @@ export function ForgotPasswordPage() {
     // page to the paused state through the store.
     if (result.error) {
       if (!authReadOnlyRefusal(result.error)) {
-        setError(result.error.message || 'The reset link could not be sent. Try again.');
+        setError(
+          isServiceFailure(result.error)
+            ? PASSWORD_RESET_UNAVAILABLE
+            : result.error.message || 'The reset link could not be sent. Try again.',
+        );
         // The form stays: back to its button rather than the body (#190).
         focusAfterRender('reset-request-submit');
       }
@@ -113,7 +119,40 @@ export function ForgotPasswordPage() {
             <Link to="/auth/login">Return to sign in</Link>
           </Button>
         </div>
-      ) : !status?.localAuthEnabled || !status.smtpConfigured ? (
+      ) : !status && isError ? (
+        // The status could not be loaded (the database or the API down): an
+        // outage, not a sign that resets are not offered (#288). The status is
+        // asked for again every 5 s, and the form appears once it answers.
+        <div className="space-y-4 text-center">
+          <h1 className="text-lg font-semibold">Password reset temporarily unavailable</h1>
+          <p role="status" className="text-sm text-[var(--text-muted)]">
+            The service is temporarily unavailable. Try again in a moment.
+          </p>
+          <Button
+            variant="primary"
+            className="w-full"
+            disabled={retrying}
+            onClick={async () => {
+              setRetrying(true);
+              await refetch();
+              setRetrying(false);
+            }}
+          >
+            {retrying ? <Spinner /> : <RotateCw />} Try again
+          </Button>
+          <Link
+            to="/auth/login"
+            className="block text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          >
+            Return to sign in
+          </Link>
+        </div>
+      ) : !status ? (
+        // Still loading: neither the form nor "unavailable" yet (#288).
+        <div className="flex justify-center py-8">
+          <Spinner className="size-5" />
+        </div>
+      ) : !status.localAuthEnabled || !status.smtpConfigured ? (
         <div className="space-y-4 text-center">
           <h1 className="text-lg font-semibold">Password reset unavailable</h1>
           <p className="text-sm text-[var(--text-muted)]">
@@ -181,7 +220,7 @@ export function ResetPasswordPage() {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
-    const result = await authClient.resetPassword({ newPassword: password, token });
+    const result = await answered(authClient.resetPassword({ newPassword: password, token }));
     setSubmitted(true);
     if (result.error) {
       if (result.error.code === 'INVALID_TOKEN') {
@@ -189,7 +228,12 @@ export function ResetPasswordPage() {
         setSubmitting(false);
         return;
       }
-      setError(result.error.message ?? 'This reset link is invalid or expired.');
+      // An outage is not the link's fault (#288): the link still works afterwards.
+      setError(
+        isServiceFailure(result.error)
+          ? PASSWORD_RESET_UNAVAILABLE
+          : (result.error.message ?? 'This reset link is invalid or expired.'),
+      );
       // Back to the field the error describes rather than the body (#190).
       focusAfterRender('new-password');
       setSubmitting(false);

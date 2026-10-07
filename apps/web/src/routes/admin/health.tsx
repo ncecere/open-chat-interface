@@ -202,23 +202,49 @@ function Observability() {
   );
 }
 
+/** How often runs are read while one is followed (#282). */
+const JOB_FOLLOW_MS = 2_000;
+/** How long after Run, and how long into a run, it is followed. */
+const JOB_FOLLOW_FOR_MS = 15_000;
+const JOB_RUNNING_FOLLOW_MS = 5 * 60_000;
+
+/**
+ * Whether the list is read again soon: a run just asked for, or one that
+ * started a short while ago and is still running. Run returns once a worker
+ * takes the request (#265), so the list read straight after it shows the run
+ * starting; a job that then took 20 ms kept its "Running" warning until the
+ * next read, 30 seconds later (#282).
+ */
+function followingRuns(jobs: BackgroundJob[] | undefined, until: number, now = Date.now()) {
+  if (now < until) return true;
+  return (jobs ?? []).some(
+    (job) =>
+      job.lastRun?.status === 'running' &&
+      now - new Date(job.lastRun.startedAt).getTime() < JOB_RUNNING_FOLLOW_MS,
+  );
+}
+
 function BackgroundJobs() {
   const queryClient = useQueryClient();
+  const [followUntil, setFollowUntil] = useState(0);
 
   const jobs = useQuery({
     queryKey: ['admin', 'jobs'],
     queryFn: () => api.get<{ jobs: BackgroundJob[] }>('/admin/lifecycle/jobs'),
-    refetchInterval: 30_000,
+    refetchInterval: (query) =>
+      followingRuns(query.state.data?.jobs, followUntil) ? JOB_FOLLOW_MS : 30_000,
   });
   const { data, isLoading } = jobs;
 
   const run = useMutation({
     mutationFn: (name: string) => api.post(`/admin/lifecycle/jobs/${name}/run`),
-    onSuccess: () =>
-      Promise.all([
+    onSuccess: () => {
+      setFollowUntil(Date.now() + JOB_FOLLOW_FOR_MS);
+      return Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin', 'jobs'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'storage-health'] }),
-      ]),
+      ]);
+    },
   });
 
   if (isLoading) {

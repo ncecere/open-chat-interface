@@ -9,8 +9,8 @@ import { getSetting } from './settings.js';
  * Composes the system prompt from the instance default plus the user's
  * customization settings, then today's date: where the person is, when their
  * browser said (`personTimeZone`), else where the instance is. With a
- * conversation `context`, it ends with the artifacts guidance when the
- * person's role allows artifacts.
+ * conversation `context`, it ends with the artifacts guidance, or with a note
+ * that artifacts are unavailable when the person's role lacks them (#277).
  */
 export async function buildSystemPrompt(
   userId: string,

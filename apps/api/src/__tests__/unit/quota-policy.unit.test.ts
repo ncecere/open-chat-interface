@@ -1,4 +1,4 @@
-import { MICROS_PER_DOLLAR, upsertQuotaPolicySchema } from '@oci/shared';
+import { MICROS_PER_DOLLAR, quotaWindowPhrase, upsertQuotaPolicySchema } from '@oci/shared';
 import { describe, expect, it } from 'vitest';
 import {
   buildAllowance,
@@ -118,6 +118,12 @@ describe('administrative limit descriptions', () => {
     expect(describeWindow(policy({ windowKind: 'weekly' }))).toBe('this week');
     expect(describeWindow(policy({ windowKind: 'monthly' }))).toBe('this month');
     expect(describeWindow(policy({ windowKind: 'yearly' as never }))).toBe('this window');
+  });
+
+  it('says "the last hour" for a one-hour window, not "the last 1 hours" (#286)', () => {
+    expect(describeWindow(policy({ windowKind: 'rolling', windowHours: 1 }))).toBe('the last hour');
+    expect(quotaWindowPhrase('rolling', 1)).toBe('the last hour');
+    expect(quotaWindowPhrase('rolling', 12)).toBe('the last 12 hours');
   });
 
   it('defaults a rolling window with no length to 24 hours', () => {

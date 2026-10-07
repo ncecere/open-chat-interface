@@ -458,7 +458,9 @@ export async function branchFromUserMessage(
       .values({
         organizationId: sourceThread.organizationId,
         userId,
-        title: selectedIndex === 0 ? deriveTitle(input.text) : sourceThread.title,
+        // From the revised question wherever it sits: keeping the source's title
+        // listed identical rows, as a fixed "Edit of" mark still would (#278).
+        title: deriveTitle(input.text),
         parentThreadId: sourceThread.id,
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,

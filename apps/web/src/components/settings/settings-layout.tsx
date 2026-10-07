@@ -180,9 +180,11 @@ function SectionNav({ pathname }: { pathname: string }) {
   const tabs = visibleTabs(pathname, data?.features, data?.settingsSummary);
   const current = tabs.find((tab) => isActive(tab, pathname)) ?? TABS[0];
   return (
-    <div className="@container">
-      <nav
-        aria-label="Settings sections"
+    // One landmark for the tabs and the menu that replaces them: the menu was
+    // outside every landmark on narrow screens (#272).
+    <nav aria-label="Settings sections" className="@container">
+      <div
+        data-section-tabs
         className="hidden flex-nowrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1 @[50rem]:inline-flex"
       >
         {tabs.map((tab) => {
@@ -205,7 +207,7 @@ function SectionNav({ pathname }: { pathname: string }) {
             </Link>
           );
         })}
-      </nav>
+      </div>
       <div className="@[50rem]:hidden">
         <Select
           aria-label="Settings section"
@@ -215,7 +217,7 @@ function SectionNav({ pathname }: { pathname: string }) {
           className="h-11"
         />
       </div>
-    </div>
+    </nav>
   );
 }
 
@@ -257,9 +259,11 @@ export function SettingsLayout() {
           column beside the page. Narrow: identity, then the page, then the cards.
         */}
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-10">
-          <div className="lg:col-start-1 lg:row-start-1">
+          {/* Landmarks of their own, like the page beside them: they were
+              outside every landmark, so landmark navigation skipped them (#272). */}
+          <section aria-label="Your profile" className="lg:col-start-1 lg:row-start-1">
             <Identity />
-          </div>
+          </section>
 
           <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <SectionNav pathname={pathname} />
@@ -280,7 +284,8 @@ export function SettingsLayout() {
             </main>
           </div>
 
-          <div
+          <aside
+            aria-label="Usage and help"
             className={cn(
               'flex flex-col gap-6 pb-16 lg:col-start-1 lg:row-start-2 lg:self-start',
               !loaded && 'invisible',
@@ -289,7 +294,7 @@ export function SettingsLayout() {
             <UsageLimits />
             <ShortcutsCard />
             <HelpCard />
-          </div>
+          </aside>
         </div>
       </div>
     </div>

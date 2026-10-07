@@ -167,6 +167,7 @@ their tool steps.
 | `connector.create` | A connector is added | name, short name, authentication mode, private network flag, whether a credential was set |
 | `connector.update` | A connector is changed | the fields changed, each as it was and became (address, name, authentication mode and so on), whether each secret was `replaced`, `cleared` or `unchanged`, connections removed |
 | `connector.delete` | A connector is deleted | name, short name, number of tools and connections removed |
+| `connector.test` | **Test connection** is pressed | short name, address, whether it connected |
 | `connector.tools.refresh` | Tools are refreshed | counts added, updated and no longer listed |
 | `connector.tool.update` | A tool is enabled, disabled or its kind changed | tool id, before and after, `readOnlyConfirmed` |
 | `connector.account.connect` | A person connects their account | the connector |

@@ -8,7 +8,7 @@ import { getDefaultOrganizationId } from '../organization.js';
 import { getSetting } from '../settings.js';
 import { buildStorageKey, getStorageDriver } from '../storage/index.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
-import { admissionTotals, lockStorageUsage } from '../storage/usage.js';
+import { artifactBytes, attachmentTotals, lockStorageUsage } from '../storage/usage.js';
 import { extractText } from './extract.js';
 import { validateUpload } from './validate.js';
 
@@ -95,9 +95,12 @@ export async function uploadAttachment(params: {
       }
       await lockStorageUsage(tx, owner);
       // Authoritative rows prevent legacy counter drift from weakening enforcement.
-      const totals = await admissionTotals(tx, params.userId);
+      // Admission weighs files and artifacts; the counter holds files alone,
+      // since usage adds artifact bytes summed from their rows (#276).
+      const files = await attachmentTotals(tx, params.userId);
+      const artifacts = await artifactBytes(tx, params.userId);
       assertStorageAllowanceForUsage(
-        { ...totals, ...limits },
+        { ...files, liveBytes: files.liveBytes + artifacts, ...limits },
         {
           incomingBytes: file.bytes.byteLength,
           incomingFiles: 1,
@@ -120,9 +123,9 @@ export async function uploadAttachment(params: {
       await tx
         .update(schema.storageUsage)
         .set({
-          ...totals,
-          liveBytes: totals.liveBytes + file.bytes.byteLength,
-          liveFileCount: totals.liveFileCount + 1,
+          ...files,
+          liveBytes: files.liveBytes + file.bytes.byteLength,
+          liveFileCount: files.liveFileCount + 1,
           updatedAt: new Date(),
         })
         .where(eq(schema.storageUsage.userId, params.userId));

@@ -233,6 +233,27 @@ describe('Background work', () => {
     expect(document.body.textContent).not.toContain('of about');
   });
 
+  it('counts a finished migration’s rows without the table estimate, and one row as "row" (#281)', async () => {
+    api.get.mockResolvedValue({
+      migrations: [
+        // The rows it changed, not the table's: 404 of about 577 read "(100%)".
+        migration({ status: 'finished', estimatedRows: 577, rowsProcessed: 404, progress: 1 }),
+        migration({
+          name: '0.11.one',
+          status: 'running',
+          estimatedRows: 1,
+          rowsProcessed: 0,
+          progress: 0,
+        }),
+      ],
+    });
+    ({ root } = await renderAdmin(<BackgroundWorkSection />));
+    const bars = [...document.querySelectorAll('[role="progressbar"]')].map((bar) =>
+      bar.getAttribute('aria-valuetext'),
+    );
+    expect(bars).toEqual(['404 rows processed (100%)', '0 of about 1 row (0%)']);
+  });
+
   it('is read-only for auditors', async () => {
     api.get.mockResolvedValue({ migrations: [migration()] });
     ({ root } = await renderAdmin(<BackgroundWorkSection />, { role: 'auditor' }));

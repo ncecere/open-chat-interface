@@ -39,6 +39,7 @@ vi.mock('../../lib/role.js', () => ({
 vi.mock('../../services/chat-streams.js', () => ({ sharedRedis: async () => state.redis }));
 
 const { lifecycleRoutes } = await import('../../routes/admin/lifecycle.js');
+const { maintenanceAdminRoutes } = await import('../../routes/admin/maintenance.js');
 const { lifecycleJobs } = await import('../../services/jobs/index.js');
 const { startReplicaHeartbeat } = await import('../../services/jobs/workers.js');
 const { listenForJobRequests, manualRunAck } = await import('../../services/jobs/requests.js');
@@ -106,6 +107,7 @@ describe.skipIf(!available)('live: background jobs on a web replica (#256)', () 
     await next();
   });
   app.route('/lifecycle', lifecycleRoutes);
+  app.route('/maintenance', maintenanceAdminRoutes);
 
   const runAudits = async (job: string) =>
     live.db
@@ -143,6 +145,24 @@ describe.skipIf(!available)('live: background jobs on a web replica (#256)', () 
     const names = jobs.map((job) => job.name);
     expect(names).not.toContain(POST_MIGRATIONS_JOB);
     expect(names).toContain('storage.recompute-usage');
+  });
+
+  it('offers the same jobs to keep running while read-only (#281)', async () => {
+    const listed = (await (await app.request('/lifecycle/jobs')).json()) as {
+      jobs: { name: string }[];
+    };
+    const response = await app.request('/maintenance');
+    expect(response.status, await response.clone().text()).toBe(200);
+    const { jobs } = (await response.json()) as { jobs: { name: string }[] };
+    expect(jobs.map((job) => job.name)).toEqual(listed.jobs.map((job) => job.name).sort());
+    expect(jobs.map((job) => job.name)).not.toContain(POST_MIGRATIONS_JOB);
+    // Nor can it be chosen.
+    const chosen = await app.request('/maintenance', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ keepRunningJobs: [POST_MIGRATIONS_JOB] }),
+    });
+    expect(chosen.status).toBe(422);
   });
 
   it('refuses Run for a job no worker runs, saying why, and audits nothing', async () => {

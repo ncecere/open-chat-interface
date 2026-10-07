@@ -5,7 +5,7 @@ import {
   type QuotaOverride,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -14,10 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import {
+  type FieldProblem,
+  problemsAt,
+  problemsElsewhere,
+  useFieldProblems,
+} from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 
 /** Cost is stored in micro-dollars; the other metrics are plain counts. */
 function toDisplay(value: number, metric: QuotaMetric): string {
@@ -40,6 +46,19 @@ function fromDisplay(value: string, metric: QuotaMetric): number {
   return metric === 'cost' ? Math.round(parsed * MICROS_PER_DOLLAR) : Math.round(parsed);
 }
 
+/** "Expires", as the field is labelled, not "Expires at" (#228). */
+const OVERRIDE_LABELS = { limitValue: 'Limit', expiresAt: 'Expires', reason: 'Reason' };
+
+/** The form's field for each field the API names, per budget: `<policyId>:limit` (#283). */
+const FORM_FIELDS: Record<string, string> = {
+  limitValue: 'limit',
+  expiresAt: 'expiresAt',
+  reason: 'reason',
+};
+const fieldOf = (policyId: string, field: string) => `${policyId}:${field}`;
+
+type OverrideDraft = { limit: string; expiresAt: string; reason: string };
+
 function unitLabel(metric: QuotaMetric): string {
   if (metric === 'cost') return 'US dollars';
   return metric === 'tokens' ? 'tokens' : 'messages';
@@ -54,16 +73,41 @@ function unitLabel(metric: QuotaMetric): string {
  */
 export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [drafts, setDrafts] = useState<
-    Record<string, { limit: string; expiresAt: string; reason: string }>
-  >({});
-  const [error, setError] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, OverrideDraft>>({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'users', user.id, 'quota-overrides'],
     queryFn: () =>
       api.get<{ overrides: QuotaOverride[] }>(`/admin/users/${user.id}/quota-overrides`),
   });
+  const entries = data?.overrides ?? [];
+  const draftFor = (entry: QuotaOverride): OverrideDraft =>
+    drafts[entry.policyId] ?? {
+      limit: toDisplay(entry.limitValue, entry.metric),
+      expiresAt: entry.expiresAt ? entry.expiresAt.slice(0, 10) : '',
+      reason: entry.reason ?? '',
+    };
+
+  // Every budget's fields, keyed `<policyId>:<field>`: an error is shown under
+  // the field it is about, marked invalid, and goes once that field is
+  // corrected, not at the next Save (#178, #217, #283).
+  const values = Object.fromEntries(
+    entries.flatMap((entry) =>
+      Object.entries(draftFor(entry)).map(([field, value]) => [
+        fieldOf(entry.policyId, field),
+        value,
+      ]),
+    ),
+  );
+  const fieldsArea = useRef<HTMLDivElement>(null);
+  const [problems, setProblems] = useFieldProblems(values, fieldsArea);
+  const error = problemsElsewhere(problems, Object.keys(values));
+  /** One budget's problems replaced by `next`, keeping the other budgets'. */
+  const reportFor = (policyId: string, next: FieldProblem[]) =>
+    setProblems([
+      ...problems.filter((problem) => !problem.fields[0]?.startsWith(`${policyId}:`)),
+      ...next,
+    ]);
 
   const invalidate = () =>
     Promise.all([
@@ -76,19 +120,27 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.put(`/admin/users/${user.id}/quota-overrides`, body),
-    onSuccess: async () => {
-      setError(null);
+    onSuccess: async (_, body) => {
+      reportFor(String(body.policyId), []);
       await invalidate();
     },
-    // "Expires", as the field is labelled, not "Expires at" (#228).
-    onError: (cause) =>
-      setError(
-        apiErrorMessage(cause, 'The override could not be saved.', {
-          limitValue: 'Limit',
-          expiresAt: 'Expires',
-          reason: 'Reason',
-        }),
-      ),
+    onError: (cause, body) => {
+      const policyId = String(body.policyId);
+      reportFor(
+        policyId,
+        apiErrorProblems(cause, 'The override could not be saved.', OVERRIDE_LABELS).map(
+          // One about no field (a failed save) is still this budget's, so its
+          // next Save replaces it; it is shown at the foot.
+          (problem) => ({
+            ...problem,
+            fields:
+              problem.fields.length === 0
+                ? [fieldOf(policyId, '')]
+                : problem.fields.map((field) => fieldOf(policyId, FORM_FIELDS[field] ?? field)),
+          }),
+        ),
+      );
+    },
   });
 
   const clear = useMutation({
@@ -96,8 +148,6 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
       api.delete(`/admin/users/${user.id}/quota-overrides/${policyId}`),
     onSuccess: invalidate,
   });
-
-  const entries = data?.overrides ?? [];
 
   return (
     <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
@@ -117,13 +167,11 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
         </p>
       )}
 
-      <div className="flex flex-col gap-5">
+      <div ref={fieldsArea} className="flex flex-col gap-5">
         {entries.map((entry) => {
-          const draft = drafts[entry.policyId] ?? {
-            limit: toDisplay(entry.limitValue, entry.metric),
-            expiresAt: entry.expiresAt ? entry.expiresAt.slice(0, 10) : '',
-            reason: entry.reason ?? '',
-          };
+          const draft = draftFor(entry);
+          const at = (field: keyof OverrideDraft) =>
+            problemsAt(problems, fieldOf(entry.policyId, field));
           const overridden = entry.limitValue !== entry.roleLimitValue;
 
           return (
@@ -149,9 +197,11 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
                 <Field
                   label={`Limit (${unitLabel(entry.metric)})`}
                   htmlFor={`limit-${entry.policyId}`}
+                  error={at('limit')}
                 >
                   <Input
                     id={`limit-${entry.policyId}`}
+                    {...invalidFieldProps(`limit-${entry.policyId}`, at('limit'))}
                     type="number"
                     min={entry.metric === 'cost' ? '0.01' : '1'}
                     step={entry.metric === 'cost' ? '0.01' : '1'}
@@ -169,9 +219,11 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
                   label="Expires"
                   htmlFor={`expires-${entry.policyId}`}
                   hint="Blank never expires."
+                  error={at('expiresAt')}
                 >
                   <Input
                     id={`expires-${entry.policyId}`}
+                    {...invalidFieldProps(`expires-${entry.policyId}`, at('expiresAt'))}
                     type="date"
                     value={draft.expiresAt}
                     onChange={(event) =>
@@ -183,9 +235,10 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
                   />
                 </Field>
 
-                <Field label="Reason" htmlFor={`reason-${entry.policyId}`}>
+                <Field label="Reason" htmlFor={`reason-${entry.policyId}`} error={at('reason')}>
                   <Input
                     id={`reason-${entry.policyId}`}
+                    {...invalidFieldProps(`reason-${entry.policyId}`, at('reason'))}
                     placeholder="Why this is needed"
                     value={draft.reason}
                     onChange={(event) =>
@@ -227,7 +280,12 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
                   onClick={() => {
                     const limitValue = fromDisplay(draft.limit, entry.metric);
                     if (Number.isNaN(limitValue)) {
-                      setError('Enter a limit greater than zero.');
+                      reportFor(entry.policyId, [
+                        {
+                          fields: [fieldOf(entry.policyId, 'limit')],
+                          text: 'Enter a limit greater than zero.',
+                        },
+                      ]);
                       return;
                     }
                     save.mutate({
@@ -254,7 +312,7 @@ export function QuotaOverrideDialog({ user, onClose }: { user: AdminUser; onClos
       {error && (
         <p
           role="alert"
-          className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
+          className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-[var(--danger-on-tint)] text-xs"
         >
           {error}
         </p>

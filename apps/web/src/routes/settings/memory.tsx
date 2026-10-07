@@ -54,7 +54,33 @@ function MemoryRow({
   const rowRef = useRef<HTMLLIElement>(null);
   const deleteRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const mounted = useRef(false);
+  const editMounted = useRef(false);
+
+  // Edit and the form replace each other, removing the control that had
+  // focus: into the editor on Edit, back on Edit after Cancel, Escape or
+  // Save, as Edit name does (#270).
+  useLayoutEffect(() => {
+    if (!editMounted.current) {
+      editMounted.current = true;
+      return;
+    }
+    if (editing) {
+      const editor = editorRef.current;
+      editor?.focus();
+      editor?.setSelectionRange(editor.value.length, editor.value.length);
+    } else if (!document.activeElement || document.activeElement === document.body) {
+      editRef.current?.focus();
+    }
+  }, [editing]);
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setDraft(entry.content);
+    save.reset();
+  };
 
   // Asking, cancelling or a failed delete swaps the buttons, removing the one
   // that had focus: put focus on its counterpart rather than the body (#128).
@@ -86,24 +112,21 @@ function MemoryRow({
             Edit memory
           </label>
           <Textarea
+            ref={editorRef}
             id={editId}
             rows={3}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              cancelEdit();
+            }}
           />
           <div className="flex items-center gap-2 text-xs">
             <Counted value={draft} max={maxChars} />
             <span className="flex-1" />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setEditing(false);
-                setDraft(entry.content);
-                save.reset();
-              }}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={cancelEdit}>
               Cancel
             </Button>
             <Button
@@ -129,6 +152,7 @@ function MemoryRow({
           <div className="flex shrink-0 gap-1">
             {canEdit && (
               <Button
+                ref={editRef}
                 variant="ghost"
                 size="sm"
                 aria-label={`Edit memory: ${entry.content}`}

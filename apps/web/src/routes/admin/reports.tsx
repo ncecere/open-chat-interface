@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Mail } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
+import { z } from 'zod';
 import { EditOnly } from '~/components/admin/admin-access';
 import {
   AdminPageHeader,
@@ -12,14 +13,14 @@ import {
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { FullPageSpinner } from '~/components/ui/spinner';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { useSetupCheck } from '~/hooks/use-setup-status';
-import { api } from '~/lib/api-client';
-import { formatRelativeTime } from '~/lib/utils';
+import { api, apiErrorProblems } from '~/lib/api-client';
+import { formatRelativeTime, plural } from '~/lib/utils';
 
 interface ScheduledReport {
   id: string;
@@ -66,6 +67,41 @@ export function nextRunText(report: Pick<ScheduledReport, 'nextRunAt'>, now = Da
   return `Next: ${formatRelativeTime(report.nextRunAt, now)}`;
 }
 
+/** The form's names for the fields, so each error names the one it is about (#127, #283). */
+const REPORT_LABELS = {
+  name: 'Name',
+  cadence: 'Cadence',
+  windowDays: 'Window (days)',
+  recipients: 'Recipients',
+};
+
+/** The addresses as the form sends them: split on commas and spaces, blanks dropped. */
+function parseRecipients(text: string): string[] {
+  return text
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+const email = z.email();
+
+/**
+ * The addresses that are not email addresses, named, as the API's own check
+ * can only say "Recipients (item 1)", which the person has to count to (#283).
+ * Null when every address is valid.
+ */
+export function recipientsProblem(recipients: readonly string[]): string | null {
+  const invalid = recipients.filter((entry) => !email.safeParse(entry).success);
+  if (invalid.length === 0) return null;
+  const list = new Intl.ListFormat('en', { type: 'conjunction' }).format(invalid);
+  return invalid.length === 1
+    ? `Recipients: ${list} is not an email address.`
+    : `Recipients: ${list} are not email addresses.`;
+}
+
+/** The fields that show their own errors; any other is shown above the button (#283). */
+const FIELDS_SHOWN = ['name', 'windowDays', 'recipients'];
+
 const CADENCES = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
@@ -83,6 +119,7 @@ export function AdminReportsPage() {
   const [editing, setEditing] = useState<ScheduledReport | null>(null);
 
   function resetForm() {
+    setProblems([]);
     setEditing(null);
     setName('');
     setCadence('monthly');
@@ -92,6 +129,7 @@ export function AdminReportsPage() {
 
   function edit(report: ScheduledReport) {
     create.reset();
+    setProblems([]);
     setEditing(report);
     setName(report.name);
     setCadence(report.cadence);
@@ -108,17 +146,30 @@ export function AdminReportsPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
 
+  // Each error is shown under its field, marked invalid, all at once, and
+  // goes when that field is corrected (#217, #283).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems({ name, cadence, windowDays, recipients }, form);
+  const at = (field: keyof typeof REPORT_LABELS) => problemsAt(problems, field);
+  const formError = problemsElsewhere(problems, FIELDS_SHOWN);
+
   const create = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       editing ? api.patch(`/admin/reports/${editing.id}`, body) : api.post('/admin/reports', body),
+    onMutate: () => setProblems([]),
     onSuccess: () => {
       resetForm();
       invalidate();
     },
+    onError: (cause) =>
+      setProblems(
+        apiErrorProblems(
+          cause,
+          editing ? 'The report could not be saved.' : 'The report could not be added.',
+          REPORT_LABELS,
+        ),
+      ),
   });
-
-  // The error is about the values sent; correcting them clears it (#217).
-  useClearOnEdit({ name, cadence, windowDays, recipients }, () => create.reset());
 
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
@@ -139,15 +190,13 @@ export function AdminReportsPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    create.mutate({
-      name,
-      cadence,
-      windowDays,
-      recipients: recipients
-        .split(/[\s,]+/)
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    });
+    const addresses = parseRecipients(recipients);
+    const invalid = recipientsProblem(addresses);
+    if (invalid) {
+      setProblems([{ fields: ['recipients'], text: invalid }]);
+      return;
+    }
+    create.mutate({ name, cadence, windowDays, recipients: addresses });
   }
 
   if (isLoading) return <FullPageSpinner />;
@@ -177,14 +226,16 @@ export function AdminReportsPage() {
       {/* Adds a report, or edits the one chosen with Edit. */}
       <EditOnly>
         <form
+          ref={form}
           onSubmit={submit}
           className="mb-8 grid gap-3 sm:grid-cols-2"
           aria-label={editing ? `Edit ${editing.name}` : 'Add report'}
         >
           {editing && <p className="text-sm font-medium sm:col-span-2">Editing {editing.name}</p>}
-          <Field label="Name" htmlFor="report-name">
+          <Field label="Name" htmlFor="report-name" error={at('name')}>
             <Input
               id="report-name"
+              {...invalidFieldProps('report-name', at('name'))}
               value={name}
               required
               maxLength={120}
@@ -198,10 +249,12 @@ export function AdminReportsPage() {
           <Field
             label="Window (days)"
             htmlFor="report-window"
+            error={at('windowDays')}
             hint="How much history each report covers."
           >
             <Input
               id="report-window"
+              {...invalidFieldProps('report-window', at('windowDays'))}
               type="number"
               min={1}
               max={365}
@@ -212,10 +265,12 @@ export function AdminReportsPage() {
           <Field
             label="Recipients"
             htmlFor="report-recipients"
+            error={at('recipients')}
             hint="Separate addresses with commas."
           >
             <Input
               id="report-recipients"
+              {...invalidFieldProps('report-recipients', at('recipients'))}
               value={recipients}
               required
               placeholder="ops@example.com"
@@ -223,12 +278,11 @@ export function AdminReportsPage() {
             />
           </Field>
           <div className="flex flex-col gap-2 sm:col-span-2">
-            <MutationError
-              error={create.error}
-              message={
-                editing ? 'The report could not be saved.' : 'The report could not be added.'
-              }
-            />
+            {formError && (
+              <p role="alert" className="whitespace-pre-line text-[var(--danger)] text-sm">
+                {formError}
+              </p>
+            )}
             <div className="flex gap-2">
               <Button type="submit" variant="primary" disabled={create.isPending}>
                 {editing ? 'Save report' : 'Add report'}
@@ -291,7 +345,8 @@ export function AdminReportsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm">{report.name}</p>
                   <p className="text-[var(--text-muted)] text-xs">
-                    {report.cadence} · {report.windowDays} days · {report.recipients.join(', ')}
+                    {report.cadence} · {plural(report.windowDays, 'day')} ·{' '}
+                    {report.recipients.join(', ')}
                   </p>
                   <p className="mt-0.5 text-[var(--text-muted)] text-xs">{nextRunText(report)}</p>
                   {report.lastRunAt && (

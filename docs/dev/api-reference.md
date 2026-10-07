@@ -336,7 +336,7 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET/POST | `/api/auth/*` | Better Auth owns every other /api/auth/* path; sign-in, sign-up, password reset and verification are limited per client address and per account (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After). |
-| POST | `/api/auth/admin/remove-user` | Answers 404: accounts are deleted with DELETE /api/admin/users/:id, which checks legal holds and the last administrator and records a `user.delete` deletion event. |
+| ALL | `/api/auth/admin/*` | Answers 404: Better Auth's admin endpoints are closed. Accounts are managed under /api/admin/users, which audits every change, sends webhooks, and checks legal holds and the last administrator. |
 
 ## `routes/maintenance.ts`
 
@@ -423,7 +423,7 @@ Generated from 44 route files.
 | GET | `/api/threads/:id` | — |
 | PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
-| POST | `/api/threads/:id/branches` | — |
+| POST | `/api/threads/:id/branches` | Copies the conversation before `messageId` (a question) into a new one ending with `text` as the revised question, titled from that text; returns `thread` and `message`, the revised question (`id`, `modelSlug`, `effort`). |
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
 | GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start), whether a background summary is queued or being made (`pending`), and the last failure of a summary the person asked for (`failure`, v0.10). |
 | DELETE | `/api/threads/:id/compaction/failure` | Dismisses the report of a failed summary (v0.10) and returns the state as GET does. |

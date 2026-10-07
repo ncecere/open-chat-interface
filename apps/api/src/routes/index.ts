@@ -42,21 +42,21 @@ export function createApiRoutes() {
   api.use('/auth/*', authRateLimitMiddleware);
 
   /**
-   * Answers 404: accounts are deleted with DELETE /api/admin/users/:id, which
-   * checks legal holds and the last administrator and records a `user.delete`
-   * deletion event. Better Auth's own endpoint would skip all but the
-   * database's legal hold trigger.
+   * Answers 404 for all of Better Auth's admin endpoints (/api/auth/admin/*).
+   * Every account change an administrator makes goes through OCI's own routes
+   * under /api/admin/users, which record it in the audit log with before and
+   * after, send webhooks, refuse self-demotion and removing the last
+   * administrator, and respect legal holds. The plugin's endpoints did the
+   * same changes, and impersonation, with none of that (QA walk 5); the web
+   * app never calls them. The plugin itself stays: it supplies roles, bans
+   * and the server-side createUser the API uses.
    */
-  api.post('/auth/admin/remove-user', (c) =>
-    c.json(
-      {
-        code: 'NOT_FOUND',
-        message: 'Delete accounts under People → Users.',
-        error: { code: 'NOT_FOUND', message: 'Delete accounts under People → Users.' },
-      },
-      404,
-    ),
-  );
+  const managedInPeople = {
+    code: 'NOT_FOUND',
+    message: 'Manage accounts under People → Users.',
+    error: { code: 'NOT_FOUND', message: 'Manage accounts under People → Users.' },
+  };
+  api.all('/auth/admin/*', (c) => c.json(managedInPeople, 404));
 
   /**
    * Better Auth owns every other /api/auth/* path; sign-in, sign-up, password

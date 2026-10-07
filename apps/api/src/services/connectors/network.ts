@@ -3,6 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
 import { Readable } from 'node:stream';
+import type { RefinementCtx } from 'zod';
 
 /**
  * Outbound HTTP for MCP connectors and their OAuth servers.
@@ -148,6 +149,28 @@ export function assertAllowedUrl(raw: string | URL, policy: NetworkPolicy): URL 
   if (isIP(host) && !addressAllowed(host, policy))
     throw new ConnectorNetworkError(ADDRESS_REFUSED, 'address');
   return url;
+}
+
+/**
+ * The save-time URL rules (`assertAllowedUrl`) as a check on a request body,
+ * reported with the schema's own issues at `path`: a form then hears of every
+ * problem in one save, rather than of the URL only once the other fields
+ * were right (#283). Skipped when the schema has already refused this field,
+ * so a field gets one complaint, not two.
+ */
+export function addUrlIssue(
+  ctx: RefinementCtx,
+  url: string,
+  policy: NetworkPolicy,
+  path: string = 'url',
+): void {
+  if (ctx.issues.some((issue) => issue.path?.[0] === path)) return;
+  try {
+    assertAllowedUrl(url, policy);
+  } catch (error) {
+    if (!(error instanceof ConnectorNetworkError)) throw error;
+    ctx.addIssue({ code: 'custom', path: [path], message: error.message });
+  }
 }
 
 type LookupCallback = (

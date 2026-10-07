@@ -173,7 +173,10 @@ Creating, changing, rotating and deleting endpoints are audited as
 `webhook.create`, `webhook.update`, `webhook.rotate` and `webhook.delete`, and
 are kept regardless of audit-log retention. An update records each changed
 setting as it was and became, so narrowing the actions an endpoint forwards
-leaves a record of what it used to receive.
+leaves a record of what it used to receive; a save that changes nothing is
+not recorded. **Send test** is audited as `webhook.test.send` (the address,
+whether it was delivered and the HTTP status), like every other Test button;
+it is named apart from the `webhook.test` event the endpoint receives.
 
 ### What is sent
 

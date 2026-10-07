@@ -1,9 +1,11 @@
 import { MICROS_PER_DOLLAR, type RoleAccess } from '@oci/shared';
 import { Link } from '@tanstack/react-router';
+import { plural } from '~/lib/utils';
 
 function formatBudgetLimit(budget: RoleAccess['budgets'][number]): string {
   if (budget.metric !== 'cost') {
-    return `${budget.limitValue.toLocaleString()} ${budget.metric}`;
+    // "1 message", not "1 messages" (#286).
+    return plural(budget.limitValue, budget.metric.slice(0, -1));
   }
   const dollars = budget.limitValue / MICROS_PER_DOLLAR;
   return `$${dollars.toFixed(dollars > 0 && dollars < 0.01 ? 4 : 2)}`;
@@ -11,7 +13,7 @@ function formatBudgetLimit(budget: RoleAccess['budgets'][number]): string {
 
 function formatBudgetWindow(budget: RoleAccess['budgets'][number]): string {
   return budget.windowKind === 'rolling'
-    ? `Rolling ${budget.windowHours ?? 24} hours`
+    ? `Rolling ${plural(budget.windowHours ?? 24, 'hour')}`
     : budget.windowKind.charAt(0).toUpperCase() + budget.windowKind.slice(1);
 }
 

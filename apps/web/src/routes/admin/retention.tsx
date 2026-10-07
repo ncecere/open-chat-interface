@@ -1,7 +1,7 @@
 import { MIN_TRASH_RETENTION_DAYS, type RetentionSettings } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { EditableFieldset, EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, Notice } from '~/components/admin/admin-ui';
 import {
@@ -12,12 +12,13 @@ import {
 } from '~/components/admin/config-source';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { problemsText, useFieldProblems } from '~/hooks/use-clear-on-edit';
+import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorProblems } from '~/lib/api-client';
+import { plural } from '~/lib/utils';
 
 /** The form's names for the fields, as the API names them (#127). */
 const RETENTION_LABELS = {
@@ -55,8 +56,11 @@ function RetentionForm({
   useEffect(() => setDraft(settings), [settings]);
   // The errors are about the values sent: correcting a field clears its own
   // (#217), and the others stay while their fields are still wrong (#257).
-  const [problems, setProblems] = useFieldProblems(draft);
-  const error = problemsText(problems);
+  // Each is shown under its field, which is marked invalid (#283); only one
+  // about no field shown here (a failed save) is beside the button.
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems(draft, form);
+  const error = problemsElsewhere(problems, Object.keys(RETENTION_LABELS));
 
   const patch = changedRetention(settings, draft);
   const hasChanges = Object.keys(patch).length > 0;
@@ -83,17 +87,22 @@ function RetentionForm({
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-5 pb-10">
+    <form ref={form} onSubmit={submit} className="flex flex-col gap-5 pb-10">
       <EditableFieldset className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Trash retention (days)"
             htmlFor="trash-days"
+            error={problemsAt(problems, 'trashRetentionDays')}
             hint="How long a deleted conversation stays restorable before it is destroyed."
           >
             <Input
               id="trash-days"
-              aria-describedby={sources ? 'trash-days-source' : undefined}
+              {...invalidFieldProps(
+                'trash-days',
+                problemsAt(problems, 'trashRetentionDays'),
+                sources ? 'trash-days-source' : undefined,
+              )}
               type="number"
               min={MIN_TRASH_RETENTION_DAYS}
               max="365"
@@ -111,11 +120,16 @@ function RetentionForm({
           <Field
             label="Conversation retention (days)"
             htmlFor="thread-days"
+            error={problemsAt(problems, 'threadRetentionDays')}
             hint="Inactive conversations move to trash after this long. Leave blank to keep them forever."
           >
             <Input
               id="thread-days"
-              aria-describedby={sources ? 'thread-days-source' : undefined}
+              {...invalidFieldProps(
+                'thread-days',
+                problemsAt(problems, 'threadRetentionDays'),
+                sources ? 'thread-days-source' : undefined,
+              )}
               type="number"
               min="1"
               placeholder="Never"
@@ -133,11 +147,16 @@ function RetentionForm({
           <Field
             label="Usage history (days)"
             htmlFor="usage-days"
+            error={problemsAt(problems, 'usageEventRetentionDays')}
             hint="Per-message usage rows. Daily totals are kept regardless."
           >
             <Input
               id="usage-days"
-              aria-describedby={sources ? 'usage-days-source' : undefined}
+              {...invalidFieldProps(
+                'usage-days',
+                problemsAt(problems, 'usageEventRetentionDays'),
+                sources ? 'usage-days-source' : undefined,
+              )}
               type="number"
               min="1"
               value={draft.usageEventRetentionDays}
@@ -154,11 +173,18 @@ function RetentionForm({
           <Field
             label="Reporting timezone"
             htmlFor="display-timezone"
-            hint="Where a day starts and ends on the Usage page, and the date models are told. Limits reset on their own policy's timezone, which this does not change."
+            error={problemsAt(problems, 'displayTimezone')}
+            // Since #248 a model is told the person's own date, from their
+            // browser; this zone is only the fallback (#286).
+            hint="Where a day starts and ends on the Usage page, and the zone of the date models are told when a person's browser does not give its own. Limits reset on their own policy's timezone, which this does not change."
           >
             <Input
               id="display-timezone"
-              aria-describedby={sources ? 'display-timezone-source' : undefined}
+              {...invalidFieldProps(
+                'display-timezone',
+                problemsAt(problems, 'displayTimezone'),
+                sources ? 'display-timezone-source' : undefined,
+              )}
               value={draft.displayTimezone}
               placeholder="UTC"
               onChange={(event) =>
@@ -171,11 +197,16 @@ function RetentionForm({
           <Field
             label="Audit log (days)"
             htmlFor="audit-days"
+            error={problemsAt(problems, 'auditLogRetentionDays')}
             hint="Security-relevant entries such as role and credential changes are kept regardless."
           >
             <Input
               id="audit-days"
-              aria-describedby={sources ? 'audit-days-source' : undefined}
+              {...invalidFieldProps(
+                'audit-days',
+                problemsAt(problems, 'auditLogRetentionDays'),
+                sources ? 'audit-days-source' : undefined,
+              )}
               type="number"
               min="1"
               value={draft.auditLogRetentionDays}
@@ -192,11 +223,16 @@ function RetentionForm({
           <Field
             label="Memory retention (days)"
             htmlFor="memory-days"
+            error={problemsAt(problems, 'memoryRetentionDays')}
             hint="Memories not updated for this long are deleted. Leave blank to keep them until the person deletes them."
           >
             <Input
               id="memory-days"
-              aria-describedby={sources ? 'memory-days-source' : undefined}
+              {...invalidFieldProps(
+                'memory-days',
+                problemsAt(problems, 'memoryRetentionDays'),
+                sources ? 'memory-days-source' : undefined,
+              )}
               type="number"
               min="1"
               placeholder="Never"
@@ -237,9 +273,9 @@ function RetentionForm({
 
         {draft.threadRetentionDays !== null && (
           <Notice tone="warning" title="Conversations will be removed automatically">
-            Conversations with no activity for {draft.threadRetentionDays} days move to the trash,
-            then are destroyed {draft.trashRetentionDays} days later. Shared conversations are not
-            exempt, so their links stop working when they are removed.
+            Conversations with no activity for {plural(draft.threadRetentionDays, 'day')} move to
+            the trash, then are destroyed {plural(draft.trashRetentionDays, 'day')} later. Shared
+            conversations are not exempt, so their links stop working when they are removed.
           </Notice>
         )}
       </EditableFieldset>
@@ -247,7 +283,7 @@ function RetentionForm({
       <EditOnly>
         <div className="flex items-center justify-end gap-3">
           {error && (
-            <p role="alert" className="mr-auto text-[var(--danger)] text-sm">
+            <p role="alert" className="mr-auto whitespace-pre-line text-[var(--danger)] text-sm">
               {error}
             </p>
           )}

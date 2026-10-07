@@ -282,11 +282,13 @@ function BackgroundRow({ migration }: { migration: BackgroundMigrationSummary })
   const canResume = ['paused', 'failed'].includes(migration.status) && migration.bundled;
   const scheduled = migration.status !== 'not_scheduled';
   // Without an estimate there is no "of about": "9 rows processed", not
-  // "9 of about rows unknown" (#263).
+  // "9 of about rows unknown" (#263). Nor once finished: the rows it changed
+  // are not the table's, so "404 of about 577 rows (100%)" disagreed with
+  // itself (#281).
   const progressText = `${
-    migration.estimatedRows === null
+    migration.estimatedRows === null || migration.status === 'finished'
       ? `${rowCount(migration.rowsProcessed)} processed`
-      : `${migration.rowsProcessed.toLocaleString()} of about ${rows(migration.estimatedRows)}`
+      : `${migration.rowsProcessed.toLocaleString()} of about ${rowCount(migration.estimatedRows)}`
   }${percent === null ? '' : ` (${percent}%)`}`;
 
   return (

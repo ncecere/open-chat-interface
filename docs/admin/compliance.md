@@ -230,7 +230,8 @@ never exports their events again.
 ### Audit and monitoring
 
 - Changing settings is audited as `compliance.settings.update` (which fields
-  changed, never the secret), and kept regardless of audit retention.
+  changed, never the secret), and kept regardless of audit retention. Testing
+  the destination is audited as `compliance.test`, with whether it passed.
 - Manual runs, and every failed run, are audited as `compliance.export.run`,
   so a [webhook](observability.md#webhooks) can alert on failures.
 - **System health** has a *Compliance export* row: off is fine; the latest run

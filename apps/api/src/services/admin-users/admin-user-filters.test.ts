@@ -130,7 +130,13 @@ describe('admin user listing and detail', () => {
       // The true number of active sessions, beyond the ten listed (#134).
       [{ value: 14 }],
       [{ id: 'thread', updatedAt: date }],
-      [{ id: 'audit', createdAt: date, seq: 12 }],
+      // With the actor account's email for entries recorded without one (#280).
+      [
+        {
+          entry: { id: 'audit', createdAt: date, seq: 12, actorEmail: null },
+          accountEmail: 'actor@example.com',
+        },
+      ],
       [
         {
           id: 'hold',
@@ -164,6 +170,7 @@ describe('admin user listing and detail', () => {
     });
     expect(detail.recentThreads[0]?.updatedAt).toBe(date.toISOString());
     expect(detail.audit[0]?.createdAt).toBe(date.toISOString());
+    expect(detail.audit[0]?.actorEmail).toBe('actor@example.com');
   });
 
   it('rejects missing detail before loading related records', async () => {

@@ -58,9 +58,14 @@ change (each account's previous role) and read-only mode (the reason and
 expected end before, and the end as saved), and the edits of retention, rate
 limits and sign-in attempts, an SSO provider (account-linking trust among
 them), an announcement (its window and audience too), a connector (its address
-among them), a webhook (the actions it forwards) and a scheduled report. Each
+among them), a webhook (the actions it forwards), a scheduled report and an
+acceptable-use draft (its title, and whether the text changed). Each
 lists its `changes`, every value as it was and as it became, a nested one by
-its path (`roles.user.chatRequestsPerMinute`). A deletion records what was removed: a
+its path (`roles.user.chatRequestsPerMinute`); an announcement, webhook or
+acceptable-use save that changes nothing is not recorded. Every **Test** button
+that reaches an outside service is recorded with its outcome (`smtp.test`,
+`storage.test`, `search.test`, `embeddings.test`, `reranking.test`,
+`backup.test`, `compliance.test`, `connector.test`, `webhook.test.send`). A deletion records what was removed: a
 deleted usage budget keeps its measure, limit, window, roles, models and how
 many per-user overrides went with it, a deleted storage allowance its values,
 and a cleared override its limit. **Sign out everywhere** records how many sessions it ended.

@@ -73,15 +73,24 @@ backupRoutes.post('/run', async (c) => {
 
 /** Writes, reads back and deletes a small object at the saved destination. */
 backupRoutes.post('/test', async (c) => {
+  const actor = currentUser(c);
   const settings = await backupSettings();
+  let result: { ok: boolean; detail: string };
   try {
     await testBackupTarget(settings);
-    return c.json({
-      ok: true,
-      detail: 'The destination accepted, returned and deleted a test object.',
-    });
+    result = { ok: true, detail: 'The destination accepted, returned and deleted a test object.' };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return c.json({ ok: false, detail: message.slice(0, 300) });
+    result = { ok: false, detail: message.slice(0, 300) };
   }
+  // Audited as every other Test button is: it reaches an address an
+  // administrator chose (#287).
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'backup.test',
+    targetType: 'instance',
+    metadata: { ok: result.ok },
+  });
+  return c.json(result);
 });

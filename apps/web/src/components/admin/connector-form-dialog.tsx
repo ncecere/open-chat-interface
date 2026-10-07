@@ -1,6 +1,6 @@
 import type { AdminConnector, ConnectorAuthMode } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -9,13 +9,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { useClearOnEdit } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import {
+  type FieldProblem,
+  linkFields,
+  problemsAt,
+  problemsElsewhere,
+  useFieldProblems,
+} from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 
 export const AUTH_MODE_LABELS: Record<ConnectorAuthMode, string> = {
   none: 'No sign-in',
@@ -44,6 +50,13 @@ const CONNECTOR_LABELS = {
   oauthClientSecret: 'Client secret',
   oauthScopes: 'Scopes',
 };
+
+/**
+ * Fields whose problems another field also decides: a plain http:// URL is
+ * refused only while "Allow private network" is off, so switching it on
+ * clears the complaint, as correcting the URL does (#283).
+ */
+const LINKED_FIELDS = { url: ['allowPrivateNetwork'] };
 
 /** Where authorization servers send people back, for registering an OAuth client. */
 function connectorRedirectUrl(connector: AdminConnector | null): string {
@@ -99,6 +112,7 @@ function SecretField({
   onValue,
   hint,
   placeholder,
+  error,
 }: {
   id: string;
   label: string;
@@ -109,9 +123,15 @@ function SecretField({
   onValue: (value: string) => void;
   hint: string;
   placeholder: string;
+  error: string | null;
 }) {
   return (
-    <Field label={label} htmlFor={id} hint={isSet ? `Set. ${hint}` : `Not set. ${hint}`}>
+    <Field
+      label={label}
+      htmlFor={id}
+      hint={isSet ? `Set. ${hint}` : `Not set. ${hint}`}
+      error={error}
+    >
       <div className="flex flex-col gap-2">
         {isSet && (
           <Select
@@ -128,6 +148,7 @@ function SecretField({
         {(!isSet || action === 'replace') && (
           <Input
             id={id}
+            {...invalidFieldProps(id, error)}
             type="password"
             autoComplete="off"
             value={value}
@@ -167,7 +188,37 @@ export function ConnectorFormDialog({
   const [scopes, setScopes] = useState(connector?.oauthScopes ?? '');
   const [enabled, setEnabled] = useState(connector?.enabled ?? true);
   const [allowPrivate, setAllowPrivate] = useState(connector?.allowPrivateNetwork ?? false);
-  const [error, setError] = useState<string | null>(null);
+  // The values sent, by the API's names for them, so each error the API
+  // returns is shown under its field and goes when that field is corrected,
+  // and every problem is listed at once (#217, #283).
+  const values = {
+    name,
+    url,
+    slug,
+    authMode,
+    sharedHeaderName: headerName,
+    sharedHeaderValue: headerValue,
+    headerAction,
+    oauthClientId: clientId,
+    oauthClientSecret: clientSecret,
+    secretAction,
+    oauthScopes: scopes,
+    enabled,
+    allowPrivateNetwork: allowPrivate,
+  };
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems(values, form);
+  const report = (found: FieldProblem[]) => setProblems(linkFields(found, LINKED_FIELDS));
+  const at = (field: keyof typeof values) => problemsAt(problems, field);
+  // The fields on screen; an error about any other is shown at the foot.
+  const shown = [
+    'name',
+    'url',
+    ...(connector ? [] : ['slug']),
+    ...(authMode === 'shared' ? ['sharedHeaderName', 'sharedHeaderValue'] : []),
+    ...(authMode === 'oauth' ? ['oauthClientId', 'oauthClientSecret', 'oauthScopes'] : []),
+  ];
+  const error = problemsElsewhere(problems, shown);
 
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -182,18 +233,18 @@ export function ConnectorFormDialog({
       onClose();
     },
     onError: (cause) =>
-      setError(apiErrorMessage(cause, 'The connector could not be saved.', CONNECTOR_LABELS)),
+      report(apiErrorProblems(cause, 'The connector could not be saved.', CONNECTOR_LABELS)),
   });
-  // The error is about the values sent; correcting them clears it (#217).
-  const values = { name, url, slug, authMode, headerName, headerValue, headerAction };
-  const oauth = { clientId, clientSecret, secretAction, scopes, enabled, allowPrivate };
-  useClearOnEdit({ ...values, ...oauth }, () => setError(null));
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
-    if (!name.trim() || !url.trim()) {
-      setError('Enter a name and the server’s URL.');
+    setProblems([]);
+    const missing: FieldProblem[] = [
+      ...(name.trim() ? [] : [{ fields: ['name'], text: 'Enter a name for the connector.' }]),
+      ...(url.trim() ? [] : [{ fields: ['url'], text: 'Enter the server’s URL.' }]),
+    ];
+    if (missing.length > 0) {
+      report(missing);
       return;
     }
     if (connector) {
@@ -260,10 +311,16 @@ export function ConnectorFormDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        <Field label="Name" htmlFor="connector-name" hint="Shown to people next to its tools.">
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-4" noValidate>
+        <Field
+          label="Name"
+          htmlFor="connector-name"
+          hint="Shown to people next to its tools."
+          error={at('name')}
+        >
           <Input
             id="connector-name"
+            {...invalidFieldProps('connector-name', at('name'))}
             value={name}
             onChange={(event) => setName(event.target.value)}
             required
@@ -272,10 +329,12 @@ export function ConnectorFormDialog({
         <Field
           label="Server URL"
           htmlFor="connector-url"
+          error={at('url')}
           hint="The MCP endpoint, for example https://mcp.example.com/mcp. Redirects are not followed."
         >
           <Input
             id="connector-url"
+            {...invalidFieldProps('connector-url', at('url'))}
             value={url}
             placeholder="https://mcp.example.com/mcp"
             onChange={(event) => setUrl(event.target.value)}
@@ -286,10 +345,12 @@ export function ConnectorFormDialog({
           <Field
             label="Short name (optional)"
             htmlFor="connector-slug"
+            error={at('slug')}
             hint="Used in tool ids; chosen from the name when empty and fixed once saved."
           >
             <Input
               id="connector-slug"
+              {...invalidFieldProps('connector-slug', at('slug'))}
               value={slug}
               placeholder="docs"
               onChange={(event) => setSlug(event.target.value)}
@@ -313,10 +374,12 @@ export function ConnectorFormDialog({
             <Field
               label="Header name"
               htmlFor="connector-header-name"
+              error={at('sharedHeaderName')}
               hint="For example Authorization or X-Api-Key."
             >
               <Input
                 id="connector-header-name"
+                {...invalidFieldProps('connector-header-name', at('sharedHeaderName'))}
                 value={headerName}
                 onChange={(event) => setHeaderName(event.target.value)}
               />
@@ -331,6 +394,7 @@ export function ConnectorFormDialog({
               onValue={setHeaderValue}
               hint="Stored encrypted and never shown again."
               placeholder="Bearer …"
+              error={at('sharedHeaderValue')}
             />
           </>
         )}
@@ -340,6 +404,7 @@ export function ConnectorFormDialog({
             <Field
               label="Client ID (optional)"
               htmlFor="connector-client-id"
+              error={at('oauthClientId')}
               hint={
                 connector?.oauthClientSource === 'dynamic'
                   ? `OCI registered itself with the server as ${connector.oauthClientId}. Enter a client ID to use your own instead.`
@@ -348,6 +413,7 @@ export function ConnectorFormDialog({
             >
               <Input
                 id="connector-client-id"
+                {...invalidFieldProps('connector-client-id', at('oauthClientId'))}
                 value={clientId}
                 autoComplete="off"
                 onChange={(event) => setClientId(event.target.value)}
@@ -365,10 +431,17 @@ export function ConnectorFormDialog({
               onValue={setClientSecret}
               hint="Stored encrypted and never shown again."
               placeholder="Client secret"
+              error={at('oauthClientSecret')}
             />
-            <Field label="Scopes (optional)" htmlFor="connector-scopes" hint="Space-separated.">
+            <Field
+              label="Scopes (optional)"
+              htmlFor="connector-scopes"
+              hint="Space-separated."
+              error={at('oauthScopes')}
+            >
               <Input
                 id="connector-scopes"
+                {...invalidFieldProps('connector-scopes', at('oauthScopes'))}
                 value={scopes}
                 onChange={(event) => setScopes(event.target.value)}
               />
@@ -421,7 +494,7 @@ export function ConnectorFormDialog({
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
+            className="whitespace-pre-line rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
           >
             {error}
           </p>

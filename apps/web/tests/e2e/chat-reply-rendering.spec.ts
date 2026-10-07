@@ -93,7 +93,9 @@ for (const width of [390, 1440]) {
   });
 }
 
-test("a reply's headings sit below the page's one h1 (#212)", async ({ page }) => {
+test("a reply's headings sit below the page's one h1 without skipping a level (#212, #271)", async ({
+  page,
+}) => {
   const reply = await openReply(page, 'fix3-headings', [
     { type: 'text', text: '# Ten Facts About Owls\n\nOwls are birds.\n\n## Hunting\n\nAt night.' },
   ]);
@@ -103,6 +105,14 @@ test("a reply's headings sit below the page's one h1 (#212)", async ({ page }) =
     reply.getByRole('heading', { level: 2, name: 'Ten Facts About Owls' }),
   ).toBeVisible();
   await expect(reply.getByRole('heading', { level: 3, name: 'Hunting' })).toBeVisible();
+});
+
+test("a reply that starts at ### has an h2 under the page's h1 (#271)", async ({ page }) => {
+  const reply = await openReply(page, 'fix5-headings', [
+    { type: 'text', text: '### Quick example\n\nText.\n\n##### Detail\n\nMore.' },
+  ]);
+  await expect(reply.getByRole('heading', { level: 2, name: 'Quick example' })).toBeVisible();
+  await expect(reply.getByRole('heading', { level: 3, name: 'Detail' })).toBeVisible();
 });
 
 test("a reply's code blocks, tables and message controls have names of their own (#194)", async ({
@@ -119,13 +129,21 @@ test("a reply's code blocks, tables and message controls have names of their own
     ],
     'Two snippets please',
   );
-  await expect(reply.getByRole('region', { name: 'Code block 2 (Python)' })).toBeVisible();
-  await expect(reply.getByRole('button', { name: 'Copy code block 1 (Python)' })).toBeAttached();
+  // Each also names the reply by its opening words, as its own controls do (#271).
+  const where = ' in “a = 1 b = 2 A · B 1 · 2”';
   await expect(
-    reply.getByRole('button', { name: 'Download code block 2 (Python)' }),
+    reply.getByRole('region', { name: `Code block 2 (Python)${where}`, exact: true }),
+  ).toBeVisible();
+  await expect(
+    reply.getByRole('button', { name: `Copy code block 1 (Python)${where}`, exact: true }),
   ).toBeAttached();
-  await expect(reply.getByRole('region', { name: 'Table 1' })).toBeVisible();
-  await expect(reply.getByRole('button', { name: 'View table 1 full screen' })).toBeAttached();
+  await expect(
+    reply.getByRole('button', { name: `Download code block 2 (Python)${where}`, exact: true }),
+  ).toBeAttached();
+  await expect(reply.getByRole('region', { name: `Table 1${where}`, exact: true })).toBeVisible();
+  await expect(
+    reply.getByRole('button', { name: `View table 1 full screen${where}`, exact: true }),
+  ).toBeAttached();
   const question = page.locator('[data-message-id="fix3-names-question"]');
   await expect(
     question.getByRole('button', { name: 'Copy message “Two snippets please”' }),

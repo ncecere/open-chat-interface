@@ -141,6 +141,12 @@ describe.skipIf(!available)('live: automated backups', () => {
 
     response = await call('POST', '/api/admin/backups/test');
     expect(await response.json()).toMatchObject({ ok: true });
+    // Audited, as every Test button is (#287).
+    const tests = await pool.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, 'backup.test'));
+    expect(tests.map((entry) => entry.metadata)).toEqual([{ ok: true }]);
 
     await pool.db.delete(schema.backupRun);
     response = await call('POST', '/api/admin/backups/run');

@@ -35,7 +35,9 @@ function assertDeliverableUrl(url: string, allowPrivateNetwork: boolean): void {
   try {
     assertAllowedUrl(url, { allowPrivateNetwork });
   } catch (error) {
-    if (error instanceof ConnectorNetworkError) throw validationFailed(error.message);
+    // At the URL field, so a form shows it there, naming the field (#283).
+    if (error instanceof ConnectorNetworkError)
+      throw validationFailed(error.message, [{ path: ['url'], message: error.message }]);
     throw error;
   }
 }
@@ -173,7 +175,9 @@ export async function updateWebhook(
     allowPrivateNetwork: input.allowPrivateNetwork ?? existing.allowPrivateNetwork,
   };
   if (!next.allActions && next.actions.length === 0)
-    throw validationFailed('Choose at least one audit action, or all of them.');
+    throw validationFailed('Choose at least one audit action, or all of them.', [
+      { path: ['actions'], message: 'Choose at least one audit action, or all of them.' },
+    ]);
   assertDeliverableUrl(next.url, next.allowPrivateNetwork);
 
   const fields = (Object.keys(next) as Array<keyof typeof next>).filter(

@@ -52,7 +52,8 @@ test('settings fit the window and offer every section without wrapping', async (
 
   const tabs = page.getByRole('navigation', { name: 'Settings sections' });
   const menu = page.getByRole('combobox', { name: 'Settings section' });
-  if (await tabs.isVisible()) {
+  // The landmark holds the tab row or, where it does not fit, the menu (#272).
+  if (!(await menu.isVisible())) {
     // One row: every tab shares the first tab's top edge.
     const tops = await tabs
       .getByRole('link')

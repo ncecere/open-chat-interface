@@ -26,7 +26,7 @@ the sign-in address brings the form back.
 
 ### If you are refused
 
-Three refusals mean different things:
+These messages mean different things:
 
 - **"Your account is not authorised to use this application"**, or wording your
   administrator chose, means you authenticated correctly but are not in a group
@@ -37,6 +37,9 @@ Three refusals mean different things:
   message, deliberately, so this does not confirm whether an account exists.
 - **"This account has been suspended"** means an administrator has suspended
   (banned) the account. Ask them if you think it is a mistake.
+- **"Sign-in is temporarily unavailable"** means the service could not check
+  your sign-in just then (it is restarting, or its database is briefly
+  unreachable). It says nothing about your password; try again in a moment.
 
 If your session ends while the app is open (an administrator suspends the
 account or signs it out everywhere, or you sign out every other device from
@@ -51,6 +54,10 @@ one, if the instance can send email. The link works for 1 hour; after that, ask
 for a new one. Choosing a new password this way signs
 your account out everywhere, including any device you have lost; sign in again
 with the new password.
+
+If the page says **password reset is temporarily unavailable**, the service
+could not be reached just then; the form comes back by itself once it can be,
+or choose **Try again**.
 
 ## The introduction
 

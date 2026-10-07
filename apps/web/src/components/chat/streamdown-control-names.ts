@@ -9,6 +9,11 @@
  * (Python)", "Download table 1", "View diagram 1 full screen"). The visible
  * tooltip's words stay at the start of the name where they can.
  *
+ * Numbers restart in every message, so a conversation of two replies with a
+ * Python block each had two "Copy code block 1 (Python)" (#271). A block in a
+ * message also names the message by its opening words, as the message's own
+ * controls do: "Copy code block 1 (Python) in “Quick example…”".
+ *
  * Streamdown offers no prop for per-block names, so this runs on the rendered
  * DOM, with the scroll-region pass that already watches it. Names are set
  * again on every pass, so a block added above another renumbers both.
@@ -70,6 +75,12 @@ function label(element: Element | null | undefined, name: string) {
     element.setAttribute('aria-label', name);
 }
 
+/** Which message the scope is: ` in “Quick example…”`, from its opening words. */
+function inMessage(scope: ParentNode): string {
+  const excerpt = scope instanceof Element ? scope.getAttribute('data-excerpt') : null;
+  return excerpt ? ` in “${excerpt}”` : '';
+}
+
 /** A block's buttons, told apart by the tooltip Streamdown gives each. */
 function buttonTitled(block: Element, ...titles: string[]): Element | undefined {
   return [...block.querySelectorAll('button[title]')].find((button) =>
@@ -84,9 +95,10 @@ const blocksOf = (scope: ParentNode, kind: string) =>
   );
 
 function nameCodeBlocks(scope: ParentNode) {
+  const where = inMessage(scope);
   blocksOf(scope, 'code-block').forEach((block, index) => {
     const language = languageName(block.getAttribute('data-language') ?? '');
-    const which = `${index + 1}${language ? ` (${language})` : ''}`;
+    const which = `${index + 1}${language ? ` (${language})` : ''}${where}`;
     const name = `code block ${which}`;
     label(block.querySelector('[data-streamdown="code-block-body"]'), `Code block ${which}`);
     label(block.querySelector('[data-streamdown="code-block-copy-button"]'), `Copy ${name}`);
@@ -98,21 +110,26 @@ function nameCodeBlocks(scope: ParentNode) {
 }
 
 function nameDiagrams(scope: ParentNode) {
+  const where = inMessage(scope);
   blocksOf(scope, 'mermaid-block').forEach((diagram, index) => {
     const name = `diagram ${index + 1}`;
-    label(diagram.querySelector('[data-streamdown="code-block-copy-button"]'), `Copy ${name} code`);
-    label(buttonTitled(diagram, 'Download diagram'), `Download ${name}`);
-    label(buttonTitled(diagram, 'View fullscreen'), `View ${name} full screen`);
+    label(
+      diagram.querySelector('[data-streamdown="code-block-copy-button"]'),
+      `Copy ${name} code${where}`,
+    );
+    label(buttonTitled(diagram, 'Download diagram'), `Download ${name}${where}`);
+    label(buttonTitled(diagram, 'View fullscreen'), `View ${name} full screen${where}`);
   });
 }
 
 function nameTables(scope: ParentNode) {
+  const where = inMessage(scope);
   blocksOf(scope, 'table-wrapper').forEach((table, index) => {
     const name = `table ${index + 1}`;
-    label(table.querySelector(':scope > .overflow-x-auto'), `Table ${index + 1}`);
-    label(buttonTitled(table, 'Copy table'), `Copy ${name}`);
-    label(buttonTitled(table, 'Download table'), `Download ${name}`);
-    label(buttonTitled(table, 'View fullscreen'), `View ${name} full screen`);
+    label(table.querySelector(':scope > .overflow-x-auto'), `Table ${index + 1}${where}`);
+    label(buttonTitled(table, 'Copy table'), `Copy ${name}${where}`);
+    label(buttonTitled(table, 'Download table'), `Download ${name}${where}`);
+    label(buttonTitled(table, 'View fullscreen'), `View ${name} full screen${where}`);
   });
 }
 
@@ -124,11 +141,13 @@ function nameTables(scope: ParentNode) {
  * the button that opened it does.
  */
 export function nameTableFullscreen(overlay: Element, opener: Element | null): void {
-  const which = opener?.getAttribute('aria-label')?.match(/^View table (\d+) full screen$/)?.[1];
+  // "View table 2 full screen", and the message it is in (#271).
+  const [, which, where = ''] =
+    opener?.getAttribute('aria-label')?.match(/^View table (\d+) full screen( in “.*”)?$/) ?? [];
   const name = which ? `table ${which}` : 'table';
-  label(overlay, `${which ? `Table ${which}` : 'Table'}, full screen`);
-  label(buttonTitled(overlay, 'Copy table'), `Copy ${name}`);
-  label(buttonTitled(overlay, 'Download table'), `Download ${name}`);
+  label(overlay, `${which ? `Table ${which}` : 'Table'}${where}, full screen`);
+  label(buttonTitled(overlay, 'Copy table'), `Copy ${name}${where}`);
+  label(buttonTitled(overlay, 'Download table'), `Download ${name}${where}`);
   label(buttonTitled(overlay, 'Exit fullscreen'), 'Exit full screen');
 }
 

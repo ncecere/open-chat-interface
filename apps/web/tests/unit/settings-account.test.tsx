@@ -11,6 +11,7 @@ import {
   click,
   dialog,
   findButton,
+  pressEscape,
   renderAdmin,
 } from './admin-test-utils';
 
@@ -299,6 +300,33 @@ describe('Settings → Account', () => {
       await click(button('Save'));
       expect(authClient.updateUser).toHaveBeenCalledWith({ name: 'Ada Lovelace' });
       expect(document.body.textContent).toContain('Saved');
+    });
+
+    // #270: Edit and the form replace each other, so focus fell to the body.
+    it('puts focus in the field on Edit, and back on Edit name after Cancel or Escape', async () => {
+      await render();
+      button('Edit name').focus();
+      await click(button('Edit name'));
+      expect(document.activeElement).toBe(field('Name'));
+
+      button('Cancel').focus();
+      await click(button('Cancel'));
+      expect(document.activeElement).toBe(button('Edit name'));
+
+      await click(button('Edit name'));
+      await pressEscape();
+      expect(findButton('Save')).toBeUndefined();
+      expect(document.activeElement).toBe(button('Edit name'));
+    });
+
+    it('returns focus to Edit name after saving', async () => {
+      await render();
+      await click(button('Edit name'));
+      await type(field('Name'), 'Ada Lovelace');
+      button('Save').focus();
+      await click(button('Save'));
+      expect(document.body.textContent).toContain('Saved');
+      expect(document.activeElement).toBe(button('Edit name'));
     });
 
     it('refuses an empty name', async () => {

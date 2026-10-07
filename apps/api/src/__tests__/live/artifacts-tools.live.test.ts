@@ -156,13 +156,19 @@ describe.skipIf(!available)('live artifacts', () => {
       );
     });
 
-    it('offers no artifact tools and no guidance when the role switch is off', async () => {
+    it('offers no artifact tools, and says artifacts are unavailable, when the role switch is off', async () => {
       state.settings.set('roleFeatures', { roles: { user: { artifacts: false } } });
       const chat = await thread();
       const model = script(textStep('Hello'));
-      await turn(chat.id, 'Hi');
+      await turn(chat.id, 'Create a Document artifact titled Walk5 RM doc.');
       expect(offered(model)).toEqual([]);
-      expect(systemOf(model)).not.toContain('Artifacts');
+      // Told so, rather than left to claim it made one (#277).
+      const { NO_ARTIFACTS } = await import('../../services/artifacts/guidance.js');
+      expect(systemOf(model)).toContain('never say you created, saved or attached');
+      expect(systemOf(model)).toContain(NO_ARTIFACTS);
+      expect(systemOf(model)).not.toContain('create_artifact');
+      expect(systemOf(model)).not.toContain('fenced code block (```html');
+      expect(systemOf(model)).not.toContain('Diagram Design');
     });
 
     it('draws diagrams in the colour theme when no accent colour is set (v0.10)', async () => {

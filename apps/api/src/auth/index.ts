@@ -7,6 +7,7 @@ import { admin as adminPlugin } from 'better-auth/plugins';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { clientIpFromHeaders } from '../lib/client-ip.js';
+import { isConnectionError } from '../lib/db-connection.js';
 import { logger } from '../lib/logger.js';
 import {
   RESET_LINK_TTL_SECONDS,
@@ -197,6 +198,13 @@ export const auth = betterAuth({
         );
         return replaced ? { context: { body: replaced.body } } : undefined;
       }
+      // Sign-out reads its cookie itself and ends the session, so the after
+      // hook saw none and audited it with no actor, as "System" (#279). The
+      // session it ends is found first and handed on to the after hook.
+      if (ctx.path === '/sign-out') {
+        const session = await getSessionFromCtx(ctx).catch(() => null);
+        return session ? { context: { context: { session } } } : undefined;
+      }
 
       const policy = await enforceAuthRequestPolicy(
         ctx.path,
@@ -241,7 +249,8 @@ export const auth = betterAuth({
       const returned = ctx.context.returned as { status?: number; statusCode?: number } | undefined;
       const status = returned instanceof Response ? returned.status : (returned?.statusCode ?? 200);
       // A new session (sign-in, or a password change that signs other devices
-      // out) names the actor; otherwise the session the request was made with.
+      // out) names the actor; otherwise the session the request was made with
+      // (for sign-out, as the before hook found it).
       const session = ctx.context.newSession ?? ctx.context.session;
 
       await recordAuthEvent({
@@ -288,6 +297,27 @@ export const auth = betterAuth({
    * and budget single sign-on per identity provider.
    */
   rateLimit: { enabled: false },
+
+  /**
+   * A lost database connection goes on to the API's error handler, which
+   * answers it as everywhere else: 500 with `retryable: true` and
+   * X-OCI-Retryable (middleware/error-handler.ts). Better Auth answered it
+   * itself with an empty 500, marked retryable only when a connection dropped
+   * during that very request, so the sign-in page could not tell an outage
+   * from a wrong password (#288). Called synchronously by Better Auth's
+   * router; a non-APIError thrown here leaves `auth.handler` as it is.
+   * Anything else is logged as Better Auth logs it when this is unset.
+   */
+  onAPIError: {
+    onError(error, ctx) {
+      if (isConnectionError(error)) throw error;
+      if (error instanceof APIError) {
+        if (error.status === 'INTERNAL_SERVER_ERROR') ctx.logger.error(error.status, error);
+        return;
+      }
+      ctx.logger.error(error instanceof Error ? error.name : '', error);
+    },
+  },
 
   advanced: {
     cookiePrefix: 'oci',

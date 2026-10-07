@@ -1,6 +1,6 @@
 import type { WebhookEndpoint, WebhookWithSecret } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import {
   DialogContent,
@@ -9,11 +9,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Field } from '~/components/ui/field';
+import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
-import { api, apiErrorMessage } from '~/lib/api-client';
+import {
+  type FieldProblem,
+  linkFields,
+  problemsAt,
+  problemsElsewhere,
+  useFieldProblems,
+} from '~/hooks/use-clear-on-edit';
+import { api, apiErrorProblems } from '~/lib/api-client';
 import {
   type Draft,
   parseActions,
@@ -21,6 +28,19 @@ import {
   WEBHOOKS_QUERY_KEY,
   webhookChanges,
 } from './webhook-helpers';
+
+/** The fields that show their own errors; any other is shown at the foot (#283). */
+const FIELDS_SHOWN = ['url', 'description', 'actions'];
+
+/**
+ * A plain http:// URL is refused only while "Allow private network" is off,
+ * so switching it on clears the complaint, as correcting the URL does (#283).
+ * Sending every event answers "choose at least one action".
+ */
+const LINKED_FIELDS = { url: ['allowPrivateNetwork'], actions: ['allActions'] };
+
+/** The form's names for the fields, so each error names the one it is about (#127, #283). */
+const WEBHOOK_LABELS = { url: 'URL', description: 'Description', actions: 'Audit actions' };
 
 function SwitchRow({
   id,
@@ -75,7 +95,13 @@ export function WebhookFormDialog({
     enabled: endpoint?.enabled ?? true,
     allowPrivateNetwork: endpoint?.allowPrivateNetwork ?? false,
   });
-  const [error, setError] = useState<string | null>(null);
+  // Each error is shown under its field, marked invalid, all at once, and
+  // goes when that field is corrected (#217, #283).
+  const form = useRef<HTMLFormElement>(null);
+  const [problems, setProblems] = useFieldProblems(draft, form);
+  const report = (found: FieldProblem[]) => setProblems(linkFields(found, LINKED_FIELDS));
+  const at = (field: keyof Draft) => problemsAt(problems, field);
+  const error = problemsElsewhere(problems, FIELDS_SHOWN);
   // A name that can never match was accepted silently (#83). Only a warning:
   // the list is what this instance has recorded, and an action may not have
   // happened yet.
@@ -96,18 +122,21 @@ export function WebhookFormDialog({
       if (!endpoint) onCreated(result as WebhookWithSecret);
       onClose();
     },
-    onError: (cause) => setError(apiErrorMessage(cause, 'The endpoint could not be saved.')),
+    onError: (cause) =>
+      report(apiErrorProblems(cause, 'The endpoint could not be saved.', WEBHOOK_LABELS)),
   });
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setError(null);
-    if (!draft.url.trim()) {
-      setError('Enter the endpoint’s URL.');
-      return;
-    }
-    if (!draft.allActions && parseActions(draft.actions).length === 0) {
-      setError('Choose at least one audit action, or send all of them.');
+    setProblems([]);
+    const missing: FieldProblem[] = [
+      ...(draft.url.trim() ? [] : [{ fields: ['url'], text: 'Enter the endpoint’s URL.' }]),
+      ...(!draft.allActions && parseActions(draft.actions).length === 0
+        ? [{ fields: ['actions'], text: 'Choose at least one audit action, or send all of them.' }]
+        : []),
+    ];
+    if (missing.length > 0) {
+      report(missing);
       return;
     }
     if (endpoint) {
@@ -134,22 +163,29 @@ export function WebhookFormDialog({
           OCI posts the selected audit events here, signed with a secret only this endpoint knows.
         </DialogDescription>
       </DialogHeader>
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <Field
           label="URL"
           htmlFor="webhook-url"
           hint="An https:// address. Redirects are not followed."
+          error={at('url')}
         >
           <Input
             id="webhook-url"
+            {...invalidFieldProps('webhook-url', at('url'))}
             value={draft.url}
             placeholder="https://hooks.example.com/oci"
             onChange={(event) => set('url', event.target.value)}
           />
         </Field>
-        <Field label="Description (optional)" htmlFor="webhook-description">
+        <Field
+          label="Description (optional)"
+          htmlFor="webhook-description"
+          error={at('description')}
+        >
           <Input
             id="webhook-description"
+            {...invalidFieldProps('webhook-description', at('description'))}
             value={draft.description}
             maxLength={200}
             onChange={(event) => set('description', event.target.value)}
@@ -166,11 +202,16 @@ export function WebhookFormDialog({
           <Field
             label="Audit actions"
             htmlFor="webhook-actions"
+            error={at('actions')}
             hint="One per line. A prefix such as user.* matches every action below it."
           >
             <Textarea
               id="webhook-actions"
-              aria-describedby={unmatched.length > 0 ? 'webhook-actions-unmatched' : undefined}
+              {...invalidFieldProps(
+                'webhook-actions',
+                at('actions'),
+                unmatched.length > 0 ? 'webhook-actions-unmatched' : undefined,
+              )}
               rows={5}
               value={draft.actions}
               placeholder={'user.*\nbackup.run'}
@@ -205,7 +246,7 @@ export function WebhookFormDialog({
           onChange={(value) => set('allowPrivateNetwork', value)}
         />
         {error && (
-          <p role="alert" className="text-sm text-[var(--danger)]">
+          <p role="alert" className="whitespace-pre-line text-sm text-[var(--danger)]">
             {error}
           </p>
         )}

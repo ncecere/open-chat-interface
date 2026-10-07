@@ -86,7 +86,12 @@ it('stays open while pending and ignores Escape until the action settles', async
   await click(button('Delete widget'));
 
   expect(button('Deleting…').disabled).toBe(true);
-  expect(button('Cancel').disabled).toBe(true);
+  // Cancel has focus (Radix's first button), so it keeps it, marked
+  // aria-disabled rather than disabled, and a press does nothing (#269).
+  expect(document.activeElement).toBe(button('Cancel'));
+  expect(button('Cancel').getAttribute('aria-disabled')).toBe('true');
+  await click(button('Cancel'));
+  expect(dialog()).not.toBeNull();
   await pressEscape();
   expect(dialog()).not.toBeNull();
 

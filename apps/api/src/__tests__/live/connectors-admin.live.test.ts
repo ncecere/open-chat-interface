@@ -147,6 +147,12 @@ describe.skipIf(!available)('live MCP connectors', () => {
         call('POST', `/api/admin/connectors/${created.id}/test`),
       );
       expect(test).toEqual({ ok: true, detail: 'Connected to Test MCP 1.0.0 · 0 tools' });
+      // Audited, as every Test button is (#287); the credential is not.
+      const tests = await audits('connector.test');
+      expect(tests.map((entry) => [entry.targetId, entry.metadata])).toEqual([
+        [created.id, { slug: 'docs', url: created.url, ok: true }],
+      ]);
+      expect(JSON.stringify(tests)).not.toContain('Bearer');
 
       const updated = await ok<Connector>(
         call('PATCH', `/api/admin/connectors/${created.id}`, {

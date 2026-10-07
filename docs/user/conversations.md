@@ -17,12 +17,18 @@ Hovering over a message reveals its controls.
 Screen readers and voice control hear which message each control acts on, by
 its opening words: **Copy message “Walk3 table: give me a small…”**, **Fork
 conversation at “…”**. Code blocks and tables are numbered within their
-message in the same way: **Copy code block 2 (Python)**, **Download table 1**.
+message and named by its opening words too: **Copy code block 2 (Python) in
+“Here is the plan…”**, **Download table 1 in “Here is the plan…”**.
 
 ### Editing, retrying and forking preserve the original
 
 Editing creates a new conversation with your revised question; the original
-stays as it was.
+stays as it was. The new conversation is titled from your revised question, so
+each edit can be told apart in the sidebar; rename it if you prefer.
+
+Editing, retrying and forking at a question answer with the model and
+reasoning level shown in the model picker when you do it. If a model failed or
+was slow, switch the picker to another one first and then edit or retry.
 
 Retrying answers your latest question again, using the conversation up to that
 question. The earlier reply is kept: below the latest reply, **‹ 2 / 3 ›**

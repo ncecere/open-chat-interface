@@ -91,20 +91,20 @@ broadcastRoutes.put('/:id', async (c) => {
   const [saved] = updated;
   if (!saved || !existing) throw notFound('Announcement not found');
 
-  await recordAudit({
-    actorUserId: actor.id,
-    actorEmail: actor.email,
-    action: 'broadcast.update',
-    targetType: 'broadcast',
-    targetId: id,
-    // Which fields changed and from what; the window and audience were not
-    // recorded at all (#258).
-    metadata: {
-      title: input.title,
-      published: input.published,
-      changes: diffUpdate(existing, saved, BROADCAST_FIELDS),
-    },
-  });
+  // A save that changed nothing is not recorded, nor sent to webhooks, as
+  // for webhook edits (#258, #287).
+  const changes = diffUpdate(existing, saved, BROADCAST_FIELDS);
+  if (changes.length > 0)
+    await recordAudit({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      action: 'broadcast.update',
+      targetType: 'broadcast',
+      targetId: id,
+      // Which fields changed and from what; the window and audience were not
+      // recorded at all (#258).
+      metadata: { title: input.title, published: input.published, changes },
+    });
 
   return c.json({ ok: true });
 });

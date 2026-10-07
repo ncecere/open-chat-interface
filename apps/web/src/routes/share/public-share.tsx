@@ -16,6 +16,7 @@ import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { ApiError, api } from '~/lib/api-client';
 import { usePageTitle } from '~/lib/document-title';
+import { messageExcerpt } from '~/lib/message-excerpt';
 
 interface PublicTextPart {
   type: 'text';
@@ -233,7 +234,11 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
 
   if (message.role === 'user') {
     return (
-      <article className="flex flex-col items-end" aria-label="User message">
+      <article
+        className="flex flex-col items-end"
+        aria-label="User message"
+        data-excerpt={messageExcerpt(text) ?? undefined}
+      >
         <div className="max-w-[90%] rounded-2xl border border-[var(--border-user-message)] bg-[var(--bg-user-message)] px-4 py-3 text-[0.9375rem] leading-relaxed text-[var(--text-primary)] sm:max-w-[85%]">
           <Markdown skipHtml urlTransform={publicMarkdownUrl}>
             {text}
@@ -244,7 +249,8 @@ function SharedMessage({ message }: { message: PublicShareResponse['messages'][n
   }
 
   return (
-    <article aria-label="Assistant message">
+    // Its opening words name its code blocks and tables (#271).
+    <article aria-label="Assistant message" data-excerpt={messageExcerpt(text) ?? undefined}>
       <Sources parts={message.parts} />
       {/* The work, then what it made, then the text in the order it was written. */}
       <SharedWork

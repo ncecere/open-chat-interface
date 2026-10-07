@@ -54,6 +54,11 @@ export function modelLine(
     : `${name}  ${messageCount(model.messages)}  ${cost}`;
 }
 
+/** The report's first line: "…usage, last 30 days", or "last 1 day" (#286, as #263). */
+export function reportHeading(appName: string, windowDays: number): string {
+  return `${appName} usage, last ${windowDays} ${windowDays === 1 ? 'day' : 'days'}`;
+}
+
 async function buildUsageReport(windowDays: number, appName: string): Promise<string> {
   const [totals, daily, models, consumers] = await Promise.all([
     usageTotals(windowDays),
@@ -63,7 +68,7 @@ async function buildUsageReport(windowDays: number, appName: string): Promise<st
   ]);
 
   const lines: string[] = [
-    `${appName} usage, last ${windowDays} days`,
+    reportHeading(appName, windowDays),
     '',
     `Messages:      ${totals.messages.toLocaleString()}`,
     `Tokens:        ${totals.tokens.toLocaleString()}`,

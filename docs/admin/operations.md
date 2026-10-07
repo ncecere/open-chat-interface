@@ -173,7 +173,9 @@ that has not run since the instance was set up says **Not run yet**. **Run**
 starts one now. When the jobs run on a separate worker, **Run** waits up to
 5 seconds for the worker to take the request. If none takes it (a worker that
 has just stopped or is restarting), the page says the job has not started, so
-you can try again once **Background workers** is healthy.
+you can try again once **Background workers** is healthy. Once a job has
+started, its row shows it running and is checked every few seconds until it
+finishes, then shows how the run ended.
 
 Which jobs are scheduled depends on the settings of the replicas that run
 jobs (`OCI_ROLE=worker` or `all`), so the list shows theirs, as each reports

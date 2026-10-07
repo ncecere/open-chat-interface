@@ -101,8 +101,11 @@ last administrator. It is also refused in a session an administrator opened
 as the person; delete under People instead, where the entry names you. It is
 recorded as a `user.delete` entry with
 `metadata.self: true` and `metadata.deletion.reason: "user"`; a wrong password
-is recorded as `user.delete.failure`. Better Auth's own delete-user endpoint
-stays disabled.
+is recorded as `user.delete.failure`. Better Auth's own admin endpoints
+(`/api/auth/admin/*`: roles, bans, account edits, passwords, impersonation and
+deletion) are disabled: they would make these changes without an audit entry,
+a webhook or these checks. Every account change goes through People → Users,
+and administrators cannot open a session as another person.
 
 For an account that signs in through single sign-on there is no password to
 ask for; signing in again later creates a new, empty account (through
@@ -198,8 +201,10 @@ every role except `restricted`).
   `create_artifact` and `update_artifact`; the system prompt gains a short
   section on how to make them; and people can edit Markdown documents. With it
   off, none of these happen and an edit is refused with `403` ("Artifacts are
-  not available for your role"); existing artifacts stay readable by their
-  owner.
+  not available for your role"); the system prompt instead tells the model
+  that it cannot create documents or files, so it writes the content in its
+  reply rather than claiming to have made one; existing artifacts stay
+  readable by their owner.
 - **Artifact tools** change only OCI's own data in the current conversation,
   so they need no approval and are not listed under the role's tools. Each call
   is still a `tool.call` audit event (kind `read`).
@@ -489,8 +494,11 @@ Consequences:
   accepted a version that did not exist when they last signed in.
 - **Somebody re-prompted is told the policy changed**, rather than being shown it
   as though it were new.
-- **A version somebody accepted cannot be deleted.** The database refuses,
-  because deleting it would destroy the record of what they agreed to.
+- **A published version cannot be changed or deleted**, even before anybody
+  has accepted it: people may be accepting it at that moment. The database
+  also refuses to delete a version somebody accepted, because that would
+  destroy the record of what they agreed to. Only a [draft](#drafts) can be
+  reworded or deleted.
 
 ### Drafts
 
@@ -499,6 +507,11 @@ draft, so it can still be reworded (**Edit**) or discarded (**Delete**) until
 you **Publish** it, which asks for confirmation first. Once published, the
 wording is fixed. **View** shows the full text of any version, drafts and
 published ones alike, to administrators and auditors.
+
+Each edit of a draft is audited as `policy.update`, with the title as it was
+and became and `textChanged`. A changed text is recorded by its length and
+SHA-256 digest before and after, never by its wording, which can be long. A
+save that changes nothing is not recorded.
 
 ### What is recorded
 

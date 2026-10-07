@@ -1,4 +1,5 @@
 import {
+  type AdminModel,
   type AdminUser,
   MICROS_PER_DOLLAR,
   type QuotaMetric,
@@ -18,7 +19,7 @@ import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
-import { formatBytes, formatDateTime, formatTimeUntil } from '~/lib/utils';
+import { formatBytes, formatDateTime, formatTimeUntil, plural } from '~/lib/utils';
 
 export interface UserLimits {
   usage: UsageSummary;
@@ -39,7 +40,7 @@ export function formatQuotaAmount(value: number, metric: QuotaMetric): string {
 function windowLabel(allowance: UsageAllowance): string {
   switch (allowance.windowKind) {
     case 'rolling':
-      return `Rolling ${allowance.windowHours ?? 24} hours`;
+      return `Rolling ${plural(allowance.windowHours ?? 24, 'hour')}`;
     case 'daily':
       return 'Daily';
     case 'weekly':
@@ -68,7 +69,26 @@ function resetText(resetsAt: string | null): string | null {
   return until === 'expired' ? 'Resetting now' : `Resets ${until}`;
 }
 
-function BudgetRow({ allowance }: { allowance: UsageAllowance }) {
+/**
+ * The models a budget applies to, by the names the rest of the admin shows
+ * ("E2E catalog beta"), not their internal slugs (#285). A slug no longer in
+ * the catalog, or while the catalog loads, is shown as it is.
+ */
+export function budgetModelNames(
+  slugs: readonly string[],
+  models: readonly Pick<AdminModel, 'slug' | 'displayName'>[] | undefined,
+): string {
+  const names = new Map(models?.map((model) => [model.slug, model.displayName]));
+  return slugs.map((slug) => names.get(slug) ?? slug).join(', ');
+}
+
+function BudgetRow({
+  allowance,
+  models,
+}: {
+  allowance: UsageAllowance;
+  models: AdminModel[] | undefined;
+}) {
   const severity = SEVERITY[allowance.severity];
   const used = formatQuotaAmount(allowance.used, allowance.metric);
   const limit = formatQuotaAmount(allowance.limitValue, allowance.metric);
@@ -102,7 +122,7 @@ function BudgetRow({ allowance }: { allowance: UsageAllowance }) {
           </time>
         )}
         {allowance.modelSlugs.length > 0 && (
-          <span>· Applies to {allowance.modelSlugs.join(', ')}</span>
+          <span>· Applies to {budgetModelNames(allowance.modelSlugs, models)}</span>
         )}
       </p>
     </li>
@@ -219,6 +239,15 @@ export function UserLimitsSection({ user }: { user: AdminUser }) {
     queryFn: () => api.get<UserLimits>(`/admin/users/${user.id}/limits`),
   });
 
+  // The catalog, for the names of the models a budget is limited to; shared
+  // with the budget dialog's picker, and only asked for when one is (#285).
+  const scoped = limits.data?.usage.allowances.some((entry) => entry.modelSlugs.length > 0);
+  const models = useQuery({
+    queryKey: ['admin', 'models'],
+    queryFn: () => api.get<{ models: AdminModel[] }>('/admin/models'),
+    enabled: Boolean(scoped),
+  });
+
   function closeAdjust() {
     setAdjusting(false);
     // Overrides change the budgets shown here.
@@ -265,7 +294,11 @@ export function UserLimitsSection({ user }: { user: AdminUser }) {
               ) : (
                 <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
                   {limits.data.usage.allowances.map((allowance) => (
-                    <BudgetRow key={allowance.policyId} allowance={allowance} />
+                    <BudgetRow
+                      key={allowance.policyId}
+                      allowance={allowance}
+                      models={models.data?.models}
+                    />
                   ))}
                 </ul>
               )}
