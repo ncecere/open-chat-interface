@@ -1,4 +1,9 @@
-import { type UsagePolicy, updatePolicyDraftSchema, upsertUsagePolicySchema } from '@oci/shared';
+import {
+  type PolicyAcceptances,
+  type UsagePolicy,
+  updatePolicyDraftSchema,
+  upsertUsagePolicySchema,
+} from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, FileText, Pencil, Send, Trash2 } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
@@ -33,7 +38,7 @@ import {
   useFieldProblems,
 } from '~/hooks/use-clear-on-edit';
 import { api, apiErrorProblems } from '~/lib/api-client';
-import { formatDate } from '~/lib/utils';
+import { formatDate, formatDateTime } from '~/lib/utils';
 import { validationProblems } from '~/lib/validation-issues';
 
 /** The form's names for the fields, as errors should use them (#228). */
@@ -225,6 +230,76 @@ function PolicyDialog({
   );
 }
 
+/**
+ * "accepted by 12", and "accepted by 12, 3 since deleted" when accounts that
+ * accepted have been deleted since (#373): their acceptance goes with them, and
+ * the count used to drop without saying so.
+ */
+export function acceptedText(
+  policy: Pick<UsagePolicy, 'acceptanceCount' | 'deletedAcceptanceCount'>,
+) {
+  const deleted = policy.deletedAcceptanceCount ?? 0;
+  return `accepted by ${policy.acceptanceCount}${deleted > 0 ? `, ${deleted} since deleted` : ''}`;
+}
+
+/** Who accepted a published version, with their email and when (#373). */
+function AcceptanceList({ policy }: { policy: UsagePolicy }) {
+  const acceptances = useQuery({
+    queryKey: ['admin', 'policies', policy.id, 'acceptances'],
+    queryFn: () => api.get<PolicyAcceptances>(`/admin/policies/${policy.id}/acceptances`),
+  });
+  const data = acceptances.data;
+
+  return (
+    <section aria-labelledby="policy-acceptances-heading">
+      <h3 id="policy-acceptances-heading" className="font-medium text-sm">
+        Who accepted
+      </h3>
+      {acceptances.isError && !data && (
+        <LoadError title="Acceptances could not be loaded." query={acceptances} />
+      )}
+      {acceptances.isLoading && <Spinner className="mt-2 size-4" />}
+      {data && (
+        <>
+          <p className="mt-1 text-[var(--text-muted)] text-xs">
+            {data.accepted} accepted{data.deleted > 0 ? `, ${data.deleted} since deleted` : ''}.
+            {data.deleted > 0 &&
+              ' An acceptance goes with its account; the deleted ones are listed from the audit log.'}
+            {data.shown < data.accepted + data.deleted &&
+              ` Showing the latest ${data.shown}; the audit log (policy.accept) has the rest.`}
+          </p>
+          {data.acceptances.length === 0 ? (
+            <p className="mt-2 text-[var(--text-muted)] text-sm">Nobody has accepted it yet.</p>
+          ) : (
+            <ul className="mt-2 max-h-56 divide-y divide-[var(--border-subtle)] overflow-y-auto rounded-xl border border-[var(--border-subtle)] text-sm">
+              {data.acceptances.map((entry) => (
+                <li
+                  key={`${entry.email}-${entry.acceptedAt}-${entry.accountDeleted}`}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-2"
+                >
+                  <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                    {entry.email ?? 'Unknown address'}
+                    {entry.name && entry.name !== entry.email && (
+                      <span className="text-[var(--text-muted)]"> · {entry.name}</span>
+                    )}
+                  </span>
+                  {entry.accountDeleted && <Badge variant="outline">account deleted</Badge>}
+                  <span
+                    className="ml-auto shrink-0 text-[var(--text-muted)] text-xs"
+                    title={entry.acceptedAt}
+                  >
+                    {formatDateTime(entry.acceptedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 /** The full wording of any version, for admins and auditors alike. */
 function ViewPolicyDialog({ policy, onClose }: { policy: UsagePolicy; onClose: () => void }) {
   return (
@@ -235,13 +310,14 @@ function ViewPolicyDialog({ policy, onClose }: { policy: UsagePolicy; onClose: (
         </DialogTitle>
         <DialogDescription>
           {policy.publishedAt
-            ? `Published ${formatDate(policy.publishedAt)} · accepted by ${policy.acceptanceCount}`
+            ? `Published ${formatDate(policy.publishedAt)} · ${acceptedText(policy)}`
             : 'Draft: nobody has been asked to accept it yet.'}
         </DialogDescription>
       </DialogHeader>
       <div className="whitespace-pre-wrap rounded-xl border border-[var(--border-subtle)] p-4 text-sm">
         {policy.body}
       </div>
+      {policy.publishedAt && <AcceptanceList policy={policy} />}
       <DialogFooter>
         <Button type="button" variant="secondary" onClick={onClose}>
           Close
@@ -329,7 +405,7 @@ export function AdminPoliciesPage() {
                       {policy.publishedAt
                         ? `Published ${formatDate(policy.publishedAt)}`
                         : 'Not published'}
-                      {` · accepted by ${policy.acceptanceCount}`}
+                      {` · ${acceptedText(policy)}`}
                     </p>
                     {olderDraft && (
                       <p className="mt-0.5 text-[var(--text-muted)] text-xs">

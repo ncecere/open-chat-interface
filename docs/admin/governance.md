@@ -572,6 +572,20 @@ their own account. Nothing is locked: accepting is always possible.
 The version, the moment, and the address it came from. Enough to answer "what
 exactly did this person agree to, and when" later.
 
+- **Acceptable use → View** on a published version lists who accepted it, with
+  their email and when (the latest 200), to administrators and auditors
+  (`GET /api/admin/policies/:id/acceptances`).
+- **Each acceptance is audited** as `policy.accept` (who, which version and
+  title, the address), once per person and version, and kept regardless of the
+  audit retention period.
+- **An acceptance goes with its account.** When a person's account is deleted
+  their acceptance row goes too, so the list says "accepted by 2, 1 since
+  deleted" instead of the count dropping, and shows the deleted account's
+  address from its audit entry, marked **account deleted**. Acceptances made
+  before this was recorded (older than the release that added `policy.accept`)
+  have no audit entry, so one of those that is deleted later cannot be counted
+  as deleted.
+
 ### Practical advice
 
 Publish before opening the instance. A policy published afterwards prompts

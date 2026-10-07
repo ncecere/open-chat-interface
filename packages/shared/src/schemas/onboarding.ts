@@ -7,9 +7,37 @@ export const usagePolicySchema = z.object({
   title: z.string(),
   body: z.string(),
   publishedAt: z.string().nullable(),
+  /** Accepted by accounts that still exist. */
   acceptanceCount: z.number().int().nonnegative(),
+  /**
+   * Accepted by accounts since deleted (#373): an acceptance goes with its
+   * account, but the audit entry (`policy.accept`) that recorded it stays, so
+   * the page can say how many there were instead of the count quietly dropping.
+   */
+  deletedAcceptanceCount: z.number().int().nonnegative(),
   createdAt: z.string(),
 });
+
+/** Who accepted a published version, for administrators and auditors (#373). */
+export const policyAcceptanceSchema = z.object({
+  email: z.string().nullable(),
+  name: z.string().nullable(),
+  acceptedAt: z.string(),
+  ipAddress: z.string().nullable(),
+  /** The account has been deleted since; the row comes from the audit log. */
+  accountDeleted: z.boolean(),
+});
+
+export const policyAcceptancesSchema = z.object({
+  acceptances: z.array(policyAcceptanceSchema),
+  /** Accepted by accounts that still exist, and by accounts since deleted. */
+  accepted: z.number().int().nonnegative(),
+  deleted: z.number().int().nonnegative(),
+  /** The list is the latest this many; more exist when `shown < accepted + deleted`. */
+  shown: z.number().int().nonnegative(),
+});
+export type PolicyAcceptance = z.infer<typeof policyAcceptanceSchema>;
+export type PolicyAcceptances = z.infer<typeof policyAcceptancesSchema>;
 
 export const upsertUsagePolicySchema = z
   .object({

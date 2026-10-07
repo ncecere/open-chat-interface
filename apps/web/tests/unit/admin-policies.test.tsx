@@ -29,6 +29,7 @@ const published: UsagePolicy = {
   body: 'Be kind to the machines.',
   publishedAt: '2026-10-01T00:00:00.000Z',
   acceptanceCount: 12,
+  deletedAcceptanceCount: 0,
   createdAt: '2026-10-01T00:00:00.000Z',
 };
 const draft: UsagePolicy = {
@@ -38,12 +39,19 @@ const draft: UsagePolicy = {
   body: 'Be kind. Typo: recieve.',
   publishedAt: null,
   acceptanceCount: 0,
+  deletedAcceptanceCount: 0,
   createdAt: '2026-10-05T00:00:00.000Z',
 };
 
 let root: Root | undefined;
 beforeEach(() => {
-  api.get.mockReset().mockResolvedValue({ policies: [draft, published] });
+  api.get
+    .mockReset()
+    .mockImplementation(async (path: string) =>
+      path.endsWith('/acceptances')
+        ? { acceptances: [], accepted: 0, deleted: 0, shown: 0 }
+        : { policies: [draft, published] },
+    );
   api.post.mockReset().mockResolvedValue({ ok: true });
   api.patch.mockReset().mockResolvedValue({ ok: true });
   api.delete.mockReset().mockResolvedValue({ ok: true });
@@ -207,4 +215,54 @@ it('does not offer Publish on a draft older than the version in force (#372)', a
   // It can still be reworded or discarded.
   expect(findButton('Edit draft Walk AUP old draft v0')).toBeDefined();
   expect(findButton('Delete draft Walk AUP old draft v0')).toBeDefined();
+});
+
+it('says how many accepted accounts were deleted since, and lists who accepted with their email (#373)', async () => {
+  const live = { ...published, acceptanceCount: 2, deletedAcceptanceCount: 1 };
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/admin/policies') return { policies: [live] };
+    if (path === '/admin/policies/policy-1/acceptances')
+      return {
+        acceptances: [
+          {
+            email: 'physics@example.edu',
+            name: 'Walk9 Physics Two',
+            acceptedAt: '2026-10-06T14:41:00.000Z',
+            ipAddress: '198.51.100.7',
+            accountDeleted: false,
+          },
+          {
+            email: 'bell@example.edu',
+            name: null,
+            acceptedAt: '2026-10-06T14:50:00.000Z',
+            ipAddress: null,
+            accountDeleted: true,
+          },
+        ],
+        accepted: 2,
+        deleted: 1,
+        shown: 2,
+      };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  ({ root } = await renderAdmin(<AdminPoliciesPage />, { role: 'auditor' }));
+  // Before: "accepted by 2" whether or not an account had been deleted.
+  expect(document.body.textContent).toContain('accepted by 2, 1 since deleted');
+
+  await click(button('View Acceptable use v1'));
+  const text = dialog()?.textContent ?? '';
+  expect(text).toContain('Who accepted');
+  expect(text).toContain('2 accepted, 1 since deleted.');
+  expect(text).toContain('physics@example.edu');
+  expect(text).toContain('Walk9 Physics Two');
+  expect(text).toContain('bell@example.edu');
+  expect(text).toContain('account deleted');
+  expect(api.get).toHaveBeenCalledWith('/admin/policies/policy-1/acceptances');
+});
+
+it('does not ask who accepted a draft', async () => {
+  ({ root } = await renderAdmin(<AdminPoliciesPage />));
+  await click(button('View Walk AUP draft v2'));
+  expect(dialog()?.textContent).not.toContain('Who accepted');
+  expect(api.get).not.toHaveBeenCalledWith('/admin/policies/policy-2/acceptances');
 });

@@ -90,13 +90,15 @@ export async function acceptPolicy(params: {
   userId: string;
   policyId: string;
   ipAddress: string | null;
-}): Promise<void> {
+}): Promise<{ recorded: boolean; version: number; title: string }> {
   const policy = await currentPolicy();
   if (!policy || policy.id !== params.policyId) {
     throw validationFailed('That policy is no longer the current one. Reload and try again.');
   }
 
-  await db
+  // `recorded` is false for a second acceptance of the same version, which
+  // changes nothing and so is not audited again (#373).
+  const inserted = await db
     .insert(schema.usagePolicyAcceptance)
     .values({
       policyId: policy.id,
@@ -104,7 +106,9 @@ export async function acceptPolicy(params: {
       policyVersion: policy.version,
       ipAddress: params.ipAddress,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: schema.usagePolicyAcceptance.id });
+  return { recorded: inserted.length > 0, version: policy.version, title: policy.title };
 }
 
 export async function listPolicies(): Promise<UsagePolicy[]> {
@@ -121,6 +125,12 @@ export async function listPolicies(): Promise<UsagePolicy[]> {
       // Qualified by hand: Drizzle drops qualifiers in a single-table select.
       acceptanceCount: sql<number>`(select count(*) from "usage_policy_acceptance" as acceptance
         where acceptance.policy_id = "usage_policy"."id")::int`,
+      // Acceptances whose account was deleted since: the row went with the
+      // account, the audit entry that recorded it stayed (its actor is null
+      // once the account is gone) (#373).
+      deletedAcceptanceCount: sql<number>`(select count(*) from "audit_log" as entry
+        where entry.action = 'policy.accept' and entry.target_id = "usage_policy"."id"
+        and entry.actor_user_id is null)::int`,
     })
     .from(schema.usagePolicy)
     .where(eq(schema.usagePolicy.organizationId, organizationId))
@@ -134,6 +144,7 @@ export async function listPolicies(): Promise<UsagePolicy[]> {
     body: row.body,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     acceptanceCount: Number(row.acceptanceCount),
+    deletedAcceptanceCount: Number(row.deletedAcceptanceCount),
     createdAt: row.createdAt.toISOString(),
   }));
 }

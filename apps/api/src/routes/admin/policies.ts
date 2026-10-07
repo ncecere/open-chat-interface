@@ -13,12 +13,24 @@ import {
   publishPolicy,
   updatePolicyDraft,
 } from '../../services/onboarding.js';
+import { listPolicyAcceptances } from '../../services/policy-acceptances.js';
 import { diffUpdate, type SettingChange } from '../../services/settings-diff.js';
 
 export const policyRoutes = new Hono<AppBindings>();
 
 policyRoutes.get('/', async (c) => {
   return c.json({ policies: await listPolicies() });
+});
+
+/**
+ * Who accepted one version and when, with their email, for administrators and
+ * auditors (#373): the latest 200, and the counts of accounts that exist and of
+ * accounts deleted since.
+ */
+policyRoutes.get('/:id/acceptances', async (c) => {
+  const result = await listPolicyAcceptances(c.req.param('id'));
+  if (!result) throw notFound('Policy version not found');
+  return c.json(result);
 });
 
 /**
