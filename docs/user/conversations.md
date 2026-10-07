@@ -343,6 +343,15 @@ Names are 1 to 200 characters; spaces at either end are dropped. The new name
 shows straight away in the sidebar, in search and in
 [Settings → History](settings.md#history).
 
+## Right-to-left languages
+
+Arabic, Hebrew, Persian, Urdu and other right-to-left text is laid out from the
+right: each paragraph, list, quote and table cell, in your messages and in
+replies, takes its direction from its first letter, so an Arabic paragraph and
+an English one in the same reply each read their own way. The message box and
+conversation titles follow what you type in the same way. Code stays left to
+right. (Exported PDFs do the same; see [Exporting](exporting.md).)
+
 ## Finding a conversation
 
 Type in the sidebar's search box, or press `Cmd/Ctrl + K`, to search your

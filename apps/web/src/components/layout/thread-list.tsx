@@ -87,7 +87,9 @@ export function ThreadRow({
         className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
         title={projectName ? `${thread.title} (${projectName})` : thread.title}
       >
-        <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+        <span dir="auto" className="min-w-0 flex-1 truncate">
+          {thread.title}
+        </span>
         {projectName && (
           <span
             className={cn(

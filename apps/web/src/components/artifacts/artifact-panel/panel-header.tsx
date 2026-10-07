@@ -22,12 +22,18 @@ export interface Chrome {
 const HEADING_WRAP = 'break-words text-base [overflow-wrap:anywhere]';
 
 function PanelHeading({ chrome, children }: { chrome: Chrome; children: ReactNode }) {
-  if (!chrome.docked) return <DialogTitle className={HEADING_WRAP}>{children}</DialogTitle>;
+  if (!chrome.docked)
+    return (
+      <DialogTitle dir="auto" className={HEADING_WRAP}>
+        {children}
+      </DialogTitle>
+    );
   return (
     <h2
       id={chrome.headingId}
       tabIndex={-1}
       data-panel-heading=""
+      dir="auto"
       className={`${HEADING_WRAP} font-semibold outline-none`}
     >
       {children}

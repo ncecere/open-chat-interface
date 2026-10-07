@@ -132,6 +132,8 @@ export const Composer = memo(function Composer({
           placeholder={readOnly.active ? `${readOnlyShortReason(readOnly)}.` : placeholder}
           disabled={readOnly.active}
           aria-label="Message input"
+          // Each line reads from its own side as it is typed (#360).
+          dir="auto"
           aria-invalid={tooLong || undefined}
           aria-describedby={tooLong ? lengthNoteId : undefined}
           className={cn(

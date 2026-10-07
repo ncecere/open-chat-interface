@@ -165,6 +165,7 @@ function CompactThreadForm({
       >
         <Textarea
           id={id}
+          dir="auto"
           rows={3}
           maxLength={COMPACTION_INSTRUCTIONS_MAX_LENGTH}
           value={instructions}

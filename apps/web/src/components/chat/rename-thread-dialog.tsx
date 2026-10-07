@@ -73,6 +73,7 @@ function RenameThreadForm({
       <Field label="Name" htmlFor={inputId}>
         <Input
           id={inputId}
+          dir="auto"
           value={name}
           maxLength={THREAD_TITLE_MAX_LENGTH}
           required

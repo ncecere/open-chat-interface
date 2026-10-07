@@ -503,7 +503,9 @@ function ProjectConversations({ projectId }: { projectId: string }) {
                 title={thread.title}
                 className="flex items-center gap-3 py-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+                <span dir="auto" className="min-w-0 flex-1 truncate">
+                  {thread.title}
+                </span>
                 <span className="shrink-0 text-xs text-[var(--text-muted)]">
                   {formatDate(thread.lastMessageAt ?? thread.updatedAt)}
                 </span>

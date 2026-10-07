@@ -16,7 +16,7 @@ export function SearchResultContent({ result }: { result: ThreadSearchResult }) 
   return (
     <>
       <span className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">
+        <span dir="auto" className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">
           <HighlightedText text={result.titleHighlight || result.thread.title} />
         </span>
         {result.thread.archived && (
@@ -28,9 +28,14 @@ export function SearchResultContent({ result }: { result: ThreadSearchResult }) 
       {result.matches.map((match) => (
         <span
           key={match.messageId}
+          dir="auto"
           className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--text-muted)]"
         >
-          <span className="font-medium">{match.role === 'user' ? 'You: ' : 'Reply: '}</span>
+          {/* The label is English whatever the snippet's language; skipped by
+              dir="auto", which reads the snippet's own first letter (#360). */}
+          <span dir="ltr" className="font-medium">
+            {match.role === 'user' ? 'You: ' : 'Reply: '}
+          </span>
           <HighlightedText text={match.snippet} />
         </span>
       ))}

@@ -99,6 +99,7 @@ export function MessageEditor({
       <textarea
         ref={textBox}
         aria-label="Edit message text"
+        dir="auto"
         value={text}
         // Read-only, not disabled, while saving: a disabled box would take focus
         // with it (#333, #269).

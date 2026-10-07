@@ -282,6 +282,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                     <Link
                       to="/chat/$threadId"
                       params={{ threadId: thread.id }}
+                      dir="auto"
                       className="block truncate text-sm text-[var(--text-primary)] hover:underline"
                       // The full text on hover when a narrow screen cuts it short (#130).
                       title={thread.title}

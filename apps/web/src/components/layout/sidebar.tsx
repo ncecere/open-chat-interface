@@ -115,6 +115,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           }}
           placeholder="Search your conversations..."
           aria-label="Search your conversations"
+          dir="auto"
           aria-describedby="thread-search-hint"
           className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
         />

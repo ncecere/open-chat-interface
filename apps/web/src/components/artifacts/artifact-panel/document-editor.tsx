@@ -55,6 +55,7 @@ export function DocumentEditor({
       </label>
       <textarea
         id={editorId}
+        dir="auto"
         // biome-ignore lint/a11y/noAutofocus: the person chose to edit; focus belongs in the editor.
         autoFocus
         value={draft}

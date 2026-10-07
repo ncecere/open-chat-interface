@@ -115,7 +115,11 @@ export function TrashList() {
               className="flex items-center gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[var(--text-primary)] text-sm" title={thread.title}>
+                <p
+                  dir="auto"
+                  className="truncate text-[var(--text-primary)] text-sm"
+                  title={thread.title}
+                >
                   {thread.title}
                 </p>
                 <p className="truncate text-[var(--text-muted)] text-xs" title={detail}>
