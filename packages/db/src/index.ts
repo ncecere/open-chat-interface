@@ -98,6 +98,7 @@ export {
   UnfinishedRequirementsError,
   unfinishedRequirements,
 } from './release-manifest.js';
+export { SamlSignInRemovedError, samlWouldLockOut } from './saml-lockout.js';
 export * as schema from './schema/index.js';
 export { seedDatabase } from './seed.js';
 export {

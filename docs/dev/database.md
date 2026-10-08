@@ -209,6 +209,19 @@ rely on N's backfill (a `NOT NULL`, a dropped fallback) without blocking N's
 own upgrade on it; the operator finishes N's work on N, then upgrades. The
 preflight reports the same.
 
+### Refusing an upgrade that would lock everyone out
+
+The same place in the migrator (`packages/db/src/saml-lockout.ts`, called by
+`runMigrationsWithLock` under the lock, before any migration) refuses with
+`SamlSignInRemovedError`, applying nothing, when SAML sign-in has been removed
+(#53) and the instance's only way in is a SAML provider: an `sso_provider` row
+with `kind = 'saml'` and `enabled`, `instance_setting` `auth.localAuthEnabled`
+set to `false`, and no enabled provider of another kind. It is not a SQL
+migration and needs no manifest entry; it checks the data, not the journal, so
+it applies to `migrate` and to a start with `RUN_MIGRATIONS=true` alike. A new
+database (no tables yet) and a database too old to have the columns are never
+refused.
+
 ### Code during the gap
 
 Between `migrate` and the end of the background phase, release N runs with
