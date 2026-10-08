@@ -71,17 +71,6 @@ afterEach(async () => {
 
 const pause = (ms: number) => act(() => new Promise((resolve) => setTimeout(resolve, ms)));
 
-/**
- * Waits until `check` holds, up to `timeoutMs`. The handover is two timers (the announcement
- * leaving, the read-only banner arriving), each followed by a render, so how long it takes
- * depends on how busy the machine is: on a loaded CI runner a fixed wait left both banners
- * showing at the moment of the check.
- */
-async function until(check: () => boolean, timeoutMs = 6_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (!check() && Date.now() < deadline) await pause(50);
-}
-
 it('hands over from the announcement to the read-only banner at the start', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement('div');
@@ -99,16 +88,8 @@ it('hands over from the announcement to the read-only banner at the start', asyn
   expect(container.textContent).toContain('Scheduled maintenance');
   expect(container.textContent).not.toContain('Read-only for maintenance');
 
-  // Past the start and its one-second margin for the server: the announcement gives way to
-  // the read-only banner. Never before the start, however long a busy machine takes after it.
-  await until(
-    () =>
-      !container.textContent!.includes('Scheduled maintenance') &&
-      container
-        .querySelector('[role="status"]')
-        ?.textContent?.includes('Read-only for maintenance') === true,
-  );
-  expect(Date.now()).toBeGreaterThanOrEqual(startsAt);
+  // Just past the start, and its one-second margin for the server.
+  await pause(startsAt - Date.now() + 1_300);
   expect(container.textContent).not.toContain('Scheduled maintenance');
   const banner = container.querySelector('[role="status"]')?.textContent ?? '';
   expect(banner).toContain('Read-only for maintenance until about');
@@ -120,4 +101,4 @@ it('hands over from the announcement to the read-only banner at the start', asyn
   expect(banner).toMatch(
     new RegExp(`until about [^:]*\\d{1,2}:\\d{2}[^:]*${zone.replace(/[+]/g, '\\+')}:`),
   );
-}, 15_000);
+}, 10_000);
