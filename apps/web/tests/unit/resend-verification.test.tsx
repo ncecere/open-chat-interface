@@ -82,3 +82,26 @@ it('offers another request a minute after the last one (#330)', async () => {
     vi.useRealTimers();
   }
 });
+
+it('offers Resend again when the timer fires a moment before the wall clock reaches the end of the wait', async () => {
+  // A timer can fire a millisecond or so before Date.now() reaches the time it was set for.
+  // The wait used to end only if the clock had passed it, and nothing set another timer, so
+  // the button stayed disabled until something else re-rendered the page.
+  const { RESEND_COOLDOWN_MS } = await import('../../src/components/auth/resend-verification');
+  const waitUntil = Date.now() + 300;
+  await act(() =>
+    root.render(
+      <ResendVerification email="pending@example.test" sentAt={waitUntil - RESEND_COOLDOWN_MS} />,
+    ),
+  );
+  expect(container.querySelector('button')?.disabled).toBe(true);
+
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(waitUntil - 1);
+  try {
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+    expect(container.querySelector('button')?.disabled).toBe(false);
+    expect(container.textContent).not.toContain('A link was just sent');
+  } finally {
+    clock.mockRestore();
+  }
+});

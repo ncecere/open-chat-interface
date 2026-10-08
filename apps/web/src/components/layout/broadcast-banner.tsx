@@ -35,7 +35,15 @@ function useUnexpired(broadcasts: ActiveBroadcast[]): ActiveBroadcast[] {
   const next = ends.length ? Math.min(...ends) : null;
   useEffect(() => {
     if (next === null) return;
-    const timer = setTimeout(() => setNow(Date.now()), Math.min(next - Date.now(), MAX_TIMER_MS));
+    const delay = next - Date.now();
+    const timer = setTimeout(
+      // A timer can fire a moment before the wall clock reaches the time it was set for.
+      // Then neither `now` nor `next` would change and no other timer would be set, so the
+      // announcement would stay until the next refresh: once this one is due, it is at
+      // least `next` now (a later end, clamped to MAX_TIMER_MS, is only checked again).
+      () => setNow(delay > MAX_TIMER_MS ? Date.now() : Math.max(Date.now(), next)),
+      Math.min(delay, MAX_TIMER_MS),
+    );
     return () => clearTimeout(timer);
   }, [next]);
   return broadcasts.filter(

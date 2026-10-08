@@ -9,7 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [0.12.0] - 2026-10-07
 
-Removes SAML sign-in and makes an emailed invitation verify the address. One
+Removes SAML sign-in, makes an emailed invitation verify the address, and fixes two
+timers that could leave a notice or a button stuck. One
 pre-deploy migration, `0046` (a nullable `invitation.emailed_at` column, no table
 rewrite); no post-deploy step and no background migration. Read the **SAML**
 upgrade note below before upgrading an instance that has a SAML provider.
@@ -54,6 +55,17 @@ upgrade note below before upgrading an instance that has a SAML provider.
   Connect provider on the release you are running, then run `migrate` again.
   There is no SQL migration (`saml_config` stays as an unused column), and the
   `samlify` package stays installed, as a dependency of `@better-auth/sso`.
+
+### Fixed
+
+- **An announcement could stay beside the read-only banner**, and **Resend
+  verification email could stay disabled**, after the time they were waiting for
+  (#160, #330). Both used a timer set once for an end time, and a timer can fire a
+  millisecond or so before the wall clock reaches the time it was set for. The
+  check then found the time not yet reached, and nothing set another timer: the
+  scheduled-maintenance announcement stayed until the five-minute refresh, and the
+  resend button until something else re-rendered the page. Each now treats its
+  timer, once it has fired, as having reached its time.
 
 ## [0.11.1] - 2026-10-07
 
