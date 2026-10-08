@@ -1,10 +1,11 @@
 import { and, desc, eq, gt, isNull, or, schema, sql } from '@oci/db';
-import { createInviteSchema, type Invite } from '@oci/shared';
+import { type CreatedInvite, createInviteSchema, type Invite } from '@oci/shared';
 import { type Context, Hono } from 'hono';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { generateToken, hashToken } from '../../lib/crypto.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { recordAudit } from '../../services/audit.js';
 import { sendInviteEmail } from '../../services/email.js';
@@ -35,6 +36,7 @@ inviteRoutes.get('/', async (c) => {
     expiresAt: row.expiresAt?.toISOString() ?? null,
     redeemedAt: row.redeemedAt?.toISOString() ?? null,
     redeemedByUserId: row.redeemedByUserId,
+    emailedAt: row.emailedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }));
 
@@ -155,17 +157,44 @@ inviteRoutes.post('/', async (c) => {
     emailDelivered = result.delivered;
   }
 
+  // Record that the link reached the address, after the send: if the process
+  // dies in between, the invitation stays unverified-by-link, which is the
+  // safe side (#214). If this write fails the invitation was still emailed, so
+  // the link is still withheld; it just does not verify the address.
+  let emailed = false;
+  if (emailDelivered && created) {
+    try {
+      await db
+        .update(schema.invitation)
+        .set({ emailedAt: new Date() })
+        .where(eq(schema.invitation.id, created.id));
+      emailed = true;
+    } catch (error) {
+      logger.error(
+        { error, inviteId: created.id },
+        'Failed to record that an invitation was emailed',
+      );
+    }
+  }
+
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
     action: 'invite.create',
     targetType: 'invite',
     targetId: created?.id ?? null,
-    metadata: { email: input.email ?? null, role: input.role },
+    // Whether it was emailed, never the token or the link.
+    metadata: { email: input.email ?? null, role: input.role, emailed },
   });
 
-  // The raw token is returned exactly once so the admin can copy the link.
-  return c.json({ id: created?.id, url, emailDelivered }, 201);
+  // An emailed invitation counts as proof of the address, so the link must be
+  // held only by the mailbox owner: an administrator who saw it could accept it
+  // for someone else's address and get a verified account. Otherwise the raw
+  // token is returned exactly once so the admin can share the link by hand.
+  const body: CreatedInvite = emailDelivered
+    ? { id: created?.id ?? '', emailDelivered: true }
+    : { id: created?.id ?? '', emailDelivered: false, url };
+  return c.json(body, 201);
 });
 
 inviteRoutes.delete('/:id', async (c) => {

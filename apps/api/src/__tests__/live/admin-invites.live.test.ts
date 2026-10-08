@@ -10,7 +10,11 @@ import {
 import type { AppBindings } from '../../middleware/context.js';
 
 const available = await livePostgresAvailable();
-const state = vi.hoisted(() => ({ db: null as unknown, organizationId: '' }));
+const state = vi.hoisted(() => ({
+  db: null as unknown,
+  organizationId: '',
+  sentLinks: [] as string[],
+}));
 vi.mock('../../db/index.js', () => ({
   get db() {
     return state.db;
@@ -19,7 +23,14 @@ vi.mock('../../db/index.js', () => ({
 vi.mock('../../services/organization.js', () => ({
   getDefaultOrganizationId: async () => state.organizationId,
 }));
-vi.mock('../../services/email.js', () => ({ sendInviteEmail: async () => ({ delivered: true }) }));
+// The link of an emailed invitation is held only by the mailbox (#214): the
+// response omits it, so the test takes it from the "mail".
+vi.mock('../../services/email.js', () => ({
+  sendInviteEmail: async ({ url }: { url: string }) => {
+    state.sentLinks.push(url);
+    return { delivered: true };
+  },
+}));
 vi.mock('../../services/settings.js', () => ({
   getSetting: async (key: string) =>
     key === 'auth'
@@ -127,8 +138,8 @@ describe.skipIf(!available)('live: invitations', () => {
   });
 
   it('says when an invitation is for a different address', async () => {
-    const { body } = await invite({ email: 'walk.bound@northbrook.edu', role: 'user' });
-    const token = decodeURIComponent(String(body.url).split('#token=')[1] ?? '');
+    await invite({ email: 'walk.bound@northbrook.edu', role: 'user' });
+    const token = decodeURIComponent(String(state.sentLinks.at(-1)).split('#token=')[1] ?? '');
     await expect(
       acceptInvitation({
         token,

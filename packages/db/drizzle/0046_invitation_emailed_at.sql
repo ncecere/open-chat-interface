@@ -1,0 +1,15 @@
+-- An invitation that was actually emailed records when (#214). Accepting an
+-- emailed invitation for the address it was sent to proves the person controls
+-- that mailbox, so the account is created verified. The record has to be
+-- written by the server when the email is delivered: the link is also shown to
+-- the administrator, and trusting "the link was used" alone would let an
+-- administrator create a verified account for someone else's address.
+--
+-- Pre-deploy safe: the previous release neither writes nor reads the column
+-- and works unchanged on this schema.
+-- * `emailed_at` is nullable without a default: a catalog-only change, with no
+--   table rewrite. Existing invitations get NULL and keep the current
+--   behaviour (the person verifies the address as before).
+--
+-- Re-runnable: the statement is guarded.
+ALTER TABLE "invitation" ADD COLUMN IF NOT EXISTS "emailed_at" timestamp with time zone;
