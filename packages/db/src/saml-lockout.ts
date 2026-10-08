@@ -10,6 +10,12 @@ import type { Queryable } from './release-manifest.js';
  * It refuses only when ALL hold: an enabled SAML provider exists, local
  * (email and password) sign-in is turned off, and no OpenID Connect provider
  * is enabled. Anything else leaves someone able to sign in.
+ *
+ * It is about the upgrade, so it stops applying once the upgrade has happened:
+ * after `invitation.emailed_at` (this release's migration `0046`) exists the
+ * instance already runs without SAML. Refusing every later start would turn an
+ * administrator's own change (deleting the last OpenID Connect provider, say)
+ * into an API that cannot start, with nobody able to reach the page that fixes it.
  */
 export class SamlSignInRemovedError extends Error {
   override name = 'SamlSignInRemovedError';
@@ -40,6 +46,8 @@ async function columnsExist(client: Queryable, table: string, columns: string[])
 export async function samlWouldLockOut(client: Queryable): Promise<boolean> {
   if (!(await columnsExist(client, 'sso_provider', ['kind', 'enabled']))) return false;
   if (!(await columnsExist(client, 'instance_setting', ['key', 'value']))) return false;
+  // This release's own migration has been applied: the upgrade is done.
+  if (await columnsExist(client, 'invitation', ['emailed_at'])) return false;
 
   const [row] = await client<[{ locked_out: boolean }]>`
     select (

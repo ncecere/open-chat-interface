@@ -32,6 +32,9 @@ describe.skipIf(!available)('live PostgreSQL: SAML lockout guard in migrate', ()
 
   beforeEach(async () => {
     live = await createLiveDatabase('saml_lockout');
+    // A v0.11.1 database: this release's migration 0046 has not run yet. The guard is about
+    // that upgrade and stops applying once the column exists (see the last test).
+    await live.db.execute(sql`alter table invitation drop column emailed_at`);
     organizationId = await seedOrganization(live.db);
     folder = await mkdtemp(join(tmpdir(), 'oci-saml-lockout-'));
     await mkdir(join(folder, 'meta'));
@@ -152,6 +155,17 @@ describe.skipIf(!available)('live PostgreSQL: SAML lockout guard in migrate', ()
     await live.db.execute(sql`delete from instance_setting`);
     await provider('saml', true);
     await expect(migrate()).resolves.toEqual({ applied: true });
+  });
+
+  it('does not refuse an instance that has already been upgraded, whatever its settings become', async () => {
+    // The state that would lock everyone out, on a database that already has this release's
+    // migration: an administrator deleted the last OpenID Connect provider and turned local
+    // sign-in off. Refusing every start from here on would leave an API that cannot start.
+    await provider('saml', true);
+    await localSignIn(false);
+    await live.db.execute(sql`alter table invitation add column emailed_at timestamptz`);
+    await expect(migrate()).resolves.toEqual({ applied: true });
+    expect(await probeExists()).toBe(true);
   });
 
   it('does not refuse a new database, which has no tables yet', async () => {
