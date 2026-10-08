@@ -12,7 +12,7 @@ credentials in your secret manager; never commit them or put them in
 `.env.example`.
 
 ```bash
-export OCI_VERSION=v0.11.1
+export OCI_VERSION=v0.12.0
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
@@ -622,6 +622,13 @@ replicas work through afterwards while OCI serves.
    release's background migration or post-deploy step that has not finished;
    the message names it. Finish it on the release you are running (step 7),
    then upgrade.
+   SAML sign-in was removed after v0.11.1 (#53). `migrate` (and a start with
+   `RUN_MIGRATIONS=true`) also refuses, changing nothing, when an enabled SAML
+   provider exists, local sign-in is turned off and no OpenID Connect provider
+   is enabled: upgrading would leave nobody able to sign in. Before upgrading,
+   turn on local sign-in (Admin → Authentication) or add an OpenID Connect
+   provider, then run `migrate` again. A SAML provider stays in the database,
+   inert, and can be deleted in the same page.
 6. **Replace** API replicas one at a time. From v0.11 each one drains when it
    is stopped (see [Shutting down and draining](#shutting-down-and-draining));
    a replica on an older release still cuts the replies it is writing, which

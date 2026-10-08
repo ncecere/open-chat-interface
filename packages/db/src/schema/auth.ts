@@ -171,6 +171,10 @@ export const invitation = pgTable(
       onDelete: 'set null',
     }),
     createdByUserId: text('created_by_user_id').references(() => user.id, { onDelete: 'set null' }),
+    // When the invitation email was delivered (migration 0046, #214). Set by the
+    // server only; NULL means the link was not emailed (or predates the column),
+    // so accepting it does not verify the address.
+    emailedAt: timestamp('emailed_at', { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [

@@ -12,7 +12,6 @@ import {
 } from '~/components/ui/dialog';
 import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
-import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
@@ -24,12 +23,10 @@ import {
   type PatchSsoProviderBody,
   type PolicyDraft,
   type ProtocolDraft,
-  type ProviderKind,
   policyFromProvider,
   toCreateBody,
   toPatchBody,
 } from './sso-form/provider-draft';
-import { SamlFields } from './sso-form/saml-fields';
 
 /** The fields that show their own errors; any other is shown at the foot (#302). */
 const FIELDS_SHOWN = [
@@ -39,9 +36,6 @@ const FIELDS_SHOWN = [
   'clientSecret',
   'discoveryUrl',
   'scopes',
-  'entryPoint',
-  'idpCertificate',
-  'audience',
   'label',
   'allowedDomains',
   'roleRequiredMessage',
@@ -114,7 +108,7 @@ export function SsoProviderForm({
         <DialogDescription>
           {editing
             ? 'Update sign-in access and user provisioning policy.'
-            : 'Configure an OpenID Connect or SAML 2.0 identity provider.'}
+            : 'Configure an OpenID Connect identity provider.'}
         </DialogDescription>
       </DialogHeader>
 
@@ -125,7 +119,7 @@ export function SsoProviderForm({
             aria-labelledby="protocol-summary-heading"
           >
             <h3 id="protocol-summary-heading" className="text-sm font-semibold">
-              {provider.kind === 'oidc' ? 'OpenID Connect' : 'SAML 2.0'} configuration
+              OpenID Connect configuration
             </h3>
             <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
               <div>
@@ -146,23 +140,7 @@ export function SsoProviderForm({
           </section>
         ) : (
           <>
-            <section className="grid gap-4 sm:grid-cols-2" aria-label="Provider identity">
-              <Field
-                label="Provider type"
-                htmlFor="sso-kind"
-                hint="The protocol cannot be changed after creation."
-              >
-                <Select
-                  id="sso-kind"
-                  value={protocol.kind}
-                  disabled={save.isPending}
-                  onChange={(next) => setProtocol({ ...protocol, kind: next as ProviderKind })}
-                  options={[
-                    { value: 'oidc', label: 'OpenID Connect' },
-                    { value: 'saml', label: 'SAML 2.0' },
-                  ]}
-                />
-              </Field>
+            <section className="grid gap-4" aria-label="Provider identity">
               <Field
                 label="Provider ID"
                 htmlFor="sso-provider-id"
@@ -184,21 +162,12 @@ export function SsoProviderForm({
               </Field>
             </section>
 
-            {protocol.kind === 'oidc' ? (
-              <OidcFields
-                protocol={protocol}
-                disabled={save.isPending}
-                onChange={setProtocol}
-                errorAt={errorAt}
-              />
-            ) : (
-              <SamlFields
-                protocol={protocol}
-                disabled={save.isPending}
-                onChange={setProtocol}
-                errorAt={errorAt}
-              />
-            )}
+            <OidcFields
+              protocol={protocol}
+              disabled={save.isPending}
+              onChange={setProtocol}
+              errorAt={errorAt}
+            />
           </>
         )}
 

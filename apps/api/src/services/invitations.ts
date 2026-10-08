@@ -69,6 +69,8 @@ interface RedeemedInvite {
   inviteId: string;
   userId: string;
   email: string;
+  /** The invitation was emailed to this address, which proves it (#214). */
+  verifiedByInvitation: boolean;
 }
 
 /**
@@ -94,6 +96,7 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{
           role: schema.invitation.role,
           expiresAt: schema.invitation.expiresAt,
           redeemedAt: schema.invitation.redeemedAt,
+          emailedAt: schema.invitation.emailedAt,
         })
         .from(schema.invitation)
         .where(eq(schema.invitation.tokenHash, tokenHash))
@@ -135,7 +138,13 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{
         throw validationFailed(INVALID_INVITE_MESSAGE);
       }
 
-      if (!verificationPolicy) {
+      // An invitation the server emailed to this address, accepted for that
+      // address (refused above for any other), shows the person reads that
+      // mailbox. Link-only invitations and ones created before the record
+      // (emailed_at NULL) prove nothing: the administrator saw those links (#214).
+      const verifiedByInvitation = Boolean(invite.emailedAt && invite.email);
+
+      if (!verificationPolicy || verifiedByInvitation) {
         await tx
           .update(schema.user)
           .set({ emailVerified: true })
@@ -155,7 +164,7 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{
         .returning({ id: schema.invitation.id });
       if (!claimed) throw validationFailed(INVALID_INVITE_MESSAGE);
 
-      return { inviteId: invite.id, userId: created.user.id, email };
+      return { inviteId: invite.id, userId: created.user.id, email, verifiedByInvitation };
     });
   } catch (error) {
     // Better Auth owns user/account creation on its own connection. If the
@@ -172,8 +181,8 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{
     throw error;
   }
 
-  let emailVerificationRequired = verificationPolicy;
-  if (verificationPolicy) {
+  let emailVerificationRequired = verificationPolicy && !redeemed.verifiedByInvitation;
+  if (emailVerificationRequired) {
     try {
       await auth.api.sendVerificationEmail({
         body: { email: redeemed.email, callbackURL: '/' },
@@ -198,7 +207,10 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{
     action: 'invite.redeem',
     targetType: 'invite',
     targetId: redeemed.inviteId,
-    metadata: { roleApplied: true },
+    metadata: {
+      roleApplied: true,
+      ...(redeemed.verifiedByInvitation ? { emailVerifiedByInvitation: true } : {}),
+    },
   }).catch((error) => logger.error({ error, inviteId: redeemed.inviteId }, 'Audit write failed'));
 
   return { emailVerificationRequired };

@@ -23,6 +23,7 @@ import {
   UnfinishedRequirementsError,
   unfinishedRequirements,
 } from './release-manifest.js';
+import { SamlSignInRemovedError, samlWouldLockOut } from './saml-lockout.js';
 import * as schema from './schema/index.js';
 
 const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), '../drizzle');
@@ -199,6 +200,10 @@ export async function runMigrationsWithLock(
               manifest: options.releaseManifest,
             });
             if (unfinished.length > 0) throw new UnfinishedRequirementsError(unfinished);
+            // SAML sign-in was removed (#53): do not upgrade an instance whose
+            // only way in is a SAML provider. Also under the lock, before any
+            // migration, so a refusal changes nothing.
+            if (await samlWouldLockOut(transaction)) throw new SamlSignInRemovedError();
             await runMigrations(db, options.migrationsFolder);
             return { applied: true };
           } finally {

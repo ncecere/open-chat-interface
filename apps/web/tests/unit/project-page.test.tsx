@@ -3,7 +3,7 @@ import type { ProjectFile, ProjectSummary, ThreadSummary } from '@oci/shared';
 import { useRouterState } from '@tanstack/react-router';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
-import { Toaster, toast } from 'sonner';
+import { Toaster } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ProjectPage } from '../../src/routes/projects/project';
@@ -13,6 +13,7 @@ import {
   cleanup,
   click,
   dialog,
+  dismissToasts,
   expectLocked,
   renderAdmin,
   settle,
@@ -364,7 +365,7 @@ describe('project page', () => {
     expect(region?.textContent).toContain(
       'Its 2 conversations are kept in your conversation list.',
     );
-    await act(async () => toast.dismiss());
+    await dismissToasts();
   });
 
   it('words the delete confirmation to fit what the project holds (#210)', async () => {

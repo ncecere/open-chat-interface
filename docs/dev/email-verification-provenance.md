@@ -18,6 +18,7 @@ unverified. Creation/update timestamps cannot resolve that ambiguity.
 | Path | Evidence and limits |
 | --- | --- |
 | Historical delivery fallback | At `fd4cfa0`, `apps/api/src/auth/policy.ts` waived enforcement for unusable SMTP or policy-read failure. `auth/index.ts`, `services/admin-users/mutations.ts` and `services/invitations.ts` could mark accounts verified without successful delivery. Source shows possibility, not affected account counts. |
+| Emailed invitation | `services/invitations.ts` marks an account verified when the invitation has `invitation.emailed_at` (migration `0046`) and an address, and it is accepted for that address. `POST /api/admin/invites` sets `emailed_at` only after the invitation email was delivered, and then does not return the link to the administrator, so only the mailbox owner holds it. The `invite.redeem` event records `emailVerifiedByInvitation: true`. Invitations created before `0046`, with no address, or whose email was not delivered have no `emailed_at` and do not set the flag. |
 | Explicit policy exemption | Current `auth/email-verification.ts`, administrative creation and invitation flows still permit automatic verification when the policy is explicitly disabled. SMTP failure no longer supplies an exemption. |
 | Administrative recovery | `bootstrap.ts` and `scripts/promote-admin.ts` set the flag without mailbox proof. Their `instance.bootstrap` and `user.promote_cli` events establish administrative actions, not address ownership. |
 | SDK administrative routes | Installed Better Auth admin creation/update endpoints can accept verification changes under administrator permissions. They are not covered by OCI's authentication audit-path map. |
@@ -41,9 +42,10 @@ not a count of misleading events in a deployed instance.
 Account-linked events with matching addresses are useful investigation
 candidates, but there is no explicit stored method/address/transition receipt.
 Audit writes are best-effort, and email-verification events are not protected
-from normal audit retention. Administrative creation and invitation redemption
-also do not establish mailbox ownership; administrators can receive invitation
-URLs directly.
+from normal audit retention. Administrative creation does not establish mailbox ownership. Nor does
+redeeming an invitation whose link the administrator was shown (no address, no
+delivered email, or created before migration `0046`); one emailed to the address
+does, and is recorded as `emailVerifiedByInvitation: true` on `invite.redeem`.
 
 ## Optional aggregate-only inspection
 

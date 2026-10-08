@@ -27,7 +27,6 @@ const provider = (label: string, enabled: boolean): SsoProviderSummary => ({
   claimMappings: {} as SsoProviderSummary['claimMappings'],
   autoRedirect: false,
   issuer: 'https://id.example.edu/realms/walk',
-  metadataUrl: null,
   callbackUrl: 'https://oci.example.edu/api/auth/sso/callback',
   createdAt: '2026-10-01T00:00:00.000Z',
   updatedAt: '2026-10-01T00:00:00.000Z',
@@ -42,7 +41,7 @@ afterEach(async () => {
 it('names each provider switch the same way, on or off, with its state as aria-checked', async () => {
   ({ root } = await renderAdmin(
     <SsoProviderList
-      providers={[provider('Walk Keycloak', true), provider('Campus SAML', false)]}
+      providers={[provider('Walk Keycloak', true), provider('Campus ID', false)]}
       onEdit={vi.fn()}
       onDelete={vi.fn()}
     />,
@@ -53,6 +52,6 @@ it('names each provider switch the same way, on or off, with its state as aria-c
   ]);
   expect(switches).toEqual([
     ['Enable Walk Keycloak', 'true'],
-    ['Enable Campus SAML', 'false'],
+    ['Enable Campus ID', 'false'],
   ]);
 });

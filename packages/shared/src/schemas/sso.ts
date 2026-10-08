@@ -56,9 +56,27 @@ const baseProviderFields = {
   autoRedirect: z.boolean().default(false),
 };
 
-export const createOidcProviderSchema = z.object({
+/** Why a provider of kind "saml" is refused (#53); also the message shown at the `kind` field. */
+export const SAML_NOT_SUPPORTED_MESSAGE = 'SAML is no longer supported. Use OpenID Connect.';
+
+/**
+ * What an administrator is told about a provider that was created while SAML
+ * was supported. Its row is kept (so rolling back restores it), but it is not
+ * offered at sign-in and cannot be enabled or edited, only deleted.
+ */
+export const SAML_PROVIDER_INERT_MESSAGE =
+  'SAML 2.0 is no longer supported. This provider is not offered at sign-in; delete it or replace it with an OpenID Connect provider.';
+
+/**
+ * OpenID Connect is the only kind that can be created. SAML was removed (#53):
+ * a body with `kind: "saml"` fails at the `kind` field with an explanation
+ * instead of the generic "Invalid input".
+ */
+export const createSsoProviderSchema = z.object({
   ...baseProviderFields,
-  kind: z.literal('oidc'),
+  kind: z.literal('oidc', {
+    error: (issue) => (issue.input === 'saml' ? SAML_NOT_SUPPORTED_MESSAGE : undefined),
+  }),
   issuer: z.string().trim().url().max(500),
   clientId: z.string().trim().min(1).max(300),
   clientSecret: z.string().trim().min(1).max(500),
@@ -67,27 +85,14 @@ export const createOidcProviderSchema = z.object({
   pkce: z.boolean().default(true),
 });
 
-export const createSamlProviderSchema = z.object({
-  ...baseProviderFields,
-  kind: z.literal('saml'),
-  issuer: z.string().trim().min(1).max(500),
-  entryPoint: z.string().trim().url().max(500),
-  idpCertificate: z.string().trim().min(1).max(20000),
-  audience: z.string().trim().min(1).max(500).nullable().optional(),
-  wantAssertionsSigned: z.boolean().default(true),
-  signatureAlgorithm: z.enum(['sha256', 'sha512']).default('sha256'),
-  digestAlgorithm: z.enum(['sha256', 'sha512']).default('sha256'),
-});
-
-export const createSsoProviderSchema = z.discriminatedUnion('kind', [
-  createOidcProviderSchema,
-  createSamlProviderSchema,
-]);
-
 export const ssoProviderSummarySchema = z.object({
   id: z.string(),
   providerId: z.string(),
   label: z.string(),
+  /**
+   * 'saml' only for a provider created before SAML was removed (#53): the list
+   * still returns it so it can be seen and deleted.
+   */
   kind: z.enum(['oidc', 'saml']),
   enabled: z.boolean(),
   jitProvisioning: z.boolean(),
@@ -100,8 +105,8 @@ export const ssoProviderSummarySchema = z.object({
   claimMappings: claimMappingsSchema,
   autoRedirect: z.boolean(),
   issuer: z.string(),
-  metadataUrl: z.string().nullable(),
-  callbackUrl: z.string(),
+  /** The address to register with the identity provider; null for a legacy SAML provider. */
+  callbackUrl: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

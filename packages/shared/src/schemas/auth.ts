@@ -52,7 +52,8 @@ export const authStatusSchema = z.object({
     z.object({
       providerId: z.string(),
       label: z.string(),
-      kind: z.enum(['oidc', 'saml']),
+      // Only OpenID Connect is offered at sign-in; SAML was removed (#53).
+      kind: z.literal('oidc'),
       iconUrl: z.string().url().nullable(),
       /** Whether the sign-in page should go straight to this provider. */
       autoRedirect: z.boolean().default(false),

@@ -2,10 +2,18 @@
 import type { ThreadSummary } from '@oci/shared';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
-import { Toaster, toast } from 'sonner';
+import { Toaster } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThreadList } from '../../src/components/layout/thread-list';
-import { button, cleanup, click, findButton, renderAdmin, settle } from './admin-test-utils';
+import {
+  button,
+  cleanup,
+  click,
+  dismissToasts,
+  findButton,
+  renderAdmin,
+  settle,
+} from './admin-test-utils';
 
 /**
  * How long the archive notice with Undo stays (#205), through the real
@@ -63,7 +71,7 @@ beforeEach(() => {
   };
 });
 afterEach(async () => {
-  await act(async () => toast.dismiss());
+  await dismissToasts();
   if (root) await cleanup(root);
   root = undefined;
   vi.useRealTimers();

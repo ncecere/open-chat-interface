@@ -16,7 +16,8 @@ describe('authentication rate limit: which Better Auth endpoints count', () => {
     ['POST', '/change-password', true],
     ['POST', '/change-email', true],
     ['GET', '/sso/callback/campus', true],
-    ['POST', '/sso/saml2/sp/acs/campus', true],
+    // SAML sign-in was removed (#53); the path is answered 404 before any limiter.
+    ['POST', '/sso/saml2/sp/acs/campus', false],
     ['GET', '/get-session', false],
     ['POST', '/sign-out', false],
     ['GET', '/sign-in/email', false],
@@ -40,10 +41,7 @@ describe('authentication rate limit: which Better Auth endpoints count', () => {
       kind: 'sso-callback',
       provider: 'campus idp',
     });
-    expect(authRequestKind('POST', '/sso/saml2/callback/staff')).toEqual({
-      kind: 'sso-callback',
-      provider: 'staff',
-    });
+    expect(authRequestKind('POST', '/sso/saml2/callback/staff')).toBeNull();
     expect(authRequestKind('GET', '/sso/callback')).toEqual({
       kind: 'sso-callback',
       provider: '(shared callback)',

@@ -1,4 +1,4 @@
-import { eq, schema } from '@oci/db';
+import { and, eq, ne, schema } from '@oci/db';
 import { type AuthStatus, acceptInviteSchema, validateInviteSchema } from '@oci/shared';
 import { Hono } from 'hono';
 import { getAuthPolicySettings } from '../auth/policy.js';
@@ -35,11 +35,12 @@ authStatusRoutes.get('/status', async (c) => {
       .select({
         providerId: schema.ssoProvider.providerId,
         label: schema.ssoProvider.label,
-        kind: schema.ssoProvider.kind,
         autoRedirect: schema.ssoProvider.autoRedirect,
       })
       .from(schema.ssoProvider)
-      .where(eq(schema.ssoProvider.enabled, true)),
+      // A provider created while SAML was supported stays in the table but is
+      // not offered: its sign-in endpoints are gone (#53).
+      .where(and(eq(schema.ssoProvider.enabled, true), ne(schema.ssoProvider.kind, 'saml'))),
   ]);
 
   const payload: AuthStatus = {
@@ -50,7 +51,7 @@ authStatusRoutes.get('/status', async (c) => {
     ssoProviders: providers.map((provider) => ({
       providerId: provider.providerId,
       label: provider.label || provider.providerId,
-      kind: provider.kind === 'saml' ? 'saml' : 'oidc',
+      kind: 'oidc',
       iconUrl: null,
       autoRedirect: provider.autoRedirect,
     })),

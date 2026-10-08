@@ -52,7 +52,7 @@ describe('SSO role mapping', () => {
   });
 
   it('reads a nested claim through a dotted path', () => {
-    // SAML assertions and some OIDC providers nest group membership.
+    // Some OIDC providers nest group membership.
     expect(
       resolveRoleFromClaims(
         { attributes: { groups: ['oci-admins'] } },

@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { toast } from 'sonner';
 import { expect } from 'vitest';
 import type { ZodType } from 'zod';
 import { AdminAccessProvider, type AdminRole } from '../../src/components/admin/admin-access';
@@ -140,6 +141,19 @@ export async function pressEscape() {
 export async function cleanup(root: Root) {
   await act(async () => root.unmount());
   document.body.innerHTML = '';
+}
+
+/**
+ * Dismisses every toast and waits out sonner's exit timer. A dismissed toast is removed
+ * 200 ms later by a plain `setTimeout` that is never cleared when the Toaster unmounts; if
+ * the test environment is gone by then, the timer calls into React with no `window` and
+ * vitest fails the whole run on the unhandled "window is not defined" (release PR #379).
+ */
+export async function dismissToasts() {
+  await act(async () => {
+    toast.dismiss();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  });
 }
 
 const FIXTURE_ROLES = ['admin', 'auditor', 'user', 'restricted'] as const;

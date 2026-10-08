@@ -1,3 +1,4 @@
+import { SAML_NOT_SUPPORTED_MESSAGE } from '@oci/shared';
 import { Hono } from 'hono';
 import { auth } from '../auth/index.js';
 import { loadEnv } from '../config/env.js';
@@ -63,6 +64,20 @@ export function createApiRoutes() {
   api.all('/auth/admin/*', (c) => c.json(managedInPeople, 404));
 
   /**
+   * Answers 404 for every SAML endpoint (/api/auth/sso/saml2/*). SAML sign-in
+   * was removed (#53), but the SSO plugin still ships its routes (assertion
+   * consumer, metadata, logout), so without this they would keep answering for
+   * a provider row left over from an earlier release. Registered before the
+   * catch-all below, like the admin one.
+   */
+  const samlRemoved = {
+    code: 'NOT_FOUND',
+    message: SAML_NOT_SUPPORTED_MESSAGE,
+    error: { code: 'NOT_FOUND', message: SAML_NOT_SUPPORTED_MESSAGE },
+  };
+  api.all('/auth/sso/saml2/*', (c) => c.json(samlRemoved, 404));
+
+  /**
    * Better Auth owns every other /api/auth/* path; sign-in, sign-up, password
    * reset and verification are limited per client address and per account
    * (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After).
@@ -73,8 +88,8 @@ export function createApiRoutes() {
     /*
      * Turn a refused SSO sign-in into a redirect back to the sign-in page.
      *
-     * The SAML callback already redirects on an APIError, but the OIDC one
-     * returns the body, so a refusal would render as raw JSON on a blank page.
+     * The OIDC callback returns the body of an APIError, so a refusal would
+     * render as raw JSON on a blank page.
      * Carrying the reason as a query parameter lets the sign-in page explain
      * it in place of a generic failure.
      */

@@ -38,7 +38,13 @@ export function ResendVerification({
   // reader would announce every second.
   useEffect(() => {
     if (!waiting) return;
-    const timer = window.setTimeout(() => setNow(Date.now()), waitUntil - Date.now());
+    const timer = window.setTimeout(
+      // A timer can fire a moment before Date.now() reaches the time it was set for; the
+      // wait is over once it has fired. Reading the clock alone left the button disabled
+      // (nothing set another timer) until something else re-rendered the page.
+      () => setNow(Math.max(Date.now(), waitUntil)),
+      waitUntil - Date.now(),
+    );
     return () => window.clearTimeout(timer);
   }, [waiting, waitUntil]);
 

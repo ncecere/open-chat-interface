@@ -56,8 +56,22 @@ export const inviteSchema = z.object({
   expiresAt: z.string().nullable(),
   redeemedAt: z.string().nullable(),
   redeemedByUserId: z.string().nullable(),
+  // When the invitation email was delivered; null if it was not emailed or
+  // predates the record. An emailed invitation verifies the address (#214).
+  emailedAt: z.string().nullable(),
   createdAt: z.string(),
 });
+
+/**
+ * The response to creating an invitation (#214). When the email was delivered
+ * the link is not returned at all: only the mailbox owner holds it, which is
+ * what lets accepting it count as proof of the address. Otherwise the link is
+ * returned once, for the administrator to share by hand.
+ */
+export const createdInviteSchema = z.discriminatedUnion('emailDelivered', [
+  z.object({ id: z.string(), emailDelivered: z.literal(true) }),
+  z.object({ id: z.string(), emailDelivered: z.literal(false), url: z.string() }),
+]);
 
 export const createInviteSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(320).nullable().optional(),
@@ -412,6 +426,7 @@ export interface SearchTestResult {
 
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type Invite = z.infer<typeof inviteSchema>;
+export type CreatedInvite = z.infer<typeof createdInviteSchema>;
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>;
 export type UpdateInstanceSettings = z.infer<typeof updateInstanceSettingsSchema>;
 export type QuotaPolicy = z.infer<typeof quotaPolicySchema>;

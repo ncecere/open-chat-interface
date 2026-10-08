@@ -19,7 +19,7 @@ interface SsoProvidersResponse {
 }
 
 /**
- * OpenID Connect and SAML identity providers, shown on the Authentication page
+ * OpenID Connect identity providers, shown on the Authentication page
  * beneath local sign-in so every way of signing in is configured in one place.
  */
 export function SsoProvidersSection() {
@@ -56,8 +56,8 @@ export function SsoProvidersSection() {
             Single sign-on
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
-            Connect OpenID Connect and SAML 2.0 identity providers, control account provisioning,
-            and map identity claims to roles.
+            Connect OpenID Connect identity providers, control account provisioning, and map
+            identity claims to roles.
           </p>
         </div>
         <EditOnly>
@@ -91,7 +91,7 @@ export function SsoProvidersSection() {
             No SSO providers configured.
           </p>
           <p className="max-w-md text-xs text-[var(--text-muted)]">
-            Add an OIDC or SAML 2.0 provider to offer centralized sign-in. You can keep it disabled
+            Add an OpenID Connect provider to offer centralized sign-in. You can keep it disabled
             while completing identity provider setup.
           </p>
         </div>

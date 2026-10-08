@@ -7,6 +7,66 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-07
+
+Removes SAML sign-in, makes an emailed invitation verify the address, and fixes two
+timers that could leave a notice or a button stuck. One
+pre-deploy migration, `0046` (a nullable `invitation.emailed_at` column, no table
+rewrite); no post-deploy step and no background migration. Read the **SAML**
+upgrade note below before upgrading an instance that has a SAML provider.
+
+### Changed
+
+- **An invitation that was emailed verifies the address** (#214). When you
+  invite an address and the email is delivered, the person who accepts the
+  invitation for that address gets an account whose email is already verified,
+  and is not sent a verification email. Invitations with no address, ones whose
+  email was not delivered (including when email is not configured), and ones
+  created before this release behave as before: the person still verifies. The
+  Invitations page lists when each was **Emailed**. **Upgrade note:** migration
+  `0046` adds one nullable column (`invitation.emailed_at`, no table rewrite);
+  existing invitations are unaffected. `POST /api/admin/invites` no longer returns
+  `url` when the email was delivered (the response is `{ id, emailDelivered:
+  true }`), and the dialog says the link was sent only to that address instead
+  of showing it; if the email was not delivered the link is shown as before.
+  The link is withheld because an invitation's link seen by an administrator
+  proves nothing about who holds the mailbox: showing it would let an
+  administrator create a verified account for someone else's address.
+  `GET /api/admin/invites` includes `emailedAt`.
+
+### Removed
+
+- **SAML sign-in is removed (#53); OpenID Connect stays.** The service-provider
+  metadata declares `WantAssertionsSigned="false"` because of a bug in
+  `@better-auth/sso`, a provider's certificate cannot be edited, and SAML is
+  hard to test and has had a long list of defects. **Upgrade note:** existing
+  SAML providers stop working. They stay in the database, untouched (so rolling
+  back to v0.11.1 restores them), but they are not offered on the sign-in page,
+  cannot be enabled or edited, and show a notice on Authentication with only a
+  **Delete** action; replace each with an OpenID Connect provider, which most
+  identity providers offer too (`docs/admin/identity.md`, "SAML is not
+  supported"). Creating a SAML provider is refused (422, at the `kind` field),
+  every `/api/auth/sso/saml2/*` address answers 404, and the provider form no
+  longer asks for a type. The `metadataUrl` field of the provider list is gone,
+  and `callbackUrl` is `null` for a SAML provider. **While upgrading, `migrate`
+  refuses, changing nothing,** when the only way to sign in is a SAML provider (an enabled SAML
+  provider, local sign-in off and no enabled OpenID Connect provider), because
+  upgrading would lock everyone out; turn on local sign-in or add an OpenID
+  Connect provider on the release you are running, then run `migrate` again.
+  There is no SQL migration (`saml_config` stays as an unused column), and the
+  `samlify` package stays installed, as a dependency of `@better-auth/sso`.
+
+### Fixed
+
+- **An announcement could stay beside the read-only banner**, and **Resend
+  verification email could stay disabled**, after the time they were waiting for
+  (#160, #330). Both used a timer set once for an end time, and a timer can fire a
+  millisecond or so before the wall clock reaches the time it was set for. The
+  check then found the time not yet reached, and nothing set another timer: the
+  scheduled-maintenance announcement stayed until the five-minute refresh, and the
+  resend button until something else re-rendered the page. Each now treats its
+  timer, once it has fired, as having reached its time.
+
 ## [0.11.1] - 2026-10-07
 
 Fixes from nine QA walks of v0.11.0 (issues #35–#378). Four migrations,
@@ -1662,7 +1722,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.11.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.12.0...main
+[0.12.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.0
 [0.11.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.1
 [0.11.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.0
 [0.10.2]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.2
