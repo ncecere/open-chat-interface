@@ -1,11 +1,19 @@
 // @vitest-environment happy-dom
 import type { ProjectSummary } from '@oci/shared';
-import { act, useState } from 'react';
+import { useState } from 'react';
 import type { Root } from 'react-dom/client';
-import { Toaster, toast } from 'sonner';
+import { Toaster } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MoveToProjectDialog } from '../../src/components/projects/project-dialogs';
-import { alerts, button, cleanup, click, dialog, renderAdmin } from './admin-test-utils';
+import {
+  alerts,
+  button,
+  cleanup,
+  click,
+  dialog,
+  dismissToasts,
+  renderAdmin,
+} from './admin-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -63,7 +71,7 @@ beforeEach(() => {
   api.patch.mockReset().mockResolvedValue({ thread: { id: 'thread-1' } });
 });
 afterEach(async () => {
-  await act(async () => toast.dismiss());
+  await dismissToasts();
   if (root) await cleanup(root);
   root = undefined;
 });
