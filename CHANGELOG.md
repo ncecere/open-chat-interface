@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-07
+
+Removes SAML sign-in and makes an emailed invitation verify the address. One
+pre-deploy migration, `0046` (a nullable `invitation.emailed_at` column, no table
+rewrite); no post-deploy step and no background migration. Read the **SAML**
+upgrade note below before upgrading an instance that has a SAML provider.
+
 ### Changed
 
 - **An invitation that was emailed verifies the address** (#214). When you
@@ -40,8 +47,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   supported"). Creating a SAML provider is refused (422, at the `kind` field),
   every `/api/auth/sso/saml2/*` address answers 404, and the provider form no
   longer asks for a type. The `metadataUrl` field of the provider list is gone,
-  and `callbackUrl` is `null` for a SAML provider. **`migrate` refuses, changing
-  nothing,** when the only way to sign in is a SAML provider (an enabled SAML
+  and `callbackUrl` is `null` for a SAML provider. **While upgrading, `migrate`
+  refuses, changing nothing,** when the only way to sign in is a SAML provider (an enabled SAML
   provider, local sign-in off and no enabled OpenID Connect provider), because
   upgrading would lock everyone out; turn on local sign-in or add an OpenID
   Connect provider on the release you are running, then run `migrate` again.
@@ -1703,7 +1710,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.11.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.12.0...main
+[0.12.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.0
 [0.11.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.1
 [0.11.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.0
 [0.10.2]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.10.2
