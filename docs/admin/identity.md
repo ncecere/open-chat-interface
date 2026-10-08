@@ -59,8 +59,14 @@ address or delete their own account; Settings tells them to ask you (see
 
 When required, local signup does not issue a session until the address is
 verified. Missing SMTP, rejected delivery, and unavailable authentication
-settings do not waive the requirement. Invitations and administrator-created
-accounts also remain unverified when delivery fails.
+settings do not waive the requirement. Administrator-created accounts remain
+unverified when delivery fails. So do accounts made from an invitation, except
+one that was emailed to an address and accepted for that address: the email
+that carried the link already showed the person reads that mailbox, so that
+account is created verified and is sent no verification email. An invitation
+with no address, one that could not be emailed (its link is then shared by
+hand), and one created before this release are verified like any other account (see
+[Invitations](people.md#invitations)).
 
 Configure and test SMTP before enabling this setting. After delivery recovers,
 users can **Resend verification email** from the signup or invitation confirmation,

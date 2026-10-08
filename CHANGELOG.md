@@ -7,6 +7,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- **An invitation that was emailed verifies the address** (#214). When you
+  invite an address and the email is delivered, the person who accepts the
+  invitation for that address gets an account whose email is already verified,
+  and is not sent a verification email. Invitations with no address, ones whose
+  email was not delivered (including when email is not configured), and ones
+  created before this release behave as before: the person still verifies. The
+  Invitations page lists when each was **Emailed**. **Upgrade note:** migration
+  `0046` adds one nullable column (`invitation.emailed_at`, no table rewrite);
+  existing invitations are unaffected. `POST /api/admin/invites` no longer returns
+  `url` when the email was delivered (the response is `{ id, emailDelivered:
+  true }`), and the dialog says the link was sent only to that address instead
+  of showing it; if the email was not delivered the link is shown as before.
+  The link is withheld because an invitation's link seen by an administrator
+  proves nothing about who holds the mailbox: showing it would let an
+  administrator create a verified account for someone else's address.
+  `GET /api/admin/invites` includes `emailedAt`.
+
 ## [0.11.1] - 2026-10-07
 
 Fixes from nine QA walks of v0.11.0 (issues #35–#378). Four migrations,

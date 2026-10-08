@@ -1,4 +1,10 @@
-import { createInviteSchema, type Invite, USER_ROLES, type UserRole } from '@oci/shared';
+import {
+  type CreatedInvite,
+  createInviteSchema,
+  type Invite,
+  USER_ROLES,
+  type UserRole,
+} from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Link2, MailPlus, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
@@ -26,12 +32,6 @@ import { validationProblems } from '~/lib/validation-issues';
 
 interface InvitesResponse {
   invites: Array<Omit<Invite, 'token'>>;
-}
-
-interface CreatedInvite {
-  id?: string;
-  url: string;
-  emailDelivered: boolean;
 }
 
 /** The form's names for the fields, so each error names the one it is about (#127). */
@@ -116,7 +116,8 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
   }
 
   async function copyUrl() {
-    if (!create.data) return;
+    // An emailed invitation has no link to copy (#214).
+    if (!create.data || create.data.emailDelivered) return;
 
     try {
       await navigator.clipboard.writeText(create.data.url);
@@ -124,6 +125,36 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
     } catch {
       setCopyFeedback('failed');
     }
+  }
+
+  if (create.data?.emailDelivered) {
+    // The link went only to the address: if it were shown here too, whoever
+    // created the invitation could accept it for someone else's address, and
+    // accepting it verifies that address (#214).
+    const recipient = email.trim();
+
+    return (
+      <DialogContent className="w-[calc(100%-2rem)]">
+        <DialogHeader>
+          <DialogTitle>Invitation emailed</DialogTitle>
+          <DialogDescription>
+            Invitation emailed to {recipient}. The link was sent only to that address, so it is not
+            shown here.
+          </DialogDescription>
+        </DialogHeader>
+
+        <p className="text-sm text-[var(--text-muted)]">
+          When they accept it with that address, their email is already verified. If it does not
+          arrive, revoke the invitation and create a new one.
+        </p>
+
+        <DialogFooter>
+          <Button type="button" variant="primary" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    );
   }
 
   if (create.data) {
@@ -164,16 +195,10 @@ function CreateInviteDialog({ onClose }: { onClose: () => void }) {
 
         {recipient ? (
           <div
-            className={`mt-4 rounded-lg px-3 py-2 text-sm ${
-              create.data.emailDelivered
-                ? 'bg-[var(--success)]/15 text-[var(--success)]'
-                : 'bg-[var(--warning)]/15 text-[var(--warning)]'
-            }`}
+            className="mt-4 rounded-lg bg-[var(--warning)]/15 px-3 py-2 text-sm text-[var(--warning)]"
             role="status"
           >
-            {create.data.emailDelivered
-              ? `Invitation email delivered to ${recipient}.`
-              : `The email could not be delivered to ${recipient}. Share the link manually.`}
+            The email could not be delivered to {recipient}. Share the link manually.
           </div>
         ) : (
           <p className="mt-4 text-sm text-[var(--text-muted)]">
@@ -367,6 +392,17 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
               {formatDateTime(invite.createdAt)}
             </dd>
           </div>
+          {invite.emailedAt && (
+            <div>
+              <dt className="text-[var(--text-muted)]">Emailed</dt>
+              <dd
+                className="mt-0.5 text-[var(--text-secondary)]"
+                title={formatDateTime(invite.emailedAt)}
+              >
+                {formatDateTime(invite.emailedAt)}
+              </dd>
+            </div>
+          )}
           {invite.redeemedAt && (
             <div>
               <dt className="text-[var(--text-muted)]">Redeemed</dt>

@@ -189,9 +189,23 @@ at a time: revoke it to send a new one, for example with a different role.
 A save with several problems, such as an expiry of 400 days for an address that
 already has an account, shows them all at their fields at once.
 An invitation for an address can only be accepted with that address, so the
-invitation page fills it in. When email verification is required, the new
-account still verifies its address as any other does: whoever opens the link
-could have been given it by hand.
+invitation page fills it in.
+
+When you create an invitation for an address and the email is delivered, the
+link goes only to that address and is **not shown to you**. Accepting it for
+that address shows the person reads that mailbox, so the account is created
+with its email already verified, and no verification email is sent. The list
+shows **Emailed** with the time it was sent. The link is withheld on purpose: if
+you could see it, you could accept it yourself for somebody else's address and
+get a verified account for it. If the email does not arrive, revoke the
+invitation and create a new one.
+
+In every other case the person verifies their address as any other account
+does (when email verification is required): an invitation with no address, one
+whose email was not sent or failed (then you are shown the link to share by
+hand, with a warning), and any invitation created before this behaviour
+existed (v0.11.1 and earlier). Whoever opens a link you could see might have
+been given it by hand.
 
 Invitations need email to be configured. Without SMTP you can still create one,
 but you will have to deliver the link yourself.
