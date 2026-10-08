@@ -33,7 +33,7 @@ const AUDITED_PATHS = new Map<string, string>([
 ]);
 
 /** Path prefixes whose outcome is a completed SSO sign-in. */
-const SSO_CALLBACK_PREFIXES = ['/sso/callback/', '/sso/saml2/sp/acs/'];
+const SSO_CALLBACK_PREFIXES = ['/sso/callback/'];
 
 function actionFor(path: string): string | null {
   const direct = AUDITED_PATHS.get(path);

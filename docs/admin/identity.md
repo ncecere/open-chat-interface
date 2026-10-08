@@ -5,7 +5,7 @@
 Every way of signing in is configured on one page, **Sign-in & security →
 Authentication** (`/admin/settings/authentication`): registration, local email
 and password sign-in, session length, and — further down, under **Single
-sign-on** — OIDC and SAML providers. The old `/admin/sso` address lands on that
+sign-on** — OpenID Connect (OIDC) providers. The old `/admin/sso` address lands on that
 section.
 
 ## Roles
@@ -111,8 +111,40 @@ the user list and sign them out together.
 
 ![Adding a provider](../images/admin-sso-provider-form.png)
 
-OIDC and SAML are both supported. The form asks for what the protocol needs;
-what follows are the fields whose consequences are not obvious.
+OpenID Connect is the supported protocol (see [SAML is not supported](#saml-is-not-supported)
+for moving off it); what follows are the fields whose consequences are not
+obvious.
+
+### SAML is not supported
+
+SAML 2.0 sign-in was removed after v0.11.1. OCI cannot add a SAML provider, and
+the SAML endpoints (`/api/auth/sso/saml2/*`) answer 404. Most identity providers
+(Microsoft Entra ID, Okta, Google Workspace, Keycloak, Shibboleth with its OIDC
+plugin, AD FS) offer OpenID Connect too, so moving over is a matter of
+registering OCI there as an OIDC application.
+
+A SAML provider created earlier **stays in the list** with a notice, but it is
+inert: it is not offered on the sign-in page, cannot be enabled or edited, and
+only **Delete** is available. Nothing is removed from the database, so rolling
+back to v0.11.1 restores it.
+
+To move over:
+
+1. Add an OpenID Connect provider for the same identity provider (below), with
+   the same **Allowed email domains** and role mappings, and
+   **Trust for account linking** set as it was.
+2. Sign in through it as a real person and check the role they get
+   ([Verifying it works](#verifying-it-works)). Accounts that signed in through
+   SAML keep their data; because the new provider is a different sign-in
+   method, people whose address matches an existing account are linked only if
+   **Trust for account linking** is on, as described below.
+3. Delete the SAML provider.
+
+If SAML was the only way anybody could sign in (local sign-in off, no OIDC
+provider), `migrate` refuses to upgrade and changes nothing, so nobody is
+locked out. Its message says what to do: turn on local sign-in (**Authentication**
+page) or add an OpenID Connect provider on the release you are running, then run
+`migrate` again.
 
 ### Before adding an OIDC provider
 
@@ -123,8 +155,7 @@ Okta) or on your own network. This guards against the server being pointed at
 an internal address. Add the issuer's origin, for example
 `AUTH_TRUSTED_ORIGINS=https://login.microsoftonline.com`, on every API replica
 and restart them before adding the provider; otherwise **Add provider** refuses
-and names the origin to add. SAML providers need no entry: their details are
-entered on the form, not discovered.
+and names the origin to add.
 
 ### Allowed email domains
 
@@ -135,20 +166,11 @@ commas or spaces, without `@`.
 ### Before enabling a provider
 
 A new provider starts **disabled**, so nobody can use it while you finish and
-check its settings; turn on **Provider enabled** when it is ready. A SAML
-provider's IdP certificate must be the identity provider's signing certificate
-(PEM, or the base64 body from its metadata); anything else is refused.
+check its settings; turn on **Provider enabled** when it is ready.
 
-Two limits of the current SSO library to know about:
-
-- **SAML metadata and signed assertions.** The SP metadata OCI publishes says
-  `WantAssertionsSigned="false"` even with **Require signed assertions** on;
-  the setting itself is applied when a response is checked. Tell the identity
-  provider's administrators to sign assertions rather than relying on the
-  metadata flag.
-- **Changing credentials.** A provider's protocol settings, client secret or
-  IdP certificate cannot be edited. To rotate one, add the provider again with
-  a new provider ID, then delete the old one.
+One limit to know about: **changing credentials.** A provider's protocol
+settings and client secret cannot be edited. To rotate one, add the provider
+again with a new provider ID, then delete the old one.
 
 ### Trust for account linking
 
@@ -182,8 +204,7 @@ Points worth knowing:
 
 - **Group membership usually arrives as a list**, and a rule matches if any
   entry does.
-- **A dotted path reaches a nested claim**, which SAML and some OIDC providers
-  need.
+- **A dotted path reaches a nested claim**, which some OIDC providers need.
 - **Matching ignores case**, because directories are inconsistent about it.
 - **Where several rules match, the most privileged wins.** Row order is an
   authoring detail, not a privilege decision.

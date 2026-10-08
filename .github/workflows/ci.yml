@@ -143,9 +143,7 @@ jobs:
       - name: Coverage with PostgreSQL, Redis, SMTP and S3
         # Every live suite runs, S3 included; with CI set an unreachable S3
         # server fails them rather than skipping, and every floor applies.
-        run: |
-          pnpm test:coverage
-          if test -f scripts/smoke-saml.mjs; then node scripts/smoke-saml.mjs; fi
+        run: pnpm test:coverage
       - name: Browser and accessibility regression tests
         run: |
           pnpm --filter @oci/web exec playwright install --with-deps chromium

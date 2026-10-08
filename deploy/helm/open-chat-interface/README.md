@@ -179,7 +179,7 @@ Every key is documented in [values.yaml](values.yaml) and checked by
 | Key | Default | Description |
 | --- | --- | --- |
 | `config.appUrl` | `""` (required) | Public URL people use. |
-| `config.authTrustedOrigins` | `""` | Trusted internal OIDC/SAML origins, comma-separated. |
+| `config.authTrustedOrigins` | `""` | Trusted internal OIDC origins, comma-separated. |
 | `config.logLevel` | `info` | |
 | `config.storageLocalPath` | `/data/storage` | Local attachment directory. |
 | `config.shutdownDrainTimeoutMs` | `25000` | How long a stopping pod lets replies finish. |

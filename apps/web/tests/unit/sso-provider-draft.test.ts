@@ -19,15 +19,6 @@ const oidc: ProtocolDraft = {
   clientId: ' client-id ',
   clientSecret: ' client-secret ',
 };
-const saml: ProtocolDraft = {
-  ...EMPTY_PROTOCOL,
-  providerId: 'company-saml',
-  kind: 'saml',
-  issuer: ' urn:company:idp ',
-  entryPoint: ' https://id.example.com/saml/sso ',
-  idpCertificate: ' signing-certificate ',
-};
-
 const provider: SsoProviderSummary = {
   id: 'provider-record',
   providerId: 'company-sso',
@@ -47,7 +38,6 @@ const provider: SsoProviderSummary = {
   claimMappings: { email: 'mail', subject: 'subject-id' },
   autoRedirect: true,
   issuer: 'https://id.example.com',
-  metadataUrl: null,
   callbackUrl: 'https://chat.example.com/callback',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
@@ -58,19 +48,12 @@ describe('SSO provider draft initialization', () => {
     expect(policyFromProvider()).toEqual(EMPTY_POLICY);
     expect(EMPTY_PROTOCOL).toEqual({
       providerId: '',
-      kind: 'oidc',
       issuer: '',
       clientId: '',
       clientSecret: '',
       discoveryUrl: '',
       scopes: 'openid profile email',
       pkce: true,
-      entryPoint: '',
-      idpCertificate: '',
-      audience: '',
-      wantAssertionsSigned: true,
-      signatureAlgorithm: 'sha256',
-      digestAlgorithm: 'sha256',
     });
   });
 
@@ -192,11 +175,10 @@ describe('SSO provider request mapping', () => {
     });
   });
 
-  it('patches only policy, stripping unexpected protocol settings, credentials and draft IDs', () => {
+  it('patches only policy, stripping protocol settings, credentials and draft IDs', () => {
     const input = {
       ...oidc,
       ...policy,
-      idpCertificate: 'certificate',
       claimRoleMappings: [
         { draftId: 'local-id', claim: ' groups ', value: ' engineering ', role: 'admin' as const },
       ],
@@ -228,9 +210,9 @@ describe('SSO provider request mapping', () => {
       scopes: 'openid,email openid\nprofile email',
       discoveryUrl: ' ',
       pkce: false,
-      idpCertificate: 'irrelevant-certificate',
+      // A leftover SAML field is not sent: SAML was removed (#53).
       entryPoint: 'not-a-url',
-    });
+    } as ProtocolDraft);
     expect(result.success).toBe(true);
     if (!result.success) throw new Error(result.error);
     const patch = toPatchBody(policy);
@@ -248,34 +230,6 @@ describe('SSO provider request mapping', () => {
     });
   });
 
-  it('creates SAML with only SAML protocol fields, null audience and no OIDC credentials', () => {
-    const result = toCreateBody(policy, {
-      ...saml,
-      audience: ' ',
-      wantAssertionsSigned: false,
-      signatureAlgorithm: 'sha512',
-      digestAlgorithm: 'sha512',
-      clientId: 'irrelevant-client',
-      clientSecret: 'irrelevant-secret',
-      discoveryUrl: 'not-a-url',
-    });
-    if (!result.success) throw new Error(result.error);
-    const patch = toPatchBody(policy);
-    if (!patch.success) throw new Error(patch.error);
-    expect(result.data).toEqual({
-      ...patch.data,
-      providerId: 'company-saml',
-      kind: 'saml',
-      issuer: 'urn:company:idp',
-      entryPoint: 'https://id.example.com/saml/sso',
-      idpCertificate: 'signing-certificate',
-      audience: null,
-      wantAssertionsSigned: false,
-      signatureAlgorithm: 'sha512',
-      digestAlgorithm: 'sha512',
-    });
-  });
-
   it('trims nonblank optional protocol fields', () => {
     expect(
       toCreateBody(policy, { ...oidc, discoveryUrl: ' https://id.example.com/discovery ' }),
@@ -283,14 +237,10 @@ describe('SSO provider request mapping', () => {
       success: true,
       data: { discoveryUrl: 'https://id.example.com/discovery' },
     });
-    expect(toCreateBody(policy, { ...saml, audience: ' urn:chat:sp ' })).toMatchObject({
-      success: true,
-      data: { audience: 'urn:chat:sp' },
-    });
   });
 
-  it.each([oidc, saml])('strips role mapping draft IDs when creating $kind', (protocol) => {
-    const result = toCreateBody(policyFromProvider(provider), protocol);
+  it('strips role mapping draft IDs when creating', () => {
+    const result = toCreateBody(policyFromProvider(provider), oidc);
     if (!result.success) throw new Error(result.error);
     expect(result.data.claimRoleMappings).toEqual(provider.claimRoleMappings);
   });
@@ -325,9 +275,9 @@ describe('SSO provider validation errors', () => {
     expect(toCreateBody(draft, EMPTY_PROTOCOL)).toMatchObject({ success: false, error: message });
   });
 
-  it.each([oidc, saml])('validates provider ID before protocol fields for $kind', (protocol) => {
+  it('validates provider ID before protocol fields', () => {
     expect(
-      toCreateBody(policy, { ...protocol, providerId: 'INVALID', issuer: '', clientSecret: '' }),
+      toCreateBody(policy, { ...oidc, providerId: 'INVALID', issuer: '', clientSecret: '' }),
     ).toMatchObject({
       success: false,
       error: 'Provider ID must be lowercase alphanumeric with dashes',
@@ -341,20 +291,8 @@ describe('SSO provider validation errors', () => {
     });
   });
 
-  it('keeps SAML entry point validation before certificate validation', () => {
-    expect(
-      toCreateBody(policy, { ...saml, entryPoint: 'not-a-url', idpCertificate: '' }),
-    ).toMatchObject({
-      success: false,
-      error: 'Invalid URL',
-    });
-  });
-
-  it.each([
-    { protocol: oidc, patch: { clientSecret: '' } },
-    { protocol: saml, patch: { idpCertificate: '' } },
-  ])('requires the $protocol.kind credential', ({ protocol, patch }) => {
-    expect(toCreateBody(policy, { ...protocol, ...patch })).toMatchObject({
+  it('requires the client secret', () => {
+    expect(toCreateBody(policy, { ...oidc, clientSecret: '' })).toMatchObject({
       success: false,
       error: 'Too small: expected string to have >=1 characters',
     });

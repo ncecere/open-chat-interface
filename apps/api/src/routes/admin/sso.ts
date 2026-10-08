@@ -1,8 +1,9 @@
-import { X509Certificate } from 'node:crypto';
 import { desc, eq, schema } from '@oci/db';
 import {
   claimMappingsSchema,
   createSsoProviderSchema,
+  SAML_NOT_SUPPORTED_MESSAGE,
+  SAML_PROVIDER_INERT_MESSAGE,
   type SsoProviderSummary,
   USER_ROLES,
 } from '@oci/shared';
@@ -60,35 +61,8 @@ async function registerWithPlugin(
   }
 }
 
-/**
- * The IdP's signing certificate, which every SAML response is checked
- * against. "this is not a certificate" used to be accepted, and the problem
- * only surfaced as failed sign-ins. Accepts PEM, or the bare base64 body that
- * IdP metadata carries.
- */
-function assertIdpCertificate(value: string): void {
-  const body = value.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s+/g, '');
-  const pem = `-----BEGIN CERTIFICATE-----\n${body.match(/.{1,64}/g)?.join('\n') ?? ''}\n-----END CERTIFICATE-----`;
-  try {
-    new X509Certificate(pem);
-  } catch {
-    throw validationFailed(
-      "The IdP certificate is not a valid X.509 certificate. Paste the signing certificate from the identity provider's metadata (PEM, or its base64 body).",
-      { path: ['idpCertificate'] },
-    );
-  }
-}
-
-function callbackUrl(providerId: string, kind: 'oidc' | 'saml'): string {
-  return kind === 'saml'
-    ? `${env.APP_URL}/api/auth/sso/saml2/sp/acs/${providerId}`
-    : `${env.APP_URL}/api/auth/sso/callback/${providerId}`;
-}
-
-function metadataUrl(providerId: string, kind: 'oidc' | 'saml'): string | null {
-  return kind === 'saml'
-    ? `${env.APP_URL}/api/auth/sso/saml2/sp/metadata?providerId=${providerId}`
-    : null;
+function callbackUrl(providerId: string): string {
+  return `${env.APP_URL}/api/auth/sso/callback/${providerId}`;
 }
 
 ssoRoutes.get('/providers', async (c) => {
@@ -98,6 +72,8 @@ ssoRoutes.get('/providers', async (c) => {
     .orderBy(desc(schema.ssoProvider.createdAt));
 
   const providers: SsoProviderSummary[] = rows.map((row) => {
+    // A provider created while SAML was supported (#53): listed so it can be
+    // seen and deleted, but it has no address to register anywhere any more.
     const kind = row.kind === 'saml' ? 'saml' : 'oidc';
     return {
       id: row.id,
@@ -115,8 +91,7 @@ ssoRoutes.get('/providers', async (c) => {
       claimMappings: row.claimMappings,
       autoRedirect: row.autoRedirect,
       issuer: row.issuer,
-      metadataUrl: metadataUrl(row.providerId, kind),
-      callbackUrl: callbackUrl(row.providerId, kind),
+      callbackUrl: kind === 'saml' ? null : callbackUrl(row.providerId),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -127,7 +102,7 @@ ssoRoutes.get('/providers', async (c) => {
 
 ssoRoutes.post('/providers', async (c) => {
   const actor = currentUser(c);
-  const input = await parseBody(c, createSsoProviderSchema);
+  const input = await parseBody(c, createSsoProviderSchema, [SAML_NOT_SUPPORTED_MESSAGE]);
   const organizationId = await getDefaultOrganizationId();
 
   const [existing] = await db
@@ -140,59 +115,24 @@ ssoRoutes.post('/providers', async (c) => {
 
   const domain = input.allowedDomains[0] ?? 'localhost';
 
-  if (input.kind === 'oidc') {
-    const discoveryEndpoint =
-      input.discoveryUrl ?? `${input.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`;
-    await assertDiscoveryTrusted(discoveryEndpoint);
-    await registerWithPlugin(
-      {
-        providerId: input.providerId,
-        issuer: input.issuer,
-        domain,
-        oidcConfig: {
-          clientId: input.clientId,
-          clientSecret: input.clientSecret,
-          discoveryEndpoint,
-          scopes: input.scopes,
-          pkce: input.pkce,
-        },
+  const discoveryEndpoint =
+    input.discoveryUrl ?? `${input.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`;
+  await assertDiscoveryTrusted(discoveryEndpoint);
+  await registerWithPlugin(
+    {
+      providerId: input.providerId,
+      issuer: input.issuer,
+      domain,
+      oidcConfig: {
+        clientId: input.clientId,
+        clientSecret: input.clientSecret,
+        discoveryEndpoint,
+        scopes: input.scopes,
+        pkce: input.pkce,
       },
-      c.req.raw.headers,
-    );
-  } else {
-    assertIdpCertificate(input.idpCertificate);
-    await registerWithPlugin(
-      {
-        providerId: input.providerId,
-        issuer: input.issuer,
-        domain,
-        samlConfig: {
-          entryPoint: input.entryPoint,
-          cert: input.idpCertificate,
-          callbackUrl: callbackUrl(input.providerId, 'saml'),
-          audience: input.audience ?? env.APP_URL,
-          wantAssertionsSigned: input.wantAssertionsSigned,
-          signatureAlgorithm: input.signatureAlgorithm,
-          digestAlgorithm: input.digestAlgorithm,
-          idpMetadata: {
-            entityID: input.issuer,
-            cert: input.idpCertificate,
-            singleSignOnService: [
-              {
-                Location: input.entryPoint,
-                Binding: 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect',
-              },
-            ],
-          },
-          spMetadata: {
-            entityID: input.audience ?? env.APP_URL,
-            binding: 'post',
-          },
-        },
-      },
-      c.req.raw.headers,
-    );
-  }
+    },
+    c.req.raw.headers,
+  );
 
   // Apply OCI-specific policy columns the plugin does not manage.
   await db
@@ -267,6 +207,9 @@ ssoRoutes.patch('/providers/:providerId', async (c) => {
     .limit(1);
 
   if (!existing) throw notFound('SSO provider not found');
+  // Inert since SAML was removed (#53): enabling or editing it would suggest
+  // it can sign people in. Only deleting remains.
+  if (existing.kind === 'saml') throw conflict(SAML_PROVIDER_INERT_MESSAGE);
 
   const [updated] = await db
     .update(schema.ssoProvider)

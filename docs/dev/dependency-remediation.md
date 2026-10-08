@@ -36,12 +36,14 @@ Vitest 4 runs **288 API unit/integration tests and 120 web tests** successfully.
 The coverage run passes the unchanged thresholds with **383 tests**, including
 95 live PostgreSQL/SMTP tests; six S3 tests skip. These counts describe this
 branch based on the refactor baseline, not the separate runtime-fix branch.
-The signed-SAML smoke also passes using Samlify 2.13.1 and xmldom 0.8.15.
+The signed-SAML smoke (since removed, #53) also passed using Samlify 2.13.1 and xmldom 0.8.15.
 
 ## Reachability and limits
 
-- **XML:** used by the nonoptional SAML stack. Parsing denial-of-service findings
-  matter on SAML inputs; serializer attacks depend on the DOM operations used.
+- **XML:** used by the SAML stack, which `@better-auth/sso` still depends on
+  (Samlify, xmldom) although OCI no longer offers SAML sign-in or answers its
+  routes (#53), so SAML input is not reachable. Serializer attacks depend on the
+  DOM operations used.
 - **Hono:** query parsing is used. OCI's JSON validation helper is distinct from
   Hono's dot-notation body parser; no static-site generation call was found.
 - **Mail:** SMTP delivery uses Nodemailer. No legacy `resolveContent` call was
@@ -77,15 +79,6 @@ Do not confuse unavailable-service skips with successful tests. During local
 remediation, Mailpit was available but the configured MinIO image could not be
 pulled, leaving six S3 checks unverified.
 
-A repeatable SAML dependency smoke requires the `openssl` CLI:
-
-```bash
-node scripts/smoke-saml.mjs
-```
-
-It generates disposable RSA keys/certificates, uses the installed Better Auth
-XML validator and Samlify dependency, verifies a signed login-response
-round-trip, and asserts rejection of signature tampering and malformed XML.
-The temporary keys are removed, and no external IdP is contacted. This checks
-the upgraded XML/signature chain, **not** OCI's complete SSO callback, claim
-mapping or external-IdP interoperability.
+The repeatable SAML dependency smoke (`scripts/smoke-saml.mjs`) that used to run
+here was removed with SAML sign-in itself (#53); nothing in OCI verifies a SAML
+response any more.

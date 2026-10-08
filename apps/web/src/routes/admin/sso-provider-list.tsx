@@ -1,6 +1,6 @@
-import type { SsoProviderSummary } from '@oci/shared';
+import { SAML_PROVIDER_INERT_MESSAGE, type SsoProviderSummary } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ExternalLink, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
+import { Check, Copy, Pencil, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { EditOnly, useAdminAccess } from '~/components/admin/admin-access';
 import { RowList } from '~/components/admin/admin-ui';
@@ -18,20 +18,16 @@ import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
 import { api, apiErrorMessage } from '~/lib/api-client';
 
-type CopiedEndpoint = 'callback' | 'metadata' | null;
-
 function Endpoint({
   label,
   value,
   copied,
   onCopy,
-  openable = false,
 }: {
   label: string;
   value: string;
   copied: boolean;
   onCopy: () => void;
-  openable?: boolean;
 }) {
   return (
     <div className="min-w-0">
@@ -49,13 +45,6 @@ function Endpoint({
         >
           {copied ? <Check /> : <Copy />}
         </Button>
-        {openable && (
-          <Button asChild variant="ghost" size="icon-sm">
-            <a href={value} target="_blank" rel="noreferrer" aria-label={`Open ${label}`}>
-              <ExternalLink />
-            </a>
-          </Button>
-        )}
       </dd>
     </div>
   );
@@ -72,7 +61,7 @@ function ProviderRow({
 }) {
   const queryClient = useQueryClient();
   const { canEdit } = useAdminAccess();
-  const [copied, setCopied] = useState<CopiedEndpoint>(null);
+  const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
 
   const toggle = useMutation({
@@ -85,18 +74,23 @@ function ProviderRow({
       ]),
   });
 
-  async function copy(value: string, endpoint: Exclude<CopiedEndpoint, null>) {
+  async function copy(value: string) {
     setCopyError(false);
     try {
       await navigator.clipboard.writeText(value);
-      setCopied(endpoint);
+      setCopied(true);
     } catch {
-      setCopied(null);
+      setCopied(false);
       setCopyError(true);
     }
   }
 
-  const kindLabel = provider.kind === 'oidc' ? 'OpenID Connect' : 'SAML 2.0';
+  // A provider created while SAML was supported (#53): kept so it can be seen
+  // and deleted (and so a rollback restores it), but it is not offered at
+  // sign-in, and nothing about it can be enabled or edited.
+  const legacySaml = provider.kind === 'saml';
+  const callbackUrl = provider.callbackUrl ?? '';
+  const kindLabel = legacySaml ? 'SAML 2.0' : 'OpenID Connect';
 
   return (
     <div className="p-4 sm:p-5">
@@ -109,9 +103,13 @@ function ProviderRow({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="truncate font-medium text-[var(--text-primary)]">{provider.label}</h2>
             <Badge variant="neutral">{kindLabel}</Badge>
-            <Badge variant={provider.enabled ? 'success' : 'warning'}>
-              {provider.enabled ? 'Enabled' : 'Disabled'}
-            </Badge>
+            {legacySaml ? (
+              <Badge variant="warning">Not offered at sign-in</Badge>
+            ) : (
+              <Badge variant={provider.enabled ? 'success' : 'warning'}>
+                {provider.enabled ? 'Enabled' : 'Disabled'}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 break-all text-xs text-[var(--text-muted)]">
             {provider.providerId} · {provider.issuer}
@@ -119,24 +117,28 @@ function ProviderRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Switch
-            checked={provider.enabled}
-            disabled={toggle.isPending || !canEdit}
-            onCheckedChange={(enabled) => toggle.mutate(enabled)}
-            // One name whatever its state, which aria-checked gives (#325): "Disable
-            // Walk Keycloak, switch, on" sounded as if it were off. As the model switches.
-            aria-label={`Enable ${provider.label}`}
-          />
+          {!legacySaml && (
+            <Switch
+              checked={provider.enabled}
+              disabled={toggle.isPending || !canEdit}
+              onCheckedChange={(enabled) => toggle.mutate(enabled)}
+              // One name whatever its state, which aria-checked gives (#325): "Disable
+              // Walk Keycloak, switch, on" sounded as if it were off. As the model switches.
+              aria-label={`Enable ${provider.label}`}
+            />
+          )}
           <EditOnly>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Edit ${provider.label}`}
-              onClick={onEdit}
-            >
-              <Pencil />
-            </Button>
+            {!legacySaml && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Edit ${provider.label}`}
+                onClick={onEdit}
+              >
+                <Pencil />
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -150,82 +152,88 @@ function ProviderRow({
         </div>
       </div>
 
-      <dl className="mt-4 grid gap-3 border-t border-[var(--border-subtle)] pt-4 sm:grid-cols-3">
-        <div>
-          <dt className="text-xs text-[var(--text-muted)]">JIT provisioning</dt>
-          <dd className="mt-0.5 text-xs font-medium text-[var(--text-secondary)]">
-            {provider.jitProvisioning ? 'Enabled' : 'Disabled'}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[var(--text-muted)]">Account linking</dt>
-          <dd className="mt-0.5 text-xs font-medium text-[var(--text-secondary)]">
-            {provider.trustedForLinking ? 'Trusted' : 'Not trusted'}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[var(--text-muted)]">Default role</dt>
-          <dd className="mt-0.5 text-xs font-medium capitalize text-[var(--text-secondary)]">
-            {provider.defaultRole}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[var(--text-muted)]">Allowed domains</dt>
-          <dd className="mt-0.5 break-words text-xs font-medium text-[var(--text-secondary)]">
-            {provider.allowedDomains.length > 0 ? provider.allowedDomains.join(', ') : 'Any domain'}
-          </dd>
-        </div>
-      </dl>
-
-      <div className="mt-4 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent-soft)]/50 p-3 sm:p-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-          {provider.kind === 'saml' ? 'Service provider details' : 'Application redirect details'}
-        </h3>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
-          Configure these exact values in your identity provider.
-        </p>
-        <dl className="mt-3 grid gap-3">
-          <Endpoint
-            label={
-              provider.kind === 'saml' ? 'Assertion Consumer Service (ACS) URL' : 'Redirect URI'
-            }
-            value={provider.callbackUrl}
-            copied={copied === 'callback'}
-            onCopy={() => void copy(provider.callbackUrl, 'callback')}
+      {legacySaml ? (
+        <div
+          role="note"
+          className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-3 text-xs text-[var(--text-secondary)] sm:p-4"
+        >
+          <TriangleAlert
+            className="mt-0.5 size-4 shrink-0 text-[var(--warning)]"
+            aria-hidden="true"
           />
-          {provider.metadataUrl && (
-            <Endpoint
-              label="SP metadata URL"
-              value={provider.metadataUrl}
-              copied={copied === 'metadata'}
-              onCopy={() => void copy(provider.metadataUrl as string, 'metadata')}
-              openable
-            />
-          )}
-        </dl>
-        <p className="sr-only" aria-live="polite">
-          {copied && `${copied === 'callback' ? 'Callback' : 'Metadata'} URL copied.`}
-          {copyError && 'Could not copy the URL. Select it manually.'}
-        </p>
-      </div>
-
-      {provider.claimRoleMappings.length > 0 && (
-        <div className="mt-4">
-          <p className="text-xs font-medium text-[var(--text-muted)]">Role mappings</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {provider.claimRoleMappings.map((mapping) => (
-              <Badge
-                key={`${mapping.claim}-${mapping.value}-${mapping.role}`}
-                variant="outline"
-                className="max-w-full font-mono"
-              >
-                <span className="truncate">
-                  {mapping.claim}={mapping.value} → {mapping.role}
-                </span>
-              </Badge>
-            ))}
-          </div>
+          <p>{SAML_PROVIDER_INERT_MESSAGE}</p>
         </div>
+      ) : (
+        <>
+          <dl className="mt-4 grid gap-3 border-t border-[var(--border-subtle)] pt-4 sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-[var(--text-muted)]">JIT provisioning</dt>
+              <dd className="mt-0.5 text-xs font-medium text-[var(--text-secondary)]">
+                {provider.jitProvisioning ? 'Enabled' : 'Disabled'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--text-muted)]">Account linking</dt>
+              <dd className="mt-0.5 text-xs font-medium text-[var(--text-secondary)]">
+                {provider.trustedForLinking ? 'Trusted' : 'Not trusted'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--text-muted)]">Default role</dt>
+              <dd className="mt-0.5 text-xs font-medium capitalize text-[var(--text-secondary)]">
+                {provider.defaultRole}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--text-muted)]">Allowed domains</dt>
+              <dd className="mt-0.5 break-words text-xs font-medium text-[var(--text-secondary)]">
+                {provider.allowedDomains.length > 0
+                  ? provider.allowedDomains.join(', ')
+                  : 'Any domain'}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="mt-4 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent-soft)]/50 p-3 sm:p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+              Application redirect details
+            </h3>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Configure these exact values in your identity provider.
+            </p>
+            <dl className="mt-3 grid gap-3">
+              <Endpoint
+                label="Redirect URI"
+                value={callbackUrl}
+                copied={copied}
+                onCopy={() => void copy(callbackUrl)}
+              />
+            </dl>
+            <p className="sr-only" aria-live="polite">
+              {copied && 'Callback URL copied.'}
+              {copyError && 'Could not copy the URL. Select it manually.'}
+            </p>
+          </div>
+
+          {provider.claimRoleMappings.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-medium text-[var(--text-muted)]">Role mappings</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {provider.claimRoleMappings.map((mapping) => (
+                  <Badge
+                    key={`${mapping.claim}-${mapping.value}-${mapping.role}`}
+                    variant="outline"
+                    className="max-w-full font-mono"
+                  >
+                    <span className="truncate">
+                      {mapping.claim}={mapping.value} → {mapping.role}
+                    </span>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {toggle.error && (

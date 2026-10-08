@@ -22,7 +22,7 @@ not the same problem. A short file can still have poor boundaries.
 | Entry point | Before → after (lines) | Responsibilities extracted |
 | --- | --- | --- |
 | `apps/web/src/routes/admin/storage.tsx` | 834 → 60 | Draft validation/patching; save/health controller; driver, S3 credential/connection, and upload panels |
-| `apps/web/src/routes/admin/sso-provider-form.tsx` | 880 → 181 | Validated create/edit payloads; policy and role mappings; OIDC/SAML field groups |
+| `apps/web/src/routes/admin/sso-provider-form.tsx` | 880 → 181 | Validated create/edit payloads; policy and role mappings; OIDC field group (the SAML one was removed, #53) |
 | `apps/web/src/routes/admin/users.tsx` | 521 → 126 | Directory filters/paging; saved views; selection/bulk actions; table and role mutation |
 | `apps/web/src/routes/admin/audit.tsx` | 548 → 193 | Filter/query controller; desktop/mobile event lists; event details |
 | `apps/web/src/components/command-palette/command-palette.tsx` | 424 → 133 | Role-aware action catalogue; debounced search and keyboard interaction |
@@ -169,4 +169,4 @@ that these findings have been resolved.
 The separate dependency change upgrades the packages above and reports zero
 advisories in both production and full audits, without ignored findings. See
 [dependency remediation](dependency-remediation.md) for versions, reachability
-limits, coverage changes and the repeatable signed-SAML smoke.
+limits and coverage changes (its signed-SAML smoke was removed with SAML, #53).

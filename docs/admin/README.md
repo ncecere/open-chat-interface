@@ -16,7 +16,7 @@ resolves it. [First run](first-run.md) walks through it.
 1. [First run](first-run.md) — the setup checklist, step by step.
 2. [Instance settings](instance-settings.md) — general settings, email delivery,
    branding, announcements.
-3. [Identity and access](identity.md) — roles, local accounts, OIDC, SAML, group
+3. [Identity and access](identity.md) — roles, local accounts, OIDC, group
    role mapping.
 4. [People](people.md) — users, roles, bans, limits, invitations, bulk actions.
 5. [Models and providers](models-providers.md) — credentials, the catalogue, the

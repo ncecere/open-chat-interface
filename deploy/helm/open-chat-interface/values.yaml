@@ -71,7 +71,7 @@ secrets:
 config:
   # Public URL people use (required). Must match the ingress host and scheme.
   appUrl: ""
-  # Comma-separated origins of trusted internal OIDC/SAML identity providers.
+  # Comma-separated origins of trusted internal OIDC identity providers.
   authTrustedOrigins: ""
   logLevel: info
   # Local attachment directory (used while the storage driver is "local").

@@ -49,7 +49,7 @@ const POST_KINDS = new Map<string, AuthRequestKind>([
 const GET_KINDS = new Map<string, AuthRequestKind>([['/verify-email', 'request']]);
 const GET_PREFIXES: Array<[string, AuthRequestKind]> = [['/reset-password/', 'request']];
 /** Single sign-on callbacks, each ending in the provider id. */
-const SSO_CALLBACK_PREFIXES = ['/sso/callback/', '/sso/saml2/callback/', '/sso/saml2/sp/acs/'];
+const SSO_CALLBACK_PREFIXES = ['/sso/callback/'];
 
 export const AUTH_RATE_LIMIT_MESSAGE = 'Too many attempts. Wait a minute and try again.';
 

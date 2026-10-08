@@ -78,7 +78,7 @@ only. Confirm it is what you want before the instance is reachable:
   once an identity provider is doing the work.
 
 If you are connecting an identity provider, [Identity and access](identity.md)
-covers OIDC and SAML in full. Two things there deserve attention before you rely
+covers OIDC in full. Two things there deserve attention before you rely
 on it:
 
 - **Require a matching role**, or every account your provider will authenticate

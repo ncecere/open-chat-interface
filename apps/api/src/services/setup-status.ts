@@ -1,4 +1,4 @@
-import { count, eq, isNotNull, schema } from '@oci/db';
+import { and, count, eq, isNotNull, ne, schema } from '@oci/db';
 import { SEARCH_PROVIDERS, type SetupCheck, type SetupStatus } from '@oci/shared';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
@@ -136,7 +136,8 @@ async function signInCheck(): Promise<SetupCheck> {
     db
       .select({ value: count() })
       .from(schema.ssoProvider)
-      .where(eq(schema.ssoProvider.enabled, true)),
+      // Not a legacy SAML provider: it cannot sign anyone in (#53).
+      .where(and(eq(schema.ssoProvider.enabled, true), ne(schema.ssoProvider.kind, 'saml'))),
   ]);
   const ssoCount = sso?.value ?? 0;
   const methods = [

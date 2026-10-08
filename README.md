@@ -1,6 +1,6 @@
 # Open Chat Interface (OCI)
 
-A self-hostable, multi-model chat application with local, OIDC, and SAML
+A self-hostable, multi-model chat application with local and OIDC
 authentication and a first-class administration dashboard. OCI includes streaming
 chat and reasoning, resumable Redis-backed generations, attachments, grounded web
 search, branching, temporary chats, and privacy-filtered share links.
@@ -19,7 +19,7 @@ search, branching, temporary chats, and privacy-filtered share links.
 | Monorepo | pnpm workspaces + Turborepo |
 | Frontend | Vite, React 19, TypeScript, Tailwind 4, TanStack Router/Query |
 | Backend | Hono on Node 22, AI SDK v7 |
-| Auth | Better Auth (email/password, OIDC, SAML 2.0, admin roles) |
+| Auth | Better Auth (email/password, OIDC, admin roles) |
 | Database | PostgreSQL 17 + Drizzle ORM |
 | Cache/Jobs | Redis |
 | Tooling | Biome, Vitest, Playwright |
@@ -245,8 +245,8 @@ invite tokens really do travel in the URL fragment.
 
 ## Testing SSO and email locally
 
-`docker/compose.auth-test.yaml` starts a preconfigured Keycloak realm (OIDC and
-SAML clients, one test user) plus Mailpit for capturing outbound mail.
+`docker/compose.auth-test.yaml` starts a preconfigured Keycloak realm (an OIDC
+client, one test user) plus Mailpit for capturing outbound mail.
 
 ```bash
 docker compose -f docker/compose.auth-test.yaml up -d
@@ -257,8 +257,8 @@ docker compose -f docker/compose.auth-test.yaml up -d
 
 Run the API with `AUTH_TRUSTED_ORIGINS=http://localhost:8090`, then register the
 providers under **Single sign-on** on **Admin → Sign-in & security →
-Authentication** using provider IDs `oci-oidc` and `oci-saml`
-so the callback URLs match the imported realm. The credentials in this realm are
+Authentication** using provider ID `oci-oidc`
+so the callback URL matches the imported realm. The credentials in this realm are
 test-only and must never be reused.
 
 ### Account linking

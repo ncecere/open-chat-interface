@@ -57,11 +57,6 @@ export const READ_ONLY_ALLOWLIST: readonly ReadOnlyAllowance[] = [
   { method: 'POST', path: '/api/auth/sign-out', why: 'Signing out' },
   {
     method: 'POST',
-    path: '/api/auth/sso/saml2/*',
-    why: 'Signing in with SAML (the identity provider posts back here)',
-  },
-  {
-    method: 'POST',
     path: '/api/auth/accept-invite/validate',
     why: 'Checks an invitation; changes nothing',
   },

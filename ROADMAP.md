@@ -48,8 +48,9 @@ self-hosted alternatives.
   read-only auditor role. Open WebUI has no enforced quotas and its audit log is
   off-by-default request logging. LibreChat has credits but no cost analytics,
   and its audit log covers permission grants only.
-- **Native OIDC and SAML** with just-in-time provisioning, domain allowlists and
-  claim-to-role mapping. Open WebUI has no native SAML.
+- **Native OIDC** with just-in-time provisioning, domain allowlists and
+  claim-to-role mapping. (SAML was removed after v0.11.1, #53;
+  most identity providers offer OIDC as well.)
 - **White-label without strings.** MIT licensed, with no contributor licence
   agreement. Open WebUI may not be rebranded above 50 users without an
   enterprise licence.

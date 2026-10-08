@@ -34,8 +34,6 @@ export const policySchema = z.object({
   ),
 });
 
-export type ProviderKind = SsoProviderSummary['kind'];
-
 export interface DraftClaimRoleMapping extends ClaimRoleMapping {
   draftId: string;
 }
@@ -57,21 +55,15 @@ export interface PolicyDraft {
   claimSubject: string;
 }
 
+/** The OpenID Connect settings of a new provider; SAML was removed (#53). */
 export interface ProtocolDraft {
   providerId: string;
-  kind: ProviderKind;
   issuer: string;
   clientId: string;
   clientSecret: string;
   discoveryUrl: string;
   scopes: string;
   pkce: boolean;
-  entryPoint: string;
-  idpCertificate: string;
-  audience: string;
-  wantAssertionsSigned: boolean;
-  signatureAlgorithm: 'sha256' | 'sha512';
-  digestAlgorithm: 'sha256' | 'sha512';
 }
 
 export const EMPTY_POLICY: PolicyDraft = {
@@ -94,19 +86,12 @@ export const EMPTY_POLICY: PolicyDraft = {
 
 export const EMPTY_PROTOCOL: ProtocolDraft = {
   providerId: '',
-  kind: 'oidc',
   issuer: '',
   clientId: '',
   clientSecret: '',
   discoveryUrl: '',
   scopes: 'openid profile email',
   pkce: true,
-  entryPoint: '',
-  idpCertificate: '',
-  audience: '',
-  wantAssertionsSigned: true,
-  signatureAlgorithm: 'sha256',
-  digestAlgorithm: 'sha256',
 };
 
 export function splitList(value: string): string[] {
@@ -178,9 +163,6 @@ const SSO_LABELS = {
   clientSecret: 'Client secret',
   discoveryUrl: 'Discovery URL',
   scopes: 'Scopes',
-  entryPoint: 'Single sign-on URL',
-  idpCertificate: 'IdP signing certificate',
-  audience: 'SP entity ID / audience',
 };
 
 type Issues = ReadonlyArray<{ path: PropertyKey[]; message: string }>;
@@ -243,27 +225,15 @@ export function toCreateBody(
     : toPatchBody({ ...EMPTY_POLICY, label: 'Placeholder' });
   if (!checked.success) throw new Error('The placeholder policy is refused');
 
-  const protocolFields =
-    protocol.kind === 'oidc'
-      ? {
-          kind: 'oidc' as const,
-          issuer: protocol.issuer,
-          clientId: protocol.clientId,
-          clientSecret: protocol.clientSecret,
-          discoveryUrl: protocol.discoveryUrl.trim() || null,
-          scopes: splitList(protocol.scopes),
-          pkce: protocol.pkce,
-        }
-      : {
-          kind: 'saml' as const,
-          issuer: protocol.issuer,
-          entryPoint: protocol.entryPoint,
-          idpCertificate: protocol.idpCertificate,
-          audience: protocol.audience.trim() || null,
-          wantAssertionsSigned: protocol.wantAssertionsSigned,
-          signatureAlgorithm: protocol.signatureAlgorithm,
-          digestAlgorithm: protocol.digestAlgorithm,
-        };
+  const protocolFields = {
+    kind: 'oidc' as const,
+    issuer: protocol.issuer,
+    clientId: protocol.clientId,
+    clientSecret: protocol.clientSecret,
+    discoveryUrl: protocol.discoveryUrl.trim() || null,
+    scopes: splitList(protocol.scopes),
+    pkce: protocol.pkce,
+  };
 
   const result = createSsoProviderSchema.safeParse({
     ...checked.data,

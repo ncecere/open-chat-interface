@@ -66,8 +66,8 @@ const ROLE_PRECEDENCE: UserRole[] = ['admin', 'auditor', 'user', 'restricted'];
 /**
  * Reads a claim, following dots into nested objects.
  *
- * SAML assertions and some OIDC providers nest group membership rather than
- * exposing it at the top level, so `attributes.groups` has to be reachable.
+ * Some OIDC providers nest group membership rather than exposing it at the
+ * top level, so `attributes.groups` has to be reachable.
  */
 function claimValue(claims: Record<string, unknown>, path: string): unknown {
   if (path in claims) return claims[path];

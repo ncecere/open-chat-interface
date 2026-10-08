@@ -52,64 +52,47 @@ test('storage tabs retain one draft and submit only changed public settings', as
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
 });
 
-for (const kind of ['oidc', 'saml'] as const) {
-  test(`SSO ${kind} creation submits only the selected protocol and access policy`, async ({
-    page,
-  }) => {
-    const submissions: Record<string, unknown>[] = [];
-    await page.route('**/api/admin/sso/providers', async (route) => {
-      if (route.request().method() === 'POST') {
-        submissions.push(route.request().postDataJSON());
-        return route.fulfill({ json: { providerId: 'review-sso' } });
-      }
-      return route.fulfill({ json: { providers: [] } });
-    });
-    // Single sign-on lives on the Authentication page; the old address redirects there.
-    await page.goto('/admin/sso');
-    await expect(page).toHaveURL(/\/admin\/settings\/authentication#single-sign-on$/);
-    await page
-      .locator('#single-sign-on')
-      .getByRole('button', { name: 'Add provider', exact: true })
-      .click();
-    const dialog = page.getByRole('dialog');
-    if (kind === 'saml') {
-      await dialog.getByRole('combobox', { name: 'Provider type' }).click();
-      await page.getByRole('option', { name: 'SAML 2.0', exact: true }).click();
-      await dialog.getByLabel('IdP entity ID / issuer').fill('https://id.example.test');
-      await dialog.getByLabel('Single sign-on URL').fill('https://id.example.test/sso');
-      await dialog
-        .getByLabel('IdP signing certificate')
-        .fill('-----BEGIN CERTIFICATE-----\nreview-only\n-----END CERTIFICATE-----');
-    } else {
-      await dialog.getByLabel('Issuer URL').fill('https://id.example.test');
-      await dialog.getByLabel('Client ID', { exact: true }).fill('review-client');
-      await dialog
-        .getByLabel('Client secret', { exact: true })
-        .fill('review-only-not-a-credential');
+test('SSO creation submits only the OpenID Connect protocol and access policy', async ({
+  page,
+}) => {
+  const submissions: Record<string, unknown>[] = [];
+  await page.route('**/api/admin/sso/providers', async (route) => {
+    if (route.request().method() === 'POST') {
+      submissions.push(route.request().postDataJSON());
+      return route.fulfill({ json: { providerId: 'review-sso' } });
     }
-    await dialog.getByLabel('Provider ID', { exact: true }).fill('review-sso');
-    await dialog.locator('#sso-label').fill('Review SSO');
-    await dialog.getByLabel('Allowed email domains').fill('EXAMPLE.TEST, example.test');
-    await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
-    await expect(dialog).toBeHidden();
-    expect(submissions).toHaveLength(1);
-    expect(submissions[0]).toMatchObject({
-      providerId: 'review-sso',
-      kind,
-      label: 'Review SSO',
-      allowedDomains: ['example.test', 'example.test'],
-    });
-    // The form currently deduplicates before lowercasing; preserve that request
-    // shape here rather than smuggling a normalization change into a refactor.
-    if (kind === 'oidc') {
-      expect(submissions[0]).toHaveProperty('clientSecret', 'review-only-not-a-credential');
-      expect(submissions[0]).not.toHaveProperty('idpCertificate');
-    } else {
-      expect(submissions[0]).toHaveProperty('idpCertificate');
-      expect(submissions[0]).not.toHaveProperty('clientSecret');
-    }
+    return route.fulfill({ json: { providers: [] } });
   });
-}
+  // Single sign-on lives on the Authentication page; the old address redirects there.
+  await page.goto('/admin/sso');
+  await expect(page).toHaveURL(/\/admin\/settings\/authentication#single-sign-on$/);
+  await page
+    .locator('#single-sign-on')
+    .getByRole('button', { name: 'Add provider', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog');
+  // SAML was removed (#53): there is no provider type to choose.
+  await expect(dialog.getByRole('combobox', { name: 'Provider type' })).toHaveCount(0);
+  await dialog.getByLabel('Issuer URL').fill('https://id.example.test');
+  await dialog.getByLabel('Client ID', { exact: true }).fill('review-client');
+  await dialog.getByLabel('Client secret', { exact: true }).fill('review-only-not-a-credential');
+  await dialog.getByLabel('Provider ID', { exact: true }).fill('review-sso');
+  await dialog.locator('#sso-label').fill('Review SSO');
+  await dialog.getByLabel('Allowed email domains').fill('EXAMPLE.TEST, example.test');
+  await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect(submissions).toHaveLength(1);
+  // The form currently deduplicates before lowercasing; preserve that request
+  // shape here rather than smuggling a normalization change into a refactor.
+  expect(submissions[0]).toMatchObject({
+    providerId: 'review-sso',
+    kind: 'oidc',
+    label: 'Review SSO',
+    allowedDomains: ['example.test', 'example.test'],
+    clientSecret: 'review-only-not-a-credential',
+  });
+  expect(submissions[0]).not.toHaveProperty('idpCertificate');
+});
 
 test('user filters reset pagination and selection survives page changes', async ({ page }) => {
   const requests: URL[] = [];

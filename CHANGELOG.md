@@ -26,6 +26,28 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   administrator create a verified account for someone else's address.
   `GET /api/admin/invites` includes `emailedAt`.
 
+### Removed
+
+- **SAML sign-in is removed (#53); OpenID Connect stays.** The service-provider
+  metadata declares `WantAssertionsSigned="false"` because of a bug in
+  `@better-auth/sso`, a provider's certificate cannot be edited, and SAML is
+  hard to test and has had a long list of defects. **Upgrade note:** existing
+  SAML providers stop working. They stay in the database, untouched (so rolling
+  back to v0.11.1 restores them), but they are not offered on the sign-in page,
+  cannot be enabled or edited, and show a notice on Authentication with only a
+  **Delete** action; replace each with an OpenID Connect provider, which most
+  identity providers offer too (`docs/admin/identity.md`, "SAML is not
+  supported"). Creating a SAML provider is refused (422, at the `kind` field),
+  every `/api/auth/sso/saml2/*` address answers 404, and the provider form no
+  longer asks for a type. The `metadataUrl` field of the provider list is gone,
+  and `callbackUrl` is `null` for a SAML provider. **`migrate` refuses, changing
+  nothing,** when the only way to sign in is a SAML provider (an enabled SAML
+  provider, local sign-in off and no enabled OpenID Connect provider), because
+  upgrading would lock everyone out; turn on local sign-in or add an OpenID
+  Connect provider on the release you are running, then run `migrate` again.
+  There is no SQL migration (`saml_config` stays as an unused column), and the
+  `samlify` package stays installed, as a dependency of `@better-auth/sso`.
+
 ## [0.11.1] - 2026-10-07
 
 Fixes from nine QA walks of v0.11.0 (issues #35–#378). Four migrations,
