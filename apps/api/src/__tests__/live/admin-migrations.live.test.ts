@@ -150,6 +150,7 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0010_audit_log_actor_email_index', 'pending'],
       ['0011_attachment_storage_key_index', 'pending'],
       ['0012_attachment_thumbnail_key_index', 'pending'],
+      ['0013_drop_project_file_embedding_failure', 'pending'],
     ]);
     const [created] = report.postDeploy;
     expect(created!.statement).toMatchObject({ cost: 'concurrent-index', fast: true });
