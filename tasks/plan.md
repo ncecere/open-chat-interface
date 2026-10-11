@@ -73,7 +73,7 @@ test, docs) and leaves `main` releasable.
 
 ### Phase 2: CI and docs
 - [x] Task 3: Guard development-image pruning
-- [ ] Task 4: Bring ROADMAP.md up to date
+- [x] Task 4: Bring ROADMAP.md up to date
 
 ### Checkpoint B
 - [ ] `run.py checks` (real exit code), `node --test scripts/*.test.mjs`

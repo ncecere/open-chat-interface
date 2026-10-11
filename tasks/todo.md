@@ -94,24 +94,24 @@ the script selects.
 
 **Estimated scope:** Small
 
-## Task 4: Bring ROADMAP.md up to date
+## Task 4: Bring ROADMAP.md up to date ✅
 
 **Description:** Update the roadmap for v0.11.1 and v0.12.0 and add a
 "Now — v0.13" section from SPEC.md's capability map.
 
 **Acceptance criteria:**
-- [ ] Header names v0.11.1 and v0.12.0; "Shipped — v0.12" summarises v0.11.1
+- [x] Header names v0.11.1 and v0.12.0; "Shipped — v0.12" summarises v0.11.1
   (nine QA walks, the data-loss fix, code artifacts, report retries) and
   v0.12.0 (SAML removed, emailed invitations verify, timer fixes), each line
   traceable to CHANGELOG.md.
-- [ ] "Now — v0.13" lists `accent-search`, `external-backups`,
+- [x] "Now — v0.13" lists `accent-search`, `external-backups`,
   `scale-on-cluster` (and v0.12.1's `release-hygiene`) with one line each.
-- [ ] SAML's removal is reflected where the roadmap mentions SSO; the table
+- [x] SAML's removal is reflected where the roadmap mentions SSO; the table
   of contents links work.
 
 **Verification:**
-- [ ] Read against CHANGELOG.md `[0.11.1]` and `[0.12.0]`
-- [ ] `pnpm lint` (no effect on Markdown, sanity only)
+- [x] Read against CHANGELOG.md `[0.11.1]` and `[0.12.0]`
+- [x] `pnpm lint` (no effect on Markdown, sanity only)
 
 **Dependencies:** None
 
