@@ -879,7 +879,7 @@ summaries off under **General → Summarise long conversations**
 
 Migration `0029_embeddings` adds one small table
 (`project_file_embedding_failure`) and needs no extension; v0.8 replicas never
-read it. Meaning-based search for project files is optional and off until an
+read it. (v0.11 replaced that table; v0.12.1 drops it in a post-deploy step.) Meaning-based search for project files is optional and off until an
 administrator configures an embeddings model under **Providers & Models →
 Embeddings** ([Embeddings](admin/models-providers.md#embeddings)). It also
 needs the [pgvector](https://github.com/pgvector/pgvector) extension, which OCI
@@ -1367,6 +1367,20 @@ cost before a model change is saved.
   unchanged. Docker Compose needs nothing; a container may now also run with
   `cap_drop: [ALL]`. Kubernetes manifests that added `NET_BIND_SERVICE` for
   Caddy can drop it (the chart does).
+
+### Upgrading to v0.12
+
+#### Dropped `project_file_embedding_failure` (post-deploy step 0013, v0.12.1)
+
+Post-deploy step `0013_drop_project_file_embedding_failure` drops the table
+v0.11.0 replaced with `embedding_generation_failure`; it was kept only because
+v0.10 replicas wrote it during that upgrade
+([Removing a column](dev/database.md#removing-a-column)). No release since
+v0.11.0 reads or writes it, so `migrate --post` drops it after every replica
+runs v0.12.1, with its index and checks, under a brief exclusive lock on that
+table only. It holds nothing worth keeping: rows saying a file's passages
+could not be embedded for a model, which v0.11 records elsewhere. Rolling
+back to v0.12.0 or v0.11.x is unaffected; only v0.10 and earlier used it.
 
 ## Shutting down and draining
 

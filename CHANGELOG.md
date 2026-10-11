@@ -7,6 +7,36 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+Small debts left after v0.12.0 (`SPEC-release-hygiene.md`). No pre-deploy
+migration; one post-deploy step, `0013`, run by `migrate --post` after every
+replica runs the new release (no background migration).
+
+### Changed
+
+- **Pruning never deletes a branch head's development image.** The weekly
+  prune of `dev-*` images keeps the image of every branch's head commit (what
+  `dev-env up --ref <branch>` pulls), refuses `older_than_days` below 1, and
+  deletes nothing if the branches cannot be listed
+  (`scripts/prune-dev-images.mjs`). A manual run with `older_than_days=0`
+  had deleted `main`'s image a minute after it was built.
+- **Roadmap** updated for v0.11.1 and v0.12, with v0.13's plan (`SPEC.md`).
+
+### Removed
+
+- **The unused `project_file_embedding_failure` table** (post-deploy step
+  `0013_drop_project_file_embedding_failure`). v0.11.0 replaced it with
+  `embedding_generation_failure` and kept it only for v0.10 replicas during
+  that upgrade; no release since reads or writes it. **Upgrade note:** rolling
+  back to v0.12.0 or v0.11.x is unaffected (`docs/OPERATIONS.md`, "Upgrading
+  to v0.12").
+
+### Fixed
+
+- **The upgrade preflight words background migrations as System health
+  does** (#263, #281): "0 rows so far; size not known yet" instead of "0 of
+  ~rows unknown" before a table has an estimate, and "404 rows processed"
+  instead of "404 of ~577 rows" once one has finished.
+
 ## [0.12.0] - 2026-10-07
 
 Removes SAML sign-in, makes an emailed invitation verify the address, and fixes two

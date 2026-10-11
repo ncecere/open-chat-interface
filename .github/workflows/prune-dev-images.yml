@@ -1,10 +1,13 @@
 # Deletes old development images (branch-images.yml's dev-<12 hex> tags) from the GHCR packages.
 #
-# Only a version whose tags are ALL dev-<12 hex digits> is ever a candidate. Untagged versions are
-# never touched (the per-architecture children of a release's multi-platform index are untagged), and
-# neither is any version that carries another tag (a release, sha-<short>, latest...).
+# scripts/prune-dev-images.mjs chooses them (tested in scripts/prune-dev-images.test.mjs). Only a
+# version whose tags are ALL dev-<12 hex digits> is ever a candidate. Never deleted: untagged versions
+# (the per-architecture children of a release's multi-platform index), any version with another tag (a
+# release, sha-<short>, latest...), and the image of any branch's head commit, which `dev-env up --ref
+# <branch>` pulls. If the branches cannot be listed, nothing is deleted.
 #
-# Runs weekly and deletes images older than 14 days. By hand it is a dry run unless you clear dry_run.
+# Runs weekly and deletes images older than 14 days. By hand it is a dry run unless you clear dry_run,
+# and older_than_days below 1 is refused.
 name: Prune development images
 
 on:
@@ -47,25 +50,30 @@ jobs:
       OLDER_THAN_DAYS: ${{ inputs.older_than_days || '14' }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
       - name: Prune
+        env:
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          [[ "$OLDER_THAN_DAYS" =~ ^[0-9]+$ ]] || { echo "::error::older_than_days must be a number"; exit 1; }
-          cutoff="$(date -u -d "$OLDER_THAN_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)"
-          echo "Development images created before $cutoff (dry run: $DRY_RUN)"
+          work="$(mktemp -d)"
+          # Every branch head's image is kept. A failure here stops the job before anything is deleted.
+          gh api --paginate "/repos/$REPOSITORY/branches?per_page=100" | jq -s 'add // []' > "$work/branches.json"
+          echo "$(jq length "$work/branches.json") branches; dry run: $DRY_RUN"
           deleted=0
           while read -r package; do
             [ -n "$package" ] || continue
             echo "## $package"
-            versions="$(gh api --paginate "/users/$OWNER/packages/container/$package/versions?per_page=100" | jq -s 'add // []')"
-            # candidates: tagged, every tag is dev-<12 hex>, older than the cutoff
-            ids="$(jq -r --arg cutoff "$cutoff" '
-              .[] | select((.metadata.container.tags | length) > 0)
-                  | select(all(.metadata.container.tags[]; test("^dev-[0-9a-f]{12}$")))
-                  | select(.created_at < $cutoff)
-                  | "\(.id) \(.metadata.container.tags | join(","))"' <<<"$versions")"
-            total="$(jq 'length' <<<"$versions")"
-            echo "$total versions in the package"
+            gh api --paginate "/users/$OWNER/packages/container/$package/versions?per_page=100" \
+              | jq -s 'add // []' > "$work/versions.json"
+            echo "$(jq length "$work/versions.json") versions in the package"
+            node scripts/prune-dev-images.mjs --versions "$work/versions.json" \
+              --branches "$work/branches.json" --older-than-days "$OLDER_THAN_DAYS" > "$work/candidates.txt"
             while read -r id tags; do
               [ -n "${id:-}" ] || continue
               if [ "$DRY_RUN" = true ]; then
@@ -75,6 +83,6 @@ jobs:
                 echo "deleted $id ($tags)"
               fi
               deleted=$((deleted + 1))
-            done <<<"$ids"
+            done < "$work/candidates.txt"
           done <<<"$PACKAGES"
           echo "candidates: $deleted (dry run: $DRY_RUN)" | tee -a "$GITHUB_STEP_SUMMARY"

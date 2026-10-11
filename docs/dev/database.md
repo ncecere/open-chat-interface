@@ -473,8 +473,8 @@ which would need the outbox the design describes.
 
 **Backoff.** `embedding_generation_failure` (generation, file) replaces
 `project_file_embedding_failure`, whose single row per file could not hold
-two generations. The old table stays because v0.10 replicas write it during
-the upgrade; a later release drops it in a post-deploy step.
+two generations. The old table stayed because v0.10 replicas wrote it during
+that upgrade; post-deploy step `0013` drops it in v0.12.1.
 
 **Full-text indexes** for a future search feature follow the same pattern
 without a new mechanism: the new index is built `CONCURRENTLY` by a
@@ -739,6 +739,7 @@ Pending second steps: none.
 
 Completed:
 
-| Column | Code removed in | Dropped in |
+| Column or table | Code removed in | Dropped in |
 | --- | --- | --- |
 | `user_preference.boring_mode` | v0.8 | v0.9 (`0031_drop_boring_mode`) |
+| `project_file_embedding_failure` (table) | v0.11.0 | v0.12.1 (post-deploy `0013_drop_project_file_embedding_failure`) |

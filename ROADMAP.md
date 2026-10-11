@@ -2,7 +2,8 @@
 
 Where Open Chat Interface (OCI) stands, what comparable products offer, and
 what we intend to build next. Written against **v0.6.1** and updated for
-**v0.7.0**, **v0.8.0**, **v0.9.0**, **v0.10.0** and **v0.11.0** in **October 2026**.
+**v0.7.0**, **v0.8.0**, **v0.9.0**, **v0.10.0**, **v0.11.0**, **v0.11.1** and
+**v0.12.0** in **October 2026**.
 
 This is a plan, not a promise. Priorities change as we learn, and an item moves
 into a release only when it has a design, tests and documentation. Review this
@@ -16,6 +17,8 @@ document at every minor release.
 - [Shipped — v0.9: make and operate](#shipped--v09-make-and-operate)
 - [Shipped — v0.10: finish and harden](#shipped--v010-finish-and-harden)
 - [Shipped — v0.11: always on](#shipped--v011-always-on)
+- [Shipped — v0.11.1 and v0.12: tested by use](#shipped--v0111-and-v012-tested-by-use)
+- [Now — v0.13: search, backups and scale](#now--v013-search-backups-and-scale)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -225,7 +228,7 @@ and embedding already run as background jobs. What is missing is below.
 | **Background work visible** | Imports, indexing, re-embedding and background migrations run out of sight. | Queue depth, progress and failures on System health and in metrics. |
 
 **Shipped in v0.11.0.** Everything above except two items: **Backups at
-scale** moves to the next release, and **Optional Qdrant** is not needed for
+scale** moves to [v0.13](#now--v013-search-backups-and-scale), and **Optional Qdrant** is not needed for
 now: measured at 437,000 passages, an exact pgvector scan within one project
 takes about 20 ms, so v0.11 ships the vector store interface and generations
 and Qdrant waits for a deployment that needs it. **Background work visible**
@@ -241,6 +244,31 @@ objectives) and the design are in `docs/dev/v0.11-design.md`. Measured by the
 harness, later releases may also partition the largest append-only tables
 (usage events, audit log, webhook deliveries) so that retention drops old
 partitions instead of deleting rows.
+
+## Shipped — v0.11.1 and v0.12: tested by use
+
+Released as v0.11.1 and v0.12.0 in October 2026. See `CHANGELOG.md` for the
+details and upgrade notes.
+
+| Release | What shipped |
+| --- | --- |
+| **v0.11.1** | Fixes from nine QA walks of v0.11.0 (issues #35–#378): a data-loss fix (deleting a conversation no longer deletes the files of its forks and edits, #358), code artifacts (#298), a scheduled report whose email failed is tried again and can be sent now (#352), Send test email, unsaved-changes protection in administration, HTML account emails, SSO sign-in with account linking off, large project files searched in full, conversation titles that ignore accents, and many audit, accessibility and wording fixes. |
+| **v0.12.0** | SAML sign-in removed (#53; OpenID Connect stays, and `migrate` refuses to lock everyone out); an invitation that was emailed verifies the address (#214); two timers that could leave a notice or a button stuck. |
+
+Left open: message text that ignores accents needs an index built by hand
+(#362), taken up in v0.13.
+
+## Now — v0.13: search, backups and scale
+
+The work left open after v0.12.0, as one specification (`SPEC.md`, with one
+spec per module). Small debts ship first as v0.12.1.
+
+| Item | Why | Plan |
+| --- | --- | --- |
+| **Release hygiene** (v0.12.1) | An unused table, preflight wording, and a pruning run that deleted the development image of `main`'s head. | Drop `project_file_embedding_failure` in a post-deploy step; word the preflight as System health does; never prune a branch head's image; this roadmap. |
+| **Search that ignores accents** | `bibliotheque` does not find "bibliothèque" in message text (#362), and the index that would fix it is too slow to build during an upgrade. | A stored, folded copy of the text, filled by a throttled background migration and indexed concurrently, with search falling back until both are ready; on for everyone, with ß, æ and œ. Project file search too. |
+| **Backups at scale** | `pg_dump` takes hours and loads the primary on a large cluster (deferred from v0.11). | An "external database backup" mode for clusters with their own backups (CloudNativePG and pgBackRest tested, WAL-G documented): OCI copies attachments and verifies, with documented recovery objectives and a restore drill. |
+| **Scale on the cluster** | The service objectives have not been shown to hold at the `large` profile (30,000 people, 20 million messages). | Run the scale harness against a development environment on the cluster, with safeguards for the shared disks, and publish the results against the objectives. |
 
 ## Later — v1.0 and beyond: assistants and media
 

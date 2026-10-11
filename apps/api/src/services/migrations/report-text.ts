@@ -68,8 +68,18 @@ export function renderReport(report: UpgradeReport): string {
   lines.push(`Background migrations: ${report.background.length}`);
   for (const item of report.background) {
     const progress = item.progress === null ? '' : ` ${Math.round(item.progress * 100)}%`;
+    const done = item.rowsProcessed.toLocaleString('en');
+    // As System health (#263, #281): no "of ~" before the table has an
+    // estimate, nor once finished, when the rows it changed are not the
+    // table's size.
+    const amount =
+      item.status === 'finished'
+        ? `${done} rows processed`
+        : item.estimatedRows === null
+          ? `${done} rows so far; size not known yet`
+          : `${done} of ~${rows(item.estimatedRows)}`;
     lines.push(
-      `  ${item.name} on ${item.table}: ${item.status.replace('_', ' ')}${progress} (${item.rowsProcessed.toLocaleString('en')} of ~${rows(item.estimatedRows)})${item.bundled ? '' : ' [not in this release]'}`,
+      `  ${item.name} on ${item.table}: ${item.status.replace('_', ' ')}${progress} (${amount})${item.bundled ? '' : ' [not in this release]'}`,
     );
     if (item.lastError) lines.push(`    last error: ${item.lastError}`);
     if (item.throttledReason && item.status === 'running')

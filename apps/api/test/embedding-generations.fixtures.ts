@@ -236,14 +236,15 @@ export function useEmbeddingGenerationsSuite(state: EmbeddingGenerationsState) {
     const { pool } = ctx;
     state.db = pool.db;
     await pool.db.execute(sql`create extension if not exists vector`);
+    // As after post-deploy step 0013 (v0.12.1): nothing may need the old table.
+    await pool.db.execute(sql`drop table if exists project_file_embedding_failure`);
     state.organizationId = await seedOrganization(pool.db);
     ctx.owner = await seedUser(pool.db, state.organizationId);
   });
   beforeEach(async () => {
     const { pool } = ctx;
     const tables = await pool.db.execute<{ name: string }>(
-      sql`select tablename as name from pg_tables
-          where tablename like 'project_file_embedding%' and tablename <> 'project_file_embedding_failure'`,
+      sql`select tablename as name from pg_tables where tablename like 'project_file_embedding%'`,
     );
     for (const { name } of tables) await pool.db.execute(sql`drop table ${sql.identifier(name)}`);
     await pool.db.execute(sql`delete from embedding_generation`);
