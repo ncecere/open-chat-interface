@@ -1,0 +1,96 @@
+name: Branch images
+
+# Builds the api and web images for any branch push and publishes them as
+# ghcr.io/<owner>/<repo>/<app>:dev-<first 12 characters of the commit>, so a
+# development environment can run exactly that commit (dev-env up oci <name>
+# --ref <branch> in the homelab repo). These are development builds:
+#   - amd64 only (the homelab runs amd64), built once, no manifest join;
+#   - no `latest`, no version tag, no provenance or SBOM;
+#   - a tag names one commit and is rebuilt only if that commit is built again.
+# Releases are published by publish-containers.yml, not by this workflow.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build (default is the selected ref)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces an older build of it.
+concurrency:
+  group: branch-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.app }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Name the image
+        id: name
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          {
+            echo "sha=$sha"
+            echo "tag=dev-${sha:0:12}"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/$APP"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/${{ matrix.app }}.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.name.outputs.image }}:${{ steps.name.outputs.tag }}
+          provenance: false
+          sbom: false
+          build-args: |
+            OCI_VERSION=${{ steps.name.outputs.tag }}
+            OCI_REVISION=${{ steps.name.outputs.sha }}
+            OCI_SOURCE=https://github.com/${{ github.repository }}
+            OCI_CREATED=${{ steps.name.outputs.created }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+      - name: Summary
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+          TAG: ${{ steps.name.outputs.tag }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "**${{ matrix.app }}** \`$IMAGE:$TAG\`"
+            echo ""
+            echo "digest \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
