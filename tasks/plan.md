@@ -72,7 +72,7 @@ test, docs) and leaves `main` releasable.
 - [ ] Rolling-upgrade test from v0.12.0 passes; the table is gone after `migrate --post`
 
 ### Phase 2: CI and docs
-- [ ] Task 3: Guard development-image pruning
+- [x] Task 3: Guard development-image pruning
 - [ ] Task 4: Bring ROADMAP.md up to date
 
 ### Checkpoint B

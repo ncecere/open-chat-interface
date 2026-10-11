@@ -64,7 +64,7 @@ not a bug: the log filter hid `0.11.reencrypt-webhook-secrets`.)
 - [ ] `pnpm lint:migrations` clean
 - [ ] `node tools/upgrade-test/run.mjs --from v0.12.0` passes; the table is gone after `migrate --post`
 
-## Task 3: Guard development-image pruning
+## Task 3: Guard development-image pruning ✅
 
 **Description:** Move the pruning selection into a tested script that never
 selects an image for any existing branch head, refuses `older_than_days < 1`,
@@ -72,19 +72,19 @@ and fails closed if branches cannot be listed; the workflow deletes only what
 the script selects.
 
 **Acceptance criteria:**
-- [ ] `scripts/prune-dev-images.mjs` takes package versions, branch heads,
+- [x] `scripts/prune-dev-images.mjs` takes package versions, branch heads,
   `olderThanDays` and `now`, and returns candidates and protected images with
   reasons; `older_than_days < 1` and a missing branch list are errors.
-- [ ] Reproduce first: `scripts/prune-dev-images.test.mjs` shows the old
+- [x] Reproduce first: `scripts/prune-dev-images.test.mjs` shows the old
   selection (all `dev-*` older than the cutoff) would delete a branch head's
   image with `older_than_days=0`; the new selection keeps it.
-- [ ] `prune-dev-images.yml` lists branches with `gh api --paginate`, calls the
+- [x] `prune-dev-images.yml` lists branches with `gh api --paginate`, calls the
   script, prints protected and candidate images (dry run by default for manual
   runs), and deletes only candidates; permissions unchanged.
 
 **Verification:**
-- [ ] `node --test scripts/prune-dev-images.test.mjs`
-- [ ] `pnpm lint`
+- [x] `node --test scripts/prune-dev-images.test.mjs`
+- [x] `pnpm lint`
 - [ ] After merge to the branch: a manual dry run on GitHub lists `main`'s head as protected
 
 **Dependencies:** None
