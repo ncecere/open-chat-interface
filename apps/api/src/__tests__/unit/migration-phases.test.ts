@@ -235,7 +235,7 @@ describe('post-deploy folder', () => {
     return folder;
   };
 
-  it('reads the bundled steps: concurrent index builds, and a constraint validation', () => {
+  it('reads the bundled steps: concurrent index builds, a constraint validation and a drop', () => {
     const steps = readPostSteps();
     expect(steps.map((step) => [step.name, step.release, step.index?.name])).toEqual([
       ['0001_message_created_at_index', '0.11.0', 'message_created_at_idx'],
@@ -253,8 +253,10 @@ describe('post-deploy folder', () => {
       // Which rows use a stored object, for shared files (#358).
       ['0011_attachment_storage_key_index', '0.11.0', 'attachment_storage_key_idx'],
       ['0012_attachment_thumbnail_key_index', '0.11.0', 'attachment_thumbnail_key_idx'],
-      // Not 0013: the folded message-text index (#362) is optional, built by hand, and
-      // an upgrade must not wait for it (about 1 ms per message). See packages/db/optional.
+      // The table v0.11.0 replaced, unused since (release-hygiene, v0.12.1). The folded
+      // message-text index (#362) is not a step: it is optional, built by hand, and an
+      // upgrade must not wait for it (about 1 ms per message). See packages/db/optional.
+      ['0013_drop_project_file_embedding_failure', '0.12.1', undefined],
     ]);
     const builds = steps.filter((step) => step.index);
     expect(builds).toHaveLength(11);
@@ -447,6 +449,42 @@ describe('upgrade verdict and its text', () => {
     expect(text).toMatch(/0\.11\.b on public\.message: running 10% \(10 of ~100 rows\)/);
     expect(text).toMatch(/last error: boom/);
     expect(text).toMatch(/waiting: Replication lag 30 s/);
+  });
+
+  it('says when the size of a background migration is not known yet, not "~rows unknown"', () => {
+    const unsized = { ...background, estimatedRows: null, progress: null, lastError: null };
+    const report = {
+      ...base,
+      background: [
+        { ...unsized, name: '0.12.a', status: 'not_scheduled' as const, rowsProcessed: 0 },
+        { ...unsized, name: '0.12.b', status: 'running' as const, rowsProcessed: 34 },
+        {
+          ...background,
+          name: '0.12.c',
+          status: 'running' as const,
+          rowsProcessed: 1234,
+          estimatedRows: 5678,
+        },
+        {
+          ...background,
+          name: '0.12.d',
+          status: 'finished' as const,
+          rowsProcessed: 404,
+          estimatedRows: 577,
+          progress: 1,
+        },
+      ],
+    };
+    const text = renderReport({ ...report, verdict: verdictOf(report) });
+    expect(text).toMatch(
+      /0\.12\.a on public\.message: not scheduled \(0 rows so far; size not known yet\)/,
+    );
+    expect(text).toMatch(
+      /0\.12\.b on public\.message: running \(34 rows so far; size not known yet\)/,
+    );
+    expect(text).toMatch(/0\.12\.c on public\.message: running 10% \(1,234 of ~5,678 rows\)/);
+    expect(text).toMatch(/0\.12\.d on public\.message: finished 100% \(404 rows processed\)/);
+    expect(text).not.toMatch(/rows unknown/);
   });
 
   it('renders steps in every state', () => {

@@ -36,29 +36,25 @@ a live test under `apps/api/src/__tests__/live/`, `docs/dev/database.md`
 
 **Estimated scope:** Medium
 
-## Task 2: Preflight wording and background-migration count
+## Task 2: Preflight wording ✅
 
-**Description:** Make the preflight's background-migration lines read
-naturally when no size estimate exists, and make the header count the same
-definitions it lists.
+**Description:** Make the preflight's background-migration lines read as
+System health does (#263, #281). (The header-count mismatch in the plan was
+not a bug: the log filter hid `0.11.reencrypt-webhook-secrets`.)
 
 **Acceptance criteria:**
-- [ ] No estimate: `… pending (0 rows so far; size not known yet)`; with an
-  estimate: `… (1,234 of ~5,678 rows)` unchanged.
-- [ ] Header count equals the number of lines under "Background migrations";
-  test-only definitions are neither counted nor listed unless
-  `OCI_TEST_BACKGROUND_MIGRATIONS` names them.
-- [ ] Reproduce first: unit tests for both wordings and the count fail on the
-  current code.
+- [x] No estimate: `… (0 rows so far; size not known yet)`; finished:
+  `… (404 rows processed)`; in progress with an estimate: `… (1,234 of ~5,678 rows)`.
+- [x] Reproduce first: the unit test fails on the old code.
+- [x] The bundled-steps test lists step 0013 (missed in Task 1).
 
 **Verification:**
-- [ ] `python3 $H/run.py test preflight src/__tests__/unit/migration-phases.test.ts`
-- [ ] `pnpm --filter @oci/api typecheck`
+- [x] `python3 $H/run.py test preflight src/__tests__/unit/migration-phases.test.ts` (20/20)
+- [x] `pnpm --filter @oci/api typecheck`
 
 **Dependencies:** None
 
-**Files likely touched:** `apps/api/src/services/migrations/report-text.ts`,
-`apps/api/src/services/migrations/preflight.ts`,
+**Files touched:** `apps/api/src/services/migrations/report-text.ts`,
 `apps/api/src/__tests__/unit/migration-phases.test.ts`
 
 **Estimated scope:** Small

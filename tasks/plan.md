@@ -64,8 +64,8 @@ test, docs) and leaves `main` releasable.
 ## Task list
 
 ### Phase 1: Schema and upgrade tooling
-- [ ] Task 1: Drop `project_file_embedding_failure` in post-deploy step 0013
-- [ ] Task 2: Preflight wording and background-migration count
+- [x] Task 1: Drop `project_file_embedding_failure` in post-deploy step 0013
+- [x] Task 2: Preflight wording (the count was not a bug)
 
 ### Checkpoint A
 - [ ] `run.py coverage` (all pass, zero skips, floors hold), `pnpm lint:migrations`

@@ -17,9 +17,11 @@ clean base:
    and `project-search-hybrid.fixtures.ts` mention it).
 2. **Preflight wording.** `upgrade-check` prints "0 of ~rows unknown" for a
    background migration whose table has no estimate yet
-   (`apps/api/src/services/migrations/report-text.ts`), and during the v0.11.0
-   homelab upgrade its header count of background migrations did not match
-   the lines listed under it.
+   (`apps/api/src/services/migrations/report-text.ts`), and "404 of ~577 rows"
+   for a finished one, whose rows changed are not the table's size. System
+   health already words both correctly (#263, #281). (A count mismatch seen
+   during the v0.11.0 homelab upgrade was not a bug: the log filter used to
+   hide credentials also hid `0.11.reencrypt-webhook-secrets`.)
 3. **Guard development-image pruning.** On 2026-10-11 a manual run of
    `.github/workflows/prune-dev-images.yml` with `older_than_days=0` and
    `dry_run=false` deleted every `dev-*` image, including the one built a
@@ -57,12 +59,10 @@ would break the plugin. Revisit when the plugin no longer declares it.
 ### 2. Preflight
 - A background migration with no row estimate reads, for example,
   `0.11.usage-rollups on public.usage_event: pending (0 rows so far; size not
-  known yet)` instead of `(0 of ~rows unknown)`; one with an estimate keeps
+  known yet)` instead of `(0 of ~rows unknown)`; a finished one reads
+  `(404 rows processed)`; one in progress with an estimate keeps
   `(1,234 of ~5,678 rows)`.
-- The header's count of background migrations equals the number of lines
-  listed under "Background migrations" (test-only definitions are never
-  counted or listed unless `OCI_TEST_BACKGROUND_MIGRATIONS` names them).
-- Unit tests cover both cases and the count; the reproduction fails first.
+- Unit tests cover the three cases; the reproduction fails first.
 
 ### 3. Image pruning
 - `prune-dev-images.yml` never deletes an image whose tag is
