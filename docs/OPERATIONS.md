@@ -879,7 +879,7 @@ summaries off under **General → Summarise long conversations**
 
 Migration `0029_embeddings` adds one small table
 (`project_file_embedding_failure`) and needs no extension; v0.8 replicas never
-read it. Meaning-based search for project files is optional and off until an
+read it. (v0.11 replaced that table; v0.12.1 drops it in a post-deploy step.) Meaning-based search for project files is optional and off until an
 administrator configures an embeddings model under **Providers & Models →
 Embeddings** ([Embeddings](admin/models-providers.md#embeddings)). It also
 needs the [pgvector](https://github.com/pgvector/pgvector) extension, which OCI

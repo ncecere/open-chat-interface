@@ -138,8 +138,10 @@ export function hybridHelpers(state: HybridState, context: () => HybridContext) 
   /** Forgets every generation and its table, as on an instance never configured. */
   async function resetGenerations() {
     const { pool } = context();
+    // Also drops `project_file_embedding_failure`, as post-deploy step 0013
+    // (v0.12.1) does: nothing may need the old table.
     const tables = await pool.db.execute<{ name: string }>(
-      sql`select tablename as name from pg_tables where tablename like 'project_file_embedding%' and tablename <> 'project_file_embedding_failure'`,
+      sql`select tablename as name from pg_tables where tablename like 'project_file_embedding%'`,
     );
     for (const { name } of tables) await pool.db.execute(sql`drop table ${sql.identifier(name)}`);
     await pool.db.execute(sql`delete from embedding_generation`);

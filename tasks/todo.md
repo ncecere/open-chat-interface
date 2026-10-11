@@ -2,28 +2,29 @@
 
 Plan: [plan.md](plan.md). Spec: [SPEC-release-hygiene.md](../SPEC-release-hygiene.md).
 Branch: `patch/v0.12.1`. Shared commands are in [SPEC.md](../SPEC.md)
-(`H=/private/tmp/oci-admin-phase0-ww9bw91d`).
+(`H=~/.oci-harness`).
 
-## Task 1: Drop `project_file_embedding_failure` in post-deploy step 0013
+## Task 1: Drop `project_file_embedding_failure` in post-deploy step 0013 ✅
 
 **Description:** Add a post-deploy step that drops the table v0.11 replaced,
 remove it from the Drizzle schema, and update the docs that describe it as
 kept.
 
 **Acceptance criteria:**
-- [ ] `packages/db/post/0013_drop_project_file_embedding_failure.sql`:
+- [x] `packages/db/post/0013_drop_project_file_embedding_failure.sql`:
   `DROP TABLE IF EXISTS "project_file_embedding_failure";` with an
   `-- oci:lint-allow drop-table:` reason naming v0.11.0 and
   `embedding_generation_failure`; journal entry `{ idx: 12, tag, release: "0.12.1" }`.
-- [ ] Reproduce first: a live test asserts the table is absent after
+- [x] Reproduce first: a live test asserts the table is absent after
   `migrate --post` (fails before the step exists), and that embedding and
   project-search paths work afterwards.
-- [ ] `projectFileEmbeddingFailure` removed from `packages/db/src/schema/embeddings.ts`;
-  `docs/dev/database.md` says it was dropped in v0.12.1. Test fixtures keep
-  their exclusion filter (see plan, decision 2).
+- [x] `projectFileEmbeddingFailure` removed from `packages/db/src/schema/embeddings.ts`;
+  `docs/dev/database.md` says it was dropped in v0.12.1. The two embedding
+  test fixtures drop it in their setup (see plan), so their 63 live tests run
+  without it.
 
 **Verification:**
-- [ ] `pnpm lint:migrations` clean
+- [x] `pnpm lint:migrations` clean
 - [ ] `python3 $H/run.py build && python3 $H/run.py test post src/__tests__/live/post-migrations.live.test.ts <new test>`
 - [ ] `pnpm upgrade:check` against a v0.12.0 database lists step 0013 with the table's size
 

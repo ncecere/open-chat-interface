@@ -43,11 +43,13 @@ runtime service or dependency without asking.
 ## Commands
 
 ```sh
-# Install (sanitized, as every agent does)
-env -i PATH=$PATH HOME=/private/tmp/oci-admin-phase0-ww9bw91d/home \
-  XDG_CONFIG_HOME=/private/tmp/oci-admin-phase0-ww9bw91d/home/.config \
-  TMPDIR=/private/tmp/oci-admin-phase0-ww9bw91d/tmp \
-  pnpm install --frozen-lockfile --prefer-offline
+# Harness: ~/.oci-harness (run.py + compose.yaml) mirrors CI's services and
+# environment (PostgreSQL 17 + pgvector, Redis, Mailpit, VersityGW S3) on
+# 127.0.0.1-only ports, with a sanitized environment. It lives outside
+# /private/tmp, which macOS clears on restart.
+H=~/.oci-harness
+python3 $H/run.py up            # start the services (down: stop and wipe them)
+python3 $H/run.py install       # pnpm install --frozen-lockfile, sanitized
 
 pnpm lint                 # biome check .
 pnpm typecheck            # turbo run typecheck
@@ -56,14 +58,14 @@ pnpm licenses:check
 pnpm audit --prod
 pnpm release:check        # versions, Helm chart and CHANGELOG agree
 
-# Harness (real PostgreSQL, Redis, SMTP, S3; never `run.py down`)
-H=/private/tmp/oci-admin-phase0-ww9bw91d
+# Tests (real PostgreSQL, Redis, SMTP, S3)
 python3 $H/run.py build
 python3 $H/run.py test <report-name> <files…>   # targeted, from apps/api
 python3 $H/run.py coverage                       # API: all pass, zero skips, floors hold
 python3 $H/run.py web tests/unit
-python3 $H/run.py checks                         # check the real exit code
-python3 $H/e2e.py build && python3 $H/e2e.py run # one process at a time
+python3 $H/run.py checks                         # typecheck, lint, migration lint, licences, web unit; real exit code
+# e2e: as CI's two browser steps (seeded, then the deterministic fixture); see
+# .github/workflows/ci.yml and docs/dev/testing.md
 
 # Upgrades and scale
 node tools/upgrade-test/run.mjs                  # from the previous release, under load

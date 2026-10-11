@@ -47,13 +47,11 @@ test, docs) and leaves `main` releasable.
   v0.12.1, and v0.12.0 replicas never touch the table, so a rolling upgrade is
   safe either way. `DROP TABLE IF EXISTS` keeps it idempotent; its index and
   checks go with it. The Drizzle schema export goes too (nothing imports it).
-- **The two test fixtures keep their exclusion filter.** They run on fresh
-  test databases built from pre-deploy migrations, which still create the
-  table (migration 0029); the drop happens only in post-deploy. Excluding the
-  old name is correct on databases where step 0013 has not run and harmless
-  where it has. A new live test proves the step removes the table. "Nothing
-  references it" in the spec therefore means product code, schema and docs,
-  not these filters (the spec says so).
+- **The two embedding test fixtures drop the table in their setup**, as step
+  0013 does, instead of excluding it by name. Test databases are built from
+  pre-deploy migrations, which still create it; dropping it first makes every
+  embedding-generation and hybrid-search live test (63) prove that nothing
+  needs it. A new live test proves step 0013 removes it and is idempotent.
 - **Pruning logic moves to `scripts/prune-dev-images.mjs`** (plain Node, no
   dependency) so it can be tested with recorded listings; the workflow calls
   it with `gh api` output. It protects `dev-<sha12>` of every branch head

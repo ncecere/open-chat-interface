@@ -47,9 +47,8 @@ would break the plugin. Revisit when the plugin no longer declares it.
 - The table is removed from `packages/db/src/schema/embeddings.ts`; no
   product code, schema or current docs reference it (`git grep` finds only
   migrations, the post step, the changelog, historical design notes, and the
-  two test fixtures' filters that exclude it when listing generation tables,
-  which stay because test databases are built from pre-deploy migrations
-  that still create it).
+  two embedding test fixtures, which now drop it in their setup so every
+  embedding and project-search live test runs without it).
 - `pnpm lint:migrations` passes; the preflight lists the step with the
   table's size.
 - Rolling-upgrade test from v0.12.0 passes, and the table is gone after

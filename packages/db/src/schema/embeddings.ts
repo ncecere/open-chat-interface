@@ -14,38 +14,16 @@ import { pgTable } from './_table.js';
 import { attachment } from './chat.js';
 
 /**
- * Project files whose passages could not be embedded with the current
- * embeddings model (migration 0029), so the background job backs off instead
- * of retrying them every tick. Written by v0.10; v0.11 uses
- * `embedding_generation_failure` instead (one row per file and generation)
- * and keeps this table only because v0.10 replicas still write it during a
- * rolling upgrade. A later release drops it. A row only applies while `model_key` is the
- * configured model: changing the model gives every file a fresh start. The
- * row is removed once the file's passages are embedded, and goes with the file.
+ * The embeddings themselves live in `project_file_embedding` (generation 1)
+ * and `project_file_embedding_g<n>`, which are not part of any migration:
+ * their `vector(n)` column needs the pgvector extension, which an operator
+ * enables, and its size depends on the model. OCI creates them at runtime (see
+ * apps/api/src/services/embeddings/storage.ts).
  *
- * The embeddings themselves live in `project_file_embedding`, which is not
- * part of any migration: its `vector(n)` column needs the pgvector extension,
- * which an operator enables, and its size depends on the model. OCI creates it
- * at runtime (see apps/api/src/services/embeddings/storage.ts).
+ * `project_file_embedding_failure` (migration 0029, written by v0.10) was
+ * replaced by `embedding_generation_failure` in v0.11 and dropped by
+ * post-deploy step 0013 in v0.12.1.
  */
-export const projectFileEmbeddingFailure = pgTable(
-  'project_file_embedding_failure',
-  {
-    attachmentId: text('attachment_id')
-      .primaryKey()
-      .references(() => attachment.id, { onDelete: 'cascade' }),
-    modelKey: text('model_key').notNull(),
-    failures: integer('failures').notNull().default(1),
-    lastError: text('last_error'),
-    retryAt: timestamp('retry_at', { withTimezone: true }).notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index('project_file_embedding_failure_retry_idx').on(t.retryAt),
-    check('project_file_embedding_failure_failures', sql`${t.failures} > 0`),
-    check('project_file_embedding_failure_error_length', sql`char_length(${t.lastError}) <= 500`),
-  ],
-);
 
 export const EMBEDDING_GENERATION_STATES = [
   'filling',
