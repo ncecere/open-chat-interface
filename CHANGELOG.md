@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-11
+
 Small debts left after v0.12.0 (`SPEC-release-hygiene.md`). No pre-deploy
 migration; one post-deploy step, `0013`, run by `migrate --post` after every
 replica runs the new release (no background migration).
@@ -1752,7 +1754,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.12.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.12.1...main
+[0.12.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.1
 [0.12.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.0
 [0.11.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.1
 [0.11.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.0
