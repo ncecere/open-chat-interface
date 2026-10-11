@@ -67,9 +67,9 @@ test, docs) and leaves `main` releasable.
 - [x] Task 1: Drop `project_file_embedding_failure` in post-deploy step 0013
 - [x] Task 2: Preflight wording (the count was not a bug)
 
-### Checkpoint A
-- [ ] `run.py coverage` (all pass, zero skips, floors hold), `pnpm lint:migrations`
-- [ ] Rolling-upgrade test from v0.12.0 passes; the table is gone after `migrate --post`
+### Checkpoint A ✅
+- [x] `run.py coverage` (2,472/2,472, zero skips, floors hold; first run caught three pinned lists), `pnpm lint:migrations`
+- [x] Rolling-upgrade test from v0.12.0: PASS (0 errors, p99 228 ms, 216 replies complete, 0 cut; step 0013 applied in the post-deploy phase)
 
 ### Phase 2: CI and docs
 - [x] Task 3: Guard development-image pruning

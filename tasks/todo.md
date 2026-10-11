@@ -59,10 +59,10 @@ not a bug: the log filter hid `0.11.reencrypt-webhook-secrets`.)
 
 **Estimated scope:** Small
 
-## Checkpoint A
-- [ ] `python3 $H/run.py coverage`: all pass, zero skips, floors hold
-- [ ] `pnpm lint:migrations` clean
-- [ ] `node tools/upgrade-test/run.mjs --from v0.12.0` passes; the table is gone after `migrate --post`
+## Checkpoint A ✅
+- [x] `python3 $H/run.py coverage`: 2,472/2,472, zero skips, floors hold (`cafd0d29` updated three pinned post-deploy lists)
+- [x] `pnpm lint:migrations` clean
+- [x] `node tools/upgrade-test/run.mjs --from v0.12.0`: PASS
 
 ## Task 3: Guard development-image pruning ✅
 
