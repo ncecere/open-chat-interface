@@ -1368,6 +1368,20 @@ cost before a model change is saved.
   `cap_drop: [ALL]`. Kubernetes manifests that added `NET_BIND_SERVICE` for
   Caddy can drop it (the chart does).
 
+### Upgrading to v0.12
+
+#### Dropped `project_file_embedding_failure` (post-deploy step 0013, v0.12.1)
+
+Post-deploy step `0013_drop_project_file_embedding_failure` drops the table
+v0.11.0 replaced with `embedding_generation_failure`; it was kept only because
+v0.10 replicas wrote it during that upgrade
+([Removing a column](dev/database.md#removing-a-column)). No release since
+v0.11.0 reads or writes it, so `migrate --post` drops it after every replica
+runs v0.12.1, with its index and checks, under a brief exclusive lock on that
+table only. It holds nothing worth keeping: rows saying a file's passages
+could not be embedded for a model, which v0.11 records elsewhere. Rolling
+back to v0.12.0 or v0.11.x is unaffected; only v0.10 and earlier used it.
+
 ## Shutting down and draining
 
 From v0.11 an API replica drains when it is stopped, so replacing replicas

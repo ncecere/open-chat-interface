@@ -75,10 +75,10 @@ test, docs) and leaves `main` releasable.
 - [x] Task 3: Guard development-image pruning
 - [x] Task 4: Bring ROADMAP.md up to date
 
-### Checkpoint B
-- [ ] `run.py checks` (real exit code), `node --test scripts/*.test.mjs`
-- [ ] The prune workflow's dry run on GitHub lists protected heads and nothing for `main`
-- [ ] Review with the human
+### Checkpoint B ✅
+- [x] `run.py checks` (real exit code 0), `node --test scripts/*.test.mjs` (139/139)
+- [x] The prune workflow's dry run on GitHub kept the branch head, 0 candidates (main has no image after the 2026-10-11 prune)
+- [x] Review with the human (the `/build auto` approval; the tag waits for sign-off)
 
 ### Phase 3: Release
 - [ ] Task 5: Changelog and docs for v0.12.1, then release by `docs/RELEASING.md`

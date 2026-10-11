@@ -119,10 +119,11 @@ the script selects.
 
 **Estimated scope:** Small
 
-## Checkpoint B
-- [ ] `python3 $H/run.py checks` (real exit code 0)
-- [ ] `node --test scripts/*.test.mjs`
-- [ ] Review with the human
+## Checkpoint B ✅
+- [x] `python3 $H/run.py checks` (real exit code 0; licences needed the harness's pnpm store fixed)
+- [x] `node --test scripts/*.test.mjs` (139/139)
+- [x] Prune dry run on GitHub (run 38179575488): the branch head kept, 0 candidates
+- [x] Review with the human: covered by `/build auto` approval; tag and publish still stop for sign-off
 
 ## Task 5: Changelog, docs and release v0.12.1
 
@@ -130,7 +131,7 @@ the script selects.
 open the PR, then release by `docs/RELEASING.md`.
 
 **Acceptance criteria:**
-- [ ] CHANGELOG `[Unreleased]` → `[0.12.1]`: Removed (the table, post-deploy
+- [x] CHANGELOG `[Unreleased]` → `[0.12.1]`: Removed (the table, post-deploy
   step 0013; rollback unaffected), Fixed (preflight wording and count), and a
   development note on pruning; `docs/OPERATIONS.md` per-release upgrade note.
 - [ ] PR CI green (application checks, both browser steps, rolling upgrade,
