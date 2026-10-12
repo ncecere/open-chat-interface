@@ -81,13 +81,23 @@ test, docs) and leaves `main` releasable.
 - [x] Review with the human (the `/build auto` approval; the tag waits for sign-off)
 
 ### Phase 3: Release
-- [ ] Task 5: Changelog and docs for v0.12.1, then release by `docs/RELEASING.md`
+- [x] Task 5: Changelog and docs for v0.12.1, then release by `docs/RELEASING.md`
 
-### Checkpoint C: Complete
-- [ ] PR CI green (incl. the rolling-upgrade workflow); merged
-- [ ] v0.12.1 tagged; multi-arch images and chart published and verified
-- [ ] `dev-env up oci … --ref v0.12.1` healthy, then down
-- [ ] Spec marked done in SPEC.md
+### Checkpoint C: Complete ✅
+- [x] PR #382 CI green (incl. the rolling-upgrade workflow); merged
+- [x] v0.12.1 tagged (`34c1d419`); api and web images (linux/amd64 + linux/arm64) and chart 0.12.1 published, public, `latest` moved
+- [x] `dev-env up oci r121 --ref v0.12.1` healthy (sign-in, admin); `migrate --post` applied 0013 (103 ms, table dropped) and every background migration finished; then down. Found: dev-env never runs post-deploy steps (see below)
+- [x] Spec marked done in SPEC.md
+
+## Found during Checkpoint C
+
+`dev-env` (homelab `tools/dev-env/devenv/oci.py`) renders the chart with
+`migrations.enabled: false` (Helm hooks do not run under `kubectl apply`); the
+API migrates at start but runs as `OCI_ROLE=web`, and the worker has
+`RUN_MIGRATIONS=false`, so `RUN_POST_MIGRATIONS` is off. Post-deploy steps
+and background migrations therefore never run in a development environment,
+and features gated on them (code artifacts, step 0009; leaving embedding
+generation 1) stay off there. Fix belongs to the homelab tool (ask first).
 
 ## Risks and mitigations
 

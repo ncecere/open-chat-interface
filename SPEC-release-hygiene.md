@@ -1,6 +1,6 @@
 # Spec: release-hygiene
 
-Module of [SPEC.md](SPEC.md) (v0.13). Depends on nothing. Shared commands,
+Module of [SPEC.md](SPEC.md) (v0.13). Depends on nothing. **Status: done, released as v0.12.1 (2026-10-11).** Shared commands,
 structure, style, testing and boundaries are in SPEC.md; this file adds what
 is specific to this module.
 

@@ -25,8 +25,8 @@ kept.
 
 **Verification:**
 - [x] `pnpm lint:migrations` clean
-- [ ] `python3 $H/run.py build && python3 $H/run.py test post src/__tests__/live/post-migrations.live.test.ts <new test>`
-- [ ] `pnpm upgrade:check` against a v0.12.0 database lists step 0013 with the table's size
+- [x] `python3 $H/run.py build && python3 $H/run.py test post src/__tests__/live/post-migrations.live.test.ts <new test>`
+- [x] The preflight lists step 0013 (System health → Upgrades on the v0.12.1 dev-env environment, before `migrate --post`)
 
 **Dependencies:** None
 
@@ -85,7 +85,7 @@ the script selects.
 **Verification:**
 - [x] `node --test scripts/prune-dev-images.test.mjs`
 - [x] `pnpm lint`
-- [ ] After merge to the branch: a manual dry run on GitHub lists `main`'s head as protected
+- [x] Manual dry run on GitHub (run 38179575488) kept the branch head; `main` had no image to protect after the 2026-10-11 prune
 
 **Dependencies:** None
 
@@ -125,7 +125,7 @@ the script selects.
 - [x] Prune dry run on GitHub (run 38179575488): the branch head kept, 0 candidates
 - [x] Review with the human: covered by `/build auto` approval; tag and publish still stop for sign-off
 
-## Task 5: Changelog, docs and release v0.12.1
+## Task 5: Changelog, docs and release v0.12.1 ✅
 
 **Description:** Write the `[0.12.1]` changelog section and operator notes,
 open the PR, then release by `docs/RELEASING.md`.
@@ -134,17 +134,17 @@ open the PR, then release by `docs/RELEASING.md`.
 - [x] CHANGELOG `[Unreleased]` → `[0.12.1]`: Removed (the table, post-deploy
   step 0013; rollback unaffected), Fixed (preflight wording and count), and a
   development note on pruning; `docs/OPERATIONS.md` per-release upgrade note.
-- [ ] PR CI green (application checks, both browser steps, rolling upgrade,
+- [x] PR CI green (application checks, both browser steps, rolling upgrade,
   Helm); merged with `--match-head-commit`.
-- [ ] Release PR (`release-prep-0.12.1`: six manifests, `version.ts`, the Helm
+- [x] Release PR (`release-prep-0.12.1`: six manifests, `version.ts`, the Helm
   chart, image examples) green and merged; tag `v0.12.1`; multi-arch images and
   the chart published and verified; `dev-env up oci r121 --ref v0.12.1`
   healthy, then down.
 
 **Verification:**
-- [ ] `pnpm release:check`, `pnpm lint`, `pnpm typecheck`, `pnpm lint:migrations`,
+- [x] `pnpm release:check`, `pnpm lint`, `pnpm typecheck`, `pnpm lint:migrations`,
   `pnpm licenses:check`, `pnpm audit --prod`, `helm lint deploy/helm/open-chat-interface`
-- [ ] Publish workflow green; `docker buildx imagetools inspect` shows amd64 and arm64
+- [x] Publish workflow green (run 38183804817); both platforms in each image index
 
 **Dependencies:** Tasks 1–4
 
@@ -152,7 +152,7 @@ open the PR, then release by `docs/RELEASING.md`.
 
 **Estimated scope:** Medium
 
-## Checkpoint C: Complete
-- [ ] All acceptance criteria in SPEC-release-hygiene.md met
-- [ ] SPEC.md marks `release-hygiene` done
-- [ ] Docs site, website and homelab updates are a separate, approved step
+## Checkpoint C: Complete ✅
+- [x] All acceptance criteria in SPEC-release-hygiene.md met
+- [x] SPEC.md marks `release-hygiene` done
+- [ ] Docs site, website and homelab updates are a separate, approved step (open)
