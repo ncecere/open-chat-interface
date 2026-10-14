@@ -1,9 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { sql } from '@oci/db';
+import { createDatabase, messageSearchFolded, runPostMigrations, sql } from '@oci/db';
 import { SEARCH_HIGHLIGHT_END, SEARCH_HIGHLIGHT_START, type ThreadSearchResult } from '@oci/shared';
 import { Hono } from 'hono';
-import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   createLiveDatabase,
@@ -14,20 +11,28 @@ import {
 } from '../../../test/live-postgres.js';
 
 /**
- * Search and accents (#362), against real Postgres and the real optional SQL
- * file. Titles ignore accents always. Message text is exact about accents (the
- * old index) until an operator builds the optional folded index by running
- * packages/db/optional/message_text_search_folded_index.sql; the application
- * notices the index by itself (no code change, no restart), and uses it only
- * while it exists and is valid, so the folded expression never runs without it.
+ * Search and accents (#362, SPEC-accent-search.md), against real Postgres.
+ *
+ * Titles ignore accents always. Message text is exact about accents (as v0.12
+ * was) until BOTH the post-deploy step that builds the index over
+ * `message.search_folded` and the background migration that fills it for older
+ * messages are done; from then on a search matches the exact index or the
+ * folded one, so it finds everything it found before and more.
  */
 const available = await livePostgresAvailable();
 
-const state = vi.hoisted(() => ({ db: null as unknown, organizationId: '' }));
+const state = vi.hoisted(() => ({
+  db: null as unknown,
+  sql: null as unknown,
+  organizationId: '',
+}));
 
 vi.mock('../../db/index.js', () => ({
   get db() {
     return state.db;
+  },
+  get sql() {
+    return state.sql;
   },
 }));
 vi.mock('../../services/organization.js', () => ({
@@ -37,31 +42,49 @@ vi.mock('../../services/settings.js', () => ({
   getSetting: async () => ({ branching: true, shareLinks: true, temporaryChat: true }),
 }));
 
+import type postgres from 'postgres';
 import type { AppBindings } from '../../middleware/context.js';
 import { errorHandler } from '../../middleware/error-handler.js';
 import { threadRoutes } from '../../routes/threads.js';
+import { resetReadinessCache } from '../../services/migrations/readiness.js';
 import {
-  FOLDED_SEARCH_INDEX,
-  FOLDED_SEARCH_INDEX_FILE,
-  foldedMessageSearchVector,
   foldedSearchReady,
-  resetFoldedSearchReady,
+  messageSearchBranches,
   threadSearchStatement,
 } from '../../services/thread-search.js';
 
-const optionalSql = readFileSync(
-  fileURLToPath(
-    new URL(`../../../../../packages/db/optional/${FOLDED_SEARCH_INDEX_FILE}`, import.meta.url),
-  ),
-  'utf8',
-);
+const { runBackgroundMigrations } = await import('../../services/migrations/background-runner.js');
 
 const text = (value: string) => ({ type: 'text', text: value });
+const quiet = { info: () => {}, warn: () => {} };
+
+const QUERIES = [
+  'bibliotheque',
+  'bibliothèque',
+  'BIBLIOTHEQUE',
+  'biblio',
+  'busqueda',
+  'búsqueda',
+  'stefan',
+  'viet nam',
+  'pho',
+  'phở',
+  'premiere ete',
+  'seconde citation',
+  'strasse',
+  'oeuvre',
+  'plain',
+  '日本語',
+  'がっこう',
+  'اكتب',
+];
 
 describe.skipIf(!available)('live Postgres: search ignores accents', () => {
   let live: LiveDatabase;
+  let client: postgres.Sql;
   let ownerId: string;
   const ids: Record<string, string> = {};
+  const before = new Map<string, string[]>();
 
   function appFor(userId: string) {
     const app = new Hono<AppBindings>();
@@ -110,7 +133,9 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
 
   beforeAll(async () => {
     live = await createLiveDatabase('thread_search_accents');
+    client = createDatabase(live.connectionString, { max: 4 }).sql;
     state.db = live.db;
+    state.sql = client;
     state.organizationId = await seedOrganization(live.db);
     ownerId = await seedUser(live.db, state.organizationId, { email: 'owner@example.com' });
     await createThread('library', 'Notes de lecture', [
@@ -123,34 +148,20 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
     await createThread('vietnam', 'Việt Nam', [text('Phở là món ăn nổi tiếng.')]);
     await createThread('arabic', 'واجب الكتابة', [text('اكتب لي جملتين عن المكتبة.')]);
     await createThread('japanese', '日本語の宿題', [text('がっこうのしゅくだい')]);
+    await createThread('german', 'Reise', [text('Die Straße nach Köln, das Œuvre.')]);
+    await createThread('plain', 'Plain notes', [text('Just plain English words.')]);
+    // As if every message was written before migration 0048 (the trigger had not run).
+    await client`update message set search_folded = null`;
   });
 
   afterAll(async () => {
+    await client?.end({ timeout: 5 });
     await live?.destroy();
   });
 
-  async function indexState(): Promise<'missing' | 'valid' | 'invalid'> {
-    const [row] = await live.db.execute<{ valid: boolean }>(sql`
-      select i.indisvalid as valid from pg_class c join pg_index i on i.indexrelid = c.oid
-      where c.relname = ${FOLDED_SEARCH_INDEX}`);
-    return row ? (row.valid ? 'valid' : 'invalid') : 'missing';
-  }
-
-  /** Runs the statement in `sql` as an operator's `psql -f` would: on its own connection, no transaction. */
-  async function runByHand(statement: string) {
-    const client = postgres(live.connectionString, { max: 1, onnotice: () => {} });
-    try {
-      await client.unsafe(statement).simple();
-    } finally {
-      await client.end({ timeout: 1 });
-      // The application re-reads the index state after a short time; do not wait for it.
-      resetFoldedSearchReady();
-    }
-  }
-
-  describe('without the optional index (what an upgrade ships)', () => {
-    it('is not ready, and message text is exact about accents, as before', async () => {
-      expect(await indexState()).toBe('missing');
+  describe('right after the upgrade, before the stored vectors are ready', () => {
+    it('is not ready, and message text is exact about accents, as v0.12 was', async () => {
+      resetReadinessCache();
       expect(await foldedSearchReady()).toBe(false);
       expect(await found('bibliothèque')).toEqual(['Notes de lecture']);
       expect(await found('bibliotheque')).toEqual([]);
@@ -158,12 +169,12 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
       expect(await found('phở')).toEqual(['Việt Nam']);
       // Non-Latin search is unaffected.
       expect(await found('日本語')).toEqual(['日本語の宿題']);
+      for (const query of QUERIES) before.set(query, await found(query));
     });
 
-    it('still ignores accents in titles', async () => {
+    it('still ignores accents in titles, and folds ß, æ and œ in them', async () => {
       expect(await found('busqueda')).toEqual(['Walk9 Búsqueda de archivos']);
       expect(await found('BUSQUEDA')).toEqual(['Walk9 Búsqueda de archivos']);
-      expect(await found('búsqueda')).toEqual(['Walk9 Búsqueda de archivos']);
       expect(await found('stefan')).toEqual(['Ștefan cel Mare']);
       expect(await found('viet nam')).toEqual(['Việt Nam']);
       const [title] = await results('busqueda');
@@ -179,54 +190,44 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
       expect(body.threads.map((thread) => thread.id)).toEqual([ids.title]);
     });
 
-    it('never evaluates the folded message expression, which no index could answer', async () => {
-      const statement = await live.db.transaction(async (tx) => {
-        await tx.execute(sql`set local enable_seqscan = off`);
-        const rows = await tx.execute<{ 'QUERY PLAN': string }>(
-          sql`explain ${threadSearchStatement(
-            ownerId,
-            {
-              tsquery: "'bibliotheque':*",
-              terms: ['bibliotheque'],
-              folded: false,
-              titleTsquery: "'bibliotheque':*",
-              titleTerms: ['bibliotheque'],
-            },
-            'bibliotheque',
-            20,
-          )}`,
-        );
-        return rows.map((row) => row['QUERY PLAN']).join('\n');
-      });
-      expect(statement).not.toContain(FOLDED_SEARCH_INDEX);
-      expect(statement).not.toMatch(/translate\(\(?jsonb_path_query_array/);
+    it('never reads the stored column while it is not ready', async () => {
+      const statement = await explain(false);
+      expect(statement).not.toContain('search_folded');
     });
 
-    it('does not use an INVALID index of that name (a build that failed or was cancelled)', async () => {
-      // A unique build over duplicates fails and leaves an INVALID index behind.
-      await expect(
-        runByHand(`create unique index concurrently "${FOLDED_SEARCH_INDEX}" on message (role)`),
-      ).rejects.toThrow();
-      expect(await indexState()).toBe('invalid');
+    it('is still not ready when the index is built but older messages are not filled', async () => {
+      // The post-deploy step alone (no background migration scheduled yet).
+      await runPostMigrations(live.connectionString, { logger: quiet, backgroundMigrations: [] });
+      resetReadinessCache();
       expect(await foldedSearchReady()).toBe(false);
       expect(await found('bibliotheque')).toEqual([]);
-      await runByHand(`drop index concurrently "${FOLDED_SEARCH_INDEX}"`);
-      expect(await indexState()).toBe('missing');
     });
   });
 
-  describe('with the optional index, built by running its SQL file', () => {
+  describe('once the index is built and the older messages are filled', () => {
     beforeAll(async () => {
-      // Exactly what an operator runs: the shipped file, outside any transaction.
-      await runByHand(optionalSql);
+      await runPostMigrations(live.connectionString, {
+        logger: quiet,
+        backgroundMigrations: [messageSearchFolded],
+      });
+      // Not ready until it has actually run.
+      resetReadinessCache();
+      expect(await foldedSearchReady()).toBe(false);
+      await client`update background_migration set batch_size = 3, pause_ms = 0`;
+      await runBackgroundMigrations({
+        client,
+        definitions: [messageSearchFolded],
+        throttle: async () => null,
+        shouldStop: () => false,
+      });
+      resetReadinessCache();
     });
 
-    it('is built, valid and noticed without a code change', async () => {
-      expect(await indexState()).toBe('valid');
+    it('is ready', async () => {
       expect(await foldedSearchReady()).toBe(true);
     });
 
-    it('finds accented words from unaccented ones', async () => {
+    it('finds accented words from unaccented ones, and the reverse', async () => {
       for (const query of [
         'bibliotheque',
         'bibliothèque',
@@ -237,7 +238,6 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
         expect(await found(query)).toEqual(['Notes de lecture']);
       }
       expect(await found('busqueda')).toEqual(['Walk9 Búsqueda de archivos']);
-      expect(await found('búsqueda')).toEqual(['Walk9 Búsqueda de archivos']);
       expect(await found('stefan')).toEqual(['Ștefan cel Mare']);
       expect(await found('viet nam')).toEqual(['Việt Nam']);
       expect(await found('pho')).toEqual(['Việt Nam']);
@@ -245,47 +245,107 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
       expect(await found('seconde citation')).toEqual(['Escapes']);
     });
 
-    it('is exact about accents again once the index is dropped, after the answer expires', async () => {
-      await runByHand(`drop index concurrently "${FOLDED_SEARCH_INDEX}"`);
-      expect(await foldedSearchReady()).toBe(false);
-      expect(await found('bibliotheque')).toEqual([]);
-      await runByHand(optionalSql);
-      expect(await found('bibliotheque')).toEqual(['Notes de lecture']);
+    it('finds ß, æ and œ by their folded spelling, and plain text as before', async () => {
+      expect(await found('strasse')).toEqual(['Reise']);
+      expect(await found('oeuvre')).toEqual(['Reise']);
+      expect(await found('straße')).toEqual(['Reise']);
+      expect(await found('koln')).toEqual(['Reise']);
+      expect(await found('plain')).toEqual(['Plain notes']);
+    });
+
+    it('finds everything it found before, in the same order for those', async () => {
+      for (const query of QUERIES) {
+        const now = await found(query);
+        const old = before.get(query) ?? [];
+        for (const title of old) expect(now, query).toContain(title);
+        expect(
+          now.filter((title) => old.includes(title)),
+          query,
+        ).toEqual(old);
+      }
+    });
+
+    it('still finds other scripts, whose letters are not folded', async () => {
+      expect(await found('اكتب')).toEqual(['واجب الكتابة']);
+      expect(await found('المكتبة')).toEqual(['واجب الكتابة']);
+      expect(await found('日本語')).toEqual(['日本語の宿題']);
+      expect(await found('がっこう')).toEqual(['日本語の宿題']);
+    });
+
+    it('finds a message written after the upgrade, through the trigger', async () => {
+      await createThread('later', 'Later', [text('Une réunion à Montréal demain.')]);
+      expect(await found('reunion montreal')).toEqual(['Later']);
+      expect(await found('réunion')).toEqual(['Later']);
+      // Edited: the vector follows the new text.
+      await live.db.execute(sql`
+        update message set parts = ${JSON.stringify([text('Plus de réunion.')])}::jsonb
+        where thread_id = ${ids.later}
+      `);
+      expect(await found('montreal')).toEqual([]);
+      expect(await found('reunion')).toEqual(['Later']);
+    });
+
+    it('highlights the word as written, accents kept', async () => {
+      const [hit] = await results('bibliotheque');
+      expect(hit?.matches[0]?.snippet).toContain(
+        `${SEARCH_HIGHLIGHT_START}bibliothèque${SEARCH_HIGHLIGHT_END}`,
+      );
+      const [title] = await results('busqueda');
+      expect(title?.titleHighlight).toBe(
+        `Walk9 ${SEARCH_HIGHLIGHT_START}Búsqueda${SEARCH_HIGHLIGHT_END} de archivos`,
+      );
+    });
+
+    it('is answered by both indexes, each branch on its own, never by a scan that folds every message', async () => {
+      const plan = async (condition: 'exact' | 'folded') =>
+        live.db.transaction(async (tx) => {
+          await tx.execute(sql`set local enable_seqscan = off`);
+          const branches = messageSearchBranches('m', sql`${"'bibliotheque':*"}::tsquery`);
+          const rows = await tx.execute<{ 'QUERY PLAN': string }>(
+            sql`explain select m.id from message m where ${branches[condition]}`,
+          );
+          return rows.map((row) => row['QUERY PLAN']).join('\n');
+        });
+      expect(await plan('exact')).toContain('message_text_search_idx');
+      expect(await plan('folded')).toContain('message_search_folded_idx');
+      expect(await explain(true)).not.toMatch(/oci_fold_search_text\(\(?jsonb_path_query_array/);
+    });
+
+    it('joins the two branches by UNION, not OR: an OR made the planner compute the exact vector of every message of the person', async () => {
+      const text = (folded: boolean) =>
+        threadSearchStatement(
+          ownerId,
+          {
+            tsquery: "'bibliotheque':*",
+            terms: ['bibliotheque'],
+            folded,
+            titleTsquery: "'bibliotheque':*",
+            titleTerms: ['bibliotheque'],
+          },
+          'bibliotheque',
+          20,
+        );
+      const sqlText = (statement: ReturnType<typeof text>) =>
+        statement.queryChunks.map((chunk) => JSON.stringify(chunk)).join('');
+      const flat = sqlText(text(true)).replace(/\\n|\s+/g, ' ');
+      expect(flat).toMatch(/union/i);
+      expect(flat).not.toMatch(/@@[^@]*\) or "m"\."search_folded"/i);
+      // Before the stored vectors are ready only the exact branch runs, as in v0.12.
+      expect(sqlText(text(false))).not.toMatch(/union/i);
+      expect(sqlText(text(false))).not.toContain('search_folded');
     });
   });
 
-  it('with the index, still finds other scripts, whose letters are not folded', async () => {
-    expect(await found('اكتب')).toEqual(['واجب الكتابة']);
-    expect(await found('المكتبة')).toEqual(['واجب الكتابة']);
-    expect(await found('日本語')).toEqual(['日本語の宿題']);
-    expect(await found('がっこう')).toEqual(['日本語の宿題']);
-  });
-
-  it('with the index, highlights the word as written, accents kept', async () => {
-    const [hit] = await results('bibliotheque');
-    expect(hit?.matches[0]?.snippet).toContain(
-      `${SEARCH_HIGHLIGHT_START}bibliothèque${SEARCH_HIGHLIGHT_END}`,
-    );
-    const [title] = await results('busqueda');
-    expect(title?.titleHighlight).toBe(
-      `Walk9 ${SEARCH_HIGHLIGHT_START}Búsqueda${SEARCH_HIGHLIGHT_END} de archivos`,
-    );
-  });
-
-  it('with the index, is answered by it, on exactly the indexed expression', async () => {
-    const plans = await live.db.transaction(async (tx) => {
+  async function explain(folded: boolean): Promise<string> {
+    return live.db.transaction(async (tx) => {
       await tx.execute(sql`set local enable_seqscan = off`);
-      const predicate = await tx.execute<{ 'QUERY PLAN': string }>(sql`
-        explain select m.id from message m
-        where ${foldedMessageSearchVector('m')} @@ ${"'bibliotheque':*"}::tsquery
-      `);
-      const statement = await tx.execute<{ 'QUERY PLAN': string }>(
+      const rows = await tx.execute<{ 'QUERY PLAN': string }>(
         sql`explain ${threadSearchStatement(
           ownerId,
           {
             tsquery: "'bibliotheque':*",
             terms: ['bibliotheque'],
-            folded: true,
+            folded,
             titleTsquery: "'bibliotheque':*",
             titleTerms: ['bibliotheque'],
           },
@@ -293,14 +353,7 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
           20,
         )}`,
       );
-      return {
-        predicate: predicate.map((row) => row['QUERY PLAN']).join('\n'),
-        statement: statement.map((row) => row['QUERY PLAN']).join('\n'),
-      };
+      return rows.map((row) => row['QUERY PLAN']).join('\n');
     });
-    expect(plans.predicate).toContain('message_text_search_folded_idx');
-    const indexed = plans.predicate.match(/Index Cond: \((.*) @@ /)?.[1];
-    expect(indexed).toContain('translate(');
-    expect(plans.statement).toContain(`${indexed} @@`);
-  });
+  }
 });

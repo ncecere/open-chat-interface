@@ -151,6 +151,8 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0011_attachment_storage_key_index', 'pending'],
       ['0012_attachment_thumbnail_key_index', 'pending'],
       ['0013_drop_project_file_embedding_failure', 'pending'],
+      ['0014_message_search_folded_index', 'pending'],
+      ['0015_drop_message_text_search_folded_index', 'pending'],
     ]);
     const [created] = report.postDeploy;
     expect(created!.statement).toMatchObject({ cost: 'concurrent-index', fast: true });
@@ -165,7 +167,7 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       invalidExists: false,
     });
     expect(created!.index!.estimatedBytes).toBeGreaterThan(0);
-    expect(report.indexes.toBuild).toBe(11);
+    expect(report.indexes.toBuild).toBe(12);
     expect(report.verdict.mode).toBe('rolling');
     expect(report.verdict.summary).toMatch(/Run `migrate --post`/);
     expect(renderReport(report)).toMatch(/Verdict: ROLLING/);
@@ -301,6 +303,8 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0.11.reencrypt-settings', 'not_scheduled'],
       // Forks and edits made before 0.11 get their own rows for shared files (#358).
       ['0.11.attachment-own-rows', 'not_scheduled'],
+      ['0.13.message-search-folded', 'not_scheduled'],
+      ['0.13.chunk-search-folded', 'not_scheduled'],
     ]);
 
     expect(

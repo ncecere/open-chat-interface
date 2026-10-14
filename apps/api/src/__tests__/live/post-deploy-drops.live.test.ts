@@ -71,4 +71,33 @@ describe.skipIf(!available)('live: tables dropped by post-deploy steps', () => {
     ).resolves.toBeDefined();
     expect(await tableExists(live, 'project_file_embedding_failure')).toBe(false);
   });
+
+  it('drops the optional folded message index v0.12 let an operator build, and only that one (0015)', async () => {
+    const client = postgres(live.connectionString, { max: 1, onnotice: () => {} });
+    const indexes = async () =>
+      (
+        await client<{ name: string }[]>`
+          select indexname as name from pg_indexes
+          where tablename = 'message' and indexname in
+            ('message_text_search_folded_idx', 'message_text_search_idx', 'message_search_folded_idx')
+          order by indexname`
+      ).map((row) => row.name);
+    try {
+      // What an operator ran, outside any transaction (the v0.12 optional file's index).
+      await client
+        .unsafe(
+          `create index concurrently "message_text_search_folded_idx" on message using gin (to_tsvector('simple'::regconfig, parts::text))`,
+        )
+        .simple();
+      expect(await indexes()).toEqual([
+        'message_text_search_folded_idx',
+        'message_text_search_idx',
+      ]);
+      await runPostMigrations(live.connectionString, { logger: quiet, backgroundMigrations: [] });
+      // Gone; the exact index and step 0014's index are untouched.
+      expect(await indexes()).toEqual(['message_search_folded_idx', 'message_text_search_idx']);
+    } finally {
+      await client.end({ timeout: 1 });
+    }
+  });
 });

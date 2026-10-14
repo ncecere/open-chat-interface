@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, schema, sql } from '@oci/db';
+import { and, eq, inArray, isNull, MESSAGE_SEARCH_FOLDED, schema, sql } from '@oci/db';
 import {
   plainTextOfMarkdown,
   SEARCH_HIGHLIGHT_END,
@@ -7,9 +7,10 @@ import {
   THREAD_SEARCH_MAX_LIMIT,
 } from '@oci/shared';
 import { db } from '../db/index.js';
-import { foldSql, foldSqlText } from '../lib/fold.js';
+import { foldSql } from '../lib/fold.js';
 import { containsPattern } from '../lib/like.js';
 import { stripControls, tsqueryOperand } from '../lib/text.js';
+import { isBackgroundMigrationDone, isPostStepDone } from './migrations/readiness.js';
 import { textArray } from './project-search/retrieval.js';
 
 type SQL = ReturnType<typeof sql.raw>;
@@ -41,76 +42,58 @@ export function messageSearchVector(alias: string): SQL {
 }
 
 /**
- * The optional index over the accent-folded message text (#362). It is not a
- * post-deploy step: building it reads every message (about a millisecond
- * each), which is too much to put on every upgrade. An operator who wants
- * accent-insensitive message search builds it by hand
- * (packages/db/optional/message_text_search_folded_index.sql, docs/OPERATIONS.md).
- * Without it message text is searched exactly as before; titles are folded
- * either way, since nothing indexes them.
+ * Accent-insensitive search of message text (#362, SPEC-accent-search.md).
+ * `message.search_folded` holds the folded search vector of every message
+ * whose text has letters the fold changes (NULL for the rest), kept by a
+ * trigger. Search matches the exact-text index OR the partial index over that
+ * column, so "bibliotheque" finds "bibliothèque" and the reverse.
+ *
+ * It is used only once the column is filled for messages written before
+ * v0.13 (the background migration) and its index is built (post-deploy step
+ * 0014); until both are done, message text is searched exactly as v0.12 did.
+ * Titles are folded in the query either way, since nothing indexes them.
  */
-export const FOLDED_SEARCH_INDEX = 'message_text_search_folded_idx';
-export const FOLDED_SEARCH_INDEX_FILE = 'message_text_search_folded_index.sql';
-
-/** How long an answer about the index is trusted: short, so a built (or dropped) index is noticed soon. */
-export const FOLDED_READY_TTL_MS = 30_000;
-
-let foldedReady: { value: boolean; until: number } | null = null;
-
-/** Test seam: forget the cached answer about the optional index. */
-export function resetFoldedSearchReady(): void {
-  foldedReady = null;
-}
+export const FOLDED_SEARCH_STEP = '0014_message_search_folded_index';
 
 /**
- * True when the optional folded index exists and is valid. Only then may a query
- * use the folded expression: without the index it would read every message. An
- * index still being built (or left INVALID by a cancelled build) is not ready,
- * and neither is a database that cannot answer.
+ * True when message text may be searched ignoring accents: the stored vectors
+ * are complete and their index exists. A database that cannot answer reads as
+ * not ready (the safe direction), and the answers are cached by
+ * `readiness.ts` (permanent once true, 30 seconds while false). Never call it
+ * from inside a transaction.
  */
 export async function foldedSearchReady(): Promise<boolean> {
-  const now = Date.now();
-  if (foldedReady && foldedReady.until > now) return foldedReady.value;
-  let value = false;
-  try {
-    const rows = await db.execute<{ ready: boolean }>(sql`
-      select exists (
-        select 1
-        from pg_index i
-        join pg_class c on c.oid = i.indexrelid
-        where c.relname = ${FOLDED_SEARCH_INDEX}
-          and i.indrelid = to_regclass('message')
-          and i.indisvalid
-          and i.indisready
-      ) as ready
-    `);
-    value = rows[0]?.ready === true;
-  } catch {
-    value = false;
-  }
-  foldedReady = { value, until: now + FOLDED_READY_TTL_MS };
-  return value;
+  return (
+    (await isBackgroundMigrationDone(MESSAGE_SEARCH_FOLDED)) &&
+    (await isPostStepDone(FOLDED_SEARCH_STEP))
+  );
 }
 
 /**
- * The searchable document with accents folded (#362): the same text parts,
- * every accented Latin letter replaced by its base letter, so "bibliotheque"
- * finds "bibliothèque". The JSON text is folded and read back as JSON (the
- * table only changes letters, never JSON syntax), so `to_tsvector` still
- * indexes string values only.
+ * The two conditions a message can meet for a search (`query` is a tsquery).
+ * `exact` is the exact-text index's, as in v0.12. `folded` compares the stored
+ * folded vector (`message.search_folded`, #362), which only messages with
+ * accented letters have. A message with accents has both, and the stored one
+ * holds every word, so matching either finds everything the exact index alone
+ * found, and more.
  *
- * Must stay character-for-character the expression of the optional index
- * (`message_text_search_folded_idx`); a unit test compares them. Only ever used
- * when `foldedSearchReady()` said the index exists.
+ * They are separate conditions on purpose, joined by UNION in the statement
+ * and not by OR. The exact vector is not stored: it is computed from `parts`
+ * wherever a plan filters on it (about 77 microseconds a message), which the
+ * planner costs as nearly free. In `exact OR folded`, a folded branch that
+ * looks unselective made it abandon the bitmap scans and compute the exact
+ * vector for every message of the person (1.2 s for 15,000 messages, found by
+ * the rolling-upgrade test in CI as 6 to 8 s searches right after the backfill
+ * finished). As a UNION each branch is planned alone: the exact one is exactly
+ * the v0.12 query, and the folded one compares a stored column, which is cheap
+ * whichever plan is chosen. Exported so a test can EXPLAIN each predicate.
  */
-export function foldedMessageSearchVectorText(alias: string): string {
-  if (!/^[a-z_][a-z0-9_]*$/.test(alias)) throw new Error('Invalid table alias');
-  const text = `jsonb_path_query_array("${alias}"."parts", ${JSON_TEXT_PATH})::text`;
-  return `to_tsvector('simple'::regconfig, ${foldSqlText(text)}::jsonb)`;
+export function messageSearchBranches(alias: string, query: SQL): { exact: SQL; folded: SQL } {
+  return {
+    exact: sql`${messageSearchVector(alias)} @@ ${query}`,
+    folded: sql`${sql.raw(`"${alias}"."search_folded"`)} @@ ${query}`,
+  };
 }
-
-export const foldedMessageSearchVector = (alias: string): SQL =>
-  sql.raw(foldedMessageSearchVectorText(alias));
 
 /** The same text parts as one string, for snippets. Not indexed, so its form is free. */
 function messageSearchText(alias: string): SQL {
@@ -132,8 +115,8 @@ async function parseSearchQuery(raw: string, folded: boolean): Promise<ParsedQue
   if (!text) return null;
 
   // Titles are always folded, and the words that meet them are folded the same
-  // way (#362). Message text is folded only when the optional index exists, and
-  // its words then meet it as the index holds them.
+  // way (#362). Message text is folded only once its stored vectors and their
+  // index are ready, and its words then meet them as they are held.
   const titleWords = await wordsOf(foldSql(sql`${text}::text`));
   const bodyWords = folded ? titleWords : await wordsOf(sql`${text}`);
   if (titleWords.length === 0 && bodyWords.length === 0) return null;
@@ -168,7 +151,7 @@ export interface ParsedQuery {
   tsquery: string;
   /** The words, each matched as a prefix; folded when `folded`. */
   terms: string[];
-  /** Whether message text ignores accents: the optional folded index exists (#362). */
+  /** Whether message text ignores accents: the stored folded vectors are ready (#362). */
   folded: boolean;
   /** As `tsquery` and `terms`, for titles, which always ignore accents (#362). */
   titleTsquery: string;
@@ -230,8 +213,7 @@ function clampSearchLimit(limit: number | undefined): number {
  * The ranked search over one person's conversations. Exported so tests can
  * EXPLAIN exactly what runs. Titles always ignore accents (#362). Message text
  * does only with `search.folded`, which callers set from `foldedSearchReady()`:
- * the folded message expression must never run without its index, or it would
- * read every message.
+ * it then matches the exact index or the folded one.
  */
 export function threadSearchStatement(
   userId: string,
@@ -241,8 +223,32 @@ export function threadSearchStatement(
 ) {
   const query = sql`${search.tsquery}::tsquery`;
   const titleQuery = sql`${search.titleTsquery}::tsquery`;
-  const messageVector = (alias: string) =>
-    search.folded ? foldedMessageSearchVector(alias) : messageSearchVector(alias);
+  const exactVector = messageSearchVector('m');
+  const branches = messageSearchBranches('m', query);
+  const messageRank = search.folded
+    ? sql`ts_rank(coalesce(m.search_folded, ${exactVector}), ${query})`
+    : sql`ts_rank(${exactVector}, ${query})`;
+  // The messages one search may return: the person's own, not trashed, not
+  // temporary, and the replies as the conversation reads (a retry's replaced
+  // reply is not part of it).
+  const hitsFor = (condition: SQL) => sql`
+      select m.id, m.thread_id, m.role, m.position, ${messageRank} as rank
+      from message m
+      join thread t on t.id = m.thread_id
+      where t.user_id = ${userId}
+        and t.deleted_at is null
+        and t.temporary = false
+        and m.role in ('user', 'assistant')
+        and m.superseded_at is null
+        and ${condition}`;
+  // Before the stored vectors are ready only the exact branch runs, as in v0.12.
+  // Both branches compute the same rank for a message, so UNION removes the
+  // ones both found.
+  const hits = search.folded
+    ? sql`${hitsFor(branches.exact)}
+      union
+      ${hitsFor(branches.folded)}`
+    : hitsFor(branches.exact);
   const titleText = foldSql('t.title');
   const titleVector = sql`to_tsvector('simple'::regconfig, ${titleText})`;
   const typed = containsPattern(stripControls(rawQuery).trim().slice(0, SEARCH_QUERY_MAX_CHARS));
@@ -253,17 +259,7 @@ export function threadSearchStatement(
   const messageBody = sql`translate(left(${messageSearchText('m')}, ${SNIPPET_SOURCE_MAX_CHARS}), chr(1) || chr(2), '  ')`;
 
   return sql`
-    with hits as materialized (
-      select m.id, m.thread_id, m.role, m.position, ts_rank(${messageVector('m')}, ${query}) as rank
-      from message m
-      join thread t on t.id = m.thread_id
-      where t.user_id = ${userId}
-        and t.deleted_at is null
-        and t.temporary = false
-        and m.role in ('user', 'assistant')
-        -- Replies a retry replaced are not part of the conversation as it reads.
-        and m.superseded_at is null
-        and ${messageVector('m')} @@ ${query}
+    with hits as materialized (${hits}
     ),
     scores as (
       select thread_id, max(rank) as rank from hits group by thread_id

@@ -22,23 +22,59 @@ const run = promisify(execFile);
 export const REDIS_IMAGE =
   'redis:7.2.10-alpine@sha256:395ccd7ee4db0867de0d0410f4712a9e0331cff9fdbd864f71ec0f7982d3ffe6';
 
+/** Whether nothing listens on `port` on this machine's loopback address. */
+function portIsFree(port: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => server.close(() => resolve(true)));
+  });
+}
+
 /**
- * Free ports between 20000 and 50000: low enough that a cluster's bus port
- * (port + 10000) is valid too, and outside the usual ephemeral ranges.
+ * Free ports between 12000 and 22000. A cluster's bus port is the data port +
+ * 10000, so both stay below 32768, where Linux starts handing out ephemeral
+ * ports to outgoing connections (32768 to 60999; macOS uses 49152 and up). The
+ * range used to be 20000 to 50000 on the belief that it avoided them: most of it
+ * did not, and on a CI runner (`--network host`) a node whose port or bus port
+ * was held by some connection never came up, so the cluster never formed, at
+ * any timeout (the test takes 3 s when it works). With `bus`, the bus port is
+ * checked free too, which it never was.
  */
-async function freePorts(count: number): Promise<number[]> {
+async function freePorts(count: number, options: { bus?: boolean } = {}): Promise<number[]> {
   const ports = new Set<number>();
   while (ports.size < count) {
-    const candidate = 20_000 + Math.floor(Math.random() * 30_000);
+    const candidate = 12_000 + Math.floor(Math.random() * 10_000);
     if (ports.has(candidate)) continue;
-    const free = await new Promise<boolean>((resolve) => {
-      const server = createServer();
-      server.once('error', () => resolve(false));
-      server.listen(candidate, '127.0.0.1', () => server.close(() => resolve(true)));
-    });
-    if (free) ports.add(candidate);
+    if (!(await portIsFree(candidate))) continue;
+    if (options.bus && !(await portIsFree(candidate + 10_000))) continue;
+    ports.add(candidate);
   }
   return [...ports];
+}
+
+/**
+ * What the Redis processes in the container wrote and which of them are
+ * running, for the message of a failure: a node that could not start otherwise
+ * leaves only "timed out". Best effort; never throws.
+ */
+async function containerDiagnostics(name: string): Promise<string> {
+  try {
+    const { stdout } = await run(
+      'docker',
+      [
+        'exec',
+        name,
+        'sh',
+        '-c',
+        'ps -o args | grep -E "redis" | grep -v grep; tail -n 6 /tmp/*.log 2>&1',
+      ],
+      { timeout: 10_000 },
+    );
+    return `\n--- container ${name} ---\n${stdout.trim()}`;
+  } catch (diagnosticError) {
+    return `\n--- container ${name}: no diagnostics (${(diagnosticError as Error).message.split('\n')[0]}) ---`;
+  }
 }
 
 async function startContainer(name: string, ports: number[], script: string) {
@@ -96,11 +132,12 @@ export async function startRedisSentinel(): Promise<RedisSentinelSet> {
   const masterName = 'oci';
   const name = `oci-test-sentinel-${randomUUID().slice(0, 8)}`;
   const node = (port: number, extra = '') =>
-    `redis-server --port ${port} --save '' --appendonly no --daemonize yes --replica-announce-ip 127.0.0.1 ${extra}`;
+    `redis-server --port ${port} --save '' --appendonly no --daemonize yes --logfile /tmp/redis-${port}.log --replica-announce-ip 127.0.0.1 ${extra}`;
   const sentinel = (port: number) =>
     [
       `printf '%s\\n'`,
       `'port ${port}'`,
+      `'logfile /tmp/sentinel-${port}.log'`,
       `'sentinel announce-ip 127.0.0.1'`,
       `'sentinel monitor ${masterName} 127.0.0.1 ${primary} 2'`,
       `'sentinel down-after-milliseconds ${masterName} 1000'`,
@@ -156,6 +193,7 @@ export async function startRedisSentinel(): Promise<RedisSentinelSet> {
         return replicas.length === 1 && sentinelsSeen.length === 2;
       });
   } catch (error) {
+    if (error instanceof Error) error.message += await containerDiagnostics(name);
     await set.stop();
     throw error;
   }
@@ -168,13 +206,14 @@ export interface RedisClusterSet {
 }
 
 export async function startRedisCluster(): Promise<RedisClusterSet> {
-  const ports = await freePorts(3);
+  const ports = await freePorts(3, { bus: true });
   const name = `oci-test-cluster-${randomUUID().slice(0, 8)}`;
-  // Cluster bus ports are the data port + 10000; inside the container only.
+  // Cluster bus ports are the data port + 10000: inside the container only with
+  // published ports (macOS), on the host with `--network host` (Linux CI).
   const script = `${[
     ...ports.map(
       (port) =>
-        `redis-server --port ${port} --cluster-enabled yes --cluster-config-file /tmp/nodes-${port}.conf --cluster-node-timeout 2000 --cluster-announce-ip 127.0.0.1 --save '' --appendonly no --daemonize yes`,
+        `redis-server --port ${port} --cluster-enabled yes --cluster-config-file /tmp/nodes-${port}.conf --cluster-node-timeout 2000 --cluster-announce-ip 127.0.0.1 --save '' --appendonly no --daemonize yes --logfile /tmp/redis-${port}.log`,
     ),
     // Wait until every node answers before creating the cluster, and retry
     // the create: on a busy runner a node not yet listening made it fail, and
@@ -203,6 +242,7 @@ export async function startRedisCluster(): Promise<RedisClusterSet> {
       60_000,
     );
   } catch (error) {
+    if (error instanceof Error) error.message += await containerDiagnostics(name);
     await stop();
     throw error;
   }
