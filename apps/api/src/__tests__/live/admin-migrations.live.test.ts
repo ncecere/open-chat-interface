@@ -22,6 +22,7 @@ import {
   seedUser,
 } from '../../../test/live-postgres.js';
 import type { AppBindings } from '../../middleware/context.js';
+import { APP_VERSION } from '../../version.js';
 
 /**
  * System health, Upgrades and Background work (v0.11 design, sections 1 and
@@ -43,6 +44,9 @@ vi.mock('../../lib/logger.js', () => ({
 vi.mock('../../services/organization.js', () => ({
   getDefaultOrganizationId: async () => state.organizationId,
 }));
+
+// The release a database at the latest migration reads as: this code's own minor.
+const CURRENT_MINOR = `${APP_VERSION.split('.').slice(0, 2).join('.')}.0`;
 
 const available = await livePostgresAvailable();
 const { migrationRoutes } = await import('../../routes/admin/migrations.js');
@@ -135,7 +139,11 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
     const response = await request(auditor, 'GET', '/migrations/upgrade');
     expect(response.status).toBe(200);
     const report = (await response.json()) as UpgradeReport;
-    expect(report.database).toMatchObject({ fresh: false, unknownNewer: 0, release: '0.11.0' });
+    expect(report.database).toMatchObject({
+      fresh: false,
+      unknownNewer: 0,
+      release: CURRENT_MINOR,
+    });
     expect(report.preDeploy).toEqual([]);
     expect(report.postDeploy.map((step) => [step.name, step.state])).toEqual([
       ['0001_message_created_at_index', 'pending'],
@@ -220,7 +228,9 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       /builds an index while blocking writes to public\.big_probe \(20,000 rows/,
     );
     expect(report.verdict.mode).toBe('window');
-    expect(renderReport(report)).toMatch(/0040_slow \(0\.11\.0\): NOT FAST/);
+    expect(renderReport(report)).toMatch(
+      new RegExp(`0040_slow \\(${CURRENT_MINOR.replaceAll('.', '\\.')}\\): NOT FAST`),
+    );
   });
 
   it('is rolling when every pending statement is a catalog change', async () => {
@@ -243,13 +253,18 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
     const folder = folderWith({
       '0040_fast': 'ALTER TABLE "big_probe" ADD COLUMN IF NOT EXISTS "d" text;',
     });
+    // The database is at the current minor, so the bundled version is pinned two minors ahead.
+    const [major, minor] = CURRENT_MINOR.split('.').map(Number) as [number, number];
+    const ahead = `${major}.${minor + 2}.0`;
     const report = await upgradeReport(pool.sql, {
       migrationsFolder: folder,
       definitions: [],
-      version: '0.13.0',
+      version: ahead,
     });
     expect(report.verdict.mode).toBe('window');
-    expect(report.verdict.reasons.join(' ')).toMatch(/more than one minor release behind 0\.13\.0/);
+    expect(report.verdict.reasons.join(' ')).toMatch(
+      new RegExp(`more than one minor release behind ${ahead.replaceAll('.', '\\.')}`),
+    );
   });
 
   it('is blocked by unfinished required work, and by a newer database', async () => {

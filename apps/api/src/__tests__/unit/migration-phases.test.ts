@@ -197,8 +197,8 @@ describe('release manifest and journals', () => {
 
   it('the bundled manifest starts each release at a real migration', async () => {
     const releases = readReleaseManifest();
-    expect(releases.at(-1)).toMatchObject({
-      version: '0.11.0',
+    // The newest entry is the app's own minor (release-manifest.unit.test.ts); 0.11.0 keeps its start.
+    expect(releases.find((release) => release.version === '0.11.0')).toMatchObject({
       firstMigration: '0039_three_phase_migrations',
     });
     const bundled = (await import('@oci/db')).readJournal();

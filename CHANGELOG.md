@@ -7,7 +7,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-## [0.13.0] - 2026-10-13
+## [0.13.1] - 2026-10-14
+
+A fix for the upgrade preflight. No migration, no post-deploy step.
+
+### Fixed
+
+- **The upgrade preflight no longer asks v0.12 operators for a downtime window.**
+  `packages/db/releases.json`, which tells the preflight which migration starts
+  each minor release, had no entry for 0.12.0 or 0.13.0, so a database at
+  migration 0046 read as "0.11.0", two minors behind 0.13, and `upgrade-check`
+  and **System health** said the upgrade needs a window, with the reason "more
+  than one minor release behind". It did not: the three v0.13 migrations are
+  catalog changes, and v0.12.x to v0.13 is a rolling upgrade, as v0.13.0 says.
+  Nothing blocked on the verdict; the advice was wrong. The manifest now has
+  both entries, and a test fails when it lacks the entry for the code's own
+  minor release. **Upgrade note:** none. If you saw "WINDOW" from v0.13.0's
+  preflight on a v0.12 database, it was this; the upgrade was safe.
+
+## [0.13.0] - 2026-10-14
 
 Search, backups and scale (`SPEC.md`). Three pre-deploy migrations (`0047` to
 `0049`), two post-deploy steps (`0014`, `0015`) and two background migrations
@@ -1824,7 +1842,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.13.0...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.13.1...main
+[0.13.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.13.1
 [0.13.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.13.0
 [0.12.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.1
 [0.12.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.0
