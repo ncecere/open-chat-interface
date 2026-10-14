@@ -152,6 +152,7 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0012_attachment_thumbnail_key_index', 'pending'],
       ['0013_drop_project_file_embedding_failure', 'pending'],
       ['0014_message_search_folded_index', 'pending'],
+      ['0015_drop_message_text_search_folded_index', 'pending'],
     ]);
     const [created] = report.postDeploy;
     expect(created!.statement).toMatchObject({ cost: 'concurrent-index', fast: true });

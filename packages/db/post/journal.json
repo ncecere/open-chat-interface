@@ -70,6 +70,11 @@
       "idx": 13,
       "tag": "0014_message_search_folded_index",
       "release": "0.13.0"
+    },
+    {
+      "idx": 14,
+      "tag": "0015_drop_message_text_search_folded_index",
+      "release": "0.13.0"
     }
   ]
 }

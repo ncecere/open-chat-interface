@@ -260,6 +260,7 @@ describe('post-deploy folder', () => {
       // upgrade must not wait for it (about 1 ms per message). See packages/db/optional.
       ['0013_drop_project_file_embedding_failure', '0.12.1', undefined],
       ['0014_message_search_folded_index', '0.13.0', 'message_search_folded_idx'],
+      ['0015_drop_message_text_search_folded_index', '0.13.0', undefined],
     ]);
     const builds = steps.filter((step) => step.index);
     expect(builds).toHaveLength(12);

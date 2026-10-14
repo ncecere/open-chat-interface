@@ -68,11 +68,11 @@ Shared commands are in SPEC.md (`H=~/.oci-harness`).
 
 **Estimated scope:** Medium
 
-## Task 5: Remove the optional index
+## Task 5: Remove the optional index ✅
 
 **Acceptance criteria:**
-- [ ] `packages/db/optional/message_text_search_folded_index.sql`, `foldedSearchReady` and its tests are removed; post-deploy step `0015_drop_message_text_search_folded_index` (`DROP INDEX CONCURRENTLY IF EXISTS`, with the linter's allow comment).
-- [ ] `docs/OPERATIONS.md` "Accent-insensitive conversation search" rewritten; `docs/dev/database.md` records that a change to the fold needs a background migration; `docs/user/conversations.md` and `projects.md`; CHANGELOG with an upgrade note (rollback to v0.12.x loses message accent-insensitivity until the optional file is run).
+- [x] `packages/db/optional/message_text_search_folded_index.sql`, `foldedSearchReady` and its tests are removed; post-deploy step `0015_drop_message_text_search_folded_index` (`DROP INDEX CONCURRENTLY IF EXISTS`, with the linter's allow comment).
+- [x] `docs/OPERATIONS.md` "Accent-insensitive conversation search" rewritten; `docs/dev/database.md` records that a change to the fold needs a background migration; `docs/user/conversations.md` and `projects.md`; CHANGELOG with an upgrade note (rollback to v0.12.x loses message accent-insensitivity until the optional file is run).
 
 **Dependencies:** Tasks 3 and 4
 

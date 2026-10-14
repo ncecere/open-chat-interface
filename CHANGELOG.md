@@ -7,6 +7,28 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- **Search ignores accents everywhere, for everyone** (#362). `bibliotheque`
+  finds "bibliothèque" in the text of messages (it did only in titles), and
+  `strasse`, `oeuvre` and `aero` find "Straße", "œuvre" and "Ærø" in titles,
+  messages and project files, which a one-to-one letter table could not do. The
+  keyword search of project files is folded too. A stored folded search vector
+  is kept by a trigger on each table (migrations 0047 to 0049); only messages
+  and passages with letters to fold have one, so the extra disk is small. A
+  partial index over it is built `CONCURRENTLY` by post-deploy step `0014`, and
+  the background migrations `0.13.message-search-folded` and
+  `0.13.chunk-search-folded` fill older rows. Until they finish, search behaves
+  as v0.12 did, and once on it finds everything it found before.
+  **Upgrade note:** rolling back to v0.12.x loses accent-insensitive message
+  search, because step `0015` dropped the optional index.
+
+### Removed
+
+- **The optional folded message index** (`packages/db/optional/`, built by hand
+  in v0.12). It is replaced by the stored vector above; post-deploy step `0015`
+  drops `message_text_search_folded_idx` if an operator built it.
+
 ## [0.12.1] - 2026-10-11
 
 Small debts left after v0.12.0 (`SPEC-release-hygiene.md`). No pre-deploy
