@@ -26,7 +26,8 @@ backupRoutes.get('/', async (c) => c.json(await backupStatus()));
 
 /**
  * Changes backup settings; only sent fields change. Turning backups on is
- * refused while the destination is incomplete or pg_dump is missing, so a
+ * refused while the destination is incomplete or (when OCI dumps the
+ * database) pg_dump is missing, so a
  * schedule that cannot succeed is never silently "on".
  */
 backupRoutes.patch('/settings', async (c) => {
@@ -37,7 +38,8 @@ backupRoutes.patch('/settings', async (c) => {
 
   if (next.enabled) {
     const issues = await backupConfigurationIssues(next);
-    if (!(await pgDumpVersion()))
+    // The client tools are needed only when OCI dumps the database itself.
+    if (next.databaseBackup === 'dump' && !(await pgDumpVersion()))
       issues.push(
         'pg_dump was not found on this server. Install the PostgreSQL client tools or set BACKUP_PG_BIN_DIR.',
       );
