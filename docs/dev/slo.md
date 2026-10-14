@@ -32,8 +32,11 @@ The latency targets are the design's proposals, which the
 [scale harness](scale-harness.md#baseline) measured on a shared laptop at
 `small` and `medium` (p95: sidebar 10 and 68 ms, opening a conversation 5 and
 42 ms, reply start 142 and 400 ms, search 79 and 718 ms). `large` has not been
-measured on dedicated hardware yet, so the targets are not yet shown to hold
-there. A latency objective with a p95 target is the same as "95 % of events
+measured yet, so the targets are not yet shown to hold there. The tooling to run
+it on the shared cluster exists ([Large on the
+cluster](scale-harness.md#large-on-the-cluster-v013)); it has not run there yet,
+and when it does the result is for PostgreSQL 18 on shared nodes, not dedicated
+hardware. A latency objective with a p95 target is the same as "95 % of events
 under the threshold", which is how it is measured: the share of events in the
 histogram bucket at the threshold, exact because the buckets include 0.3 s and
 1 s.

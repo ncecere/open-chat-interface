@@ -48,6 +48,15 @@ The tool's own documentation is `tools/dev-env/README.md` in the homelab repo.
   `creds` shows the admin sign-in on request.
 - The cluster is shared with production services: keep tests bounded and remove what you create.
 
+## Scale runs on the cluster
+
+The scale harness runs against an environment with `tools/scale/cluster.sh`, never by hand: it
+pins the database to `talos-cp-1` or `talos-cp-3` (`dev-env up --pg-node`), gives its own pods and
+the database resource limits, watches etcd and the volume, and removes everything it created. Every
+`kubectl` call it makes is in `dev-oci` and names only objects of its own environment. `large` needs
+`--yes-large` and the maintainer's go-ahead. See
+[docs/dev/scale-harness.md](docs/dev/scale-harness.md#large-on-the-cluster-v013).
+
 ## Not available yet
 
 Only environments exist. The unit, integration and end-to-end suites, the QA walk and the screenshot

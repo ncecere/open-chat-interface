@@ -195,6 +195,8 @@ test('bad arguments are refused with status 2 before anything happens', () => {
     ['--profile', 'tiny', '--name', 'Scale_X'],
     ['--profile', 'tiny', '--name', 'x'],
     ['--profile', 'tiny', '--name', 'a'.repeat(21)],
+    // The chart would not prefix the names of such a release, and the tool relies on the prefix.
+    ['--profile', 'tiny', '--name', 'open-chat-interface'],
     ['--profile', 'tiny', '--name', 'scale-x', '--replicas', '0'],
     ['--profile', 'tiny', '--name', 'scale-x', '--threshold', 'bogus=1'],
     ['--profile', 'tiny', '--name', 'scale-x', '--ttl', '90m'],

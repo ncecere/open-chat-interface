@@ -119,6 +119,8 @@ cli() { node "$LIB/cluster-cli.mjs" "$@"; }
 case "$PROFILE" in tiny | small | medium | large) ;; *) usage_error "unknown profile: $PROFILE" ;; esac
 [[ -n "$NAME" ]] || usage_error "--name is required"
 [[ "$NAME" =~ ^[a-z][a-z0-9-]{1,19}$ ]] || usage_error "--name must be 2-20 characters: lowercase letters, digits and dashes, starting with a letter"
+# The chart names a release's objects <name>-open-chat-interface-*, unless the name already contains it.
+[[ "$NAME" != *open-chat-interface* ]] || usage_error "--name must not contain open-chat-interface"
 [[ "$REPLICAS" =~ ^[1-9][0-9]*$ ]] || usage_error "--replicas must be a positive integer"
 [[ "$DIMENSIONS" =~ ^[1-9][0-9]*$ ]] || usage_error "--dimensions must be a positive integer"
 [[ "$SEED" =~ ^[A-Za-z0-9._-]+$ ]] || usage_error "--seed may use letters, digits, dots, underscores and dashes only"

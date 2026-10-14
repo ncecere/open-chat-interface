@@ -98,7 +98,10 @@ async function run() {
   const cpu = { [dbNode]: [], [loadNode]: [] };
   const fsyncSamples = [];
   let previousMetrics = null;
+  const minEtcdSamples = Math.max(3, Math.floor(windowSeconds / interval) - 2);
   const deadline = Date.now() + windowSeconds * 1000;
+  // Never give up the window before enough latency samples exist, but never wait for ever either.
+  const hardDeadline = Date.now() + windowSeconds * 3000;
   for (;;) {
     for (const node of [dbNode, loadNode]) {
       const summary = readSummary(node);
@@ -110,7 +113,8 @@ async function run() {
     if (text !== null && signal.source === source && signal.p99Ms !== null)
       fsyncSamples.push(signal.p99Ms);
     if (text !== null) previousMetrics = text;
-    if (Date.now() + interval * 1000 > deadline) break;
+    const windowOver = Date.now() + interval * 1000 > deadline;
+    if ((windowOver && fsyncSamples.length >= minEtcdSamples) || Date.now() > hardDeadline) break;
     await sleep(interval * 1000);
   }
   readings.etcd.fsyncP99Ms = fsyncSamples;
@@ -133,7 +137,7 @@ async function run() {
     contextPattern: new RegExp(values['context-pattern']),
     limits: {
       ...PREFLIGHT_LIMITS,
-      minEtcdSamples: Math.max(3, Math.floor(windowSeconds / interval) - 2),
+      minEtcdSamples,
     },
     etcdWarnMs,
   });

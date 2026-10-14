@@ -721,3 +721,143 @@ Raw results: `tools/scale/results/<run>/k6-storm.json` and `db-storm.json`
   harness's dataset and load.
 - `pg_stat_statements` gives means and maxima, not percentiles; the k6
   numbers are the user-facing percentiles.
+
+## Large on the cluster (v0.13)
+
+`large` (30,000 people, 20 million messages, about 75 GB) does not fit the laptop the baselines
+ran on. `tools/scale/cluster.sh` runs the same phases against a `dev-env` environment in the
+`dev-oci` namespace of the bitop-talos cluster. **Status: the tooling exists and is tested without
+a cluster; it has not run on the cluster yet, and no cluster result is published.** `large` and
+the service objectives it is meant to check ([slo.md](slo.md)) stay unmeasured until the gates
+below have passed, in order, and the maintainer has said to go ahead with `large`.
+
+```sh
+tools/scale/cluster.sh --profile tiny --name scale-t1 --dry-run        # prints every step, calls nothing
+tools/scale/cluster.sh --profile medium --name scale-m1 --db-node talos-cp-3
+tools/scale/cluster.sh --profile large --name scale-l1 --db-node talos-cp-3 --yes-large
+```
+
+The `--ref` is a branch, tag or commit of the OCI clone whose branch images (`dev-<sha12>`) are
+published (`AGENTS.md`, "Running a branch on the cluster"); it defaults to `HEAD`. The tool needs
+`kubectl`, `helm`, Python 3 with PyYAML and the homelab checkout with `dev-env up --pg-node`
+(homelab commit 6fc60e9). Start `medium` and `large` in the maintainer's quiet hours.
+
+### What a run does
+
+1. **Preflight** (reads only): the kubectl context matches the bitop cluster, `dev-env list oci`
+   shows no environment, the three nodes are Ready with no memory, disk or PID pressure, the
+   `local-dev` pool on the database node stays at or under 0.80 of its quota after the claim, 20 %
+   of that node's filesystem stays free, both nodes average below 50 % CPU, and etcd is ready with
+   a latency below the warning level. It samples for 60 s (`tiny`, `small`) or 15 minutes
+   (`medium`, `large`) and prints each reading. Any miss, or any reading it could not take, stops
+   the run before anything exists. `--preflight-only` stops here.
+2. **`dev-env up oci <name> --pg-size <size> --pg-node <node>`**: 5Gi, 15Gi, 40Gi or 150Gi, pinned
+   to `talos-cp-1` or `talos-cp-3` (never `talos-cp-2`: SATA, and etcd shares every node's system
+   disk). The run stops if the database pod or its claim is anywhere else. `large` and `medium`
+   refuse to start without `--db-node`; `large` also needs `--yes-large`.
+3. **The watcher starts**, then the harness's PostgreSQL settings (`compose.yaml`) and resource
+   requests and limits are patched onto the CloudNativePG `Cluster` (the database restarts) and
+   checked with `show max_connections`.
+4. **The API and worker are stopped** (the generator drops and rebuilds indexes), given the
+   harness environment (rate limits out of the way, a metrics token from a Secret, the web proxy
+   trusting private ranges so each virtual user's `X-Forwarded-For` counts) and pinned to the load
+   node. The stub model is a Deployment and Service on the load node.
+5. **One Job, one pod** (`tools/scale/k8s/run-job.yaml`): init containers run in order (extract,
+   generate with two workers, record the server's settings, wait for the app, wait for background
+   migrations if `--wait-backfill`, warm, baseline, k6 main, collect, retention, collect, render)
+   and a last container only holds the pod so the results can be copied out. When `generate`
+   ends, `cluster.sh` sets the retention windows and starts the API and worker again.
+   `activeDeadlineSeconds` is the environment's TTL minus 30 minutes, so the Job stops even if the
+   laptop is gone. A failed run starts again from generation.
+6. **Results** are copied to `tools/scale/results/<profile>-cluster-<date>/` (and the report to
+   `<profile>-cluster-<date>.{md,json}`), with the watcher's log, the preflight and the pod's logs
+   (database URLs redacted).
+7. **Teardown**, on every exit including INT, TERM and HUP: delete the Job first (it is what
+   writes), `dev-env down`, then check that nothing labelled `dev.bitop.dev/env=<name>` is left
+   and, for `medium` and `large`, that the pool's allocation is back where it started. A `kill -9`
+   or a power cut cannot be trapped: the Job deadline and the TTL (2, 3, 4 and 8 hours) bound it,
+   and no watcher runs meanwhile.
+
+`--keep-on-abort` leaves the environment until its TTL after a failure.
+
+### What keeps it inside `dev-oci`
+
+Every `kubectl` call in `cluster.sh` and in the watcher goes through one guard
+(`tools/scale/lib/cluster-guard.mjs`): it puts `-n dev-oci` first and refuses `-A`,
+`--all-namespaces`, any other namespace, reading namespaces, `--context` and similar flags, every
+verb the run does not need, `get --raw` outside readiness, metrics and the kubelet summary, secrets
+printed as anything but names, and any change or delete that does not name an object of the
+environment (names start with the environment's name, or the `dev.bitop.dev/env` label is the
+selector). The manifests are rendered, then checked for the label, the namespace and the name before
+they are applied; all carry `dev.bitop.dev/env=<name>`, so `dev-env down` and the reaper find them.
+Pods meet Pod Security `restricted`. CI never runs the script (`.github/workflows/scale.yml` has no
+cluster access).
+
+### When the watcher stops the run
+
+Every 15 s it reads etcd's latency, `/readyz/etcd`, the data volume's use (`df` in the Postgres pod)
+and the nodes' conditions. It deletes the Job and exits at the value of a threshold, not above it:
+
+| Signal | Stops at | Warns at |
+| --- | --- | --- |
+| etcd p99 latency | 25 ms twice in a row, or 100 ms once | 10 ms |
+| etcd leader | any change | |
+| `/readyz/etcd` | failing | |
+| Data volume | 80 % of the claim (120 GiB of 150Gi) | |
+| Node | not Ready or any pressure condition; database-node filesystem 20 % free | |
+| The watcher itself | three samples in a row with a reading missing | |
+
+These are starting values from the spec, to be replaced by baselines from the `medium` run, and
+`large` does not run until they are. If the only source is the apiserver's request latency to etcd
+(the default: no etcd scrape was found), the latency limits are looser (50, 250 and 1000 ms), which
+are placeholders until measured; `--etcd-metrics-cmd` takes a command that prints etcd's own metrics.
+`--threshold name=value` forces a threshold, which is how the fire drill is run
+(`--threshold etcdFsyncAbortOnceMs=0`).
+
+Kubernetes has no disk-I/O limit. The generator's writes land on the NVMe that also holds etcd and
+are bounded only by CPU (a limit of 2), memory and two workers. That is a residual risk, to be
+measured at `medium` first.
+
+### What a cluster report says about where it ran
+
+A cluster report prints an Environment table instead of the laptop sentence about Docker and one
+shared machine, and `report.json` carries the same as `environment`:
+
+| | Laptop baseline (`baseline-small`, `baseline-medium`) | Cluster |
+| --- | --- | --- |
+| Hardware | Apple M4 Pro, 48 GB, Docker VM 12 CPUs / 7 GiB | the database and load nodes: CPUs, memory, OS, kernel (read at run time) |
+| Sharing | other compose stacks on the machine | production services and other development environments on the same nodes |
+| PostgreSQL | 17, `pgvector/pgvector:pg17` | 18 with pgvector (version from the server), key settings from `pg_settings` |
+| Topology | one machine, API role `all` | database on its node; API (role `web`), worker, web, stub and k6 on the load node |
+| Storage | Docker volume | Miroir `ext4` loop file on `local-dev`, the claim's size |
+| Load generator | k6 container, same machine | k6 pod on the load node |
+| Background state | v0.12 search path, no post-deploy steps | pending and finished background migrations at the start and end of the load |
+
+A cluster result is "OCI on PostgreSQL 18", not production's 17: planner and I/O changes can move a
+scan-heavy statement either way. `dev-env`'s worker applies post-deploy steps and schedules
+background migrations itself, which `run.sh` never does; `--wait-backfill` measures after they have
+finished, without it the load runs while they are pending, and the report names the state. The
+availability line counts requests by the `status` label of `oci_http_requests_total`, leaving out
+health probes, `/metrics` and unmatched routes, as [slo.md](slo.md#availability) does.
+
+A pass on the shared cluster is evidence the objective holds. A miss is not stated as a product
+finding if the nodes were visibly busy with other work, until it is repeated or explained.
+
+### Gates
+
+Each gate is reviewed before the next. `--dry-run` and the tests below need no cluster; everything
+else touches `dev-oci` and the nodes.
+
+| Gate | Command | Shows |
+| --- | --- | --- |
+| G0 | `tools/scale/cluster.sh --profile tiny --name scale-t1 --dry-run`, then `--preflight-only --window-seconds 120` | every step; the preflight's readings, and that the names and formats the tool assumes match the cluster |
+| G1 | `tools/scale/cluster.sh --profile tiny --name scale-t1 --ref <branch>` (about 15 minutes, 5Gi), then the fire drill with `--threshold etcdFsyncAbortOnceMs=0` | pod security, the stub reachable and accepted as a provider address, the superuser Secret, `pg_stat_statements`, results copied, a clean teardown, a drill that aborts, deletes the Job and removes everything |
+| G2 | `tools/scale/cluster.sh --profile medium --name scale-m1 --db-node talos-cp-3` | etcd latency before, during and after generation; thresholds set from data; a laptop `medium` run on the same commit and a PostgreSQL 18 laptop run (`SCALE_POSTGRES_IMAGE=pgvector/pgvector:pg18 tools/scale/run.sh --profile medium`) to separate version from hardware |
+| G3 | `large`, at night, after the maintainer's go-ahead | only after G2's numbers are written here |
+
+The tests run in CI (`node --test scripts/*.test.mjs`): the scope guard, the pin, the preflight and
+the watcher's thresholds with recorded samples, the manifests (label, namespace, restricted
+fields), `cluster.sh --dry-run` with a `PATH` whose `kubectl`, `helm`, `docker` and `dev-env` fail
+if called, and whole runs against a fake `kubectl` and `dev-env` (the fire drill, a failing phase, a
+signal, objects left behind). `tools/scale/k8s/validate.sh` runs kubeconform on the rendered
+manifests.
