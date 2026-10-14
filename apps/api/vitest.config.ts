@@ -154,6 +154,8 @@ export default defineConfig({
         'src/services/webhooks/delivery.ts': { statements: 85, branches: 70, functions: 75 },
         'src/services/webhooks/endpoints.ts': { statements: 90, branches: 85, functions: 95 },
         'src/services/backups/retention.ts': { statements: 100, branches: 100, functions: 100 },
+        // v0.13 external database backup: the WAL archiver rules (unit tests, injected clock).
+        'src/services/backups/database-state.ts': { statements: 95, branches: 85, functions: 100 },
         'src/services/observability/http.ts': { statements: 98, branches: 90, functions: 100 },
         'src/services/observability/metrics.ts': { statements: 95, branches: 75, functions: 100 },
         'src/services/observability/tracing.ts': { statements: 90, branches: 72, functions: 95 },

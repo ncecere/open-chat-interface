@@ -11,7 +11,7 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { primaryId, timestamps } from './_shared.js';
+import { primaryId, timestamps, tsvector } from './_shared.js';
 import { pgTable } from './_table.js';
 import { user } from './auth.js';
 import { organization } from './organization.js';
@@ -138,6 +138,12 @@ export const message = pgTable(
      * superseded time change. Null on messages written before v0.9.
      */
     changeSeq: bigint('change_seq', { mode: 'number' }),
+    /**
+     * Search vector of the text parts with accents folded (migration 0048, #362),
+     * kept by a trigger; null when folding changes nothing. Written by the
+     * database only: nothing in the application sets it.
+     */
+    searchFolded: tsvector('search_folded'),
     ...timestamps(),
   },
   (t) => [
@@ -167,11 +173,9 @@ export const message = pgTable(
       'gin',
       sql`to_tsvector('simple'::regconfig, jsonb_path_query_array(${t.parts}, '$[*] ? (@.type == "text").text'::jsonpath))`,
     ),
-    // Not declared here: the same text with accented letters folded, so message
-    // search can ignore accents (#362), is an optional index
-    // (message_text_search_folded_idx) that an operator builds by hand from
-    // packages/db/optional/message_text_search_folded_index.sql. It is no
-    // post-deploy step: building it costs about 1 ms per message.
+    // Accent-insensitive search (#362): the partial GIN index over `search_folded`
+    // is built CONCURRENTLY by post-deploy step 0014_message_search_folded_index.
+    // Queries match this index or the one above (thread-search.ts).
   ],
 );
 

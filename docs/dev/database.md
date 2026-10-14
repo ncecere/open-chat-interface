@@ -589,6 +589,38 @@ table): the overview's counts went from parallel sequential scans (46 ms,
 126 ms to 22 ms; the usage page's error count from 43 ms to 1.6 ms. The
 builds took 381 ms and 136 ms.
 
+## Search folding
+
+Accent-insensitive search (#362, `SPEC-accent-search.md`) folds text in
+**one place**: the SQL function `oci_fold_search_text(text)` (migration 0047),
+IMMUTABLE and STRICT. A `translate()` table maps precomposed Latin letters to
+their base letters and a few `replace()` calls expand `ß`, `æ` and `œ`.
+`apps/api/src/lib/fold.ts` holds the same table for TypeScript and tests, and
+migration 0047 is generated from it; `fold-function.unit.test.ts` keeps the
+two equal and `accent-fold.live.test.ts` checks the function against
+`foldAccents` on every mapped letter.
+
+Stored values:
+
+- `message.search_folded` and `project_file_chunk.search_folded` are tsvectors
+  of the folded text, kept by `BEFORE INSERT OR UPDATE OF` triggers (so every
+  writer is covered, the previous release during a rolling upgrade included),
+  built by `oci_message_folded_vector` and `oci_chunk_folded_vector`. They are
+  NULL when folding leaves the text unchanged, and queries read
+  `coalesce(search_folded, <exact vector>)` or match either index.
+- The background migrations `0.13.message-search-folded` and
+  `0.13.chunk-search-folded` call the same SQL functions for older rows, and
+  search switches over only when they (and post-deploy step 0014) are done
+  (`isBackgroundMigrationDone`, `isPostStepDone`).
+
+**Changing the fold later** (a new letter in the table, say) changes what a
+stored vector should hold, and the triggers only rewrite a row when its text
+changes. A change therefore needs: a new migration that replaces the SQL
+function, a **new background migration** (a new name, `0.<release>.…`) that
+recomputes every stored vector, and the search switch moved to that migration,
+exactly as `0.13` did. Do not edit migration 0047, and do not change
+`fold.ts` alone: the unit test fails when they differ.
+
 ## Migrations under several replicas
 
 A private client pins advisory-lock acquisition, journal reads and DDL inside one

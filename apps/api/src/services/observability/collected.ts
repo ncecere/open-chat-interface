@@ -1,6 +1,15 @@
 import { count, desc, eq, isNull, schema } from '@oci/db';
 import { db } from '../../db/index.js';
+import { archiverMetricSamples, readArchiverState } from '../backups/database-state.js';
+import { backupSettings } from '../backups/settings.js';
 import { registerCollectedGauge } from './metrics.js';
+
+/** The WAL archiver read, only when the database is backed up outside OCI. */
+async function archiverSamples() {
+  const { databaseBackup } = await backupSettings();
+  if (databaseBackup !== 'external') return null;
+  return archiverMetricSamples(await readArchiverState(), databaseBackup);
+}
 
 /**
  * Gauges read from the database when scraped: queue depths and the age of
@@ -44,6 +53,26 @@ export function registerCollectedGauges(): void {
         .orderBy(desc(schema.backupRun.finishedAt))
         .limit(1);
       return row?.finishedAt ? [{ value: Math.floor(row.finishedAt.getTime() / 1000) }] : [];
+    },
+  );
+  // Samples exist only with `databaseBackup: 'external'` (and a readable
+  // pg_stat_archiver); in dump mode the series are absent.
+  registerCollectedGauge(
+    'oci_wal_archive_last_success_timestamp_seconds',
+    'When PostgreSQL last archived a WAL segment (Unix seconds), read from pg_stat_archiver; only with an external database backup, absent when none was archived.',
+    [],
+    async () => {
+      const samples = await archiverSamples();
+      return samples?.lastSuccessSeconds != null ? [{ value: samples.lastSuccessSeconds }] : [];
+    },
+  );
+  registerCollectedGauge(
+    'oci_wal_archive_failing',
+    '1 when the newest WAL archive attempt failed after the newest success, else 0; only with an external database backup.',
+    [],
+    async () => {
+      const samples = await archiverSamples();
+      return samples ? [{ value: samples.failing }] : [];
     },
   );
 }

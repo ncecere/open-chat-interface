@@ -9,6 +9,7 @@ import {
   button,
   cleanup,
   click,
+  dialog,
   findButton,
   renderAdmin,
   typeInto,
@@ -48,6 +49,8 @@ function status(overrides: Partial<BackupStatus> = {}): BackupStatus {
       keepWeekly: 4,
       copyFiles: true,
       verifyFiles: 'sample',
+      databaseBackup: 'dump',
+      walArchivingExpected: true,
     },
     issues: [],
     pgDumpVersion: 'pg_dump (PostgreSQL) 17.6',
@@ -348,6 +351,169 @@ describe('System health', () => {
   });
 });
 
+describe('external database backup', () => {
+  const external = (overrides: Partial<BackupStatus['settings']> = {}) =>
+    status({
+      settings: { ...status().settings, databaseBackup: 'external', ...overrides },
+      pgDumpVersion: null,
+      issues: [],
+    });
+  const choose = async (id: string, label: string) => {
+    await click(document.getElementById(id) as HTMLElement);
+    await click(
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (option) => option.textContent === label,
+      )!,
+    );
+  };
+  const MODE = 'Backed up outside OCI (your own tooling)';
+
+  it('asks before OCI stops dumping the database, and sends only the mode', async () => {
+    await render();
+    expect(document.body.textContent).toContain('pg_dump (PostgreSQL) 17.6');
+    await choose('backups-database-mode', MODE);
+    // Nothing is asked, or sent, until Save.
+    expect(dialog()).toBeNull();
+    expect(api.patch).not.toHaveBeenCalled();
+    await click(button('Save changes'));
+    expect(dialog()?.textContent).toContain(
+      'OCI will stop dumping the database. Check that your own backups work: OCI cannot.',
+    );
+    expect(api.patch).not.toHaveBeenCalled();
+
+    // Cancel keeps the form as it was, unsaved.
+    await click(button('Cancel'));
+    expect(dialog()).toBeNull();
+    expect(api.patch).not.toHaveBeenCalled();
+
+    await click(button('Save changes'));
+    await click(button('Stop dumping the database'));
+    expect(api.patch).toHaveBeenCalledWith('/admin/backups/settings', {
+      databaseBackup: 'external',
+    });
+  });
+
+  it('does not ask when switching back to dumping, or when saving something else', async () => {
+    current = external();
+    await render();
+    await choose('backups-database-mode', 'OCI dumps the database (pg_dump)');
+    await click(button('Save changes'));
+    expect(dialog()).toBeNull();
+    expect(api.patch).toHaveBeenCalledWith('/admin/backups/settings', { databaseBackup: 'dump' });
+
+    api.patch.mockClear();
+    await cleanup(root!);
+    current = external();
+    await render();
+    await typeInto(document.getElementById('backups-keep-daily') as HTMLInputElement, '30');
+    await click(button('Save changes'));
+    expect(dialog()).toBeNull();
+    expect(api.patch).toHaveBeenCalledWith('/admin/backups/settings', { keepDaily: 30 });
+  });
+
+  it('says client tools are not needed, and prints no database size for a run without a dump', async () => {
+    const base = external();
+    current = {
+      ...base,
+      runs: [
+        {
+          ...status().runs[1]!,
+          id: 'x1',
+          dumpKey: null,
+          dumpBytes: null,
+          dumpSha256: null,
+          verificationDetail:
+            'Database: backed up outside OCI, not checked by OCI; 12 attachment objects checksummed, 1 missing',
+        },
+      ],
+    };
+    await render();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('PostgreSQL client tools');
+    expect(text).toContain('Not needed');
+    expect(text).not.toContain('Not found');
+    expect(text).not.toMatch(/\d B database/);
+    expect(text).not.toContain('database ·');
+    expect(text).toContain('12 attachment objects (2 KB)');
+    expect(text).toContain('Database: backed up outside OCI, not checked by OCI');
+    // No client-tool problem is shown, and Back up now is not held back for one.
+    expect(text).not.toContain('Backups cannot run yet');
+    expect(button('Back up now').disabled).toBe(false);
+    // The status says what OCI does and does not do.
+    expect(text).toContain('The database is backed up outside OCI');
+    expect(text).toContain('cannot tell whether it restores');
+  });
+
+  it('says plainly that OCI then backs up nothing but a checksum list when copying is off', async () => {
+    current = external({ copyFiles: false });
+    await render();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Nothing but a checksum list is backed up');
+    expect(text).toContain(
+      'The database is backed up outside OCI and attachment files are not copied',
+    );
+    // The dump-mode notice about copying is not repeated.
+    expect(text).not.toContain('Attachment files are not copied');
+  });
+
+  it('hints that days kept must cover the database recovery window, in external mode only', async () => {
+    await render();
+    expect(document.body.textContent).not.toContain('recovery window');
+    await cleanup(root!);
+    current = external();
+    await render();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('recovery window');
+    expect(text).toContain('at least as many days as your database recovery window');
+    expect(document.getElementById('backups-wal-expected')).not.toBeNull();
+  });
+
+  it('saves whether WAL archiving is expected', async () => {
+    current = external();
+    await render();
+    await click(document.getElementById('backups-wal-expected') as HTMLElement);
+    await click(button('Save changes'));
+    expect(dialog()).toBeNull();
+    expect(api.patch).toHaveBeenCalledWith('/admin/backups/settings', {
+      walArchivingExpected: false,
+    });
+  });
+
+  it('shows the database row in System health', async () => {
+    const { AdminHealthPage } = await import('../../src/routes/admin/health');
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/admin/health')
+        return {
+          status: 'warn',
+          checks: [
+            {
+              id: 'database-backup',
+              label: 'Database backup (external)',
+              status: 'warn',
+              detail:
+                'WAL archiving is off, so point-in-time recovery is not possible from this server. Not verified by OCI: that a base backup exists, is recent, or restores. Run the restore drill.',
+            },
+          ],
+          observability: { metrics: true, tracing: false, tracingEndpoint: null },
+        };
+      if (path === '/admin/lifecycle/jobs') return { jobs: [] };
+      if (path === '/admin/lifecycle/storage-health')
+        return {
+          liveBytes: 0,
+          liveFileCount: 0,
+          pendingBytes: 0,
+          pendingFileCount: 0,
+          pendingDeletions: 0,
+        };
+      throw new Error(`Unexpected GET ${path}`);
+    });
+    ({ root } = await renderAdmin(<AdminHealthPage />, { role: 'auditor', path: '/admin/health' }));
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Database backup (external)');
+    expect(text).toContain('Not verified by OCI: that a base backup exists');
+  });
+});
+
 describe('backup settings changes', () => {
   it('is empty for an unchanged form and maps cleared endpoints to null', () => {
     const saved = status({
@@ -371,8 +537,13 @@ describe('backup settings changes', () => {
       keepWeekly: '4',
       copyFiles: true,
       verifyFiles: 'sample' as const,
+      databaseBackup: 'dump' as const,
+      walArchivingExpected: true,
     };
     expect(backupChanges(saved, draft)).toEqual({});
+    expect(
+      backupChanges(saved, { ...draft, databaseBackup: 'external', walArchivingExpected: false }),
+    ).toEqual({ databaseBackup: 'external', walArchivingExpected: false });
     expect(backupChanges(saved, { ...draft, copyFiles: false, verifyFiles: 'all' })).toEqual({
       copyFiles: false,
       verifyFiles: 'all',

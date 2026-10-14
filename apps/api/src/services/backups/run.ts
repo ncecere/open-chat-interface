@@ -29,7 +29,9 @@ export { backupStatus, testBackupTarget } from './status.js';
  * Automated backups: a `pg_dump` archive (custom format), a manifest of
  * attachment objects and, when copying files is on, copies of those objects
  * (see files.ts), written to S3-compatible storage by the job runner, then
- * read back and verified. See docs/admin/backups.md.
+ * read back and verified. With `databaseBackup: 'external'` there is no dump:
+ * the operator's own tooling backs the database up, and a run covers the
+ * attachments only. See docs/admin/backups.md.
  *
  * Nothing is held in memory whole: the dump streams from `pg_dump` into a
  * multipart upload, the manifest is produced a page of attachments at a time,
@@ -87,18 +89,24 @@ export async function performBackup(options: {
     return await withSpan('backup.run', { 'oci.backup.trigger': options.trigger }, async () => {
       const target = await resolveBackupTarget(settings);
       const folder = `${target.root}${stamp(startedAt)}-${run!.id.slice(0, 8)}/`;
-      const dumpKey = `${folder}database.dump`;
+      // In `external` mode the operator's own tooling backs the database up:
+      // no dump, no pg_dump or pg_restore, no control connection.
+      const external = settings.databaseBackup === 'external';
+      const dumpKey = external ? null : `${folder}database.dump`;
       const attachmentsKey = `${folder}attachments.jsonl`;
       const manifestKey = `${folder}manifest.json`;
 
-      written.push(dumpKey);
-      const dump = await dumpDatabase(
-        target,
-        dumpKey,
-        // pg_dump sets session parameters: a control connection, never a
-        // transaction-mode pooler (v0.11 design, section 11).
-        options.databaseUrl ?? controlDatabaseUrl(),
-      );
+      let dump: { bytes: number; sha256: string } | null = null;
+      if (dumpKey) {
+        written.push(dumpKey);
+        dump = await dumpDatabase(
+          target,
+          dumpKey,
+          // pg_dump sets session parameters: a control connection, never a
+          // transaction-mode pooler (v0.11 design, section 11).
+          options.databaseUrl ?? controlDatabaseUrl(),
+        );
+      }
 
       const totals: ManifestTotals = {
         count: 0,
@@ -130,7 +138,10 @@ export async function performBackup(options: {
               ociVersion: APP_VERSION,
               migration,
               createdAt: startedAt.toISOString(),
-              database: { key: dumpKey, format: 'pg_dump custom', ...dump },
+              database:
+                dumpKey && dump
+                  ? { key: dumpKey, format: 'pg_dump custom', ...dump }
+                  : { external: true },
               attachments: {
                 key: attachmentsKey,
                 storage: (await getSetting('storage')).driver,
@@ -156,7 +167,10 @@ export async function performBackup(options: {
         'application/json',
       );
 
-      const detail = await verifyDump(target, dumpKey, dump);
+      const detail =
+        dumpKey && dump
+          ? await verifyDump(target, dumpKey, dump)
+          : 'Database: backed up outside OCI, not checked by OCI';
       await verifyManifest(target, attachmentsKey, {
         ...attachments,
         lines: totals.count + totals.missing,
@@ -181,9 +195,10 @@ export async function performBackup(options: {
         .set({
           status: 'succeeded',
           finishedAt: new Date(),
+          // NULL for an external run: there is no dump.
           dumpKey,
-          dumpBytes: dump.bytes,
-          dumpSha256: dump.sha256,
+          dumpBytes: dump?.bytes ?? null,
+          dumpSha256: dump?.sha256 ?? null,
           manifestKey,
           attachmentsKey,
           attachmentCount: totals.count,
@@ -211,7 +226,12 @@ export async function performBackup(options: {
       backupRuns.inc({ outcome: 'succeeded' });
       backupDuration.observe({}, durationMs / 1000);
       logger.info(
-        { backupRunId: run!.id, dumpBytes: dump.bytes, attachments: totals.count, durationMs },
+        {
+          backupRunId: run!.id,
+          ...(dump ? { dumpBytes: dump.bytes } : { database: 'external' }),
+          attachments: totals.count,
+          durationMs,
+        },
         'Backup completed',
       );
       await recordAudit({
@@ -223,7 +243,7 @@ export async function performBackup(options: {
         metadata: {
           trigger: options.trigger,
           status: 'succeeded',
-          dumpBytes: dump.bytes,
+          ...(dump ? { dumpBytes: dump.bytes } : { database: 'external' }),
           attachmentObjects: totals.count,
           missingObjects: totals.missing,
           ...(totals.files

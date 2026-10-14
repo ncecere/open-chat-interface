@@ -1202,49 +1202,58 @@ password-reset request or a refused sign-in has no signed-in actor, only an
 `audit_log_actor_email_idx` on `lower(actor_email)` for entries without an
 actor account, which answers that match.
 
-#### Accent-insensitive conversation search (optional index)
+#### Accent-insensitive search (migrations 0047 to 0049, post-deploy steps 0014 and 0015)
 
-Conversation search can ignore accents (#362): `bibliotheque` finds
-"bibliothèque". PostgreSQL's `unaccent` is an extension, so no extension is
-needed: the text is folded with `translate()`, which replaces each precomposed
-Latin letter with diacritics by its base letter (other scripts are untouched).
+Search ignores accents (#362): `bibliotheque` finds "bibliothèque", and the
+reverse. PostgreSQL's `unaccent` is an extension, so no extension is needed: a
+SQL function, `oci_fold_search_text`, replaces each precomposed Latin letter
+with diacritics by its base letter, and `ß`, `æ` and `œ` by `ss`, `ae` and
+`oe` (so `strasse` finds "Straße"). Letters of other scripts are untouched.
 
-**On by default, at no cost:** conversation titles. The search box and ⌘K, the
-sidebar and the History filter in Settings match titles ignoring accents and
-capitals. Nothing is built for this: titles are not indexed.
+It is **on for everyone, with no setting.** It covers conversation titles, the
+text of messages, and the keyword search of project files (the search box and
+⌘K, the sidebar, the History filter, and the passages a project gives the
+model).
 
-**Off by default: message text.** Search inside messages is exact about
-accents, as in v0.10 (`bibliotheque` does not find "bibliothèque" in a reply).
-It needs a second GIN index, `message_text_search_folded_idx`, over the folded
-message text, and building it reads and folds every message. That is slow: about
-1 to 1.5 ms per message. On a laptop, 100,000 messages of about 1.6 KB took
-2 min 28 s (80 MB of index; the existing `message_text_search_idx` takes 16 s for
-the same rows), so expect about 25 minutes per million messages. Because an
-upgrade must not wait for that (it was a post-deploy step, `0013`, in earlier
-builds of this release, and made the rolling-upgrade test's 300,000-message
-database take 339 s), it is not run by `migrate --post` and is not listed in the
-post-deploy steps.
+How an upgrade gets there, in the three phases of an [upgrade](#upgrade):
 
-To turn message accent-insensitivity on, run the file by hand during a quiet
-period (`CONCURRENTLY`, so reads and writes of `message` continue, but expect
-extra load while it runs). It must not run in a transaction (no `psql -1`) and
-needs no statement timeout:
+1. **`migrate` (before the new release serves):** migration 0047 creates the
+   function. Migration 0048 adds `message.search_folded` and a trigger that
+   keeps it, and migration 0049 does the same for `project_file_chunk`. Both are
+   additions without a rewrite, and the previous release keeps working: its own
+   writes are covered by the triggers. The vector is stored only where folding
+   changes the text (a message in plain English or Japanese has none), so the
+   extra disk is small.
+2. **`migrate --post` (after every replica runs the new release):** step `0014`
+   builds a partial GIN index over `message.search_folded` with `CREATE INDEX
+   CONCURRENTLY`; it indexes only the messages that have a folded vector. Step
+   `0015` drops `message_text_search_folded_idx`, the optional index v0.12.0 and
+   v0.12.1 let an operator build by hand, which v0.13 no longer reads (a no-op
+   when you never built it).
+3. **Background:** the migrations `0.13.message-search-folded` and
+   `0.13.chunk-search-folded` fill the vectors of messages and file passages
+   written before the upgrade, in batches of 500 with a pause between them.
+   They respect the usual throttle (replica lag, active chats) and can be
+   paused or resumed on **Administration → System health**. A message with
+   nothing to fold (plain English, other scripts) costs a few microseconds; one
+   with accented letters about 0.8 ms (measured on 1.6 KB messages), so a million
+   messages take minutes to an hour, most of it the pauses between batches.
 
-```sh
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SET statement_timeout = 0" \
-  -f packages/db/optional/message_text_search_folded_index.sql
-```
+**Until they are done, search behaves as v0.12 did.** Messages are searched
+exactly (accents matter) until step 0014 and `0.13.message-search-folded` have
+both finished; project passages until `0.13.chunk-search-folded` has; titles are
+folded straight away, since nothing indexes them. Nothing to configure and no
+restart: each replica notices within about 30 seconds. Once on, a search finds
+everything it found before, and more.
 
-The file is also in the API image at
-`/app/packages/db/optional/message_text_search_folded_index.sql`. There is
-nothing to configure: the API looks the index up by name and uses it once it
-exists and is valid, within about 30 seconds on every replica, with no restart.
-An index left INVALID by a cancelled build is ignored (search stays exact); drop
-it with `DROP INDEX CONCURRENTLY IF EXISTS message_text_search_folded_idx` and
-run the file again. Dropping the index turns message search back to exact
-within the same time. `message_text_search_idx` stays either way: it answers
-search while the folded index is missing, and a replica of the previous release
-uses it. Project file search (the keyword side) is not folded.
+If the background migration is **paused or failed**, search simply stays exact
+for that part. Check **System health → Background migrations**, and see
+[Background migrations](#background-migrations) for resuming one.
+
+**Rolling back to v0.12.x** is safe: it never reads the new columns, and its
+own writes keep them current through the triggers. Message accent-insensitivity
+is then gone (v0.12 has no optional index any more, as step 0015 dropped it);
+rebuild the v0.12 optional index by hand if you want it back there.
 
 #### Code artifacts (migration 0043, post-deploy step 0009)
 
