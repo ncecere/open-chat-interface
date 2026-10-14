@@ -67,9 +67,11 @@ async function lastSuccessfulBackup(): Promise<RunRow | null> {
 /** Everything the Backups page shows. */
 export async function backupStatus(now = new Date()): Promise<BackupStatus> {
   const settings = await backupSettings();
+  // The client tools matter only when OCI dumps the database itself.
+  const dumps = settings.databaseBackup === 'dump';
   const [issues, version, runs, lastSuccess, storage] = await Promise.all([
     backupConfigurationIssues(settings),
-    pgDumpVersion(),
+    dumps ? pgDumpVersion() : Promise.resolve(null),
     recentBackupRuns(20),
     lastSuccessfulBackup(),
     getSetting('storage'),
@@ -83,12 +85,13 @@ export async function backupStatus(now = new Date()): Promise<BackupStatus> {
   }
   return {
     settings: toPublicBackupSettings(settings),
-    issues: version
-      ? issues
-      : [
-          ...issues,
-          'pg_dump was not found on this server. Install the PostgreSQL client tools or set BACKUP_PG_BIN_DIR.',
-        ],
+    issues:
+      version || !dumps
+        ? issues
+        : [
+            ...issues,
+            'pg_dump was not found on this server. Install the PostgreSQL client tools or set BACKUP_PG_BIN_DIR.',
+          ],
     pgDumpVersion: version,
     attachmentStorage: {
       driver: storage.driver,

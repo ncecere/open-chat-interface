@@ -6,6 +6,7 @@ import { redisHealthCheck } from '../../lib/redis-requirement.js';
 import { processRole } from '../../lib/role.js';
 import type { AppBindings } from '../../middleware/context.js';
 import { UNSENT_UPLOAD_TTL_MS } from '../../services/attachments/index.js';
+import { databaseBackupHealthCheck } from '../../services/backups/database-state.js';
 import { cacheBusHealthCheck } from '../../services/cache-bus/index.js';
 import { emailHealthCheck } from '../../services/email-delivery-status.js';
 import { embeddingsHealthCheck } from '../../services/embeddings/status.js';
@@ -223,7 +224,11 @@ async function embeddingsCheck(): Promise<Check> {
 }
 
 /** Backups and webhooks (v0.9): a check that throws becomes a warning, not a failed page. */
-async function guarded(id: string, label: string, check: () => Promise<Check>): Promise<Check> {
+async function guarded(
+  id: string,
+  label: string,
+  check: () => Promise<Check | null>,
+): Promise<Check | null> {
   try {
     return await check();
   } catch (error) {
@@ -241,7 +246,7 @@ async function guarded(id: string, label: string, check: () => Promise<Check>): 
  * failing for a week.
  */
 healthRoutes.get('/', async (c) => {
-  const checks = await Promise.all([
+  const rows = await Promise.all([
     databaseCheck(),
     redisCheck(),
     providerCheck(),
@@ -253,6 +258,8 @@ healthRoutes.get('/', async (c) => {
     connectorCheck(),
     embeddingsCheck(),
     guarded('backups', 'Backups', backupHealthCheck),
+    // Only with an external database backup: what OCI can read of WAL archiving.
+    guarded('database-backup', 'Database backup (external)', () => databaseBackupHealthCheck()),
     guarded('webhooks', 'Webhooks', webhookHealthCheck),
     guarded('compliance', 'Compliance export', complianceHealthCheck),
     // v0.11: a deployment of OCI_ROLE=web replicas only runs no background jobs.
@@ -265,6 +272,7 @@ healthRoutes.get('/', async (c) => {
     // v0.11: values still needing a previous ENCRYPTION_KEY, before it can be retired.
     guarded('encryption', 'Encryption keys', () => encryptionHealthCheck()),
   ]);
+  const checks = rows.filter((check): check is Check => check !== null);
   const replicas = await liveReplicas().catch(() => null);
 
   const recentJobs = await db

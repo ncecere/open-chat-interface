@@ -121,11 +121,14 @@ export function exitCode(child: ChildProcess): Promise<number> {
   });
 }
 
-let versionCache: { value: string | null; expiresAt: number } | null = null;
+let versionCache: { binDir: string | undefined; value: string | null; expiresAt: number } | null =
+  null;
 
 /** `pg_dump --version`, or null when it cannot be run. Cached for a few minutes. */
 export async function pgDumpVersion(): Promise<string | null> {
-  if (versionCache && Date.now() < versionCache.expiresAt) return versionCache.value;
+  const binDir = loadEnv().BACKUP_PG_BIN_DIR;
+  if (versionCache && versionCache.binDir === binDir && Date.now() < versionCache.expiresAt)
+    return versionCache.value;
   const value = await new Promise<string | null>((resolve) => {
     let output = '';
     let child: ChildProcess;
@@ -146,6 +149,6 @@ export async function pgDumpVersion(): Promise<string | null> {
     child.once('error', () => resolve(null));
     child.once('close', (code) => resolve(code === 0 ? output.trim() || null : null));
   });
-  versionCache = { value, expiresAt: Date.now() + 5 * 60_000 };
+  versionCache = { binDir, value, expiresAt: Date.now() + 5 * 60_000 };
   return value;
 }
