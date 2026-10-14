@@ -70,16 +70,29 @@ export async function foldedSearchReady(): Promise<boolean> {
 }
 
 /**
- * The condition a message must meet for a search (`query` is a tsquery). A
- * message with nothing to fold has no stored vector and is the exact index's;
- * one with accents has both, and the stored one holds every word, so matching
- * either finds everything the exact index alone found, and more. Exported so a
- * test can EXPLAIN exactly the predicate that runs.
+ * The two conditions a message can meet for a search (`query` is a tsquery).
+ * `exact` is the exact-text index's, as in v0.12. `folded` compares the stored
+ * folded vector (`message.search_folded`, #362), which only messages with
+ * accented letters have. A message with accents has both, and the stored one
+ * holds every word, so matching either finds everything the exact index alone
+ * found, and more.
+ *
+ * They are separate conditions on purpose, joined by UNION in the statement
+ * and not by OR. The exact vector is not stored: it is computed from `parts`
+ * wherever a plan filters on it (about 77 microseconds a message), which the
+ * planner costs as nearly free. In `exact OR folded`, a folded branch that
+ * looks unselective made it abandon the bitmap scans and compute the exact
+ * vector for every message of the person (1.2 s for 15,000 messages, found by
+ * the rolling-upgrade test in CI as 6 to 8 s searches right after the backfill
+ * finished). As a UNION each branch is planned alone: the exact one is exactly
+ * the v0.12 query, and the folded one compares a stored column, which is cheap
+ * whichever plan is chosen. Exported so a test can EXPLAIN each predicate.
  */
-export function messageSearchCondition(alias: string, query: SQL, folded: boolean): SQL {
-  const exact = messageSearchVector(alias);
-  if (!folded) return sql`${exact} @@ ${query}`;
-  return sql`(${exact} @@ ${query} or ${sql.raw(`"${alias}"."search_folded"`)} @@ ${query})`;
+export function messageSearchBranches(alias: string, query: SQL): { exact: SQL; folded: SQL } {
+  return {
+    exact: sql`${messageSearchVector(alias)} @@ ${query}`,
+    folded: sql`${sql.raw(`"${alias}"."search_folded"`)} @@ ${query}`,
+  };
 }
 
 /** The same text parts as one string, for snippets. Not indexed, so its form is free. */
@@ -211,10 +224,31 @@ export function threadSearchStatement(
   const query = sql`${search.tsquery}::tsquery`;
   const titleQuery = sql`${search.titleTsquery}::tsquery`;
   const exactVector = messageSearchVector('m');
-  const messageMatches = messageSearchCondition('m', query, search.folded);
+  const branches = messageSearchBranches('m', query);
   const messageRank = search.folded
     ? sql`ts_rank(coalesce(m.search_folded, ${exactVector}), ${query})`
     : sql`ts_rank(${exactVector}, ${query})`;
+  // The messages one search may return: the person's own, not trashed, not
+  // temporary, and the replies as the conversation reads (a retry's replaced
+  // reply is not part of it).
+  const hitsFor = (condition: SQL) => sql`
+      select m.id, m.thread_id, m.role, m.position, ${messageRank} as rank
+      from message m
+      join thread t on t.id = m.thread_id
+      where t.user_id = ${userId}
+        and t.deleted_at is null
+        and t.temporary = false
+        and m.role in ('user', 'assistant')
+        and m.superseded_at is null
+        and ${condition}`;
+  // Before the stored vectors are ready only the exact branch runs, as in v0.12.
+  // Both branches compute the same rank for a message, so UNION removes the
+  // ones both found.
+  const hits = search.folded
+    ? sql`${hitsFor(branches.exact)}
+      union
+      ${hitsFor(branches.folded)}`
+    : hitsFor(branches.exact);
   const titleText = foldSql('t.title');
   const titleVector = sql`to_tsvector('simple'::regconfig, ${titleText})`;
   const typed = containsPattern(stripControls(rawQuery).trim().slice(0, SEARCH_QUERY_MAX_CHARS));
@@ -225,17 +259,7 @@ export function threadSearchStatement(
   const messageBody = sql`translate(left(${messageSearchText('m')}, ${SNIPPET_SOURCE_MAX_CHARS}), chr(1) || chr(2), '  ')`;
 
   return sql`
-    with hits as materialized (
-      select m.id, m.thread_id, m.role, m.position, ${messageRank} as rank
-      from message m
-      join thread t on t.id = m.thread_id
-      where t.user_id = ${userId}
-        and t.deleted_at is null
-        and t.temporary = false
-        and m.role in ('user', 'assistant')
-        -- Replies a retry replaced are not part of the conversation as it reads.
-        and m.superseded_at is null
-        and ${messageMatches}
+    with hits as materialized (${hits}
     ),
     scores as (
       select thread_id, max(rank) as rank from hits group by thread_id

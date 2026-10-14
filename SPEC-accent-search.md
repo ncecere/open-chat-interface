@@ -95,7 +95,7 @@ without accents; operators, who must not need a manual step or a long upgrade.
   "bibliothèque", "Búsqueda", "Straße" and "œuvre" in message text; prefix
   matching and every other search behaviour (filters, ranking, snippets)
   unchanged; the result for any query is a superset of v0.12.1's.
-- `EXPLAIN` of the search statement shows both indexes used (a BitmapOr).
+- `EXPLAIN` of each branch of the search statement shows its index used. The branches are joined by `UNION`, not `OR` (an `OR` over the computed exact vector let the planner scan every message of the person; found by the rolling-upgrade test in CI).
 - The rolling-upgrade test from v0.12.1 passes with the triggers, the
   backfill and the step under load; its p99 and max latency gates hold (the
   reason the optional index was refused).

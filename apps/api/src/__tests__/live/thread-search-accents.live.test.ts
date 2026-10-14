@@ -49,7 +49,7 @@ import { threadRoutes } from '../../routes/threads.js';
 import { resetReadinessCache } from '../../services/migrations/readiness.js';
 import {
   foldedSearchReady,
-  messageSearchCondition,
+  messageSearchBranches,
   threadSearchStatement,
 } from '../../services/thread-search.js';
 
@@ -296,19 +296,43 @@ describe.skipIf(!available)('live Postgres: search ignores accents', () => {
       );
     });
 
-    it('is answered by both indexes, never by a scan that folds every message', async () => {
-      const plan = await live.db.transaction(async (tx) => {
-        await tx.execute(sql`set local enable_seqscan = off`);
-        const rows = await tx.execute<{ 'QUERY PLAN': string }>(sql`
-          explain select m.id from message m
-          where ${messageSearchCondition('m', sql`${"'bibliotheque':*"}::tsquery`, true)}
-        `);
-        return rows.map((row) => row['QUERY PLAN']).join('\n');
-      });
-      expect(plan).toContain('BitmapOr');
-      expect(plan).toContain('message_search_folded_idx');
-      expect(plan).toContain('message_text_search_idx');
-      expect(plan).not.toMatch(/oci_fold_search_text\(\(?jsonb_path_query_array/);
+    it('is answered by both indexes, each branch on its own, never by a scan that folds every message', async () => {
+      const plan = async (condition: 'exact' | 'folded') =>
+        live.db.transaction(async (tx) => {
+          await tx.execute(sql`set local enable_seqscan = off`);
+          const branches = messageSearchBranches('m', sql`${"'bibliotheque':*"}::tsquery`);
+          const rows = await tx.execute<{ 'QUERY PLAN': string }>(
+            sql`explain select m.id from message m where ${branches[condition]}`,
+          );
+          return rows.map((row) => row['QUERY PLAN']).join('\n');
+        });
+      expect(await plan('exact')).toContain('message_text_search_idx');
+      expect(await plan('folded')).toContain('message_search_folded_idx');
+      expect(await explain(true)).not.toMatch(/oci_fold_search_text\(\(?jsonb_path_query_array/);
+    });
+
+    it('joins the two branches by UNION, not OR: an OR made the planner compute the exact vector of every message of the person', async () => {
+      const text = (folded: boolean) =>
+        threadSearchStatement(
+          ownerId,
+          {
+            tsquery: "'bibliotheque':*",
+            terms: ['bibliotheque'],
+            folded,
+            titleTsquery: "'bibliotheque':*",
+            titleTerms: ['bibliotheque'],
+          },
+          'bibliotheque',
+          20,
+        );
+      const sqlText = (statement: ReturnType<typeof text>) =>
+        statement.queryChunks.map((chunk) => JSON.stringify(chunk)).join('');
+      const flat = sqlText(text(true)).replace(/\\n|\s+/g, ' ');
+      expect(flat).toMatch(/union/i);
+      expect(flat).not.toMatch(/@@[^@]*\) or "m"\."search_folded"/i);
+      // Before the stored vectors are ready only the exact branch runs, as in v0.12.
+      expect(sqlText(text(false))).not.toMatch(/union/i);
+      expect(sqlText(text(false))).not.toContain('search_folded');
     });
   });
 

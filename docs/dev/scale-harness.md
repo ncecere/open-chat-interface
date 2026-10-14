@@ -722,22 +722,48 @@ the check it finished 300,493 messages in 160 s (about 120 s of that is the
 
 **Search at 500,000 messages, 10% with accents** (a scratch database, 50,000
 distinct texts used ten times, 1.5 GB in all). Counting the matches of one
-word, median of seven runs:
+word, median of seven runs, v0.12's predicate against "exact index or folded
+index":
 
-| Query | Exact index only (v0.12) | Exact OR folded (v0.13) |
+| Query | Exact index only (v0.12) | Either index (v0.13) |
 | --- | ---: | ---: |
 | Rare word (1,810 matches) | 1.5 ms | 1.3 ms |
 | Medium word (15,590 matches) | 14.4 ms | 14.0 ms |
 | Word only found after folding (34,430 matches) | 13.9 ms | 13.7 ms |
 
-The plan is a `BitmapOr` over `message_text_search_idx` and
-`message_search_folded_idx`. The partial index holds only the 10% of messages
-with accents: 38 MB against 485 MB for the exact index, built in 2.9 s. An
-unthrottled backfill in SQL took 151 s for the 50,000 messages that needed a
-vector (about 3 ms each, as it also computes the vector for the rest and writes
-the rows); the shipped background migration spreads this over batches of 500.
-The common-word rows of that run (450,000 matches, 14.7 s) are a count over
-nearly every message and are not what a search runs (it ranks and limits).
+The partial index holds only the 10% of messages with accents: 38 MB against
+485 MB for the exact index, built in 2.9 s. An unthrottled backfill in SQL took
+151 s for the 50,000 messages that needed a vector; the shipped background
+migration spreads this over batches of 500.
+
+**That predicate-only test hid a real problem, which the rolling-upgrade test
+in CI found.** The statement joins the messages to the person's threads, and
+the first version matched with `exact_vector @@ q OR search_folded @@ q`. The
+exact vector is not stored: wherever a plan filters on it, it is computed from
+`parts` (about 77 µs a message), and the planner costs that as nearly free. When
+the folded branch looked unselective the planner dropped the bitmap scans and
+computed the exact vector of every message of the person: 6 to 8 s for the
+first searches after the backfill finished in CI (`max time to headers` failed),
+and in a scratch database of 300,000 messages 1,160 ms for a word only found
+after folding, with fresh statistics (a nested loop over
+`message_thread_position_idx`). `ANALYZE` did not help; it made that case
+slower. The statement now joins the two branches with `UNION`, so each is
+planned alone: the exact branch is v0.12's query, and the folded one compares a
+stored column. The real statement, 300,000 messages and 20 people (500 threads
+of 30 messages each), median of three:
+
+| Term | v0.12 path | UNION, stale statistics | UNION, fresh statistics |
+| --- | ---: | ---: | ---: |
+| Medium word | 39 ms | 64 ms | 58 ms |
+| Rare word | 22 ms | 27 ms | 27 ms |
+| Only found after folding | 4 ms | 72 ms | 11 ms |
+| Only found after folding, rarer | 4 ms | 8 ms | 5 ms |
+| A word in every message of the person (15,000 hits) | 2.3 s | 2.6 s | 2.4 s |
+
+The last row is the same on both paths: ranking computes the exact vector of
+every hit. That cost is not new, and it is the thing to look at if search of a
+very common word in a very long history is ever slow. A test keeps the `OR`
+out (`thread-search-accents.live.test.ts`).
 
 **The `small` profile, three-way.** `tools/scale/run.sh --profile small` runs
 with `RUN_MIGRATIONS=false`, so no post-deploy step or background migration
