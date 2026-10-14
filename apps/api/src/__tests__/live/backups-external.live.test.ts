@@ -494,4 +494,55 @@ describe.skipIf(!available)('live: external database backup', () => {
     expect(result).toMatchObject({ restored: sources.size, missingInBackup: 1, failed: [] });
     for (const [key, body] of sources) expect((await local.get(key)).equals(body), key).toBe(true);
   });
+  it('shows the database row and the WAL metrics only in external mode, and words the Backups row without a size', async () => {
+    const { backupHealthCheck } = await import('../../services/observability/health-checks.js');
+    const { registerCollectedGauges } = await import('../../services/observability/collected.js');
+    const { renderMetrics } = await import('../../services/observability/metrics.js');
+    registerCollectedGauges();
+    const ids = async () => {
+      const response = await call('GET', '/api/admin/health', { user: auditor });
+      expect(response.status, await response.clone().text()).toBe(200);
+      return ((await response.json()) as { checks: Array<Record<string, string>> }).checks;
+    };
+    await pool.db.delete(schema.backupRun);
+
+    // Dump mode: no row, no series.
+    state.settings.set('backups', { enabled: true, destination: 'storage' });
+    expect((await ids()).some((check) => check.id === 'database-backup')).toBe(false);
+    let metrics = await renderMetrics();
+    expect(metrics).not.toMatch(/^oci_wal_archive_failing /m);
+
+    // External mode against this server (no archiving): a warning, naming what OCI cannot tell.
+    state.settings.set('backups', { enabled: false, databaseBackup: 'external' });
+    let row = (await ids()).find((check) => check.id === 'database-backup')!;
+    expect(row).toMatchObject({ label: 'Database backup (external)', status: 'warn' });
+    expect(row.detail).toMatch(/^WAL archiving is off, so point-in-time recovery is not possible/);
+    expect(row.detail).toMatch(/Not verified by OCI: that a base backup exists/);
+    // Also with scheduled backups off, and ok when archiving is not expected.
+    state.settings.set('backups', {
+      enabled: false,
+      databaseBackup: 'external',
+      walArchivingExpected: false,
+    });
+    row = (await ids()).find((check) => check.id === 'database-backup')!;
+    expect(row).toMatchObject({ status: 'ok' });
+    expect(row.detail).toMatch(/^WAL archiving is off, as configured/);
+    metrics = await renderMetrics();
+    expect(metrics).toMatch(/^oci_wal_archive_failing 0$/m);
+    // Nothing was ever archived here: the success timestamp is absent.
+    expect(metrics).not.toMatch(/^oci_wal_archive_last_success_timestamp_seconds \d/m);
+
+    // The Backups row says the database is backed up outside OCI, not "0.0 KB database".
+    state.settings.set('backups', {
+      ...(await target('ext-health/')),
+      enabled: true,
+      databaseBackup: 'external',
+    });
+    await backups.performBackup({ trigger: 'manual' });
+    const backupRow = await backupHealthCheck();
+    // (A warning here: the fixture has one attachment whose object is gone.)
+    expect(backupRow).toMatchObject({ status: 'warn' });
+    expect(backupRow.detail).toMatch(/, database backed up outside OCI, 3 attachment objects/);
+    expect(backupRow.detail).not.toMatch(/KB database|unknown size/);
+  });
 });
