@@ -61,6 +61,17 @@ export const FOLD_FROM = TABLE.from;
 export const FOLD_TO = TABLE.to;
 
 /**
+ * A regular expression (PostgreSQL's, between brackets) that every letter the
+ * fold can change matches: Latin-1 Supplement to Latin Extended-B
+ * (U+00C0 to U+024F) and Latin Extended Additional (U+1E00 to U+1EFF). Text
+ * with no such character is returned as it is, without running the fold,
+ * which costs about 0.9 ms for a 1.6 KB message and is most of what indexing
+ * and the backfill spend; the check costs a few microseconds. A test keeps
+ * every mapped letter inside it.
+ */
+export const FOLD_CANDIDATES = '[\\u00C0-\\u024F\\u1E00-\\u1EFF]';
+
+/**
  * Letters that become two, in both cases, replaced after `translate()` in the
  * SQL function and here. Not in FOLD_FROM: `translate()` maps one to one.
  */

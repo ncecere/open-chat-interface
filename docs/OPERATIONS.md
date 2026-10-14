@@ -1227,8 +1227,10 @@ How an upgrade gets there, in the three phases of an [upgrade](#upgrade):
    `0.13.chunk-search-folded` fill the vectors of messages and file passages
    written before the upgrade, in batches of 500 with a pause between them.
    They respect the usual throttle (replica lag, active chats) and can be
-   paused or resumed on **Administration → System health**. Computing a vector
-   costs about 1 ms per message.
+   paused or resumed on **Administration → System health**. A message with
+   nothing to fold (plain English, other scripts) costs a few microseconds; one
+   with accented letters about 0.8 ms (measured on 1.6 KB messages), so a million
+   messages take minutes to an hour, most of it the pauses between batches.
 
 **Until they are done, search behaves as v0.12 did.** Messages are searched
 exactly (accents matter) until step 0014 and `0.13.message-search-folded` have

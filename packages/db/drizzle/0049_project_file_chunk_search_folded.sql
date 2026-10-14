@@ -21,8 +21,10 @@ ALTER TABLE "project_file_chunk" ADD COLUMN IF NOT EXISTS "search_folded" tsvect
 CREATE OR REPLACE FUNCTION "oci_chunk_folded_vector"(content text) RETURNS tsvector
 LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
 AS $$
-	SELECT CASE WHEN oci_fold_search_text(content) = content THEN NULL
-		ELSE to_tsvector('simple'::regconfig, oci_fold_search_text(content)) END
+	-- OFFSET 0 keeps the fold to one evaluation per chunk.
+	SELECT CASE WHEN folded = content THEN NULL
+		ELSE to_tsvector('simple'::regconfig, folded) END
+	FROM (SELECT oci_fold_search_text(content) AS folded OFFSET 0) AS f
 $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION "project_file_chunk_set_search_folded"() RETURNS trigger AS $$
