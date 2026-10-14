@@ -1,6 +1,6 @@
 # Spec: external-backups
 
-Module of [SPEC.md](SPEC.md) (v0.13). Depends on nothing. **Status: draft.**
+Module of [SPEC.md](SPEC.md) (v0.13). Depends on nothing. **Status: approved 2026-10-13: every recommendation in "Open questions" accepted, including the ask-first items it lists (the CI step that starts a PostgreSQL with archiving, the same service in the local harness, the CloudNativePG drill on `dev-env`).**
 Shared commands, structure, style, testing and boundaries are in SPEC.md; this
 file adds what is specific to this module. No migration: the build order's
 "one adds migrations at a time" is not affected.
@@ -409,7 +409,7 @@ drill has been run once with its times recorded and its environment taken down,
 `SPEC.md`'s map row is marked done, and the change is released in **v0.13.0**
 (SPEC.md, decision 1) by `docs/RELEASING.md`.
 
-## Open questions
+## Decisions (were open questions; every recommendation accepted, 2026-10-13)
 
 1. **How far does "tested" go?** Decision 3 says CloudNativePG and pgBackRest
    are tested. Proposed: pgBackRest by the weekly Docker drill; CloudNativePG by

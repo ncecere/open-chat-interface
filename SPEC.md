@@ -20,7 +20,7 @@ capacity); developers benefit from the hygiene work.
 |---|---|---|---|
 | `release-hygiene` | Drop `project_file_embedding_failure`; preflight report wording; guard development-image pruning; bring `ROADMAP.md` up to date | — | [SPEC-release-hygiene.md](SPEC-release-hygiene.md) — **done, v0.12.1** |
 | `accent-search` | Accent-insensitive search of message text by default: a stored folded column filled by a throttled background migration, its index built concurrently, search falling back until both are ready; project/file keyword search folded too; ß, æ, œ (#362) | — | not written yet |
-| `external-backups` | An "external database backup" mode for clusters with their own backups: OCI copies attachments and verifies, documents recovery objectives, and has a restore drill | — | [SPEC-external-backups.md](SPEC-external-backups.md) — draft, awaiting approval |
+| `external-backups` | An "external database backup" mode for clusters with their own backups: OCI copies attachments and verifies, documents recovery objectives, and has a restore drill | — | [SPEC-external-backups.md](SPEC-external-backups.md) — **approved, building** |
 | `scale-on-cluster` | Run `tools/scale` up to `large` against a `dev-env` environment on the cluster and publish the results against the service objectives | `accent-search` | not written yet |
 
 Build order: `release-hygiene` → `accent-search`, `external-backups` (one
