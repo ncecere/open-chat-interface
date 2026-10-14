@@ -13,8 +13,13 @@ type SQL = ReturnType<typeof sql.raw>;
  * character. `translate` is IMMUTABLE, so the same expression can be indexed.
  * Letters of other scripts are untouched: decomposing them (NFD) would split
  * Arabic hamza forms and Japanese voiced kana into separate characters.
- * `ß`, `æ` and `œ` are left as they are (they would need one character to
- * become two).
+ * `ß`, `æ` and `œ` become two letters (`ss`, `ae`, `oe`), which `translate()`
+ * cannot do, so the function replaces them after it (FOLD_EXPANSIONS).
+ *
+ * The one definition is the SQL function `oci_fold_search_text` (migration
+ * 0047), which the trigger that stores folded search vectors, the queries and
+ * the titles all call. This file holds the same table for the TypeScript side
+ * and for tests, which keep the migration's literals equal to it.
  *
  * The two strings are spliced into SQL as literals, never parameters: the
  * planner uses an expression index only when the query has the same constants.
@@ -55,21 +60,41 @@ const TABLE = foldingTable();
 export const FOLD_FROM = TABLE.from;
 export const FOLD_TO = TABLE.to;
 
-/** `translate(<expression>, FROM, TO)` over raw SQL text (no quotes inside the table). */
+/**
+ * Letters that become two, in both cases, replaced after `translate()` in the
+ * SQL function and here. Not in FOLD_FROM: `translate()` maps one to one.
+ */
+export const FOLD_EXPANSIONS = [
+  ['ß', 'ss'],
+  ['ẞ', 'SS'],
+  ['æ', 'ae'],
+  ['Æ', 'AE'],
+  ['œ', 'oe'],
+  ['Œ', 'OE'],
+] as const;
+
+/**
+ * `translate(<expression>, FROM, TO)` over raw SQL text (no quotes inside the
+ * table): the one-to-one part only, which is what the optional message index
+ * (packages/db/optional, removed by the stored folded vector) holds.
+ */
 export function foldSqlText(expression: string): string {
   return `translate(${expression}, '${FOLD_FROM}', '${FOLD_TO}')`;
 }
 
-/** The same over a SQL value (a column or a bound parameter). */
+/** The fold over a SQL value (a column or a bound parameter): the database's one definition. */
 export function foldSql(value: SQL | string): SQL {
   const operand = typeof value === 'string' ? sql.raw(value) : value;
-  return sql`${sql.raw('translate(')}${operand}${sql.raw(`, '${FOLD_FROM}', '${FOLD_TO}')`)}`;
+  return sql`oci_fold_search_text(${operand})`;
 }
 
 /** The fold in JavaScript, for tests and for comparing against what SQL does. */
 export function foldAccents(value: string): string {
   const to = [...FOLD_TO];
-  const index = new Map([...FOLD_FROM].map((letter, position) => [letter, to[position] ?? letter]));
+  const index = new Map<string, string>([
+    ...[...FOLD_FROM].map((letter, position): [string, string] => [letter, to[position] ?? letter]),
+    ...FOLD_EXPANSIONS.map(([letter, expansion]): [string, string] => [letter, expansion]),
+  ]);
   return [...value].map((letter) => index.get(letter) ?? letter).join('');
 }
 

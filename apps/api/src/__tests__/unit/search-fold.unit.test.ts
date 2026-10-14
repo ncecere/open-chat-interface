@@ -24,7 +24,8 @@ const postJournal = readFileSync(
 describe('accent folding for search (#362)', () => {
   it('turns accented Latin letters into their base letters and leaves other scripts alone', () => {
     expect(foldAccents('Bibliothèque Búsqueda Ștefan Đorđe Łódź Việt Nam Ñandú Ærø')).toBe(
-      'Bibliotheque Busqueda Stefan Dorde Lodz Viet Nam Nandu Æro',
+      // Æ becomes two letters since v0.13 (oci_fold_search_text).
+      'Bibliotheque Busqueda Stefan Dorde Lodz Viet Nam Nandu AEro',
     );
     // Decomposing these would split letters of the script into separate characters.
     for (const word of ['日本語', 'がっこう', 'أحمد', 'Привет', 'नमस्ते', '한국어']) {

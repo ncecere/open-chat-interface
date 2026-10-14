@@ -16,14 +16,14 @@ Shared commands are in SPEC.md (`H=~/.oci-harness`).
 - [ ] `python3 $H/run.py coverage`, `python3 $H/run.py checks`, `node --test scripts/*.test.mjs`
 - [ ] Chart CI green; merged to `main`
 
-## Task 2: One fold: `oci_fold_search_text`
+## Task 2: One fold: `oci_fold_search_text` ✅
 
 **Description:** A SQL function holds the fold, with `ß æ œ`, and every caller of the fold uses it.
 
 **Acceptance criteria:**
-- [ ] Migration `0047` creates `oci_fold_search_text(text)` (IMMUTABLE, PARALLEL SAFE, STRICT): today's `translate()` table, then `ß`→`ss`, `ẞ`→`SS`, `æ`→`ae`, `Æ`→`AE`, `œ`→`oe`, `Œ`→`OE`.
-- [ ] `apps/api/src/lib/fold.ts` (`foldAccents`, `foldSql`) is extended the same way, and `foldSql` calls the function.
-- [ ] Reproduce first: titles and the title highlight do not find `strasse` for "Straße" or `oeuvre` for "œuvre" before; they do after. A live test compares the SQL function with `foldAccents` over every mapped character and sample text in French, Spanish, German, Portuguese, Vietnamese, Polish, Turkish; a unit test keeps the migration's literals equal to the table in `fold.ts`.
+- [x] Migration `0047` creates `oci_fold_search_text(text)` (IMMUTABLE, PARALLEL SAFE, STRICT): today's `translate()` table, then `ß`→`ss`, `ẞ`→`SS`, `æ`→`ae`, `Æ`→`AE`, `œ`→`oe`, `Œ`→`OE`.
+- [x] `apps/api/src/lib/fold.ts` (`foldAccents`, `foldSql`) is extended the same way, and `foldSql` calls the function.
+- [x] Reproduce first: titles and the title highlight do not find `strasse` for "Straße" or `oeuvre` for "œuvre" before; they do after. A live test compares the SQL function with `foldAccents` over every mapped character and sample text in French, Spanish, German, Portuguese, Vietnamese, Polish, Turkish; a unit test keeps the migration's literals equal to the table in `fold.ts`.
 
 **Verification:** targeted tests; `pnpm lint:migrations`; `pnpm --filter @oci/api typecheck`.
 
