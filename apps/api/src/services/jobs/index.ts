@@ -283,7 +283,7 @@ export async function scheduledJobs(): Promise<ScheduledJob[]> {
 function notScheduledConflict(name: string) {
   return conflict(
     name === POST_MIGRATIONS_JOB
-      ? 'No replica that runs background jobs applies post-deploy steps here. Once every replica runs this release, run migrate --post (docker compose --profile tools run --rm migrate-post), or set RUN_POST_MIGRATIONS=true on the replica that runs jobs.'
+      ? 'No replica that runs background jobs applies post-deploy steps here. Once every replica runs this release, run migrate --post (docker compose --profile tools run --rm migrate-post), or set RUN_POST_MIGRATIONS=auto on the replica that runs jobs (it waits until every replica runs this release; needs Redis).'
       : `No replica that runs background jobs runs ${name}: their settings leave it off, so it cannot start.`,
   );
 }

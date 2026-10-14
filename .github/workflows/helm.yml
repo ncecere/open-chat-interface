@@ -136,6 +136,18 @@ jobs:
           refuse 'trustedProxies' "${secret[@]}" --set config.appUrl=https://chat.example.com \
             --set-string 'web.trustedProxies=10.0.0.0/8\,192.168.0.0/16'
 
+      - name: With the hooks off, the worker applies post-deploy steps itself
+        run: |
+          set -euo pipefail
+          # #385: without hooks nothing else runs `migrate --post`.
+          off="$(helm template oci "$CHART" -f deploy/helm/dev/values-kind.yaml \
+            --set migrations.enabled=false --set api.replicaCount=1 --set networkPolicy.enabled=false)"
+          on="$(helm template oci "$CHART" -f deploy/helm/dev/values-kind.yaml)"
+          autos() { grep -A1 'name: RUN_POST_MIGRATIONS' <<< "$1" | grep -c 'value: "auto"' || true; }
+          [ "$(autos "$off")" = 1 ] || { echo "Hooks off: expected RUN_POST_MIGRATIONS=auto on the worker"; exit 1; }
+          [ "$(autos "$on")" = 0 ] || { echo "Hooks on: no pod may apply post-deploy steps itself"; exit 1; }
+          echo "RUN_POST_MIGRATIONS=auto on the worker with the hooks off, nowhere with them on"
+
   kind:
     # Both release architectures, each on a native runner: the images are
     # built and run on linux/amd64 and linux/arm64.

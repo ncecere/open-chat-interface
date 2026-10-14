@@ -119,7 +119,9 @@ extraEnvFrom: []
 # (`node dist/scripts/upgrade-check.js`) estimates long index builds.
 migrations:
   # false: no hooks; the API migrates itself at startup (RUN_MIGRATIONS=true),
-  # which suits a single replica only.
+  # which suits a single replica only. The worker (or the API, when there is
+  # no worker) then applies post-deploy steps itself, once every replica that
+  # heartbeats runs the new release (RUN_POST_MIGRATIONS=auto; needs Redis).
   enabled: true
   # Hook Jobs are kept after they finish (for their logs) and replaced by the
   # next upgrade; ttlSecondsAfterFinished removes them earlier. Add

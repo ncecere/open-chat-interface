@@ -193,7 +193,7 @@ Every key is documented in [values.yaml](values.yaml) and checked by
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `migrations.enabled` | `true` | Hook jobs; pods run with `RUN_MIGRATIONS=false`. `false` lets a single API replica migrate itself. |
+| `migrations.enabled` | `true` | Hook jobs; pods run with `RUN_MIGRATIONS=false`. `false` lets a single API replica migrate itself, and the worker applies post-deploy steps once every replica runs the new release (`RUN_POST_MIGRATIONS=auto`, needs Redis). |
 | `migrations.hookDeletePolicy` | `before-hook-creation` | Jobs are kept for their logs until the next upgrade. |
 | `migrations.ttlSecondsAfterFinished` | `86400` | |
 | `migrations.pre.activeDeadlineSeconds`, `.backoffLimit` | `1800`, `2` | `migrate`. |
