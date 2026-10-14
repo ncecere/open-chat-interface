@@ -129,7 +129,9 @@ outside OCI" instead of a database size.
 
 In this mode, and only this mode, `/metrics` also exposes
 `oci_wal_archive_last_success_timestamp_seconds` (absent when there has been no
-success) and `oci_wal_archive_failing` (0 or 1).
+success) and `oci_wal_archive_failing` (1 when the newest attempt failed after
+the newest success, else 0; it can be 1 during a retry that System health still
+shows as a warning).
 `oci_backup_last_success_timestamp_seconds` keeps meaning "the attachment
 backup". [Observability](observability.md#metrics) has the alert examples.
 
@@ -330,7 +332,9 @@ With `archive-async`, `archive_command` still reports success only after the
 segment is stored in the repository, so WAL not yet archived is lost with the
 node either way.
 
-Then, as the `postgres` user:
+Until `stanza-create` has run, every archive attempt fails (and System health
+shows a retry warning or, after 15 minutes, the archiver error), so run the
+commands below right after the restart. As the `postgres` user:
 
 ```bash
 pgbackrest --stanza=oci stanza-create

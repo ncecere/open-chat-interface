@@ -60,7 +60,7 @@ scrape_configs:
 | `oci_backup_duration_seconds` | histogram | |
 | `oci_backup_last_success_timestamp_seconds` | gauge | Absent until a backup succeeds. With [external database backup](external-database-backup.md) it means the attachment backup |
 | `oci_wal_archive_last_success_timestamp_seconds` | gauge | Only with external database backup on. When PostgreSQL last archived a WAL segment (`pg_stat_archiver`); absent when it has not since the statistics were reset |
-| `oci_wal_archive_failing` | gauge | Only with external database backup on. 1 while the archiver is failing now (the last attempt failed and nothing succeeded for 15 minutes), else 0 |
+| `oci_wal_archive_failing` | gauge | Only with external database backup on. 1 when the newest WAL archive attempt failed after the newest success, else 0. System health goes red only when that has also lasted 15 minutes without a success, so this can read 1 during a retry |
 | `oci_provider_queue_waits_total` | counter | `provider` (its display name), `model` (its slug), `outcome`: `admitted`, `timeout`, `cancelled`, `handoff`. Messages that waited for [provider capacity](models-providers.md#provider-capacity) |
 | `oci_provider_queue_wait_seconds` | histogram | `provider`, `model` |
 | `oci_provider_queue_waiting` | gauge | Messages waiting on this replica now |
