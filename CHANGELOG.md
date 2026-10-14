@@ -29,6 +29,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   in v0.12). It is replaced by the stored vector above; post-deploy step `0015`
   drops `message_text_search_folded_idx` if an operator built it.
 
+### Fixed
+
+- **Helm chart with `migrations.enabled: false`: post-deploy steps now run**
+  (#385). Without the hooks nothing ran `migrate --post`, so post-deploy steps
+  stayed pending and the background migrations were never scheduled, which left
+  features gated on them off (code artifacts, leaving embedding generation 1,
+  the new secret format). The worker now gets `RUN_POST_MIGRATIONS=auto`, a new
+  value: it applies the steps once every replica that sends a heartbeat reports
+  its own release, and waits otherwise (it needs Redis). `true` and `false`
+  work as before. **Upgrade note:** none; installs with the hooks on are
+  unchanged. Until you upgrade the chart, the workaround is
+  `config.env.RUN_POST_MIGRATIONS: "true"` on a single-replica install.
+
 ## [0.12.1] - 2026-10-11
 
 Small debts left after v0.12.0 (`SPEC-release-hygiene.md`). No pre-deploy

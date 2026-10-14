@@ -658,9 +658,16 @@ A single instance with `RUN_MIGRATIONS=true` does steps 5 and 7 itself: it
 migrates at startup and, once serving, applies its post-deploy steps from a
 background job (`RUN_POST_MIGRATIONS` defaults to `RUN_MIGRATIONS`). With
 several replicas keep `RUN_POST_MIGRATIONS=false` (the default when
-`RUN_MIGRATIONS=false`) and run step 7 yourself: nothing in the database tells
-OCI that every replica runs the new release, and a post-deploy step may drop
-something the previous release still reads.
+`RUN_MIGRATIONS=false`) and run step 7 yourself: a post-deploy step may drop or
+enable something the previous release cannot handle.
+
+`RUN_POST_MIGRATIONS=auto` (v0.13) lets a replica that does not migrate itself,
+such as the worker of the Helm chart installed with `migrations.enabled: false`,
+apply the steps by itself: every replica sends a heartbeat that carries its
+release, and the replica applies the steps only once every replica that
+heartbeats runs its own release. It needs Redis (without it, or while a replica
+of the previous release is still running, it waits and applies nothing). The
+chart sets it on the worker when its hooks are off.
 
 ### Upgrades that need a window
 
@@ -732,7 +739,7 @@ as `failed` with the error shown; resume it once the cause is fixed. Metrics:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `RUN_POST_MIGRATIONS` | same as `RUN_MIGRATIONS` | Whether this replica applies post-deploy steps itself (single instance). |
+| `RUN_POST_MIGRATIONS` | same as `RUN_MIGRATIONS` | Whether this replica applies post-deploy steps itself: `true` (single instance), `false`, or `auto` (once every replica that heartbeats runs this release; needs Redis). |
 | `POST_MIGRATION_STATEMENT_TIMEOUT_MS` | `14400000` (four hours) | How long one post-deploy step may run; `0` means no limit. The lock timeout is `MIGRATION_LOCK_TIMEOUT_MS`. |
 
 ### Migration timeouts

@@ -35,7 +35,9 @@ const { progressOf } = await import('../../services/migrations/background-admin.
 const { formatBytes, verdictOf } = await import('../../services/migrations/preflight.js');
 const { renderReport } = await import('../../services/migrations/report-text.js');
 const { duration } = await import('../../services/migrations/throttle.js');
-const { autoPostMigrations } = await import('../../services/migrations/jobs.js');
+const { allReplicasCurrent, autoPostMigrations, postMigrationMode } = await import(
+  '../../services/migrations/jobs.js'
+);
 
 beforeAll(loadSqlParser);
 
@@ -370,6 +372,25 @@ describe('configuration', () => {
       ),
     ).toBe(true);
     expect(autoPostMigrations(parseEnv({ ...base, RUN_POST_MIGRATIONS: 'false' }))).toBe(false);
+  });
+
+  it('RUN_POST_MIGRATIONS=auto applies steps once every live replica runs this release', () => {
+    const auto = parseEnv({ ...base, RUN_MIGRATIONS: 'false', RUN_POST_MIGRATIONS: 'auto' });
+    expect(postMigrationMode(auto)).toBe('when-current');
+    // The job is registered, the decision is made each time it runs.
+    expect(autoPostMigrations(auto)).toBe(true);
+    expect(postMigrationMode(parseEnv(base))).toBe('on');
+    expect(postMigrationMode(parseEnv({ ...base, RUN_MIGRATIONS: 'false' }))).toBe('off');
+    expect(postMigrationMode(parseEnv({ ...base, RUN_POST_MIGRATIONS: 'true' }))).toBe('on');
+    expect(() => parseEnv({ ...base, RUN_POST_MIGRATIONS: 'sometimes' })).toThrow();
+
+    const replica = (version: string) => ({ version });
+    expect(allReplicasCurrent([replica('0.13.0'), replica('0.13.0')], '0.13.0')).toBe(true);
+    // One replica still on the previous release (a rollout in progress).
+    expect(allReplicasCurrent([replica('0.13.0'), replica('0.12.1')], '0.13.0')).toBe(false);
+    // No evidence is not a green light: nobody heartbeating, or no Redis at all.
+    expect(allReplicasCurrent([], '0.13.0')).toBe(false);
+    expect(allReplicasCurrent(null, '0.13.0')).toBe(false);
   });
 
   it('validates the background migration and post-deploy settings', () => {

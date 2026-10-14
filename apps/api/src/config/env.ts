@@ -112,11 +112,16 @@ const envSchema = z.object({
    * replica that migrates itself at startup is a single instance, so once it
    * runs, every replica runs this release. With several replicas leave it
    * false and run `migrate --post` after replacing them all.
+   *
+   * `auto` (#385) is for a replica that does not migrate itself, such as the
+   * worker of the Helm chart when its hooks are off: it applies the steps once
+   * every replica that sends a heartbeat reports this release (needs Redis),
+   * and waits otherwise.
    */
   RUN_POST_MIGRATIONS: z
-    .enum(['true', 'false'])
+    .enum(['true', 'false', 'auto'])
     .optional()
-    .transform((value) => (value === undefined ? undefined : value === 'true')),
+    .transform((value) => (value === undefined || value === 'auto' ? value : value === 'true')),
   /** Whether this process runs background migration batches (default true). */
   BACKGROUND_MIGRATIONS_ENABLED: z
     .enum(['true', 'false'])
