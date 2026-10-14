@@ -278,7 +278,10 @@ A hold applies to work that starts after it is placed; a purge already deleting
 when the hold is saved is not undone. A hold does not stop the person using OCI
 (ban them for that), does not change what the compliance export includes, and
 does not cover data outside OCI's database and attachment storage: in
-particular, [backup](backups.md) retention still deletes old backups.
+particular, [backup](backups.md) retention still deletes old backups. Erased
+data also stays in database backups you take outside OCI ([external database
+backup](external-database-backup.md#compliance-note), snapshots, a managed
+service's) until they expire: OCI neither sees nor deletes them.
 
 Every place OCI deletes data is listed, with how it treats a hold, in the test
 `apps/api/src/__tests__/unit/legal-hold-paths.unit.test.ts`, which fails when a

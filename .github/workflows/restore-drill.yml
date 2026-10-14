@@ -1,0 +1,87 @@
+name: Restore drill
+
+# A pgBackRest point-in-time restore of an OCI database: PostgreSQL 17 with
+# pgvector and pgBackRest archiving WAL to a local repository, OCI built from
+# this ref backing up with databaseBackup 'external', a recorded target time T,
+# the primary and the attachment bucket removed, `pgbackrest restore
+# --type=time`, then OCI as OCI_ROLE=web on the restored database with its
+# attachments restored by `backup:restore-files`. Fails on any check of
+# docs/admin/external-database-backup.md's restore drill. See
+# docs/dev/restore-drill.md. Builds locally; publishes nothing. Pull-request CI
+# covers the mode itself against a PostgreSQL with archiving
+# (apps/api/src/__tests__/live/backups-external.live.test.ts).
+
+on:
+  schedule:
+    # Weekly, Tuesday 05:30 UTC (the failover drill runs Monday).
+    - cron: '30 5 * * 2'
+  workflow_dispatch:
+    inputs:
+      file-kib:
+        description: Size of each attachment in the drill, in KiB
+        required: false
+        type: number
+        default: 96
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-drill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drill:
+    name: pgBackRest point-in-time restore
+    runs-on: ubuntu-24.04
+    # About 5 minutes: the images (the API image is cached), a base backup of a
+    # small database, two OCI backup runs, the restore and its checks. The limit
+    # leaves room for a cold cache.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.0'
+      - name: Source version
+        id: source
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the API image (no publication)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: oci-restore-api:drill
+          build-args: |
+            OCI_VERSION=${{ steps.source.outputs.version }}
+            OCI_REVISION=${{ github.sha }}
+          # Reuses the CI workflow's container cache; writes none of its own.
+          cache-from: type=gha,scope=api
+      - name: Run the restore drill
+        env:
+          FILE_KIB: ${{ inputs.file-kib || 96 }}
+        run: |
+          node tools/restore-drill/run.mjs \
+            --api-image oci-restore-api:drill \
+            --file-kib "$FILE_KIB" \
+            --out "$RUNNER_TEMP/restore-drill"
+      - name: Summary
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/restore-drill/report.md"; then
+            cat "$RUNNER_TEMP/restore-drill/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: restore-drill-report
+          retention-days: 14
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/restore-drill

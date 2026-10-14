@@ -58,7 +58,9 @@ scrape_configs:
 | `oci_storage_deletions_pending` | gauge | Stored objects queued for deletion |
 | `oci_backup_runs_total` | counter | `outcome`: `succeeded`, `failed` |
 | `oci_backup_duration_seconds` | histogram | |
-| `oci_backup_last_success_timestamp_seconds` | gauge | Absent until a backup succeeds |
+| `oci_backup_last_success_timestamp_seconds` | gauge | Absent until a backup succeeds. With [external database backup](external-database-backup.md) it means the attachment backup |
+| `oci_wal_archive_last_success_timestamp_seconds` | gauge | Only with external database backup on. When PostgreSQL last archived a WAL segment (`pg_stat_archiver`); absent when it has not since the statistics were reset |
+| `oci_wal_archive_failing` | gauge | Only with external database backup on. 1 when the newest WAL archive attempt failed after the newest success, else 0. System health goes red only when that has also lasted 15 minutes without a success, so this can read 1 during a retry |
 | `oci_provider_queue_waits_total` | counter | `provider` (its display name), `model` (its slug), `outcome`: `admitted`, `timeout`, `cancelled`, `handoff`. Messages that waited for [provider capacity](models-providers.md#provider-capacity) |
 | `oci_provider_queue_wait_seconds` | histogram | `provider`, `model` |
 | `oci_provider_queue_waiting` | gauge | Messages waiting on this replica now |
@@ -86,6 +88,19 @@ stays bounded. The gauges read from the database at scrape time; if the
 database does not answer, they are left out of that scrape rather than failing
 it.
 
+OCI cannot see that an external database backup's base backups stopped, only
+that WAL is archived. Alert on the backup tool's own metrics for that, for
+example CloudNativePG's plugin metric (the age of the newest base backup; pick
+the threshold from your schedule):
+
+```yaml
+- alert: DatabaseBaseBackupStale
+  expr: time() - max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp) > 2 * 86400
+```
+
+For pgBackRest use `pgbackrest info --output=json`. See
+[external database backup](external-database-backup.md#metrics-and-alerts).
+
 Prometheus stores the `job` label of `oci_job_*` metrics as `exported_job`,
 because `job` is its own target label (unless `honor_labels: true`).
 
@@ -96,6 +111,15 @@ these metrics and ships a complete rule file and Grafana dashboard
 ```yaml
 - alert: OciBackupStale
   expr: time() - max(oci_backup_last_success_timestamp_seconds) > 26 * 3600
+- alert: OciWalArchiveFailing
+  # External database backup only: WAL piles up on the primary's disk and
+  # recovery points stop advancing.
+  expr: max(oci_wal_archive_failing) == 1
+  for: 5m
+- alert: OciWalArchiveStale
+  # External database backup only. An idle server archives little unless
+  # archive_timeout is set; choose the age for your traffic.
+  expr: time() - max(oci_wal_archive_last_success_timestamp_seconds) > 1800
 - alert: OciNoBackgroundWorker
   expr: max(oci_background_workers_alive) == 0
 - alert: OciReplyErrors
