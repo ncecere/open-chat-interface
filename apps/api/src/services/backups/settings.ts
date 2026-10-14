@@ -1,5 +1,6 @@
 import {
   BACKUP_STORAGE_PREFIX,
+  type BackupDatabaseMode,
   type BackupFileVerification,
   type BackupSettings,
   DEFAULT_BACKUP_KEEP_DAILY,
@@ -40,6 +41,9 @@ export interface ResolvedBackupSettings {
   /** Copy attachment files to `<root>objects/<sha256>`; see `normalizeBackupSettings`. */
   copyFiles: boolean;
   verifyFiles: BackupFileVerification;
+  /** `external`: the operator's own tooling backs up the database; OCI never dumps it. */
+  databaseBackup: BackupDatabaseMode;
+  walArchivingExpected: boolean;
 }
 
 const DEFAULT_BACKUP_PREFIX = 'oci-backups/';
@@ -56,6 +60,10 @@ export function normalizeBackupSettings(stored: StoredBackupSettings): ResolvedB
   return {
     copyFiles: stored.copyFiles ?? Object.keys(stored).length === 0,
     verifyFiles: stored.verifyFiles ?? 'sample',
+    // Never inferred (from `archive_mode` or anything else): only an
+    // administrator's change makes a run stop dumping.
+    databaseBackup: stored.databaseBackup ?? 'dump',
+    walArchivingExpected: stored.walArchivingExpected ?? true,
     enabled: stored.enabled ?? false,
     hourUtc: stored.hourUtc ?? 3,
     destination: stored.destination ?? 'storage',
@@ -89,6 +97,8 @@ export function toPublicBackupSettings(settings: ResolvedBackupSettings): Backup
     keepWeekly: settings.keepWeekly,
     copyFiles: settings.copyFiles,
     verifyFiles: settings.verifyFiles,
+    databaseBackup: settings.databaseBackup,
+    walArchivingExpected: settings.walArchivingExpected,
   };
 }
 
@@ -120,6 +130,8 @@ export function changedBackupFields(
     'keepWeekly',
     'copyFiles',
     'verifyFiles',
+    'databaseBackup',
+    'walArchivingExpected',
   ] as const)
     if (before[key] !== after[key]) fields.push(key);
   for (const key of ['bucket', 'region', 'endpoint', 'accessKeyId', 'forcePathStyle'] as const)
