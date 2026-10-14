@@ -202,6 +202,11 @@ function takeFlags(args) {
   const rest = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
+    if (arg === '--') {
+      // What follows is the command run inside the pod (kubectl exec), not kubectl's own flags.
+      rest.push(...args.slice(i));
+      break;
+    }
     const name = arg.startsWith('--') ? arg.split('=')[0] : arg;
     if (arg === '-A' || /^-[A-Za-z]*A[A-Za-z]*$/.test(arg) || name === '--all-namespaces') {
       refuse(
@@ -323,11 +328,12 @@ function checkOwnPods(verb, rest, env) {
   const selectors = flagValues(before, '--selector', '-l');
   if (selectors.length > 0) {
     if (!selectors.every((s) => s.split(',').includes(`${ENV_LABEL}=${env}`))) {
-      refuse(`${verb} by selector must include ${ENV_LABEL}=${env}`);
+      refuse(`${verb} by selector must include the environment's label ${ENV_LABEL}=${env}`);
     }
     return;
   }
-  const names = positionals(before);
+  // kubectl cp names a pod as `pod:path`; its other argument is a local path.
+  const names = positionals(before).filter((n) => verb !== 'cp' || n.includes(':'));
   if (names.length === 0 || !names.every((n) => ownsName(n, env))) {
     refuse(`${verb} may only name pods of the environment (names starting with ${env}-)`);
   }

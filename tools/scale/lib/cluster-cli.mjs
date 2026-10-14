@@ -14,10 +14,15 @@
  *   overrides name=value...                   validates fire-drill threshold overrides
  *   patch pg PG_SIZE | patch selector NODE    JSON for kubectl patch
  *   flags api-env ENV | web-env | resources api | retention-env USAGE_DAYS AUDIT_DAYS
- *   teardown-check --profile P --remaining FILE [--pool-before BYTES --pool-after BYTES]
+ *   teardown-check --profile P [--remaining FILE] [--pool-before BYTES --pool-after BYTES]
+ *   deadline HOURS                            the Job's activeDeadlineSeconds for a TTL
+ *   json-get FILE KEY                         one top-level value of a JSON file
+ *   environment-json --nodes FILE --db-node N --load-node N --pg-size S --api-replicas N
+ *                    --k6-image I --commit C  the launch-time `environment` block
  */
 
 import { readFileSync } from 'node:fs';
+import { describeCluster } from './cluster-environment.mjs';
 import {
   checkManifests,
   decideTeardown,
@@ -30,6 +35,7 @@ import {
   scopeKubectl,
 } from './cluster-guard.mjs';
 import { EXAMPLE_VARS, renderTemplate } from './cluster-render.mjs';
+import { parseNodeList } from './cluster-sample.mjs';
 import {
   apiEnvironment,
   nodeSelectorPatch,
@@ -76,6 +82,7 @@ try {
       else die(`Bad variable ${pair}; use KEY=VALUE or KEY@FILE`);
     }
     const name = env ?? vars.ENV;
+    vars.ENV ??= name;
     const text = renderTemplate(template, vars);
     checkManifests(parseYaml(text), name);
     process.stdout.write(text);
@@ -142,6 +149,27 @@ try {
     });
     for (const problem of decision.problems) console.error(`teardown: ${problem}`);
     process.exit(decision.ok ? 0 : 1);
+  } else if (command === 'deadline') {
+    out(String(jobDeadlineSeconds(Number(rest[0]))));
+  } else if (command === 'json-get') {
+    const value = JSON.parse(readFileSync(rest[0], 'utf8'))[rest[1]];
+    out(value === undefined || value === null ? '' : String(value));
+  } else if (command === 'environment-json') {
+    const args = [...rest];
+    const nodes = parseNodeList(JSON.parse(readFileSync(option(args, '--nodes'), 'utf8')));
+    out(
+      JSON.stringify(
+        describeCluster({
+          nodes,
+          dbNode: option(args, '--db-node'),
+          loadNode: option(args, '--load-node'),
+          pgSize: option(args, '--pg-size'),
+          apiReplicas: Number(option(args, '--api-replicas')),
+          k6Image: option(args, '--k6-image'),
+          commit: option(args, '--commit'),
+        }),
+      ),
+    );
   } else {
     die(`Unknown command ${command ?? ''}; see the header of tools/scale/lib/cluster-cli.mjs`);
   }

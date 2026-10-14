@@ -28,7 +28,6 @@ export const EXAMPLE_VARS = {
   PROFILE: 'tiny',
   SEED: 'oci-scale',
   DIMENSIONS: '1536',
-  GENERATE_WORKERS: '2',
   NOW_DATE: '2026-10-14',
   DEADLINE_SECONDS: '5400',
   APP_URL: 'http://localhost:18123',

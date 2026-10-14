@@ -19,6 +19,7 @@ import {
   parseThresholdOverrides,
   pinDecision,
   planFor,
+  ScopeError,
   scopeKubectl,
   thresholdsFor,
 } from '../tools/scale/lib/cluster-guard.mjs';
@@ -202,6 +203,43 @@ test('other changes name only objects of the environment', () => {
   ];
   for (const args of bad)
     assert.throws(() => scopeKubectl(args, opts), /environment/i, args.join(' '));
+});
+
+test('exec, logs and cp reach only pods of the environment', () => {
+  const opts = { env: ENV };
+  const ok = [
+    ['exec', `${ENV}-pg-1`, '-c', 'postgres', '--', 'psql', '-U', 'postgres', '-c', 'select 1'],
+    // Everything after -- is the command run inside the pod, not kubectl's own flags.
+    [
+      'exec',
+      `${ENV}-pg-1`,
+      '-c',
+      'postgres',
+      '--',
+      'psql',
+      '-U',
+      'postgres',
+      '-Atc',
+      'show max_connections',
+    ],
+    ['exec', `${ENV}-pg-1`, '--', 'df', '-Pk', '/var/lib/postgresql/data'],
+    ['logs', `${ENV}-scale-run-abc12`, '-c', 'generate'],
+    ['logs', '-l', `dev.bitop.dev/env=${ENV}`],
+    ['cp', `${ENV}-scale-run-abc12:/results`, '/tmp/out', '-c', 'hold'],
+  ];
+  for (const args of ok) assert.doesNotThrow(() => scopeKubectl(args, opts), args.join(' '));
+  const bad = [
+    ['exec', 'other-pg-1', '--', 'id'],
+    ['exec', '-A', `${ENV}-pg-1`, '--', 'id'],
+    ['exec', `${ENV}-pg-1`, '-n', 'kube-system', '--', 'id'],
+    ['exec', 'open-chat-api-0', '--', 'id'],
+    ['logs', 'other-scale-run-abc12'],
+    ['logs', '-l', 'app=x'],
+    ['cp', 'other-pod:/results', '/tmp/out'],
+    ['cp', '/tmp/a', '/tmp/b'],
+    ['cp', `${ENV}-pg-1:/x`, 'other-pod:/y'],
+  ];
+  for (const args of bad) assert.throws(() => scopeKubectl(args, opts), ScopeError, args.join(' '));
 });
 
 test('refuses arguments with line breaks or NUL', () => {
