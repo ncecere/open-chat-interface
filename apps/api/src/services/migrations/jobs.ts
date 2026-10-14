@@ -3,8 +3,10 @@ import { loadEnv } from '../../config/env.js';
 import { controlDatabaseUrl } from '../../db/control.js';
 import { sql } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { APP_VERSION } from '../../version.js';
 import { registerSecretCodec } from '../encryption/rotation.js';
 import type { JobDefinition } from '../jobs/runner.js';
+import { liveReplicas, type ReplicaInfo } from '../jobs/workers.js';
 import { runBackgroundMigrations, TICK_BUDGET_MS } from './background-runner.js';
 import { registerMigrationGauges } from './metrics.js';
 
@@ -12,16 +14,38 @@ export const BACKGROUND_MIGRATIONS_JOB = 'migrations.background';
 export const POST_MIGRATIONS_JOB = 'migrations.post-deploy';
 
 /**
- * Whether this replica applies post-deploy steps itself. Unset follows
+ * How this replica applies post-deploy steps itself. Unset follows
  * RUN_MIGRATIONS: a replica that migrates at startup is documented as the
  * only one, so once it serves, every replica runs this release, which is the
- * condition for post-deploy work. Several replicas leave it false and run
- * `migrate --post` after replacing them all; there is no signal in the
- * database that every replica runs a release (releases before v0.11 record
- * nothing about themselves), so it is never inferred.
+ * condition for post-deploy work. With several replicas, leave it false and
+ * run `migrate --post` after replacing them all. `auto` (#385) is for a
+ * replica that does not migrate itself (the chart's worker, hooks off): it
+ * applies the steps once every replica that heartbeats runs this release.
+ * Releases before v0.11 send no heartbeat, so the signal is only trusted for
+ * upgrades from the previous minor, the supported path.
  */
+export type PostMigrationMode = 'on' | 'off' | 'when-current';
+
+export function postMigrationMode(env = loadEnv()): PostMigrationMode {
+  const setting = env.RUN_POST_MIGRATIONS ?? env.RUN_MIGRATIONS;
+  return setting === 'auto' ? 'when-current' : setting ? 'on' : 'off';
+}
+
+/** Whether the job is registered on this replica (`auto` decides each time it runs). */
 export function autoPostMigrations(env = loadEnv()): boolean {
-  return env.RUN_POST_MIGRATIONS ?? env.RUN_MIGRATIONS;
+  return postMigrationMode(env) !== 'off';
+}
+
+/**
+ * True when every replica that sent a heartbeat runs `version`. No evidence is
+ * not a green light: without Redis (`null`) or with nobody heartbeating (not
+ * even this replica yet) it is false.
+ */
+export function allReplicasCurrent(
+  replicas: ReadonlyArray<{ version: string }> | null,
+  version: string,
+): boolean {
+  return replicas !== null && replicas.length > 0 && replicas.every((r) => r.version === version);
 }
 
 /** True when a bundled step is unfinished or a bundled background migration is unscheduled. */
@@ -37,9 +61,23 @@ export async function postWorkPending(): Promise<boolean> {
   return (row?.scheduled ?? 0) < names.length;
 }
 
-/** Applies pending post-deploy work, when this replica is configured to. */
-export async function applyPostMigrationsIfDue(): Promise<number> {
-  if (!autoPostMigrations() || !(await postWorkPending())) return 0;
+/**
+ * Applies pending post-deploy work, when this replica is configured to (and,
+ * for `auto`, once every replica runs this release). `replicas` is the
+ * heartbeat list, replaceable for tests.
+ */
+export async function applyPostMigrationsIfDue(
+  replicas: () => Promise<ReplicaInfo[] | null> = liveReplicas,
+): Promise<number> {
+  const mode = postMigrationMode();
+  if (mode === 'off' || !(await postWorkPending())) return 0;
+  if (mode === 'when-current') {
+    const current = allReplicasCurrent(await replicas().catch(() => null), APP_VERSION);
+    if (!current) {
+      logger.debug('Post-deploy steps wait: not every replica runs this release yet');
+      return 0;
+    }
+  }
   const result = await runPostMigrations(controlDatabaseUrl(), { logger });
   return result.steps.filter((step) => step.outcome === 'applied').length + result.scheduled.length;
 }
