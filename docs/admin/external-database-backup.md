@@ -78,8 +78,8 @@ small size, which is not a promise.
 | Approach | Database RPO | Database RTO |
 | --- | --- | --- |
 | OCI `pg_dump` (the default) | Up to 24 hours (the daily slot) plus the run time | Download the archive, then a serial `pg_restore` (no `--jobs`: the archive is written to a stream, see [Restoring](backups.md#restoring)). Hours for a large database; not measured |
-| CloudNativePG, WAL archive and base backups (Barman Cloud plugin) | CloudNativePG documents at most 5 minutes with WAL archiving, from its default `archive_timeout` of 5 minutes | Restore the base backup from the object store (a full copy onto new volumes), then replay WAL. Volume snapshots restore faster on very large databases |
-| CloudNativePG, volume snapshots only | The snapshot interval, unless WAL is also archived | Fast; depends on the snapshot class |
+| CloudNativePG, WAL archive and base backups (Barman Cloud plugin) | CloudNativePG documents at most 5 minutes with WAL archiving, from its default `archive_timeout` of 5 minutes | Restore the base backup from the object store onto new volumes, then replay WAL. A volume snapshot is another way to start (below). Neither time is measured here: it depends on the database size, the storage and the network |
+| CloudNativePG, volume snapshots only | The snapshot interval, unless WAL is also archived | Not measured here; depends on the snapshot class and the database size |
 | pgBackRest, WAL archive and backups | Set by `archive_timeout` (the guide below suggests 60 seconds) plus the time to push a segment. WAL not yet archived is lost with the node | `restore` with `process-max` and `--delta`, plus WAL replay |
 | WAL-G | As pgBackRest | As pgBackRest |
 
@@ -281,8 +281,10 @@ translates it with no data loss (note that the retention policy moves from the
 directory, and recovery can start from it (`bootstrap.recovery.volumeSnapshots`).
 It needs a CSI driver and a snapshot class that support it. Without a WAL archive
 the RPO is the snapshot interval; with one, snapshots are the base backup and
-WAL does the rest. They restore faster than an object store copy on very large
-databases. The Kubernetes Secrets caveat applies.
+WAL does the rest. A restore starts from the snapshot instead of copying the
+data from the object store; whether that is faster depends on your storage and
+is not measured here, so measure it in your own restore drill. The Kubernetes
+Secrets caveat applies.
 
 ## pgBackRest
 
