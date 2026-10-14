@@ -309,6 +309,7 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
       ['0012_attachment_thumbnail_key_index', 'applied'],
       // Drops the table v0.11.0 replaced (v0.12.1).
       ['0013_drop_project_file_embedding_failure', 'applied'],
+      ['0014_message_search_folded_index', 'applied'],
     ]);
     for (const name of [
       'message_created_at_idx',

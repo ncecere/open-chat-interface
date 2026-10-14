@@ -7,6 +7,7 @@ import {
   describeRequirement,
   indexBuild,
   loadSqlParser,
+  messageSearchFolded,
   mustRunOutsideTransaction,
   parseStatements,
   pendingMigrations,
@@ -257,9 +258,10 @@ describe('post-deploy folder', () => {
       // message-text index (#362) is not a step: it is optional, built by hand, and an
       // upgrade must not wait for it (about 1 ms per message). See packages/db/optional.
       ['0013_drop_project_file_embedding_failure', '0.12.1', undefined],
+      ['0014_message_search_folded_index', '0.13.0', 'message_search_folded_idx'],
     ]);
     const builds = steps.filter((step) => step.index);
-    expect(builds).toHaveLength(11);
+    expect(builds).toHaveLength(12);
     expect(builds.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -279,7 +281,12 @@ describe('post-deploy folder', () => {
 
 describe('background migrations', () => {
   it('registers test definitions only when the environment names them', () => {
-    const release = [usageRollupBackfill, ...secretReencryptionMigrations, attachmentOwnRows];
+    const release = [
+      usageRollupBackfill,
+      ...secretReencryptionMigrations,
+      attachmentOwnRows,
+      messageSearchFolded,
+    ];
     expect(backgroundMigrations({})).toEqual(release);
     expect(
       backgroundMigrations({
