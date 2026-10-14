@@ -2,8 +2,8 @@
 
 Where Open Chat Interface (OCI) stands, what comparable products offer, and
 what we intend to build next. Written against **v0.6.1** and updated for
-**v0.7.0**, **v0.8.0**, **v0.9.0**, **v0.10.0**, **v0.11.0**, **v0.11.1** and
-**v0.12.0** in **October 2026**.
+**v0.7.0**, **v0.8.0**, **v0.9.0**, **v0.10.0**, **v0.11.0**, **v0.11.1**,
+**v0.12.0** and **v0.13.0** in **October 2026**.
 
 This is a plan, not a promise. Priorities change as we learn, and an item moves
 into a release only when it has a design, tests and documentation. Review this
@@ -18,7 +18,7 @@ document at every minor release.
 - [Shipped — v0.10: finish and harden](#shipped--v010-finish-and-harden)
 - [Shipped — v0.11: always on](#shipped--v011-always-on)
 - [Shipped — v0.11.1 and v0.12: tested by use](#shipped--v0111-and-v012-tested-by-use)
-- [Now — v0.13: search, backups and scale](#now--v013-search-backups-and-scale)
+- [Shipped — v0.13: search, backups and scale](#shipped--v013-search-backups-and-scale)
 - [Later — v1.0 and beyond: assistants and media](#later--v10-and-beyond-assistants-and-media)
 - [Under consideration](#under-consideration)
 - [Not planned](#not-planned)
@@ -255,20 +255,30 @@ details and upgrade notes.
 | **v0.11.1** | Fixes from nine QA walks of v0.11.0 (issues #35–#378): a data-loss fix (deleting a conversation no longer deletes the files of its forks and edits, #358), code artifacts (#298), a scheduled report whose email failed is tried again and can be sent now (#352), Send test email, unsaved-changes protection in administration, HTML account emails, SSO sign-in with account linking off, large project files searched in full, conversation titles that ignore accents, and many audit, accessibility and wording fixes. |
 | **v0.12.0** | SAML sign-in removed (#53; OpenID Connect stays, and `migrate` refuses to lock everyone out); an invitation that was emailed verifies the address (#214); two timers that could leave a notice or a button stuck. |
 
-Left open: message text that ignores accents needs an index built by hand
-(#362), taken up in v0.13.
+## Shipped — v0.13: search, backups and scale
 
-## Now — v0.13: search, backups and scale
+Released as v0.13.0 in October 2026 (`SPEC.md`, one spec per module). See
+`CHANGELOG.md` for the details and upgrade notes.
 
-The work left open after v0.12.0, as one specification (`SPEC.md`, with one
-spec per module). Small debts ship first as v0.12.1.
+| Item | What shipped |
+| --- | --- |
+| **Search that ignores accents** (#362) | `bibliotheque` finds "bibliothèque" in message text, and `strasse`, `oeuvre` and `aero` find "Straße", "œuvre" and "Ærø", in titles, messages and project files, for everyone. A stored folded vector kept by a trigger, a partial index built `CONCURRENTLY`, and two background migrations for older rows; search behaves as v0.12 until they finish. The optional hand-built index is gone. |
+| **External database backup** (#386) | A mode for clusters with their own backups (CloudNativePG, pgBackRest, WAL-G): OCI keeps copying and verifying attachments but starts no `pg_dump`. System health reads WAL archiving from `pg_stat_archiver` and says that OCI cannot verify the backup restores. Guides, recovery objectives, and a pgBackRest restore drill run weekly. |
+| **The chart with the migration hooks off** (#385) | The worker applies post-deploy steps itself once every replica runs the new release (`RUN_POST_MIGRATIONS=auto`). |
+| **Scale on the cluster** (#387), tooling | `tools/scale/cluster.sh` runs the harness against a development environment, with a preflight, a watcher and a verified teardown. |
 
-| Item | Why | Plan |
-| --- | --- | --- |
-| **Release hygiene** (v0.12.1) | An unused table, preflight wording, and a pruning run that deleted the development image of `main`'s head. | Drop `project_file_embedding_failure` in a post-deploy step; word the preflight as System health does; never prune a branch head's image; this roadmap. |
-| **Search that ignores accents** | `bibliotheque` does not find "bibliothèque" in message text (#362), and the index that would fix it is too slow to build during an upgrade. | A stored, folded copy of the text, filled by a throttled background migration and indexed concurrently, with search falling back until both are ready; on for everyone, with ß, æ and œ. Project file search too. |
-| **Backups at scale** | `pg_dump` takes hours and loads the primary on a large cluster (deferred from v0.11). | An "external database backup" mode for clusters with their own backups (CloudNativePG and pgBackRest tested, WAL-G documented): OCI copies attachments and verifies, with documented recovery objectives and a restore drill. |
-| **Scale on the cluster** | The service objectives have not been shown to hold at the `large` profile (30,000 people, 20 million messages). | Run the scale harness against a development environment on the cluster, with safeguards for the shared disks, and publish the results against the objectives. |
+Left open, and why:
+
+- **The `large` profile has not run on the cluster, and neither has `medium`.**
+  The only etcd signal OCI can read there is the apiserver's request latency,
+  which cannot see a moderate slowdown of the disk that holds etcd. Running large
+  writes on that disk needs etcd's own fsync histogram, which the cluster does
+  not expose yet (a homelab change). The first `tiny` run found and fixed a
+  duplicate-variable bug, and a second was refused by the preflight because the
+  shared cluster was busy; it has not completed (#387).
+- **The CloudNativePG restore drill has not run** against a cluster: the Barman
+  Cloud plugin that the guide leads with is not installed there. The pgBackRest
+  drill has (#386).
 
 ## Later — v1.0 and beyond: assistants and media
 
