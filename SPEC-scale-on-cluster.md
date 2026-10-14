@@ -1,6 +1,6 @@
 # Spec: scale-on-cluster
 
-Module of [SPEC.md](SPEC.md) (v0.13). Depends on `accent-search` (measure the code that ships). Shared commands, structure, style, testing and boundaries are in SPEC.md; this file adds what is specific to this module. Status: **draft, for approval** (issue #387, SPEC.md decision 4). Written from reading only; nothing was run and no cluster was touched. Paths are relative to this repo unless prefixed `homelab:` (`~/homelab/bitop-talos`).
+Module of [SPEC.md](SPEC.md) (v0.13). Depends on `accent-search` (measure the code that ships). Shared commands, structure, style, testing and boundaries are in SPEC.md; this file adds what is specific to this module. Status: **approved 2026-10-13: every recommendation in "Open questions" accepted, including the homelab change `--pg-node` (ask-first, approved here) and dropping the `nfs-dev` fallback. Exception: the `large` run (gate G3) waits for the maintainer's explicit go-ahead when the earlier gates are done, because it runs on the shared cluster.** (issue #387, SPEC.md decision 4). Written from reading only; nothing was run and no cluster was touched. Paths are relative to this repo unless prefixed `homelab:` (`~/homelab/bitop-talos`).
 
 ## Objective
 
@@ -152,7 +152,7 @@ SCALE_POSTGRES_IMAGE=pgvector/pgvector:pg18 tools/scale/run.sh --profile medium 
 
 The acceptance criteria hold; the three gates passed in order; `large` ran at least once and its baseline is committed; the cluster and the pool were left as found; the 17-versus-18 caveat is in every cluster report.
 
-## Open questions (each with a recommendation)
+## Decisions (were open questions; every recommendation accepted, 2026-10-13)
 
 1. **How does the watcher read etcd fsync?** I found no etcd scrape in `homelab:kubernetes/platform/observability-*` and did not query anything live. Options: etcd's metrics endpoint if Talos exposes it (unverified), kube-apiserver's `/metrics` (`etcd_request_duration_seconds`, a proxy), or a new scrape (homelab, ask first). *Recommend:* confirm with the owner what exists; if only the apiserver proxy, use looser thresholds and add the scrape as a follow-up.
 2. **Pinning needs a homelab change.** *Recommend:* approve `--pg-node` (small, testable); until then no `medium` or `large`.
