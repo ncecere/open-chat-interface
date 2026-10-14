@@ -704,6 +704,64 @@ Hot spots, from `pg_stat_statements` (`db-storm.json`) and the latencies:
 Raw results: `tools/scale/results/<run>/k6-storm.json` and `db-storm.json`
 (git-ignored).
 
+## Accent-insensitive search (v0.13, #362)
+
+Measured on the laptop used for the baseline (12 Docker CPUs, one run at a
+time). What the numbers do and do not show is stated with each.
+
+**The fold.** `oci_fold_search_text` first checks for a letter the fold can
+change (U+00C0 to U+024F, U+1E00 to U+1EFF) and returns the text as it is when
+there is none. On 12,000 messages of 1.6 KB the vector (`oci_message_folded_vector`)
+cost 916 µs per message before that check, nearly all of it `translate()`
+scanning its table for every character; with it, 7 µs for a plain message and
+0.8 ms for one with accents. The trigger adds 22 µs to an ordinary insert and
+1.5 ms to one with accents. The rolling-upgrade test found this: the message
+backfill had done 228,500 of 300,000 messages when its 300 s budget ended; with
+the check it finished 300,493 messages in 160 s (about 120 s of that is the
+200 ms pause between batches), and the whole background phase in 226 s.
+
+**Search at 500,000 messages, 10% with accents** (a scratch database, 50,000
+distinct texts used ten times, 1.5 GB in all). Counting the matches of one
+word, median of seven runs:
+
+| Query | Exact index only (v0.12) | Exact OR folded (v0.13) |
+| --- | ---: | ---: |
+| Rare word (1,810 matches) | 1.5 ms | 1.3 ms |
+| Medium word (15,590 matches) | 14.4 ms | 14.0 ms |
+| Word only found after folding (34,430 matches) | 13.9 ms | 13.7 ms |
+
+The plan is a `BitmapOr` over `message_text_search_idx` and
+`message_search_folded_idx`. The partial index holds only the 10% of messages
+with accents: 38 MB against 485 MB for the exact index, built in 2.9 s. An
+unthrottled backfill in SQL took 151 s for the 50,000 messages that needed a
+vector (about 3 ms each, as it also computes the vector for the rest and writes
+the rows); the shipped background migration spreads this over batches of 500.
+The common-word rows of that run (450,000 matches, 14.7 s) are a count over
+nearly every message and are not what a search runs (it ranks and limits).
+
+**The `small` profile, three-way.** `tools/scale/run.sh --profile small` runs
+with `RUN_MIGRATIONS=false`, so no post-deploy step or background migration
+runs and search takes the v0.12 path: it shows that nothing regresses while the
+backfill is pending, not the folded path (above). Two runs of the branch
+against two of `main`, on the same machine back to back, errors 0.00% and every
+threshold met in all four:
+
+| p95 (ms) | main | branch |
+| --- | ---: | ---: |
+| Sidebar | 23, 15 | 47, 14 |
+| Keyword search | 52, 59 | 95, 46 |
+| Admin pages | 127, 118 | 196, 114 |
+| **Chat: time to first byte** | **162, 174** | **224, 210** |
+
+The first three rows are within the run-to-run spread (`main` alone moved from
+10 to 23 ms in the sidebar's p95 against the 4 October baseline). **Chat time to
+first byte is about 50 ms higher at p95 on the branch in both runs** (median
+within 2 ms) and is unexplained: nothing on that path changed except the
+message trigger, which measures 22 µs, and the message insert and update
+statements are not among the 20 costliest in either run. It is left as is. If
+chat latency regresses in a later measurement, start here: run `main` and the
+branch alternately (ABAB) rather than in blocks.
+
 ## Limits
 
 - The baseline machine also ran PostgreSQL, k6 and other workloads; treat
