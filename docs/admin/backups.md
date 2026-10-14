@@ -4,9 +4,31 @@
 day: a `pg_dump` of the database, a manifest of every attachment object and,
 with **Copy attachment files** on, copies of those files, written to
 S3-compatible storage, then read back and verified. Deployments that already
-back up PostgreSQL and object storage their own way can leave it off.
+back up PostgreSQL and object storage their own way can leave it off, or, from
+v0.13, keep the attachment half and stop the dump:
+[external database backup](#external-database-backup).
 
 An `auditor` sees everything on the page and changes nothing.
+
+## External database backup
+
+**Database backup** has two settings. **Dump** (the default, and what this page
+describes everywhere else) runs `pg_dump`. **External** is for a cluster with
+its own backups (CloudNativePG, pgBackRest, WAL-G, snapshots, a managed
+service's point-in-time recovery): OCI stops dumping and stops needing the
+PostgreSQL client tools, and every run still builds the attachment manifest,
+copies files, reads them back, applies retention and sweeps. It does not check
+that your database backup exists or restores. Choosing it asks you to confirm,
+and **days kept must be at least your database recovery window**, because
+copies are kept only while a retained run lists them. Upgrading changes
+nothing: the setting is `dump` until an administrator changes it.
+[External database backup](external-database-backup.md) has the recovery
+objectives, the System health row, guides for CloudNativePG and pgBackRest, what
+else to back up, and the restore drill.
+
+In the sections below, the dump, `pg_restore`, the database password and the
+client tools apply to **dump** mode only. A run in external mode has no
+`database.dump`, and its `manifest.json` has `database: { external: true }`.
 
 ## What a backup contains
 
@@ -95,8 +117,8 @@ fix the cause (System health shows it) and use **Back up now**. **Back up now** 
 Only one backup runs at a time across all replicas (it holds the
 `backups.run` job lock).
 
-Turning backups on is refused while the destination is incomplete or
-`pg_dump` is missing, so a schedule that cannot work is never silently on.
+Turning backups on is refused while the destination is incomplete or, in dump
+mode, `pg_dump` is missing, so a schedule that cannot work is never silently on.
 
 ### PostgreSQL client tools
 
@@ -164,7 +186,12 @@ them.
 ## Restoring
 
 Restoring is a deliberate, manual step. Practise it into a scratch database
-first; that is the only proof a backup works.
+first; that is the only proof a backup works. This section is for **dump**
+mode. With an [external database backup](external-database-backup.md) the
+database comes from your tooling (steps 1 and 2 do not apply) and the rest, the
+attachments and steps 3 to 5, is the same; the
+[restore drill](external-database-backup.md#the-restore-drill) is the full
+procedure.
 
 1. Download a backup folder, and check the dump against the manifest:
 
@@ -232,15 +259,28 @@ first; that is the only proof a backup works.
    sessions cannot be read), and the restored attachment storage. Run the same
    or a newer OCI version: startup applies any newer migrations.
 
+   **Run it with `OCI_ROLE=web` only, no worker.** The restored database
+   carries the production `backups` setting. If **Back up automatically** is on,
+   a worker would back up into the production bucket, and its sweep deletes
+   every copy that the restored database's runs do not list. It would also send
+   webhooks and compliance exports. Without a worker, none of that runs. (Use a
+   worker only after you have changed or turned off those settings in the
+   restored copy.)
+
 5. Verify sign-in, a conversation, an attachment download and System health,
    then switch production over.
 
 ## Audit and metrics
 
 Saving settings is audited as `backup.settings.update` (which fields changed,
-never a credential), and **Test destination** as `backup.test` with the destination, whether it
-passed and, when it did not, why (never a credential). Every run, scheduled or manual, is audited as `backup.run`
-with its outcome (and, with copying on, the files and bytes copied), so a
+never a credential; a change of **Database backup** lists `databaseBackup`), and
+**Test destination** as `backup.test` with the destination, whether it passed
+and, when it did not, why (never a credential). Every run, scheduled or manual, is audited as `backup.run`
+with its outcome (and, with copying on, the files and bytes copied; in external
+mode its metadata says `database: 'external'` and has no dump size), so a
 [webhook](observability.md#webhooks) can alert on a failed backup. The
 [metrics](observability.md#metrics) endpoint exposes `oci_backup_runs_total`,
 `oci_backup_duration_seconds` and `oci_backup_last_success_timestamp_seconds`.
+In external mode it also exposes `oci_wal_archive_last_success_timestamp_seconds`
+and `oci_wal_archive_failing`; `oci_backup_last_success_timestamp_seconds` then
+means the attachment backup.

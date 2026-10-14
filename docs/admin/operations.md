@@ -24,6 +24,7 @@ reported. The checks refresh every 30 seconds while the page is open; the old
 | Attachment storage | Uploads never attached to a message that the hourly cleanup has not removed: it deletes uploads unsent for a day, so a warning means the cleanup is not running | — |
 | Connectors | An enabled [connector](connectors.md)'s latest exchange failed | — |
 | Backups | On, but no [backup](backups.md) completed in over a day, or objects were missing from the last one | The latest backup failed |
+| Database backup (external) | Shown only when [external database backup](external-database-backup.md#what-system-health-shows) is on. WAL archiving is off, or `DATABASE_URL` names a standby, or a recent archive attempt failed, or nothing was archived for longer than expected, or a value could not be read | The archiver is failing now (the last attempt failed and nothing succeeded for 15 minutes). Every state says OCI cannot tell whether the backup restores |
 | Webhooks | An enabled [webhook](observability.md#webhooks) endpoint's latest delivery failed, or deliveries are over 15 minutes overdue | — |
 | Background workers | — | No replica that runs background jobs (`OCI_ROLE=worker` or `all`) has checked in for a minute; see [process roles](../OPERATIONS.md#process-roles) |
 | Read-only mode | [Read-only maintenance mode](maintenance.md) is on: says by whom (an administrator, a window or `OCI_READ_ONLY`), until when and why | — |
@@ -224,7 +225,12 @@ including when unlocking fails.
 Compares object storage against the database in both directions. **Check for
 orphans** reports objects with no record and records with no object; **Queue
 orphans for deletion** then hands the orphaned objects to the cleanup job. Worth
-running after restoring a backup, when the two can drift.
+running after restoring a backup, when the two can drift: after a restore, a
+record with no object is a file uploaded after the backup run you restored
+attachments from (see the
+[restore drill](external-database-backup.md#the-restore-drill)). Do not use
+**Queue orphans for deletion** on a scratch restore pointed at storage you still
+need.
 
 Records with no object are reported, not repaired: deleting them would destroy a
 conversation's attachment metadata over what may be a temporary storage fault.

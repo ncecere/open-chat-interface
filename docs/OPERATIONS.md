@@ -499,6 +499,16 @@ everything but the deployment secrets. With copying off (the default for
 instances that configured backups before v0.10), the manifest only lists the
 objects, so attachment storage still needs versioning or snapshots as above.
 
+From v0.13, a cluster that has its own database backups (CloudNativePG,
+pgBackRest, WAL-G, snapshots, a managed service's point-in-time recovery) can
+set **Database backup** to *External*: OCI then stops running `pg_dump` and
+needing the PostgreSQL client tools, and keeps backing up the attachments. It
+cannot tell whether your backup restores, so run the restore drill. See
+[External database backup](admin/external-database-backup.md), which also lists
+what else must be backed up (`ENCRYPTION_KEY` and any previous keys,
+`AUTH_SECRET`, the Kubernetes Secrets, storage credentials). The default stays
+`dump`; an upgrade changes nothing.
+
 ## Rotating `ENCRYPTION_KEY`
 
 `ENCRYPTION_KEY` encrypts the secrets OCI stores: model provider API keys,
