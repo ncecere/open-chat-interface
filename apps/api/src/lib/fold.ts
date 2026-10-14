@@ -73,15 +73,6 @@ export const FOLD_EXPANSIONS = [
   ['Œ', 'OE'],
 ] as const;
 
-/**
- * `translate(<expression>, FROM, TO)` over raw SQL text (no quotes inside the
- * table): the one-to-one part only, which is what the optional message index
- * (packages/db/optional, removed by the stored folded vector) holds.
- */
-export function foldSqlText(expression: string): string {
-  return `translate(${expression}, '${FOLD_FROM}', '${FOLD_TO}')`;
-}
-
 /** The fold over a SQL value (a column or a bound parameter): the database's one definition. */
 export function foldSql(value: SQL | string): SQL {
   const operand = typeof value === 'string' ? sql.raw(value) : value;
