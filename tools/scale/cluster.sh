@@ -319,6 +319,8 @@ start_watcher() {
   local threshold
   for threshold in "${THRESHOLDS[@]+"${THRESHOLDS[@]}"}"; do extra+=(--threshold "$threshold"); done
   if [[ -n "$ETCD_CMD" ]]; then extra+=(--etcd-metrics-cmd "$ETCD_CMD"); fi
+  # The limits for the apiserver-latency proxy follow the idle baseline the preflight measured.
+  if [[ -s "$RUN_DIR/preflight.json" ]]; then extra+=(--baseline-file "$RUN_DIR/preflight.json"); fi
   if [[ "$DRY_RUN" == 1 ]]; then
     node_tool cluster-watch.mjs --name "$NAME" --profile "$PROFILE" --db-node "$DB_NODE" --log "$RUN_DIR/watch.jsonl" --abort-file "$ABORT_FILE" --interval-seconds "$INTERVAL" "${extra[@]+"${extra[@]}"}" "&"
     return 0

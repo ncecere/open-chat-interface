@@ -140,6 +140,7 @@ async function run() {
       minEtcdSamples,
     },
     etcdWarnMs,
+    etcdSource: source,
   });
   for (const check of decision.checks)
     console.log(`  [${check.ok ? 'ok' : 'FAIL'}] ${check.id}: ${check.detail}`);

@@ -14,13 +14,14 @@
  * Needs SCALE_KUBECONFIG. Every kubectl call goes through the scope guard.
  */
 
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import {
   createWatcher,
   parseQuantity,
   parseThresholdOverrides,
   planFor,
+  proxyThresholdsFromBaseline,
   thresholdsFor,
 } from './cluster-guard.mjs';
 import {
@@ -44,6 +45,7 @@ const { values } = parseArgs({
     threshold: { type: 'string', multiple: true, default: [] },
     'etcd-metrics-cmd': { type: 'string' },
     'max-samples': { type: 'string' },
+    'baseline-file': { type: 'string' },
   },
 });
 for (const required of ['name', 'profile', 'db-node', 'log', 'abort-file']) {
@@ -61,7 +63,20 @@ const command = values['etcd-metrics-cmd'];
 const source = command ? 'wal-fsync' : 'apiserver-request';
 let thresholds;
 try {
-  thresholds = { ...thresholdsFor(source), ...parseThresholdOverrides(values.threshold) };
+  // The apiserver-latency proxy follows the idle baseline the preflight measured (fixed limits
+  // would abort an idle cluster); etcd's own metric keeps its absolute limits. A forced
+  // threshold (the fire drill) wins over both.
+  const derived =
+    source === 'apiserver-request' && values['baseline-file']
+      ? proxyThresholdsFromBaseline(
+          JSON.parse(readFileSync(values['baseline-file'], 'utf8')).readings.etcd.fsyncP99Ms,
+        )
+      : {};
+  thresholds = {
+    ...thresholdsFor(source),
+    ...derived,
+    ...parseThresholdOverrides(values.threshold),
+  };
 } catch (error) {
   console.error(error.message);
   process.exit(2);

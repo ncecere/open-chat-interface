@@ -463,6 +463,37 @@ const SOURCE_OVERRIDES = {
   'apiserver-request': { etcdFsyncWarnMs: 50, etcdFsyncAbortMs: 250, etcdFsyncAbortOnceMs: 1000 },
 };
 
+/**
+ * The preflight refuses an apiserver-latency baseline at or above this: a cluster whose p99 request
+ * latency to etcd is two seconds while idle is unhealthy whatever its usual noise.
+ */
+export const PROXY_PREFLIGHT_CEILING_MS = 2000;
+
+/**
+ * Limits for the apiserver-latency proxy, from the idle baseline measured in the preflight window.
+ * That signal covers every etcd operation (lists and watches too), so the fixed 50/250/1000 ms
+ * placeholders contradicted what an idle cluster reads (133 to 465 ms) and aborted it. Here: warn
+ * at 1.5 times the baseline's highest sample, abort after consecutive samples at 3 times, abort at
+ * once at 8 times, never below the fixed floors. This stops a clearly sick etcd, not a moderate
+ * slowdown: only etcd's own WAL fsync histogram can, and `medium` and `large` need it.
+ */
+export function proxyThresholdsFromBaseline(samples) {
+  if (
+    !Array.isArray(samples) ||
+    samples.length === 0 ||
+    !samples.every((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0)
+  ) {
+    throw new Error('A baseline needs at least one non-negative number of milliseconds');
+  }
+  const worst = Math.max(...samples);
+  const floors = SOURCE_OVERRIDES['apiserver-request'];
+  return {
+    etcdFsyncWarnMs: Math.max(floors.etcdFsyncWarnMs, 1.5 * worst),
+    etcdFsyncAbortMs: Math.max(floors.etcdFsyncAbortMs, 3 * worst),
+    etcdFsyncAbortOnceMs: Math.max(floors.etcdFsyncAbortOnceMs, 8 * worst),
+  };
+}
+
 export function thresholdsFor(source) {
   if (!(source in SOURCE_OVERRIDES)) {
     throw new Error(
@@ -634,6 +665,7 @@ export function decidePreflight(
     contextPattern,
     limits = PREFLIGHT_LIMITS,
     etcdWarnMs = DEFAULT_THRESHOLDS.etcdFsyncWarnMs,
+    etcdSource = 'wal-fsync',
   },
 ) {
   const checks = [];
@@ -743,11 +775,20 @@ export function decidePreflight(
     );
   } else {
     const worst = Math.max(...samples);
-    add(
-      'etcd-fsync',
-      worst < etcdWarnMs,
-      `etcd p99 over ${samples.length} samples: worst ${worst.toFixed(2)} ms (need below ${etcdWarnMs} ms)`,
-    );
+    if (etcdSource === 'apiserver-request') {
+      // A proxy with its own idle noise: this is its baseline, which sets the watcher's limits.
+      add(
+        'etcd-fsync',
+        worst < PROXY_PREFLIGHT_CEILING_MS,
+        `apiserver latency to etcd, p99 over ${samples.length} samples: worst ${worst.toFixed(2)} ms is the baseline the watcher's limits follow (need below ${PROXY_PREFLIGHT_CEILING_MS} ms)`,
+      );
+    } else {
+      add(
+        'etcd-fsync',
+        worst < etcdWarnMs,
+        `etcd p99 over ${samples.length} samples: worst ${worst.toFixed(2)} ms (need below ${etcdWarnMs} ms)`,
+      );
+    }
   }
   return { ok: checks.every((c) => c.ok), checks };
 }

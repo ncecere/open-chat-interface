@@ -15,10 +15,12 @@ import {
   FORBIDDEN_DB_NODE,
   jobDeadlineSeconds,
   NAMESPACE,
+  PROXY_PREFLIGHT_CEILING_MS,
   parseQuantity,
   parseThresholdOverrides,
   pinDecision,
   planFor,
+  proxyThresholdsFromBaseline,
   ScopeError,
   scopeKubectl,
   thresholdsFor,
@@ -742,4 +744,89 @@ test('medium and large also need the pool back at its starting allocation', () =
   );
   // Smaller profiles are not held to the pool check.
   assert.equal(decideTeardown({ profile: 'small', remaining: [], ...pool(10, 11) }).ok, true);
+});
+
+// --- The apiserver proxy: its limits come from the idle baseline ---------------------------
+//
+// With no etcd metrics endpoint to read (Talos serves them on localhost only), the signal is the
+// apiserver's request latency to etcd: every operation, lists and watches included. The first
+// read of the real cluster, idle, gave 133 to 465 ms for its p99 (the series below), roughly ten
+// times the 50 ms warning level and past the 250 ms abort level: with fixed limits the watcher
+// aborted an idle cluster. So for this source the limits are multiples of the baseline measured
+// in the preflight window. They cannot see a moderate etcd slowdown (that is why `medium` and
+// `large` need etcd's own WAL fsync histogram and the spec says so); they stop a clearly sick one.
+
+// Measured on the bitop cluster at night, 18 samples, 15 s apart. Not synthetic.
+const IDLE_PROXY = [
+  171.8, 133.5, 156.667, 135, 167, 179.333, 133.5, 194.833, 194.833, 270, 251, 465, 362.571,
+  365.143, 350, 190, 381.36, 377,
+];
+const proxyWatcher = (baseline) =>
+  createWatcher({
+    thresholds: { ...thresholdsFor('apiserver-request'), ...proxyThresholdsFromBaseline(baseline) },
+    volumeLimitBytes: VOLUME_LIMIT,
+    dbNode: 'talos-cp-3',
+  });
+
+test('proxy limits are multiples of the idle baseline, and never below the fixed floors', () => {
+  const t = proxyThresholdsFromBaseline(IDLE_PROXY);
+  assert.equal(t.etcdFsyncWarnMs, 697.5); // 1.5 x 465
+  assert.equal(t.etcdFsyncAbortMs, 1395); // 3 x 465
+  assert.equal(t.etcdFsyncAbortOnceMs, 3720); // 8 x 465
+  assert.deepEqual(proxyThresholdsFromBaseline([5, 6, 7]), {
+    etcdFsyncWarnMs: 50,
+    etcdFsyncAbortMs: 250,
+    etcdFsyncAbortOnceMs: 1000,
+  });
+  for (const bad of [[], null, undefined, [1, 'x'], [Number.NaN], [-1]])
+    assert.throws(() => proxyThresholdsFromBaseline(bad), /baseline/i, String(bad));
+});
+
+test('the fixed proxy limits abort an idle cluster; the baseline limits do not', () => {
+  const fixed = createWatcher({
+    thresholds: thresholdsFor('apiserver-request'),
+    volumeLimitBytes: VOLUME_LIMIT,
+    dbNode: 'talos-cp-3',
+  });
+  const results = IDLE_PROXY.map((p99) => fixed.evaluate(withP99(p99)).action);
+  assert.ok(results.includes('abort'), 'the placeholders contradict the measured idle series');
+
+  const calibrated = proxyWatcher(IDLE_PROXY);
+  for (const p99 of IDLE_PROXY)
+    assert.notEqual(calibrated.evaluate(withP99(p99)).action, 'abort', String(p99));
+});
+
+test('with the baseline limits a sustained 3x aborts, and a single 8x aborts at once', () => {
+  let w = proxyWatcher(IDLE_PROXY);
+  assert.equal(w.evaluate(withP99(1394.99)).action, 'warn');
+  assert.equal(w.evaluate(withP99(1394.99)).action, 'warn');
+
+  w = proxyWatcher(IDLE_PROXY);
+  assert.equal(w.evaluate(withP99(1395)).action, 'warn', 'the first strike only warns');
+  assert.deepEqual(codes(w.evaluate(withP99(1395))), ['etcd-fsync']);
+
+  assert.deepEqual(codes(proxyWatcher(IDLE_PROXY).evaluate(withP99(3720))), ['etcd-fsync-spike']);
+  assert.equal(proxyWatcher(IDLE_PROXY).evaluate(withP99(3719.99)).action, 'warn');
+});
+
+test('preflight, proxy source: an idle baseline passes, a clearly sick one fails', () => {
+  const opts = preflightOptions({ etcdSource: 'apiserver-request' });
+  const r = goodReadings();
+  r.etcd.fsyncP99Ms = IDLE_PROXY;
+  const ok = decidePreflight(r, opts);
+  assert.equal(ok.ok, true);
+  assert.match(ok.checks.find((c) => c.id === 'etcd-fsync').detail, /baseline/i);
+
+  r.etcd.fsyncP99Ms = [...IDLE_PROXY, PROXY_PREFLIGHT_CEILING_MS];
+  assert.deepEqual(failed(decidePreflight(r, opts)), ['etcd-fsync']);
+  r.etcd.fsyncP99Ms = [...IDLE_PROXY, PROXY_PREFLIGHT_CEILING_MS - 0.01];
+  assert.equal(decidePreflight(r, opts).ok, true);
+
+  // Etcd's own WAL fsync metric keeps its absolute rule, and so does an unspecified source.
+  const wal = goodReadings();
+  wal.etcd.fsyncP99Ms = IDLE_PROXY;
+  assert.deepEqual(failed(decidePreflight(wal, preflightOptions())), ['etcd-fsync']);
+  assert.deepEqual(failed(decidePreflight(wal, preflightOptions({ etcdSource: 'wal-fsync' }))), [
+    'etcd-fsync',
+  ]);
 });
