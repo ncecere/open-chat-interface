@@ -174,7 +174,7 @@ jobs:
             -v "$RUNNER_TEMP/pg-archive-init/10-archive.sh:/docker-entrypoint-initdb.d/10-archive.sh:ro" \
             pgvector/pgvector:pg17
           # Over TCP: the temporary server the image starts to initialise listens on its socket only.
-          for attempt in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             docker exec oci-archive-postgres pg_isready -h 127.0.0.1 -U oci -d oci_ci && exit 0
             sleep 2
           done
