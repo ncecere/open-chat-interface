@@ -190,6 +190,17 @@ describe.skipIf(!available)('live: WAL archiver state', () => {
   });
 
   it('reads a statistics reset as nothing archived yet, not as a failure', async () => {
+    // The tests before this one fail the archiver on purpose; segments queued meanwhile are
+    // retried on the archiver's own schedule, and one that lands after the reset makes "nothing
+    // archived" false (seen in a full run). Reset only once the queue is empty.
+    await eventually(
+      'the archive queue to drain',
+      async () =>
+        (
+          await admin`select count(*)::int as pending from pg_ls_archive_statusdir() where name like '%.ready'`
+        )[0]!.pending === 0,
+      120_000,
+    );
     await admin`select pg_stat_reset_shared('archiver')`;
     const reset = await read();
     expect(reset).toMatchObject({ archivedCount: 0, failedCount: 0, lastArchivedAt: null });

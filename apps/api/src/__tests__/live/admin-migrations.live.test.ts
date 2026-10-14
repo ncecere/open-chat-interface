@@ -227,9 +227,12 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
     const folder = folderWith({
       '0040_fast': 'ALTER TABLE "big_probe" ADD COLUMN IF NOT EXISTS "d" text;',
     });
+    // The previous minor: the database is at 0.11, so the bundled version is pinned. Without
+    // it this test fails when the app moves on (0.13 is two minors ahead: a window).
     const report = await upgradeReport(pool.sql, {
       migrationsFolder: folder,
       definitions: [probe],
+      version: '0.12.0',
     });
     expect(report.verdict.mode).toBe('rolling');
     expect(report.verdict.summary).toMatch(/run `migrate`, replace replicas one at a time/);
