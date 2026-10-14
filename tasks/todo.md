@@ -33,16 +33,16 @@ Shared commands are in SPEC.md (`H=~/.oci-harness`).
 
 **Estimated scope:** Medium
 
-## Task 3: Messages
+## Task 3: Messages ✅
 
 **Description:** `message.search_folded`, its trigger, the background migration, the post-deploy index, and the search switching over.
 
 **Acceptance criteria:**
-- [ ] Migration `0048`: nullable `message.search_folded tsvector`; trigger function and `BEFORE INSERT OR UPDATE OF parts` trigger; NULL when folding leaves the text unchanged; no work when `parts` is unchanged on update.
-- [ ] Background migration `0.13.message-search-folded` in `packages/db/src/background/`: by primary key, idempotent, resumable, writes only rows whose text has foldable letters.
-- [ ] Post-deploy step `0014_message_search_folded_index`: partial GIN, `CONCURRENTLY`.
-- [ ] `thread-search.ts`: ready means the background migration and step 0014 are both done (`isBackgroundMigrationDone`, `isPostStepDone`; never awaited inside a transaction); then the folded query words match the exact index OR the folded one, and rank uses `coalesce(search_folded, <exact vector>)`; before that, exactly v0.12.1.
-- [ ] Reproduce first: `bibliotheque`, `busqueda`, `strasse`, `oeuvre` find nothing in message text before and everything after; the result is a superset of the old path's; `EXPLAIN` shows both indexes; a row written mid-backfill is found once.
+- [x] Migration `0048`: nullable `message.search_folded tsvector`; trigger function and `BEFORE INSERT OR UPDATE OF parts` trigger; NULL when folding leaves the text unchanged; no work when `parts` is unchanged on update.
+- [x] Background migration `0.13.message-search-folded` in `packages/db/src/background/`: by primary key, idempotent, resumable, writes only rows whose text has foldable letters.
+- [x] Post-deploy step `0014_message_search_folded_index`: partial GIN, `CONCURRENTLY`.
+- [x] `thread-search.ts`: ready means the background migration and step 0014 are both done (`isBackgroundMigrationDone`, `isPostStepDone`; never awaited inside a transaction); then the folded query words match the exact index OR the folded one, and rank uses `coalesce(search_folded, <exact vector>)`; before that, exactly v0.12.1.
+- [x] Reproduce first: `bibliotheque`, `busqueda`, `strasse`, `oeuvre` find nothing in message text before and everything after; the result is a superset of the old path's; `EXPLAIN` shows both indexes; a row written mid-backfill is found once.
 
 **Verification:** live tests (trigger shapes, switch-over, parity, EXPLAIN); `pnpm lint:migrations`.
 
@@ -52,13 +52,13 @@ Shared commands are in SPEC.md (`H=~/.oci-harness`).
 
 **Estimated scope:** Large; split into the migration and trigger first, then the backfill and index, then the query, with a commit each.
 
-## Task 4: Project file chunks
+## Task 4: Project file chunks ✅
 
 **Acceptance criteria:**
-- [ ] Migration `0049`: nullable `project_file_chunk.search_folded` and its trigger (insert and update of `content`; NULL when unchanged by folding).
-- [ ] Background migration `0.13.chunk-search-folded`; no index, no post-deploy step.
-- [ ] `retrieval.ts` reads `coalesce(search_folded, search)` with folded terms once the migration is done, `search` as today before.
-- [ ] Reproduce first: `bibliotheque` finds a passage containing "bibliothèque" and the reverse, only after.
+- [x] Migration `0049`: nullable `project_file_chunk.search_folded` and its trigger (insert and update of `content`; NULL when unchanged by folding).
+- [x] Background migration `0.13.chunk-search-folded`; no index, no post-deploy step.
+- [x] `retrieval.ts` reads `coalesce(search_folded, search)` with folded terms once the migration is done, `search` as today before.
+- [x] Reproduce first: `bibliotheque` finds a passage containing "bibliothèque" and the reverse, only after.
 
 **Verification:** live tests; the 95 project-search tests still pass; `pnpm lint:migrations`.
 

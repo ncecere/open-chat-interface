@@ -169,11 +169,11 @@ describe.skipIf(!available)('live: searching large project files', () => {
     expect(await projectSearchTerms(' \u0001\u0002 ')).toEqual([]);
     expect(await projectSearchTerms("O'Brien's kestrel-nest of")).toEqual(
       expect.arrayContaining([
-        { operand: "'brien':*", stopWord: false },
-        { operand: "'kestrel-nest':*", stopWord: false },
-        { operand: "'kestrel':*", stopWord: false },
-        { operand: "'nest':*", stopWord: false },
-        { operand: "'of'", stopWord: true },
+        { operand: "'brien':*", stopWord: false, folded: false },
+        { operand: "'kestrel-nest':*", stopWord: false, folded: false },
+        { operand: "'kestrel':*", stopWord: false, folded: false },
+        { operand: "'nest':*", stopWord: false, folded: false },
+        { operand: "'of'", stopWord: true, folded: false },
       ]),
     );
     const [rows] = await pool.db.execute<{ total: number }>(

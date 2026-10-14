@@ -31,6 +31,8 @@ export {
   type BackgroundMigrationDefinition,
   type BatchTransaction,
   backgroundMigrations,
+  CHUNK_SEARCH_FOLDED,
+  chunkSearchFolded,
   ENCRYPTED_JSON_KEY,
   ENCRYPTED_LOCATIONS,
   type EncryptedLocation,

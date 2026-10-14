@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   attachmentOwnRows,
   backgroundMigrations,
+  chunkSearchFolded,
   describeRequirement,
   indexBuild,
   loadSqlParser,
@@ -286,6 +287,7 @@ describe('background migrations', () => {
       ...secretReencryptionMigrations,
       attachmentOwnRows,
       messageSearchFolded,
+      chunkSearchFolded,
     ];
     expect(backgroundMigrations({})).toEqual(release);
     expect(

@@ -344,6 +344,13 @@
       "when": 1790539200028,
       "tag": "0048_message_search_folded",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790539200029,
+      "tag": "0049_project_file_chunk_search_folded",
+      "breakpoints": true
     }
   ]
 }

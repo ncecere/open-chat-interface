@@ -303,6 +303,7 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       // Forks and edits made before 0.11 get their own rows for shared files (#358).
       ['0.11.attachment-own-rows', 'not_scheduled'],
       ['0.13.message-search-folded', 'not_scheduled'],
+      ['0.13.chunk-search-folded', 'not_scheduled'],
     ]);
 
     expect(

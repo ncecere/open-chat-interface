@@ -1,4 +1,5 @@
 import { attachmentOwnRows } from './attachment-own-rows.js';
+import { chunkSearchFolded } from './chunk-search-folded.js';
 import { messageSearchFolded } from './message-search-folded.js';
 import { secretReencryptionMigrations } from './reencrypt-secrets.js';
 import { TEST_BACKGROUND_MIGRATIONS } from './test-definitions.js';
@@ -6,6 +7,7 @@ import type { BackgroundMigrationDefinition } from './types.js';
 import { usageRollupBackfill } from './usage-rollups.js';
 
 export { attachmentOwnRows } from './attachment-own-rows.js';
+export { CHUNK_SEARCH_FOLDED, chunkSearchFolded } from './chunk-search-folded.js';
 export { MESSAGE_SEARCH_FOLDED, messageSearchFolded } from './message-search-folded.js';
 export {
   ENCRYPTED_JSON_KEY,
@@ -45,6 +47,8 @@ const RELEASE_BACKGROUND_MIGRATIONS: readonly BackgroundMigrationDefinition[] = 
   attachmentOwnRows,
   // 0.13: the accent-folded search vector of messages written before it (#362).
   messageSearchFolded,
+  // 0.13: the same for project file passages (#362).
+  chunkSearchFolded,
 ];
 
 /** Test-only definitions enabled by name, comma-separated. */

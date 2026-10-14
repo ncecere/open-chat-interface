@@ -40,8 +40,8 @@ Four tracked pieces, in the order that earns the most for the least risk:
 
 ### Phase 2: accent-search (#362), on branch `v0.13/accent-search`
 - [x] Task 2: One fold: SQL function `oci_fold_search_text` (migration 0047), `ß æ œ`, the TypeScript fold, titles and every `foldSql` caller on it
-- [ ] Task 3: Messages: `search_folded` column and trigger (0048), background migration `0.13.message-search-folded`, post step 0014 (partial GIN), search switches when both are done
-- [ ] Task 4: Project file chunks: the same (0049, `0.13.chunk-search-folded`, post step 0015)
+- [x] Task 3: Messages: `search_folded` column and trigger (0048), background migration `0.13.message-search-folded`, post step 0014 (partial GIN), search switches when both are done
+- [x] Task 4: Project file chunks: the same (0049, `0.13.chunk-search-folded`, post step 0015)
 - [ ] Task 5: Remove the optional index (file, code, tests), post step 0016 drops it if built; docs rewritten
 
 ### Checkpoint B
