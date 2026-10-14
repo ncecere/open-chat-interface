@@ -501,7 +501,7 @@ objects, so attachment storage still needs versioning or snapshots as above.
 
 From v0.13, a cluster that has its own database backups (CloudNativePG,
 pgBackRest, WAL-G, snapshots, a managed service's point-in-time recovery) can
-set **Database backup** to *External*: OCI then stops running `pg_dump` and
+set **Database backup** to *Backed up outside OCI (your own tooling)*: OCI then stops running `pg_dump` and
 needing the PostgreSQL client tools, and keeps backing up the attachments. It
 cannot tell whether your backup restores, so run the restore drill. See
 [External database backup](admin/external-database-backup.md), which also lists

@@ -12,8 +12,9 @@ An `auditor` sees everything on the page and changes nothing.
 
 ## External database backup
 
-**Database backup** has two settings. **Dump** (the default, and what this page
-describes everywhere else) runs `pg_dump`. **External** is for a cluster with
+**Database backup** has two settings. *OCI dumps the database (pg_dump)* (the
+default, and what this page describes everywhere else) is called dump mode here.
+*Backed up outside OCI (your own tooling)*, external mode, is for a cluster with
 its own backups (CloudNativePG, pgBackRest, WAL-G, snapshots, a managed
 service's point-in-time recovery): OCI stops dumping and stops needing the
 PostgreSQL client tools, and every run still builds the attachment manifest,

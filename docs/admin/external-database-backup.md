@@ -12,7 +12,7 @@ If you have no backups of your own, leave the default (**dump**) as it is.
 
 ## What OCI does and does not do
 
-With **Database backup** set to *External* on **Data & storage → Backups**
+With **Database backup** set to *Backed up outside OCI (your own tooling)* on **Data & storage → Backups**
 (`databaseBackup: 'external'` in the `backups` setting), a backup run, scheduled
 or manual, on the same schedule as before:
 
