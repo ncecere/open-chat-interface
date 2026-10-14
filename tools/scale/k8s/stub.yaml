@@ -1,0 +1,131 @@
+# The stub model (tools/scale/stub/server.mjs): an OpenAI-compatible streaming model with a fixed
+# first-token delay and token rate, plus deterministic embeddings. It runs on the load node, next to
+# k6, because the reply-start measure compares the stub's arrival time with k6's send time and both
+# must read one clock. Same namespace as everything else, so the dev area's network policy allows
+# the API to reach it by Service name. Rendered by tools/scale/cluster.sh (variables: see
+# tools/scale/lib/cluster-render.mjs); every object carries dev.bitop.dev/env, which is how
+# `dev-env down` and the reaper find it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${ENV}-scale-stub
+  labels:
+    dev.bitop.dev/env: ${ENV}
+    app.kubernetes.io/name: scale-stub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      dev.bitop.dev/env: ${ENV}
+      app.kubernetes.io/name: scale-stub
+  template:
+    metadata:
+      labels:
+        dev.bitop.dev/env: ${ENV}
+        app.kubernetes.io/name: scale-stub
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/hostname: ${LOAD_NODE}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tools
+          configMap:
+            name: ${ENV}-scale-tools
+        - name: scale
+          emptyDir:
+            sizeLimit: 64Mi
+      initContainers:
+        - name: extract
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              tar -xzf /tools/scale.tgz -C /scale
+              test -f /scale/stub/server.mjs
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+              readOnly: true
+            - name: scale
+              mountPath: /scale
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      containers:
+        - name: stub
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/scale/stub/server.mjs"]
+          env:
+            - name: STUB_PORT
+              value: "4181"
+            - name: STUB_FIRST_TOKEN_MS
+              value: "${STUB_FIRST_TOKEN_MS}"
+            - name: STUB_TOKENS_PER_SECOND
+              value: "${STUB_TOKENS_PER_SECOND}"
+            - name: STUB_REPLY_TOKENS
+              value: "${STUB_REPLY_TOKENS}"
+            - name: STUB_EMBEDDING_DELAY_MS
+              value: "40"
+          ports:
+            - name: http
+              containerPort: 4181
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 30
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Starting values; the stub streams 50 tokens a second to a few dozen readers.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${ENV}-scale-stub
+  labels:
+    dev.bitop.dev/env: ${ENV}
+    app.kubernetes.io/name: scale-stub
+spec:
+  selector:
+    dev.bitop.dev/env: ${ENV}
+    app.kubernetes.io/name: scale-stub
+  ports:
+    - name: http
+      port: 4181
+      targetPort: http

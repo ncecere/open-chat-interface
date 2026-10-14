@@ -1,0 +1,11 @@
+# tools/scale (without results) as a gzip tarball: the API image does not contain it. About 70 kB
+# compressed against the 1 MiB ConfigMap limit; tools/scale/cluster.sh checks the size.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${ENV}-scale-tools
+  labels:
+    dev.bitop.dev/env: ${ENV}
+    app.kubernetes.io/name: scale-tools
+binaryData:
+  scale.tgz: "${TOOLS_TGZ_B64}"
