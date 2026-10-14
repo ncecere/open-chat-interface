@@ -11,7 +11,7 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { primaryId, timestamps } from './_shared.js';
+import { primaryId, timestamps, tsvector } from './_shared.js';
 import { pgTable } from './_table.js';
 import { user } from './auth.js';
 import { organization } from './organization.js';
@@ -138,6 +138,12 @@ export const message = pgTable(
      * superseded time change. Null on messages written before v0.9.
      */
     changeSeq: bigint('change_seq', { mode: 'number' }),
+    /**
+     * Search vector of the text parts with accents folded (migration 0048, #362),
+     * kept by a trigger; null when folding changes nothing. Written by the
+     * database only: nothing in the application sets it.
+     */
+    searchFolded: tsvector('search_folded'),
     ...timestamps(),
   },
   (t) => [

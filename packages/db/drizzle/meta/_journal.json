@@ -337,6 +337,13 @@
       "when": 1790539200027,
       "tag": "0047_fold_search_text",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1790539200028,
+      "tag": "0048_message_search_folded",
+      "breakpoints": true
     }
   ]
 }

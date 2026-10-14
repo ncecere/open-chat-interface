@@ -1,22 +1,8 @@
 import { sql } from 'drizzle-orm';
-import {
-  boolean,
-  check,
-  customType,
-  index,
-  integer,
-  primaryKey,
-  text,
-  timestamp,
-} from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
+import { tsvector } from './_shared.js';
 import { pgTable } from './_table.js';
 import { attachment } from './chat.js';
-
-const tsvector = customType<{ data: string }>({
-  dataType() {
-    return 'tsvector';
-  },
-});
 
 /**
  * Whether a project file's extracted text has been split into chunks, and how
