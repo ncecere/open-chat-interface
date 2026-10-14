@@ -9,6 +9,8 @@
       "version": "0.11.0",
       "firstMigration": "0039_three_phase_migrations",
       "requires": { "postSteps": [], "backgroundMigrations": [] }
-    }
+    },
+    { "version": "0.12.0", "firstMigration": "0046_invitation_emailed_at" },
+    { "version": "0.13.0", "firstMigration": "0047_fold_search_text" }
   ]
 }

@@ -257,7 +257,7 @@ details and upgrade notes.
 
 ## Shipped — v0.13: search, backups and scale
 
-Released as v0.13.0 in October 2026 (`SPEC.md`, one spec per module). See
+Released as v0.13.0 in October 2026 (v0.13.1 fixed the upgrade preflight) (`SPEC.md`, one spec per module). See
 `CHANGELOG.md` for the details and upgrade notes.
 
 | Item | What shipped |

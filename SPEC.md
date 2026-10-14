@@ -1,6 +1,6 @@
 # Spec: Open Chat Interface v0.13 (index)
 
-Status: **v0.13.0 released 2026-10-13: `release-hygiene` (v0.12.1), `accent-search` and `external-backups` shipped; `scale-on-cluster` shipped its tooling, and the `medium` and `large` runs are open (see ROADMAP.md).** The chart gap #385 (found during v0.12.1) shipped in v0.13.0 too. This file is
+Status: **v0.13.0 released 2026-10-14: `release-hygiene` (v0.12.1), `accent-search` and `external-backups` shipped; `scale-on-cluster` shipped its tooling, and the `medium` and `large` runs are open (see ROADMAP.md).** The chart gap #385 (found during v0.12.1) shipped in v0.13.0 too. This file is
 the index: the approved capability map, the build order, and what every
 module shares (commands, structure, style, testing, boundaries). Each module
 has its own spec, named by its id. The map, not file names, says what exists.
