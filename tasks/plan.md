@@ -1,120 +1,72 @@
-# Implementation Plan: release-hygiene (v0.12.1)
+# Implementation Plan: v0.13 (search, backups and scale)
 
-Spec: [SPEC-release-hygiene.md](../SPEC-release-hygiene.md), part of
-[SPEC.md](../SPEC.md). Tasks: [todo.md](todo.md).
+Specs: [SPEC.md](../SPEC.md) (index and decisions), one `SPEC-<module>.md` per
+module. Tasks: [todo.md](todo.md). The v0.12.1 plan (`release-hygiene`) is in
+`tasks/done/`.
 
 ## Overview
 
-Four small, independent debts, shipped together as v0.12.1: drop the unused
-`project_file_embedding_failure` table in a post-deploy step, fix the upgrade
-preflight's wording and count, guard the development-image pruning workflow,
-and bring `ROADMAP.md` up to date. Each is its own vertical slice (change,
-test, docs) and leaves `main` releasable.
+Four tracked pieces, in the order that earns the most for the least risk:
 
-## What the code looks like today (read before planning)
-
-- **The table:** declared in `packages/db/src/schema/embeddings.ts`
-  (`projectFileEmbeddingFailure`, an index and two checks). No product code
-  at v0.11.1 or v0.12.0 reads or writes it. Two test fixtures mention it only
-  to *exclude* it when listing generation tables by name
-  (`apps/api/test/embedding-generations.fixtures.ts:246`,
-  `apps/api/test/project-search-hybrid.fixtures.ts:142`, both
-  `tablename like 'project_file_embedding%'`). Docs mention it in
-  `docs/dev/database.md:475` (kept for v0.10 replicas) and
-  `docs/OPERATIONS.md:881` (history; v0.9's migration 0029).
-- **Post-deploy steps:** one statement per file in `packages/db/post/`, listed
-  in `post/journal.json` as `{ idx, tag, release }`; the last is
-  `0012_attachment_thumbnail_key_index` (release `0.11.0`). Drops are allowed
-  only in post-deploy, with `-- oci:lint-allow drop-table: <reason>`.
-  `apps/api/src/__tests__/live/post-migrations.live.test.ts` applies steps
-  against real PostgreSQL.
-- **Preflight text:** `renderReport` in
-  `apps/api/src/services/migrations/report-text.ts`; line 72 prints
-  `(N of ~${rows(estimate)})`, where `rows(null)` is `'rows unknown'`. The
-  header's count is `definitions.length` (`preflight.ts:346`); the listed lines
-  are `report.background`. Unit tests in
-  `apps/api/src/__tests__/unit/migration-phases.test.ts`.
-- **Pruning:** all logic is inline bash and `jq` in
-  `.github/workflows/prune-dev-images.yml`; candidates are versions whose tags
-  are all `dev-<12 hex>` and older than the cutoff; no floor on
-  `older_than_days`, no protection for branch heads. Script tests run with
-  `node --test scripts/*.test.mjs` (as `ghcr-release.test.mjs`).
+1. **Chart gap #385** (small, independent): done first because it is what
+   left post-deploy steps unapplied on the cluster.
+2. **`accent-search` (#362)**: the user-visible fix, and the only module that
+   adds migrations (0047 to 0049) and post-deploy steps (0014 to 0016).
+3. **`external-backups` (#386)**: independent of search; needs its own spec,
+   drafted in parallel while accent-search builds.
+4. **`scale-on-cluster` (#387)**: last, because it measures accent-search's
+   new search at the `large` profile.
 
 ## Architecture decisions
 
-- **Drop in a post-deploy step, not a pre-deploy migration.** The linter
-  refuses drops in pre-deploy; post-deploy runs after every replica runs
-  v0.12.1, and v0.12.0 replicas never touch the table, so a rolling upgrade is
-  safe either way. `DROP TABLE IF EXISTS` keeps it idempotent; its index and
-  checks go with it. The Drizzle schema export goes too (nothing imports it).
-- **The two embedding test fixtures drop the table in their setup**, as step
-  0013 does, instead of excluding it by name. Test databases are built from
-  pre-deploy migrations, which still create it; dropping it first makes every
-  embedding-generation and hybrid-search live test (63) prove that nothing
-  needs it. A new live test proves step 0013 removes it and is idempotent.
-- **Pruning logic moves to `scripts/prune-dev-images.mjs`** (plain Node, no
-  dependency) so it can be tested with recorded listings; the workflow calls
-  it with `gh api` output. It protects `dev-<sha12>` of every branch head
-  (listed with `gh api --paginate repos/{owner}/{repo}/branches`) and refuses
-  `older_than_days < 1`. Deletion stays in the workflow step, driven by the
-  script's list, so the script itself never calls the API.
-- **Preflight:** no change to the report's data, only to its text and to
-  which definitions the header counts (the same filtered list it lists).
+- **One person adds migrations at a time** (SPEC.md): accent-search first;
+  external-backups prefers no migration.
+- **accent-search: stored folded vector, set only where folding changes the
+  text** (partial index; search matches the folded query words against both
+  the exact index and the folded one). See SPEC-accent-search.md.
+- **`RUN_POST_MIGRATIONS=auto`** (#385) uses the replica heartbeat's release
+  as the signal that every replica is current, and needs Redis.
+- **Releases:** the chart fix and accent-search ship together as v0.13.0 with
+  the other modules that are ready; backups and scale may follow as v0.13.x
+  if they are not.
 
 ## Task list
 
-### Phase 1: Schema and upgrade tooling
-- [x] Task 1: Drop `project_file_embedding_failure` in post-deploy step 0013
-- [x] Task 2: Preflight wording (the count was not a bug)
+### Phase 1: Chart gap (#385)
+- [x] Task 1: `RUN_POST_MIGRATIONS=auto`, the chart, tests, docs
 
-### Checkpoint A ✅
-- [x] `run.py coverage` (2,472/2,472, zero skips, floors hold; first run caught three pinned lists), `pnpm lint:migrations`
-- [x] Rolling-upgrade test from v0.12.0: PASS (0 errors, p99 228 ms, 216 replies complete, 0 cut; step 0013 applied in the post-deploy phase)
+### Checkpoint A
+- [ ] Coverage, checks, chart CI green; merged to `main`
 
-### Phase 2: CI and docs
-- [x] Task 3: Guard development-image pruning
-- [x] Task 4: Bring ROADMAP.md up to date
+### Phase 2: accent-search (#362), on branch `v0.13/accent-search`
+- [ ] Task 2: One fold: SQL function `oci_fold_search_text` (migration 0047), `ß æ œ`, the TypeScript fold, titles and every `foldSql` caller on it
+- [ ] Task 3: Messages: `search_folded` column and trigger (0048), background migration `0.13.message-search-folded`, post step 0014 (partial GIN), search switches when both are done
+- [ ] Task 4: Project file chunks: the same (0049, `0.13.chunk-search-folded`, post step 0015)
+- [ ] Task 5: Remove the optional index (file, code, tests), post step 0016 drops it if built; docs rewritten
 
-### Checkpoint B ✅
-- [x] `run.py checks` (real exit code 0), `node --test scripts/*.test.mjs` (139/139)
-- [x] The prune workflow's dry run on GitHub kept the branch head, 0 candidates (main has no image after the 2026-10-11 prune)
-- [x] Review with the human (the `/build auto` approval; the tag waits for sign-off)
+### Checkpoint B
+- [ ] Coverage, checks, migration lint, `node tools/upgrade-test/run.mjs --from v0.12.1` pass; EXPLAIN shows both indexes used
+- [ ] Measurements on the scale harness `small` recorded
 
-### Phase 3: Release
-- [x] Task 5: Changelog and docs for v0.12.1, then release by `docs/RELEASING.md`
+### Phase 3: external-backups (#386): spec approval, then tasks (to be planned)
+- [ ] Task 6: Spec reviewed and approved
 
-### Checkpoint C: Complete ✅
-- [x] PR #382 CI green (incl. the rolling-upgrade workflow); merged
-- [x] v0.12.1 tagged (`34c1d419`); api and web images (linux/amd64 + linux/arm64) and chart 0.12.1 published, public, `latest` moved
-- [x] `dev-env up oci r121 --ref v0.12.1` healthy (sign-in, admin); `migrate --post` applied 0013 (103 ms, table dropped) and every background migration finished; then down. Found: dev-env never runs post-deploy steps (see below)
-- [x] Spec marked done in SPEC.md
+### Phase 4: scale-on-cluster (#387): spec, then tasks (to be planned)
+- [ ] Task 7: Spec written, reviewed and approved
 
-## Found during Checkpoint C
-
-`dev-env` (homelab `tools/dev-env/devenv/oci.py`) renders the chart with
-`migrations.enabled: false` (Helm hooks do not run under `kubectl apply`); the
-API migrates at start but runs as `OCI_ROLE=web`, and the worker has
-`RUN_MIGRATIONS=false`, so `RUN_POST_MIGRATIONS` is off. Post-deploy steps
-and background migrations therefore never run in a development environment,
-and features gated on them (code artifacts, step 0009; leaving embedding
-generation 1) stay off there. Fix belongs to the homelab tool (ask first).
+### Checkpoint C: v0.13.0 released
 
 ## Risks and mitigations
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Something still reads the table (missed reference) | High: errors after `migrate --post` | `git grep` at v0.12.0 and on the branch (done: product code clean); a live test exercises embedding and project search after the step; the rolling-upgrade test runs v0.12.1 under load after `migrate --post`. v0.12.0 replicas are already replaced when the step runs, and never read the table anyway. |
-| Rolling back to v0.12.0 after the step | Low: v0.12.0 never reads it | Note in the changelog that rollback is unaffected. |
-| Branch listing in the prune workflow fails (API error) | Medium: could prune a head | Fail closed: if branches cannot be listed, delete nothing. Test it. |
-| Testing the prune workflow deletes real images | Medium | Only dry runs during development; the script is pure and tested offline. |
-| Roadmap claims drift from the changelog | Low | Every line cites a CHANGELOG section; reviewed in Checkpoint B. |
-
-## Parallelization
-
-Tasks 1–4 touch disjoint files and could run in parallel, but they are
-small; doing them sequentially in one branch (`patch/v0.12.1`) avoids
-merge noise. Task 5 depends on all of them.
+| The trigger slows message inserts | Medium | It does nothing unless the text has foldable letters; measured on `small` |
+| The backfill loads a busy database | Medium | The v0.11 framework throttles on replication lag and long transactions; batch size and pause are tunable |
+| Search returns different results once ready | High | Parity tests: the new path returns the old path's results plus the accent matches, on generated data in several languages |
+| An old replica writes during the upgrade | Medium | A trigger, not application code, so every writer is covered |
+| `auto` applies steps while an old replica serves | High | It requires every heartbeating replica to report this release and waits otherwise (tested) |
 
 ## Open questions
 
-None.
+Accent-search's three questions are settled (SPEC-accent-search.md,
+"Decisions"). Backups and scale: in their specs.
