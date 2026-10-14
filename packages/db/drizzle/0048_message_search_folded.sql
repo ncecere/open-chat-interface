@@ -21,21 +21,22 @@
 -- 0014_message_search_folded_index; search uses neither until both are done.
 ALTER TABLE "message" ADD COLUMN IF NOT EXISTS "search_folded" tsvector;
 --> statement-breakpoint
+-- The one definition of the vector: the trigger and the background migration
+-- both call it. NULL means folding leaves the text unchanged.
+CREATE OR REPLACE FUNCTION "oci_message_folded_vector"(parts jsonb) RETURNS tsvector
+LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
+AS $$
+	SELECT CASE WHEN oci_fold_search_text(document) = document THEN NULL
+		ELSE to_tsvector('simple'::regconfig, oci_fold_search_text(document)::jsonb) END
+	FROM (SELECT jsonb_path_query_array(parts, '$[*] ? (@.type == "text").text'::jsonpath)::text AS document) AS d
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION "message_set_search_folded"() RETURNS trigger AS $$
-DECLARE
-	document text;
-	folded text;
 BEGIN
 	IF TG_OP = 'UPDATE' AND NEW."parts" IS NOT DISTINCT FROM OLD."parts" THEN
 		RETURN NEW;
 	END IF;
-	document := jsonb_path_query_array(NEW."parts", '$[*] ? (@.type == "text").text'::jsonpath)::text;
-	folded := oci_fold_search_text(document);
-	IF folded = document THEN
-		NEW."search_folded" := NULL;
-	ELSE
-		NEW."search_folded" := to_tsvector('simple'::regconfig, folded::jsonb);
-	END IF;
+	NEW."search_folded" := oci_message_folded_vector(NEW."parts");
 	RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

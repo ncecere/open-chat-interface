@@ -35,6 +35,8 @@ export {
   ENCRYPTED_LOCATIONS,
   type EncryptedLocation,
   encryptedJsonValues,
+  MESSAGE_SEARCH_FOLDED,
+  messageSearchFolded,
   reencryptJson,
   rewriteMessagesInPlace,
   type SecretCodec,

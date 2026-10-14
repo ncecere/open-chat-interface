@@ -1,10 +1,12 @@
 import { attachmentOwnRows } from './attachment-own-rows.js';
+import { messageSearchFolded } from './message-search-folded.js';
 import { secretReencryptionMigrations } from './reencrypt-secrets.js';
 import { TEST_BACKGROUND_MIGRATIONS } from './test-definitions.js';
 import type { BackgroundMigrationDefinition } from './types.js';
 import { usageRollupBackfill } from './usage-rollups.js';
 
 export { attachmentOwnRows } from './attachment-own-rows.js';
+export { MESSAGE_SEARCH_FOLDED, messageSearchFolded } from './message-search-folded.js';
 export {
   ENCRYPTED_JSON_KEY,
   ENCRYPTED_LOCATIONS,
@@ -41,6 +43,8 @@ const RELEASE_BACKGROUND_MIGRATIONS: readonly BackgroundMigrationDefinition[] = 
   // 0.11: forks and edits made before it get their own rows for the files they
   // share with their source (#358).
   attachmentOwnRows,
+  // 0.13: the accent-folded search vector of messages written before it (#362).
+  messageSearchFolded,
 ];
 
 /** Test-only definitions enabled by name, comma-separated. */
