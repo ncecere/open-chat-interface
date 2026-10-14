@@ -29,6 +29,12 @@ export const DEFAULT_BACKUP_KEEP_WEEKLY = 4;
  */
 export const BACKUP_FILE_VERIFICATION = ['sample', 'all'] as const;
 export type BackupFileVerification = (typeof BACKUP_FILE_VERIFICATION)[number];
+/**
+ * Who backs up the database: OCI, with `pg_dump` (the default), or the
+ * operator's own tooling (CloudNativePG, pgBackRest, WAL-G, snapshots).
+ */
+export const BACKUP_DATABASE_MODES = ['dump', 'external'] as const;
+export type BackupDatabaseMode = (typeof BACKUP_DATABASE_MODES)[number];
 /** Files read back per run with `sample` verification. */
 export const BACKUP_FILE_SAMPLE_SIZE = 32;
 
@@ -78,6 +84,16 @@ export const backupSettingsSchema = z.object({
   /** Copy attachment files to the destination (content addressed, incremental). */
   copyFiles: z.boolean(),
   verifyFiles: z.enum(BACKUP_FILE_VERIFICATION),
+  /**
+   * Whether OCI dumps the database itself (`dump`) or the operator's own
+   * tooling backs it up (`external`): then a run backs up attachments only.
+   */
+  databaseBackup: z.enum(BACKUP_DATABASE_MODES),
+  /**
+   * With `external`: whether this cluster is expected to archive WAL. False
+   * (snapshot-style backups) makes "archiving is off" an ok in System health.
+   */
+  walArchivingExpected: z.boolean(),
 });
 export type BackupSettings = z.infer<typeof backupSettingsSchema>;
 
@@ -108,6 +124,8 @@ export const updateBackupSettingsSchema = z
     keepWeekly: z.number().int().min(0).max(104).optional(),
     copyFiles: z.boolean().optional(),
     verifyFiles: z.enum(BACKUP_FILE_VERIFICATION).optional(),
+    databaseBackup: z.enum(BACKUP_DATABASE_MODES).optional(),
+    walArchivingExpected: z.boolean().optional(),
   })
   .strict()
   .refine((input) => Object.keys(input).length > 0, { message: 'Send at least one change.' });

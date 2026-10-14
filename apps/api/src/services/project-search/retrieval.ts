@@ -1,6 +1,8 @@
-import { sql } from '@oci/db';
+import { CHUNK_SEARCH_FOLDED, sql } from '@oci/db';
 import { db } from '../../db/index.js';
+import { foldSql } from '../../lib/fold.js';
 import { stripControls, tsqueryOperand } from '../../lib/text.js';
+import { isBackgroundMigrationDone } from '../migrations/readiness.js';
 import {
   KEYWORD_DISTINCTIVE_MAX_SHARE,
   KEYWORD_DISTINCTIVE_MIN_CHUNKS,
@@ -58,6 +60,17 @@ export interface SearchTerm {
    * on its own, even in files where it happens to be rare.
    */
   stopWord: boolean;
+  /**
+   * Whether the word is folded (accents removed, #362) and so meets the stored
+   * folded vectors: true once the background migration that fills them is done.
+   * Every term of one search agrees, so the words and the vectors always match.
+   */
+  folded: boolean;
+}
+
+/** True once older chunks have their folded vector (`0.13.chunk-search-folded`). */
+export function chunkSearchFolded(): Promise<boolean> {
+  return isBackgroundMigrationDone(CHUNK_SEARCH_FOLDED);
 }
 
 /**
@@ -67,12 +80,16 @@ export interface SearchTerm {
 export async function projectSearchTerms(raw: string): Promise<SearchTerm[]> {
   const text = stripControls(raw.normalize('NFC').slice(0, QUERY_MAX_CHARS)).trim();
   if (!text) return [];
+  // Once the stored folded vectors are complete the words are folded too, so
+  // "bibliotheque" finds "bibliothèque" and the reverse (#362).
+  const folded = await chunkSearchFolded();
+  const subject = folded ? foldSql(sql`${text}::text`) : sql`${text}`;
   // The 'english_stem' dictionary returns an empty array for a stop word.
   const rows = await db.execute<{ lexeme: string; stop_word: boolean }>(sql`
     select lexeme,
            coalesce(cardinality(ts_lexize('english_stem'::regdictionary, lexeme)) = 0, false)
              as stop_word
-    from unnest(to_tsvector('simple'::regconfig, ${text})) as words(lexeme, positions, weights)
+    from unnest(to_tsvector('simple'::regconfig, ${subject})) as words(lexeme, positions, weights)
     order by positions[1]
   `);
   return rows
@@ -85,6 +102,7 @@ export async function projectSearchTerms(raw: string): Promise<SearchTerm[]> {
     .map(({ lexeme, stop_word }) => ({
       operand: tsqueryOperand(lexeme, [...lexeme].length >= PREFIX_MIN_CHARS),
       stopWord: stop_word === true,
+      folded,
     }));
 }
 
@@ -93,10 +111,16 @@ export async function projectSearchTerms(raw: string): Promise<SearchTerm[]> {
  * already come from an owner- and project-scoped query; checking again here
  * keeps another person's or another project's chunks out even if they did not.
  */
-export function scopedChunks(scope: { userId: string; projectId: string; fileIds: string[] }) {
+export function scopedChunks(
+  scope: { userId: string; projectId: string; fileIds: string[] },
+  options: { folded?: boolean } = {},
+) {
+  // Folded: a chunk with accents has its folded vector, any other the exact one,
+  // which is the same words (#362).
+  const search = options.folded ? sql`coalesce(c.search_folded, c.search)` : sql`c.search`;
   return sql`
-    select c.attachment_id, c.ordinal, c.start_offset, c.end_offset, c.content, c.search,
-           a.filename
+    select c.attachment_id, c.ordinal, c.start_offset, c.end_offset, c.content,
+           ${search} as search, a.filename
     from project_file_chunk c
     join attachment a on a.id = c.attachment_id
     where c.attachment_id = any(${textArray(scope.fileIds)})
@@ -148,7 +172,7 @@ export async function rankProjectChunks(
   const operands = terms.map((term) => term.operand);
   const stopWords = terms.filter((term) => term.stopWord).map((term) => term.operand);
   const rows = await db.execute<ChunkRow & { score: number }>(sql`
-    with scope as materialized (${scopedChunks(scope)}),
+    with scope as materialized (${scopedChunks(scope, { folded: terms.every((term) => term.folded) })}),
     -- Materialized: inlined, the count was recalculated for every hit (scale
     -- harness, medium profile: 1,491 ms for a large project, 46 ms with this).
     total as materialized (select count(*)::float8 as n from scope),

@@ -48,9 +48,10 @@ async function cached(key: string, check: () => Promise<boolean>): Promise<boole
 }
 
 /** True once `migrate --post` has finished the named step (file name without `.sql`). */
-export function isPostStepDone(name: string, client: postgres.Sql = appSql): Promise<boolean> {
+export function isPostStepDone(name: string, client?: postgres.Sql): Promise<boolean> {
   return cached(`post:${name}`, async () => {
-    const [row] = await client<{ done: boolean }[]>`
+    // Resolved inside the check, so a connection that cannot be had reads as not ready.
+    const [row] = await (client ?? appSql)<{ done: boolean }[]>`
       select exists (
         select 1 from oci_post_migration where name = ${name} and finished_at is not null
       ) as done
@@ -60,12 +61,9 @@ export function isPostStepDone(name: string, client: postgres.Sql = appSql): Pro
 }
 
 /** True once the named background migration has finished. */
-export function isBackgroundMigrationDone(
-  name: string,
-  client: postgres.Sql = appSql,
-): Promise<boolean> {
+export function isBackgroundMigrationDone(name: string, client?: postgres.Sql): Promise<boolean> {
   return cached(`background:${name}`, async () => {
-    const [row] = await client<{ done: boolean }[]>`
+    const [row] = await (client ?? appSql)<{ done: boolean }[]>`
       select exists (
         select 1 from background_migration where name = ${name} and status = 'finished'
       ) as done

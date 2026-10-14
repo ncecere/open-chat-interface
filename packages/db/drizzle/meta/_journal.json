@@ -330,6 +330,27 @@
       "when": 1790539200026,
       "tag": "0046_invitation_emailed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790539200027,
+      "tag": "0047_fold_search_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1790539200028,
+      "tag": "0048_message_search_folded",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790539200029,
+      "tag": "0049_project_file_chunk_search_folded",
+      "breakpoints": true
     }
   ]
 }

@@ -69,6 +69,9 @@ jobs:
     env:
       DATABASE_URL: postgres://oci:ci-only-password@127.0.0.1:5439/oci_ci
       TEST_DATABASE_URL: postgres://oci:ci-only-password@127.0.0.1:5439/oci_ci
+      # A second PostgreSQL 17 with WAL archiving on, for the archiver live tests
+      # (started by the step below).
+      TEST_ARCHIVE_DATABASE_URL: postgres://oci:ci-only-password@127.0.0.1:5440/oci_ci
       REDIS_URL: redis://127.0.0.1:6389
       TEST_REDIS_URL: redis://127.0.0.1:6389
       AUTH_SECRET: ci-auth-secret-at-least-32-characters
@@ -140,6 +143,43 @@ jobs:
           sudo apt-get install -y --no-install-recommends postgresql-client-17
           /usr/lib/postgresql/17/bin/pg_dump --version | grep -E '^pg_dump \(PostgreSQL\) 17\.'
           echo BACKUP_PG_BIN_DIR=/usr/lib/postgresql/17/bin >> "$GITHUB_ENV"
+      - name: PostgreSQL 17 with WAL archiving for the archiver suite
+        # The external-backups tests read pg_stat_archiver on a server that
+        # archives (wal_level=replica, archive_mode=on, the PostgreSQL manual's
+        # example archive_command into /archive). A service container takes no
+        # server arguments or files, so it is started here. The settings go in
+        # postgresql.conf, not on the command line, so a test can ALTER SYSTEM
+        # archive_command. Same image as the service above; test-only
+        # credentials. Nothing is published and nothing is deleted.
+        run: |
+          set -euo pipefail
+          # The image's postgres user (not the runner) writes /archive and reads the script.
+          install -d -m 0777 "$RUNNER_TEMP/pg-archive"
+          chmod 0777 "$RUNNER_TEMP/pg-archive"
+          install -d -m 0755 "$RUNNER_TEMP/pg-archive-init"
+          cat > "$RUNNER_TEMP/pg-archive-init/10-archive.sh" <<'SH'
+          #!/bin/sh
+          cat >> "$PGDATA/postgresql.conf" <<'CONF'
+          wal_level = replica
+          archive_mode = on
+          archive_timeout = 60
+          archive_command = 'test ! -f /archive/%f && cp %p /archive/%f'
+          CONF
+          SH
+          chmod 0755 "$RUNNER_TEMP/pg-archive-init/10-archive.sh"
+          docker run -d --name oci-archive-postgres \
+            -e POSTGRES_USER=oci -e POSTGRES_PASSWORD=ci-only-password -e POSTGRES_DB=oci_ci \
+            -p 127.0.0.1:5440:5432 \
+            -v "$RUNNER_TEMP/pg-archive:/archive" \
+            -v "$RUNNER_TEMP/pg-archive-init/10-archive.sh:/docker-entrypoint-initdb.d/10-archive.sh:ro" \
+            pgvector/pgvector:pg17
+          # Over TCP: the temporary server the image starts to initialise listens on its socket only.
+          for _ in $(seq 1 60); do
+            docker exec oci-archive-postgres pg_isready -h 127.0.0.1 -U oci -d oci_ci && exit 0
+            sleep 2
+          done
+          docker logs oci-archive-postgres
+          exit 1
       - name: Coverage with PostgreSQL, Redis, SMTP and S3
         # Every live suite runs, S3 included; with CI set an unreachable S3
         # server fails them rather than skipping, and every floor applies.
