@@ -1,0 +1,12 @@
+# What the report says about where it ran (the `environment` block of report.json): node hardware,
+# topology and settings, read by tools/scale/cluster.sh from the cluster at run time and mounted
+# into the render step. Nothing secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${ENV}-scale-env
+  labels:
+    dev.bitop.dev/env: ${ENV}
+    app.kubernetes.io/name: scale-env
+binaryData:
+  environment.json: "${ENVIRONMENT_JSON_B64}"

@@ -54,13 +54,47 @@ function parseMetrics(text) {
   return series;
 }
 
+/**
+ * Where the API replicas are: a DNS name that resolves to every ready one (compose's `api`, or on
+ * the cluster the chart's headless Service, which tools/scale/cluster.sh passes as SCALE_API_HOST),
+ * and their port.
+ */
+export function apiTarget(env = process.env) {
+  const port = env.SCALE_API_PORT === undefined ? 3000 : Number(env.SCALE_API_PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`SCALE_API_PORT must be a port number, got ${env.SCALE_API_PORT}`);
+  }
+  return { host: env.SCALE_API_HOST || 'api', port };
+}
+
+/**
+ * Requests as the availability objective counts them (docs/dev/slo.md): by the status they were
+ * answered with, leaving out health probes, /metrics and requests that matched no route.
+ */
+export function requestOutcomes(series) {
+  const outcomes = { counted: 0, serverErrors: 0, byClass: {} };
+  for (const s of series) {
+    if (s.name !== 'oci_http_requests_total') continue;
+    const route = s.labels.route ?? '';
+    if (route === 'unmatched' || route === '/metrics' || route.startsWith('/api/health')) continue;
+    const status = String(s.labels.status ?? '');
+    const group = `${status.slice(0, 1)}xx`;
+    outcomes.counted += s.value;
+    outcomes.byClass[group] = (outcomes.byClass[group] ?? 0) + s.value;
+    if (group === '5xx') outcomes.serverErrors += s.value;
+  }
+  return outcomes;
+}
+
 export async function scrapeReplicas() {
   const token = process.env.SCALE_METRICS_TOKEN ?? 'scale-harness-metrics-token';
+  const { host, port } = apiTarget();
+  const requestOutcomesTotal = { counted: 0, serverErrors: 0, byClass: {} };
   let addresses = [];
   try {
-    addresses = (await lookup('api', { all: true, family: 4 })).map((a) => a.address);
+    addresses = (await lookup(host, { all: true, family: 4 })).map((a) => a.address);
   } catch {
-    return { replicas: 0, jobs: {}, routes: [] };
+    return { replicas: 0, jobs: {}, routes: [], requests: requestOutcomesTotal };
   }
   const jobs = {};
   const jobEntry = (name) => {
@@ -73,7 +107,7 @@ export async function scrapeReplicas() {
   for (const address of addresses) {
     let text;
     try {
-      const res = await fetch(`http://${address}:3000/metrics`, {
+      const res = await fetch(`http://${address}:${port}/metrics`, {
         headers: { authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(10_000),
       });
@@ -83,7 +117,14 @@ export async function scrapeReplicas() {
       continue;
     }
     let requests = 0;
-    for (const s of parseMetrics(text)) {
+    const parsed = parseMetrics(text);
+    const outcomes = requestOutcomes(parsed);
+    requestOutcomesTotal.counted += outcomes.counted;
+    requestOutcomesTotal.serverErrors += outcomes.serverErrors;
+    for (const [group, n] of Object.entries(outcomes.byClass)) {
+      requestOutcomesTotal.byClass[group] = (requestOutcomesTotal.byClass[group] ?? 0) + n;
+    }
+    for (const s of parsed) {
       if (s.name === 'oci_http_requests_total') requests += s.value;
       if (s.name === 'oci_job_runs_total') {
         const job = jobEntry(s.labels.job);
@@ -111,6 +152,7 @@ export async function scrapeReplicas() {
     replicas: addresses.length,
     requestsPerReplica: perReplica.map((r) => r.requests),
     replies,
+    requests: requestOutcomesTotal,
     jobs,
     routes: [...routes.values()]
       .filter((r) => r.count > 0)
