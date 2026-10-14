@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { text, timestamp } from 'drizzle-orm/pg-core';
+import { customType, text, timestamp } from 'drizzle-orm/pg-core';
+
+/** A PostgreSQL full-text search vector (read and written as its text form). */
+export const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
 
 /** Generated UUID primary key column. */
 export const primaryId = () => text('id').primaryKey().default(sql`gen_random_uuid()::text`);

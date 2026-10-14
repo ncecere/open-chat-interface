@@ -150,6 +150,11 @@ Secret arrives through envFrom.
 {{- else if eq .component "worker" }}
 - name: RUN_MIGRATIONS
   value: "false"
+# Hooks are off, so nothing else runs `migrate --post`: the worker applies the
+# post-deploy steps itself once every replica that sends a heartbeat reports
+# this release (#385). A single API replica migrates itself at startup.
+- name: RUN_POST_MIGRATIONS
+  value: "auto"
 {{- end }}
 {{- range $name, $value := $c.env }}
 - name: {{ $name }}

@@ -77,7 +77,12 @@ export async function backupHealthCheck(now = new Date()): Promise<Check> {
 
   const finished = success.finishedAt ?? success.startedAt;
   const verified = success.verified ? 'verified' : 'not verified';
-  const summary = `Last backup ${finished.toISOString()}, ${verified}, ${sizeLabel(success.dumpBytes)} database, ${success.attachmentCount ?? 0} attachment objects`;
+  // An external run has no dump to size; the database's own row says how it is doing.
+  const database =
+    settings.databaseBackup === 'external'
+      ? 'database backed up outside OCI'
+      : `${sizeLabel(success.dumpBytes)} database`;
+  const summary = `Last backup ${finished.toISOString()}, ${verified}, ${database}, ${success.attachmentCount ?? 0} attachment objects`;
   if (now.getTime() - finished.getTime() > DAY_MS + 2 * 60 * 60_000)
     return { ...base, status: 'warn', detail: `No backup in over a day. ${summary}` };
   if ((success.missingObjects ?? 0) > 0)

@@ -1,5 +1,6 @@
 import {
   BACKUP_FILE_SAMPLE_SIZE,
+  type BackupDatabaseMode,
   type BackupFileVerification,
   type BackupRun,
   type BackupStatus,
@@ -15,6 +16,7 @@ import {
   SettingsSection,
   ToggleSetting,
 } from '~/components/admin/admin-ui';
+import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import {
   type DestinationDraft,
   DestinationSelect,
@@ -43,6 +45,14 @@ const VERIFICATION: Array<{ value: BackupFileVerification; label: string }> = [
   { value: 'all', label: 'Every file' },
 ];
 
+const DATABASE_MODES: Array<{ value: BackupDatabaseMode; label: string }> = [
+  { value: 'dump', label: 'OCI dumps the database (pg_dump)' },
+  { value: 'external', label: 'Backed up outside OCI (your own tooling)' },
+];
+
+/** Shown whenever the database is backed up outside OCI: what OCI does not know. */
+const EXTERNAL_LIMIT = 'OCI cannot tell whether it restores.';
+
 interface Draft extends DestinationDraft {
   enabled: boolean;
   hourUtc: number;
@@ -50,6 +60,8 @@ interface Draft extends DestinationDraft {
   keepWeekly: string;
   copyFiles: boolean;
   verifyFiles: BackupFileVerification;
+  databaseBackup: BackupDatabaseMode;
+  walArchivingExpected: boolean;
 }
 
 function draftFrom(status: BackupStatus): Draft {
@@ -62,6 +74,8 @@ function draftFrom(status: BackupStatus): Draft {
     keepWeekly: String(settings.keepWeekly),
     copyFiles: settings.copyFiles,
     verifyFiles: settings.verifyFiles,
+    databaseBackup: settings.databaseBackup,
+    walArchivingExpected: settings.walArchivingExpected,
   };
 }
 
@@ -78,6 +92,9 @@ export function backupChanges(status: BackupStatus, draft: Draft): Record<string
   if (keepWeekly !== settings.keepWeekly) patch.keepWeekly = keepWeekly;
   if (draft.copyFiles !== settings.copyFiles) patch.copyFiles = draft.copyFiles;
   if (draft.verifyFiles !== settings.verifyFiles) patch.verifyFiles = draft.verifyFiles;
+  if (draft.databaseBackup !== settings.databaseBackup) patch.databaseBackup = draft.databaseBackup;
+  if (draft.walArchivingExpected !== settings.walArchivingExpected)
+    patch.walArchivingExpected = draft.walArchivingExpected;
   return patch;
 }
 
@@ -95,6 +112,7 @@ export function filesSummary(files: NonNullable<BackupRun['files']>): string {
 function Overview({ status }: { status: BackupStatus }) {
   const latest = status.runs[0];
   const blockedId = useId();
+  const external = status.settings.databaseBackup === 'external';
 
   return (
     <div className="flex flex-col gap-4">
@@ -118,7 +136,9 @@ function Overview({ status }: { status: BackupStatus }) {
         </div>
         <div>
           <dt className="text-xs text-[var(--text-muted)]">PostgreSQL client tools</dt>
-          <dd className="mt-1 font-semibold">{status.pgDumpVersion ?? 'Not found'}</dd>
+          <dd className="mt-1 font-semibold">
+            {external ? 'Not needed' : (status.pgDumpVersion ?? 'Not found')}
+          </dd>
         </div>
       </dl>
 
@@ -131,7 +151,21 @@ function Overview({ status }: { status: BackupStatus }) {
           </ul>
         </Notice>
       )}
-      {!status.settings.copyFiles && (
+      {external && (
+        <Notice tone="info" title="The database is backed up outside OCI">
+          Each run backs up attachments only. OCI does not dump the database and cannot check that
+          your own backup exists or works; {EXTERNAL_LIMIT} System health shows what it can read of
+          WAL archiving. Test a restore with the restore drill in the administrator guide.
+        </Notice>
+      )}
+      {external && !status.settings.copyFiles && (
+        <Notice tone="warning" title="Nothing but a checksum list is backed up">
+          The database is backed up outside OCI and attachment files are not copied, so a run only
+          writes a list of attachments with their checksums. Turn on <em>Copy attachment files</em>{' '}
+          below, or protect attachment storage separately (for example with bucket versioning).
+        </Notice>
+      )}
+      {!external && !status.settings.copyFiles && (
         <Notice tone="info" title="Attachment files are not copied">
           Backups list every attachment with its checksum but do not copy the files, so a backup
           alone cannot restore attachments. Turn on <em>Copy attachment files</em> below, or protect
@@ -200,9 +234,15 @@ function SettingsForm({
     ...(draft.destination === 'separate' ? S3_BUCKET_FIELDS : []),
   ];
 
+  // Choosing to stop dumping the database is asked about when it would take effect.
+  const [confirmExternal, setConfirmExternal] = useState(false);
+  const external = draft.databaseBackup === 'external';
+
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (hasChanges) save.mutate(patch);
+    if (!hasChanges) return;
+    if (patch.databaseBackup === 'external') setConfirmExternal(true);
+    else save.mutate(patch);
   }
 
   return (
@@ -210,11 +250,41 @@ function SettingsForm({
       <ToggleSetting
         id="backups-enabled"
         label="Back up automatically"
-        description="Runs pg_dump once a day and writes the archive, with a manifest of attachment objects, to S3-compatible storage. Leave off if this instance is backed up another way."
+        description={
+          external
+            ? 'Runs once a day and writes a manifest of attachment objects, and copies of the files when that is on, to S3-compatible storage. The database is not dumped.'
+            : 'Runs pg_dump once a day and writes the archive, with a manifest of attachment objects, to S3-compatible storage. Leave off if this instance is backed up another way.'
+        }
         checked={draft.enabled}
         disabled={false}
         onCheckedChange={(enabled) => set('enabled', enabled)}
       />
+      <Field
+        label="Database backup"
+        htmlFor="backups-database-mode"
+        hint={
+          external
+            ? `Your own tooling (CloudNativePG, pgBackRest, WAL-G, volume snapshots) backs up the database. OCI backs up attachments only and does not need the PostgreSQL client tools. ${EXTERNAL_LIMIT}`
+            : 'OCI runs pg_dump and checks the archive by reading it back. Choose the other option if your own tooling already backs up the database.'
+        }
+      >
+        <Select
+          id="backups-database-mode"
+          value={draft.databaseBackup}
+          onChange={(value) => set('databaseBackup', value as BackupDatabaseMode)}
+          options={DATABASE_MODES}
+        />
+      </Field>
+      {external && (
+        <ToggleSetting
+          id="backups-wal-expected"
+          label="WAL archiving is expected"
+          description="System health warns when PostgreSQL is not archiving WAL, because point-in-time recovery is then not possible. Turn off if the database is backed up with volume snapshots only."
+          checked={draft.walArchivingExpected}
+          disabled={false}
+          onCheckedChange={(expected) => set('walArchivingExpected', expected)}
+        />
+      )}
       <ToggleSetting
         id="backups-copy-files"
         label="Copy attachment files"
@@ -274,7 +344,7 @@ function SettingsForm({
         <RetentionField
           id="backups-keep-daily"
           label="Daily backups kept"
-          hint="The newest backup of each of this many days (1–90)."
+          hint={`The newest backup of each of this many days (1–90).${external ? RECOVERY_WINDOW_HINT : ''}`}
           min={1}
           max={90}
           value={draft.keepDaily}
@@ -301,9 +371,33 @@ function SettingsForm({
         errorMessage={problemsElsewhere(problems, shown)}
         successMessage={saved && !hasChanges ? 'Backup settings saved.' : null}
       />
+
+      <ConfirmDialog
+        open={confirmExternal}
+        onOpenChange={setConfirmExternal}
+        title="Stop dumping the database?"
+        description="OCI will stop dumping the database. Check that your own backups work: OCI cannot."
+        confirmLabel="Stop dumping the database"
+        pendingLabel="Saving…"
+        errorMessage="Backup settings could not be saved."
+        onConfirm={() => save.mutateAsync(patch)}
+      >
+        <p className="text-sm text-[var(--text-muted)]">
+          OCI keeps backing up attachments on the same schedule. Earlier dumps are deleted by
+          retention as before.
+        </p>
+      </ConfirmDialog>
     </form>
   );
 }
+
+/**
+ * Copies of attachments are kept while a kept backup lists them, so with the
+ * database backed up elsewhere the days kept must reach back as far as the
+ * database can be recovered to.
+ */
+const RECOVERY_WINDOW_HINT =
+  ' Keep at least as many days as your database recovery window: a recovery point inside it can need an attachment copy that an expired backup listed.';
 
 /** The form's names for the fields the API names differently (#127). */
 const BACKUP_LABELS = {
@@ -332,7 +426,8 @@ function History({ runs }: { runs: BackupRun[] }) {
         </>
       )}
       summary={(run) =>
-        `${formatBytes(run.dumpBytes ?? 0)} database · ${run.attachmentCount ?? 0} attachment objects (${formatBytes(run.attachmentBytes ?? 0)})${run.verificationDetail ? ` · ${run.verificationDetail}` : ''}`
+        // A run without a dump (the database is backed up outside OCI) has no size to print.
+        `${run.dumpBytes === null ? '' : `${formatBytes(run.dumpBytes)} database · `}${run.attachmentCount ?? 0} attachment objects (${formatBytes(run.attachmentBytes ?? 0)})${run.verificationDetail ? ` · ${run.verificationDetail}` : ''}`
       }
       details={(run) =>
         run.files &&
@@ -366,7 +461,11 @@ export function AdminBackupsPage() {
     <div>
       <AdminPageHeader
         title="Backups"
-        description="A daily database dump, a checksummed manifest of attachment objects and, when turned on, copies of the files, written to S3-compatible storage and verified after every run. Restoring is a manual step, described in the administrator guide."
+        description={
+          status.data?.settings.databaseBackup === 'external'
+            ? 'A checksummed manifest of attachment objects and, when turned on, copies of the files, written to S3-compatible storage and verified after every run. The database is backed up outside OCI. Restoring is a manual step, described in the administrator guide.'
+            : 'A daily database dump, a checksummed manifest of attachment objects and, when turned on, copies of the files, written to S3-compatible storage and verified after every run. Restoring is a manual step, described in the administrator guide.'
+        }
       />
       {status.isLoading ? (
         <div className="py-8" role="status" aria-label="Loading backups">

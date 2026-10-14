@@ -1,22 +1,8 @@
 import { sql } from 'drizzle-orm';
-import {
-  boolean,
-  check,
-  customType,
-  index,
-  integer,
-  primaryKey,
-  text,
-  timestamp,
-} from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
+import { tsvector } from './_shared.js';
 import { pgTable } from './_table.js';
 import { attachment } from './chat.js';
-
-const tsvector = customType<{ data: string }>({
-  dataType() {
-    return 'tsvector';
-  },
-});
 
 /**
  * Whether a project file's extracted text has been split into chunks, and how
@@ -61,6 +47,11 @@ export const projectFileChunk = pgTable(
     endOffset: integer('end_offset').notNull(),
     content: text('content').notNull(),
     search: tsvector('search').generatedAlwaysAs(sql`to_tsvector('simple'::regconfig, "content")`),
+    /**
+     * The same with accents folded (migration 0049, #362), kept by a trigger; null
+     * when folding changes nothing. Written by the database only.
+     */
+    searchFolded: tsvector('search_folded'),
   },
   (t) => [
     primaryKey({ name: 'project_file_chunk_pk', columns: [t.attachmentId, t.ordinal] }),

@@ -1,6 +1,6 @@
 # Spec: Open Chat Interface v0.13 (index)
 
-Status: **map approved 2026-10-11; `release-hygiene` shipped as v0.12.1; the other modules not yet specified.** This file is
+Status: **map approved 2026-10-11; `release-hygiene` shipped as v0.12.1; `accent-search` approved and building; `external-backups` spec drafted; `scale-on-cluster` not yet specified.** The chart gap #385 (found during v0.12.1) ships in v0.13.0 too. This file is
 the index: the approved capability map, the build order, and what every
 module shares (commands, structure, style, testing, boundaries). Each module
 has its own spec, named by its id. The map, not file names, says what exists.
@@ -19,7 +19,7 @@ capacity); developers benefit from the hygiene work.
 | Module id | Responsibility | Depends on | Spec |
 |---|---|---|---|
 | `release-hygiene` | Drop `project_file_embedding_failure`; preflight report wording; guard development-image pruning; bring `ROADMAP.md` up to date | — | [SPEC-release-hygiene.md](SPEC-release-hygiene.md) — **done, v0.12.1** |
-| `accent-search` | Accent-insensitive search of message text by default: a stored folded column filled by a throttled background migration, its index built concurrently, search falling back until both are ready; project/file keyword search folded too; ß, æ, œ (#362) | — | not written yet |
+| `accent-search` | Accent-insensitive search of message text by default: a stored folded column filled by a throttled background migration, its index built concurrently, search falling back until both are ready; project/file keyword search folded too; ß, æ, œ (#362) | — | [SPEC-accent-search.md](SPEC-accent-search.md) — **approved, building** |
 | `external-backups` | An "external database backup" mode for clusters with their own backups: OCI copies attachments and verifies, documents recovery objectives, and has a restore drill | — | [SPEC-external-backups.md](SPEC-external-backups.md) — **approved, building** |
 | `scale-on-cluster` | Run `tools/scale` up to `large` against a `dev-env` environment on the cluster and publish the results against the service objectives | `accent-search` | not written yet |
 

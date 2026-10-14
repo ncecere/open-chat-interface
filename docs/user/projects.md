@@ -111,6 +111,7 @@ the parts of them that matter for your message instead:
   that contain more of your words, and rarer ones, rank higher; common words
   such as "the" count for little. Use the words you expect to find in the
   files, such as names, terms and numbers.
+  Accents and capitals do not matter: `bibliotheque` finds "bibliothèque".
 - Only passages that are relevant to your message are given to the model,
   labelled with their file name and passage number, in the order they appear
   in the files. A passage counts as relevant when it contains a word of your

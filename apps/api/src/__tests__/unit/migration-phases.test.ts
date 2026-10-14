@@ -4,9 +4,11 @@ import { join } from 'node:path';
 import {
   attachmentOwnRows,
   backgroundMigrations,
+  chunkSearchFolded,
   describeRequirement,
   indexBuild,
   loadSqlParser,
+  messageSearchFolded,
   mustRunOutsideTransaction,
   parseStatements,
   pendingMigrations,
@@ -33,7 +35,9 @@ const { progressOf } = await import('../../services/migrations/background-admin.
 const { formatBytes, verdictOf } = await import('../../services/migrations/preflight.js');
 const { renderReport } = await import('../../services/migrations/report-text.js');
 const { duration } = await import('../../services/migrations/throttle.js');
-const { autoPostMigrations } = await import('../../services/migrations/jobs.js');
+const { allReplicasCurrent, autoPostMigrations, postMigrationMode } = await import(
+  '../../services/migrations/jobs.js'
+);
 
 beforeAll(loadSqlParser);
 
@@ -257,9 +261,11 @@ describe('post-deploy folder', () => {
       // message-text index (#362) is not a step: it is optional, built by hand, and an
       // upgrade must not wait for it (about 1 ms per message). See packages/db/optional.
       ['0013_drop_project_file_embedding_failure', '0.12.1', undefined],
+      ['0014_message_search_folded_index', '0.13.0', 'message_search_folded_idx'],
+      ['0015_drop_message_text_search_folded_index', '0.13.0', undefined],
     ]);
     const builds = steps.filter((step) => step.index);
-    expect(builds).toHaveLength(11);
+    expect(builds).toHaveLength(12);
     expect(builds.every((step) => step.index?.concurrent && step.index.ifNotExists)).toBe(true);
     expect(steps[0]!.checksum).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -279,7 +285,13 @@ describe('post-deploy folder', () => {
 
 describe('background migrations', () => {
   it('registers test definitions only when the environment names them', () => {
-    const release = [usageRollupBackfill, ...secretReencryptionMigrations, attachmentOwnRows];
+    const release = [
+      usageRollupBackfill,
+      ...secretReencryptionMigrations,
+      attachmentOwnRows,
+      messageSearchFolded,
+      chunkSearchFolded,
+    ];
     expect(backgroundMigrations({})).toEqual(release);
     expect(
       backgroundMigrations({
@@ -360,6 +372,25 @@ describe('configuration', () => {
       ),
     ).toBe(true);
     expect(autoPostMigrations(parseEnv({ ...base, RUN_POST_MIGRATIONS: 'false' }))).toBe(false);
+  });
+
+  it('RUN_POST_MIGRATIONS=auto applies steps once every live replica runs this release', () => {
+    const auto = parseEnv({ ...base, RUN_MIGRATIONS: 'false', RUN_POST_MIGRATIONS: 'auto' });
+    expect(postMigrationMode(auto)).toBe('when-current');
+    // The job is registered, the decision is made each time it runs.
+    expect(autoPostMigrations(auto)).toBe(true);
+    expect(postMigrationMode(parseEnv(base))).toBe('on');
+    expect(postMigrationMode(parseEnv({ ...base, RUN_MIGRATIONS: 'false' }))).toBe('off');
+    expect(postMigrationMode(parseEnv({ ...base, RUN_POST_MIGRATIONS: 'true' }))).toBe('on');
+    expect(() => parseEnv({ ...base, RUN_POST_MIGRATIONS: 'sometimes' })).toThrow();
+
+    const replica = (version: string) => ({ version });
+    expect(allReplicasCurrent([replica('0.13.0'), replica('0.13.0')], '0.13.0')).toBe(true);
+    // One replica still on the previous release (a rollout in progress).
+    expect(allReplicasCurrent([replica('0.13.0'), replica('0.12.1')], '0.13.0')).toBe(false);
+    // No evidence is not a green light: nobody heartbeating, or no Redis at all.
+    expect(allReplicasCurrent([], '0.13.0')).toBe(false);
+    expect(allReplicasCurrent(null, '0.13.0')).toBe(false);
   });
 
   it('validates the background migration and post-deploy settings', () => {

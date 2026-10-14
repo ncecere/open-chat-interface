@@ -1,4 +1,4 @@
-import { sql } from '@oci/db';
+import { createDatabase, sql } from '@oci/db';
 import { SEARCH_HIGHLIGHT_END, SEARCH_HIGHLIGHT_START, type ThreadSearchResult } from '@oci/shared';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -21,12 +21,17 @@ const available = await livePostgresAvailable();
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
+  sql: null as unknown,
   organizationId: '',
 }));
 
 vi.mock('../../db/index.js', () => ({
   get db() {
     return state.db;
+  },
+  // Search asks whether the folded vectors are ready (services/migrations/readiness.ts).
+  get sql() {
+    return state.sql;
   },
 }));
 vi.mock('../../services/organization.js', () => ({
@@ -133,6 +138,7 @@ describe.skipIf(!available)('live Postgres: conversation search', () => {
   beforeAll(async () => {
     live = await createLiveDatabase('thread_search');
     state.db = live.db;
+    state.sql = createDatabase(live.connectionString, { max: 2 }).sql;
     state.organizationId = await seedOrganization(live.db);
     ownerId = await seedUser(live.db, state.organizationId, { email: 'owner@example.com' });
     strangerId = await seedUser(live.db, state.organizationId, { email: 'other@example.com' });
@@ -201,6 +207,9 @@ describe.skipIf(!available)('live Postgres: conversation search', () => {
   });
 
   afterAll(async () => {
+    await (state.sql as { end: (o: { timeout: number }) => Promise<void> } | null)?.end({
+      timeout: 5,
+    });
     await live?.destroy();
   });
 

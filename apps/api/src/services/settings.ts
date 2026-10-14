@@ -285,6 +285,14 @@ export interface StoredBackupSettings {
    */
   copyFiles?: boolean;
   verifyFiles?: 'sample' | 'all';
+  /**
+   * Who backs up the database (v0.13). Absent means `dump`: nothing changes
+   * on upgrade, and it is never inferred from anything OCI reads. Kept by a
+   * v0.12 replica saving other fields, as `updateSetting` merges.
+   */
+  databaseBackup?: 'dump' | 'external';
+  /** With `external`: whether WAL archiving is expected. Absent means true. */
+  walArchivingExpected?: boolean;
 }
 
 /**

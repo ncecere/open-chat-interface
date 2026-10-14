@@ -309,6 +309,8 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
       ['0012_attachment_thumbnail_key_index', 'applied'],
       // Drops the table v0.11.0 replaced (v0.12.1).
       ['0013_drop_project_file_embedding_failure', 'applied'],
+      ['0014_message_search_folded_index', 'applied'],
+      ['0015_drop_message_text_search_folded_index', 'applied'],
     ]);
     for (const name of [
       'message_created_at_idx',
@@ -322,10 +324,12 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
       'audit_log_actor_email_idx',
       'attachment_storage_key_idx',
       'attachment_thumbnail_key_idx',
+      'message_search_folded_idx',
     ]) {
       expect(await indexState(name)).toBe('valid');
     }
-    // The optional folded message index (#362) is not built by an upgrade.
+    // The hand-built folded message index v0.12 allowed is not built by an upgrade,
+    // and step 0015 would drop one that an operator built.
     expect(await indexState('message_text_search_folded_idx')).toBe('missing');
   });
 });
