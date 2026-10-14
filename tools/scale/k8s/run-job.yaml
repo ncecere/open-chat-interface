@@ -1,0 +1,697 @@
+# One run of the scale harness, in cluster (docs/dev/scale-harness.md, "Large on the cluster").
+# One pod; each phase of tools/scale/run.sh is an init container, so they run in order and the
+# first failure stops the rest; `hold` is the last container and only waits, so that
+# `kubectl cp` can fetch /results from the running pod. activeDeadlineSeconds stops the pod even if
+# the laptop that started it is gone. Phases cannot be re-run alone: a failed run starts again.
+#
+# The laptop (tools/scale/cluster.sh) scales the API and worker to 0 before this Job starts, because
+# the generator drops and rebuilds indexes, and scales them up when the `generate` container has
+# finished; `wait-api` waits for that. Everything runs on the load node (the database is pinned to
+# another node), under Pod Security `restricted`, as dev-oci requires. Rendered by cluster.sh
+# (variables: tools/scale/lib/cluster-render.mjs); every object carries dev.bitop.dev/env.
+#
+# The database password never appears here: PGUSER and PGPASSWORD come from CloudNativePG's
+# superuser Secret (the generator needs a superuser), and shell lines read $PGPASSWORD without
+# printing it. psql and node read the PG* variables or the DATABASE_URL built from them.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${ENV}-scale-run
+  labels:
+    dev.bitop.dev/env: ${ENV}
+    app.kubernetes.io/name: scale-run
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: ${DEADLINE_SECONDS}
+  template:
+    metadata:
+      labels:
+        dev.bitop.dev/env: ${ENV}
+        app.kubernetes.io/name: scale-run
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/hostname: ${LOAD_NODE}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tools
+          configMap:
+            name: ${ENV}-scale-tools
+        - name: environment
+          configMap:
+            name: ${ENV}-scale-env
+        - name: scale
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: results
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+      initContainers:
+        - name: extract
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              tar -xzf /tools/scale.tgz -C /scale
+              test -f /scale/generate.mjs
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+              readOnly: true
+            - name: scale
+              mountPath: /scale
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+        # The dataset. Two workers, not the default of one per CPU: the writes land on the NVMe that
+        # also holds etcd, and Kubernetes cannot limit disk I/O.
+        - name: generate
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              DATABASE_URL="postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE"
+              export DATABASE_URL
+              exec node /scale/generate.mjs --profile ${PROFILE} --seed ${SEED} --dimensions ${DIMENSIONS} --workers 2 --now ${NOW_DATE} --stub-url http://${ENV}-scale-stub:4181/v1 --out /results --reset
+          env:
+            - name: PGHOST
+              value: ${ENV}-pg-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: oci
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: password
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+
+        # What the report must say about the server, saved before any load: the version, the
+        # extensions and every setting (so the harness settings are shown to have taken effect),
+        # and the state of the background migrations. pg_stat_statements must be loaded: the
+        # count below fails the run here, not after the load.
+        - name: environment
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              psql -X -v ON_ERROR_STOP=1 -q -c 'create extension if not exists pg_stat_statements'
+              psql -X -v ON_ERROR_STOP=1 -q -At -c 'select count(*) from pg_stat_statements' > /dev/null
+              psql -X -v ON_ERROR_STOP=1 -q -c "\copy (select name, setting, coalesce(unit, '') as unit, source from pg_settings order by name) to '/results/pg_settings.tsv'"
+              psql -X -v ON_ERROR_STOP=1 -q -At -c 'select version()' > /results/pg_version.txt
+              psql -X -v ON_ERROR_STOP=1 -q -At -c "select extname || ' ' || extversion from pg_extension order by 1" > /results/pg_extensions.txt
+              psql -X -v ON_ERROR_STOP=1 -q -c "\copy (select name, status, rows_processed, coalesce(estimated_rows, 0) from background_migration order by name) to '/results/background-before.tsv'"
+          env:
+            - name: PGHOST
+              value: ${ENV}-pg-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: oci
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: password
+          volumeMounts:
+            - name: results
+              mountPath: /results
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+        # The laptop scales the API and worker up once `generate` has finished; wait for the app.
+        - name: wait-api
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              i=0
+              while [ "$i" -lt 180 ]; do
+                if wget -q -T 5 -O /dev/null http://${ENV}-open-chat-interface-web:8080/api/health/ready; then
+                  echo "the application is ready"
+                  exit 0
+                fi
+                i=$((i + 1))
+                sleep 5
+              done
+              echo "the application was not ready after 15 minutes" >&2
+              exit 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+        # With --wait-backfill the load starts once the background migrations have finished (what
+        # operators live with); without it, whatever is pending is still running (what the laptop
+        # baselines measured). Either way the report names the state.
+        - name: wait-background
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              if [ "$WAIT_BACKFILL" != true ]; then
+                echo "not waiting for background migrations"
+                exit 0
+              fi
+              deadline=$(( $(date +%s) + BACKFILL_WAIT_SECONDS ))
+              while :; do
+                failed=$(psql -X -At -c "select count(*) from background_migration where status = 'failed'")
+                open=$(psql -X -At -c "select count(*) from background_migration where status in ('pending', 'running', 'paused')")
+                if [ "$failed" != 0 ]; then echo "a background migration failed" >&2; exit 1; fi
+                if [ "$open" = 0 ]; then echo "background migrations finished"; exit 0; fi
+                if [ "$(date +%s)" -ge "$deadline" ]; then echo "background migrations still running after $BACKFILL_WAIT_SECONDS s" >&2; exit 1; fi
+                echo "$open background migration(s) still open"
+                sleep 30
+              done
+          env:
+            - name: WAIT_BACKFILL
+              value: "${WAIT_BACKFILL}"
+            - name: BACKFILL_WAIT_SECONDS
+              value: "${BACKFILL_WAIT_SECONDS}"
+            - name: PGHOST
+              value: ${ENV}-pg-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: oci
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+        # Warm-up, not measured (run.sh ignores its result too).
+        - name: warm
+          image: ${K6_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale/k6
+          command: ["sh", "-c"]
+          args:
+            - |
+              k6 run --quiet /scale/k6/main.js > /dev/null 2>&1 || true
+          env:
+            - name: SCALE_BASE_URL
+              value: "http://${ENV}-open-chat-interface-web:8080"
+            - name: SCALE_ORIGIN
+              value: "${APP_URL}"
+            - name: SCALE_STUB_URL
+              value: "http://${ENV}-scale-stub:4181"
+            - name: SCALE_FIXTURES
+              value: /results/fixtures.json
+            - name: SCALE_SIGNIN_ADDRESSES
+              value: "0"
+            - name: SCALE_PROFILE
+              value: ${PROFILE}
+            - name: SCALE_PHASE
+              value: warm
+            - name: K6_NO_USAGE_REPORT
+              value: "true"
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsUser: 12345
+            runAsGroup: 12345
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+
+        # Counters back to zero, the backlog before the load, and the start time that `collect`
+        # reads job runs from.
+        - name: baseline
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              DATABASE_URL="postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE"
+              export DATABASE_URL
+              psql -X -v ON_ERROR_STOP=1 -q -At -c 'select pg_stat_statements_reset()' > /dev/null
+              node /scale/report.mjs snapshot --name before --run-dir /results
+              date -u +%Y-%m-%dT%H:%M:%SZ > /results/started-main
+          env:
+            - name: PGHOST
+              value: ${ENV}-pg-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: oci
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: password
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+
+        # The measured run. k6 exits 99 when a threshold was missed: that is a result, not a failure.
+        - name: main
+          image: ${K6_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale/k6
+          command: ["sh", "-c"]
+          args:
+            - |
+              set +e
+              k6 run --quiet /scale/k6/main.js
+              status=$?
+              echo "$status" > /results/k6-main.status
+              if [ "$status" = 0 ] || [ "$status" = 99 ]; then exit 0; fi
+              exit "$status"
+          env:
+            - name: SCALE_BASE_URL
+              value: "http://${ENV}-open-chat-interface-web:8080"
+            - name: SCALE_ORIGIN
+              value: "${APP_URL}"
+            - name: SCALE_STUB_URL
+              value: "http://${ENV}-scale-stub:4181"
+            - name: SCALE_FIXTURES
+              value: /results/fixtures.json
+            - name: SCALE_SIGNIN_ADDRESSES
+              value: "0"
+            - name: SCALE_PROFILE
+              value: ${PROFILE}
+            - name: SCALE_PHASE
+              value: main
+            - name: K6_NO_USAGE_REPORT
+              value: "true"
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsUser: 12345
+            runAsGroup: 12345
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+
+        - name: collect-main
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              DATABASE_URL="postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE"
+              export DATABASE_URL
+              node /scale/report.mjs collect --phase main --since "$(cat /results/started-main)" --run-dir /results
+          env:
+            - name: PGHOST
+              value: ${ENV}-pg-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: oci
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: password
+            - name: SCALE_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-scale-harness
+                  key: METRICS_TOKEN
+            - name: SCALE_API_HOST
+              value: ${ENV}-open-chat-interface-api-headless
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+        # Destructive, so last: an administrator prunes the oldest quarter of usage and audit
+        # rows while people keep browsing. The windows were set on the API by the laptop.
+        - name: retention
+          image: ${K6_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale/k6
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ "$SKIP_RETENTION" = true ]; then echo "retention phase skipped"; exit 0; fi
+              k6 run --quiet /scale/k6/retention.js || true
+          env:
+            - name: SKIP_RETENTION
+              value: "${SKIP_RETENTION}"
+            - name: SCALE_BASE_URL
+              value: "http://${ENV}-open-chat-interface-web:8080"
+            - name: SCALE_ORIGIN
+              value: "${APP_URL}"
+            - name: SCALE_STUB_URL
+              value: "http://${ENV}-scale-stub:4181"
+            - name: SCALE_FIXTURES
+              value: /results/fixtures.json
+            - name: SCALE_SIGNIN_ADDRESSES
+              value: "0"
+            - name: SCALE_PROFILE
+              value: ${PROFILE}
+            - name: SCALE_PHASE
+              value: retention
+            - name: K6_NO_USAGE_REPORT
+              value: "true"
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsUser: 12345
+            runAsGroup: 12345
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+
+        - name: collect-retention
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              if [ "$SKIP_RETENTION" = true ]; then echo "retention phase skipped"; exit 0; fi
+              DATABASE_URL="postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE"
+              export DATABASE_URL
+              node /scale/report.mjs collect --phase retention --since "$(cat /results/started-main)" --run-dir /results
+          env:
+            - name: SKIP_RETENTION
+              value: "${SKIP_RETENTION}"
+            - name: PGHOST
+              value: ${ENV}-pg-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: oci
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: password
+            - name: SCALE_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-scale-harness
+                  key: METRICS_TOKEN
+            - name: SCALE_API_HOST
+              value: ${ENV}-open-chat-interface-api-headless
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+        # The report, with the environment block (the laptop wrote environment.json, this reads
+        # the server's own settings and the background migrations again).
+        - name: render
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          workingDir: /scale
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              psql -X -v ON_ERROR_STOP=1 -q -c "\copy (select name, status, rows_processed, coalesce(estimated_rows, 0) from background_migration order by name) to '/results/background-after.tsv'"
+              node /scale/report.mjs render --run-dir /results
+          env:
+            - name: PGHOST
+              value: ${ENV}-pg-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: oci
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${ENV}-pg-superuser
+                  key: password
+            - name: SCALE_ENVIRONMENT_FILE
+              value: /environment/environment.json
+            - name: SCALE_PROFILE
+              value: ${PROFILE}
+            - name: SCALE_COMMIT
+              value: ${COMMIT}
+            - name: SCALE_API_REPLICAS
+              value: "${API_REPLICAS}"
+            - name: STUB_FIRST_TOKEN_MS
+              value: "${STUB_FIRST_TOKEN_MS}"
+            - name: STUB_TOKENS_PER_SECOND
+              value: "${STUB_TOKENS_PER_SECOND}"
+            - name: STUB_REPLY_TOKENS
+              value: "${STUB_REPLY_TOKENS}"
+          volumeMounts:
+            - name: scale
+              mountPath: /scale
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: environment
+              mountPath: /environment
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      containers:
+        # Keeps the pod running so the laptop can copy /results out; the laptop then deletes the Job.
+        - name: hold
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "3600"]
+          volumeMounts:
+            - name: results
+              mountPath: /results
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

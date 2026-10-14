@@ -31,12 +31,15 @@ resolves it. [First run](first-run.md) walks through it.
    authentication, approval, network safety.
 10. [Backups](backups.md) — scheduled database dumps and attachment manifests
     to S3, verification, retention, restoring.
-11. [Observability and events](observability.md) — Prometheus metrics,
+11. [External database backup](external-database-backup.md) — for clusters
+    with their own backups (CloudNativePG, pgBackRest, WAL-G): what OCI stops
+    doing, recovery objectives, what else to back up, and the restore drill.
+12. [Observability and events](observability.md) — Prometheus metrics,
     OpenTelemetry traces, signed webhooks for audit events.
-12. [Compliance export and legal hold](compliance.md) — audit events and,
+13. [Compliance export and legal hold](compliance.md) — audit events and,
     optionally, conversation content as JSON Lines to S3; legal holds that
     pause retention and deletion for named people.
-13. [Read-only maintenance mode](maintenance.md) — keep reading, searching
+14. [Read-only maintenance mode](maintenance.md) — keep reading, searching
     and signing in working while nothing can be changed, for a window or an
     emergency (`OCI_READ_ONLY`).
 
@@ -87,7 +90,7 @@ Pages are grouped by task. **Overview** sits above the groups.
 | --- | --- |
 | Storage | Where attachments live, and the upload policy |
 | Retention | How long conversations, usage history, and audit entries are kept |
-| [Backups](backups.md) | Daily database dumps and attachment manifests to S3, verified, with retention |
+| [Backups](backups.md) | Daily database dumps (or, with [your own database backups](external-database-backup.md), attachments only) and attachment manifests to S3, verified, with retention |
 | [Compliance](compliance.md) | Audit events (and optionally conversation content) exported as JSON Lines to S3; legal holds |
 | System health | Whether dependencies are working, [read-only maintenance mode](maintenance.md), background jobs, storage reconciliation, [observability](observability.md) status |
 

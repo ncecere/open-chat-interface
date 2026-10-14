@@ -1,6 +1,7 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PROFILES, TARGETS } from '../profiles.mjs';
+import { completeEnvironment, ENVIRONMENT_LABELS } from './cluster-environment.mjs';
 import { readJson, runDir, writeJson } from './report-context.mjs';
 
 // ---------------------------------------------------------------------------
@@ -107,6 +108,29 @@ function jobRows(main, before, after, steadySeconds) {
   return out;
 }
 
+/**
+ * For a run on the cluster (tools/scale/cluster.sh sets SCALE_ENVIRONMENT_FILE): the launch-time
+ * description of the nodes and topology, completed from what the server itself recorded in the run
+ * directory. A laptop run has none and keeps its hardware sentence.
+ */
+function clusterEnvironment(file) {
+  let base;
+  try {
+    base = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(`SCALE_ENVIRONMENT_FILE ${file} cannot be read: ${error.message}`);
+  }
+  const text = (name) =>
+    existsSync(resolve(runDir, name)) ? readFileSync(resolve(runDir, name), 'utf8') : undefined;
+  return completeEnvironment(base, {
+    pgVersion: text('pg_version.txt'),
+    extensions: text('pg_extensions.txt'),
+    settings: text('pg_settings.tsv'),
+    backgroundBefore: text('background-before.tsv'),
+    backgroundAfter: text('background-after.tsv'),
+  });
+}
+
 export function render() {
   const generate = readJson('generate.json');
   const main = readJson('k6-main.json');
@@ -116,6 +140,9 @@ export function render() {
   const before = readJson('backlog-before.json');
   const after = dbMain?.backlog ?? null;
   const env = process.env;
+  const environment = env.SCALE_ENVIRONMENT_FILE
+    ? clusterEnvironment(env.SCALE_ENVIRONMENT_FILE)
+    : null;
   const profileName = generate?.profile ?? env.SCALE_PROFILE ?? 'tiny';
   const profile = PROFILES[profileName];
   const scenarios = scenarioRows(main);
@@ -134,6 +161,7 @@ export function render() {
     profile: profileName,
     date: env.SCALE_DATE ?? new Date().toISOString().slice(0, 10),
     commit: env.SCALE_COMMIT ?? null,
+    environment,
     hardware: {
       cpu: env.SCALE_HW_CPU ?? null,
       memory: env.SCALE_HW_MEMORY ?? null,
@@ -201,10 +229,18 @@ function markdown(r) {
     `Commit \`${r.commit ?? 'unknown'}\`; ${r.setup.apiReplicas} API replica(s) behind the web proxy; stub model: first token after ${r.setup.stub.firstTokenMs} ms, ${r.setup.stub.tokensPerSecond} tokens/s, ${r.setup.stub.replyTokens} tokens a reply.`,
     '',
   );
-  push(
-    `Hardware: ${r.hardware.cpu ?? 'unknown CPU'}, ${r.hardware.memory ?? '?'} memory${r.hardware.os ? `, ${r.hardware.os}` : ''}; Docker: ${r.hardware.dockerCpus ?? '?'} CPUs, ${r.hardware.dockerMemory ?? '?'} memory. Everything (PostgreSQL, Redis, API, web, stub, k6) shares that machine.`,
-    '',
-  );
+  if (r.environment) {
+    push('## Environment', '', '| | |', '| --- | --- |');
+    for (const [key, label] of Object.entries(ENVIRONMENT_LABELS)) {
+      push(`| ${label} | ${String(r.environment[key] ?? 'not recorded').replace(/\|/g, '\\|')} |`);
+    }
+    push('');
+  } else {
+    push(
+      `Hardware: ${r.hardware.cpu ?? 'unknown CPU'}, ${r.hardware.memory ?? '?'} memory${r.hardware.os ? `, ${r.hardware.os}` : ''}; Docker: ${r.hardware.dockerCpus ?? '?'} CPUs, ${r.hardware.dockerMemory ?? '?'} memory. Everything (PostgreSQL, Redis, API, web, stub, k6) shares that machine.`,
+      '',
+    );
+  }
   if (r.setup.load) {
     const v = r.setup.load.vus;
     push(
@@ -318,6 +354,13 @@ function markdown(r) {
       });
       push('');
     }
+  }
+  const outcomes = r.replicaMetrics?.requests;
+  if (outcomes?.counted > 0) {
+    push(
+      `Availability: ${((1 - outcomes.serverErrors / outcomes.counted) * 100).toFixed(2)} % of ${fmtInt(outcomes.counted)} counted requests were not answered with a 5xx (${fmtInt(outcomes.serverErrors)} were). Health probes, /metrics and unmatched routes are not counted; the counters are since each replica started.`,
+      '',
+    );
   }
   if (r.replicaMetrics?.requestsPerReplica?.length > 1) {
     push(

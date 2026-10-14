@@ -1,0 +1,225 @@
+# Restore drill stack (tools/restore-drill/run.mjs; docs/dev/restore-drill.md).
+# Every credential here is a throwaway test value. Ports bind to 127.0.0.1.
+#
+# `pg` is PostgreSQL 17 with pgvector and pgBackRest (Dockerfile), archiving WAL
+# to a local repository on the `repo` volume. OCI runs against it as one process
+# (OCI_ROLE=all) with its attachments and its backups on the S3 server (VersityGW).
+# After the drill has taken a base backup, written data and recorded a time T,
+# it removes `pg` and its data volume and restores the repository into a fresh
+# volume (`pg-restored`), then starts a second OCI against it as OCI_ROLE=web:
+# the restore procedure of docs/admin/external-database-backup.md.
+#
+# Profiles: `restored` (pg-restored, api-restored) and `tools` (one-off jobs).
+# Images: VersityGW and the Node and Redis images are pinned as the harness and
+# the failover drill pin them. Licences: VersityGW Apache-2.0, Redis 7.2
+# BSD-3-Clause, Node.js MIT, PostgreSQL, pgvector and pgBackRest as in the
+# Dockerfile.
+name: oci-restore
+
+x-oci-env: &oci-env
+  NODE_ENV: production
+  API_PORT: 3000
+  REDIS_URL: redis://redis:6379
+  AUTH_SECRET: restore-drill-auth-secret-not-for-production
+  ENCRYPTION_KEY: restore-drill-encryption-key-not-for-production
+  INITIAL_ADMIN_EMAIL: admin@upgrade.test
+  INITIAL_ADMIN_PASSWORD: upgrade-test-admin-password
+  STORAGE_LOCAL_PATH: /data/storage
+  RUN_MIGRATIONS: 'false'
+  LOG_LEVEL: ${OCI_DRILL_LOG_LEVEL:-warn}
+  RATE_LIMIT_AUTH_PER_MINUTE: '100000'
+  # External mode needs no PostgreSQL client tools. Pointing at a directory
+  # that does not exist makes any attempt to run pg_dump fail loudly.
+  BACKUP_PG_BIN_DIR: /nonexistent
+
+x-oci-health: &oci-health
+  test:
+    - CMD
+    - node
+    - -e
+    - "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  interval: 2s
+  timeout: 5s
+  retries: 60
+  start_period: 30s
+
+x-pg: &pg
+  image: ${OCI_DRILL_PG_IMAGE:-oci-restore-pg:drill}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: 'no'
+  healthcheck:
+    test: ['CMD-SHELL', 'pg_isready -U oci -d oci']
+    interval: 2s
+    timeout: 5s
+    retries: 60
+    start_period: 5s
+
+services:
+  # The primary. Archiving and the settings the guide tells an operator to set.
+  pg:
+    <<: *pg
+    environment:
+      POSTGRES_USER: oci
+      POSTGRES_PASSWORD: restore-drill-only
+      POSTGRES_DB: oci
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=oci archive-push %p
+      - -c
+      - archive_timeout=${OCI_DRILL_ARCHIVE_TIMEOUT:-10}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - repo:/var/lib/pgbackrest
+
+  # The restored cluster: the same image on a fresh data volume, which
+  # `pgbackrest restore` fills. No archiving flags: a scratch copy must not
+  # push WAL into the production repository. No POSTGRES_* variables: the
+  # data directory already exists when it starts.
+  pg-restored:
+    <<: *pg
+    profiles: ['restored']
+    command: ['postgres', '-c', 'max_connections=100']
+    volumes:
+      - pgdata_restored:/var/lib/postgresql/data
+      - repo:/var/lib/pgbackrest
+    networks:
+      default:
+        aliases: [pg-restored]
+
+  # `docker compose run --rm restore ...`: pgBackRest against the fresh volume.
+  restore:
+    <<: *pg
+    profiles: ['tools']
+    user: postgres
+    entrypoint: ['pgbackrest']
+    healthcheck:
+      disable: true
+    volumes:
+      - pgdata_restored:/var/lib/postgresql/data
+      - repo:/var/lib/pgbackrest
+
+  redis:
+    image: ${OCI_DRILL_REDIS_IMAGE:-redis:7.2.10-alpine@sha256:395ccd7ee4db0867de0d0410f4712a9e0331cff9fdbd864f71ec0f7982d3ffe6}
+    restart: 'no'
+    command: redis-server --save '' --appendonly no --loglevel warning
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Attachments and backups: two buckets on one S3 server, as a small
+  # deployment would have. The harness and CI use the same image.
+  s3:
+    image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
+    restart: 'no'
+    environment:
+      ROOT_ACCESS_KEY: restore_drill_s3
+      ROOT_SECRET_KEY: restore-drill-only-s3-secret
+      VGW_BACKEND: posix
+      VGW_BACKEND_ARG: /data
+      VGW_META_SIDECAR: /meta
+      VGW_HEALTH: /health
+      VGW_QUIET: 'true'
+    volumes:
+      - s3_data:/data
+      - s3_meta:/meta
+
+  # The rolling-upgrade test's stub OpenAI-compatible model: a provider whose
+  # stored credential the restored OCI must be able to decrypt.
+  stub:
+    image: ${OCI_DRILL_NODE_IMAGE:-node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402}
+    restart: 'no'
+    environment:
+      STUB_PORT: '4181'
+      STUB_CHUNKS: '4'
+      STUB_CHUNK_MS: '10'
+    volumes:
+      - ../upgrade-test/stub-model.mjs:/stub/stub-model.mjs:ro
+    command: ['node', '/stub/stub-model.mjs']
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:4181/health']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # The OCI that is backed up: one process, so that "Back up now" runs here.
+  api:
+    image: ${OCI_DRILL_API_IMAGE:-oci-restore-api:drill}
+    restart: 'no'
+    environment:
+      <<: *oci-env
+      OCI_ROLE: all
+      APP_URL: http://127.0.0.1:${OCI_DRILL_PORT:-18781}
+      DATABASE_URL: postgres://oci:restore-drill-only@pg:5432/oci
+    ports:
+      - '127.0.0.1:${OCI_DRILL_PORT:-18781}:3000'
+    healthcheck: *oci-health
+    depends_on:
+      pg: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      s3: { condition: service_started }
+      stub: { condition: service_healthy }
+
+  # The OCI started on the restored database: OCI_ROLE=web, no worker.
+  api-restored:
+    image: ${OCI_DRILL_API_IMAGE:-oci-restore-api:drill}
+    profiles: ['restored']
+    restart: 'no'
+    environment:
+      <<: *oci-env
+      OCI_ROLE: web
+      APP_URL: http://127.0.0.1:${OCI_DRILL_PORT_RESTORED:-18782}
+      DATABASE_URL: postgres://oci:restore-drill-only@pg-restored:5432/oci
+    ports:
+      - '127.0.0.1:${OCI_DRILL_PORT_RESTORED:-18782}:3000'
+    healthcheck: *oci-health
+    depends_on:
+      pg-restored: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      s3: { condition: service_started }
+      stub: { condition: service_healthy }
+
+  # One-off jobs in the API image: the migration job, the preflight, the S3
+  # helper (s3tool.mjs, which uses the image's AWS SDK) and
+  # `backup:restore-files`. The host name of the database and the S3
+  # variables are set per call by run.mjs.
+  tool:
+    image: ${OCI_DRILL_API_IMAGE:-oci-restore-api:drill}
+    profiles: ['tools']
+    restart: 'no'
+    environment:
+      <<: *oci-env
+      DATABASE_URL: postgres://oci:restore-drill-only@pg-restored:5432/oci
+      S3_ENDPOINT: http://s3:7070
+      S3_ACCESS_KEY_ID: restore_drill_s3
+      S3_SECRET_ACCESS_KEY: restore-drill-only-s3-secret
+      BACKUP_S3_ENDPOINT: http://s3:7070
+      BACKUP_S3_REGION: us-east-1
+      BACKUP_S3_ACCESS_KEY_ID: restore_drill_s3
+      BACKUP_S3_SECRET_ACCESS_KEY: restore-drill-only-s3-secret
+      BACKUP_S3_FORCE_PATH_STYLE: 'true'
+      TARGET_S3_ENDPOINT: http://s3:7070
+      TARGET_S3_REGION: us-east-1
+      TARGET_S3_ACCESS_KEY_ID: restore_drill_s3
+      TARGET_S3_SECRET_ACCESS_KEY: restore-drill-only-s3-secret
+      TARGET_S3_FORCE_PATH_STYLE: 'true'
+    volumes:
+      - ./s3tool.mjs:/app/apps/api/s3tool.mjs:ro
+    entrypoint: ['node']
+
+volumes:
+  pgdata:
+  pgdata_restored:
+  repo:
+  s3_data:
+  s3_meta:
