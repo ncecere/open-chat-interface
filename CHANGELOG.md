@@ -7,6 +7,41 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-13
+
+Search, backups and scale (`SPEC.md`). Three pre-deploy migrations (`0047` to
+`0049`), two post-deploy steps (`0014`, `0015`) and two background migrations
+(`0.13.message-search-folded`, `0.13.chunk-search-folded`). The upgrade
+preflight reports the steps and the migrations; search behaves as v0.12 until
+they finish.
+
+### Added
+
+- **External database backup** (#386). **Backups → Database backup** can be set
+  to *Backed up outside OCI* for clusters that have their own backups
+  (CloudNativePG, pgBackRest, WAL-G, volume snapshots). A run still copies and
+  verifies attachments, applies retention and runs the sweep, but starts no
+  `pg_dump` or `pg_restore` and does not need the client tools. `dump` stays
+  the default and is never inferred; there is no migration. **System health**
+  gets a *Database backup (external)* row read from `pg_stat_archiver` with an
+  ordinary application role. It is red only for a WAL archiver that is failing
+  now, and always says that OCI cannot verify that the backup restores. New
+  metrics `oci_wal_archive_last_success_timestamp_seconds` and
+  `oci_wal_archive_failing`. A run without a dump no longer shows "0 B
+  database".
+- **Guides and a restore drill for it.** `docs/admin/external-database-backup.md`
+  covers what OCI does and does not do in this mode, recovery objectives per
+  approach, CloudNativePG, pgBackRest and WAL-G, what else must be backed up,
+  retention against the recovery window, and the restore procedure. The
+  pgBackRest point-in-time restore drill (`tools/restore-drill`, run weekly by
+  `restore-drill.yml`) proves that a restored database migrates and starts, that
+  rows after the target time are gone, and that attachments restore from the
+  copies. The CloudNativePG guide has not been run against a cluster.
+- **`tools/scale/cluster.sh`** runs the scale harness against a `dev-env`
+  environment on the homelab cluster, with a preflight, an etcd and volume
+  watcher and a verified teardown (development tooling). No cluster results are
+  published yet.
+
 ### Changed
 
 - **Search ignores accents everywhere, for everyone** (#362). `bibliotheque`
@@ -1789,7 +1824,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.12.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.13.0...main
+[0.13.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.13.0
 [0.12.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.1
 [0.12.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.0
 [0.11.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.11.1
