@@ -13,8 +13,8 @@ import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { DeleteUserSection } from '~/components/admin/delete-user';
 import { UserGroupsSection } from '~/components/admin/user-groups';
 import { UserLimitsSection } from '~/components/admin/user-limits';
-import { UserProjectLabels } from '~/components/admin/user-project-labels';
 import { UserMfaSection } from '~/components/admin/user-mfa';
+import { UserProjectLabels } from '~/components/admin/user-project-labels';
 import {
   ADMIN_USERS_QUERY_KEY,
   ROLE_LABELS,

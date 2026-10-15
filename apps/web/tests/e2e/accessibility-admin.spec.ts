@@ -238,6 +238,8 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
       const results = await scan(page);
       expect(describeViolations(results), describeViolations(results)).toBe('');
     });
+  });
+
   test('admin data classes has no violations, with its dialogs (v0.14)', async ({ page }) => {
     const dataClass = (overrides: Record<string, unknown>) => ({
       id: 'c1',
