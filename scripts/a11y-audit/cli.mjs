@@ -10,7 +10,8 @@
  * and puts the settings back; run it against a disposable instance, never production.
  */
 
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULTS, parseArgs, USAGE } from './lib/args.mjs';
@@ -18,7 +19,7 @@ import { loadTools } from './lib/deps.mjs';
 import { createEvidence } from './lib/evidence.mjs';
 import { createGroup, ensureCatalog, userIdFor } from './lib/fixtures.mjs';
 import { buildMatrix } from './lib/matrix.mjs';
-import { loadRoutes } from './lib/routes.mjs';
+import { loadRoutes, REPO_ROOT } from './lib/routes.mjs';
 import {
   adminCredentials,
   apiAs,
@@ -28,6 +29,23 @@ import {
   storageStateFor,
 } from './lib/session.mjs';
 import { auditContexts } from './run.mjs';
+
+/** The version file of the checkout the audit runs from, and its commit: which build was audited. */
+function buildIdentity() {
+  const version = /'([0-9][^']*)'\)\.replace/.exec(
+    readFileSync(join(REPO_ROOT, 'apps', 'api', 'src', 'version.ts'), 'utf8'),
+  )?.[1];
+  let commit = null;
+  try {
+    commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    // Not a git checkout: the version alone identifies the build.
+  }
+  return { version: version ?? null, commit };
+}
 
 const log = (message) => process.stderr.write(`${message}\n`);
 
@@ -117,7 +135,16 @@ export async function main(argv, env = process.env) {
     for (const role of roles) {
       const account = accounts[role];
       account.params.threadId = await createThread(account.api, 'Audit conversation');
-      account.params.projectId = await createProject(account.api, 'Audit project');
+      // A role may not have projects (restricted): its project page is then reported as skipped.
+      account.params.projectId = await createProject(account.api, 'Audit project').catch(
+        (error) => {
+          skipped.push({
+            what: `/projects/$projectId as ${role}`,
+            reason: String(error.message).slice(0, 120),
+          });
+          return undefined;
+        },
+      );
       account.params.slug = 'a11y-audit-missing';
     }
     if (adminAccount) {
@@ -195,7 +222,7 @@ export async function main(argv, env = process.env) {
       generatedAt: new Date().toISOString(),
       durationSeconds: Math.round((Date.now() - started) / 1000),
       tool: { name: 'scripts/a11y-audit', ...versions, browser: `Chromium ${browser.version()}` },
-      app: { baseUrlHost: new URL(options.baseUrl).host },
+      app: { baseUrlHost: new URL(options.baseUrl).host, ...buildIdentity() },
       matrix: {
         profile: options.matrix,
         roles: options.roles,

@@ -165,7 +165,8 @@ async function auditContext({
             ? '/a11y-audit/no-such-page'
             : resolveConcretePath(route.path, { slug: 'a11y-audit-missing', ...params });
       } catch (error) {
-        errors.push({ route: route.path, check: 'route', message: String(error.message) });
+        // No fixture for this role (it cannot have projects): said so, never counted as covered.
+        coverageEntry(coverage, route.path, context.role).skipped = String(error.message);
         continue;
       }
       const opened = await visit(page, url).catch((error) => ({ failed: String(error.message) }));

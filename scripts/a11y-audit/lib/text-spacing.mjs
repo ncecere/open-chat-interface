@@ -59,6 +59,8 @@ export function findNewClipping(before, after) {
           hiddenPx: Math.round(now[axis]),
           // Already cut off before the override (an ellipsis on a long name): it now loses more.
           wasClipped: was[axis] > CLIP_TOLERANCE_PX,
+          // An ellipsis says text was cut; a plain clip hides it without a sign.
+          ellipsis: record.textOverflow === 'ellipsis',
         });
       }
     }
@@ -78,7 +80,7 @@ export function intersectionArea(one, two) {
  * of an ancestor it sits in are not a pair. Overlap smaller than a sliver of the smaller box
  * is line-box rounding, not a collision.
  *
- * @param {Array<{ id: string, rect: { x: number, y: number, width: number, height: number }, ancestorIds?: string[] }>} before
+ * @param {Array<{ id: string, owner?: string, rect: { x: number, y: number, width: number, height: number }, ancestorIds?: string[] }>} before
  * @param {typeof before} after
  */
 export function findNewOverlaps(before, after) {
@@ -88,7 +90,11 @@ export function findNewOverlaps(before, after) {
     for (let j = i + 1; j < after.length; j += 1) {
       const one = after[i];
       const two = after[j];
-      if (one.ancestorIds?.includes(two.id) || two.ancestorIds?.includes(one.id)) continue;
+      // Lines of one element, and an element with the text inside it, are not a collision.
+      const ownerOne = one.owner ?? one.id;
+      const ownerTwo = two.owner ?? two.id;
+      if (ownerOne === ownerTwo) continue;
+      if (one.ancestorIds?.includes(ownerTwo) || two.ancestorIds?.includes(ownerOne)) continue;
       const area = intersectionArea(one.rect, two.rect);
       if (area < MINIMUM_OVERLAP_PX2) continue;
       const smaller = Math.min(one.rect.width * one.rect.height, two.rect.width * two.rect.height);

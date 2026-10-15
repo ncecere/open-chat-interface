@@ -122,3 +122,26 @@ test('a box too small to show anything (screen-reader-only text) is not clipping
   ];
   assert.deepEqual(findNewClipping([], after), []);
 });
+
+test('lines of one element, even when wrapped boxes overlap, are not a collision', () => {
+  const lines = [
+    { id: 'e1#0', owner: 'e1', rect: { x: 0, y: 0, width: 100, height: 20 } },
+    { id: 'e1#1', owner: 'e1', rect: { x: 0, y: 10, width: 100, height: 20 } },
+  ];
+  assert.deepEqual(findNewOverlaps([], lines), []);
+  // The same boxes belonging to two elements are one.
+  const two = [
+    { id: 'a#0', owner: 'a', rect: lines[0].rect },
+    { id: 'b#0', owner: 'b', rect: lines[1].rect },
+  ];
+  assert.equal(findNewOverlaps([], two).length, 1);
+});
+
+test('a truncated box says whether it shows an ellipsis', () => {
+  const before = [element('name', { overflowX: 'hidden' })];
+  const after = [
+    element('name', { overflowX: 'hidden', scrollWidth: 260, textOverflow: 'ellipsis' }),
+  ];
+  assert.equal(findNewClipping(before, after)[0].ellipsis, true);
+  assert.equal(findNewClipping(before, [{ ...after[0], textOverflow: 'clip' }])[0].ellipsis, false);
+});

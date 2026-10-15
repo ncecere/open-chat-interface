@@ -356,11 +356,42 @@ export function collectTargets() {
   return targets;
 }
 
-/** Marks every text-bearing element with a stable id and measures its box and its overflow. */
+/**
+ * Marks every text-bearing element with a stable id and measures what the 1.4.12 and 1.4.4 checks
+ * compare before and after a change: the line boxes of its text, clipped to what is visible (an
+ * ancestor that hides its overflow, as a screen-reader-only or truncated element does, cuts the
+ * box), and the boxes that hide their overflow.
+ */
 export function collectTextRecords() {
   const records = [];
   const clips = [];
   let index = 0;
+  const pathOf = (element) =>
+    [
+      element.tagName.toLowerCase(),
+      ...[...element.classList].filter((name) => !/[[\]:/]/.test(name)).slice(0, 2),
+    ].join('.');
+  // The part of `rect` that is not cut off by an ancestor that clips; null when none is left.
+  const visiblePart = (element, rect) => {
+    let { left, top, right, bottom } = rect;
+    for (let node = element; node && node !== document.body; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+      const box = node.getBoundingClientRect();
+      if (style.overflowX !== 'visible') {
+        left = Math.max(left, box.left + node.clientLeft);
+        right = Math.min(right, box.left + node.clientLeft + node.clientWidth);
+      }
+      if (style.overflowY !== 'visible') {
+        top = Math.max(top, box.top + node.clientTop);
+        bottom = Math.min(bottom, box.top + node.clientTop + node.clientHeight);
+      }
+    }
+    return right - left > 0 && bottom - top > 0
+      ? { x: left, y: top, width: right - left, height: bottom - top }
+      : null;
+  };
+
   const elements = document.body.querySelectorAll('*');
   for (const element of elements) {
     if (element.closest('script, style, svg, noscript, template')) continue;
@@ -379,32 +410,45 @@ export function collectTextRecords() {
     const hasOwnText = [...element.childNodes].some(
       (child) => child.nodeType === 3 && /\S/.test(child.nodeValue),
     );
-    const rect = element.getBoundingClientRect();
-    if (hasOwnText && rect.width > 0 && rect.height > 0) {
+    if (hasOwnText && records.length < 3000) {
       const ancestorIds = [];
       for (let node = element.parentElement; node; node = node.parentElement) {
         const ancestorId = node.getAttribute('data-a11y-audit-id');
         if (ancestorId) ancestorIds.push(ancestorId);
       }
-      // Use the text's own rectangle, not the box, so padding around short text is not "text".
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      const textRect = range.getBoundingClientRect();
-      records.push({
-        id,
-        rect: {
-          x: textRect.x + scrollX,
-          y: textRect.y + scrollY,
-          width: textRect.width,
-          height: textRect.height,
-        },
-        ancestorIds,
-        path: [
-          element.tagName.toLowerCase(),
-          ...[...element.classList].filter((name) => !/[[\]:/]/.test(name)).slice(0, 2),
-        ].join('.'),
-      });
+      // One box per line of the element's own text, not the union a wrapped inline element has.
+      let line = 0;
+      for (const child of element.childNodes) {
+        if (child.nodeType !== 3 || !/\S/.test(child.nodeValue)) continue;
+        const range = document.createRange();
+        range.selectNodeContents(child);
+        for (const box of range.getClientRects()) {
+          if (box.width < 1 || box.height < 1) continue;
+          const part = visiblePart(element, {
+            left: box.left,
+            top: box.top,
+            right: box.right,
+            bottom: box.bottom,
+          });
+          if (!part) continue;
+          records.push({
+            id: `${id}#${line}`,
+            owner: id,
+            rect: {
+              x: part.x + scrollX,
+              y: part.y + scrollY,
+              width: part.width,
+              height: part.height,
+            },
+            ancestorIds,
+            path: pathOf(element),
+          });
+          line += 1;
+        }
+      }
     }
+    // A field scrolls its own text, so a long value is not content lost.
+    if (element.matches('input, textarea, select')) continue;
     if (/hidden|clip/.test(style.overflowX + style.overflowY)) {
       clips.push({
         id,
@@ -415,14 +459,11 @@ export function collectTextRecords() {
         overflowX: style.overflowX,
         overflowY: style.overflowY,
         textOverflow: style.textOverflow,
-        path: [
-          element.tagName.toLowerCase(),
-          ...[...element.classList].filter((name) => !/[[\]:/]/.test(name)).slice(0, 2),
-        ].join('.'),
+        path: pathOf(element),
       });
     }
   }
-  return { texts: records, clips, truncated: records.length > 2500 };
+  return { texts: records, clips, truncated: records.length >= 3000 };
 }
 
 /**

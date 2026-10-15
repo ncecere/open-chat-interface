@@ -268,10 +268,10 @@ async function measureChange(
       rule: `${rule}-clipping`,
       // Text that was already truncated (an ellipsis on a long name) and loses more is a lesser
       // fault than text that fitted and no longer does.
-      severity: clip.wasClipped ? 'review' : 'serious',
+      severity: clip.wasClipped ? 'review' : clip.ellipsis ? 'moderate' : 'serious',
       route,
       context,
-      message: `With ${what}, ${clip.hiddenPx} px of content is cut off on the ${clip.axis} axis${clip.wasClipped ? ' (it was already truncated: check the full text is available another way)' : ''}`,
+      message: `With ${what}, ${clip.hiddenPx} px of content is cut off on the ${clip.axis} axis${clip.wasClipped ? ' (it was already truncated: check the full text is available another way)' : clip.ellipsis ? ' (shown with an ellipsis: check the full text is available another way)' : ''}`,
       targets: [names.get(clip.id) ?? clip.id],
     });
   }
@@ -431,21 +431,8 @@ const WITHOUT_PASTE = /password|code|otp/i;
 /** Labels, error wiring, autocomplete tokens and paste, from the page's own fields. */
 export async function formsCheck(page, { evidence, route, context, ownDetails }) {
   const forms = await page.evaluate(collectForms);
-  evidence.sample(['3.3.2'], 'forms', route);
-  for (const field of forms.fields) {
-    if (!field.hasLabel) {
-      evidence.finding({
-        criteria: ['3.3.2', '1.3.1'],
-        check: 'forms',
-        rule: 'field-without-label',
-        severity: 'serious',
-        route,
-        context,
-        message: `A ${field.type} field has no label or name`,
-        targets: [field.target],
-      });
-    }
-  }
+  // Whether each field has a name is read from the accessibility tree (checks/tree.mjs), which
+  // sees through the hidden inputs that component libraries put beside a styled control.
   for (const field of forms.invalid) {
     evidence.sample(['3.3.1'], 'forms', route);
     if (!field.hasAssociatedMessage) {

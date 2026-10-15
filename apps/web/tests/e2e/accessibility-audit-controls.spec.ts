@@ -175,13 +175,13 @@ test.describe('the audit checks can fail, and do not flag a page that is right',
     expect(cleanNormal.findings).toEqual([]);
   });
 
-  test('3.3.2, 1.3.5 and 3.3.8 flag an unlabelled field, missing tokens and refused paste', async ({
+  test('1.3.5 and 3.3.8 flag missing autocomplete tokens and a refused paste', async ({
     browser,
   }) => {
     const { formsCheck } = await load('checks/measured.mjs');
     const broken = await run(browser, BROKEN, formsCheck, { env: { ownDetails: true } });
     expect(rules(broken.findings)).toEqual(
-      expect.arrayContaining(['field-without-label', 'autocomplete-missing', 'paste-blocked']),
+      expect.arrayContaining(['autocomplete-missing', 'paste-blocked']),
     );
     const clean = await run(browser, CLEAN, formsCheck, { env: { ownDetails: true } });
     expect(clean.findings).toEqual([]);
@@ -223,6 +223,9 @@ test.describe('the audit checks can fail, and do not flag a page that is right',
     expect(rules(broken.findings)).toEqual(
       expect.arrayContaining(['control-without-name', 'control-without-state']),
     );
+    // The unlabelled text field is also the 3.3.2 failure: a field with no name has no label.
+    const field = broken.findings.find((f) => f.targets.includes('div > p > input'));
+    expect(field?.criteria).toEqual(['4.1.2', '3.3.2', '1.3.1']);
     const clean = await run(browser, CLEAN, treeCheck);
     expect(clean.findings).toEqual([]);
   });

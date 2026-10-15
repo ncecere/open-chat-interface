@@ -4,6 +4,19 @@
  * screen reader is given, not from the markup.
  */
 
+/** A control a person types into or chooses with: its name is also the label 3.3.2 asks for. */
+const FIELD_ROLES = new Set([
+  'textbox',
+  'searchbox',
+  'combobox',
+  'listbox',
+  'checkbox',
+  'radio',
+  'switch',
+  'slider',
+  'spinbutton',
+]);
+
 const NAMED = new Set([
   'button',
   'link',
@@ -87,7 +100,7 @@ export async function treeCheck(page, { evidence, route, context }) {
     await cdp.send('DOM.enable');
     await cdp.send('Accessibility.enable');
     const { nodes } = await cdp.send('Accessibility.getFullAXTree');
-    evidence.sample(['4.1.2'], 'tree', route);
+    evidence.sample(['4.1.2', '3.3.2'], 'tree', route);
     const roles = {};
     let unnamed = 0;
     for (const node of nodes) {
@@ -100,7 +113,7 @@ export async function treeCheck(page, { evidence, route, context }) {
         unnamed += 1;
         if (unnamed <= 10) {
           evidence.finding({
-            criteria: ['4.1.2'],
+            criteria: FIELD_ROLES.has(role) ? ['4.1.2', '3.3.2', '1.3.1'] : ['4.1.2'],
             check: 'tree',
             rule: 'control-without-name',
             severity: 'serious',
