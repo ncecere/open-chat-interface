@@ -47,7 +47,7 @@ export function UserGroupsSection({ userId }: { userId: string }) {
                 <Link
                   to="/admin/groups/$groupId"
                   params={{ groupId: group.id }}
-                  className="min-w-0 truncate text-sm hover:underline"
+                  className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm hover:underline"
                   title={group.name}
                 >
                   {group.name}

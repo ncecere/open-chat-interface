@@ -101,7 +101,9 @@ function ProviderRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate font-medium text-[var(--text-primary)]">{provider.label}</h2>
+            <h2 className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium text-[var(--text-primary)]">
+              {provider.label}
+            </h2>
             <Badge variant="neutral">{kindLabel}</Badge>
             {legacySaml ? (
               <Badge variant="warning">Not offered at sign-in</Badge>
@@ -225,7 +227,7 @@ function ProviderRow({
                     variant="outline"
                     className="max-w-full font-mono"
                   >
-                    <span className="truncate">
+                    <span className="[overflow-wrap:anywhere]">
                       {mapping.claim}={mapping.value} → {mapping.role}
                     </span>
                   </Badge>

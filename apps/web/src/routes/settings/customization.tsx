@@ -39,9 +39,9 @@ function CountedInput({
   // The limit is heard with the field, not only seen beside it (#310).
   const countId = `${id}-count`;
   const shared = cn(
-    'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/60 px-3 text-sm',
+    'w-full rounded-lg border border-[var(--border-control)] bg-[var(--bg-control)]/60 px-3 text-sm',
     'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
-    'transition-colors focus:border-[var(--border-strong)]',
+    'transition-colors focus:border-[var(--text-muted)]',
   );
 
   return (
@@ -105,47 +105,50 @@ function AppearanceRow() {
   const { theme, setTheme } = useTheme();
   const id = useId();
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-      <div>
-        <p id={`${id}-label`} className="text-sm font-medium text-[var(--text-primary)]">
-          {t('settings.customization.appearance')}
-        </p>
-        <p
-          id={`${id}-description`}
-          className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]"
-        >
-          {t('settings.customization.appearanceDescription')}
-        </p>
-      </div>
-      <div
-        role="radiogroup"
-        aria-labelledby={`${id}-label`}
-        aria-describedby={`${id}-description`}
-        className="inline-flex shrink-0 gap-1 self-start rounded-xl bg-[var(--bg-segment-track)] p-1"
-      >
-        {APPEARANCES.map((option) => (
-          <label
-            key={option.value}
-            className={cn(
-              'flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
-              'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--accent-bright)]',
-              theme === option.value
-                ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-            )}
+    // Side by side by the room the row has, not the window: at larger text it stacks (1.4.4).
+    <div className="@container">
+      <div className="flex flex-col gap-3 @[40rem]:flex-row @[40rem]:items-start @[40rem]:justify-between @[40rem]:gap-6">
+        <div>
+          <p id={`${id}-label`} className="text-sm font-medium text-[var(--text-primary)]">
+            {t('settings.customization.appearance')}
+          </p>
+          <p
+            id={`${id}-description`}
+            className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]"
           >
-            <input
-              type="radio"
-              name={`${id}-appearance`}
-              value={option.value}
-              checked={theme === option.value}
-              onChange={() => setTheme(option.value as ThemeMode)}
-              className="sr-only"
-            />
-            <option.icon className="size-3.5" aria-hidden="true" />
-            {t(option.label)}
-          </label>
-        ))}
+            {t('settings.customization.appearanceDescription')}
+          </p>
+        </div>
+        <div
+          role="radiogroup"
+          aria-labelledby={`${id}-label`}
+          aria-describedby={`${id}-description`}
+          className="inline-flex shrink-0 gap-1 self-start rounded-xl bg-[var(--bg-segment-track)] p-1"
+        >
+          {APPEARANCES.map((option) => (
+            <label
+              key={option.value}
+              className={cn(
+                'flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--accent-bright)]',
+                theme === option.value
+                  ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+              )}
+            >
+              <input
+                type="radio"
+                name={`${id}-appearance`}
+                value={option.value}
+                checked={theme === option.value}
+                onChange={() => setTheme(option.value as ThemeMode)}
+                className="sr-only"
+              />
+              <option.icon className="size-3.5" aria-hidden="true" />
+              {t(option.label)}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );

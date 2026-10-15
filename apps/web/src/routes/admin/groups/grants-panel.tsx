@@ -85,7 +85,7 @@ function Checklist({
                 />
                 <span
                   className={cn(
-                    'min-w-0 flex-1 truncate',
+                    'min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]',
                     choice.muted && 'text-[var(--text-muted)]',
                   )}
                 >

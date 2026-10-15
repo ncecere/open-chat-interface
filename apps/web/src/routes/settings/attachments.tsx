@@ -71,7 +71,7 @@ function FilterMenu({ value, onChange }: FilterMenuProps) {
         <button
           type="button"
           className={cn(
-            'flex h-9 w-full items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors sm:w-40',
+            'flex h-9 w-full items-center justify-between gap-3 rounded-lg border border-[var(--border-control)] bg-[var(--bg-control)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors sm:w-40',
             'hover:bg-[var(--bg-control-hover)] data-[state=open]:border-[var(--accent-bright)]',
           )}
           aria-label={t('settings.attachments.filterLabel', { filter: t(active.labelKey) })}

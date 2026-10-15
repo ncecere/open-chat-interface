@@ -120,12 +120,15 @@ export function TrashList() {
               <div className="min-w-0 flex-1">
                 <p
                   dir="auto"
-                  className="truncate text-[var(--text-primary)] text-sm"
+                  className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-[var(--text-primary)] text-sm"
                   title={thread.title}
                 >
                   {thread.title}
                 </p>
-                <p className="truncate text-[var(--text-muted)] text-xs" title={detail}>
+                <p
+                  className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-[var(--text-muted)] text-xs"
+                  title={detail}
+                >
                   {detail}
                 </p>
               </div>

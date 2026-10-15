@@ -99,7 +99,10 @@ export function AdminQuotasPage() {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-medium" title={policy.name}>
+                    <p
+                      className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium"
+                      title={policy.name}
+                    >
                       {policy.name}
                     </p>
                     <Badge variant="neutral">{formatLimit(policy)}</Badge>
@@ -119,7 +122,7 @@ export function AdminQuotasPage() {
                     )}
                   </div>
                   <p
-                    className="truncate text-xs text-[var(--text-muted)]"
+                    className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]"
                     title={`${formatWindow(policy)}${policy.roles.length > 0 ? ` · ${policy.roles.join(', ')}` : ''}${policy.description ? ` · ${policy.description}` : ''}`}
                   >
                     {formatWindow(policy)}

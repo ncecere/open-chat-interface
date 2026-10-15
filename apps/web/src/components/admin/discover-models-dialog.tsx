@@ -151,7 +151,9 @@ export function DiscoverModelsDialog({
                   {isSelected && <Check className="size-3 text-white" />}
                 </span>
 
-                <span className="min-w-0 flex-1 truncate text-sm">{model.upstreamModelId}</span>
+                <span className="min-w-0 flex-1 [overflow-wrap:anywhere] text-sm">
+                  {model.upstreamModelId}
+                </span>
 
                 {model.alreadyInCatalog && <Badge variant="success">in catalog</Badge>}
               </button>

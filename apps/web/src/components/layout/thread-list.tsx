@@ -49,8 +49,21 @@ function groupThreads(threads: ThreadSummary[]) {
   return groups.filter((group) => group.threads.length > 0);
 }
 
+/**
+ * 24 by 24 px, the WCAG 2.2 target floor (2.5.8): the 14 px icon with `p-1` was 22 by 22, with
+ * 2 px between the three, so neither the size nor the spacing exception held.
+ */
 const ROW_ACTION =
-  'rounded p-1 text-[var(--text-muted)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+  'flex size-6 items-center justify-center rounded text-[var(--text-muted)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+
+/**
+ * The room the three actions take at the end of a row: 4 px from the edge, three 24 px buttons and
+ * two 2 px gaps, 80 px. The link gives it up while the actions show (`me-20` is 5rem), so they sit
+ * beside the conversation title, not over its last letters or over the link's own box, which is
+ * what the audit counted as the focused link being partly covered (2.4.11). Not animated: the
+ * link must be clear of them the moment it has focus, not 200 ms later.
+ */
+const ACTIONS_ROOM = 'group-hover:me-20 group-focus-within:me-20';
 
 /** One conversation in the sidebar, with its pin, rename and archive actions. */
 export function ThreadRow({
@@ -99,14 +112,20 @@ export function ThreadRow({
         to="/chat/$threadId"
         params={{ threadId: thread.id }}
         aria-current={active ? 'page' : undefined}
-        className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]',
+          ACTIONS_ROOM,
+        )}
         title={
           projectName
             ? t('shell.threadRow.titleInProject', { title: thread.title, project: projectName })
             : thread.title
         }
       >
-        <span dir="auto" className="min-w-0 flex-1 truncate">
+        <span
+          dir="auto"
+          className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]"
+        >
           {thread.title}
         </span>
         {projectName && (
@@ -119,14 +138,16 @@ export function ThreadRow({
           >
             <Folder className="size-3 shrink-0" aria-hidden="true" />
             <span className="sr-only">{t('shell.threadRow.inProject')} </span>
-            <span className="truncate">{projectName}</span>
+            <span className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+              {projectName}
+            </span>
           </span>
         )}
       </Link>
 
       <div
         className={cn(
-          'pointer-events-none absolute end-1 flex translate-x-3 items-center gap-0.5 rounded-lg bg-inherit ps-2 opacity-0 rtl:-translate-x-3',
+          'pointer-events-none absolute end-1 flex translate-x-3 items-center gap-0.5 opacity-0 rtl:-translate-x-3',
           'transition-[transform,opacity] duration-200 ease-out',
           'group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100',
           'group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100',

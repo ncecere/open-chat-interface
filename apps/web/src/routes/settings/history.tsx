@@ -298,7 +298,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                       to="/chat/$threadId"
                       params={{ threadId: thread.id }}
                       dir="auto"
-                      className="block truncate text-sm text-[var(--text-primary)] hover:underline"
+                      className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm text-[var(--text-primary)] hover:underline"
                       // The full text on hover when a narrow screen cuts it short (#130).
                       title={thread.title}
                     >
@@ -306,7 +306,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                     </Link>
                     {projectName && (
                       <p
-                        className="truncate text-xs text-[var(--text-muted)]"
+                        className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]"
                         title={t('settings.history.project', { name: projectName })}
                       >
                         {tWithUserText(t, 'settings.history.project', { name: projectName }, [

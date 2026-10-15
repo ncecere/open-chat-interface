@@ -4,12 +4,20 @@ Defects the audit found, from the first run of `pnpm a11y:audit` (the `smoke` ma
 [report](acr.md) for exactly what ran) and from the inspections in [inspections.md](inspections.md).
 Each has its criterion, route, severity, evidence and a suggested fix.
 
-**Status of all of them: open.** The application was being changed while this audit was made (CSS
-converted to logical properties, strings extracted for translation), so nothing was fixed here:
-the fixes are a later task, and the final audit runs after the application settles. A finding that
-still reproduces then is fixed with a test that fails first, or filed as an issue and the report's
-row stays "Partially Supports". The evidence keys are the `rule` names in `evidence.json`
-(`findings[].rule`); a test fails if a finding there is missing from this file.
+**Status.** The application was being changed while this audit was made (CSS converted to logical
+properties, strings extracted for translation), so nothing was fixed in that run. The fixes came
+after, on the branch `v0.14/a11y-fixes-1` (D1 to D5, outside the chat area), each with a test that
+failed first; each finding below says which commit fixed it and what is still open. The chat area
+(components/chat, components/artifacts, routes/chat) was being translated at the time and is fixed
+later (D6, D7, the model picker and message box under D1, D2 and D4, the reduced-motion notes). The
+final audit runs after the application settles; a finding that still reproduces then is fixed with a
+test that fails first, or filed as an issue and the report's row stays "Partially Supports". The
+evidence keys are the `rule` names in `evidence.json` (`findings[].rule`); a test fails if a finding
+there is missing from this file.
+
+The focused re-run after the fixes (`pnpm a11y:audit --matrix smoke --only pages`, the same 32
+contexts as the first run, on a freshly seeded instance) went from 172 findings to 8; the 8 are all
+in the chat area (the message box, the model picker under it) and are listed under D1, D2 and D4.
 
 This is a record of the first run, on build 68f91a59 (version file 0.13.1, before the release
 bump). Numbers can change after the interface changes; re-run before trusting any of them.
@@ -25,6 +33,18 @@ was found on the pages walked; the second step of sign-in allows paste, names th
 part of a criterion (the report says which), and nobody used a screen reader.
 
 ## D1. The edge of form fields is too faint (1.4.11, moderate)
+
+**Status: fixed outside the chat area (3179e81c); the message box and the model picker under it are
+open.** `--border-control` (`#696969` in dark, `#808080` in light: 3.1:1 to 3.6:1 and 3.3:1 to 4.0:1
+on every surface a field sits on) is the edge of `Input`, `Textarea`, the select trigger, the
+Customization fields and the attachments filter, and the off track of the switch; the sidebar search
+has an edge. Checked in light and dark and all four accents on the sign-in page, Customization,
+administration (general settings, audit log) and the home page: 111 findings over 33 routes before,
+none outside the chat area after. Still open: the message box (`textarea` inside a `div.border.px-4`
+in `components/chat/composer.tsx`, which has the edge on its wrapper, `--border-strong`, not on the
+field) and the model picker under it (a ghost button): 4 findings on `/` and `/chat/$threadId`,
+fixed with the chat area by giving the wrapper `border-[var(--border-control)]` and the picker the
+same edge as a select.
 
 - **Criterion:** 1.4.11 Non-text Contrast. **Evidence:** `field-boundary-contrast`, 111 findings
   over 33 routes.
@@ -45,6 +65,18 @@ part of a criterion (the report says which), and nobody used a screen reader.
 
 ## D2. Text is cut off under the 1.4.12 text spacing (1.4.12, moderate)
 
+**Status: fixed outside the chat area (023220f2); the model picker's label is open.** Titles and
+names in the sidebar, the lists and Settings now take two lines before an ellipsis, technical values
+break where they must (nothing cut), the Select trigger's value takes two lines. 20 moderate and 18
+review findings over 17 and 13 routes before; after, the one that remains is the model picker's label
+under the message box (`components/chat/model-picker.tsx`, `span.min-w-0.truncate`, 33 px at 320 px,
+review). The full text of a project and of a group is the heading of its page. A conversation's full
+title is the tab's title and the page's heading for a screen reader, but **not a visible heading**: the
+`h1` in `routes/chat/thread.tsx` is `sr-only`, so the sentence above ("the conversation page already
+shows the full title in its heading") was only true for a screen reader. The sidebar row has the full
+title as its `title` and the Rename dialog shows it; a visible title on the conversation page is for
+the chat area.
+
 - **Criterion:** 1.4.12 Text Spacing. **Evidence:** `text-spacing-clipping` (moderate: 20
   findings over 17 routes; review: 18 findings over 13 routes where the text was already
   truncated and loses more).
@@ -61,6 +93,12 @@ part of a criterion (the report says which), and nobody used a screen reader.
 
 ## D3. Text overlaps under the 1.4.12 text spacing (1.4.12, serious)
 
+**Status: fixed (e8d2a7ff).** The cause was not a fixed height: the name and address under the avatar
+were `truncate` boxes inside a `lg:flex-none` container, which takes the width of its text, so the box
+was wider than its 15rem column and ran under the page beside it (the audit's account has a long
+address). The container is the width of the column and the text breaks where it must. 5 findings
+before, none after, with a person whose address is 70 characters.
+
 - **Criterion:** 1.4.12 Text Spacing. **Evidence:** `text-spacing-overlap`, 5 findings.
 - **Routes:** `/settings`, `/settings/customization`, `/settings/groups`, `/settings/history`,
   `/settings/memory`.
@@ -71,6 +109,16 @@ part of a criterion (the report says which), and nobody used a screen reader.
   block grow. Re-run `--only pages --routes '^/settings'` to confirm.
 
 ## D4. Text resize to 200% breaks four layouts (1.4.4, serious and moderate)
+
+**Status: fixed outside the chat area (20d814c6, 023220f2); the model picker's label is open.** The
+four layouts broke because a breakpoint is a width of the window while the text is sized in rem:
+side-by-side rows kept going side by side with a fraction of the room. Branding (form beside its
+preview), the settings sections (18rem title beside the form), Customization's appearance control and
+the language row are now container queries (they go side by side by the room they have, so at larger
+text they stack; at 100% the pages look as before); a provider's action buttons may wrap
+(`/admin/models`); the labels of the user page's four figures break inside their cell. The truncated
+names are as for D2. Before: 2 overlaps, 12 clippings (1 serious), 1 sideways; after: the model
+picker's label under the message box (`/` and `/chat/$threadId`, moderate, 131 px), in the chat area.
 
 - **Criterion:** 1.4.4 Resize Text. **Evidence:** `text-resize-overlap` (2), `text-resize-clipping`
   (1 serious, 7 moderate, 4 review), `text-resize-sideways` (1).
@@ -86,6 +134,10 @@ part of a criterion (the report says which), and nobody used a screen reader.
 
 ## D5. The hover action buttons in the sidebar are too small and too close (2.5.8, moderate)
 
+**Status: fixed (86b79068).** The three buttons are 24 by 24 px, and the link gives up 5rem at its end
+while the row is hovered or has focus, so the buttons are beside the title and not over the link (the
+`focus-partly-obscured` review item has the same cause and the same fix). 4 findings before, none after.
+
 - **Criterion:** 2.5.8 Target Size (Minimum). **Evidence:** `target-size`, 4 findings (each with 8
   to 12 occurrences).
 - **Routes:** every page with the sidebar: `/`, `/chat/$threadId`, `/projects`,
@@ -99,6 +151,8 @@ part of a criterion (the report says which), and nobody used a screen reader.
   text. Fixes the review item too.
 
 ## D6. A streaming reply is not announced (4.1.3, serious)
+
+**Status: open, in the chat area (later).**
 
 - **Criterion:** 4.1.3 Status Messages. **Evidence:** `reply-not-announced`, route
   `/chat/$threadId`; the observation is in `facts.statusMessages["streaming-reply"]` (zero
@@ -123,6 +177,8 @@ part of a criterion (the report says which), and nobody used a screen reader.
   audit regenerates it.
 
 ## D7. The artifact panel can only be resized by dragging, or by keyboard (2.5.7, moderate)
+
+**Status: open, in the chat area (later).**
 
 - **Criterion:** 2.5.7 Dragging Movements. **Evidence:** the inspection in
   [inspections.md](inspections.md#257) and `facts.dragging["artifact-panel-resize"]` (the keyboard

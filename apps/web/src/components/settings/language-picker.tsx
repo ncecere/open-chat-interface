@@ -90,11 +90,12 @@ export function LanguagePicker() {
   const current = isPseudoLocale(locale) ? null : LOCALES[locale];
 
   return (
-    <section className="mt-12" aria-labelledby={`${id}-title`}>
+    <section className="@container mt-12" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`} className="text-xl font-bold">
         {t('settings.language.title')}
       </h2>
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      {/* Side by side by the room the row has, not the window: at larger text it stacks (1.4.4). */}
+      <div className="mt-4 flex flex-col gap-3 @[40rem]:flex-row @[40rem]:items-start @[40rem]:justify-between @[40rem]:gap-6">
         <div>
           <p id={`${id}-description`} className="text-sm leading-relaxed text-[var(--text-muted)]">
             {t('settings.language.description')}
@@ -109,7 +110,7 @@ export function LanguagePicker() {
             </p>
           )}
         </div>
-        <div className="w-full shrink-0 sm:w-64">
+        <div className="w-full shrink-0 @[40rem]:w-64">
           <Select
             id={id}
             aria-label={t('settings.language.title')}

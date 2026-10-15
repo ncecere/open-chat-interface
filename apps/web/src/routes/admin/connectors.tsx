@@ -207,7 +207,7 @@ function ConnectorCard({
                 classification on, forgetting it must be visible (#395). */}
             {classNames && !connector.reviewed && <Badge variant="warning">Not reviewed</Badge>}
           </div>
-          <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
+          <p className="mt-0.5 [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]">
             {connector.url}
             {connector.authMode === 'shared' &&
               ` · ${connector.sharedHeaderName} ${connector.hasSharedCredential ? 'set' : 'not set'}`}

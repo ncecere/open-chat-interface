@@ -158,7 +158,7 @@ describe('a conversation search result', () => {
     const spans = [...container.querySelectorAll('span[dir]')];
     const title = spans.find((span) => span.textContent === 'واجب الكتابة');
     expect(title?.getAttribute('dir')).toBe('auto');
-    const snippet = container.querySelector('span.line-clamp-2');
+    const snippet = container.querySelector('span.line-clamp-2.text-xs');
     expect(snippet?.getAttribute('dir')).toBe('auto');
     // "Reply: " is its own left-to-right run, skipped when the direction is chosen.
     expect(snippet?.querySelector('span[dir="ltr"]')?.textContent).toBe('Reply: ');

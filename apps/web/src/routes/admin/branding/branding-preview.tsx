@@ -24,7 +24,7 @@ export function BrandingPreview({ settings }: { settings: BrandingSettings }) {
   const PreviewThemeIcon = THEME_ICONS[normalized.defaultTheme];
 
   return (
-    <div className="min-w-0 lg:sticky lg:top-6">
+    <div className="min-w-0 @[56rem]:sticky @[56rem]:top-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">Live preview</h2>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-xs text-[var(--text-muted)]">

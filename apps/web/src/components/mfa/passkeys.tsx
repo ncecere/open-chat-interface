@@ -91,7 +91,7 @@ export function PasskeySection({
               className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                <p className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm font-medium text-[var(--text-primary)]">
                   {passkey.name || t('auth.passkeys.defaultName')}
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">

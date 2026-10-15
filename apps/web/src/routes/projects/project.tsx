@@ -592,7 +592,10 @@ function ProjectConversations({ projectId, shared }: { projectId: string; shared
                 title={thread.title}
                 className="flex items-center gap-3 py-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                <span dir="auto" className="min-w-0 flex-1 truncate">
+                <span
+                  dir="auto"
+                  className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]"
+                >
                   {thread.title}
                 </span>
                 <span className="shrink-0 text-xs text-[var(--text-muted)]">

@@ -11,8 +11,10 @@ export function StatGrid({ stats }: { stats: Array<{ label: string; value: strin
           key={stat.label}
           className="min-w-0 rounded-xl border border-[var(--border-subtle)] p-4"
         >
-          <dt className="truncate text-[var(--text-muted)] text-xs">{stat.label}</dt>
-          <dd className="mt-1 truncate font-semibold text-xl">{stat.value}</dd>
+          <dt className="[overflow-wrap:anywhere] text-[var(--text-muted)] text-xs">
+            {stat.label}
+          </dt>
+          <dd className="mt-1 [overflow-wrap:anywhere] font-semibold text-xl">{stat.value}</dd>
         </div>
       ))}
     </dl>
@@ -147,10 +149,16 @@ export function PeopleList({
           className="flex items-center justify-between gap-4 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
         >
           <div className="min-w-0">
-            <p className="truncate font-medium text-sm" title={entry.name}>
+            <p
+              className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium text-sm"
+              title={entry.name}
+            >
               {entry.name}
             </p>
-            <p className="truncate text-[var(--text-muted)] text-xs" title={entry.email}>
+            <p
+              className="[overflow-wrap:anywhere] text-[var(--text-muted)] text-xs"
+              title={entry.email}
+            >
               {entry.email}
             </p>
           </div>

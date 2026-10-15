@@ -118,11 +118,11 @@ function Identity() {
           {initials}
         </span>
       )}
-      <div className="min-w-0 flex-1 lg:flex-none lg:text-center">
-        <p className="truncate text-base font-bold text-[var(--text-primary)] lg:text-xl">
+      <div className="min-w-0 flex-1 lg:w-full lg:flex-none lg:text-center">
+        <p className="[overflow-wrap:anywhere] text-base font-bold text-[var(--text-primary)] lg:text-xl">
           {user.name}
         </p>
-        <p className="truncate text-sm text-[var(--text-muted)]">{user.email}</p>
+        <p className="[overflow-wrap:anywhere] text-sm text-[var(--text-muted)]">{user.email}</p>
       </div>
       <Badge variant="accent" className="shrink-0 px-3 py-1 text-xs capitalize">
         {user.role}

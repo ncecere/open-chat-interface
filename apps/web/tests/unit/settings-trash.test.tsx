@@ -66,7 +66,7 @@ const render = async () => {
   await click(tab);
 };
 const titles = () =>
-  [...document.querySelectorAll('p.truncate.text-sm')].map((node) => node.textContent);
+  [...document.querySelectorAll('p.line-clamp-2.text-sm')].map((node) => node.textContent);
 
 describe('Trash', () => {
   it('names each row’s Restore and Delete now for its conversation', async () => {

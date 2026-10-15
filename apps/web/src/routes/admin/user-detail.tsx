@@ -61,8 +61,10 @@ interface UserDetail {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 px-4 py-3">
-      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wide">{label}</p>
-      <p className="mt-1 font-semibold text-lg">{value}</p>
+      <p className="[overflow-wrap:anywhere] text-[var(--text-muted)] text-xs uppercase tracking-wide">
+        {label}
+      </p>
+      <p className="mt-1 [overflow-wrap:anywhere] font-semibold text-lg">{value}</p>
     </div>
   );
 }
@@ -304,7 +306,7 @@ export function AdminUserDetailPage() {
                       </td>
                       <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
                       <td
-                        className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs"
+                        className="max-w-xs [overflow-wrap:anywhere] px-4 py-2 text-[var(--text-muted)] text-xs"
                         title={session.userAgent ?? undefined}
                       >
                         {session.userAgent ?? '—'}
@@ -335,7 +337,10 @@ export function AdminUserDetailPage() {
                 {/* Titles only. An administrator managing an account has no
                     reason to read its contents, and this page should not be
                     the thing that makes that easy. */}
-                <span className="truncate text-sm" title={thread.title || undefined}>
+                <span
+                  className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm"
+                  title={thread.title || undefined}
+                >
                   {thread.title || 'Untitled'}
                 </span>
                 <span className="shrink-0 text-[var(--text-muted)] text-xs">
