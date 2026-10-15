@@ -67,11 +67,7 @@ export async function reconcileProject(
 
   // (b) Finished files of anyone who is no longer the owner or an editor go to the owner.
   const strays = await tx
-    .select({
-      id: schema.attachment.id,
-      userId: schema.attachment.userId,
-      sizeBytes: schema.attachment.sizeBytes,
-    })
+    .select({ id: schema.attachment.id, userId: schema.attachment.userId })
     .from(schema.attachment)
     .where(
       and(
@@ -82,41 +78,90 @@ export async function reconcileProject(
     )
     .orderBy(asc(schema.attachment.id))
     .for('update');
-  let movedFiles = 0;
   const touched = new Set(detached.map((row) => row.user_id));
-  if (strays.length > 0) {
-    const losers = [...new Set(strays.map((row) => row.userId))];
-    // Counters in user-id order, the owner among them.
-    const involved = [...new Set([project.userId, ...losers])].sort();
-    for (const userId of involved) {
-      await lockStorageUsage(tx, { organizationId: project.organizationId, userId });
-    }
-    const moved = await tx
-      .update(schema.attachment)
-      .set({ userId: project.userId })
+  const movedFiles = await handFilesToOwner(tx, { projectId, ...project }, strays);
+  for (const row of strays) touched.add(row.userId);
+  return { detachedThreads: detached.length, movedFiles, people: touched.size };
+}
+
+/**
+ * Moves the given project files (rows already locked) to the project's owner and
+ * sets the counters of everyone involved to the authoritative totals of their rows,
+ * locking the counters in user-id order. Not a deletion: allowed under a legal hold.
+ */
+async function handFilesToOwner(
+  tx: Transaction,
+  project: { projectId: string; userId: string; organizationId: string },
+  files: Array<{ id: string; userId: string }>,
+): Promise<number> {
+  if (files.length === 0) return 0;
+  const losers = [...new Set(files.map((row) => row.userId))];
+  const involved = [...new Set([project.userId, ...losers])].sort();
+  for (const userId of involved) {
+    await lockStorageUsage(tx, { organizationId: project.organizationId, userId });
+  }
+  const moved = await tx
+    .update(schema.attachment)
+    .set({ userId: project.userId })
+    .where(
+      and(
+        inArray(
+          schema.attachment.id,
+          files.map((row) => row.id),
+        ),
+        eq(schema.attachment.projectId, project.projectId),
+      ),
+    )
+    .returning({ id: schema.attachment.id });
+  // The totals of the rows, as an upload sets them: the counters cannot drift
+  // however the hand-over interleaves with other writes.
+  for (const userId of involved) {
+    const totals = await attachmentTotals(tx, userId);
+    await tx
+      .update(schema.storageUsage)
+      .set({ ...totals, updatedAt: new Date() })
+      .where(eq(schema.storageUsage.userId, userId));
+  }
+  return moved.length;
+}
+
+/**
+ * Before an account is deleted: the finished files it added to projects other
+ * people own go to those owners, so the cascade on `attachment.user_id` does not
+ * delete another person's project content (v0.14). Unfinished uploads are left to
+ * cascade with the account. Each project row is locked first, in id order.
+ * Returns the number of files handed over.
+ */
+export async function handOverFilesOf(tx: Transaction, userId: string): Promise<number> {
+  const projects = await tx.execute<{ id: string }>(sql`
+    select distinct "p"."id" from "attachment" as "a"
+    join "project" as "p" on "p"."id" = "a"."project_id"
+    where "a"."user_id" = ${userId} and "a"."upload_pending" = false and "p"."user_id" <> ${userId}
+    order by "p"."id"
+  `);
+  let moved = 0;
+  for (const { id } of projects) {
+    const [project] = await tx
+      .select({ userId: schema.project.userId, organizationId: schema.project.organizationId })
+      .from(schema.project)
+      .where(eq(schema.project.id, id))
+      .for('update');
+    if (!project) continue;
+    const files = await tx
+      .select({ id: schema.attachment.id, userId: schema.attachment.userId })
+      .from(schema.attachment)
       .where(
         and(
-          inArray(
-            schema.attachment.id,
-            strays.map((row) => row.id),
-          ),
-          eq(schema.attachment.projectId, projectId),
+          eq(schema.attachment.projectId, id),
+          eq(schema.attachment.userId, userId),
+          eq(schema.attachment.uploadPending, false),
         ),
       )
-      .returning({ id: schema.attachment.id });
-    movedFiles = moved.length;
-    // The counters are the authoritative totals of the rows, as an upload sets
-    // them: they cannot drift however the hand-over interleaves.
-    for (const userId of involved) {
-      const totals = await attachmentTotals(tx, userId);
-      await tx
-        .update(schema.storageUsage)
-        .set({ ...totals, updatedAt: new Date() })
-        .where(eq(schema.storageUsage.userId, userId));
-    }
-    for (const userId of losers) touched.add(userId);
+      .orderBy(asc(schema.attachment.id))
+      .for('update');
+    moved += await handFilesToOwner(tx, { projectId: id, ...project }, files);
   }
-  return { detachedThreads: detached.length, movedFiles, people: touched.size };
+  return moved;
 }
 
 /** One system audit entry when a reconcile changed something; counts only, no names. */
