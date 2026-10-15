@@ -1448,6 +1448,31 @@ back to v0.12.0 or v0.11.x is unaffected; only v0.10 and earlier used it.
 
 ### Upgrading to v0.14
 
+From v0.13.x, with no downtime: back up and run `pnpm upgrade:check` (the verdict
+for a v0.13 database is ROLLING), `migrate` (migrations `0050` to `0055`, all
+additive: new tables and nullable columns, nothing rewritten), replace the
+replicas one at a time, then `migrate --post`, which schedules the background
+migration `0.14.thread-connector-use` (there is no new post-deploy step). A single
+instance with `RUN_MIGRATIONS=true` and the Helm chart do all of it on their own.
+
+**Three features are not enforced by a v0.13 replica, so switch them on only once
+every replica runs v0.14** (the checklist for the window, then each feature's
+section below):
+
+1. Do not enrol in two-step verification, and do not require it for a role.
+2. Do not set data classification to **Warn** or **Block** (the setting is
+   refused until `migrate --post` has scheduled its background migration).
+3. Do not create groups, group grants or project shares (these answer 409 while an
+   older replica sends a heartbeat), and delete no accounts: a v0.13 replica
+   deleting an editor's account would delete the files they added to other
+   people's projects.
+
+Everything else (interface languages, the installable app, the accessibility
+report) needs nothing from you: languages default to English only (an
+administrator enables Spanish or Arabic under Branding), and the app manifest is
+served from the first v0.14 replica. Rolling back to v0.13 is safe: it ignores
+the new tables and columns (see each section for what you lose).
+
 #### Two-step verification (migrations 0050 and 0051, #399)
 
 Two pre-deploy migrations add the `two_factor` and `passkey` tables, the
