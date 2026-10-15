@@ -279,7 +279,14 @@ const MATRIX = {
     ...no('404'),
   ],
   // Leave: the owner cannot, a direct share can, access through a group cannot.
-  leave: ['409', '200:gone', '200:gone', '409', '409', ...no('404')],
+  leave: [
+    '409:own',
+    '200:gone',
+    '200:gone',
+    '409:leave_via_group',
+    '409:leave_via_group',
+    ...no('404'),
+  ],
   // The personal data export: all files for the owner, only the ones they added otherwise.
   export: ['owner+editor+groupEditor', 'editor', 'none', 'groupEditor', 'none', ...no('none')],
 } satisfies Record<string, string[]>;
@@ -697,7 +704,13 @@ describe.skipIf(!available)('live: project access matrix', () => {
 
     async leave(actor, fx) {
       const response = await call(actor, 'POST', `/projects/${fx.id}/leave`);
-      if (response.status !== 200) return String(response.status);
+      if (response.status !== 200) {
+        // Why matters: an owner cannot leave, and access through a group is left through the group.
+        const why =
+          response.json?.error?.details?.reason ??
+          (/own this project/.test(response.text) ? 'own' : '');
+        return why ? `${response.status}:${why}` : String(response.status);
+      }
       const after = await call(actor, 'GET', `/projects/${fx.id}`);
       return `200:${after.status === 404 ? 'gone' : 'STILL-THERE'}`;
     },

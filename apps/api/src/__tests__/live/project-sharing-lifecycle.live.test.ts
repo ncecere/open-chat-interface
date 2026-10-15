@@ -601,6 +601,34 @@ describe.skipIf(!available)('live: project sharing lifecycle', () => {
     });
   });
 
+  describe('loading the files of a turn', () => {
+    it('refuses project files the person can no longer read, even when the candidates were chosen a moment earlier', async () => {
+      const w = await world();
+      const { inspectProjectFiles, materializeAttachments } = await import(
+        '../../services/chat/attachment-context.js'
+      );
+      const candidates = await inspectProjectFiles(w.project.id, w.viewer.id);
+      expect(candidates.length).toBe(2);
+      const loaded = await materializeAttachments([], w.viewer.id, 'user', false, {
+        id: w.project.id,
+        files: candidates,
+      });
+      expect([...loaded.keys()].sort()).toEqual(candidates.map((file) => file.id).sort());
+      // Access ends between choosing the files and reading them.
+      await h.ok(w.owner, 'DELETE', `/projects/${w.project.id}/shares/${w.viewerShare.id}`);
+      await expect(
+        materializeAttachments([], w.viewer.id, 'user', false, {
+          id: w.project.id,
+          files: candidates,
+        }),
+      ).rejects.toMatchObject({ message: expect.stringContaining('Attachment context changed') });
+      // A project file passed off as one of the person's own message files is refused too.
+      await expect(
+        materializeAttachments(candidates, w.viewer.id, 'user', false),
+      ).rejects.toMatchObject({ message: expect.stringContaining('Attachment context changed') });
+    });
+  });
+
   describe('a reply already streaming', () => {
     it('finishes with the context it began with when access ends under it', async () => {
       const w = await world();
