@@ -925,4 +925,48 @@ describe.skipIf(!available)('live: requiring two-step verification', { timeout: 
       ).toHaveLength(0);
     });
   });
+
+  describe('metrics', () => {
+    it('counts verifications by method and outcome, and reports people and limited people by role, never a person', async () => {
+      const { mfaVerifications, renderMetrics } = await import(
+        '../../services/observability/metrics.js'
+      );
+      const { registerCollectedGauges } = await import('../../services/observability/collected.js');
+      registerCollectedGauges();
+      await pool.db.execute(sql`delete from "user" where role = 'restricted'`);
+      const before = {
+        success: mfaVerifications.get({ method: 'totp', outcome: 'success' }),
+        failure: mfaVerifications.get({ method: 'totp', outcome: 'failure' }),
+      };
+      const enrolled = await signedIn('restricted', 100);
+      const { secret } = await enrol(enrolled.client);
+      await signedIn('restricted', 100); // set up nothing
+      await ssoOnlyPerson('restricted');
+      await require(['restricted'], 100);
+
+      const client = browser();
+      await client.request('/api/auth/sign-in/email', {
+        json: { email: enrolled.email, password },
+      });
+      await client.request('/api/auth/two-factor/verify-totp', { json: { code: '000000' } });
+      await client.request('/api/auth/two-factor/verify-totp', {
+        json: { code: totp(secret, { stepOffset: 1 }) },
+      });
+
+      // The confirmation at enrolment was one success, the sign-in another, the typo one failure.
+      expect(mfaVerifications.get({ method: 'totp', outcome: 'success' })).toBe(before.success + 2);
+      expect(mfaVerifications.get({ method: 'totp', outcome: 'failure' })).toBe(before.failure + 1);
+
+      const text = await renderMetrics();
+      expect(text).toMatch(/^oci_mfa_people\{role="restricted",state="enrolled"\} 1$/m);
+      expect(text).toMatch(/^oci_mfa_people\{role="restricted",state="not_enrolled"\} 1$/m);
+      expect(text).toMatch(/^oci_mfa_people\{role="restricted",state="exempt"\} 1$/m);
+      expect(text).toMatch(/^oci_mfa_limited_people\{role="restricted"\} 1$/m);
+      expect(text).toMatch(/^oci_mfa_limited_people\{role="user"\} 0$/m);
+      expect(text).toContain('oci_mfa_verifications_total{method="totp",outcome="success"}');
+      // Neither a person nor a code is a label.
+      expect(text).not.toContain(enrolled.email);
+      expect(text).not.toContain(secret);
+    });
+  });
 });

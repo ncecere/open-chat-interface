@@ -173,3 +173,59 @@ describe('log redaction of failed queries (#264)', () => {
     expect(captured.console).toEqual([]);
   });
 });
+
+describe('log redaction of second-step secrets (#399)', () => {
+  let captured: Captured;
+  beforeEach(() => {
+    captured = capture();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+  const URI = `otpauth://totp/Open%20Chat:person%40example.test?secret=${SECRET}&issuer=Open%20Chat&digits=6&period=30`;
+  const RECOVERY = 'Qx7Lm-9pRt2';
+  const CODE = '493021';
+
+  it('redacts the otpauth link, the key, the recovery codes and the code, by field and in text', () => {
+    logger.info({ totpURI: URI, secret: SECRET, backupCodes: [RECOVERY], code: CODE }, 'enrolling');
+    logger.warn({ recoveryCodes: [RECOVERY] }, 'a response');
+    logger.error({ nested: { deeper: { totpUri: URI, secret: SECRET } } }, 'nested');
+    logger.error(`Could not render ${URI} for the person`);
+    logger.error({ err: new Error(`link was ${URI}`) }, 'an error carrying the link');
+    const failing = Object.assign(new Error('verification failed'), { secret: SECRET, code: CODE });
+    logger.error({ err: failing }, 'an error with the fields');
+    logger.info(
+      { details: [{ code: RECOVERY }, { code: ` ${CODE.slice(0, 3)} ${CODE.slice(3)} ` }] },
+      'codes in a list',
+    );
+
+    expect(captured.lines).toHaveLength(7);
+    for (const line of captured.lines) {
+      expect(line).not.toContain(SECRET);
+      expect(line).not.toContain(RECOVERY);
+      expect(line).not.toContain(CODE);
+      expect(line).not.toContain('otpauth://totp');
+      expect(line).not.toContain('493 021');
+      expect(() => JSON.parse(line)).not.toThrow();
+    }
+    const first = JSON.parse(captured.lines[0]!);
+    expect(first.totpURI).toBe('[redacted]');
+    expect(first.secret).toBe('[redacted]');
+    expect(first.backupCodes).toBe('[redacted]');
+    expect(first.code).toBe('[redacted]');
+  });
+
+  it('keeps an error code that is not a second-step code, and ordinary text', () => {
+    logger.error({ code: 'ECONNRESET', status: 500 }, 'upstream reset');
+    logger.error(
+      { err: Object.assign(new Error('connection refused'), { code: '23505' }) },
+      'duplicate key',
+    );
+    const [first, second] = captured.lines.map((line) => JSON.parse(line));
+    expect(first.code).toBe('ECONNRESET');
+    expect(second.err.code).toBe('23505');
+    expect(second.err.message).toBe('connection refused');
+  });
+});

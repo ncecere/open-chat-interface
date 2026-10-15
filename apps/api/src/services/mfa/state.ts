@@ -5,6 +5,8 @@ import { auth } from '../../auth/index.js';
 import { evaluateMfa } from '../../auth/mfa.js';
 import { countRecoveryCodes } from '../../auth/recovery-codes.js';
 import { db } from '../../db/index.js';
+import { isConnectionError } from '../../lib/db-connection.js';
+import { logger } from '../../lib/logger.js';
 import type { SessionMfaFacts } from '../../middleware/context.js';
 import { getSetting, normalizeMfaRequirement } from '../settings.js';
 import { hasCredentialAccount } from './credential.js';
@@ -74,6 +76,22 @@ export async function recoveryCodesLeft(state: MfaPersonState): Promise<number |
   return countRecoveryCodes((await auth.$context).secretConfig, state.totp.backupCodes);
 }
 
+/**
+ * The requirement for a summary. GET /api/me is allowed while limited and must
+ * answer even when the setting cannot be read (it only informs; the gate is the
+ * one that refuses, and it fails closed), so an unreadable setting reads as none
+ * here. A lost database connection is still an error the client retries.
+ */
+async function readRequirement() {
+  try {
+    return normalizeMfaRequirement((await getSetting('auth')).mfaRequirement);
+  } catch (error) {
+    if (isConnectionError(error)) throw error;
+    logger.warn({ error }, 'Could not read the two-step verification requirement for /api/me');
+    return normalizeMfaRequirement(undefined);
+  }
+}
+
 export interface MfaPerson {
   id: string;
   role: UserRole;
@@ -85,8 +103,10 @@ export async function mfaSummaryFor(
   facts: SessionMfaFacts | null | undefined,
   now = new Date(),
 ): Promise<{ summary: MfaSummary; state: MfaPersonState }> {
-  const [state, settings] = await Promise.all([loadMfaPersonState(person.id), getSetting('auth')]);
-  const requirement = normalizeMfaRequirement(settings.mfaRequirement);
+  const [state, requirement] = await Promise.all([
+    loadMfaPersonState(person.id),
+    readRequirement(),
+  ]);
   const evaluation = evaluateMfa({
     role: person.role,
     authMethod: facts?.authMethod ?? null,

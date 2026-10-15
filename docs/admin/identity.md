@@ -107,6 +107,101 @@ were given. If you need people out now, use **Sign out everywhere** on their
 [account page](people.md#looking-at-one-person), or select several accounts in
 the user list and sign them out together.
 
+## Two-step verification
+
+People who sign in with an email and password can add a second step: a code
+from an authenticator app, recovery codes for when the phone is lost, and
+passkeys. The people's side is in
+[Two-step verification](../user/two-step-verification.md). It is off for
+everybody until they set it up, and you can require it for chosen roles.
+
+### Who it covers
+
+- **Local accounts only.** The second step is asked for after the right
+  password. A person who signs in through your organisation is not asked for one
+  here and cannot set one up: their **identity provider must enforce its own**
+  (that is where multi-factor sign-in for them is configured). An account with a
+  password *and* an organisation sign-in is held to the second step only when
+  they sign in with the password.
+- **A passkey counts as both factors.** It is accepted only when the device
+  verified the person with a PIN, fingerprint or face; a security key that only
+  checked it was touched is refused. A passkey sign-in follows the same local
+  rules as the password: it is off while local sign-in is off (a verified
+  administrator keeps the break-glass path) and needs a verified address when
+  verification is required.
+- **No "trust this device".** The second step is asked for at every password
+  sign-in. Shared campus computers are a core use, and a browser cookie nobody
+  can list or revoke would skip it.
+- **Codes cannot be replayed.** A code that was accepted is refused for the next
+  two minutes, wrong codes are limited per sign-in attempt and per address (see
+  [Sign-in limits](../OPERATIONS.md#sign-in-limits)), five wrong codes end an
+  attempt, and ten in a row lock the second step for 15 minutes. Authenticator
+  codes depend on the server clock, so keep NTP running.
+- **Passkeys are tied to the host of `APP_URL`.** Moving the instance to another
+  address orphans them (the password and authenticator still work).
+
+### Requiring it for a role
+
+**Require two-step verification** on the Authentication page has a checkbox per
+role (administrator, auditor, user, restricted) and a **grace period** in days
+(14 by default). Beside the checkboxes the page says, for each role, how many
+people have it set up, how many do not, how many have no password and so are
+never required to, and when the first person would be limited.
+
+A person is **limited** when their role is required, the session was opened
+with the password alone, and their deadline has passed. The deadline is the
+later of the day the role was added and the day their account was made, plus the
+grace period, so a new account gets the grace too. Use 0 to limit people at
+their next request. Before the deadline the app shows a banner ("Set up
+two-step verification by …"). A limited person gets `403
+MFA_ENROLMENT_REQUIRED` on everything except signing out, the second step and
+setting it up (`/api/me/mfa`), and the web app takes them to a setup page, so
+turning it on never removes the way in. A session that passed the second step, a
+passkey sign-in or a single sign-on session carries on; nobody is signed out
+when you turn it on, they are limited at their next request once the grace has
+passed.
+
+Saving a requirement is refused (`409 MFA_REQUIRED_FOR_ACTOR`) when you have not
+used a second step yourself in this session, and a requirement that names the
+administrator role is refused until at least one local administrator (verified,
+not banned, with a password) has set it up: nobody can switch on what they cannot
+complete. Removing a requirement is always allowed. Every change is recorded as
+`settings.auth.update` with the roles.
+
+### When somebody is locked out
+
+Another administrator can **Reset two-step verification** on the person's
+account page (People → Users): it removes their authenticator, recovery codes
+and passkeys, ends their sessions and emails them. An administrator who cannot
+sign in uses the command line,
+`docker compose exec api node dist/scripts/reset-mfa.js user@example.com`
+(`--unlock` for a person locked out by wrong codes), described in
+[Getting back in](../OPERATIONS.md#when-two-step-verification-stands-in-the-way).
+
+### `AUTH_SECRET` and backups
+
+The authenticators' keys and recovery codes are stored encrypted with
+`AUTH_SECRET`, not `ENCRYPTION_KEY`. Changing `AUTH_SECRET` (it used to only
+sign people out) makes them unreadable, and a database backup can only be read
+with the matching secret. See
+[Two-step verification and `AUTH_SECRET`](../OPERATIONS.md#two-step-verification-and-auth_secret).
+
+### What is recorded
+
+Challenges (`auth.signin.local.challenged`, not a sign-in), verifications
+(`auth.mfa.verify.success` / `.failure` with the method), enabling and disabling
+(`auth.mfa.enabled`, `auth.mfa.disabled`), new recovery codes
+(`auth.mfa.recovery_codes.regenerated`), a recovery code used
+(`auth.mfa.recovery_code.used`, with how many are left), passkeys
+(`auth.passkey.added`, `.renamed`, `.removed`, `auth.passkey.signin.success` /
+`.failure`), and resets (`user.mfa.reset`, `user.mfa_reset_cli`). Never a code,
+a key or a recovery code. The person is emailed about each change when email is
+set up. Metrics: `oci_mfa_verifications_total{method,outcome}`,
+`oci_mfa_people{role,state}` and `oci_mfa_limited_people{role}`.
+
+TOTP codes can be phished in real time; passkeys cannot. Encourage passkeys
+where devices support them.
+
 ## Adding an identity provider
 
 ![Adding a provider](../images/admin-sso-provider-form.png)

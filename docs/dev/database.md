@@ -7,7 +7,7 @@ PostgreSQL, with Drizzle. Schema in `packages/db/src/schema/`, migrations in
 
 | File | Holds |
 | --- | --- |
-| `auth.ts` | users, sessions, accounts, SSO providers, invitations |
+| `auth.ts` | users, sessions, accounts, SSO providers, invitations, `two_factor` (an authenticator's key and recovery codes, encrypted by the plugin with `AUTH_SECRET`; migration 0050) and `passkey` (migration 0051); `user.two_factor_enabled` and `session.auth_method` |
 | `chat.ts` | threads, messages, attachments, share links |
 | `provider.ts` | providers and the model catalogue |
 | `usage.ts` | usage events, quotas, audit log |
@@ -503,6 +503,20 @@ the list. **A new encrypted column must be added there** (and a JSON field
 must be named `encrypted…`), or key rotation will not rewrite it and System
 health will not count it; the rotation live test
 (`encryption-rotation.live.test.ts`) fills every listed location.
+
+**`two_factor` is absent from that list on purpose** (v0.14, #399). Better
+Auth's `twoFactor` plugin encrypts `two_factor.secret` and
+`two_factor.backup_codes` itself, with `AUTH_SECRET` (XChaCha20-Poly1305 keyed
+from it), and no option moves the authenticator's key to another secret. Listing
+the table here would make the `ENCRYPTION_KEY` rotation try `ENCRYPTION_KEY` on
+`AUTH_SECRET` ciphertext and fail the batch; wrapping the columns in OCI's
+envelope would break the plugin's one-use check on recovery codes (a compare and
+swap on the stored ciphertext, which a random IV never equals). A unit test
+(`mfa-encrypted-locations.unit.test.ts`) keeps both tables out. The consequence
+for operators: changing `AUTH_SECRET` makes every authenticator unreadable
+(`reset-mfa --all --yes`), and a database backup carries values only that secret
+opens ([Two-step verification and `AUTH_SECRET`](../OPERATIONS.md#two-step-verification-and-auth_secret)).
+The reset commands decrypt nothing, so they work with any `AUTH_SECRET`.
 
 Formats: before v0.11 `base64(iv | tag | ciphertext)` (AES-256-GCM, key
 SHA-256 of `ENCRYPTION_KEY`); from v0.11 `oci:v1:<key id>:` followed by the

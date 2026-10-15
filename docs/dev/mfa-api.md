@@ -29,7 +29,7 @@ Errors on these paths (`code`, with the HTTP status): `INVALID_CODE` 401 and `IN
 `TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE` 400 (5 wrong codes end a challenge: "Start again");
 `ACCOUNT_TEMPORARILY_LOCKED` 429 (10 consecutive failures lock the second step for 15 minutes; an administrator or the
 `admin:reset-mfa --unlock` CLI clears it); `TOO_MANY_REQUESTS` 429 with `Retry-After` (OCI's `second-factor` limit);
-`CODE_ALREADY_USED` 401 (a TOTP code accepted in the last 120 seconds is refused, so wait for the next code);
+`CODE_ALREADY_USED` 401 (an authenticator code, or a recovery code, already accepted or in flight in the last 120 seconds is refused: wait for the next authenticator code; the same applies right after enrolling, when the confirming code was this window's);
 `LOCAL_AUTH_DISABLED` 403 and `EMAIL_NOT_VERIFIED` 403 on a passkey sign-in, as on the password; `BANNED_USER` 403.
 
 These POSTs stay open in read-only maintenance mode (`/api/auth/two-factor/*`, `/api/auth/passkey/verify-authentication`).
@@ -65,7 +65,7 @@ OCI's:
 
 | Call | Notes |
 |---|---|
-| `authClient.passkey.addPasskey({ name })` (`GET /api/auth/passkey/generate-register-options`, `POST /api/auth/passkey/verify-registration`) | Needs a **fresh** session (signed in within the last 24 hours): otherwise `403 SESSION_NOT_FRESH`; show "enter your password and sign in again". Refused with `409 CONFLICT`-style `{ code: 'MFA_NOT_AVAILABLE' }` for an account without a password. Resident key and user verification are required. |
+| `authClient.passkey.addPasskey({ name })` (`GET /api/auth/passkey/generate-register-options`, `POST /api/auth/passkey/verify-registration`) | Needs a **fresh** session (signed in within the last 24 hours): otherwise `403 SESSION_NOT_FRESH`; show "enter your password and sign in again". Refused with `409 { code: 'PASSKEY_NOT_AVAILABLE' }` for an account without a password. Resident key and user verification are required. |
 | `authClient.passkey.updatePasskey({ id, name })` (`POST /api/auth/passkey/update-passkey`) | Rename; owner only. |
 | `authClient.passkey.deletePasskey({ id })` (`POST /api/auth/passkey/delete-passkey`) | Remove; owner only. |
 | list | `GET /api/me/mfa` (`passkeys`), never the plugin's list. |
@@ -78,9 +78,9 @@ Passkeys are bound to the host of `APP_URL` (`rpID`) and its origin: a changed `
 |---|---|
 | `GET /api/admin/users/:id` | gains `mfa: AdminMfaStatus` = `{ eligible, totp, passkeys, recoveryCodesLeft, lockedUntil, required, deadline }`; auditors see it read-only. |
 | `POST /api/admin/users/:id/mfa/reset` | `requireAdmin` (an auditor gets 403). Removes the person's authenticator, recovery codes and passkeys, ends their sessions, emails them, audits `user.mfa.reset`. `200 { ok: true, sessionsEnded }`. 422 on oneself, 404 unknown. |
-| `GET /api/admin/settings` | gains `mfaRequirement: { roles, graceDays, since }`. |
-| `PATCH /api/admin/settings` | accepts `mfaRequirement: { roles, graceDays }` (strict; `since` is stamped by the server when a role is added). **409 `MFA_REQUIRED_FOR_ACTOR`** when the acting administrator is not satisfied, or when `admin` is named and no enrolled, unbanned local administrator exists. Audited `settings.auth.update`. |
-| `GET /api/admin/settings/mfa-impact` | `MfaImpact`: per role `people, exempt, enrolled, unenrolled, required, since, firstDeadline`, for the saved requirement. |
+| `GET /api/admin/settings` | gains `mfaRequirement: { roles, graceDays, since }` (`since`: ISO stamp per required role). |
+| `PATCH /api/admin/settings` | accepts `mfaRequirement: { roles, graceDays }` (strict; `since` is stamped by the server when a role is added). **409 `MFA_REQUIRED_FOR_ACTOR`** (`details.reason`: `actor_not_satisfied` or `no_enrolled_admin`) when a *changed* requirement is saved and the acting administrator is not satisfied (an unchanged one riding along with other settings is not a save, and removing roles is always allowed), or when `admin` is named and no enrolled, unbanned local administrator exists. Audited `settings.auth.update`. |
+| `GET /api/admin/settings/mfa-impact` | `MfaImpact`: per role `people, exempt, enrolled, unenrolled, required, since, firstDeadline, limitedNow`, for the saved requirement (unbanned accounts). |
 
 ## 5. The requirement and the gate
 
@@ -125,3 +125,19 @@ upgrade that changes any of them fails there first):
 Other facts the tests pinned: the signed-in `verify-totp` accepts the same code again and again (the plugin keeps no
 memory of used codes: OCI's replay guard is its own); registration needs a session created in the last 24 hours:
 `403 SESSION_NOT_FRESH` otherwise.
+
+## Behaviour the web must know (found by running it)
+
+- **Hooks run for every `auth.api` call and the cookie of a swapped session comes back in `Set-Cookie`.** Confirming
+  the authenticator and turning it off both replace the session; the browser just keeps the cookies it is given.
+- **The enrolment confirmation uses this window's code.** Signing in again within about two minutes needs the
+  *next* code (`CODE_ALREADY_USED` otherwise). Browser tests must use the next or previous 30-second step.
+- **One use per recovery code holds under concurrency** only because OCI claims the code first. The plugin's own
+  guarded update is `WHERE id IN (SELECT ...)` in the Drizzle adapter, which passes twice under READ COMMITTED:
+  about one pair in four spent the same code twice before the claim.
+- **Option hooks run before the plugin's.** The audit hook sees the password step's session still present, so
+  "challenged" is decided from the person's `twoFactorEnabled`, not from `newSession === null`.
+- **A passkey session never asks for a second step**, and a person limited by the requirement with only a passkey
+  must sign in *with* the passkey (the password session is limited).
+- **Test helpers:** `apps/api/test/totp.ts` (RFC 6238, checked against Appendix B), `test/webauthn.ts` (a software
+  authenticator; `userVerified: false` makes a PIN-less key), `test/live-client.ts` (cookie jar).

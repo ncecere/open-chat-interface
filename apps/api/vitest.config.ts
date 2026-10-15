@@ -232,6 +232,23 @@ export default defineConfig({
         // v0.11 read-only maintenance mode (what is refused, and what pauses) and
         // cross-replica cache invalidation.
         'src/middleware/read-only.ts': { statements: 98, branches: 90, functions: 100 },
+        // v0.14 two-step verification (#399): the gate that enforces the per-role
+        // requirement, the rules it and /api/me share, and the hooks, replay guard,
+        // enrolment, lockout, reset and requirement services around the plugin.
+        'src/middleware/mfa-gate.ts': { statements: 98, branches: 90, functions: 100 },
+        'src/auth/mfa.ts': { statements: 95, branches: 85, functions: 100 },
+        'src/auth/mfa-hooks.ts': { statements: 88, branches: 78, functions: 60 },
+        'src/auth/recovery-codes.ts': { statements: 95, branches: 85, functions: 100 },
+        'src/services/limits/code-replay.ts': { statements: 88, branches: 70, functions: 100 },
+        'src/services/mfa/credential.ts': { statements: 100, branches: 100, functions: 100 },
+        'src/services/mfa/enrolment.ts': { statements: 85, branches: 70, functions: 100 },
+        'src/services/mfa/lockout.ts': { statements: 88, branches: 70, functions: 100 },
+        'src/services/mfa/notify.ts': { statements: 95, branches: 70, functions: 100 },
+        'src/services/mfa/requirement.ts': { statements: 95, branches: 72, functions: 100 },
+        'src/services/mfa/reset.ts': { statements: 88, branches: 60, functions: 85 },
+        'src/services/mfa/state.ts': { statements: 95, branches: 78, functions: 100 },
+        'src/services/admin-users/mfa.ts': { statements: 95, branches: 55, functions: 100 },
+        'src/routes/me-mfa.ts': { statements: 95, branches: 45, functions: 100 },
         'src/services/maintenance/read-only.ts': { statements: 95, branches: 90, functions: 85 },
         'src/services/cache-bus/index.ts': { statements: 95, branches: 80, functions: 90 },
       },

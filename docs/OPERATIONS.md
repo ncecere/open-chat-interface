@@ -472,7 +472,10 @@ Back up all durable state before an upgrade:
 - The configured local or S3-compatible storage contains attachment objects.
 - Your secret manager contains `AUTH_SECRET`, `ENCRYPTION_KEY`, database
   credentials, and deployment configuration. Losing `ENCRYPTION_KEY` makes
-  encrypted provider and integration credentials unrecoverable.
+  encrypted provider and integration credentials unrecoverable. From v0.14
+  `AUTH_SECRET` also opens the authenticators of people who use two-step
+  verification (see [Two-step verification and `AUTH_SECRET`](#two-step-verification-and-auth_secret)):
+  a database backup carries them encrypted, and only that secret reads them.
 
 Example PostgreSQL backup for the bundled Compose stack:
 
@@ -1408,6 +1411,74 @@ table only. It holds nothing worth keeping: rows saying a file's passages
 could not be embedded for a model, which v0.11 records elsewhere. Rolling
 back to v0.12.0 or v0.11.x is unaffected; only v0.10 and earlier used it.
 
+### Upgrading to v0.14
+
+#### Two-step verification (migrations 0050 and 0051, #399)
+
+Two pre-deploy migrations add the `two_factor` and `passkey` tables, the
+`user.two_factor_enabled` flag and `session.auth_method`. They are additive and
+fast (new empty tables, a nullable column and a column with a constant default,
+which PostgreSQL adds without rewriting the table); `pnpm lint:migrations` is
+clean and a v0.13 replica ignores all of it, so a rolling upgrade works as
+before. Nothing changes for anybody until they set two-step verification up or
+an administrator requires it.
+
+- **Do not enrol, and do not require it, until every replica runs v0.14.** A
+  v0.13 replica has no second step: a person who enrolled on a v0.14 replica
+  signs in with the password alone on a v0.13 one (during the roll, or after a
+  rollback), and a requirement is not applied there. Enrolling after the roll
+  is complete is safe, and rolling back afterwards keeps the enrolments for when
+  you upgrade again.
+- **`AUTH_SECRET` now matters more.** Before, changing it only signed people
+  out. Now it also encrypts every authenticator and set of recovery codes.
+  Changing it makes them unreadable: people with an authenticator cannot sign in
+  with it. Recover with `admin:reset-mfa --all --yes`
+  ([below](#two-step-verification-and-auth_secret)). Keep it with the other
+  deployment secrets, and in the backups' secret list.
+- **`APP_URL` is now bound to passkeys.** A passkey belongs to the host of
+  `APP_URL`. Moving the instance to another address orphans its passkeys (the
+  authenticator and password still work). Use the final address before people
+  register them.
+- **The server clock must be right.** Authenticator codes depend on the time;
+  run NTP (or your platform's time sync) on every replica. Codes are accepted
+  from one 30-second step before to one after the current one, so a server
+  clock more than about 30 seconds out refuses correct codes.
+
+#### Requiring it for a role
+
+Under **Admin → Sign-in & security → Authentication** an administrator can
+require two-step verification for chosen roles, with a grace period (14 days by
+default; 0 limits people at their next request). The requirement is enforced on
+the server, on every request, and it never removes the way in: a person who is
+limited can always reach setup and sign out. See
+[Identity and access](admin/identity.md#two-step-verification).
+
+## Two-step verification and `AUTH_SECRET`
+
+Better Auth's `twoFactor` plugin encrypts each authenticator's key and each set
+of recovery codes with `AUTH_SECRET` (XChaCha20-Poly1305, keyed from it). This
+is deliberately **not** `ENCRYPTION_KEY`: no option moves the plugin to another
+key, and wrapping the columns in OCI's own envelope would break the plugin's
+one-use check on recovery codes. So:
+
+- `two_factor` is not one of the places [`ENCRYPTION_KEY` rotation](#rotating-encryption_key)
+  re-encrypts, on purpose, and a test keeps it that way.
+- Changing `AUTH_SECRET` makes every authenticator and recovery code unreadable.
+  People who have one cannot pass the second step; passkeys are not affected
+  (they do not depend on the secret). After a deliberate or accidental change,
+  run once, from any replica:
+
+  ```bash
+  docker compose exec api node dist/scripts/reset-mfa.js --all --yes
+  ```
+
+  It removes every authenticator and every set of recovery codes, turns the
+  second step off and ends every session; people sign in with their password
+  and set it up again. A role that requires two-step verification limits them
+  until they do.
+- A database backup carries the encrypted values, which only the matching
+  `AUTH_SECRET` opens: back the secret up with the database.
+
 ## Shutting down and draining
 
 From v0.11 an API replica drains when it is stopped, so replacing replicas
@@ -2098,6 +2169,36 @@ docker compose exec api node dist/scripts/promote-admin.js user@example.com
 
 Outside a container, from a checkout: `pnpm --filter @oci/api admin:promote
 user@example.com`.
+
+### When two-step verification stands in the way
+
+A person who lost their authenticator and their recovery codes, or an
+administrator who cannot pass the second step, is helped in two ways.
+
+- **Another administrator** opens **People → Users →** the person and chooses
+  **Reset two-step verification**. Their authenticator, recovery codes and
+  passkeys are removed and their sessions end; they are emailed (when email is
+  set up) and the reset is audited as `user.mfa.reset`. It is not offered for
+  your own account.
+- **The recovery CLI**, when no administrator can get in:
+
+  ```bash
+  docker compose exec api node dist/scripts/reset-mfa.js user@example.com
+  ```
+
+  This does the same for one person and records `user.mfa_reset_cli`. It prints
+  no secret and decrypts nothing, so it works whatever `AUTH_SECRET` is.
+  `--unlock` only clears the lock after too many wrong codes (ten consecutive
+  failures lock the second step for 15 minutes, and somebody who knows the
+  password can otherwise keep it locked): `reset-mfa.js user@example.com
+  --unlock`. `--all --yes` is for a changed `AUTH_SECRET`
+  ([above](#two-step-verification-and-auth_secret)). Outside a container, from a
+  checkout: `pnpm --filter @oci/api admin:reset-mfa user@example.com`.
+
+The break-glass administrator is never locked out by the requirement itself: a
+limited person can always set it up or sign out, and saving a requirement is
+refused unless the administrator saving it has passed the second step and, for
+the administrator role, another local administrator has set it up.
 
 ## Single sign-on roles
 

@@ -128,6 +128,16 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   },
   'services/admin-users/mutations.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },
   'services/lifecycle/retention.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },
+  // Two-step verification reset (v0.14, #399): credentials, not content.
+  'services/mfa/reset.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },
+  'services/mfa/reset.ts twoFactor': {
+    hold: 'exempt',
+    how: 'An authenticator and its recovery codes are credentials; resetting them removes no content, and a held person must still be able to get back in.',
+  },
+  'services/mfa/reset.ts passkey': {
+    hold: 'exempt',
+    how: 'Passkeys are credentials, not content.',
+  },
   'services/lifecycle/retention.ts verification': {
     hold: 'exempt',
     how: 'Expired verification tokens are credentials.',
