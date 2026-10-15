@@ -142,7 +142,10 @@ export function ExportMenu({
           title={compact ? label : undefined}
           data-export-menu=""
         >
-          <FileDown aria-hidden="true" className={cn(state.busy && 'animate-pulse')} />
+          <FileDown
+            aria-hidden="true"
+            className={cn(state.busy && 'animate-pulse motion-reduce:animate-none')}
+          />
           {!compact && label}
         </Button>
       </DropdownMenuTrigger>

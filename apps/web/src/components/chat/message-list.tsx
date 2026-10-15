@@ -259,7 +259,7 @@ export const MessageList = memo(function MessageList({
               {[0, 1, 2].map((dot) => (
                 <span
                   key={dot}
-                  className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
+                  className="size-1.5 animate-bounce rounded-full motion-reduce:animate-none bg-[var(--text-muted)]"
                   style={{ animationDelay: `${dot * 0.15}s` }}
                 />
               ))}

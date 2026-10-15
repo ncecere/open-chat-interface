@@ -186,6 +186,17 @@ describe('memoized transcript correctness', () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
+  it('stops the waiting dots bouncing for a person who asked for reduced motion', async () => {
+    await render({
+      messages: [{ id: 'live', role: 'assistant', parts: [] }],
+      streaming: true,
+      onRetry: vi.fn(),
+    });
+    const dots = [...container.querySelectorAll('[role="status"][aria-label] .animate-bounce')];
+    expect(dots).toHaveLength(3);
+    for (const dot of dots) expect(dot.className).toContain('motion-reduce:animate-none');
+  });
+
   it('refreshes grounding and attachments without relying on text-only comparisons', async () => {
     const onRetry = vi.fn();
     const user = message('question', 'user');
