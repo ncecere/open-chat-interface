@@ -452,6 +452,15 @@ const adminConnectorsRoute = createRoute({
   component: lazyRouteComponent(() => import('~/routes/admin/connectors'), 'AdminConnectorsPage'),
 });
 
+const adminDataClassesRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/data-classes',
+  component: lazyRouteComponent(
+    () => import('~/routes/admin/data-classes'),
+    'AdminDataClassesPage',
+  ),
+});
+
 const adminStorageRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/admin/storage',
@@ -537,6 +546,7 @@ const routeTree = rootRoute.addChildren([
     adminQuotasRoute,
     adminSearchRoute,
     adminConnectorsRoute,
+    adminDataClassesRoute,
     adminWebhooksRoute,
     adminBackupsRoute,
     adminComplianceRoute,
