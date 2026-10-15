@@ -151,6 +151,33 @@ unreadable.
 picked a theme themselves. Somebody who has chosen one keeps it. System follows
 each person's operating system preference.
 
+### Language
+
+Under the appearance settings (its own **Save language** button):
+
+- **Languages people can choose** — English is always on. **Español** and
+  **العربية** are machine-drafted and marked **(beta)**: nobody who reads them
+  has reviewed them yet, and they can contain mistakes. They are off until you
+  turn them on; turn one on once someone who reads it has looked it over (see
+  [Translations](../dev/translations.md#reviewing-a-beta-catalog)).
+- **Default language** — what people get who have not chosen their own. It
+  must be one of the enabled languages. **Follow the browser** uses the first
+  of a person's browser languages that is turned on, else English.
+
+People choose their own in Settings → Customization, and that choice wins over
+the default. Switching a language off does not delete anyone's choice: they see
+the default until it is switched on again. The sign-in page follows the default
+or the browser.
+
+**The administration console stays in English** whatever is chosen here, and so
+does what the server writes: emails, exported files, audit entries and the text
+of API errors. Model names and the branding text you set (the app name, the
+sign-in message) are shown as you wrote them. A change is audited as
+`settings.update` with the languages it was and became (`language.enabled`,
+`language.default`). Through the API: `PATCH /api/admin/settings` with
+`{"language": {"enabled": ["en", "es"], "default": "es"}}`; either part may be
+sent alone.
+
 ### What follows branding
 
 | Surface | Name | Logo | Colour theme |

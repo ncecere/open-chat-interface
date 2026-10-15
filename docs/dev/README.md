@@ -21,6 +21,7 @@ and [Release process](../RELEASING.md) for GitHub Actions and GHCR publishing.
 13. [Release validation checkpoint](release-validation.md) — full live-service/browser results, corrected onboarding coverage, isolated source-built MinIO, and remaining gates.
 14. [Tools and connected knowledge](tools-design.md) — the v0.8 design: tool registry, approvals, web search as a tool, project-file search and MCP connectors.
 15. [Make and operate](v0.9-design.md) — the v0.9 design: compaction, meaning-based search, artifacts, file output, memory, compliance export, observability and backups.
+16. [Translations](translations.md) — the typed catalog, adding a language, the checks, reviewing a beta catalog and right-to-left.
 
 ## The shape of it
 

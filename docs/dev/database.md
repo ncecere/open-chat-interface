@@ -10,7 +10,7 @@ PostgreSQL, with Drizzle. Schema in `packages/db/src/schema/`, migrations in
 | `auth.ts` | users, sessions, accounts, SSO providers, invitations |
 | `chat.ts` | threads, messages, attachments, share links |
 | `provider.ts` | providers and the model catalogue |
-| `usage.ts` | usage events, quotas, audit log |
+| `usage.ts` | usage events, quotas, audit log, personal preferences (`user_preference`, with the language, migration `0055`) |
 | `lifecycle.ts` | retention, storage policies, jobs, saved views, reports |
 | `organization.ts` | the organisation and its settings |
 
@@ -620,6 +620,19 @@ function, a **new background migration** (a new name, `0.<release>.…`) that
 recomputes every stored vector, and the search switch moved to that migration,
 exactly as `0.13` did. Do not edit migration 0047, and do not change
 `fold.ts` alone: the unit test fails when they differ.
+
+## The person's language (migration 0055)
+
+| Migration | Statement | Why it is safe |
+| --- | --- | --- |
+| `0055_user_locale` (v0.14, #397) | `ALTER TABLE "user_preference" ADD COLUMN IF NOT EXISTS "locale" text` | Nullable, no default: a catalog-only change with no rewrite. A v0.13 replica names its columns when it writes and lists them when it reads, so it neither sees nor needs it. |
+
+`locale` holds `en`, `es` or `ar` (the tags in `packages/shared/src/locales.ts`)
+or null for no choice. The database does not constrain it: the API validates
+what it saves (422 for anything else), and a value this release does not know
+reads as no choice, so a language added in a later release needs no migration.
+The instance's own setting (`language`: `{ default, enabled[] }`) is an
+`instance_setting` JSON value and needs none.
 
 ## Migrations under several replicas
 

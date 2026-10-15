@@ -85,6 +85,29 @@ you leave the page (or switch to another settings section) with a change not
 saved, you are asked first; this holds for every settings section with a Save
 button, including a memory typed but not yet added.
 
+### Language
+
+**Language** sets the language of menus, buttons and messages. It is saved
+with your account, so it follows you to every browser and device, and it
+changes as soon as you choose it. Each language is written in its own
+language, so you can find yours even when the page is in another one.
+
+- **Automatic** uses the default your administrator chose, or else the
+  language of your browser when the instance offers it, or else English.
+- A language marked **(beta)** is a machine-made draft that a native reader has
+  not reviewed yet. It can contain mistakes; the page says so when you choose
+  one. If you read the language and want to help, see
+  [Translations](../dev/translations.md#reviewing-a-beta-catalog).
+- Arabic shows the whole page from right to left.
+- The list shows only the languages your administrator turned on. With only
+  English on, there is no Language setting. If a language you chose is turned
+  off later, you see the default one instead, without any error, and your
+  choice comes back if it is turned on again.
+
+What you and the assistant write is never translated, and neither are model
+names. The administration console is in English whatever you choose, and so are
+emails and exported files.
+
 Further down are choices about the interface itself, all kept in this browser:
 
 - **Appearance** — **Light**, **Dark**, or **System** to follow your device.
