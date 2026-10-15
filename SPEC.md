@@ -1,6 +1,6 @@
 # Spec: Open Chat Interface v0.14 (index)
 
-Status: **map set 2026-10-14 under the maintainer's delegation ("use your judgement"); building.** This file is
+Status: **map and module specs approved 2026-10-14 under the maintainer's delegation ("use your judgement"); building.** This file is
 the index: the capability map, the scope decisions, the build order, and what every module shares (commands,
 structure, style, testing, boundaries). Each module has its own spec, named by its id (`SPEC-<id>.md`). The v0.13
 specs are in `specs/v0.13/`.
@@ -171,7 +171,7 @@ notes are updated; the release follows `docs/RELEASING.md`.
 
 - **Always:** access checks are server-side and deny by default; every new endpoint has a permission test that
   proves a person without the right gets 403 or 404 (never data); audit events for every administrative change.
-- **Ask first / decided here:** the one new dependency this release may add is `@better-auth/passkey` (decision 2).
-  No other dependency.
+- **Ask first / decided here:** the only new dependencies this release may add are `@better-auth/passkey` 1.6.26
+  (API, decision 2) and `qrcode-generator` (web, for the TOTP enrolment QR code; MIT, no dependencies). No other.
 - **Never:** weaken an existing access check to make a feature fit; skip a test; ship an unreviewed translation
   without the beta label; claim in the conformance report anything that was not tested.
