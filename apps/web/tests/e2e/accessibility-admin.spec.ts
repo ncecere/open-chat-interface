@@ -186,4 +186,73 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');
   });
+  test('admin data classes has no violations, with its dialogs (v0.14)', async ({ page }) => {
+    const dataClass = (overrides: Record<string, unknown>) => ({
+      id: 'c1',
+      name: 'Student records',
+      description: 'Anything about enrolled students.',
+      retiredAt: null,
+      modelCount: 2,
+      connectorCount: 1,
+      projectCount: 3,
+      threadCount: 14,
+      createdAt: '2026-10-01T09:00:00.000Z',
+      updatedAt: '2026-10-01T09:00:00.000Z',
+      ...overrides,
+    });
+    await page.route('**/api/admin/classification', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          mode: 'warn',
+          services: { webSearch: ['c1'], embeddings: [], reranking: [] },
+          modeAvailable: true,
+          backfillDone: false,
+          unreviewedConnectorCount: 2,
+        }),
+      }),
+    );
+    await page.route('**/api/admin/data-classes', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          classes: [
+            dataClass({}),
+            dataClass({
+              id: 'c2',
+              name: 'Health data',
+              description: '',
+              retiredAt: '2026-10-02T09:00:00.000Z',
+              modelCount: 0,
+              connectorCount: 0,
+              projectCount: 0,
+              threadCount: 0,
+            }),
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/admin/data-classes');
+    await expect(page.getByRole('heading', { name: 'Data classes', level: 1 })).toBeVisible();
+    await expect(page.getByText('Finding which conversations used connectors')).toBeVisible();
+    await expect(page.getByText('Some connectors are not reviewed')).toBeVisible();
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+
+    await page.getByRole('button', { name: 'Rename Student records' }).click();
+    await expect(page.getByRole('dialog', { name: 'Rename Student records' })).toBeVisible();
+    const renameResults = await scan(page);
+    expect(describeViolations(renameResults), describeViolations(renameResults)).toBe('');
+    await page.keyboard.press('Escape');
+
+    // Deleting a class that is in use: the counts say why it cannot be.
+    await page.getByRole('button', { name: 'Delete Student records' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Delete Student records?' });
+    await expect(confirm).toContainText(
+      'is still used by 1 connector, 3 projects and 14 conversations',
+    );
+    const deleteResults = await scan(page);
+    expect(describeViolations(deleteResults), describeViolations(deleteResults)).toBe('');
+  });
 });

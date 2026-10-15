@@ -23,7 +23,12 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
+    {
+      name: 'mobile-chromium',
+      // Switches the instance-wide classification mode, so it runs once, on desktop.
+      testIgnore: '**/classification.spec.ts',
+      use: { ...devices['Pixel 7'] },
+    },
     // The instance falls back to the dark theme, so the scans above never saw
     // light, where every AA contrast failure the QA walk found was (#72). The
     // specs store the light theme for projects whose name ends in -light.

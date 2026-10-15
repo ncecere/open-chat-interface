@@ -8,6 +8,7 @@ import { Link } from '@tanstack/react-router';
 import { type FormEvent, useState } from 'react';
 import { Notice, SaveRow, SettingsSection } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
+import { HIGHLIGHTED_ROW_TEXT } from '~/components/ui/item-focus';
 import { ADMIN_CLASSIFICATION_KEY } from '~/hooks/use-admin-classification';
 import { ApiError, api, apiErrorMessage } from '~/lib/api-client';
 import { countOf } from '~/lib/classification';
@@ -113,7 +114,8 @@ export function ModeSection({ settings }: { settings: AdminClassification }) {
                 className={cn(
                   'flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3',
                   checked
-                    ? 'border-[var(--accent-button-border)] bg-[var(--accent-soft)]'
+                    ? // The muted lines stay readable on the highlight wash (#188).
+                      `border-[var(--accent-button-border)] bg-[var(--accent-soft)] ${HIGHLIGHTED_ROW_TEXT}`
                     : 'border-[var(--border-subtle)] hover:bg-[var(--bg-control)]/40',
                 )}
               >
