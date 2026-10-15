@@ -13,6 +13,7 @@ import { authStatusRoutes } from './auth-status.js';
 import { brandingRoutes } from './branding.js';
 import { chatRoutes } from './chat.js';
 import { connectorRoutes } from './connectors.js';
+import { groupRoutes } from './groups.js';
 import { healthRoutes } from './health.js';
 import { maintenanceRoutes } from './maintenance.js';
 import { meRoutes } from './me.js';
@@ -118,6 +119,7 @@ export function createApiRoutes() {
   api.route('/models', modelCatalogRoutes);
   api.route('/threads', threadRoutes);
   api.route('/projects', projectRoutes);
+  api.route('/groups', groupRoutes);
   api.route('/chat', chatRoutes);
   api.route('/attachments', attachmentRoutes);
   api.route('/artifacts', artifactRoutes);
