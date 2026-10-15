@@ -109,6 +109,25 @@ test.describe('the audit checks can fail, and do not flag a page that is right',
     expect(clean.json.checks['non-text-contrast'].counters['field-boundaries']).toBeGreaterThan(0);
   });
 
+  test('1.4.11 measures a marked frame, not a card that merely contains the field', async ({
+    browser,
+  }) => {
+    const { nonTextContrastCheck } = await load('checks/measured.mjs');
+    const broken = await run(browser, BROKEN, nonTextContrastCheck);
+    const flagged = broken.findings
+      .filter((f) => f.rule === 'field-boundary-contrast')
+      .map((f) => f.targets[0]);
+    // The card has a strong edge but is not marked as the field's frame: the field has none.
+    expect(flagged.some((target) => target.includes('textarea.bare.in-card'))).toBe(true);
+    // A marked frame is measured, and its pale edge fails.
+    expect(flagged.some((target) => target.includes('textarea.bare.in-pale-frame'))).toBe(true);
+    // A combobox button with no text is a field like any other.
+    expect(flagged.some((target) => target.includes('button.icon-combobox'))).toBe(true);
+    // The clean page's marked frame has a strong edge, and its text combobox is not a field.
+    const clean = await run(browser, CLEAN, nonTextContrastCheck);
+    expect(clean.findings).toEqual([]);
+  });
+
   test('2.5.8 flags two 10px buttons 4px apart and passes 44px targets', async ({ browser }) => {
     const { targetSizeCheck } = await load('checks/measured.mjs');
     const broken = await run(browser, BROKEN, targetSizeCheck);

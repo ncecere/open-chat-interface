@@ -122,7 +122,7 @@ export function ModelScopePicker({
                   onClick={() => toggleGroup(group.models)}
                   // One per lab group; each names its group (#220).
                   aria-label={`${allSelected ? 'Deselect' : 'Select'} all ${group.label} models`}
-                  className="text-[var(--accent)] text-xs hover:underline"
+                  className="text-[var(--accent-bright)] text-xs hover:underline"
                 >
                   {allSelected ? 'Deselect all' : 'Select all'}
                 </button>

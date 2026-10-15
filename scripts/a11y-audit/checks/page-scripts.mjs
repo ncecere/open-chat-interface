@@ -203,9 +203,8 @@ export function collectNonTextSamples() {
   const fields = document.querySelectorAll(
     'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]), select, textarea, [role="combobox"], [role="textbox"], [role="switch"], [role="checkbox"], [role="radio"]',
   );
-  for (const field of fields) {
-    if (!visible(field) || disabled(field)) continue;
-    const style = getComputedStyle(field);
+  const edgesOf = (element) => {
+    const style = getComputedStyle(element);
     const borders = ['Top', 'Right', 'Bottom', 'Left']
       .map((side) => ({
         width: Number.parseFloat(style[`border${side}Width`]),
@@ -213,15 +212,38 @@ export function collectNonTextSamples() {
         colour: style[`border${side}Color`],
       }))
       .filter((border) => border.width > 0 && border.style !== 'none');
+    return {
+      borderColours: [...new Set(borders.map((border) => border.colour))],
+      fill: isClear(style.backgroundColor) ? null : style.backgroundColor,
+      // A visible ring, a shadow or an outline also marks the edge.
+      hasShadow: style.boxShadow !== 'none',
+    };
+  };
+  for (const field of fields) {
+    if (!visible(field) || disabled(field)) continue;
+    // A <button role="combobox"> that shows its current value as text (the model picker's trigger)
+    // is identified by that text, not by an edge: 1.4.11 asks for a boundary only where the
+    // boundary is what identifies the control. An icon-only one, or an <input>, still is measured.
+    if (
+      field.tagName === 'BUTTON' &&
+      field.getAttribute('role') === 'combobox' &&
+      /\S/.test(field.textContent ?? '')
+    ) {
+      continue;
+    }
+    // A field with no edge of its own may sit in a frame that draws it: the element that carries
+    // data-field-frame, which is then the edge measured (against what surrounds the frame). A card
+    // that merely contains a field is not a frame; the marker is a deliberate statement by the page.
+    const own = edgesOf(field);
+    const frame = field.closest('[data-field-frame]');
+    const framed = frame && own.borderColours.length === 0 && own.fill === null && !own.hasShadow;
+    const edge = framed ? edgesOf(frame) : own;
     samples.push({
       kind: 'field-boundary',
       target: cssPath(field),
       role: field.getAttribute('role') ?? field.tagName.toLowerCase(),
-      borderColours: [...new Set(borders.map((border) => border.colour))],
-      fill: isClear(style.backgroundColor) ? null : style.backgroundColor,
-      surrounding: layersFrom(field.parentElement),
-      // A visible ring, a shadow or an outline also marks the edge.
-      hasShadow: style.boxShadow !== 'none',
+      ...edge,
+      surrounding: layersFrom(framed ? frame.parentElement : field.parentElement),
     });
   }
 

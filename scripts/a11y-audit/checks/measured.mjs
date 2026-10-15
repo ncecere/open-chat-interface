@@ -195,7 +195,7 @@ export async function nonTextContrastCheck(page, { evidence, route, context }) {
   }
   evidence.limit(
     'non-text-contrast',
-    'Only the edges of fields and the glyphs of icon-only controls are measured. Charts, status dots, custom graphics and the focus indicator (measured in the keyboard walkthroughs) are not part of this check. A field with a low-contrast edge is reported even where a label or placeholder also identifies it: that reading of 1.4.11 is the stricter one.',
+    'Only the edges of fields and the glyphs of icon-only controls are measured (a field with no edge of its own is measured by the frame that draws it, when the page marks one with data-field-frame; a button-shaped combobox that shows its value as text is not measured as a field). Charts, status dots, custom graphics and the focus indicator (measured in the keyboard walkthroughs) are not part of this check. A field with a low-contrast edge is reported even where a label or placeholder also identifies it: that reading of 1.4.11 is the stricter one.',
   );
 }
 
