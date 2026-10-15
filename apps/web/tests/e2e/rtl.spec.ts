@@ -33,6 +33,7 @@ import {
 
 let storage: Awaited<ReturnType<typeof signedInState>>;
 let threadId = '';
+let projectId = '';
 const PROJECT_NAME = 'مشروع المكتبة · Library project';
 
 test.beforeAll(async ({ browser }) => {
@@ -61,6 +62,7 @@ test.beforeAll(async ({ browser }) => {
     data: { name: PROJECT_NAME },
   });
   expect(project.ok(), await project.text()).toBe(true);
+  projectId = ((await project.json()) as { project: { id: string } }).project.id;
   await context.close();
 });
 
@@ -73,11 +75,10 @@ test.afterAll(async ({ browser }) => {
     const removed = await context.request.delete(`/api/threads/${threadId}/permanent`);
     expect(removed.ok(), `delete thread: ${removed.status()} ${await removed.text()}`).toBe(true);
   }
-  const list = await context.request.get('/api/projects');
-  expect(list.ok(), `list projects: ${list.status()} ${await list.text()}`).toBe(true);
-  const { projects } = (await list.json()) as { projects: { id: string; name: string }[] };
-  for (const project of projects.filter((item) => item.name.startsWith(PROJECT_NAME))) {
-    const deleted = await context.request.delete(`/api/projects/${project.id}`);
+  // Only the project this run made, by its id. The spec runs under both browser projects at
+  // once, each with a project of this name, and a clean-up by name removed the other's.
+  if (projectId) {
+    const deleted = await context.request.delete(`/api/projects/${projectId}`);
     expect(deleted.ok(), `delete project: ${deleted.status()} ${await deleted.text()}`).toBe(true);
   }
   await context.close();
