@@ -183,6 +183,19 @@ describe.skipIf(!available)('live: groups in the roles summary, the usage card a
       expect(events.totals.messages).toBe(17);
     });
 
+    it('reports zeros for a group whose members have not used anything', async () => {
+      const quiet = await groupNamed(live.db, organizationId, 'Quiet');
+      const body = await json<GroupUsage>(
+        await call(admin, 'GET', `/admin/groups/${quiet.id}/usage`),
+      );
+      expect(body).toMatchObject({
+        memberCount: 0,
+        totals: { messages: 0, tokensIn: 0, tokensOut: 0, costMicros: 0 },
+        people: [],
+        truncated: false,
+      });
+    });
+
     it('follows membership: someone who left is not counted, someone who joined is, with their history', async () => {
       const g = await groupNamed(live.db, organizationId, 'Usage moves');
       await addMember(live.db, g.id, ann.id);

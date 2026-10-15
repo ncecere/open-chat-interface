@@ -76,7 +76,7 @@ export async function groupUsage(
   `);
 
   const first = rows[0];
-  const members = (await memberCounts([groupId])).get(groupId)?.members ?? 0;
+  const members = (await memberCounts([groupId])).get(groupId)!.members;
   return {
     days,
     since: start,

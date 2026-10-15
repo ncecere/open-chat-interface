@@ -126,8 +126,8 @@ export async function listManagedGroups(userId: string): Promise<ManagedGroup[]>
   const counts = await memberCounts(rows.map((row) => row.id));
   return rows.map((row) => ({
     ...row,
-    memberCount: counts.get(row.id)?.members ?? 0,
-    managerCount: counts.get(row.id)?.managers ?? 0,
+    memberCount: counts.get(row.id)!.members,
+    managerCount: counts.get(row.id)!.managers,
     memberLimit: MAX_MEMBERS_PER_GROUP,
   }));
 }
@@ -138,7 +138,8 @@ export async function countManagedGroups(userId: string): Promise<number> {
     .select({ value: count() })
     .from(schema.groupMember)
     .where(and(eq(schema.groupMember.userId, userId), eq(schema.groupMember.role, 'manager')));
-  return row?.value ?? 0;
+  // An aggregate always answers with one row.
+  return row!.value;
 }
 
 /** The groups of one person, for the administrator's user detail. */
@@ -163,6 +164,7 @@ export async function memberCounts(
 ): Promise<Map<string, { members: number; managers: number }>> {
   const result = new Map<string, { members: number; managers: number }>();
   if (groupIds.length === 0) return result;
+  for (const id of groupIds) result.set(id, { members: 0, managers: 0 });
   const rows = await db
     .select({
       groupId: schema.groupMember.groupId,
@@ -224,7 +226,7 @@ export async function listGroupMembers(
     members: rows.map((row) => ({ ...row, addedAt: row.addedAt.toISOString() })),
     page: query.page,
     pageSize: query.pageSize,
-    total: total?.value ?? 0,
+    total: total!.value,
   };
 }
 
@@ -329,8 +331,8 @@ export async function addGroupMembers(params: {
       })
       .from(schema.groupMember)
       .where(eq(schema.groupMember.groupId, groupId));
-    const members = totals?.members ?? 0;
-    const managers = totals?.managers ?? 0;
+    const members = totals!.members;
+    const managers = totals!.managers;
 
     if (members + toAdd.length > MAX_MEMBERS_PER_GROUP) {
       throw conflict(
@@ -445,9 +447,9 @@ export async function changeMemberRole(params: {
         .where(
           and(eq(schema.groupMember.groupId, groupId), eq(schema.groupMember.role, 'manager')),
         );
-      if ((managers?.value ?? 0) >= MAX_MANAGERS_PER_GROUP) {
+      if (managers!.value >= MAX_MANAGERS_PER_GROUP) {
         throw conflict(
-          `A group can have at most ${MAX_MANAGERS_PER_GROUP} managers. This one has ${managers?.value}.`,
+          `A group can have at most ${MAX_MANAGERS_PER_GROUP} managers. This one has ${managers!.value}.`,
           { reason: GROUP_ERROR_REASONS.MANAGER_LIMIT, limit: MAX_MANAGERS_PER_GROUP },
         );
       }

@@ -76,10 +76,10 @@ async function summarise(rows: GroupRow[]): Promise<AdminGroup[]> {
     id: row.id,
     name: row.name,
     description: row.description,
-    memberCount: members.get(row.id)?.members ?? 0,
-    managerCount: members.get(row.id)?.managers ?? 0,
-    policyCount: grants.get(row.id)?.policies ?? 0,
-    modelCount: grants.get(row.id)?.models ?? 0,
+    memberCount: members.get(row.id)!.members,
+    managerCount: members.get(row.id)!.managers,
+    policyCount: grants.get(row.id)!.policies,
+    modelCount: grants.get(row.id)!.models,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }));
@@ -109,7 +109,7 @@ export async function listGroups(query: {
     groups: await summarise(rows),
     page: query.page,
     pageSize: query.pageSize,
-    total: total?.value ?? 0,
+    total: total!.value,
     limit: MAX_GROUPS,
   };
 }
@@ -191,7 +191,7 @@ export async function createGroup(actor: GroupActor, input: CreateGroupInput): P
         .select({ value: count() })
         .from(schema.group)
         .where(eq(schema.group.organizationId, organizationId));
-      if ((total?.value ?? 0) >= MAX_GROUPS) {
+      if (total!.value >= MAX_GROUPS) {
         throw conflict(
           `An instance can have at most ${MAX_GROUPS} groups. Delete one that is no longer used first.`,
           { reason: GROUP_ERROR_REASONS.GROUP_LIMIT, limit: MAX_GROUPS },
@@ -242,7 +242,6 @@ export async function updateGroup(
       if (input.name !== undefined) patch.name = input.name;
       // An empty description clears it, as null does.
       if (input.description !== undefined) patch.description = input.description || null;
-      if (Object.keys(patch).length === 0) return { before: current, after: current };
 
       if (patch.name !== undefined && patch.name.toLowerCase() !== current.name.toLowerCase()) {
         const [clash] = await tx
@@ -322,8 +321,8 @@ export async function deleteGroup(actor: GroupActor, id: string): Promise<Delete
       group,
       removed: {
         members: members.length,
-        policies: policies?.value ?? 0,
-        models: models?.value ?? 0,
+        policies: policies!.value,
+        models: models!.value,
         sharedProjects,
       },
     };

@@ -64,6 +64,16 @@ export default defineConfig({
         'src/services/storage/usage.ts': { statements: 90, branches: 60, functions: 100 },
         'src/services/jobs/lock.ts': { statements: 100, branches: 100, functions: 100 },
         'src/services/quota/policy.ts': { statements: 90, branches: 78, functions: 100 },
+        // v0.14 groups: membership and manager checks (who may change who belongs), the
+        // limits, the grants and the budget rule that adds groups to roles.
+        'src/services/groups/membership.ts': { statements: 100, branches: 95, functions: 100 },
+        'src/services/groups/groups.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/groups/grants.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/groups/usage.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/groups/upgrade-guard.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/quota/applicability.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/routes/groups.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/routes/admin/groups.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/chat/attachment-context.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/chat/context-budget.ts': { statements: 100, branches: 90, functions: 100 },
         'src/services/chat/generation-settings.ts': {

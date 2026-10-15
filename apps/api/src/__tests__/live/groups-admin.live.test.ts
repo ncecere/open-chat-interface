@@ -335,6 +335,76 @@ describe.skipIf(!available)('live: administering groups', () => {
     });
   });
 
+  describe('edge cases', () => {
+    it('lists nothing for a search that matches nothing, and 404 for the groups of an unknown person', async () => {
+      const page = await json<AdminGroupsPage>(
+        await call(admin, 'GET', '/admin/groups?search=zzz-no-such-group'),
+      );
+      expect(page).toMatchObject({ groups: [], total: 0 });
+      expect((await call(admin, 'GET', '/admin/users/nobody/groups')).status).toBe(404);
+    });
+
+    it('keeps one winner when two groups are renamed to the same name at once', async () => {
+      const a = await groupNamed(live.db, organizationId, 'Rename race A');
+      const b = await groupNamed(live.db, organizationId, 'Rename race B');
+      const results = await atOnce(() =>
+        [a, b].map((g) => call(admin, 'PATCH', `/admin/groups/${g.id}`, { name: 'Rename race' })),
+      );
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      const loser = results.find((r) => r.status === 409)!;
+      const body = (await loser.json()) as { error: { details: { reason: string } } };
+      expect(body.error.details.reason).toBe('name_taken');
+    });
+
+    it('names who created a group, changes only the description, and records nothing for a save that changes nothing', async () => {
+      const group = await json<AdminGroup>(
+        await call(admin, 'POST', '/admin/groups', { name: 'Described' }),
+        201,
+      );
+      const detail = await json<AdminGroupDetail>(
+        await call(admin, 'GET', `/admin/groups/${group.id}`),
+      );
+      expect(detail.createdByName).toBe('Ada Admin');
+      const before = (await auditActions()).length;
+      const same = await json<AdminGroup>(
+        await call(admin, 'PATCH', `/admin/groups/${group.id}`, { name: 'Described' }),
+      );
+      expect(same.name).toBe('Described');
+      expect((await auditActions()).length).toBe(before);
+      const described = await json<AdminGroup>(
+        await call(admin, 'PATCH', `/admin/groups/${group.id}`, { description: 'Now described' }),
+      );
+      expect(described).toMatchObject({ name: 'Described', description: 'Now described' });
+      expect((await auditActions()).length).toBe(before + 1);
+    });
+
+    it('does nothing, and records nothing, for a role change to the role someone already has', async () => {
+      const group = await groupNamed(live.db, organizationId, 'Same role');
+      const p = await person(live.db, organizationId);
+      await addMember(live.db, group.id, p.id);
+      const before = (await auditActions()).length;
+      const result = await json<GroupMember>(
+        await call(admin, 'PATCH', `/admin/groups/${group.id}/members/${p.id}`, { role: 'member' }),
+      );
+      expect(result.role).toBe('member');
+      expect((await auditActions()).length).toBe(before);
+    });
+
+    it('allows a manager asked to be added as a member to stay a manager, and 404s a person with no account', async () => {
+      const group = await groupNamed(live.db, organizationId, 'Stay manager');
+      const m = await person(live.db, organizationId);
+      await addMember(live.db, group.id, m.id, 'manager');
+      const result = await json<AddGroupMembersResult>(
+        await call(admin, 'POST', `/admin/groups/${group.id}/members`, { emails: [m.email] }),
+      );
+      expect(result.alreadyMembers).toEqual([m.email]);
+      const detail = await json<AdminGroupDetail>(
+        await call(admin, 'GET', `/admin/groups/${group.id}`),
+      );
+      expect(detail.managerCount).toBe(1);
+    });
+  });
+
   describe('membership', () => {
     it('adds by email ignoring case, sorts every address into one list, and audits one entry', async () => {
       const group = await groupNamed(live.db, organizationId, 'Adding');

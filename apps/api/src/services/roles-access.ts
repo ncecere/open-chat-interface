@@ -157,8 +157,8 @@ async function getGroupsAccess(organizationId: string): Promise<RolesAccessGroup
   return groups.map((group) => ({
     id: group.id,
     name: group.name,
-    memberCount: counts.get(group.id)?.members ?? 0,
-    managerCount: counts.get(group.id)?.managers ?? 0,
+    memberCount: counts.get(group.id)!.members,
+    managerCount: counts.get(group.id)!.managers,
     budgets: budgets
       .filter((row) => row.groupId === group.id)
       .map(({ groupId: _groupId, ...budget }) => budget),

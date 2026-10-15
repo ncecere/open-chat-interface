@@ -18,12 +18,11 @@ type SQL = ReturnType<typeof sql.raw>;
  * Read per call, never cached: leaving a group ends its budget on the next
  * request.
  */
-export function budgetAppliesTo(role: UserRole, userId: string | undefined): SQL {
+export function budgetAppliesTo(role: UserRole, userId: string): SQL {
   const viaRole = sql`exists (
     select 1 from ${schema.quotaPolicyRole}
     where ${schema.quotaPolicyRole.policyId} = ${schema.quotaPolicy.id}
       and ${schema.quotaPolicyRole.role} = ${role})`;
-  if (userId === undefined) return viaRole;
   return sql`(${viaRole} or exists (
     select 1 from ${schema.quotaPolicyGroup}
     inner join ${schema.groupMember}

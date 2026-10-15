@@ -44,7 +44,7 @@ export { resolveWindow } from './windows.js';
  * Overrides are applied here rather than at each call site so enforcement and
  * the usage meter can never disagree about what a person's limit actually is.
  */
-async function loadPoliciesForRole(role: UserRole, userId?: string): Promise<EvaluablePolicy[]> {
+async function loadPoliciesForRole(role: UserRole, userId: string): Promise<EvaluablePolicy[]> {
   const organizationId = await getDefaultOrganizationId();
 
   const rows = await db
@@ -89,12 +89,10 @@ async function loadPoliciesForRole(role: UserRole, userId?: string): Promise<Eva
     slugsByPolicy.set(scope.policyId, existing);
   }
 
-  const overrides = userId
-    ? await loadOverrides(
-        userId,
-        rows.map((row) => row.id),
-      )
-    : new Map();
+  const overrides = await loadOverrides(
+    userId,
+    rows.map((row) => row.id),
+  );
 
   return rows.map((row) => ({
     ...row,

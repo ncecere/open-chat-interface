@@ -13,8 +13,18 @@ import {
 } from '@oci/shared';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../services/jobs/workers.js', () => ({ liveReplicas: async () => null }));
-const { isOlderMinor } = await import('../../services/groups/upgrade-guard.js');
+const replicas = vi.hoisted(() => ({
+  next: null as null | { version: string }[] | 'fails',
+}));
+vi.mock('../../services/jobs/workers.js', () => ({
+  liveReplicas: async () => {
+    if (replicas.next === 'fails') throw new Error('Redis is down');
+    return replicas.next;
+  },
+}));
+const { assertNoOlderReplicas, isOlderMinor } = await import(
+  '../../services/groups/upgrade-guard.js'
+);
 
 describe('group request schemas', () => {
   it('trims names, bounds them, and refuses unknown fields', () => {
@@ -92,5 +102,24 @@ describe('isOlderMinor (the mixed-version guard)', () => {
     expect(isOlderMinor('0.14.2', '0.14.0')).toBe(false);
     expect(isOlderMinor('0.15.0', '0.14.0')).toBe(false);
     expect(isOlderMinor('garbage', '0.14.0')).toBe(false);
+  });
+});
+
+describe('assertNoOlderReplicas', () => {
+  it('passes without heartbeats, when they cannot be read, and when no replica is older', async () => {
+    replicas.next = null;
+    await expect(assertNoOlderReplicas()).resolves.toBeUndefined();
+    replicas.next = 'fails';
+    await expect(assertNoOlderReplicas()).resolves.toBeUndefined();
+    replicas.next = [{ version: '0.13.1' }, { version: '0.99.0' }];
+    await expect(assertNoOlderReplicas()).resolves.toBeUndefined();
+  });
+
+  it('refuses with 409 while an earlier minor release serves', async () => {
+    replicas.next = [{ version: '0.12.9' }, { version: '0.13.1' }];
+    await expect(assertNoOlderReplicas()).rejects.toMatchObject({
+      status: 409,
+      message: 'An upgrade is still in progress',
+    });
   });
 });
