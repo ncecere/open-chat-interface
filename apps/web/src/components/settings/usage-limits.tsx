@@ -1,35 +1,55 @@
 import type { UsageAllowance, UsageSummary } from '@oci/shared';
-import { quotaLimitName } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Info } from 'lucide-react';
 import { api } from '~/lib/api-client';
+import { type MessageKey, type Translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
-function formatCountdown(iso: string | null): string | null {
+function formatCountdown(iso: string | null, t: Translate): string | null {
   if (!iso) return null;
   const remaining = new Date(iso).getTime() - Date.now();
   if (remaining <= 0) return null;
 
   const hours = Math.floor(remaining / 3_600_000);
   const minutes = Math.floor((remaining % 3_600_000) / 60_000);
-  if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
-  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  if (hours >= 24) {
+    return t('settings.usage.durationDaysHours', {
+      days: Math.floor(hours / 24),
+      hours: hours % 24,
+    });
+  }
+  return hours > 0
+    ? t('settings.usage.durationHoursMinutes', { hours, minutes })
+    : t('settings.usage.durationMinutes', { minutes });
 }
 
-function windowLabel(allowance: UsageAllowance): string {
+function windowLabel(allowance: UsageAllowance, t: Translate): string {
   switch (allowance.windowKind) {
     case 'rolling':
-      return `rolling ${allowance.windowHours ?? 24}h`;
+      return t('settings.usage.windowRolling', { hours: allowance.windowHours ?? 24 });
     case 'daily':
-      return 'today';
+      return t('settings.usage.windowDaily');
     case 'weekly':
-      return 'this week';
+      return t('settings.usage.windowWeekly');
     case 'monthly':
-      return 'this month';
+      return t('settings.usage.windowMonthly');
     default:
       return '';
   }
 }
+
+/** What is counted: the limit's kind, not the policy's name (the administrator's). */
+const LIMIT_NAMES: Record<string, { all: MessageKey; some: MessageKey }> = {
+  messages: {
+    all: 'settings.usage.limitMessages',
+    some: 'settings.usage.limitMessagesSomeModels',
+  },
+  tokens: { all: 'settings.usage.limitTokens', some: 'settings.usage.limitTokensSomeModels' },
+};
+const OTHER_LIMIT_NAME = {
+  all: 'settings.usage.limitUsage',
+  some: 'settings.usage.limitUsageSomeModels',
+} as const;
 
 /**
  * Shows only how much of an allowance is left, as a percentage.
@@ -40,17 +60,16 @@ function windowLabel(allowance: UsageAllowance): string {
  * instance cost out of the interface.
  */
 function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
+  const t = useT();
   // The bar depletes as the allowance is consumed, so a full bar means a full
   // allowance remaining.
   const fractionRemaining = Math.max(0, 1 - allowance.used / allowance.limitValue);
   // Severity comes from the server so the meter and the toast cannot disagree
   // about when a user is close to their limit.
   const low = allowance.severity === 'critical' || allowance.severity === 'exceeded';
-  const countdown = formatCountdown(allowance.resetsAt);
-  const name = quotaLimitName(allowance.metric);
-  const label = `${name.charAt(0).toUpperCase()}${name.slice(1)}${
-    allowance.modelSlugs.length > 0 ? ' (some models)' : ''
-  }`;
+  const countdown = formatCountdown(allowance.resetsAt, t);
+  const names = LIMIT_NAMES[allowance.metric] ?? OTHER_LIMIT_NAME;
+  const label = t(allowance.modelSlugs.length > 0 ? names.some : names.all);
 
   // Round toward zero so a nearly spent allowance never reads as a full 1%,
   // but anything still usable stays visible rather than showing 0%.
@@ -71,7 +90,7 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
             low ? 'text-[var(--danger-on-tint)]' : 'text-[var(--text-muted)]',
           )}
         >
-          {percentRemaining}% left
+          {t('settings.usage.percentLeft', { fraction: percentRemaining / 100 })}
         </span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--bg-segment-track)]">
@@ -84,8 +103,12 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
         />
       </div>
       <p className="mt-1 text-[0.6875rem] text-[var(--text-muted)]">
-        {windowLabel(allowance)}
-        {countdown ? ` · resets in ${countdown}` : ''}
+        {countdown
+          ? t('settings.usage.windowResets', {
+              window: windowLabel(allowance, t),
+              time: countdown,
+            })
+          : windowLabel(allowance, t)}
       </p>
     </div>
   );
@@ -96,6 +119,7 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
  * reports plain consumption when none apply to the signed-in role.
  */
 export function UsageLimits() {
+  const t = useT();
   const { data } = useQuery({
     queryKey: ['me', 'usage'],
     queryFn: () => api.get<UsageSummary>('/me/usage'),
@@ -108,13 +132,13 @@ export function UsageLimits() {
     <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
       <div className="mb-3 flex items-center gap-1.5">
         {/* A heading, as the other cards' titles are (#272). */}
-        <h2 className="text-sm font-semibold">Usage Limits</h2>
+        <h2 className="text-sm font-semibold">{t('settings.usage.title')}</h2>
         <Info
           className="size-3.5 text-[var(--text-muted)]"
           aria-label={
             data.allowances.length > 0
-              ? 'How much of each limit applied to your role remains'
-              : 'No usage limits apply to your role'
+              ? t('settings.usage.infoWithLimits')
+              : t('settings.usage.infoNoLimits')
           }
         />
       </div>
@@ -126,7 +150,7 @@ export function UsageLimits() {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-[var(--text-muted)]">No usage limits apply to your account.</p>
+        <p className="text-sm text-[var(--text-muted)]">{t('settings.usage.none')}</p>
       )}
     </div>
   );

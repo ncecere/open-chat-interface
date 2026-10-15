@@ -67,21 +67,6 @@
       "reason": "Reads the browser's time zone name for the export link; nothing is shown to a person."
     },
     {
-      "file": "apps/web/src/components/settings/storage-meter.tsx",
-      "count": 3,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
-      "file": "apps/web/src/components/settings/trait-chips.tsx",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
-      "file": "apps/web/src/components/settings/your-data.tsx",
-      "count": 5,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
       "file": "apps/web/src/hooks/use-chat-session.ts",
       "count": 1,
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
@@ -178,16 +163,6 @@
     },
     {
       "file": "apps/web/src/routes/admin/users/bulk-toolbar.tsx",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
-      "file": "apps/web/src/routes/settings/attachment-list.tsx",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
-      "file": "apps/web/src/routes/settings/sharing.tsx",
       "count": 1,
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
     }

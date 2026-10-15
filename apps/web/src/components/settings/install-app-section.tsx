@@ -1,4 +1,5 @@
 import { Button } from '~/components/ui/button';
+import { useT } from '~/lib/i18n';
 import { useInstallPrompt } from '~/lib/install-prompt';
 
 /**
@@ -8,20 +9,19 @@ import { useInstallPrompt } from '~/lib/install-prompt';
  * already installed has nothing to press; the docs cover Add to Home Screen.
  */
 export function InstallAppSection() {
+  const t = useT();
   const { canInstall, install } = useInstallPrompt();
   if (!canInstall) return null;
 
   return (
     <section className="mt-12">
-      <h2 className="text-xl font-bold">Install the app</h2>
+      <h2 className="text-xl font-bold">{t('settings.install.title')}</h2>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <p className="text-sm leading-relaxed text-[var(--text-muted)]">
-          Add this site to your home screen or desktop, so it opens in its own window without the
-          browser's address bar. It still needs a network connection: nothing is saved for offline
-          use.
+          {t('settings.install.description')}
         </p>
         <Button variant="accent" className="shrink-0 self-start" onClick={() => void install()}>
-          Install
+          {t('settings.install.button')}
         </Button>
       </div>
     </section>

@@ -9,9 +9,11 @@
     "apps/web/src/components/mfa",
     "apps/web/src/components/onboarding",
     "apps/web/src/components/projects",
+    "apps/web/src/components/settings",
     "apps/web/src/components/ui",
     "apps/web/src/routes/auth",
     "apps/web/src/routes/projects",
+    "apps/web/src/routes/settings",
     "apps/web/src/routes/share"
   ]
 }

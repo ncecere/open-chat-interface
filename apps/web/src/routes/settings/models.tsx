@@ -17,22 +17,23 @@ import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels } from '~/hooks/use-models';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { type MessageKey, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 
-const CAPABILITY_META: Partial<Record<ModelCapability, { label: string; icon: typeof Eye }>> = {
-  vision: { label: 'Vision', icon: Eye },
-  reasoning: { label: 'Reasoning', icon: Brain },
-  tool_calling: { label: 'Tools', icon: Wrench },
-  fast: { label: 'Fast', icon: Zap },
-  pdf_comprehension: { label: 'PDF', icon: FileText },
-  image_generation: { label: 'Images', icon: Image },
+const CAPABILITY_META: Partial<Record<ModelCapability, { label: MessageKey; icon: typeof Eye }>> = {
+  vision: { label: 'settings.models.capabilityVision', icon: Eye },
+  reasoning: { label: 'settings.models.capabilityReasoning', icon: Brain },
+  tool_calling: { label: 'settings.models.capabilityTools', icon: Wrench },
+  fast: { label: 'settings.models.capabilityFast', icon: Zap },
+  pdf_comprehension: { label: 'settings.models.capabilityPdf', icon: FileText },
+  image_generation: { label: 'settings.models.capabilityImages', icon: Image },
 };
 
-const EFFORT_LABELS: Record<ReasoningEffort, string> = {
-  instant: 'Instant',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
+const EFFORT_LABELS: Record<ReasoningEffort, MessageKey> = {
+  instant: 'settings.models.effortInstant',
+  low: 'settings.models.effortLow',
+  medium: 'settings.models.effortMedium',
+  high: 'settings.models.effortHigh',
 };
 
 /**
@@ -42,6 +43,7 @@ const EFFORT_LABELS: Record<ReasoningEffort, string> = {
  * A saved default that is no longer allowed is ignored, and said so here.
  */
 function DefaultsForm({ models }: { models: CatalogModel[] }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const { data: me } = useCurrentUser();
   const savedModel = me?.preferences.defaultModelSlug ?? null;
@@ -98,11 +100,10 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
   return (
     <section aria-labelledby="model-defaults-heading" className="mt-8">
       <h2 id="model-defaults-heading" className="text-xl font-bold">
-        Defaults
+        {t('settings.models.defaults')}
       </h2>
       <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Where new conversations start, on every device you use. A model or level you pick in a
-        conversation applies to that conversation only.
+        {t('settings.models.defaultsDescription')}
       </p>
 
       {problems.length > 0 && (
@@ -110,24 +111,25 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
           role="note"
           className="mt-4 flex flex-col gap-1 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-3 text-sm"
         >
-          {problems.includes('model') && (
-            <p>
-              Your default model is no longer available to you, so new conversations start with the
-              instance default. Choose another below.
-            </p>
-          )}
+          {problems.includes('model') && <p>{t('settings.models.modelUnavailable')}</p>}
           {problems.includes('effort') && savedEffort && (
             <p>
-              Your default reasoning level, {EFFORT_LABELS[savedEffort]}, is no longer available
-              {problems.includes('model') ? '' : ' with your default model'}, so the instance
-              default ({EFFORT_LABELS[instanceEffort]}) applies.
+              {t(
+                problems.includes('model')
+                  ? 'settings.models.effortUnavailable'
+                  : 'settings.models.effortUnavailableWithModel',
+                {
+                  level: t(EFFORT_LABELS[savedEffort]),
+                  instance: t(EFFORT_LABELS[instanceEffort]),
+                },
+              )}
             </p>
           )}
         </div>
       )}
 
       <form onSubmit={submit} noValidate className="mt-4 flex max-w-md flex-col gap-4">
-        <Field label="Default model" htmlFor="default-model">
+        <Field label={t('settings.models.defaultModel')} htmlFor="default-model">
           <Select
             id="default-model"
             value={model}
@@ -136,20 +138,22 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
               {
                 value: '',
                 label: instanceModel
-                  ? `Instance default (${instanceModel.displayName})`
-                  : 'Instance default',
+                  ? t('settings.models.instanceDefaultNamed', { name: instanceModel.displayName })
+                  : t('settings.models.instanceDefault'),
               },
               ...models.map((entry) => ({ value: entry.slug, label: entry.displayName })),
             ]}
           />
         </Field>
         <Field
-          label="Default reasoning level"
+          label={t('settings.models.defaultEffort')}
           htmlFor="default-effort"
           hint={
             levels.length === 0
-              ? `${target?.displayName ?? 'This model'} has no reasoning levels.`
-              : 'Used on models that offer it; otherwise the nearest level the model has.'
+              ? target
+                ? t('settings.models.noLevelsNamed', { name: target.displayName })
+                : t('settings.models.noLevels')
+              : t('settings.models.effortHint')
           }
         >
           <Select
@@ -162,8 +166,13 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
               setEffort(next);
             }}
             options={[
-              { value: '', label: `Instance default (${EFFORT_LABELS[instanceEffort]})` },
-              ...levels.map((level) => ({ value: level, label: EFFORT_LABELS[level] })),
+              {
+                value: '',
+                label: t('settings.models.instanceDefaultNamed', {
+                  name: t(EFFORT_LABELS[instanceEffort]),
+                }),
+              },
+              ...levels.map((level) => ({ value: level, label: t(EFFORT_LABELS[level]) })),
             ]}
           />
         </Field>
@@ -176,21 +185,23 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
             disabled={!changed || save.isPending}
           >
             {save.isPending && <Spinner />}
-            Save defaults
+            {t('settings.models.saveDefaults')}
           </Button>
           {changed && !save.isPending && (
-            <span className="text-sm text-[var(--text-muted)]">Not saved yet</span>
+            <span className="text-sm text-[var(--text-muted)]">
+              {t('settings.models.notSaved')}
+            </span>
           )}
           {saved && !changed && (
             <span role="status" className="flex items-center gap-1.5 text-sm text-[var(--success)]">
               <CheckCircle2 className="size-4" aria-hidden="true" />
-              Saved
+              {t('settings.models.saved')}
             </span>
           )}
         </div>
         {save.error && (
           <p role="alert" className="text-sm text-[var(--danger)]">
-            {apiErrorMessage(save.error, 'Your defaults could not be saved. Try again.')}
+            {apiErrorMessage(save.error, t('settings.models.saveFailed'))}
           </p>
         )}
       </form>
@@ -199,6 +210,7 @@ function DefaultsForm({ models }: { models: CatalogModel[] }) {
 }
 
 export function SettingsModelsPage() {
+  const t = useT();
   const { data: models, isLoading } = useModels();
   const { data: me } = useCurrentUser();
   const personalDefault = me?.chat?.defaultModelSlug ?? null;
@@ -214,21 +226,18 @@ export function SettingsModelsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Models</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Where your conversations start, and the models an administrator has made available to your
-        role.
-      </p>
+      <h1 className="text-2xl font-bold">{t('settings.models.title')}</h1>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">{t('settings.models.subtitle')}</p>
 
       {models && models.length > 0 && <DefaultsForm models={models} />}
 
-      <h2 className="mt-12 text-xl font-bold">Available models</h2>
+      <h2 className="mt-12 text-xl font-bold">{t('settings.models.available')}</h2>
       <div className="mt-4 max-w-sm">
         <Input
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="Search models..."
-          aria-label="Search models"
+          placeholder={t('settings.models.searchPlaceholder')}
+          aria-label={t('settings.models.search')}
         />
       </div>
 
@@ -238,9 +247,7 @@ export function SettingsModelsPage() {
         </div>
       ) : visible.length === 0 ? (
         <p className="mt-10 text-sm text-[var(--text-muted)]">
-          {models?.length === 0
-            ? 'No models are available to you yet. Ask an administrator to enable one.'
-            : 'No models matched your search.'}
+          {models?.length === 0 ? t('settings.models.noModels') : t('settings.models.noMatch')}
         </p>
       ) : (
         <div className="mt-6 flex flex-col">
@@ -257,19 +264,19 @@ export function SettingsModelsPage() {
                   <p className="font-medium text-[var(--text-primary)]">{model.displayName}</p>
                   {model.isDefault && (
                     <Badge variant="accent" className="whitespace-nowrap">
-                      instance default
+                      {t('settings.models.badgeInstance')}
                     </Badge>
                   )}
                   {model.slug === personalDefault && (
                     <Badge variant="success" className="whitespace-nowrap">
-                      your default
+                      {t('settings.models.badgeYours')}
                     </Badge>
                   )}
                 </div>
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                   {model.providerLabel}
                   {model.contextWindow
-                    ? ` · ${(model.contextWindow / 1000).toFixed(0)}k context`
+                    ? ` · ${t('settings.models.context', { count: Math.round(model.contextWindow / 1000) })}`
                     : ''}
                 </p>
                 {model.description && (
@@ -287,7 +294,7 @@ export function SettingsModelsPage() {
                       className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[0.6875rem] text-[var(--text-secondary)]"
                     >
                       <meta.icon className="size-3" />
-                      {meta.label}
+                      {t(meta.label)}
                     </span>
                   );
                 })}

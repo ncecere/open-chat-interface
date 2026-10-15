@@ -4,7 +4,8 @@ import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { type MouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { LoadError } from '~/components/admin/admin-ui';
+import { LoadError } from '~/components/settings/load-error';
+import { tWithUserText } from '~/components/settings/user-text';
 import { YourDataButtons } from '~/components/settings/your-data';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -14,18 +15,18 @@ import { useProjects, useProjectsAvailable, useSharedProjects } from '~/hooks/us
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { keepFocusWhenRemoved, placeBesideRows } from '~/lib/focus-return';
+import { formatRelativeTime, type MessageKey, translate, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
-import { formatRelativeTime } from '~/lib/utils';
 import { TrashList } from './trash-list';
 
 /** How long typing pauses before the title search runs. */
 export const HISTORY_SEARCH_DEBOUNCE_MS = 300;
 
 const HISTORY_TABS = [
-  { id: 'active', label: 'Active' },
-  { id: 'archived', label: 'Archived' },
-  { id: 'trash', label: 'Trash' },
-] as const;
+  { id: 'active', labelKey: 'settings.history.tabActive' },
+  { id: 'archived', labelKey: 'settings.history.tabArchived' },
+  { id: 'trash', labelKey: 'settings.history.tabTrash' },
+] as const satisfies readonly { id: string; labelKey: MessageKey }[];
 const PANEL_ID = 'history-panel';
 
 interface HistoryPage {
@@ -51,10 +52,6 @@ function useDebounced<T>(value: T, delay: number): T {
   return settled;
 }
 
-function plural(count: number): string {
-  return `${count} conversation${count === 1 ? '' : 's'}`;
-}
-
 /** A header checkbox that is checked, unchecked or mixed. */
 function SelectAll({
   total,
@@ -65,6 +62,7 @@ function SelectAll({
   selected: number;
   onChange: () => void;
 }) {
+  const t = useT();
   const all = total > 0 && selected === total;
   const some = selected > 0 && !all;
   return (
@@ -80,12 +78,13 @@ function SelectAll({
         onChange={onChange}
         className="size-4 accent-[var(--accent)]"
       />
-      Select all
+      {t('settings.history.selectAll')}
     </label>
   );
 }
 
 function ConversationList({ archived }: { archived: boolean }) {
+  const t = useT();
   const queryClient = useQueryClient();
   // Archiving, deleting and restoring are refused while read-only (#353).
   const lock = useReadOnlyLock();
@@ -141,15 +140,16 @@ function ConversationList({ archived }: { archived: boolean }) {
     onSuccess: ({ done, failed, action }) => {
       if (done > 0) {
         toast.success(
-          action === 'archive'
-            ? `Archived ${plural(done)}.`
-            : `Moved ${plural(done)} to the trash.`,
+          translate(
+            action === 'archive' ? 'settings.history.archived' : 'settings.history.movedToTrash',
+            { count: done },
+          ),
         );
       }
-      if (failed > 0) toast.error(`${plural(failed)} could not be changed. Try again.`);
+      if (failed > 0) toast.error(translate('settings.history.changeFailed', { count: failed }));
       setSelected(new Set());
     },
-    onError: (error) => toast.error(apiErrorMessage(error, 'That could not be done. Try again.')),
+    onError: (error) => toast.error(apiErrorMessage(error, translate('settings.history.error'))),
     onSettled: () =>
       Promise.all([
         invalidateConversationLists(queryClient),
@@ -160,9 +160,15 @@ function ConversationList({ archived }: { archived: boolean }) {
   const unarchive = useMutation({
     mutationFn: (thread: ThreadSummary) => api.patch(`/threads/${thread.id}`, { archived: false }),
     // Said, as archiving is: the row only vanished (#250).
-    onSuccess: (_, thread) => toast.success(`Restored “${thread.title}” to Active.`),
+    onSuccess: (_, thread) =>
+      toast.success(translate('settings.history.restored', { title: thread.title })),
     onError: (error, thread) =>
-      toast.error(apiErrorMessage(error, `“${thread.title}” could not be restored. Try again.`)),
+      toast.error(
+        apiErrorMessage(
+          error,
+          translate('settings.history.restoreFailed', { title: thread.title }),
+        ),
+      ),
     onSettled: () => invalidateConversationLists(queryClient),
   });
 
@@ -199,7 +205,7 @@ function ConversationList({ archived }: { archived: boolean }) {
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative sm:max-w-xs sm:flex-1">
           <label htmlFor={searchId} className="sr-only">
-            Search conversation titles
+            {t('settings.history.searchLabel')}
           </label>
           <Search
             aria-hidden="true"
@@ -209,7 +215,7 @@ function ConversationList({ archived }: { archived: boolean }) {
             id={searchId}
             type="search"
             value={query}
-            placeholder="Search titles"
+            placeholder={t('settings.history.searchPlaceholder')}
             onChange={(event) => setQuery(event.target.value)}
             className="ps-9"
           />
@@ -217,7 +223,9 @@ function ConversationList({ archived }: { archived: boolean }) {
 
         {selected.size > 0 && (
           <div className="flex items-center gap-2 sm:ms-auto">
-            <span className="text-xs text-[var(--text-muted)]">{selected.size} selected</span>
+            <span className="text-xs text-[var(--text-muted)]">
+              {t('settings.history.selected', { count: selected.size })}
+            </span>
             {!archived && (
               <Button
                 variant="secondary"
@@ -226,7 +234,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                 disabled={bulk.isPending}
                 onClick={(event) => runBulk(event, 'archive')}
               >
-                Archive
+                {t('settings.history.archive')}
               </Button>
             )}
             <Button
@@ -236,30 +244,26 @@ function ConversationList({ archived }: { archived: boolean }) {
               disabled={bulk.isPending}
               onClick={(event) => runBulk(event, 'delete')}
             >
-              Delete
+              {t('settings.history.delete')}
             </Button>
           </div>
         )}
       </div>
 
       {history.isLoading ? (
-        <div className="py-16" role="status" aria-label="Loading conversations">
+        <div className="py-16" role="status" aria-label={t('settings.history.loading')}>
           <Spinner className="mx-auto size-6" />
         </div>
       ) : history.isError ? (
         // Announced, with Try again, as every other list's load error (#245).
-        <LoadError
-          title="Your conversations could not be loaded."
-          query={history}
-          className="mt-8"
-        />
+        <LoadError title={t('settings.history.loadError')} query={history} className="mt-8" />
       ) : threads.length === 0 ? (
         <p className="mt-10 text-sm text-[var(--text-muted)]">
           {search
-            ? 'No conversation titles match your search.'
+            ? t('settings.history.noMatch')
             : archived
-              ? 'Nothing archived.'
-              : 'No conversations yet.'}
+              ? t('settings.history.noneArchived')
+              : t('settings.history.noneYet')}
         </p>
       ) : (
         <>
@@ -270,7 +274,11 @@ function ConversationList({ archived }: { archived: boolean }) {
               onChange={toggleAll}
             />
           </div>
-          <ul ref={listRef} aria-label="Conversations" className="flex flex-col">
+          <ul
+            ref={listRef}
+            aria-label={t('settings.history.conversations')}
+            className="flex flex-col"
+          >
             {threads.map((thread) => {
               const projectName = thread.projectId ? projectNames.get(thread.projectId) : undefined;
               return (
@@ -282,7 +290,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                     type="checkbox"
                     checked={selected.has(thread.id)}
                     onChange={() => toggle(thread.id)}
-                    aria-label={`Select ${thread.title}`}
+                    aria-label={t('settings.history.select', { title: thread.title })}
                     className="size-4 shrink-0 accent-[var(--accent)]"
                   />
                   <div className="min-w-0 flex-1">
@@ -299,9 +307,11 @@ function ConversationList({ archived }: { archived: boolean }) {
                     {projectName && (
                       <p
                         className="truncate text-xs text-[var(--text-muted)]"
-                        title={`Project: ${projectName}`}
+                        title={t('settings.history.project', { name: projectName })}
                       >
-                        Project: {projectName}
+                        {tWithUserText(t, 'settings.history.project', { name: projectName }, [
+                          'name',
+                        ])}
                       </p>
                     )}
                   </div>
@@ -315,7 +325,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                       // Only this row's: a disabled neighbour cannot take focus.
                       locked={lock.title}
                       disabled={unarchive.isPending && unarchive.variables?.id === thread.id}
-                      aria-label={`Restore ${thread.title}`}
+                      aria-label={t('settings.history.restoreLabel', { title: thread.title })}
                       onClick={(event) => {
                         // The row leaves on refetch: focus goes to the next, not the body (#250).
                         const row = event.currentTarget.closest('li');
@@ -323,7 +333,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                         unarchive.mutate(thread);
                       }}
                     >
-                      Restore
+                      {t('settings.history.restore')}
                     </Button>
                   )}
                 </li>
@@ -339,7 +349,7 @@ function ConversationList({ archived }: { archived: boolean }) {
                 onClick={() => void history.fetchNextPage()}
               >
                 {history.isFetchingNextPage && <Spinner />}
-                Load more
+                {t('settings.history.loadMore')}
               </Button>
             </div>
           )}
@@ -350,33 +360,28 @@ function ConversationList({ archived }: { archived: boolean }) {
 }
 
 export function SettingsHistoryPage() {
+  const t = useT();
   const [tab, setTab] = useState<(typeof HISTORY_TABS)[number]['id']>('active');
+  const tabs = HISTORY_TABS.map((entry) => ({ id: entry.id, label: t(entry.labelKey) }));
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">History</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Your conversations on this instance. Deleting one moves it to the trash, where it stays
-        recoverable until its deletion date.
-      </p>
+      <h1 className="text-2xl font-bold">{t('settings.history.title')}</h1>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">{t('settings.history.description')}</p>
 
       <YourDataButtons />
 
       <div className="mt-6">
         <PillTabs
-          tabs={HISTORY_TABS}
+          tabs={tabs}
           active={tab}
           onChange={setTab}
-          label="Conversations"
+          label={t('settings.history.conversations')}
           controls={PANEL_ID}
         />
       </div>
 
-      <div
-        id={PANEL_ID}
-        role="tabpanel"
-        aria-label={HISTORY_TABS.find((entry) => entry.id === tab)?.label}
-      >
+      <div id={PANEL_ID} role="tabpanel" aria-label={tabs.find((entry) => entry.id === tab)?.label}>
         {tab === 'trash' ? (
           <TrashList />
         ) : (

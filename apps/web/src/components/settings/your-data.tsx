@@ -13,20 +13,28 @@ import {
 } from '~/components/ui/dialog';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import {
+  formatFileSize,
+  formatNumber,
+  formatRelativeTime,
+  type MessageKey,
+  translate,
+  useT,
+} from '~/lib/i18n';
 import { uploadImportFile } from '~/lib/import-upload';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
-import { cn, formatBytes, formatRelativeTime } from '~/lib/utils';
+import { cn } from '~/lib/utils';
 
 const IMPORTS_KEY = ['me', 'imports'] as const;
 /** How often the list refreshes while an import is queued or running. */
 export const IMPORT_POLL_MS = 2_000;
 
-const STATUS_LABELS: Record<ImportStatus, string> = {
-  pending: 'Queued',
-  running: 'Importing',
-  completed: 'Completed',
-  failed: 'Failed',
+const STATUS_LABELS: Record<ImportStatus, MessageKey> = {
+  pending: 'settings.imports.statusPending',
+  running: 'settings.imports.statusRunning',
+  completed: 'settings.imports.statusCompleted',
+  failed: 'settings.imports.statusFailed',
 };
 
 const STATUS_VARIANTS = {
@@ -36,32 +44,54 @@ const STATUS_VARIANTS = {
   failed: 'danger',
 } as const;
 
+/** The products stay as named; the rest of the label is translated. */
 function sourceLabel(record: ConversationImportSummary): string {
-  if (record.source === 'chatgpt') return 'ChatGPT';
-  if (record.source === 'claude') return 'Claude';
-  return record.status === 'pending' || record.status === 'running'
-    ? 'Detecting format'
-    : 'Unknown';
-}
-
-function plural(count: number, noun: string): string {
-  return `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`;
+  const label =
+    record.source === 'chatgpt'
+      ? 'ChatGPT'
+      : record.source === 'claude'
+        ? 'Claude'
+        : translate(
+            record.status === 'pending' || record.status === 'running'
+              ? 'settings.imports.sourceDetecting'
+              : 'settings.imports.sourceUnknown',
+          );
+  return record.formatVersion
+    ? translate('settings.imports.sourceVersion', { source: label, version: record.formatVersion })
+    : label;
 }
 
 function countsLine(record: ConversationImportSummary): string {
-  const parts = [`${record.importedCount.toLocaleString()} imported`];
-  if (record.skippedCount > 0) parts.push(`${record.skippedCount.toLocaleString()} skipped`);
-  if (record.failedCount > 0) parts.push(`${record.failedCount.toLocaleString()} failed`);
+  const parts = [translate('settings.imports.countImported', { count: record.importedCount })];
+  if (record.skippedCount > 0) {
+    parts.push(translate('settings.imports.countSkipped', { count: record.skippedCount }));
+  }
+  if (record.failedCount > 0) {
+    parts.push(translate('settings.imports.countFailed', { count: record.failedCount }));
+  }
   return parts.join(' · ');
 }
 
 function finishedMessage(record: ConversationImportSummary): string {
   if (record.status === 'failed') {
-    return `Import of ${record.filename} failed${record.error ? `: ${record.error}` : '.'}`;
+    // The reason is the server's own text.
+    return record.error
+      ? translate('settings.imports.failedWithReason', {
+          filename: record.filename,
+          error: record.error,
+        })
+      : translate('settings.imports.failed', { filename: record.filename });
   }
-  return `Import of ${record.filename} finished: ${plural(record.importedCount, 'conversation')} imported${
-    record.skippedCount > 0 ? `, ${record.skippedCount.toLocaleString()} skipped` : ''
-  }.`;
+  return record.skippedCount > 0
+    ? translate('settings.imports.finishedSkipped', {
+        filename: record.filename,
+        count: record.importedCount,
+        skipped: record.skippedCount,
+      })
+    : translate('settings.imports.finished', {
+        filename: record.filename,
+        count: record.importedCount,
+      });
 }
 
 function ImportRow({
@@ -73,6 +103,7 @@ function ImportRow({
   onDelete: () => void;
   deleting: boolean;
 }) {
+  const t = useT();
   const active = record.status === 'pending' || record.status === 'running';
   // Cancelling or removing an import is refused while read-only (#353).
   const lock = useReadOnlyLock();
@@ -83,12 +114,11 @@ function ImportRow({
           <p dir="auto" className="truncate text-[var(--text-primary)] text-sm">
             {record.filename}
           </p>
-          <Badge variant={STATUS_VARIANTS[record.status]}>{STATUS_LABELS[record.status]}</Badge>
+          <Badge variant={STATUS_VARIANTS[record.status]}>{t(STATUS_LABELS[record.status])}</Badge>
         </div>
         <p className="mt-0.5 text-[var(--text-muted)] text-xs">
-          {sourceLabel(record)}
-          {record.formatVersion ? ` (${record.formatVersion} export)` : ''} ·{' '}
-          {formatBytes(record.sizeBytes)} · {formatRelativeTime(record.createdAt)}
+          {sourceLabel(record)} · {formatFileSize(record.sizeBytes)} ·{' '}
+          {formatRelativeTime(record.createdAt)}
           {(record.status !== 'pending' || record.importedCount > 0) && ` · ${countsLine(record)}`}
         </p>
         {record.error && <p className="mt-1 text-[var(--danger)] text-xs">{record.error}</p>}
@@ -103,10 +133,14 @@ function ImportRow({
         size="sm"
         locked={lock.title}
         disabled={record.status === 'running' || deleting}
-        aria-label={active ? `Cancel import of ${record.filename}` : `Remove ${record.filename}`}
+        aria-label={
+          active
+            ? t('settings.imports.cancelLabel', { filename: record.filename })
+            : t('settings.imports.removeLabel', { filename: record.filename })
+        }
         onClick={onDelete}
       >
-        {active ? 'Cancel' : 'Remove'}
+        {active ? t('settings.imports.cancel') : t('settings.imports.remove')}
       </Button>
     </li>
   );
@@ -149,7 +183,7 @@ function useImports() {
           setAnnouncement(finishedMessage(record));
           if (record.status === 'completed') landed = true;
         } else if (record.status === 'running') {
-          setAnnouncement(`Importing ${record.filename}…`);
+          setAnnouncement(translate('settings.imports.importing', { filename: record.filename }));
         }
       }
       previous.current.set(record.id, record.status);
@@ -162,16 +196,16 @@ function useImports() {
     onMutate: (file) => {
       setError(null);
       setProgress(0);
-      setAnnouncement(`Uploading ${file.name}…`);
+      setAnnouncement(translate('settings.imports.uploading', { filename: file.name }));
     },
     onSuccess: (record) => {
       previous.current.set(record.id, record.status);
-      setAnnouncement(`${record.filename} uploaded. It will be imported in the background.`);
+      setAnnouncement(translate('settings.imports.uploaded', { filename: record.filename }));
       void queryClient.invalidateQueries({ queryKey: IMPORTS_KEY });
     },
     onError: (failure) => {
       setAnnouncement('');
-      setError(apiErrorMessage(failure, 'The upload failed. Check your connection and try again.'));
+      setError(apiErrorMessage(failure, translate('settings.imports.uploadFailed')));
     },
     onSettled: () => setProgress(null),
   });
@@ -179,7 +213,8 @@ function useImports() {
   const remove = useMutation({
     mutationFn: (id: string) => api.delete(`/me/imports/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: IMPORTS_KEY }),
-    onError: (failure) => setError(apiErrorMessage(failure, 'Could not remove that import.')),
+    onError: (failure) =>
+      setError(apiErrorMessage(failure, translate('settings.imports.removeFailed'))),
   });
 
   const records = imports.data ?? [];
@@ -199,6 +234,7 @@ function ImportPanel({
   state: ImportsState;
   inputRef: RefObject<HTMLInputElement | null>;
 }) {
+  const t = useT();
   const inputId = useId();
   const helpId = useId();
   const { records, upload, remove, progress, announcement, error, busy } = state;
@@ -209,13 +245,10 @@ function ImportPanel({
   return (
     <div>
       <label htmlFor={inputId} className="sr-only">
-        ChatGPT or Claude export file
+        {t('settings.imports.fileLabel')}
       </label>
       <p id={helpId} className="text-[var(--text-muted)] text-sm">
-        Upload the .zip you received from ChatGPT or Claude, or the conversations.json inside it.
-        Conversations keep their titles and dates. Attached files are not part of those exports, so
-        they are listed by name only. Importing the same export again skips conversations already
-        here.
+        {t('settings.imports.help')}
       </p>
       <input
         ref={inputRef}
@@ -241,7 +274,7 @@ function ImportPanel({
           disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
-          {upload.isPending ? 'Uploading…' : 'Choose export file'}
+          {upload.isPending ? t('settings.imports.uploadingShort') : t('settings.imports.choose')}
         </Button>
         {progress !== null && (
           <div className="flex min-w-48 flex-1 items-center gap-2">
@@ -249,23 +282,23 @@ function ImportPanel({
               className="h-1.5 flex-1 accent-[var(--accent)]"
               max={100}
               value={Math.round(progress * 100)}
-              aria-label="Upload progress"
+              aria-label={t('settings.imports.progress')}
             />
             <span className="text-[var(--text-muted)] text-xs tabular-nums">
-              {Math.round(progress * 100)}%
+              {formatNumber(progress, { style: 'percent' })}
             </span>
           </div>
         )}
         {busy && !upload.isPending && (
           <span className="text-[var(--text-muted)] text-xs">
-            One import runs at a time. You can close this while it works.
+            {t('settings.imports.oneAtATime')}
           </span>
         )}
       </div>
 
       {lock.locked && (
         <p className="mt-2 text-[var(--text-muted)] text-xs">
-          {lock.title}: importing is paused until maintenance ends.
+          {t('settings.imports.paused', { reason: lock.title })}
         </p>
       )}
       <p role="status" aria-live="polite" className="mt-2 text-[var(--text-muted)] text-xs">
@@ -278,7 +311,10 @@ function ImportPanel({
       )}
 
       {records.length > 0 && (
-        <ul aria-label="Imports" className="mt-3 flex max-h-[40vh] flex-col overflow-y-auto">
+        <ul
+          aria-label={t('settings.imports.list')}
+          className="mt-3 flex max-h-[40vh] flex-col overflow-y-auto"
+        >
           {records.map((record) => (
             <ImportRow
               key={record.id}
@@ -299,6 +335,7 @@ function ImportPanel({
  * below the conversation list).
  */
 export function YourDataButtons() {
+  const t = useT();
   const state = useImports();
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState<'export' | 'import' | null>(null);
@@ -310,11 +347,11 @@ export function YourDataButtons() {
     <div className="mt-5 flex flex-wrap items-center gap-2">
       <Button variant="secondary" size="sm" onClick={() => setOpen('export')}>
         <Download />
-        Export all conversations
+        {t('settings.yourData.export')}
       </Button>
       <Button variant="secondary" size="sm" onClick={() => setOpen('import')}>
         <Upload />
-        Import from ChatGPT or Claude
+        {t('settings.yourData.import')}
       </Button>
       {/* While the import dialog is open its own status line speaks instead. */}
       {open !== 'import' && (
@@ -326,12 +363,8 @@ export function YourDataButtons() {
       <Dialog open={open === 'export'} onOpenChange={close}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Export all conversations</DialogTitle>
-            <DialogDescription>
-              Downloads a .zip with every active and archived conversation as Markdown and JSON,
-              plus the files you attached and your projects. Conversations in the trash and
-              temporary chats are not included.
-            </DialogDescription>
+            <DialogTitle>{t('settings.yourData.export')}</DialogTitle>
+            <DialogDescription>{t('settings.yourData.exportDescription')}</DialogDescription>
           </DialogHeader>
           <a
             href="/api/me/export"
@@ -340,7 +373,7 @@ export function YourDataButtons() {
             onClick={() => setOpen(null)}
           >
             <Download />
-            Download export
+            {t('settings.yourData.download')}
           </a>
         </DialogContent>
       </Dialog>
@@ -349,7 +382,7 @@ export function YourDataButtons() {
         {/* Described by the panel's own help text, tied to the file input. */}
         <DialogContent className="max-w-xl" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Import from ChatGPT or Claude</DialogTitle>
+            <DialogTitle>{t('settings.yourData.import')}</DialogTitle>
           </DialogHeader>
           <ImportPanel state={state} inputRef={inputRef} />
         </DialogContent>

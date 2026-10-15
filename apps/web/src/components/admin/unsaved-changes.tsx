@@ -28,7 +28,18 @@ interface UnsavedChangesContextValue {
 
 const UnsavedChangesContext = createContext<UnsavedChangesContextValue | null>(null);
 
-export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
+/**
+ * `message` is read when the person navigates, so a translated page (Settings)
+ * can ask in its language; the administration console passes none and stays
+ * English.
+ */
+export function UnsavedChangesGuard({
+  children,
+  message = () => LEAVE_WITH_UNSAVED_CHANGES,
+}: {
+  children: ReactNode;
+  message?: () => string;
+}) {
   const [dirty, setDirty] = useState<ReadonlySet<string>>(() => new Set());
   const report = useCallback((id: string, isDirty: boolean) => {
     setDirty((current) => {
@@ -44,7 +55,7 @@ export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
   useBlocker({
     // Blocks unless the person agrees to discard; one question for the page,
     // however many sections have changes.
-    shouldBlockFn: () => !window.confirm(LEAVE_WITH_UNSAVED_CHANGES),
+    shouldBlockFn: () => !window.confirm(message()),
     disabled: !hasUnsaved,
     enableBeforeUnload: hasUnsaved,
   });

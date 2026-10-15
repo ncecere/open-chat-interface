@@ -100,11 +100,11 @@ describe('Settings → Attachments', () => {
     const breakdown = document.querySelector('dl[aria-label="Storage by kind"]')!;
     const entries = [...breakdown.querySelectorAll('div')].map((row) => row.textContent);
     expect(entries).toEqual([
-      'Chat files2 KB · 1 file',
-      'Project files198 KB · 1 file',
-      'Artifacts100 KB · 3 artifacts',
+      'Chat files2 kB · 1 file',
+      'Project files198 kB · 1 file',
+      'Artifacts100 kB · 3 artifacts',
     ]);
-    expect(document.body.textContent).toContain('300 KB · 2 files');
+    expect(document.body.textContent).toContain('300 kB · 2 files');
   });
 
   it('marks a file attached in a composer and not sent, unlike sent ones (#297)', async () => {
@@ -137,8 +137,8 @@ describe('Settings → Attachments', () => {
       [['/chat/t2', 'Fork of Grant questions']],
     ]);
     expect(rows.map((row) => row.querySelector('p')?.textContent)).toEqual([
-      expect.stringMatching(/^In Grant questions · text\/plain · 2.0 KB/),
-      expect.stringMatching(/^In Fork of Grant questions · text\/plain · 2.0 KB/),
+      expect.stringMatching(/^In Grant questions · text\/plain · 2 kB/),
+      expect.stringMatching(/^In Fork of Grant questions · text\/plain · 2 kB/),
     ]);
     // Each has its own checkbox and delete button.
     expect(document.querySelectorAll('[aria-label="Delete walk9-grant.pdf"]')).toHaveLength(2);
@@ -238,7 +238,7 @@ describe('Settings → Attachments', () => {
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain(
         // No limit applies to this role, so none is spoken of (#254).
-        '6 KB of deleted files, and of conversations in the trash, is not counted in the storage used.',
+        '6 kB of deleted files, and of conversations in the trash, is not counted in the storage used.',
       ),
     );
     expect(document.body.textContent).toContain('No storage limit applies to your role.');
@@ -252,7 +252,7 @@ describe('Settings → Attachments', () => {
     await render();
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain(
-        '6 KB of deleted files, and of conversations in the trash, no longer counts against your limit.',
+        '6 kB of deleted files, and of conversations in the trash, no longer counts against your limit.',
       ),
     );
   });
