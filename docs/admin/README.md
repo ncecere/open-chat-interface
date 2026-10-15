@@ -42,6 +42,9 @@ resolves it. [First run](first-run.md) walks through it.
 14. [Read-only maintenance mode](maintenance.md) — keep reading, searching
     and signing in working while nothing can be changed, for a window or an
     emergency (`OCI_READ_ONLY`).
+15. [Data classification](data-classification.md) — which models and
+    connectors may handle which kinds of data; warn or block when labelled
+    content would reach one that is not approved.
 
 For deployment, backup, and upgrade, see [Operations](../OPERATIONS.md).
 

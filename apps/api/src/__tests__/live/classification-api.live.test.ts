@@ -618,6 +618,43 @@ describe.skipIf(!available)('live data classification: the API', () => {
       expect((await call('GET', '/api/admin/users/nope/projects')).status).toBe(404);
     });
 
+    it('keeps every label when a conversation is moved out of its project or forked, through the real routes', async () => {
+      const student = await createClass('Student records');
+      const health = await createClass('Health records');
+      const project = await createProject(ctx.alice);
+      await labelProject(ctx.alice, project.id, [student.id]);
+      const chat = await projectThread(ctx.alice, project.id);
+      await labelThread(ctx.alice, chat.id, health.id);
+      await ctx.pool.db.execute(sql`insert into message (id, thread_id, user_id, role, position, parts, status)
+        values ('fork-q', ${chat.id}, ${ctx.alice}, 'user', 0, '[{"type":"text","text":"Q"}]'::jsonb, 'complete'),
+               ('fork-a', ${chat.id}, ${ctx.alice}, 'assistant', 1, '[{"type":"text","text":"A"}]'::jsonb, 'complete')`);
+      setMode('block');
+
+      const fork = await ok<{ thread: { id: string; dataClasses: Array<{ name: string }> } }>(
+        call('POST', `/api/threads/${chat.id}/forks`, {
+          user: ctx.alice,
+          body: { messageId: 'fork-a' },
+        }),
+        201,
+      );
+      expect(fork.thread.dataClasses.map((entry) => entry.name)).toEqual([
+        'Health records',
+        'Student records',
+      ]);
+
+      const moved = await ok<{
+        thread: { dataClasses: Array<{ name: string; reasons: string[] }> };
+      }>(call('PATCH', `/api/threads/${chat.id}`, { user: ctx.alice, body: { projectId: null } }));
+      expect(moved.thread.dataClasses.map((entry) => [entry.name, entry.reasons])).toEqual([
+        ['Health records', ['person']],
+        ['Student records', ['kept']],
+      ]);
+      // Deleting the project afterwards changes nothing for either conversation.
+      await ok(call('DELETE', `/api/projects/${project.id}`, { user: ctx.alice }));
+      expect((await classification(`threadId=${chat.id}`)).classes).toHaveLength(2);
+      expect((await classification(`threadId=${fork.thread.id}`)).classes).toHaveLength(2);
+    });
+
     it('answers what a conversation carries and which models may take it, computed on the server', async () => {
       const student = await createClass('Student records');
       await approve(APPROVED_MODEL, [student.id]);
