@@ -148,8 +148,53 @@ switch alone decides. Governance follows the features projects reuse:
   Deleting a project detaches its conversations; it never deletes them.
 - **Audit**: like conversations and share links, creating, changing and
   deleting projects is personal content and is not written to the audit log.
-- **Export** includes each project's name, instructions and files.
-- Deleting an account deletes its projects and their files.
+  **Sharing is different** (v0.14): it moves content between people, so it is
+  recorded as `project.share.create`, `project.share.update`,
+  `project.share.delete` (also when a person leaves) and `project.transfer`, and
+  the system's `project.access.revoked` (counts of conversations detached and
+  files handed to the owner, no names). They name the project by id, the
+  person or group and the permission, never the project's name or content, and
+  are not exempt from retention-based pruning of the audit log. Webhooks carry
+  them like any audit event.
+- **Export** includes each project's name, instructions and files; the owner's
+  includes every file in it, and a member's adds only the files they added to
+  projects shared with them.
+- **Sharing** (v0.14): an owner shares a project with a person (by exact email)
+  or a group they belong to, as viewer or editor. Viewers and editors use the
+  project in their own conversations, which stay private. **Administrators and
+  auditors are outsiders to project content**, as before; they manage groups,
+  not other people's projects. See [Sharing](#sharing-projects) below.
+- Deleting an account deletes its projects and their files. A deleted editor's
+  files are handed to the owners first.
+
+#### Sharing projects
+
+- **Who may share**: any person whose role has the Projects switch on; there is
+  no separate setting. A person with projects off sees nothing shared with them.
+- **Limits** (fixed): 50 shares per project (a group counts one), 100 projects
+  shared directly with one person, and 30 email lookups and share changes a
+  minute per person. Looking up an email answers whether an account exists to any
+  signed-in person (managers adding by email have the same power), which is why
+  it is rate limited.
+- **Files and storage**: files an editor adds count against the editor's storage
+  and follow their role's limits. When an editor loses access their files move
+  to the owner and the allowance moves with them; this never refuses for lack of
+  room. Deleting the owner's account deletes files other people added to the
+  project; the dialog says how many shared projects and other people's
+  conversations are affected, and the `user.delete` entry records `sharedProjects`.
+- **Legal hold**: deleting a project, or a file in one, is refused while the
+  person doing it, or the person who added the file, is on hold; deleting an
+  owner's account is refused while anyone who added files to their projects is on
+  hold. Moving files to the owner is not a deletion and is allowed.
+- **Deleting an editor's account** hands the files they added to the owners.
+- **While an upgrade is running**: creating a share or transferring a project
+  answers 409 "An upgrade is still in progress" while a replica of an older
+  release is live. See [Upgrading to v0.14](../OPERATIONS.md#upgrading-to-v014).
+- **Reconciliation**: the `projects.reconcile-access` job (every minute) moves
+  stray files to the owner and takes conversations of people without access out
+  of a project, after anything that ended access without doing it itself. Access
+  is always checked at request time, so the job never decides who may see
+  anything.
 
 The level a new conversation starts at is set instance-wide as **Default
 reasoning level** on [General settings](instance-settings.md). When the chosen

@@ -21,6 +21,7 @@ import {
   rankProjectChunks,
 } from '../project-search/retrieval.js';
 import { semanticProjectChunks } from '../project-search/semantic.js';
+import { projectReadableBy } from '../project-sharing/access.js';
 import { roleFeatures } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import {
@@ -39,6 +40,12 @@ import { addCost, type ContextCost, emptyCost, fitsContext, textCost } from './c
  */
 type ProjectContext = {
   id: string;
+  /**
+   * The person whose conversation this is: the **actor** who asks the questions,
+   * is charged for them, and whose access to the project every read below
+   * re-checks. Not necessarily the project's owner (v0.14: a viewer or editor of
+   * a shared project uses it in their own conversation).
+   */
   userId: string;
   name: string;
   instructions: string;
@@ -69,6 +76,12 @@ const chunkKey = (chunk: RetrievedChunk) => `${chunk.attachmentId}:${chunk.ordin
 /**
  * Loads the project of a conversation, or null when there is nothing to add.
  *
+ * The person must be able to read the project (owner, editor or viewer, checked
+ * now, not remembered): without access (a share removed, a group left) the
+ * conversation carries on as an ordinary one with no instructions and no
+ * passages, as with the switch off. A reply already streaming finishes with the
+ * context it began with.
+ *
  * With the role's `projects` feature off, the conversation carries on as an
  * ordinary one: the project row is kept but contributes nothing. Files also
  * need attachments to be allowed for the role and the instance, like any
@@ -85,7 +98,7 @@ export async function loadProjectContext(
   const [project] = await db
     .select({ name: schema.project.name, instructions: schema.project.instructions })
     .from(schema.project)
-    .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, user.id)))
+    .where(and(eq(schema.project.id, projectId), projectReadableBy(projectId, user.id)))
     .limit(1);
   if (!project) return null;
 
@@ -105,7 +118,7 @@ export async function loadProjectContext(
 
 /**
  * Checks the files a message asks to leave out (v0.10): each must be a file
- * of the conversation's project, owned by the person. A file deleted since the
+ * of the conversation's project, which the person can read. A file deleted since the
  * composer listed it still passes, so a send never fails over it. Runs before
  * the turn is claimed.
  */
@@ -124,8 +137,8 @@ export async function assertExcludableProjectFiles(
     .where(
       and(
         inArray(schema.attachment.id, unique),
-        eq(schema.attachment.userId, userId),
         eq(schema.attachment.projectId, projectId),
+        projectReadableBy(projectId, userId),
       ),
     );
   if (rows.length !== unique.length)
@@ -145,8 +158,8 @@ async function projectFileNames(
     .where(
       and(
         inArray(schema.attachment.id, [...order.keys()]),
-        eq(schema.attachment.userId, userId),
         eq(schema.attachment.projectId, projectId),
+        projectReadableBy(projectId, userId),
       ),
     );
   return rows

@@ -29,11 +29,15 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   },
   'services/projects.ts project': {
     hold: 'checked',
-    how: 'Refused under hold: projects have no trash and their files go with them (live row "Deleting a project").',
+    how: 'Refused under hold: projects have no trash and their files go with them, so also when the owner or anyone who added a file is held (live rows "Deleting a project", "refuses to delete a project that holds a held person’s files" in project-sharing-lifecycle).',
   },
   'services/projects.ts attachment': {
     hold: 'checked',
-    how: 'Refused under hold (live row "Deleting a project file").',
+    how: 'Refused under hold, the actor’s or the uploader’s (live rows "Deleting a project file", "refuses to delete a project that holds a held person’s files" in project-sharing-lifecycle).',
+  },
+  'services/project-sharing/shares.ts projectShare': {
+    hold: 'exempt',
+    how: 'A share is configuration, not a person’s record: removing one (or leaving) hands any files the person added to the owner, which is a move and not a deletion, and is allowed under a hold (project-sharing-lifecycle live row "does not stop a transfer of ownership of files").',
   },
   'services/memory/store.ts userMemory': {
     hold: 'checked',

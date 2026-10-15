@@ -38,6 +38,7 @@ import {
   assertPersonalDefaultsAllowed,
   resolvePersonalDefaults,
 } from '../services/personal-defaults.js';
+import { accountSharingImpact } from '../services/project-sharing/impact.js';
 import { getUsageSummary } from '../services/quota/index.js';
 import { combineFeatures, roleFeatures } from '../services/role-features.js';
 import { getSetting } from '../services/settings.js';
@@ -318,6 +319,11 @@ meRoutes.post('/share-links/revoke-all', async (c) => {
     });
   }
   return c.json({ revoked });
+});
+
+/** What deleting the signed-in person's own account would do through project sharing (v0.14), as counts, for the dialog. */
+meRoutes.get('/sharing-impact', async (c) => {
+  return c.json(await accountSharingImpact(currentUser(c).id));
 });
 
 /**

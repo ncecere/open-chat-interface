@@ -111,7 +111,7 @@ will do anything, so the wrong account cannot be deleted with a stray click.
 
 Deleting is permanent. It removes the account and everything it owns: its
 conversations and their messages, uploaded files (the stored files are removed
-shortly after by the storage cleanup job), projects, artifacts, memory, share
+shortly after by the storage cleanup job), projects (shared ones too: files other people added go with them, their conversations are kept but leave the project; the dialog says how many; an editor's own account deletion hands the files they added to the owners), artifacts, memory, share
 links, connected accounts, saved views, limit overrides and preferences. The
 person is signed out at once.
 

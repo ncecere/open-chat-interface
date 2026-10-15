@@ -1575,6 +1575,66 @@ time; they have no effect on v0.13.
 Groups only add budgets and models. Rolling back to v0.13 therefore removes
 what groups added, never anything a role gave.
 
+**Project sharing (migration 0054) and groups (0053).** Two pre-deploy
+migrations that only add tables (`group`, `group_member`, `quota_policy_group`,
+`model_group_access`, `project_share`): no existing table changes, nothing is
+backfilled, no post-deploy step or background migration follows, and v0.13
+replicas keep serving on the new schema. Every new foreign key cascades, so a
+v0.13 replica deleting a user, project, model or budget is never blocked by rows
+it cannot see.
+
+**While a v0.13 replica still serves, do the following.** A v0.13 replica
+knows nothing of shares and groups. Its project queries only ever look at the
+owner's own rows, so it can never show more than the owner's data, but:
+
+| What | Effect on v0.13 |
+| --- | --- |
+| A person a project is shared with | gets 404 for it, flapping behind the balancer if replicas are mixed: safe |
+| Their message in a conversation they have in that project | the project is silently not applied: safe, but the reply ignores it |
+| Their conversation in a shared project | hidden from their sidebar's project tree (it is not their project), still in History and search |
+| An administrator deletes an **editor's** account | **the files the editor added to other people's projects are deleted with the account** (v0.13 does not know to hand them over): data loss, only while a v0.13 replica serves |
+| A group budget or a group-granted model | not applied: a group budget is not enforced (it fails open), an extra model is not offered (it fails closed) |
+| A v0.13 owner deletes a project | works; its shares go with it |
+
+To keep that window harmless:
+
+1. **Create no groups and no shares, and delete no accounts, until every replica
+   runs v0.14.** The application helps: while a live replica reports an older
+   version, creating a share or transferring a project answers `409` "An
+   upgrade is still in progress" (the same guard covers a group's grants). The
+   guard reads the replicas' heartbeats, so it needs Redis, which more than one
+   replica already requires. With one replica and no Redis there is nothing to
+   compare and the guard lets requests through: it is the only replica.
+   **It cannot see an account deletion**: do not delete accounts during the window.
+2. After the last v0.13 replica is gone the guard clears on its own (a replica
+   that stops is removed from the list at once; one that vanished is forgotten
+   after a minute).
+3. A job, `projects.reconcile-access`, runs every minute on the replicas that run
+   jobs: it moves files whose uploader is no longer an editor to the owner and
+   takes conversations of people who cannot read a project out of it. It is a
+   safety net: access is always checked when a request arrives.
+
+**Rolling back to v0.13 after v0.14 has run.** Migrations are forward only, and
+nothing here needs the backup: v0.13 runs on the schema with the new tables
+unused. Shares and groups stay in the database and work again if you upgrade
+again. Before or just after the rollback, run this once to take **other people's
+conversations out of projects v0.13 would not let them open** (they stay
+conversations, nothing is deleted; v0.13 would otherwise keep them but hide
+them from the sidebar's project tree):
+
+```sql
+UPDATE thread SET project_id = NULL
+WHERE project_id IS NOT NULL
+  AND user_id <> (SELECT p.user_id FROM project p WHERE p.id = thread.project_id);
+```
+
+Files that editors added to other people's projects stay in those projects under
+their uploaders' names (counted against them). v0.13 shows an owner only the
+files they uploaded themselves, so those files are not listed to the owner while
+v0.13 serves, and they are deleted if the uploader's account is deleted: hand
+them to the owner first with the same hand-over v0.14 uses when an editor leaves
+a project (remove the share in v0.14 before rolling back).
+
 ## Shutting down and draining
 
 From v0.11 an API replica drains when it is stopped, so replacing replicas

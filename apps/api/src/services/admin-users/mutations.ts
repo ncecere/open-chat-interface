@@ -15,6 +15,11 @@ import {
   isOnLegalHold,
 } from '../compliance/holds.js';
 import {
+  anyOnLegalHold,
+  HELD_SHARED_PROJECT_ACCOUNT_DELETION_MESSAGE,
+} from '../project-sharing/holds.js';
+import { handOverFilesOf } from '../project-sharing/reconcile.js';
+import {
   administratorRemains,
   LAST_ADMIN_BAN_MESSAGE,
   LAST_ADMIN_ROLE_MESSAGE,
@@ -302,6 +307,26 @@ export async function deleteUser(
       if (target.role === 'admin' && !administratorRemains(admins, [targetId])) {
         throw conflict(self ? LAST_ADMIN_SELF_DELETION_MESSAGE : LAST_ADMIN_DELETION_MESSAGE);
       }
+      // Projects shared with others (v0.14). Deleting the owner deletes the project,
+      // its shares and every file in it, including the ones other people added:
+      // refused while any of those people is on legal hold (the database trigger
+      // only guards the account row, not their files).
+      const uploaders = await tx.execute<{ user_id: string }>(sql`
+        select distinct "a"."user_id" from "attachment" as "a"
+        join "project" as "p" on "p"."id" = "a"."project_id"
+        where "p"."user_id" = ${targetId} and "a"."user_id" <> ${targetId}
+      `);
+      if (
+        await anyOnLegalHold(
+          uploaders.map((row) => row.user_id),
+          tx,
+        )
+      ) {
+        throw conflict(HELD_SHARED_PROJECT_ACCOUNT_DELETION_MESSAGE);
+      }
+      // What the account added to other people's projects is theirs to keep: the
+      // files go to those owners before the cascade on attachment.user_id runs.
+      const handedOver = await handOverFilesOf(tx, targetId);
       // Recorded first, in this transaction (the owner's email is read from the
       // row about to go): everything the account owned goes with it, counted.
       const [owned] = await tx.execute<Record<string, number>>(sql`
@@ -311,6 +336,14 @@ export async function deleteUser(
           (select count(*) from "attachment" where "user_id" = ${targetId})::int as attachments,
           (select count(*) from "artifact" where "user_id" = ${targetId})::int as artifacts,
           (select count(*) from "project" where "user_id" = ${targetId})::int as projects,
+          (select count(*) from "project" as "shared_project"
+            where "shared_project"."user_id" = ${targetId}
+              and exists (select 1 from "project_share" as "ps"
+                where "ps"."project_id" = "shared_project"."id"))::int as "sharedProjects",
+          (select count(*) from "thread" as "other_thread"
+            join "project" as "owned_project" on "owned_project"."id" = "other_thread"."project_id"
+            where "owned_project"."user_id" = ${targetId}
+              and "other_thread"."user_id" <> ${targetId})::int as "otherConversationsInProjects",
           (select count(*) from "user_memory" where "user_id" = ${targetId})::int as memories,
           (select count(*) from "share_link" where "user_id" = ${targetId})::int as "shareLinks"
       `);
@@ -326,6 +359,7 @@ export async function deleteUser(
             ...Object.fromEntries(
               Object.entries(owned ?? {}).map(([key, value]) => [key, Number(value)]),
             ),
+            ...(handedOver > 0 ? { filesHandedToOwners: handedOver } : {}),
             ...(self ? { self: true } : {}),
           },
           ipAddress: options.ipAddress ?? null,

@@ -330,7 +330,15 @@ export async function buildModelContext(
   ].flatMap((message) => historical.byMessage.get(message.id) ?? []);
   const files = projectFiles!;
   const allCandidates = [...newCandidates, ...historicalCandidates, ...files.files];
-  const loaded = await materializeAttachments(allCandidates, user.id, user.role, supportsVision);
+  // The person's own message files and the project's files (which another person
+  // may have added) are loaded by different queries; see materializeAttachments.
+  const loaded = await materializeAttachments(
+    [...newCandidates, ...historicalCandidates],
+    user.id,
+    user.role,
+    supportsVision,
+    project && files.files.length > 0 ? { id: project.id, files: files.files } : undefined,
+  );
   const historicalMessage = (message: ContextMessage) =>
     withAttachmentContext(
       asUI(message, toolsOffered),

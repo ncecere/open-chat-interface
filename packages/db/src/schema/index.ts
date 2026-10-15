@@ -14,5 +14,6 @@ export * from './operations.js';
 export * from './organization.js';
 export * from './portability.js';
 export * from './project-search.js';
+export * from './project-shares.js';
 export * from './provider.js';
 export * from './usage.js';

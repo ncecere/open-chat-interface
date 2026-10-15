@@ -5,9 +5,11 @@ course or a grant application, under instructions and files they all share.
 Every conversation in the project gets the project's instructions and can read
 its files, so you do not have to paste the same background into each new chat.
 
-Projects are private to you. Your administrator decides whether your role can
-use them; if the **Projects** section is missing from the sidebar, they are off
-for your role.
+A project is yours until you share it. You can [share a project](#sharing-a-project)
+with colleagues or a group you belong to; they use its instructions and files in
+their own conversations, which stay private to them. Your administrator decides
+whether your role can use projects; if the **Projects** section is missing from
+the sidebar, they are off for your role.
 
 ## Creating a project
 
@@ -202,6 +204,74 @@ conversation in a project can still be moved to the trash after a period of
 inactivity, like any other; restoring it puts it back in the project if the
 project still exists.
 
+## Sharing a project
+
+Only the owner shares a project. In the project's page, open **Share** and add:
+
+- **A person**, by their exact email address (the one they sign in with). OCI
+  looks up the address as you typed it, ignoring capitals; it does not search or
+  suggest names. Nobody is notified: the project appears under **Shared with
+  me** in their sidebar.
+- **A group** you belong to, chosen from the list. Everyone in the group gets
+  access, and people who join later get it too; people who leave lose it.
+
+Each share is a **viewer** or an **editor**:
+
+| | Viewer | Editor | Owner |
+| --- | :---: | :---: | :---: |
+| Read the name, instructions and files; download files | yes | yes | yes |
+| Use the project in their own conversations | yes | yes | yes |
+| Edit the instructions | | yes | yes |
+| Add and remove files | | yes | yes |
+| Rename, delete, share, change or remove a share, transfer | | | yes |
+
+A person who has more than one share (their own and a group's) gets the highest.
+You can share a project with up to 50 people and groups (a group counts as one),
+and a person can have up to 100 projects shared with them directly.
+
+**What people you share with can and cannot see**
+
+- They use the instructions and files in **their own** conversations. Those
+  conversations are theirs alone: you cannot read them, and they cannot read
+  yours or anyone else's. Their count and recent list under a shared project are
+  their own.
+- They see your name as the owner and how many people and groups share the
+  project, never who they are. They see which person added each file, by name.
+- Files an editor adds **count against that editor's storage**, not yours, and
+  follow the editor's upload limits.
+- Administrators and auditors are not part of a project: they cannot read its
+  content unless you share it with them, as with anyone.
+- Only the owner can see the people and groups it is shared with, with their
+  emails.
+
+**Changing and ending access**
+
+- **Change** a share's permission, or **remove** it, from the Share dialog. It
+  takes effect on the person's very next request: the project disappears from
+  their sidebar, its files cannot be opened, and their next message in a
+  conversation that was in the project carries no instructions and no passages.
+  A reply already being written finishes with the context it started with.
+- When access ends, the person's **conversations leave the project but are kept**,
+  with every message. If they get access again they can move them back. What
+  the model already said in a conversation, including the note listing which
+  passages it used, stays in that conversation: **text a person has already seen
+  is not recalled.**
+- Files a person added who is no longer an editor **move to the owner**, so the
+  project keeps its content; the person's storage is freed and the owner's grows
+  by the same amount, whatever the owner's allowance.
+- **Leave** a project shared with you from its page (a direct share only; if you
+  have access through a group, ask a manager of the group to remove you from it).
+- **Transfer** a project to someone who is a direct editor: in the project's
+  **Settings** tab. They become the owner and you become an editor. Nothing is
+  copied or moved.
+- If the owner's **account is deleted**, the project, its shares and all its
+  files are deleted with it, and other people's conversations leave it. If an
+  editor's account is deleted, the files they added are kept and become the
+  owner's.
+
+Sharing is recorded in the administrators' audit log (who shared with whom and
+at which level; never the project's name or content).
+
 ## If projects are switched off for your role
 
 Your projects are kept, but you cannot open, change or create them, and their
@@ -216,4 +286,8 @@ apply but its files are not used.
 
 [Exporting your data](your-data.md) includes your projects: `manifest.json`
 lists each project's name, instructions, files and conversations, and the files
-themselves are under `projects/<project name>/`.
+themselves are under `projects/<project name>/`. For a project you own, that
+includes every file in it, including those an editor added. If you added files
+to a project someone else shared with you, only those files are included, under
+`shared-projects/<project name>/`; the owner's instructions and other files are
+not part of your data.

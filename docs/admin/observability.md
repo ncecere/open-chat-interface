@@ -193,6 +193,9 @@ Choose **Add endpoint** and enter:
   matches every action that starts with `user.`. The form warns about an entry
   that matches nothing the audit log has recorded so far (often a typing
   mistake), but saves it, since the action may simply not have happened yet.
+  Project sharing (v0.14) is `project.share.create`, `project.share.update`,
+  `project.share.delete`, `project.transfer` and `project.access.revoked`:
+  `project.*` follows all of them (they name the project's id, never its name).
   Or turn on **Send every audit event** (this includes `tool.call`, one per
   tool call, which can be a lot).
 - **Allow private network**: like [connectors](connectors.md#private-networks),

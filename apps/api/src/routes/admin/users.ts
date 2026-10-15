@@ -17,6 +17,7 @@ import {
   updateUser,
 } from '../../services/admin-users/mutations.js';
 import { budgetSources as budgetSourcesFor } from '../../services/quota/applicability.js';
+import { accountSharingImpact } from '../../services/project-sharing/impact.js';
 import { getUsageSummary } from '../../services/quota/index.js';
 import { getStorageUsage } from '../../services/storage/quota.js';
 
@@ -37,6 +38,21 @@ userRoutes.post('/bulk', async (c) => {
   const { id, email } = currentUser(c);
   const input = await parseBody(c, bulkActionSchema);
   return c.json(await applyBulkUserAction({ id, email }, input, clientIp(c)));
+});
+
+/**
+ * What deleting this account would do through project sharing (v0.14): counts for
+ * the delete dialog. Titles and names are not part of it.
+ */
+userRoutes.get('/:id/sharing-impact', async (c) => {
+  const id = c.req.param('id');
+  const [target] = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.id, id))
+    .limit(1);
+  if (!target) throw notFound('User not found');
+  return c.json(await accountSharingImpact(id));
 });
 
 userRoutes.get('/:id', async (c) => {

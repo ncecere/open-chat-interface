@@ -30,6 +30,15 @@ background job (`conversation.trash`, `conversation.delete`,
 others). Each names what was deleted, whose it was and why, never its
 content; see [deletion events](compliance.md#deletion-events).
 
+**Project sharing** (v0.14) — `project.share.create`, `project.share.update`,
+`project.share.delete` (also when someone leaves), `project.transfer` and the
+system's `project.access.revoked` (written by the reconcile step when access
+ending moved files or detached conversations: counts only). They name the project
+by id, the person or group and the permission, never the project's name or
+content. Creating, renaming and deleting a project are still not audited (the
+deletion event above aside); sharing is, because it moves content between
+people.
+
 Only outcomes are recorded. No credentials, no tokens, no request bodies.
 
 ### Searching it

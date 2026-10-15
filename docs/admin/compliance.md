@@ -66,7 +66,7 @@ retention while unexported or while their owner is on legal hold.
 | `attachment.delete` | A project file is deleted (`user`), a file trashed on its own is purged (`trash_expiry`), or an upload never sent with a message is cleaned up after a day (`unused_expiry`). | `threadId`, `messageId` or `projectId`; `sizeBytes`. |
 | `project.delete` | A project is deleted. | `fileIds` and `files`: its files, deleted with it; `conversationsDetached`: its conversations, which are kept. |
 | `memory.delete` | A memory note is deleted by the person (`user`), the `forget` tool or undoing a saved note (`tool`), or memory retention (`retention`). One entry per note. | The target is the owner (as since v0.9); also `via`, `memoryId`. |
-| `user.delete` | An administrator deletes an account, or a person deletes their own (v0.10: `reason: "user"`, `self: true`). | `conversations`, `messages`, `attachments`, `artifacts`, `projects`, `memories`, `shareLinks`: everything deleted with it; also `email`, `role`. |
+| `user.delete` | An administrator deletes an account, or a person deletes their own (v0.10: `reason: "user"`, `self: true`). | `conversations`, `messages`, `attachments`, `artifacts`, `projects`, `memories`, `shareLinks`: everything deleted with it; `sharedProjects` (v0.14): how many of its projects were shared, and `otherConversationsInProjects`: other people's conversations in them (kept, but they leave the project); `filesHandedToOwners` when it had added files to other people's projects (those files are kept and go to their owners); also `email`, `role`. |
 
 Every one of them has the same `metadata.deletion` object:
 
@@ -266,7 +266,7 @@ While a person is on hold:
 | Usage history is pruned after its retention window | Their usage events are kept (daily totals are always kept) |
 | Expired and revoked share links are removed after 30 days | Their links are kept (still unusable) |
 | They empty their trash or delete a conversation forever | Refused: *Permanent deletion is paused for this account by your organization.* Moving to the trash still works. |
-| They delete a project or a project file | Refused: *Deleting projects and project files is paused for this account by your organization.* Projects have no trash, so this would destroy the files at once. |
+| They delete a project or a project file | Refused: *Deleting projects and project files is paused for this account by your organization.* Projects have no trash, so this would destroy the files at once. Since v0.14 the same refusal applies when the project holds a file added by a person on hold, and when a person on hold removes any file. Deleting an account that owns a project with a held person's files is refused too. |
 | They delete memories (in Settings, with the `forget` tool, or by undoing a saved note) | Refused: *Deleting memories is paused for this account by your organization.* Editing a note still works. |
 | They delete a chat file | Still works: it goes to the trash, which is kept |
 | An administrator deletes the account | Refused with *This person is on legal hold…*. A database trigger also refuses it on any other path. |

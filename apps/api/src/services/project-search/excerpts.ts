@@ -2,6 +2,7 @@ import { schema, sql } from '@oci/db';
 import { PROJECT_EXCERPT_MAX_CHARS } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { stripControls } from '../../lib/text.js';
+import { projectReadableBy } from '../project-sharing/access.js';
 import type { ProjectPassage } from './passages.js';
 import { textArray } from './retrieval.js';
 
@@ -71,7 +72,9 @@ export const passageKey = (passage: Pick<ProjectPassage, 'attachmentId' | 'start
 
 /**
  * The heading of each passage, keyed by `passageKey`. One query reads at most
- * HEADING_LOOKBACK_CHARS of the person's own file text before each passage
+ * HEADING_LOOKBACK_CHARS of file text before each passage, only of files of a
+ * project the person can read (v0.14: `userId` is the person asking, who may not
+ * be the owner or the uploader).
  * (PostgreSQL counts characters where offsets count UTF-16 units, so text
  * with characters outside the Basic Multilingual Plane may shift the window
  * slightly; only the heading can be affected). A failure only means no
@@ -96,7 +99,9 @@ export async function passageHeadings(
                        for p.start - greatest(p.start - ${HEADING_LOOKBACK_CHARS}, 0)) as before
       from unnest(${textArray(passages.map((passage) => passage.attachmentId))}, ${starts})
              with ordinality as p(id, start, ordinal)
-      join ${schema.attachment} a on a.id = p.id and a.user_id = ${userId}
+      join ${schema.attachment} a on a.id = p.id
+        and a.project_id is not null
+        and ${projectReadableBy(sql`a.project_id`, userId)}
     `);
   } catch {
     return headings;

@@ -5,6 +5,7 @@ import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
 import { assertAttachmentUseAllowed } from '../attachments/index.js';
 import { isImage } from '../attachments/validate.js';
+import { projectReadableBy } from '../project-sharing/access.js';
 import { getSetting } from '../settings.js';
 import { getStorageDriver } from '../storage/index.js';
 import {
@@ -112,6 +113,11 @@ export async function inspectIncomingAttachments(ids: string[], userId: string, 
  * A project's ready files as context candidates, oldest first, without loading
  * payloads. Costed and selected by the caller like any other attachment, then
  * loaded through `materializeAttachments`.
+ *
+ * Every file of the project, whoever added it, as long as `userId` (the person
+ * whose conversation this is, not necessarily the owner) can read the project
+ * (v0.14): a viewer's turn uses the files an editor added. A person with no
+ * access gets none.
  */
 export async function inspectProjectFiles(
   projectId: string,
@@ -123,7 +129,7 @@ export async function inspectProjectFiles(
     .where(
       and(
         eq(schema.attachment.projectId, projectId),
-        eq(schema.attachment.userId, userId),
+        projectReadableBy(projectId, userId),
         eq(schema.attachment.uploadPending, false),
         isNull(schema.attachment.deletedAt),
         sql`octet_length(${schema.attachment.mimeType}) <= 256`,
@@ -133,37 +139,77 @@ export async function inspectProjectFiles(
     .limit(MAX_CONTEXT_FILES);
 }
 
-/** Called only after selection. Ready payloads are immutable in normal application writes. */
+/**
+ * Called only after selection. Ready payloads are immutable in normal application writes.
+ *
+ * Two kinds of candidates, loaded by two queries (v0.14): the person's own
+ * message files (`candidates`: the person's own rows, as always) and the files
+ * of the conversation's project (`project`), which another person may have
+ * added, so they are checked against the project, not against the uploader.
+ * Folding them into one `user_id = person` query would fail every turn that uses
+ * a shared file with "Attachment context changed".
+ */
 export async function materializeAttachments(
   candidates: AttachmentCandidate[],
   userId: string,
   role: UserRole,
   supportsVision: boolean,
+  project?: { id: string; files: AttachmentCandidate[] },
 ) {
-  if (!candidates.length) return new Map<string, ModelAttachment>();
-  if (candidates.length > MAX_CONTEXT_FILES) throw validationFailed('Too many context files');
+  const projectFiles = project?.files ?? [];
+  if (!candidates.length && !projectFiles.length) return new Map<string, ModelAttachment>();
+  if (candidates.length + projectFiles.length > MAX_CONTEXT_FILES)
+    throw validationFailed('Too many context files');
   await assertAttachmentUseAllowed(role);
   const unique = new Map(candidates.map((file) => [file.id, file]));
-  const rows = await db
-    .select()
-    .from(schema.attachment)
-    .where(
-      and(
-        inArray(schema.attachment.id, [...unique.keys()]),
-        eq(schema.attachment.userId, userId),
-        eq(schema.attachment.uploadPending, false),
-        isNull(schema.attachment.deletedAt),
-        sql`octet_length(${schema.attachment.filename}) <= ${MAX_INPUT_UNITS}`,
-        sql`coalesce(octet_length(${schema.attachment.extractedText}), 0) <= ${MAX_INPUT_UNITS}`,
-        sql`octet_length(${schema.attachment.storageKey}) <= 1024`,
-        sql`octet_length(${schema.attachment.mimeType}) <= 256`,
-      ),
-    );
+  const projectUnique = new Map(projectFiles.map((file) => [file.id, file]));
+  // A message file and a project file are different rows; an id in both lists
+  // is a mistake that would let a project candidate stand in for a message one.
+  for (const id of projectUnique.keys()) if (unique.has(id)) unique.delete(id);
+  const limits = [
+    sql`octet_length(${schema.attachment.filename}) <= ${MAX_INPUT_UNITS}`,
+    sql`coalesce(octet_length(${schema.attachment.extractedText}), 0) <= ${MAX_INPUT_UNITS}`,
+    sql`octet_length(${schema.attachment.storageKey}) <= 1024`,
+    sql`octet_length(${schema.attachment.mimeType}) <= 256`,
+  ];
+  const messageRows = unique.size
+    ? await db
+        .select()
+        .from(schema.attachment)
+        .where(
+          and(
+            inArray(schema.attachment.id, [...unique.keys()]),
+            eq(schema.attachment.userId, userId),
+            eq(schema.attachment.uploadPending, false),
+            isNull(schema.attachment.deletedAt),
+            ...limits,
+          ),
+        )
+    : [];
+  const projectRows =
+    project && projectUnique.size
+      ? await db
+          .select()
+          .from(schema.attachment)
+          .where(
+            and(
+              inArray(schema.attachment.id, [...projectUnique.keys()]),
+              eq(schema.attachment.projectId, project.id),
+              projectReadableBy(project.id, userId),
+              eq(schema.attachment.uploadPending, false),
+              isNull(schema.attachment.deletedAt),
+              ...limits,
+            ),
+          )
+      : [];
+  const rows = [...messageRows, ...projectRows];
+  const expected = new Map([...unique, ...projectUnique]);
   if (
-    rows.length !== unique.size ||
+    rows.length !== expected.size ||
     rows.some((row) => {
-      const before = unique.get(row.id)!;
+      const before = expected.get(row.id);
       return (
+        !before ||
         row.messageId !== before.messageId ||
         row.mimeType !== before.mimeType ||
         row.sizeBytes !== before.sizeBytes ||

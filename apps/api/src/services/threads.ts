@@ -15,6 +15,7 @@ import { editedQuestionParts } from './chat/message-parts.js';
 import { activeMessage, latestTurnReplies, pathThrough } from './chat/reply-path.js';
 import { notOnLegalHold } from './compliance/holds.js';
 import { destroyThreads } from './lifecycle/destroy.js';
+import { projectIdWhileReadable, projectReadableBy } from './project-sharing/access.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 
@@ -225,7 +226,7 @@ export async function createThread(options: {
   role: UserRole;
   title?: string;
   temporary?: boolean;
-  /** Start inside one of the user's projects; needs the role's projects feature. */
+  /** Start inside a project the user can read (own or shared); needs the role's projects feature. */
   projectId?: string;
 }) {
   if (options.temporary) await assertTemporaryChatAllowed(options.role);
@@ -247,11 +248,14 @@ export async function createThread(options: {
 
   const [thread] = projectId
     ? await db.transaction(async (tx) => {
-        // Another person's project is reported as missing, never joined.
+        // A project the person cannot read (their own, or shared with them at any
+        // level) is reported as missing, never joined.
         const [project] = await tx
           .select({ id: schema.project.id })
           .from(schema.project)
-          .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, options.userId)))
+          .where(
+            and(eq(schema.project.id, projectId), projectReadableBy(projectId, options.userId)),
+          )
           .for('key share');
         if (!project) throw notFound('Project not found');
         return tx.insert(schema.thread).values(values).returning();
@@ -329,8 +333,8 @@ export async function forkFromMessage(threadId: string, userId: string, input: F
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
         expiresAt: sourceThread.expiresAt,
-        // A fork or edit stays in the project its source belongs to.
-        projectId: sourceThread.projectId,
+        // A fork or edit stays in the project its source belongs to, while the person can still read it.
+        projectId: await projectIdWhileReadable(tx, sourceThread.projectId, userId),
         lastMessageAt: new Date(),
       })
       .returning();
@@ -426,8 +430,8 @@ export async function branchFromUserMessage(
         branchedFromMessageId: selected.id,
         temporary: sourceThread.temporary,
         expiresAt: sourceThread.expiresAt,
-        // A fork or edit stays in the project its source belongs to.
-        projectId: sourceThread.projectId,
+        // A fork or edit stays in the project its source belongs to, while the person can still read it.
+        projectId: await projectIdWhileReadable(tx, sourceThread.projectId, userId),
         lastMessageAt: new Date(),
       })
       .returning();

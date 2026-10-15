@@ -86,6 +86,12 @@ import {
   setupThroughApi,
   WORDS,
 } from './seed.mjs';
+import {
+  checkMixedWindow,
+  checkNewRelease,
+  checkPreviousRelease,
+  seedSharing,
+} from './sharing.mjs';
 import { runSmoke } from './smoke.mjs';
 
 async function main() {
@@ -215,6 +221,17 @@ async function main() {
       ? `no usage events seeded: ${R.seed.usage.skipped}`
       : `seeded ${R.seed.usage.events} usage events (${R.seed.usage.tableSize}; ${R.seed.usage.fromReplies} for seeded replies, ${R.seed.usage.deletedAccounts} of deleted accounts, ${R.seed.usage.models} models, ${R.seed.usage.pending} unsettled) in ${(R.seed.usage.totalMs / 1000).toFixed(1)} s`,
   );
+  R.sharing = { steps: [] };
+  let sharing;
+  // The release under test must look newer than FROM to the mixed-version guard.
+  // A checkout not yet bumped has FROM's own version; then its replicas say they are the next minor.
+  const [fromMajor, fromMinor] = fromTag.replace(/^v/, '').split('.').map(Number);
+  const toVersionEnv =
+    STABLE.test(fromTag) && compareVersions(`v${sourceVersion}`, fromTag) <= 0
+      ? `${fromMajor}.${fromMinor + 1}.0`
+      : '';
+  if (toVersionEnv)
+    log(`the source is not newer than ${fromTag}: its replicas report version ${toVersionEnv}`);
   const loadPeople = people.slice(0, Math.min(options.vus, people.length - 1));
   const smokePerson = people.at(-1);
   const threadMap = await seededThreadsFor(loadPeople, env);
@@ -318,6 +335,15 @@ async function main() {
     );
 
     // --- FROM on the new schema --------------------------------------------
+    // Project sharing and groups (v0.14): people, shares and a group made while FROM
+    // serves, on the schema that has the tables (so after the pre-deploy migrations).
+    try {
+      sharing = await seedSharing({ env, bases, origin, emails: people, log });
+    } catch (error) {
+      sharing = { skipped: `seeding failed: ${error.message}` };
+      R.sharing.steps.push({ name: 'sharing: seeding', ok: false, ms: 0, detail: error.message });
+    }
+
     setPhase('smoke-old');
     R.smokeOld = await runSmoke({
       bases,
@@ -328,6 +354,8 @@ async function main() {
     log(
       `smoke (previous release, new schema): ${R.smokeOld.total - R.smokeOld.failed}/${R.smokeOld.total}`,
     );
+
+    R.sharing.steps.push(...(await checkPreviousRelease(sharing, log)));
 
     // --- Replace replicas one at a time -------------------------------------
     R.replacements = [];
@@ -394,6 +422,8 @@ async function main() {
       const stoppedAt = Date.now();
       const exitCode = Number(await inspect(id, '{{.State.ExitCode}}'));
       env[variable] = image;
+      if (service.startsWith('api'))
+        env[`OCI_${service.replace('-', '').toUpperCase()}_VERSION`] = toVersionEnv;
       await must(
         compose(['up', '-d', '--no-deps', service], env),
         `starting ${service} on ${image}`,
@@ -421,6 +451,9 @@ async function main() {
       // Releases before v0.11 read only the previous secret format.
       const fromReadsVersioned =
         STABLE.test(fromTag) && compareVersions(fromTag, FIRST_VERSIONED_SECRETS) >= 0;
+      if (kind === 'replace' && service === 'api-1') {
+        R.sharing.steps.push(...(await checkMixedWindow(sharing, { service, log })));
+      }
       if (kind === 'replace' && service === 'api-1' && !fromReadsVersioned) {
         R.secretsMixed = await secretsDuringUpgrade();
         log(
@@ -498,6 +531,9 @@ async function main() {
       requireAll: true,
     });
     log(`smoke (new release): ${R.smokeNew.total - R.smokeNew.failed}/${R.smokeNew.total}`);
+
+    setPhase('sharing-new');
+    R.sharing.steps.push(...(await checkNewRelease(sharing, log)));
 
     setPhase('cooldown');
     await sleep(options['cooldown-seconds'] * 1000);

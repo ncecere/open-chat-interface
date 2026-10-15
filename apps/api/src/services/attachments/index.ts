@@ -1,10 +1,11 @@
-import { and, desc, eq, isNull, lte, schema, sql } from '@oci/db';
+import { and, desc, eq, isNotNull, isNull, lte, or, schema, sql } from '@oci/db';
 import type { UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
 import { recordDeletions } from '../compliance/deletions.js';
 import { notOnLegalHold } from '../compliance/holds.js';
 import { destroyAttachments } from '../lifecycle/destroy.js';
+import { projectAccess, projectReadableBy } from '../project-sharing/access.js';
 import { assertRoleFeature } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import { adjustStorageUsage } from '../storage/usage.js';
@@ -39,6 +40,46 @@ export async function getOwnedAttachment(id: string, userId: string) {
 }
 
 /**
+ * A file the person may download (v0.14): one of their own message files
+ * (`user_id` is theirs, as it always was), or a live file of a project they can
+ * read, whoever added it. A project file is decided by the project, not by who
+ * uploaded it: an editor who lost access no longer reaches what they added
+ * (until it moves to the owner), and a viewer reaches what an editor added.
+ * Someone other than the owner also needs the role's `projects` switch and the
+ * attachment switches, as the project routes do; the owner's access is exactly
+ * what it was. A file the person cannot reach is 404, as every other refusal.
+ */
+export async function getReadableAttachment(id: string, userId: string, role: UserRole) {
+  const [row] = await db
+    .select()
+    .from(schema.attachment)
+    .where(
+      and(
+        eq(schema.attachment.id, id),
+        eq(schema.attachment.uploadPending, false),
+        or(
+          and(eq(schema.attachment.userId, userId), isNull(schema.attachment.projectId)),
+          and(
+            isNotNull(schema.attachment.projectId),
+            isNull(schema.attachment.deletedAt),
+            projectReadableBy(sql`${schema.attachment.projectId}`, userId),
+          ),
+        ),
+      ),
+    )
+    .limit(1);
+  if (!row) throw notFound('Attachment not found');
+  if (row.projectId) {
+    const level = await projectAccess(db, row.projectId, userId);
+    if (level !== 'owner') {
+      await assertRoleFeature(role, 'projects');
+      await assertAttachmentUseAllowed(role);
+    }
+  }
+  return row;
+}
+
+/**
  * Settings → Attachments: chat files (message attachments and staged
  * uploads) and, since v0.9.1, project files with the project they belong to,
  * so the list accounts for what the storage meter counts. Newest first. A file
@@ -46,32 +87,42 @@ export async function getOwnedAttachment(id: string, userId: string) {
  * for it (#358), with that conversation, and each is counted by the meter.
  */
 export async function listAttachments(userId: string) {
-  return db
-    .select({
-      id: schema.attachment.id,
-      filename: schema.attachment.filename,
-      mimeType: schema.attachment.mimeType,
-      sizeBytes: schema.attachment.sizeBytes,
-      createdAt: schema.attachment.createdAt,
-      messageId: schema.attachment.messageId,
-      projectId: schema.attachment.projectId,
-      projectName: schema.project.name,
-      threadId: schema.thread.id,
-      threadTitle: schema.thread.title,
-    })
-    .from(schema.attachment)
-    .leftJoin(schema.project, eq(schema.project.id, schema.attachment.projectId))
-    .leftJoin(schema.message, eq(schema.message.id, schema.attachment.messageId))
-    .leftJoin(schema.thread, eq(schema.thread.id, schema.message.threadId))
-    .where(
-      and(
-        eq(schema.attachment.userId, userId),
-        isNull(schema.attachment.deletedAt),
-        eq(schema.attachment.uploadPending, false),
-      ),
-    )
-    .orderBy(desc(schema.attachment.createdAt), desc(schema.attachment.id))
-    .limit(500);
+  return (
+    db
+      .select({
+        id: schema.attachment.id,
+        filename: schema.attachment.filename,
+        mimeType: schema.attachment.mimeType,
+        sizeBytes: schema.attachment.sizeBytes,
+        createdAt: schema.attachment.createdAt,
+        messageId: schema.attachment.messageId,
+        projectId: schema.attachment.projectId,
+        projectName: schema.project.name,
+        threadId: schema.thread.id,
+        threadTitle: schema.thread.title,
+      })
+      .from(schema.attachment)
+      // The project's name only while the person can still read the project (v0.14):
+      // a file left behind by lost access does not tell them what the project is called.
+      .leftJoin(
+        schema.project,
+        and(
+          eq(schema.project.id, schema.attachment.projectId),
+          projectReadableBy(sql`${schema.attachment.projectId}`, userId),
+        ),
+      )
+      .leftJoin(schema.message, eq(schema.message.id, schema.attachment.messageId))
+      .leftJoin(schema.thread, eq(schema.thread.id, schema.message.threadId))
+      .where(
+        and(
+          eq(schema.attachment.userId, userId),
+          isNull(schema.attachment.deletedAt),
+          eq(schema.attachment.uploadPending, false),
+        ),
+      )
+      .orderBy(desc(schema.attachment.createdAt), desc(schema.attachment.id))
+      .limit(500)
+  );
 }
 
 /**
