@@ -274,12 +274,10 @@ describe.skipIf(!available)('live: administering groups', () => {
       );
       expect(same.map((r) => r.status).sort()).toEqual([201, 409]);
 
-      const [{ value }] = await live.db
-        .select({ value: sql<number>`count(*)::int` })
-        .from(schema.group);
+      const existing = (await live.db.select().from(schema.group)).length;
       await live.db.execute(
         sql`insert into "group" (organization_id, name)
-            select ${organizationId}, 'cap ' || g from generate_series(1, ${MAX_GROUPS - 1 - value!}) g`,
+            select ${organizationId}, 'cap ' || g from generate_series(1, ${MAX_GROUPS - 1 - existing}) g`,
       );
       const last = await atOnce(() =>
         ['Last A', 'Last B'].map((name) => call(admin, 'POST', '/admin/groups', { name })),
