@@ -121,7 +121,7 @@ export const Composer = memo(function Composer({
     <div className="mx-auto w-full max-w-[47rem] px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-3 md:pb-0">
       <ComposerConnectHint selectedModel={selectedModel} />
       <ComposerClassificationNote classification={classification} selectedModel={selectedModel} />
-      <div className="rounded-[1.25rem] border border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-[var(--accent-bright)] md:rounded-b-none md:border-b-0">
+      <div className="rounded-[1.25rem] border border-[var(--border-control)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-[var(--accent-bright)] md:rounded-b-none md:border-b-0">
         <AttachmentChips
           items={attachments}
           onRemove={(id) => onRemoveAttachment?.(id)}

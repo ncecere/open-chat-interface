@@ -229,47 +229,50 @@ export const ModelPicker = memo(function ModelPicker({
         className="relative flex max-h-[var(--radix-popover-content-available-height)] w-[min(29rem,calc(100vw-2rem))] flex-col p-0"
       >
         <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5">
-          <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-          <input
-            ref={searchRef}
-            aria-label={t('chat.modelPicker.searchLabel')}
-            placeholder={t('chat.modelPicker.searchPlaceholder')}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            // Keep normal Escape handling so the menu remains keyboard-closeable.
-            role="combobox"
-            aria-expanded="true"
-            aria-controls="model-picker-listbox"
-            aria-autocomplete="list"
-            aria-activedescendant={active ? modelOptionId(active.id) : undefined}
-            onKeyDown={(event) => {
-              if (event.key !== 'Escape') event.stopPropagation();
-              // The listbox pattern: arrows move through the matches and Enter
-              // picks one, so a search never needs a dozen Tabs to reach it.
-              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                event.preventDefault();
-                moveActive(event.key === 'ArrowDown' ? 1 : -1);
-              } else if (event.key === 'Enter' && active) {
-                event.preventDefault();
-                // A model the conversation's classes forbid is announced, not chosen.
-                if (availability.get(active.slug)?.status === 'blocked') return;
-                onSelect(active);
-                setOpen(false);
-              } else if (
-                // Details for the highlighted model, from the keyboard: the
-                // row's Details button is for the pointer (#114).
-                // At the end of the text, the key that goes on: Right, or Left in Arabic.
-                event.key === (rtl ? 'ArrowLeft' : 'ArrowRight') &&
-                active &&
-                canShowDetails &&
-                event.currentTarget.selectionStart === event.currentTarget.value.length
-              ) {
-                event.preventDefault();
-                showDetails(active.id);
-              }
-            }}
-            className="h-9 w-full bg-transparent text-[0.9375rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
-          />
+          {/* The search field has an edge of its own (1.4.11), not only a divider under the row. */}
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-[var(--border-control)] bg-[var(--bg-control)] px-3 focus-within:outline focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-[var(--accent-bright)]">
+            <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+            <input
+              ref={searchRef}
+              aria-label={t('chat.modelPicker.searchLabel')}
+              placeholder={t('chat.modelPicker.searchPlaceholder')}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              // Keep normal Escape handling so the menu remains keyboard-closeable.
+              role="combobox"
+              aria-expanded="true"
+              aria-controls="model-picker-listbox"
+              aria-autocomplete="list"
+              aria-activedescendant={active ? modelOptionId(active.id) : undefined}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape') event.stopPropagation();
+                // The listbox pattern: arrows move through the matches and Enter
+                // picks one, so a search never needs a dozen Tabs to reach it.
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  moveActive(event.key === 'ArrowDown' ? 1 : -1);
+                } else if (event.key === 'Enter' && active) {
+                  event.preventDefault();
+                  // A model the conversation's classes forbid is announced, not chosen.
+                  if (availability.get(active.slug)?.status === 'blocked') return;
+                  onSelect(active);
+                  setOpen(false);
+                } else if (
+                  // Details for the highlighted model, from the keyboard: the
+                  // row's Details button is for the pointer (#114).
+                  // At the end of the text, the key that goes on: Right, or Left in Arabic.
+                  event.key === (rtl ? 'ArrowLeft' : 'ArrowRight') &&
+                  active &&
+                  canShowDetails &&
+                  event.currentTarget.selectionStart === event.currentTarget.value.length
+                ) {
+                  event.preventDefault();
+                  showDetails(active.id);
+                }
+              }}
+              className="h-9 w-full bg-transparent text-[0.9375rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+            />
+          </div>
           <ModelPickerFilters
             open={filtersOpen}
             selected={capabilityFilters}
