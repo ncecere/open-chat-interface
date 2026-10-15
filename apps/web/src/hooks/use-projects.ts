@@ -1,12 +1,15 @@
 import type {
   CreateProjectInput,
   ProjectFile,
+  ProjectList,
   ProjectSummary,
   SidebarProject,
+  SidebarProjectList,
   ThreadSummary,
   UpdateProjectInput,
 } from '@oci/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { ApiError, api } from '~/lib/api-client';
 import {
@@ -26,8 +29,22 @@ export function useProjectsAvailable(): boolean {
 export function useProjects(enabled = true) {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.get<{ projects: ProjectSummary[] }>('/projects'),
+    queryFn: () => api.get<ProjectList>('/projects'),
     select: (data) => data.projects,
+    enabled,
+  });
+}
+
+/**
+ * Projects other people shared with the person (v0.14), by name. `projects`
+ * stays the person's own, so nothing that offers "my projects" can mistake one
+ * of these for it. An API from before sharing sends none.
+ */
+export function useSharedProjects(enabled = true) {
+  return useQuery({
+    queryKey: ['projects'],
+    queryFn: () => api.get<ProjectList>('/projects'),
+    select: (data) => data.shared ?? [],
     enabled,
   });
 }
@@ -40,8 +57,18 @@ export function useProjects(enabled = true) {
 export function useSidebarProjects(enabled = true) {
   return useQuery({
     queryKey: SIDEBAR_PROJECTS_KEY,
-    queryFn: () => api.get<{ projects: SidebarProject[] }>('/projects/sidebar'),
+    queryFn: () => api.get<SidebarProjectList>('/projects/sidebar'),
     select: (data) => data.projects,
+    enabled,
+  });
+}
+
+/** The sidebar's "Shared with me" tree: the same query as above, so no extra request. */
+export function useSidebarSharedProjects(enabled = true) {
+  return useQuery({
+    queryKey: SIDEBAR_PROJECTS_KEY,
+    queryFn: () => api.get<SidebarProjectList>('/projects/sidebar'),
+    select: (data): SidebarProject[] => data.shared ?? [],
     enabled,
   });
 }
@@ -54,6 +81,20 @@ export function useProject(projectId: string | undefined) {
     select: (data) => data.project,
     enabled: Boolean(projectId),
   });
+}
+
+/**
+ * A 404 from one of a project's own requests means the person's access ended
+ * (the owner stopped sharing, a group changed) or the project is gone. The
+ * project is read again, so the page says "You no longer have access" rather
+ * than leaving a list that cannot load.
+ */
+export function useRefreshOnAccessLoss(projectId: string, error: unknown) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (error instanceof ApiError && error.status === 404)
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId], exact: true });
+  }, [error, projectId, queryClient]);
 }
 
 export function useProjectFiles(projectId: string, enabled = true) {
@@ -84,12 +125,18 @@ export function useCreateProject() {
   });
 }
 
+function refreshIfAccessLost(queryClient: QueryClient, projectId: string, error: unknown) {
+  if (error instanceof ApiError && error.status === 404)
+    void queryClient.invalidateQueries({ queryKey: ['projects', projectId], exact: true });
+}
+
 export function useUpdateProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (patch: UpdateProjectInput) =>
       api.patch<{ project: ProjectSummary }>(`/projects/${encodeURIComponent(projectId)}`, patch),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+    onError: (error) => refreshIfAccessLost(queryClient, projectId, error),
   });
 }
 
@@ -158,6 +205,7 @@ export function useDeleteProjectFile(projectId: string) {
     mutationFn: (fileId: string) =>
       api.delete(`/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+    onError: (error) => refreshIfAccessLost(queryClient, projectId, error),
   });
 }
 
