@@ -14,6 +14,7 @@ import { RouteLoadError } from '~/components/ui/route-load-error';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { useNewChatKey } from '~/hooks/use-new-chat-key';
 import {
+  validateGroupSearch,
   validateModelsSearch,
   validateRolesSearch,
   validateStorageSearch,
@@ -257,6 +258,10 @@ const SETTINGS_TABS = [
     component: lazyRouteComponent(() => import('~/routes/settings/sharing'), 'SettingsSharingPage'),
   },
   {
+    path: '/settings/groups',
+    component: lazyRouteComponent(() => import('~/routes/settings/groups'), 'SettingsGroupsPage'),
+  },
+  {
     path: '/settings/connectors',
     component: lazyRouteComponent(
       () => import('~/routes/settings/connectors'),
@@ -325,6 +330,22 @@ const adminUsersRoute = createRoute({
   path: '/admin/users',
   validateSearch: validateUsersSearch,
   component: lazyRouteComponent(() => import('~/routes/admin/users'), 'AdminUsersPage'),
+});
+
+const adminGroupsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/groups',
+  component: lazyRouteComponent(() => import('~/routes/admin/groups'), 'AdminGroupsPage'),
+});
+
+const adminGroupDetailRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/admin/groups/$groupId',
+  validateSearch: validateGroupSearch,
+  component: lazyRouteComponent(
+    () => import('~/routes/admin/group-detail'),
+    'AdminGroupDetailPage',
+  ),
 });
 
 const adminReportsRoute = createRoute({
@@ -522,6 +543,8 @@ const routeTree = rootRoute.addChildren([
     adminOverviewRoute,
     adminUsersRoute,
     adminUserDetailRoute,
+    adminGroupsRoute,
+    adminGroupDetailRoute,
     adminHealthRoute,
     adminReportsRoute,
     adminProvidersRoute,

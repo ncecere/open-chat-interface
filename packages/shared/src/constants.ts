@@ -180,6 +180,15 @@ export const PROTECTED_AUDIT_ACTIONS = [
   'connector.data_classes.update',
   'settings.classification.update',
   'project.data_classes.update',
+  // Groups carry budgets and model access and let managers change who belongs
+  // (#394); who held which access when is what an incident review asks.
+  'group.create',
+  'group.update',
+  'group.delete',
+  'group.member.add',
+  'group.member.remove',
+  'group.member.role',
+  'group.grants.update',
 ] as const;
 
 /** Rate limiting and concurrency defaults, overridable per role by an admin. */

@@ -33,6 +33,7 @@ const TABS = [
   { to: '/settings/history', label: 'History' },
   { to: '/settings/models', label: 'Models' },
   { to: '/settings/sharing', label: 'Sharing' },
+  { to: '/settings/groups', label: 'Groups' },
   { to: '/settings/connectors', label: 'Connectors' },
   { to: '/settings/attachments', label: 'Attachments' },
 ] as const;
@@ -70,6 +71,10 @@ function visibleTabs(
   summary: SettingsSummary | undefined,
 ): Tab[] {
   return TABS.filter((tab) => {
+    // Groups (v0.14) is for managers only: nothing is shown until /me says the
+    // person manages a group, also from an older API that does not say.
+    if (tab.to === '/settings/groups')
+      return isActive(tab, pathname) || (summary?.managedGroups ?? 0) > 0;
     if (isActive(tab, pathname) || !summary) return true;
     if (tab.to === '/settings/memory')
       return features?.memory !== false || summary.memoryEntries > 0;
@@ -172,8 +177,9 @@ function HelpCard() {
  * The settings sections: tabs on one row where they fit, otherwise one menu.
  * Decided by the width of the content column (a container query), so it holds
  * whatever the window, sidebar or font size; the row never wraps or scrolls.
- * Eight tabs need about 44rem at the default font; the switch is at 50rem
- * (v0.10, was 46rem for seven) to keep room for wider fonts and labels.
+ * Eight tabs need about 44rem at the default font, and Groups, shown only to
+ * managers, adds about 4.5rem; the switch is at 50rem (v0.10, was 46rem for
+ * seven) to keep room for wider fonts and labels.
  */
 function SectionNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();

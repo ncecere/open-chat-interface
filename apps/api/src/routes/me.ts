@@ -25,6 +25,7 @@ import { recordAudit } from '../services/audit.js';
 import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
 import { userConnectors } from '../services/connectors/people.js';
 import { mfaSummaryFor } from '../services/mfa/state.js';
+import { countManagedGroups } from '../services/groups/membership.js';
 import { listAvailableModels } from '../services/models.js';
 import {
   acceptPolicy,
@@ -108,6 +109,7 @@ meRoutes.get('/', async (c) => {
     connectors,
     shareLinks,
     mfa,
+    managedGroups,
   ] = await Promise.all([
     loadPreferences(user.id),
     getSetting('features'),
@@ -120,6 +122,7 @@ meRoutes.get('/', async (c) => {
     userConnectors(user),
     activeShareLinkCount(user.id),
     mfaSummaryFor({ id: user.id, role: user.role }, c.get('mfa')),
+    countManagedGroups(user.id),
   ]);
   const { reasoningEfforts, ...effective } = combineFeatures(features, search, own);
   const instanceEffort: ReasoningEffort = chat.defaultEffort ?? 'instant';
@@ -129,7 +132,9 @@ meRoutes.get('/', async (c) => {
     defaultEffort: preferences?.defaultEffort ?? null,
   };
   const personal = resolvePersonalDefaults(saved, {
-    catalog: saved.defaultModelSlug ? await listAvailableModels(user.role) : null,
+    catalog: saved.defaultModelSlug
+      ? await listAvailableModels({ userId: user.id, role: user.role })
+      : null,
     roleEfforts: reasoningEfforts,
     instanceEffort,
   });
@@ -154,9 +159,15 @@ meRoutes.get('/', async (c) => {
     /**
      * v0.9.1: what Settings needs to hide sections with nothing in them
      * without fetching each section on every settings page. `shareLinks`
-     * (v0.10) counts links not yet revoked.
+     * (v0.10) counts links not yet revoked. `managedGroups` (v0.14) is how
+     * many groups the person manages: Settings → Groups shows for managers only.
      */
-    settingsSummary: { memoryEntries, connectors: connectors.length, shareLinks },
+    settingsSummary: {
+      memoryEntries,
+      connectors: connectors.length,
+      shareLinks,
+      managedGroups,
+    },
     // Instance switches narrowed by the role's own. Web search is advertised
     // only when a search would actually run.
     features: { ...features, ...effective },
@@ -245,7 +256,7 @@ meRoutes.patch('/preferences', async (c) => {
   const current = await loadPreferences(user.id);
   if (patch.defaultModelSlug !== undefined || patch.defaultEffort !== undefined) {
     const [catalog, own] = await Promise.all([
-      listAvailableModels(user.role),
+      listAvailableModels({ userId: user.id, role: user.role }),
       roleFeatures(user.role),
     ]);
     assertPersonalDefaultsAllowed(

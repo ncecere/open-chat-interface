@@ -6,6 +6,7 @@ import {
   REASONING_EFFORTS,
   USER_ROLES,
 } from '../constants.js';
+import { groupRefSchema } from './groups.js';
 import { patchSchema } from './patch.js';
 
 export const modelCapabilitySchema = z.enum(MODEL_CAPABILITIES);
@@ -93,6 +94,8 @@ export const adminModelSchema = catalogModelSchema.extend({
   visibleToRoles: z.array(z.enum(USER_ROLES)),
   /** Data classes the model is approved for (v0.14, #395); none means none. */
   dataClassIds: z.array(z.string()),
+  /** Groups granted this model in addition to the roles (v0.14), read-only; set from the group. */
+  groups: z.array(groupRefSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

@@ -86,15 +86,15 @@ export async function setUserOverride(
 ) {
   const { policies } = await policiesForUser(userId);
 
-  // An override adjusts a limit the role already carries. Allowing an
-  // unassigned policy would make this a back door for granting individuals
-  // policies their role was never given.
+  // An override adjusts a limit the person already has, from their role or
+  // from a group they are in. Allowing an unassigned policy would make this a
+  // back door for granting individuals policies nothing gave them.
   const policy = policies.find((entry) => entry.id === input.policyId);
   if (!policy) {
     throw validationFailed('That policy does not apply to this user.', [
       {
         path: ['policyId'],
-        message: 'Only policies applied to the user\u2019s role can be adjusted.',
+        message: 'Only policies applied to the user\u2019s role or groups can be adjusted.',
       },
     ]);
   }

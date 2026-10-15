@@ -1,6 +1,8 @@
 import {
   type AdminModel,
   type AdminUser,
+  type BudgetSource,
+  type BudgetSources,
   MICROS_PER_DOLLAR,
   type QuotaMetric,
   type StorageUsage,
@@ -24,6 +26,8 @@ import { formatBytes, formatDateTime, formatTimeUntil, plural } from '~/lib/util
 export interface UserLimits {
   usage: UsageSummary;
   storage: StorageUsage;
+  /** Where each budget comes from (v0.14): the role, or which groups; absent from an older API. */
+  budgetSources?: BudgetSources;
 }
 
 export function userLimitsQueryKey(userId: string) {
@@ -82,12 +86,58 @@ export function budgetModelNames(
   return slugs.map((slug) => names.get(slug) ?? slug).join(', ');
 }
 
+/**
+ * Which of the person's budgets come from their role and which from a group
+ * they are in: "From the user role, the group Biology". A budget both carry
+ * lists both and is still enforced once.
+ */
+function BudgetSourceText({
+  sources,
+  role,
+}: {
+  sources: readonly BudgetSource[] | undefined;
+  role: string;
+}) {
+  if (!sources || sources.length === 0) return null;
+  const parts = sources.map((source) =>
+    source.kind === 'group' && source.groupId ? (
+      <span key={`group-${source.groupId}`}>
+        the group{' '}
+        <Link
+          to="/admin/groups/$groupId"
+          params={{ groupId: source.groupId }}
+          className="text-[var(--accent-bright)] hover:underline"
+        >
+          {source.groupName ?? 'unnamed'}
+        </Link>
+      </span>
+    ) : (
+      <span key="role">the {role} role</span>
+    ),
+  );
+  return (
+    <span>
+      · From{' '}
+      {parts.map((part, index) => (
+        <span key={part.key}>
+          {index > 0 && (index === parts.length - 1 ? ' and ' : ', ')}
+          {part}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function BudgetRow({
   allowance,
   models,
+  sources,
+  role,
 }: {
   allowance: UsageAllowance;
   models: AdminModel[] | undefined;
+  sources?: readonly BudgetSource[];
+  role: string;
 }) {
   const severity = SEVERITY[allowance.severity];
   const used = formatQuotaAmount(allowance.used, allowance.metric);
@@ -124,6 +174,7 @@ function BudgetRow({
         {allowance.modelSlugs.length > 0 && (
           <span>· Applies to {budgetModelNames(allowance.modelSlugs, models)}</span>
         )}
+        <BudgetSourceText sources={sources} role={role} />
       </p>
     </li>
   );
@@ -298,6 +349,8 @@ export function UserLimitsSection({ user }: { user: AdminUser }) {
                       key={allowance.policyId}
                       allowance={allowance}
                       models={models.data?.models}
+                      sources={limits.data?.budgetSources?.[allowance.policyId]}
+                      role={user.role}
                     />
                   ))}
                 </ul>

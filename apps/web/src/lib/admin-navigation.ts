@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   UserCog,
   Users,
+  UsersRound,
   Webhook,
 } from 'lucide-react';
 
@@ -56,6 +57,7 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     label: 'People',
     items: [
       { to: '/admin/users', label: 'Users', icon: Users },
+      { to: '/admin/groups', label: 'Groups', icon: UsersRound },
       { to: '/admin/invites', label: 'Invitations', icon: Mail },
       { to: '/admin/roles', label: 'Roles & access', icon: ShieldCheck },
     ],

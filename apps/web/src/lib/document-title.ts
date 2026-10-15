@@ -29,6 +29,7 @@ const SETTINGS_SECTIONS: Record<string, string> = {
   '/history': 'History',
   '/models': 'Models',
   '/sharing': 'Sharing',
+  '/groups': 'Groups',
   '/connectors': 'Connectors',
   '/attachments': 'Attachments',
 };

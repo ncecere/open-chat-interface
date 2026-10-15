@@ -211,6 +211,11 @@ delivered" or "Last failure". **Show deliveries** lists the last 50 deliveries w
 their status, attempts and last error. Auditors can see endpoints and their
 deliveries but not change them, send tests or see secrets.
 
+Group changes are among the events you can send: `group.create`,
+`group.update`, `group.delete`, `group.member.add`, `group.member.remove`,
+`group.member.role` and `group.grants.update` (or `group.*`), described on
+[Groups](groups.md#what-is-recorded).
+
 Creating, changing, rotating and deleting endpoints are audited as
 `webhook.create`, `webhook.update`, `webhook.rotate` and `webhook.delete`, and
 are kept regardless of audit-log retention. An update records each changed

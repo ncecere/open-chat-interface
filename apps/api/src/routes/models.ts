@@ -9,7 +9,7 @@ modelCatalogRoutes.use('*', requireAuth);
 /** The models the person's role may use, and whether an empty list is the role's doing. */
 modelCatalogRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  const models = await listAvailableModels(user.role);
+  const models = await listAvailableModels({ userId: user.id, role: user.role });
   // With none for this role, whether that is the role or the instance: the
   // two need different words, and the person different help (#303).
   const hiddenFromRole = models.length === 0 && (await hasUsableModels());

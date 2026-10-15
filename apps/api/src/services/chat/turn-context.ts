@@ -49,7 +49,7 @@ export async function resolveTurnContext(
   // The composer hides the toggle, but the request is the boundary. The
   // instance-wide switch is checked where the search runs.
   if (input.webSearch) await assertRoleFeature(user.role, 'webSearch');
-  const resolved = await resolveModelForRole(input.modelSlug, user.role);
+  const resolved = await resolveModelForRole(input.modelSlug, { userId: user.id, role: user.role });
   const { reasoningEfforts } = await roleFeatures(user.role);
   assertReasoningEffortSupported(input.effort, resolved.supportedEfforts, reasoningEfforts);
   if (!input.messages[0]) throw validationFailed('A user message is required');

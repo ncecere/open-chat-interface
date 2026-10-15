@@ -33,6 +33,8 @@ way regardless of which model you pick.
     or Claude.
 15. [Installing the app](installing.md) — adding OCI to a phone's home screen or a
     computer's desktop, and why it still needs a connection.
+16. [Groups](groups.md) — what a group is, and managing one if you are a group
+    manager.
 
 ## The parts of the screen
 

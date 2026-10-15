@@ -1552,6 +1552,28 @@ then roll back to v0.13, the mode is ignored by v0.13 and applies again when you
 return to v0.14; labels set meanwhile are kept.
 
 Rolling back to v0.13 leaves the new tables and triggers in place and harmless.
+#### Groups (migration 0053)
+
+Migration `0053_groups` adds four tables (`group`, `group_member`,
+`quota_policy_group`, `model_group_access`) and changes nothing that exists: no
+column added, no rows rewritten, no post-deploy step or background migration. It
+is a pre-deploy migration, fast, and every foreign key is `ON DELETE CASCADE`
+(never `RESTRICT`), so a v0.13 replica still serving while the upgrade runs can
+delete a user, a model or a budget without being blocked by rows it cannot see.
+Rolling back to v0.13 leaves the tables inert.
+
+**While a v0.13 replica still serves** (the rolling window of step 6), a v0.13
+replica does not know groups: a budget attached to a group is **not enforced**
+on it (a budget fails open), and a model granted only through a group is not
+offered there. So v0.14 refuses to change a group's grants while any live
+replica reports an earlier release (409, "An upgrade is still in progress";
+this needs the replica heartbeats, so with more than one replica Redis, as
+[above](#upgrade)). **Create no groups you rely on until the upgrade has
+finished**: set grants afterwards. Members and managers can be edited at any
+time; they have no effect on v0.13.
+
+Groups only add budgets and models. Rolling back to v0.13 therefore removes
+what groups added, never anything a role gave.
 
 ## Shutting down and draining
 

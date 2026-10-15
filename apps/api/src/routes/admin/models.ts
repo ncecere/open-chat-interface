@@ -32,6 +32,24 @@ modelRoutes.get('/', async (c) => {
     .orderBy(asc(schema.model.sortOrder), asc(schema.model.displayName));
 
   const approvals = await modelClassIds();
+
+  // Groups granted each model, as read-only chips: grants are written from the group.
+  const granted = await db
+    .select({
+      modelId: schema.modelGroupAccess.modelId,
+      id: schema.group.id,
+      name: schema.group.name,
+    })
+    .from(schema.modelGroupAccess)
+    .innerJoin(schema.group, eq(schema.modelGroupAccess.groupId, schema.group.id))
+    .orderBy(asc(schema.group.name));
+  const groupsByModel = new Map<string, { id: string; name: string }[]>();
+  for (const row of granted) {
+    const existing = groupsByModel.get(row.modelId) ?? [];
+    existing.push({ id: row.id, name: row.name });
+    groupsByModel.set(row.modelId, existing);
+  }
+
   const models: AdminModel[] = rows.map(({ model, providerKind, providerLabel }) => ({
     id: model.id,
     slug: model.slug,
@@ -53,6 +71,7 @@ modelRoutes.get('/', async (c) => {
     enabled: model.enabled,
     visibleToRoles: model.visibleToRoles,
     dataClassIds: approvals.get(model.id) ?? [],
+    groups: groupsByModel.get(model.id) ?? [],
     createdAt: model.createdAt.toISOString(),
     updatedAt: model.updatedAt.toISOString(),
   }));

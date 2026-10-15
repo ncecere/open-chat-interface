@@ -23,6 +23,11 @@ export const MODELS_TABS = ['providers', 'models', 'embeddings'] as const;
 export type ModelsTab = (typeof MODELS_TABS)[number];
 export const DEFAULT_MODELS_TAB: ModelsTab = 'providers';
 
+/** The tabs of one group's page (v0.14): who is in it, what it grants, its usage, its settings. */
+export const GROUP_TABS = ['members', 'grants', 'usage', 'settings'] as const;
+export type GroupTab = (typeof GROUP_TABS)[number];
+export const DEFAULT_GROUP_TAB: GroupTab = 'members';
+
 export const ROLE_TABS = ['admin', 'auditor', 'user', 'restricted'] as const;
 export type RoleTab = (typeof ROLE_TABS)[number];
 export const DEFAULT_ROLE_TAB: RoleTab = 'user';
@@ -63,6 +68,15 @@ export interface ModelsSearch {
 export function validateModelsSearch(search: Record<string, unknown>): ModelsSearch {
   const tab = oneOf(search.tab, MODELS_TABS);
   return tab && tab !== DEFAULT_MODELS_TAB ? { tab } : {};
+}
+
+export interface GroupSearch {
+  tab?: GroupTab;
+}
+
+export function validateGroupSearch(search: Record<string, unknown>): GroupSearch {
+  const tab = oneOf(search.tab, GROUP_TABS);
+  return tab && tab !== DEFAULT_GROUP_TAB ? { tab } : {};
 }
 
 export interface RolesSearch {

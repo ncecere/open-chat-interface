@@ -36,6 +36,8 @@ const lazyModules = [
   ['routes/admin/overview', ['AdminOverviewPage']],
   ['routes/admin/users', ['AdminUsersPage']],
   ['routes/admin/user-detail', ['AdminUserDetailPage']],
+  ['routes/admin/groups', ['AdminGroupsPage']],
+  ['routes/admin/group-detail', ['AdminGroupDetailPage']],
   ['routes/admin/reports', ['AdminReportsPage']],
   ['routes/admin/health', ['AdminHealthPage']],
   ['routes/admin/models', ['AdminModelsPage']],
@@ -64,6 +66,7 @@ const lazyModules = [
   ['routes/settings/history', ['SettingsHistoryPage']],
   ['routes/settings/models', ['SettingsModelsPage']],
   ['routes/settings/sharing', ['SettingsSharingPage']],
+  ['routes/settings/groups', ['SettingsGroupsPage']],
   ['routes/settings/connectors', ['SettingsConnectorsPage']],
   ['routes/settings/attachments', ['SettingsAttachmentsPage']],
 ] as const;
@@ -260,6 +263,22 @@ describe('real router lazy admin and settings routes', () => {
       expect(imported.mock.calls.map(([module]) => module).sort()).toEqual([layout, page].sort());
     },
   );
+
+  it.each([
+    ['/admin/groups', 'AdminGroupsPage', 'routes/admin/groups'],
+    ['/admin/groups/group-7', 'AdminGroupDetailPage', 'routes/admin/group-detail'],
+    ['/admin/groups/group-7?tab=grants', 'AdminGroupDetailPage', 'routes/admin/group-detail'],
+    ['/settings/groups', 'SettingsGroupsPage', 'routes/settings/groups'],
+  ] as const)('serves the groups page %s from its own lazy module', async (path, name, module) => {
+    await renderRoute(path);
+    expect(container.querySelector(`[data-page="${name}"]`)).not.toBeNull();
+    expect(imported).toHaveBeenCalledWith(module);
+  });
+
+  it('keeps a group page’s tab in the address', async () => {
+    await renderRoute('/admin/groups/group-7?tab=grants');
+    expect(router.state.matches.at(-1)?.search).toEqual({ tab: 'grants' });
+  });
 
   it('preserves dynamic user-detail parameters across the lazy boundary', async () => {
     await renderRoute('/admin/users/user-42');

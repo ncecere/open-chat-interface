@@ -9,7 +9,8 @@ A section with nothing in it for you is left out: **Memory** when your
 administrator has not made memory available to you and you have no saved
 notes, **Sharing** when you may not share and have no link left to revoke, and
 **Connectors** when there is nothing for your role to connect. Their addresses
-still open if you follow a link to one.
+still open if you follow a link to one. **Groups** appears only if you manage
+at least one [group](groups.md).
 
 ## Account
 

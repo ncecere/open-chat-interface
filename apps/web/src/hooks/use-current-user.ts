@@ -74,6 +74,8 @@ export interface SettingsSummary {
   connectors: number;
   /** Share links not yet revoked (v0.10); absent from an older API. */
   shareLinks?: number;
+  /** Groups the person manages (v0.14); absent from an older API. Settings → Groups shows when above zero. */
+  managedGroups?: number;
 }
 
 interface MeResponse {

@@ -16,6 +16,7 @@ import {
   revokeUserSessions,
   updateUser,
 } from '../../services/admin-users/mutations.js';
+import { budgetSources as budgetSourcesFor } from '../../services/quota/applicability.js';
 import { getUsageSummary } from '../../services/quota/index.js';
 import { getStorageUsage } from '../../services/storage/quota.js';
 
@@ -56,11 +57,13 @@ userRoutes.get('/:id/limits', async (c) => {
   if (!target) throw notFound('User not found');
   // The column is plain text; role values are validated on every write.
   const role = target.role as UserRole;
-  const [usage, storage] = await Promise.all([
+  const [usage, storage, budgetSources] = await Promise.all([
     getUsageSummary(target.id, role),
     getStorageUsage(target.id, role),
+    // Where each budget comes from: the role, or which group (v0.14).
+    budgetSourcesFor(target.id, role),
   ]);
-  return c.json({ usage, storage });
+  return c.json({ usage, storage, budgetSources });
 });
 
 userRoutes.patch('/:id', async (c) => {

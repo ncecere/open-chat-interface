@@ -111,7 +111,7 @@ export async function setupApprovalContinuation(
     .limit(1);
   if (!reply) throw notFound('Reply not found');
   if (!reply.modelSlug || !reply.parentMessageId) throw validationFailed(NOT_PENDING);
-  const resolved = await resolveModelForRole(reply.modelSlug, user.role);
+  const resolved = await resolveModelForRole(reply.modelSlug, { userId: user.id, role: user.role });
   // Data classification: labels may have changed since the call was requested.
   // Refused before the claim below, so the reply stays waiting for an answer.
   const guarded = await guardModel({

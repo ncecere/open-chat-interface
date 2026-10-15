@@ -3,6 +3,7 @@ import { type QuotaPolicy, USER_ROLES, type UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
 import { getDefaultOrganizationId } from '../organization.js';
+import { budgetAppliesTo } from './applicability.js';
 
 export async function loadPolicies(organizationId: string, ids?: string[]): Promise<QuotaPolicy[]> {
   const rows = await db
@@ -22,7 +23,7 @@ export async function loadPolicies(organizationId: string, ids?: string[]): Prom
 
   const policyIds = rows.map((row) => row.id);
 
-  const [assignments, scopes, overrideCounts] = await Promise.all([
+  const [assignments, scopes, overrideCounts, groupRows] = await Promise.all([
     db
       .select({ policyId: schema.quotaPolicyRole.policyId, role: schema.quotaPolicyRole.role })
       .from(schema.quotaPolicyRole)
@@ -35,7 +36,26 @@ export async function loadPolicies(organizationId: string, ids?: string[]): Prom
       .from(schema.quotaPolicyModel)
       .where(inArray(schema.quotaPolicyModel.policyId, policyIds)),
     overrideCountsByPolicy(),
+    // The groups the policy is attached to, as read-only chips: grants are
+    // written from the group, never through the budget form.
+    db
+      .select({
+        policyId: schema.quotaPolicyGroup.policyId,
+        id: schema.group.id,
+        name: schema.group.name,
+      })
+      .from(schema.quotaPolicyGroup)
+      .innerJoin(schema.group, eq(schema.quotaPolicyGroup.groupId, schema.group.id))
+      .where(inArray(schema.quotaPolicyGroup.policyId, policyIds))
+      .orderBy(schema.group.name),
   ]);
+
+  const groupsByPolicy = new Map<string, { id: string; name: string }[]>();
+  for (const row of groupRows) {
+    const existing = groupsByPolicy.get(row.policyId) ?? [];
+    existing.push({ id: row.id, name: row.name });
+    groupsByPolicy.set(row.policyId, existing);
+  }
 
   const rolesByPolicy = new Map<string, QuotaPolicy['roles']>();
   for (const assignment of assignments) {
@@ -66,12 +86,16 @@ export async function loadPolicies(organizationId: string, ids?: string[]): Prom
     // Surfaced so an override is discoverable from the policy as well as from
     // the person it was granted to.
     overrideCount: overrideCounts.get(row.id) ?? 0,
+    groups: groupsByPolicy.get(row.id) ?? [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }));
 }
 
-/** The policies a user's role carries, which is what an override may adjust. */
+/**
+ * The policies that apply to a user, which is what an override may adjust: the
+ * ones their role carries and the ones a group they are in carries (v0.14).
+ */
 export async function policiesForUser(userId: string) {
   const organizationId = await getDefaultOrganizationId();
 
@@ -96,12 +120,8 @@ export async function policiesForUser(userId: string) {
       limitValue: schema.quotaPolicy.limitValue,
     })
     .from(schema.quotaPolicy)
-    .innerJoin(schema.quotaPolicyRole, eq(schema.quotaPolicyRole.policyId, schema.quotaPolicy.id))
     .where(
-      and(
-        eq(schema.quotaPolicy.organizationId, organizationId),
-        eq(schema.quotaPolicyRole.role, role),
-      ),
+      and(eq(schema.quotaPolicy.organizationId, organizationId), budgetAppliesTo(role, userId)),
     )
     .orderBy(schema.quotaPolicy.name);
 

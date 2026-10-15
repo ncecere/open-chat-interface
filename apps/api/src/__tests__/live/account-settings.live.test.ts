@@ -139,7 +139,12 @@ describe.skipIf(!available)('live: Settings → Account', () => {
     expect(response.status).toBe(200);
     return (await response.json()) as {
       signIn: { password: boolean; credential: boolean; sso: string[] };
-      settingsSummary: { memoryEntries: number; connectors: number; shareLinks: number };
+      settingsSummary: {
+        memoryEntries: number;
+        connectors: number;
+        shareLinks: number;
+        managedGroups: number;
+      };
     };
   }
 
@@ -152,7 +157,12 @@ describe.skipIf(!available)('live: Settings → Account', () => {
       const { cookie } = await signedIn();
       const body = await signInOf(cookie);
       expect(body.signIn).toEqual({ password: true, credential: true, sso: [] });
-      expect(body.settingsSummary).toEqual({ memoryEntries: 0, connectors: 0, shareLinks: 0 });
+      expect(body.settingsSummary).toEqual({
+        memoryEntries: 0,
+        connectors: 0,
+        shareLinks: 0,
+        managedGroups: 0,
+      });
     });
 
     it('reports an unusable password for a person once local sign-in is off', async () => {

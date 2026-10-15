@@ -30,6 +30,12 @@ For each role:
 - **Usage budgets** — the budgets assigned to the role, read-only, with a link
   to [Usage budgets](#usage-budgets) to change them.
 
+Below the roles, a read-only **Groups** section lists each
+[group](groups.md) with its members and managers, the budgets it carries and the
+extra models it grants, and links to **People → Groups** to change them. Groups
+add to a role; they never take access away. The per-role model count above
+counts what the role alone sees.
+
 Below the role tabs, **Instance-wide** holds the limits that apply to everybody
 regardless of role: sign-in attempts per minute (counted per IP address and per
 account; see [below](#sign-in-attempts)), and the cost and tokens reserved
@@ -299,7 +305,11 @@ labels.
 **Models → Usage budgets** (`/admin/quotas`). A budget — a quota policy —
 caps consumption, and is applied to one or more roles. A role can carry several
 at once and every one is enforced; each person gets the full amount on their
-own. Its name is for administrators: people see what a budget counts and its
+own. A budget can also be attached to a [group](groups.md#budgets), which holds
+its members to it in addition to their role's budgets: every budget is enforced,
+the most restrictive wins, and nothing is added up (a group budget never raises a
+role budget). Groups are attached from the group, not from this page, which shows
+them as read-only chips. Its name is for administrators: people see what a budget counts and its
 period ("You have reached your message limit for today"), never its name.
 Three things to decide.
 
@@ -352,7 +362,9 @@ eighty per cent adjusts.
 
 An individual can be granted more without changing the policy, from **Limits**
 beside their name in [the user list](people.md) or **Adjust limits** on their
-account page. Set an expiry where the need is temporary.
+account page. Set an expiry where the need is temporary. An override can adjust
+a budget the person has through their role or through a group they are in, and
+nothing else.
 
 ## Storage allowance
 
