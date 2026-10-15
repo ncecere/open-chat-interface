@@ -1,9 +1,5 @@
 import { inArray, schema } from '@oci/db';
-import type {
-  ClassificationClass,
-  ClassificationMode,
-  ClassificationModel,
-} from '@oci/shared';
+import type { ClassificationClass, ClassificationMode, ClassificationModel } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { listAvailableModels, type ModelViewer } from '../models.js';
 import type { ResolvedClass } from './resolve.js';

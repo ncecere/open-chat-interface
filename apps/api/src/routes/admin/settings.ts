@@ -1,8 +1,8 @@
 import {
   DEFAULT_MAX_TOOL_STEPS,
   type InstanceSettings,
-  type MfaRequirement,
   type LanguageSettings,
+  type MfaRequirement,
   normalizeLanguageSettings,
   SEARCH_PROVIDERS,
   type SearchProviderKind,

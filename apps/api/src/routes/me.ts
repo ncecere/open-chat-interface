@@ -25,8 +25,8 @@ import {
 import { recordAudit } from '../services/audit.js';
 import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
 import { userConnectors } from '../services/connectors/people.js';
-import { mfaSummaryFor } from '../services/mfa/state.js';
 import { countManagedGroups } from '../services/groups/membership.js';
+import { mfaSummaryFor } from '../services/mfa/state.js';
 import { listAvailableModels } from '../services/models.js';
 import {
   acceptPolicy,

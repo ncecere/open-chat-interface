@@ -16,8 +16,8 @@ import {
 } from '../constants.js';
 import { languageSettingsSchema, localeSchema } from '../locales.js';
 import { DEFAULT_MAX_TOOL_STEPS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from '../tools.js';
-import { MFA_DEFAULT_GRACE_DAYS, mfaRequirementInputSchema, mfaRequirementSchema } from './mfa.js';
 import { groupRefSchema } from './groups.js';
+import { MFA_DEFAULT_GRACE_DAYS, mfaRequirementInputSchema, mfaRequirementSchema } from './mfa.js';
 import { patchSchema } from './patch.js';
 
 export const adminUserSchema = z.object({
