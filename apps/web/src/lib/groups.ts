@@ -6,6 +6,7 @@ import {
   MICROS_PER_DOLLAR,
 } from '@oci/shared';
 import { ApiError, apiErrorMessage } from '~/lib/api-client';
+import { formatNumber } from '~/lib/i18n/format';
 import { plural } from '~/lib/utils';
 
 /** Every administrator query about groups; invalidating it refreshes the list, a page and its members. */
@@ -82,7 +83,7 @@ export function describeAddResult(result: AddGroupMembersResult): AddOutcome {
   const summary =
     added === 0
       ? 'Nobody was added.'
-      : `Added ${added === 1 ? '1 person' : `${added.toLocaleString('en-US')} people`}. The group now has ${plural(result.memberCount, 'member')}.`;
+      : `Added ${added === 1 ? '1 person' : `${formatNumber(added)} people`}. The group now has ${plural(result.memberCount, 'member')}.`;
   const problems = [
     { label: 'Already in the group', emails: result.alreadyMembers },
     { label: 'No account with this address', emails: result.unknown },

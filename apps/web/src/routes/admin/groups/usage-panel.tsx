@@ -6,10 +6,11 @@ import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
 import { ADMIN_GROUPS_KEY, formatCost } from '~/lib/groups';
+import { formatNumber } from '~/lib/i18n/format';
 import { cn, formatDate } from '~/lib/utils';
 
 const RANGES = [7, 30, 90] as const;
-const number = (value: number) => value.toLocaleString('en-US');
+const number = (value: number) => formatNumber(value);
 
 function Figure({ label, value }: { label: string; value: string }) {
   return (

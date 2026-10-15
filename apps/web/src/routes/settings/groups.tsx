@@ -12,11 +12,12 @@ import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { describeManagerError, MANAGED_GROUPS_KEY } from '~/lib/groups';
+import { formatNumber } from '~/lib/i18n/format';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { formatDate, plural } from '~/lib/utils';
 
 const memberCountText = (group: ManagedGroup) =>
-  `${group.memberCount.toLocaleString('en-US')} of ${group.memberLimit.toLocaleString('en-US')} members`;
+  `${formatNumber(group.memberCount)} of ${formatNumber(group.memberLimit)} members`;
 
 function Members({ group }: { group: ManagedGroup }) {
   const queryClient = useQueryClient();

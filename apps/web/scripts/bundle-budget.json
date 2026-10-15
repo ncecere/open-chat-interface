@@ -1,6 +1,6 @@
 {
-  "description": "Size budget for the initial JavaScript, checked by check-route-chunks.mjs after every web build. Measured as gzip bytes of the files the entry loads before any route (what that script prints). The translation framework (#397) may add 8 kB gzip to v0.13.1; English strings added later count too, so lazy-load or split before raising it.",
+  "description": "Size budget for the initial JavaScript, checked by check-route-chunks.mjs after every web build. Measured as gzip bytes of the files the entry loads before any route (what that script prints). v0.14 raised the allowance from 8 kB (the translation framework, #397) to 24 kB: the framework itself is about 4 kB, the rest is code every page needs for three features that touch the shell, the composer and sign-in (the second sign-in step's client and WebAuthn code, the classification checks in the model picker and composer, project sharing in the sidebar) and the schemas they share. The QR code, the MFA settings and the enrolment pages were moved out into lazy chunks to stay under it (measured: 371 kB before, 357 kB after). English strings added by the translation work count too: split the catalogs by route or area, do not raise this again for them.",
   "baseline": "v0.13.1",
   "baselineGzipBytes": 336808,
-  "allowedGrowthGzipBytes": 8192
+  "allowedGrowthGzipBytes": 24576
 }

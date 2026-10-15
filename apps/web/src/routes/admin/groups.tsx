@@ -12,6 +12,7 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
 import { ADMIN_GROUPS_KEY } from '~/lib/groups';
+import { formatNumber } from '~/lib/i18n/format';
 import { plural } from '~/lib/utils';
 import { CreateGroupDialog } from './groups/create-group-dialog';
 
@@ -111,7 +112,7 @@ export function AdminGroupsPage() {
           {data &&
             (searching
               ? `${plural(total, 'group')} match`
-              : `${total.toLocaleString('en-US')} of ${data.limit.toLocaleString('en-US')} groups`)}
+              : `${formatNumber(total)} of ${formatNumber(data.limit)} groups`)}
         </p>
       </div>
 

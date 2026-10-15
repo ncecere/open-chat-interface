@@ -16,6 +16,7 @@ import { Field, invalidFieldProps } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api, apiErrorMessage } from '~/lib/api-client';
+import { formatNumber } from '~/lib/i18n/format';
 import { mfaDeadlineText } from '~/lib/mfa';
 
 export const MFA_IMPACT_KEY = ['admin', 'settings', 'mfa-impact'] as const;
@@ -30,7 +31,7 @@ export function graceDays(text: string): number | null {
 }
 
 const plural = (n: number, one: string, many: string) =>
-  `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
+  `${formatNumber(n)} ${n === 1 ? one : many}`;
 
 /**
  * The server's reasons for refusing to save a requirement (409

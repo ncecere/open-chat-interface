@@ -36,10 +36,8 @@ import { redirectRemovedConversation } from '~/lib/unused-conversation-route';
 import { failedVerificationCode, VERIFY_EMAIL_PAGE } from '~/lib/verify-email-link';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
-import { MfaSetupPage } from '~/routes/auth/mfa-setup';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
 import { SignupPage } from '~/routes/auth/signup';
-import { TwoFactorPage } from '~/routes/auth/two-factor';
 import { VerifyEmailPage } from '~/routes/auth/verify-email';
 import { ChatHomePage } from '~/routes/chat/home';
 import { ChatThreadPage } from '~/routes/chat/thread';
@@ -144,6 +142,11 @@ const loginRoute = createRoute({
     if (session) throw redirect({ href: returnPathFromSearch(location.searchStr) ?? '/' });
   },
 });
+
+// Loaded when needed: the second step and enrolment pages carry the QR code and WebAuthn
+// code, which no other page needs (the initial JavaScript has a budget, check-route-chunks).
+const TwoFactorPage = lazyRouteComponent(() => import('~/routes/auth/two-factor'), 'TwoFactorPage');
+const MfaSetupPage = lazyRouteComponent(() => import('~/routes/auth/mfa-setup'), 'MfaSetupPage');
 
 // The second step of a password sign-in (#399). Public: the person has no
 // session until the code is accepted, and is sent on when they have one.

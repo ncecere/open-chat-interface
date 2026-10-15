@@ -16,6 +16,7 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { authClient } from '~/lib/auth-client';
 import { answered } from '~/lib/auth-unavailable';
+import { formatDate } from '~/lib/i18n/format';
 import {
   MFA_STATUS_KEY,
   type PasskeyProblem,
@@ -31,8 +32,7 @@ type Dialogs =
   | { kind: 'remove'; passkey: PasskeySummary }
   | null;
 
-const addedOn = (iso: string | null) =>
-  iso ? `Added ${new Date(iso).toLocaleDateString('en-US', { dateStyle: 'long' })}` : null;
+const addedOn = (iso: string | null) => (iso ? `Added ${formatDate(iso, 'long')}` : null);
 
 const kindOf = (passkey: PasskeySummary) =>
   passkey.deviceType === 'multiDevice' || passkey.backedUp

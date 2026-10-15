@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { FieldProblem } from '~/hooks/use-clear-on-edit';
 import { ApiError, api, apiErrorProblems } from '~/lib/api-client';
 import { SIGN_IN_UNAVAILABLE } from '~/lib/auth-unavailable';
+import { formatDate } from '~/lib/i18n/format';
 
 /** What Settings → Account and the setup page read: `GET /api/me/mfa`. */
 export const MFA_STATUS_KEY = ['me', 'mfa'] as const;
@@ -52,7 +53,7 @@ export function retryText(seconds: number): string {
 
 /** A deadline as a date in words, in the person's own time zone. */
 export function mfaDeadlineText(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { dateStyle: 'long' });
+  return formatDate(iso, 'long');
 }
 
 /** Better Auth's client error, with the `Retry-After` the wrapper read from the response. */
