@@ -25,6 +25,9 @@ the database, the API, and a worked example that adds a feature end to end.
 - [Operations](OPERATIONS.md) — deploying, backing up, upgrading, rolling back,
   and getting back in when sign-on fails.
 - [Releasing](RELEASING.md) — how a version is prepared, tagged, and published.
+- [Accessibility conformance report](accessibility/acr.md) — a VPAT 2.5 report for WCAG 2.2
+  A and AA, a self-assessment that says how it was made and what was not done; the
+  [method and how to rerun it](dev/accessibility-audit.md).
 
 ## Conventions in these documents
 
