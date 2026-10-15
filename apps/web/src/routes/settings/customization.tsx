@@ -39,9 +39,9 @@ function CountedInput({
   // The limit is heard with the field, not only seen beside it (#310).
   const countId = `${id}-count`;
   const shared = cn(
-    'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/60 px-3 text-sm',
+    'w-full rounded-lg border border-[var(--border-control)] bg-[var(--bg-control)]/60 px-3 text-sm',
     'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
-    'transition-colors focus:border-[var(--border-strong)]',
+    'transition-colors focus:border-[var(--text-muted)]',
   );
 
   return (

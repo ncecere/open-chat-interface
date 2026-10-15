@@ -108,7 +108,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
         </Button>
       </div>
 
-      <div className="relative px-3">
+      <div className="relative px-3 py-1">
         <Search className="pointer-events-none absolute start-6 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
         <input
           value={search}
@@ -123,7 +123,8 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           aria-label={t('shell.sidebar.searchLabel')}
           dir="auto"
           aria-describedby="thread-search-hint"
-          className="h-11 w-full bg-transparent ps-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+          // A field with an edge, like the others (1.4.11): it was a bare row above a rule.
+          className="h-10 w-full rounded-lg border border-[var(--border-control)] bg-[var(--bg-control)] pe-3 ps-9 text-sm text-[var(--text-primary)] transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--text-muted)]"
         />
       </div>
 

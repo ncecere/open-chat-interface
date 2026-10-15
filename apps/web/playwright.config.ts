@@ -15,6 +15,9 @@ const CLASSIFICATION_SPEC = '**/classification.spec.ts';
 // viewports (320, 768, 1280 px): a second project would only repeat them, or fight
 // over the setting.
 const LANGUAGE_SPECS = ['**/language.spec.ts', '**/rtl.spec.ts'];
+// a11y-fixes-*.spec.ts set its own 1280 and 320 px viewports for the audit's measurements, as the
+// language specs do; a phone project would only repeat them.
+const VIEWPORT_SPECS = ['**/a11y-fixes-*.spec.ts'];
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -41,6 +44,7 @@ export default defineConfig({
         MFA_REQUIREMENT_SPEC,
         CLASSIFICATION_SPEC,
         ...LANGUAGE_SPECS,
+        ...VIEWPORT_SPECS,
       ],
       use: { ...devices['Pixel 7'] },
     },
