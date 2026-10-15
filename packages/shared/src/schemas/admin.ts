@@ -15,6 +15,7 @@ import {
   USER_ROLES,
 } from '../constants.js';
 import { DEFAULT_MAX_TOOL_STEPS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from '../tools.js';
+import { MFA_DEFAULT_GRACE_DAYS, mfaRequirementInputSchema, mfaRequirementSchema } from './mfa.js';
 import { patchSchema } from './patch.js';
 
 export const adminUserSchema = z.object({
@@ -124,6 +125,15 @@ export const instanceSettingsSchema = z.object({
   /** Days a session stays valid, and how often activity extends it. */
   sessionLifetimeDays: z.number().int().min(1).max(365).default(30),
   sessionRefreshDays: z.number().int().min(1).max(365).default(1),
+  /**
+   * Two-step verification required per role (v0.14, #399). Absent from an
+   * older API's response and from settings saved before v0.14: nobody.
+   */
+  mfaRequirement: mfaRequirementSchema.default({
+    roles: [],
+    graceDays: MFA_DEFAULT_GRACE_DAYS,
+    since: {},
+  }),
   defaultSystemPrompt: z.string().nullable(),
   /**
    * Reasoning level a new conversation starts at. Clients lower it to what the
@@ -235,6 +245,8 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
     features: instanceSettingsSchema.shape.features
       .extend({ memory: z.boolean().optional() })
       .optional(),
+    // The roles and the grace only: the server stamps `since` itself.
+    mfaRequirement: mfaRequirementInputSchema.optional(),
     storage: instanceSettingsSchema.shape.storage
       // localPath is reported for reference only; it is fixed by the
       // deployment and must not be writable through the admin API.

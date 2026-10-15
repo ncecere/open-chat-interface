@@ -29,7 +29,12 @@ import {
   storedFallbackSearchKey,
   storedSearchKey,
 } from '../../services/search/index.js';
-import { getSetting, type SearchSettings, updateSetting } from '../../services/settings.js';
+import {
+  getSetting,
+  normalizeMfaRequirement,
+  type SearchSettings,
+  updateSetting,
+} from '../../services/settings.js';
 import { diffSettings, redactSecrets } from '../../services/settings-diff.js';
 import {
   applyS3SettingsPatch,
@@ -114,6 +119,7 @@ settingsRoutes.get('/', async (c) => {
     localAuthEnabled: authSettings.localAuthEnabled,
     sessionLifetimeDays: authSettings.sessionLifetimeDays,
     sessionRefreshDays: authSettings.sessionRefreshDays,
+    mfaRequirement: normalizeMfaRequirement(authSettings.mfaRequirement),
     defaultSystemPrompt: chat.defaultSystemPrompt,
     defaultEffort: chat.defaultEffort ?? 'instant',
     maxToolSteps: chat.maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS,

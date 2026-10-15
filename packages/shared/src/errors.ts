@@ -17,6 +17,20 @@ export const ERROR_CODES = {
    */
   POLICY_ACCEPTANCE_REQUIRED: 'POLICY_ACCEPTANCE_REQUIRED',
   /**
+   * This role must use two-step verification and this session has not passed
+   * one (v0.14, #399): every request outside a short allowlist (sign-out, the
+   * second step, GET /api/me, /api/me/mfa/*) is refused with 403 until the
+   * person sets one up or signs in with it. `details.reason` is `enrol` or
+   * `second_step`, `details.deadline` the ISO time the grace ended.
+   */
+  MFA_ENROLMENT_REQUIRED: 'MFA_ENROLMENT_REQUIRED',
+  /**
+   * Saving a requirement the acting administrator could not satisfy, or one
+   * naming `admin` with no enrolled local administrator (409): nobody may
+   * turn on what they cannot complete.
+   */
+  MFA_REQUIRED_FOR_ACTOR: 'MFA_REQUIRED_FOR_ACTOR',
+  /**
    * A replica shutting down (v0.11.1): a new chat turn refused with 503 and
    * Retry-After before anything is stored; send it again. Not a fault.
    */
