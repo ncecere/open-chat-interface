@@ -23,6 +23,28 @@ export function startingModel(
   return models.find((model) => model.isDefault) ?? models[0] ?? null;
 }
 
+/**
+ * `startingModel` for a conversation or project that carries data classes
+ * (v0.14, #395): a default (the person's own, the instance's, or the first
+ * listed) is never one the classes forbid, which in `block` could only be
+ * refused. `chosen` is an explicit choice already made in this conversation
+ * (picked, handed over, or the model it last used) and is kept even when it is
+ * forbidden: the picker and the composer say so, and the person decides. When
+ * no model is approved at all nothing can be sent anyway, so the ordinary
+ * default stands and the composer says why.
+ */
+export function startingModelAmong(
+  models: readonly CatalogModel[],
+  unapproved: ReadonlySet<string>,
+  chosen: string | null | undefined,
+  ...defaults: Array<string | null | undefined>
+): CatalogModel | null {
+  const explicit = chosen ? models.find((model) => model.slug === chosen) : undefined;
+  if (explicit) return explicit;
+  const approved = models.filter((model) => !unapproved.has(model.slug));
+  return startingModel(approved.length > 0 ? approved : models, ...defaults);
+}
+
 /** The pre-v0.10 per-browser model; read by nothing now. */
 const LEGACY_MODEL_STORAGE_KEY = 'oci.model';
 

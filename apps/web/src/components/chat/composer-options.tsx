@@ -1,4 +1,9 @@
-import { type CatalogModel, effectiveSupportedEfforts, type ReasoningEffort } from '@oci/shared';
+import {
+  type CatalogModel,
+  type ClassificationResponse,
+  effectiveSupportedEfforts,
+  type ReasoningEffort,
+} from '@oci/shared';
 import { Brain, Check, ChevronRight, Globe, Paperclip, Plus, Zap } from 'lucide-react';
 import { type ChangeEvent, type ComponentPropsWithoutRef, forwardRef, useRef } from 'react';
 import { ModelPicker } from '~/components/chat/model-picker';
@@ -33,6 +38,8 @@ export interface ComposerOptionsProps {
    * hiding Attach until they arrive (#156).
    */
   loading?: boolean;
+  /** What the conversation's data classes allow each model (v0.14, #395). */
+  classification?: ClassificationResponse | null | undefined;
 }
 
 /**
@@ -87,6 +94,7 @@ export function ComposerOptions({
   attachmentsPausedReason,
   onAttachFiles,
   loading = false,
+  classification,
 }: ComposerOptionsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const availableEfforts = selectedModel ? effectiveSupportedEfforts(selectedModel) : [];
@@ -170,6 +178,7 @@ export function ComposerOptions({
         selected={selectedModel}
         onSelect={onSelectModel}
         loading={loading}
+        classification={classification}
       />
 
       {supportsEffort && (

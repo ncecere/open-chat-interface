@@ -12,6 +12,7 @@ import {
 } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useRef, useState } from 'react';
+import { DataClassSelect, useAdminDataClasses } from '~/components/admin/data-class-select';
 import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { CAPABILITY_LABELS } from '~/components/chat/model-picker-data';
 import { LabLogo } from '~/components/model/lab-logo';
@@ -35,7 +36,7 @@ import {
   useFieldProblems,
 } from '~/hooks/use-clear-on-edit';
 import { SETUP_STATUS_QUERY_KEY } from '~/hooks/use-setup-status';
-import { api, apiErrorProblems } from '~/lib/api-client';
+import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 import {
   draftField,
@@ -104,6 +105,13 @@ const FIELDS_SHOWN = [
   'outputPrice',
 ];
 
+/** The model saved but its approvals did not; the message says so. */
+class ApprovalsNotSaved extends Error {
+  constructor(reason: string) {
+    super(`The model was saved, but the classes it is approved for were not. ${reason}`);
+  }
+}
+
 export function ModelFormDialog({
   model,
   providers,
@@ -116,11 +124,16 @@ export function ModelFormDialog({
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(() => initialDraft(model, providers));
   const [slugTouched, setSlugTouched] = useState(Boolean(model));
+  // The data classes the model is approved for (v0.14, #395); saved with its own
+  // request after the model, empty meaning none.
+  const [approved, setApproved] = useState<string[]>(model?.dataClassIds ?? []);
+  const dataClasses = useAdminDataClasses();
+  const formValues = { ...draft, approvedFor: approved };
   // The listed problems were about the form as it was submitted; each goes
   // once its own field changes (#178), and the rest stay until fixed (#257).
   const form = useRef<HTMLFormElement>(null);
-  const [problems, setProblems] = useFieldProblems(draft, form);
-  const edited = useEditedSince(draft); // Escape asks before discarding (#300).
+  const [problems, setProblems] = useFieldProblems(formValues, form);
+  const edited = useEditedSince(formValues); // Escape asks before discarding (#300).
   // Each problem under its field, marked invalid and described by it (#302).
   const at = (field: string) => problemsAt(problems, field);
   const error = problemsElsewhere(problems, FIELDS_SHOWN);
@@ -129,24 +142,44 @@ export function ModelFormDialog({
   // the guidance follows whichever provider is selected.
   const selectedProviderKind = providers.find((provider) => provider.id === draft.providerId)?.kind;
 
+  const approvalsChanged =
+    [...approved].sort().join() !== [...(model?.dataClassIds ?? [])].sort().join();
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
+      queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
+      queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'data-classes'] }),
+    ]);
   const save = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      model ? api.patch(`/admin/models/${model.id}`, body) : api.post('/admin/models', body),
+    mutationFn: async (body: Record<string, unknown>) => {
+      const saved = model
+        ? await api.patch<{ id?: string }>(`/admin/models/${model.id}`, body)
+        : await api.post<{ id?: string }>('/admin/models', body);
+      const id = model?.id ?? saved?.id;
+      if (id && approvalsChanged) {
+        try {
+          await api.put(`/admin/models/${id}/data-classes`, { classIds: approved });
+        } catch (cause) {
+          // The model itself is saved: say so, rather than that it failed.
+          await refresh();
+          throw new ApprovalsNotSaved(apiErrorMessage(cause, 'Try again.'));
+        }
+      }
+    },
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'models'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'providers'] }),
-        queryClient.invalidateQueries({ queryKey: ['models', 'catalog'] }),
-        queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY }),
-      ]);
+      await refresh();
       onClose();
     },
     onError: (cause) =>
       setProblems(
-        apiErrorProblems(cause, 'The model could not be saved.').map((problem) => ({
-          ...problem,
-          fields: problem.fields.map(draftField),
-        })),
+        cause instanceof ApprovalsNotSaved
+          ? [{ fields: [], text: cause.message }]
+          : apiErrorProblems(cause, 'The model could not be saved.').map((problem) => ({
+              ...problem,
+              fields: problem.fields.map(draftField),
+            })),
       ),
   });
 
@@ -445,6 +478,15 @@ export function ModelFormDialog({
             onChange={(visibleToRoles) => setDraft((current) => ({ ...current, visibleToRoles }))}
           />
         </Field>
+        {/* Deny by default: a model approved for no class cannot receive
+            content that carries one (v0.14, #395). */}
+        <DataClassSelect
+          legend="Approved for"
+          classes={dataClasses.data}
+          value={approved}
+          onChange={setApproved}
+          emptyText="No class: this model cannot receive labelled content."
+        />
 
         {/* Full width, so the switch sits at the right as in every other dialog (#228). */}
         <div className="rounded-xl border border-[var(--border-subtle)] p-4">

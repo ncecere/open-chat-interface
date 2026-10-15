@@ -47,6 +47,13 @@ small input limit only your most recent notes are included.
 **Temporary chats never use memory.** They neither read your notes nor save
 new ones, whatever your setting.
 
+**A conversation that carries a [data class](conversations.md#data-classes)
+never saves notes.** A note is read into every future conversation, so one
+written from labelled content could carry it to a model that is not approved
+for it. The model is not offered the ability to remember there, in Warn mode as
+well as Block. Your own notes are used in such a conversation as usual, and you
+can still write, edit and delete notes by hand.
+
 ## Managing your notes
 
 **Settings → Memory** lists every note, newest first, with where it came from

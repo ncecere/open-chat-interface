@@ -1,6 +1,6 @@
 # Data classification
 
-**Governance → Data classes** (`/admin/data-classes`). Say which models and
+**Administration → Models → Data classes** (`/admin/data-classes`). Say which models and
 connectors may handle which kinds of data, and have OCI refuse (or warn) when
 labelled content would reach one that is not approved. Added in v0.14.
 
@@ -36,12 +36,20 @@ model picker only shows the result.
 
 | Mode | What happens |
 |---|---|
-| **Off** (default) | Nothing is checked, and nothing about v0.13 behaviour changes. Connector use is still recorded, so that labelling a connector later reaches conversations that used it earlier. |
-| **Warn** | Nothing is refused. A send, tool call, search or share that Block would have refused goes ahead; the person sees a notice and an audit entry (`classification.warn`) records it. A dry run of Block. |
-| **Block** | Anything that would carry a class to something not approved is refused. If OCI cannot read the classes (the database is unavailable), it refuses rather than guess. |
+| **Off** (default) | "Nothing is checked and nothing changes for anyone." Connector use is still recorded, so that labelling a connector later reaches conversations that used it earlier. |
+| **Warn** | "Nothing is refused: what Block would have refused goes ahead, with a notice, and is recorded in the audit log." A send, tool call, search or share that Block would have refused goes ahead, and an audit entry (`classification.warn`) records it. A dry run of Block. See [Known limitations in Warn](#known-limitations-in-warn). |
+| **Block** | "Anything that would carry a class to a model or service that is not approved for it is refused." If OCI cannot read the classes (the database is unavailable), it refuses rather than guess. |
 
 You cannot turn on Warn or Block until the upgrade to 0.14 has finished on every
-server (see [Upgrading](#upgrading-and-the-mixed-version-window)).
+server (see [Upgrading](#upgrading-and-the-mixed-version-window)). Until then
+the page shows **The upgrade to 0.14 is not finished**, and saving Warn or Block
+answers "The mode was not changed. The upgrade to 0.14 has not finished on every
+server, so Warn and Block cannot be turned on yet. Run “migrate --post” …".
+While the background migration is still running the page says **Finding which
+conversations used connectors before 0.14**; the mode can be turned on then,
+because OCI reads each conversation's own messages in the meantime. In Warn or
+Block, **Some connectors are not reviewed** counts the connectors nobody has
+labelled.
 
 ## Setting it up
 
@@ -54,26 +62,37 @@ Do it in this order, so that nobody is surprised:
    be **deleted** only when nothing refers to it (the page shows how many
    connectors, projects and conversations still do); there is deliberately no
    force, because it would unlabel content silently.
-2. **Approve models.** On **Models**, open a model and choose **Approved for**.
-   Empty means "No class: this model cannot receive labelled content".
+2. **Approve models.** Under **Providers & Models**, edit a model and choose
+   **Approved for**. Empty reads "No class: this model cannot receive labelled
+   content". It is saved with the model; if only the approvals fail to save, the
+   form says the model was saved but the classes were not.
 3. **Label connectors.** On **Connectors**, choose what each **Carries**, or
    "Carries no classified data" when it carries none. A connector nobody has
    looked at shows **Not reviewed**. With classification on, a new connector
    cannot be saved without one of the two, so that forgetting to label it is
    visible. An unlabelled connector is unaffected by every decision.
-4. **Approve outside services** under **Other services**: web search,
-   meaning-based project search (embeddings) and reranking each have a list of
-   classes they may receive. The default is none, so a conversation that carries
-   any class does not use them.
+4. **Approve outside services** under **Other services**: **Web search may
+   receive**, **Meaning-based project search may receive** (embeddings) and
+   **Reranking may receive** each have a list of classes. The default is none, so
+   a conversation that carries any class does not use them.
 5. **Turn on Warn.** Let people work normally for a while and read the audit log
    (below) for `classification.warn` entries: they are what Block would have
    refused.
 6. **Turn on Block** when the warnings show nothing unexpected.
 
-Project labels are set by the project's owner in the project's settings. You can
-also label a person's project yourself from **People → (person) → Projects**;
-a label you set is **locked**: only an administrator removes it, and the owner
-sees it with a note. (Project names are shown to administrators only there.)
+Project labels are set by the project's owner in the project's **Settings** tab,
+under **Data classes**. You can also label a person's project yourself: open the
+person under **Users** and use **Project data classes**. A label you save there
+is **locked**: only an administrator removes it, and the owner sees it as "set by
+an administrator". (Project names are shown to administrators only there.)
+
+The classes list shows, for each class, the number of models approved, connectors
+carrying it, projects and conversations labelled with it. **Rename** keeps the
+class's id, so labels and approvals follow. **Retire** hides it from the label
+lists and stops new labels (what it already labels and approves still counts).
+**Delete** is offered only when no connector, project or conversation refers to
+it, and the dialog says how many do; there is no force. Auditors can read the
+whole page and change nothing.
 
 ## What is checked
 
@@ -104,12 +123,47 @@ may go through once.
 
 ## What people see
 
-- Chips under a conversation's title show each class and why ("Student records:
-  project", "from the SIS connector", "added by you"). People remove the labels
-  they added; the others explain why they cannot be removed.
-- The model picker keeps unapproved models in the list, disabled, with "Not
-  approved for Student records" (in Warn they stay selectable with a note).
-- A refused send shows what is missing and the approved models as buttons.
+- Chips at the top of a conversation show each class and why ("from the
+  project", "from the SIS connector", "added by you", "kept from its earlier
+  project"). **Add label** lists the classes that are not retired. People remove
+  the labels they added (an **×**); the others are explained in a sentence.
+- The model picker keeps unapproved models in the list, with "Not approved for
+  Student records" as text, `aria-disabled` and reachable with the arrow keys
+  (in Warn they stay selectable, with an amber note). A default is never an
+  unapproved model: a new chat in a labelled project starts on an approved one.
+  A note above the message box says when the chosen model is not approved.
+- A refused send (403 `DATA_CLASS_BLOCKED`) keeps the text in the message box,
+  shows the server's sentence and lists the approved models as **Use *model***
+  buttons.
+- A reply sent in Warn carries a note ("It was sent anyway because data
+  classification is set to warn"); a reply whose project search left out
+  meaning-based search or reranking says so.
+- A share link of a labelled conversation shows as **paused**; in Warn, creating
+  one shows a notice.
+
+## Known limitations in Warn
+
+In Warn, only a **send** adds a note to the reply (the `data-classification`
+part, written once per reply, and only when the chosen model is not approved for
+what the conversation carries at that moment). What Warn lets through at the
+other places is **recorded (`classification.warn`, and the counter) but not shown
+to the person**:
+
+- a **connector tool** that runs (OCI cannot tell the person at that moment that
+  the connector's classes are not approved for the model; once it has run, the
+  conversation carries them, the chips update when the reply finishes, and the
+  next send gets the note above);
+- the **web search**, in the tool and before a reply;
+- **meaning-based project search and reranking** (`withheld` is only set in
+  Block, where they are actually left out);
+- **summarising earlier messages**.
+
+`remember` is withheld in Warn as in Block, quietly. If you need to see these,
+read the audit log: `classification.warn` entries name the `point` (`tool`,
+`web_search`, `embedding`, `rerank`, `compaction`), the tool id and the missing
+classes. Block does not have the gap for tools and searches that are withheld:
+the model is told the tool is unavailable and the reply says a search was not
+made.
 
 ## The audit log and metrics
 

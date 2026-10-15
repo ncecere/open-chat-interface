@@ -17,7 +17,8 @@ export function projectSearchOf(message: UIMessage): ProjectSearchData | null {
     | undefined;
   if (!part) return null;
   const parsed = projectSearchDataSchema.safeParse(part.data);
-  return parsed.success && (parsed.data.files.length > 0 || parsed.data.excluded?.length)
+  return parsed.success &&
+    (parsed.data.files.length > 0 || parsed.data.excluded?.length || parsed.data.withheld?.length)
     ? parsed.data
     : null;
 }
@@ -28,6 +29,27 @@ function describeFiles(files: ProjectSearchData['files']): string {
       (file) => `${file.name} (${file.passages} ${file.passages === 1 ? 'passage' : 'passages'})`,
     )
     .join(', ');
+}
+
+/**
+ * Which outside services data classification kept out of this reply (v0.14,
+ * #395): meaning-based search sends the message to an embeddings provider, and
+ * reranking sends it with the passages to a reranker.
+ */
+function withheldText(withheld: ProjectSearchData['withheld']): string | null {
+  if (!withheld?.length) return null;
+  const meaning = withheld.includes('embeddings');
+  const reranking = withheld.includes('reranking');
+  const what =
+    meaning && reranking
+      ? 'Meaning-based search and reranking are'
+      : meaning
+        ? 'Meaning-based search is'
+        : 'Reranking is';
+  const result = meaning
+    ? 'project files were searched by keywords only'
+    : 'the passages kept their combined order';
+  return `${what} not approved for a data class this conversation carries, so ${result}.`;
 }
 
 function passageLabel(excerpt: { first: number; last: number }): string {
@@ -89,6 +111,7 @@ export function ProjectSearchNote({ message }: { message: UIMessage }) {
   const search = projectSearchOf(message);
   if (!search) return null;
   const lead = leadOf(search);
+  const withheld = withheldText(search.withheld);
   const excluded = search.excluded ?? [];
   const leftOut =
     excluded.length > 0
@@ -104,9 +127,12 @@ export function ProjectSearchNote({ message }: { message: UIMessage }) {
         data-project-search={search.mode}
         data-project-ranking={search.ranking ?? 'keyword'}
         data-project-reranked={search.reranked === undefined ? undefined : String(search.reranked)}
+        data-project-withheld={search.withheld?.join(' ')}
       >
         <FileSearch className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 break-words">{[lead, leftOut].filter(Boolean).join(' ')}</span>
+        <span className="min-w-0 break-words">
+          {[lead, withheld, leftOut].filter(Boolean).join(' ')}
+        </span>
       </p>
       {listed && (
         <>

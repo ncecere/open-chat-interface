@@ -19,6 +19,7 @@ import {
 } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { AUTH_MODE_LABELS, ConnectorFormDialog } from '~/components/admin/connector-form-dialog';
+import { useAdminDataClasses } from '~/components/admin/data-class-select';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -32,6 +33,7 @@ import {
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
+import { useAdminClassification } from '~/hooks/use-admin-classification';
 import { api } from '~/lib/api-client';
 import { CONNECT_OUTCOMES, startConnecting } from '~/lib/connectors';
 import { formatDateTime } from '~/lib/utils';
@@ -160,10 +162,13 @@ function ConnectorCard({
   connector,
   onEdit,
   onDelete,
+  classNames,
 }: {
   connector: AdminConnector;
   onEdit: () => void;
   onDelete: () => void;
+  /** Names of the data classes while classification is on (v0.14, #395); undefined while it is off. */
+  classNames: ReadonlyMap<string, string> | undefined;
 }) {
   const queryClient = useQueryClient();
   const test = useMutation({
@@ -198,6 +203,9 @@ function ConnectorCard({
             {connector.allowPrivateNetwork && (
               <Badge variant="outline">private network allowed</Badge>
             )}
+            {/* An unlabelled connector is unaffected by every decision, so with
+                classification on, forgetting it must be visible (#395). */}
+            {classNames && !connector.reviewed && <Badge variant="warning">Not reviewed</Badge>}
           </div>
           <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
             {connector.url}
@@ -212,6 +220,13 @@ function ConnectorCard({
                   : 'not registered yet'
               }`}
           </p>
+          {classNames && connector.reviewed && (
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]" data-connector-carries>
+              {connector.dataClassIds.length === 0
+                ? 'Carries no classified data'
+                : `Carries ${connector.dataClassIds.map((id) => classNames.get(id) ?? 'a removed class').join(', ')}`}
+            </p>
+          )}
           <p className="mt-0.5 text-xs text-[var(--text-muted)]">
             {/* "Last contact" is the last exchange that worked. A failed one
                 may well have reached the server, so after a failure this does
@@ -332,6 +347,13 @@ export function AdminConnectorsPage() {
     queryKey: CONNECTORS_QUERY_KEY,
     queryFn: () => api.get<{ connectors: AdminConnector[] }>('/admin/connectors'),
   });
+  // Only while classification is on do connectors show what they carry (v0.14, #395).
+  const classification = useAdminClassification();
+  const dataClasses = useAdminDataClasses();
+  const classNames =
+    classification.data && classification.data.mode !== 'off'
+      ? new Map((dataClasses.data ?? []).map((entry) => [entry.id, entry.name]))
+      : undefined;
 
   async function remove(connector: AdminConnector) {
     await api.delete(`/admin/connectors/${connector.id}`);
@@ -387,6 +409,7 @@ export function AdminConnectorsPage() {
                 connector={connector}
                 onEdit={() => setFormFor({ connector })}
                 onDelete={() => setDeleteFor(connector)}
+                classNames={classNames}
               />
             ))}
             <p className="text-sm text-[var(--text-muted)]">

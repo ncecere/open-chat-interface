@@ -1,4 +1,4 @@
-import type { CatalogModel } from '@oci/shared';
+import type { CatalogModel, ClassificationResponse } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -6,16 +6,18 @@ import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
 import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
 import { useAttachments } from '~/hooks/use-attachments';
+import { useClassification } from '~/hooks/use-classification';
 import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels, useModelsHiddenFromRole } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
+import { blockedSlugs } from '~/lib/classification';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
 import { greetingName } from '~/lib/greeting-name';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
-import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
+import { forgetBrowserModel, startingModelAmong } from '~/lib/starting-model';
 import { clearRestoredDraft, peekRestoredDraft } from '~/lib/unused-conversation';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
@@ -41,6 +43,22 @@ const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
  * created inside that project. A project chat is never temporary.
  */
 export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
+  // Only a chat in a project can carry data classes before its first message (v0.14, #395).
+  return projectId ? <ProjectChatHome projectId={projectId} /> : <ChatHome />;
+}
+
+function ProjectChatHome({ projectId }: { projectId: string }) {
+  const { data } = useClassification({ projectId });
+  return <ChatHome projectId={projectId} classification={data} />;
+}
+
+function ChatHome({
+  projectId,
+  classification,
+}: {
+  projectId?: string;
+  classification?: ClassificationResponse | undefined;
+}) {
   const { data } = useCurrentUser();
   const modelsQuery = useModels();
   const hiddenFromRole = useModelsHiddenFromRole();
@@ -95,7 +113,13 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   // the person arrived (#251). Not on a touch-only device (see touchOnly).
   useEffect(() => focusComposerOnArrival(), []);
 
-  const selectedModel = startingModel(models, modelSlug, data?.chat?.defaultModelSlug);
+  // A new chat in a labelled project starts on a model approved for its labels (v0.14, #395).
+  const selectedModel = startingModelAmong(
+    models,
+    blockedSlugs(classification),
+    modelSlug,
+    data?.chat?.defaultModelSlug,
+  );
   // The person's default level, else the administrator's, clamped to what this
   // model and role allow.
   const [effort, setEffort] = useComposerEffort(selectedModel);
@@ -302,6 +326,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
         // Shown (waiting) until known, so it does not appear later and move the row.
         attachmentsAvailable={data ? data.features.attachments : true}
         loading={loading}
+        classification={classification}
         attachments={attachmentItems}
         onAttachFiles={upload}
         onRemoveAttachment={remove}

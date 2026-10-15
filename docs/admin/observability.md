@@ -48,6 +48,7 @@ scrape_configs:
 | `oci_chat_reply_duration_seconds` | histogram | `status` |
 | `oci_tool_calls_total` | counter | `tool` (the tool id, such as `web_search` or `mcp__docs__search`), `outcome`: `ok`, `error`, `denied`, `refused` |
 | `oci_tool_call_duration_seconds` | histogram | `tool` |
+| `oci_classification_decisions_total` | counter | `point`: `send`, `approval`, `tool`, `compaction`, `web_search`, `embedding`, `rerank`, `share`; `outcome`: `allowed`, `warned`, `blocked`. Counted only for a conversation that carries at least one [data class](data-classification.md); no class label, because names may be sensitive and the number of classes is not bounded for a series |
 | `oci_job_runs_total` | counter | `job`, `outcome`: `success`, `error` |
 | `oci_job_duration_seconds` | histogram | `job` |
 | `oci_job_last_success_timestamp_seconds` | gauge | `job`: when it last succeeded on this process |

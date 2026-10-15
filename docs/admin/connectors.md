@@ -31,6 +31,16 @@ Choose **Add connector** and enter:
   Chosen from the name when left empty, and fixed once saved, because role
   allows and the audit log refer to tool ids.
 - **Authentication** — see below.
+- **Carries** (v0.14) — the [data classes](data-classification.md) the
+  connector's results contain, or **Carries no classified data** when it carries
+  none. A conversation that has used the connector carries these classes from
+  then on. A connector nobody has looked at shows **Not reviewed** on its card
+  while data classification is on, and with classification on a new connector
+  cannot be saved without saying one or the other (the form shows "Choose the
+  classes it carries, or confirm that it carries no classified data."): an
+  unlabelled connector is unaffected by every decision, so forgetting to label
+  it would otherwise go unnoticed. The card then shows what it carries. Changing
+  it applies at once, to conversations that used the connector earlier as well.
 
 Then select **Refresh tools**. OCI asks the server for its tools
 (`tools/list`) and lists them on the connector. **Test connection** checks the
@@ -158,7 +168,10 @@ connector's latest exchange failed.
 
 Deleting removes the connector, its tools, every person's connection, and
 every role's allow for its tools. Replies that already used its tools keep
-their tool steps.
+their tool steps. Conversations that used it **keep the classes it carried** as
+labels their owners cannot remove (see
+[Data classification](data-classification.md)): deleting a connector is never a
+way to unlabel content.
 
 ## Audit
 
@@ -170,16 +183,22 @@ their tool steps.
 | `connector.test` | **Test connection** is pressed | short name, address, whether it connected |
 | `connector.tools.refresh` | Tools are refreshed | counts added, updated and no longer listed |
 | `connector.tool.update` | A tool is enabled, disabled or its kind changed | tool id, before and after, `readOnlyConfirmed` |
+| `connector.data_classes.update` | What the connector carries is set (v0.14) | short name, the classes before and after (names at the time), whether it is reviewed |
 | `connector.account.connect` | A person connects their account | the connector |
 | `connector.account.disconnect` | A person disconnects | the connector, whether the token was revoked |
 | `tool.call` | A model calls a tool | as for every tool; never inputs or results |
 
 `connector.create`, `connector.update` and `connector.delete` are kept
-regardless of audit retention. Auditors can open this page and see
+regardless of audit retention, as is `connector.data_classes.update`. Auditors can open this page and see
 everything on it except secrets, and change nothing.
 
 ## Limits of the current design
 
+- Data classification judges what comes **back** from a connector, not what is
+  sent to it: the arguments of a tool call are written by the model from the
+  conversation. If a connector must not receive labelled content, do not enable
+  its tools for the people who work with it
+  ([What it does not control](data-classification.md#what-it-does-not-control)).
 - A connection is opened per tool call and closed afterwards; there is no
   pooling.
 - Refreshing a person's expiring token is coordinated across every OCI

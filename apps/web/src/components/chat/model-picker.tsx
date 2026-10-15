@@ -1,8 +1,9 @@
-import type { CatalogModel, ModelCapability } from '@oci/shared';
+import type { CatalogModel, ClassificationResponse, ModelCapability } from '@oci/shared';
 import { ChevronDown, Search } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
+import { availabilityOf } from '~/lib/classification';
 import { ariaKeyShortcuts, OPEN_MODEL_PICKER_EVENT } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { labsFrom, matchesCapabilities, matchesSearch } from './model-picker-data';
@@ -17,10 +18,17 @@ export const ModelPicker = memo(function ModelPicker({
   selected,
   onSelect,
   loading = false,
+  classification,
 }: {
   models: CatalogModel[];
   selected: CatalogModel | null;
   onSelect: (model: CatalogModel) => void;
+  /**
+   * What the conversation's data classes allow (v0.14, #395), from the server.
+   * Models it forbids stay listed, disabled, with the classes they are not
+   * approved for; absent or `off`, the picker is as it always was.
+   */
+  classification?: ClassificationResponse | null | undefined;
   /** The list has not arrived yet: say so, not that there are no models (#156). */
   loading?: boolean;
 }) {
@@ -120,6 +128,7 @@ export const ModelPicker = memo(function ModelPicker({
     return () => window.removeEventListener(OPEN_MODEL_PICKER_EVENT, openFromShortcut);
   }, [available]);
 
+  const availability = useMemo(() => availabilityOf(classification), [classification]);
   const labs = useMemo(() => labsFrom(models), [models]);
   const visible = useMemo(
     () =>
@@ -230,6 +239,8 @@ export const ModelPicker = memo(function ModelPicker({
                 moveActive(event.key === 'ArrowDown' ? 1 : -1);
               } else if (event.key === 'Enter' && active) {
                 event.preventDefault();
+                // A model the conversation's classes forbid is announced, not chosen.
+                if (availability.get(active.slug)?.status === 'blocked') return;
                 onSelect(active);
                 setOpen(false);
               } else if (
@@ -314,6 +325,7 @@ export const ModelPicker = memo(function ModelPicker({
                   active={active?.id === model.id}
                   canShowDetails={canShowDetails}
                   detailsOpen={detailsFor === model.id}
+                  availability={availability.get(model.slug)}
                   onSelect={(model) => {
                     onSelect(model);
                     setOpen(false);

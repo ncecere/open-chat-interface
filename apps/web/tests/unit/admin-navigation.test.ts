@@ -24,7 +24,14 @@ describe('admin navigation catalogue', () => {
           'Roles & access /admin/roles',
         ],
       ],
-      ['Models', ['Providers & Models /admin/models', 'Usage budgets /admin/quotas']],
+      [
+        'Models',
+        [
+          'Providers & Models /admin/models',
+          'Usage budgets /admin/quotas',
+          'Data classes /admin/data-classes',
+        ],
+      ],
       [
         'Tools & integrations',
         ['Web search /admin/search', 'Connectors /admin/connectors', 'Webhooks /admin/webhooks'],

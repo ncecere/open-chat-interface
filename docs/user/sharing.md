@@ -25,6 +25,20 @@ it.
 The same dialog lists the conversation's links, each marked **Live** or
 **Snapshot** with its view count and expiry, so you can copy or revoke them.
 
+## Conversations with data classes
+
+If your institution uses [data classes](conversations.md#data-classes) and the
+conversation carries one, a share link is open to anyone who has it, which no
+model or service is ever approved to be. Depending on the mode:
+
+- **Block**: the link cannot be made (the dialog says which class the
+  conversation carries). A link made earlier is **paused** while the conversation
+  carries the class: it shows **paused** in the dialog, cannot be copied, and
+  anyone opening it sees the page for a link that does not exist (it never names
+  the class). Removing the label makes it work again; it was not revoked.
+- **Warn**: the link is made, with a notice of which class the conversation
+  carries, and the administrator can see it.
+
 ## All your links
 
 **Settings → Sharing** lists every link you have made, across all your

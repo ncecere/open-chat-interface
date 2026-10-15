@@ -40,6 +40,7 @@ import {
 import { usePageTitle } from '~/lib/document-title';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
+import { ProjectLabelsSection } from './project-labels';
 import { DeleteProjectSection, Section } from './project-sections';
 
 function formatBytes(bytes: number): string {
@@ -221,6 +222,7 @@ function ProjectView({
         {tab === 'settings' && (
           <>
             <ProjectNameForm project={project} />
+            <ProjectLabelsSection projectId={project.id} />
             <DeleteProjectSection project={project} />
           </>
         )}

@@ -47,7 +47,9 @@ conversation inside the project. Below it, the page has four tabs:
   - **Waiting to be indexed**: the file was added before your institution
     upgraded and has not been prepared yet. This happens automatically in the
     background, usually within minutes; until then the file is used whole.
-- **Settings**: rename the project, or delete it.
+- **Settings**: rename the project, label it with
+  [data classes](conversations.md#data-classes) (when your institution uses them),
+  or delete it.
 
 The open tab is part of the page address, so a reload or a shared link opens
 the same tab.
@@ -65,6 +67,25 @@ change applies from the next reply.
 
 Forks and edited branches stay in the same project as the conversation they
 came from.
+
+### Data classes on a project
+
+If your institution uses [data classes](conversations.md#data-classes), the
+project's **Settings** tab has **Data classes**. Use **Add label** to say what
+kind of data the project holds, for example "Student records". Every
+conversation in the project then carries it, so only models your administrator
+has approved for it can answer, and a new chat in the project starts on one of
+them. Select the **×** on a label to remove it.
+
+An administrator can also label your project. That label is marked **set by an
+administrator** and cannot be removed by you; ask an administrator to change it.
+
+Taking a conversation out of the project, or deleting the project, does not
+remove the labels from the conversations that were in it: they keep them. Moving
+a conversation *into* a labelled project gives it the project's labels. Project
+search may also leave out meaning-based search or reranking for a labelled
+project, in which case the reply's note says so and files are searched by
+keywords only.
 
 ## Projects in the sidebar
 
