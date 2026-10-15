@@ -16,35 +16,11 @@
   },
   "matrix": {
     "profile": "standard",
-    "roles": [
-      "anonymous",
-      "admin",
-      "user",
-      "restricted"
-    ],
-    "themes": [
-      "light",
-      "dark"
-    ],
-    "accents": [
-      "neutral",
-      "blue",
-      "violet",
-      "emerald"
-    ],
-    "views": [
-      "1280",
-      "768",
-      "320",
-      "zoom400",
-      "text200",
-      "reduce"
-    ],
-    "languages": [
-      "en",
-      "ar-XB",
-      "ar"
-    ],
+    "roles": ["anonymous", "admin", "user", "restricted"],
+    "themes": ["light", "dark"],
+    "accents": ["neutral", "blue", "violet", "emerald"],
+    "views": ["1280", "768", "320", "zoom400", "text200", "reduce"],
+    "languages": ["en", "ar-XB", "ar"],
     "contexts": 104,
     "ran": [
       "anonymous/light/neutral/1280/en",
@@ -153,11 +129,7 @@
       "restricted/dark/emerald/1280/en"
     ],
     "routeFilter": null,
-    "parts": [
-      "pages",
-      "walkthroughs",
-      "global"
-    ]
+    "parts": ["pages", "walkthroughs", "global"]
   },
   "routes": {
     "listed": 58,
@@ -505,9 +477,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe"
-      ],
+      "checks": ["axe"],
       "routes": {
         "/admin": {
           "samples": 20,
@@ -526,10 +496,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "document"
-      ],
+      "checks": ["axe", "document"],
       "routes": {
         "/": {
           "samples": 69,
@@ -778,9 +745,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "orientation"
-      ],
+      "checks": ["orientation"],
       "routes": {
         "/": {
           "samples": 1,
@@ -794,11 +759,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "forms",
-        "walkthrough"
-      ],
+      "checks": ["axe", "forms", "walkthrough"],
       "routes": {
         "/admin/compliance": {
           "samples": 20,
@@ -862,9 +823,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe"
-      ],
+      "checks": ["axe"],
       "routes": {
         "/admin/groups": {
           "samples": 20,
@@ -888,10 +847,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "contrast"
-      ],
+      "checks": ["axe", "contrast"],
       "routes": {
         "/": {
           "samples": 120,
@@ -1140,11 +1096,7 @@
       "failures": 8,
       "reviews": 0,
       "findingCount": 2,
-      "checks": [
-        "axe",
-        "document",
-        "text-resize"
-      ],
+      "checks": ["axe", "document", "text-resize"],
       "routes": {
         "/": {
           "samples": 75,
@@ -1393,9 +1345,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "reflow"
-      ],
+      "checks": ["reflow"],
       "routes": {
         "/": {
           "samples": 15,
@@ -1644,9 +1594,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "non-text-contrast"
-      ],
+      "checks": ["non-text-contrast"],
       "routes": {
         "/": {
           "samples": 60,
@@ -1895,10 +1843,7 @@
       "failures": 0,
       "reviews": 18,
       "findingCount": 2,
-      "checks": [
-        "axe",
-        "text-spacing"
-      ],
+      "checks": ["axe", "text-spacing"],
       "routes": {
         "/": {
           "samples": 78,
@@ -2147,10 +2092,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "walkthrough"
-      ],
+      "checks": ["axe", "walkthrough"],
       "routes": {
         "/admin": {
           "samples": 20,
@@ -2369,10 +2311,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "keyboard",
-        "walkthrough"
-      ],
+      "checks": ["keyboard", "walkthrough"],
       "routes": {
         "/": {
           "samples": 1,
@@ -2411,9 +2350,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "keyboard"
-      ],
+      "checks": ["keyboard"],
       "routes": {
         "/": {
           "samples": 1,
@@ -2427,9 +2364,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "motion"
-      ],
+      "checks": ["motion"],
       "routes": {
         "/": {
           "samples": 15,
@@ -2678,11 +2613,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "document",
-        "keyboard"
-      ],
+      "checks": ["axe", "document", "keyboard"],
       "routes": {
         "/": {
           "samples": 70,
@@ -2931,10 +2862,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "document"
-      ],
+      "checks": ["axe", "document"],
       "routes": {
         "/": {
           "samples": 69,
@@ -3183,10 +3111,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "keyboard",
-        "walkthrough"
-      ],
+      "checks": ["keyboard", "walkthrough"],
       "routes": {
         "/": {
           "samples": 1,
@@ -3230,9 +3155,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe"
-      ],
+      "checks": ["axe"],
       "routes": {
         "/": {
           "samples": 60,
@@ -3471,9 +3394,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "document"
-      ],
+      "checks": ["document"],
       "routes": {
         "/": {
           "samples": 9,
@@ -3722,9 +3643,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "keyboard"
-      ],
+      "checks": ["keyboard"],
       "routes": {
         "/": {
           "samples": 1,
@@ -3763,9 +3682,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "keyboard"
-      ],
+      "checks": ["keyboard"],
       "routes": {
         "/": {
           "samples": 1,
@@ -3804,9 +3721,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "walkthrough"
-      ],
+      "checks": ["walkthrough"],
       "routes": {
         "/chat/$threadId": {
           "samples": 1,
@@ -3820,10 +3735,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "target-size"
-      ],
+      "checks": ["axe", "target-size"],
       "routes": {
         "/": {
           "samples": 120,
@@ -4072,10 +3984,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "document"
-      ],
+      "checks": ["axe", "document"],
       "routes": {
         "/": {
           "samples": 69,
@@ -4324,9 +4233,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "walkthrough"
-      ],
+      "checks": ["walkthrough"],
       "routes": {
         "help": {
           "samples": 1,
@@ -4340,10 +4247,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "forms",
-        "walkthrough"
-      ],
+      "checks": ["forms", "walkthrough"],
       "routes": {
         "/admin/roles": {
           "samples": 3,
@@ -4362,10 +4266,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "tree"
-      ],
+      "checks": ["axe", "tree"],
       "routes": {
         "/": {
           "samples": 69,
@@ -4614,9 +4515,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "walkthrough"
-      ],
+      "checks": ["walkthrough"],
       "routes": {
         "/auth/two-factor": {
           "samples": 1,
@@ -4630,10 +4529,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "forms",
-        "walkthrough"
-      ],
+      "checks": ["forms", "walkthrough"],
       "routes": {
         "/auth/login": {
           "samples": 3,
@@ -4652,10 +4548,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "axe",
-        "tree"
-      ],
+      "checks": ["axe", "tree"],
       "routes": {
         "/": {
           "samples": 69,
@@ -4904,9 +4797,7 @@
       "failures": 0,
       "reviews": 0,
       "findingCount": 0,
-      "checks": [
-        "walkthrough"
-      ],
+      "checks": ["walkthrough"],
       "routes": {
         "/chat/$threadId": {
           "samples": 3,
@@ -9912,12 +9803,7 @@
         "stops": 4,
         "reachedEnd": true,
         "trapped": false,
-        "order": [
-          "input: <email>",
-          "input: INPUT",
-          "button: Sign in",
-          "button: Use a passkey"
-        ]
+        "order": ["input: <email>", "input: INPUT", "button: Sign in", "button: Use a passkey"]
       },
       "sign-in-two-step:/auth/two-factor": {
         "stops": 4,
@@ -9934,10 +9820,7 @@
         "stops": 2,
         "reachedEnd": true,
         "trapped": false,
-        "order": [
-          "combobox: Select model. Current model: A11y audit ",
-          "button: Attach"
-        ]
+        "order": ["combobox: Select model. Current model: A11y audit ", "button: Attach"]
       },
       "approve-tool:/chat/$threadId": {
         "stops": 40,
@@ -10117,9 +10000,7 @@
         "title": "Approve a tool call",
         "completed": true,
         "tabPresses": 33,
-        "steps": [
-          "reached Approve after 33 Tab presses"
-        ],
+        "steps": ["reached Approve after 33 Tab presses"],
         "reason": null
       },
       "open-artifact": {
@@ -10147,9 +10028,7 @@
         "title": "Rename a conversation",
         "completed": true,
         "tabPresses": 14,
-        "steps": [
-          "reached the Rename button after 14 Tab presses"
-        ],
+        "steps": ["reached the Rename button after 14 Tab presses"],
         "reason": null
       },
       "share": {
@@ -10221,10 +10100,7 @@
       "streaming-reply": {
         "replyShown": true,
         "liveRegionAnnouncements": 3,
-        "texts": [
-          "The assistant is replying.",
-          "Reply complete."
-        ]
+        "texts": ["The assistant is replying.", "Reply complete."]
       },
       "reply-failed": {
         "errorShown": true,
@@ -10276,17 +10152,13 @@
   "findings": [
     {
       "id": "F001",
-      "criteria": [
-        "1.4.12"
-      ],
+      "criteria": ["1.4.12"],
       "check": "text-spacing",
       "rule": "text-spacing-clipping",
       "severity": "review",
       "route": "/",
       "message": "With the 1.4.12 text spacing applied, 33 px of content is cut off on the x axis (it was already truncated: check the full text is available another way)",
-      "targets": [
-        "span.min-w-0.truncate"
-      ],
+      "targets": ["span.min-w-0.truncate"],
       "occurrences": 9,
       "contexts": [
         "admin/light/neutral/320/ar",
@@ -10303,17 +10175,13 @@
     },
     {
       "id": "F002",
-      "criteria": [
-        "1.4.12"
-      ],
+      "criteria": ["1.4.12"],
       "check": "text-spacing",
       "rule": "text-spacing-clipping",
       "severity": "review",
       "route": "/chat/$threadId",
       "message": "With the 1.4.12 text spacing applied, 33 px of content is cut off on the x axis (it was already truncated: check the full text is available another way)",
-      "targets": [
-        "span.min-w-0.truncate"
-      ],
+      "targets": ["span.min-w-0.truncate"],
       "occurrences": 9,
       "contexts": [
         "admin/light/neutral/320/ar",
@@ -10330,17 +10198,13 @@
     },
     {
       "id": "F003",
-      "criteria": [
-        "1.4.4"
-      ],
+      "criteria": ["1.4.4"],
       "check": "text-resize",
       "rule": "text-resize-clipping",
       "severity": "moderate",
       "route": "/",
       "message": "With text at 200%, 131 px of content is cut off on the x axis (shown with an ellipsis: check the full text is available another way)",
-      "targets": [
-        "span.min-w-0.truncate"
-      ],
+      "targets": ["span.min-w-0.truncate"],
       "occurrences": 4,
       "contexts": [
         "admin/dark/neutral/text200/en",
@@ -10352,17 +10216,13 @@
     },
     {
       "id": "F004",
-      "criteria": [
-        "1.4.4"
-      ],
+      "criteria": ["1.4.4"],
       "check": "text-resize",
       "rule": "text-resize-clipping",
       "severity": "moderate",
       "route": "/chat/$threadId",
       "message": "With text at 200%, 131 px of content is cut off on the x axis (shown with an ellipsis: check the full text is available another way)",
-      "targets": [
-        "span.min-w-0.truncate"
-      ],
+      "targets": ["span.min-w-0.truncate"],
       "occurrences": 4,
       "contexts": [
         "admin/dark/neutral/text200/en",

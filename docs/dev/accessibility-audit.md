@@ -57,6 +57,8 @@ group and some conversations and projects.
 
    The profile and the dimensions that ran are written into `evidence.json` and the report, so a
    reader can see what was covered.
+   The audit writes `evidence.json` as plain JSON; run `pnpm exec biome format --write
+   docs/accessibility/evidence.json` before committing it, or `pnpm lint` fails on its layout.
 4. Read the result, then regenerate the report:
 
    ```bash
