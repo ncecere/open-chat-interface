@@ -4,6 +4,7 @@ import {
   type ProjectShareErrorReason,
 } from '@oci/shared';
 import { ApiError, apiErrorMessage } from '~/lib/api-client';
+import { formatNumber } from '~/lib/i18n';
 
 /**
  * What each access level may do on the project page (SPEC-groups.md, access
@@ -122,7 +123,7 @@ export function describeShareError(error: unknown, fallback: string): string {
 
 /** "2 people and 1 group", leaving out what is zero; empty when nothing is shared. Counts only: who they are is never shown. */
 export function sharedWithText(personShares: number, groupShares: number): string {
-  const people = personShares === 1 ? '1 person' : `${personShares.toLocaleString('en-US')} people`;
-  const groups = groupShares === 1 ? '1 group' : `${groupShares.toLocaleString('en-US')} groups`;
+  const people = personShares === 1 ? '1 person' : `${formatNumber(personShares)} people`;
+  const groups = groupShares === 1 ? '1 group' : `${formatNumber(groupShares)} groups`;
   return [personShares > 0 && people, groupShares > 0 && groups].filter(Boolean).join(' and ');
 }
