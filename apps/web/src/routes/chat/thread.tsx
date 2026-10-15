@@ -32,6 +32,7 @@ import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getInitialHistory, type HistoryIsland } from '~/lib/chat-history';
 import { blockedDetailsOf } from '~/lib/classification';
 import { usePageTitle } from '~/lib/document-title';
+import { useT } from '~/lib/i18n';
 import { conversationChoice } from '~/lib/starting-model';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 
@@ -153,6 +154,7 @@ function ThreadConversation({
   temporary: boolean;
   target?: ChatScrollTarget;
 }) {
+  const t = useT();
   const pendingBranch = peekPendingBranch(threadId);
   // An explicit choice in this conversation comes first: a branch's or the home
   // page's, else what it last used. Without one, the person's default applies.
@@ -335,7 +337,9 @@ function ThreadConversation({
   }, [refetchCompaction, session.streaming]);
 
   const conversationTitle = useOpenConversation(threadId)?.thread.title;
-  const pageName = temporary ? 'Temporary chat' : conversationTitle || 'Conversation';
+  const pageName = temporary
+    ? t('chat.thread.temporaryTitle')
+    : conversationTitle || t('chat.thread.untitled');
   // Unavailable: the page says so, and its heading names the tab (#197).
   usePageTitle(session.recovery.unavailable ? null : pageName);
 
@@ -434,7 +438,7 @@ function ThreadConversation({
                           session.recovery.error ||
                           (session.error && chatErrorText(session.error)) ||
                           replies.error ||
-                          'Something went wrong generating a response.'}
+                          t('chat.thread.generationFailed')}
                       </p>
                     )}
                   {waitingOnServer && (
@@ -445,9 +449,9 @@ function ThreadConversation({
                         ? session.stopDelayed
                           ? // The Stop request failed (a database outage, say) and is
                             // being sent again; the reply is still running (#351).
-                            "Stop didn't reach the server yet; trying again."
-                          : 'Stopping the reply\u2026'
-                        : 'A reply is pending on the server. You can stop it or wait for saved messages.'}
+                            t('chat.thread.stopDelayed')
+                          : t('chat.thread.stopping')
+                        : t('chat.thread.pending')}
                     </p>
                   )}
                   {/* Nothing was saved from a refused message: no saved
@@ -464,7 +468,7 @@ function ThreadConversation({
                       }
                       onClick={session.recovery.recover}
                     >
-                      Reload saved messages
+                      {t('chat.thread.reload')}
                     </button>
                   )}
                 </div>
@@ -480,7 +484,7 @@ function ThreadConversation({
               className="absolute bottom-3 start-1/2 flex -translate-x-1/2 items-center rtl:translate-x-1/2 gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors hover:text-[var(--text-primary)]"
             >
               <ArrowDown className="size-4" aria-hidden="true" />
-              Jump to latest
+              {t('chat.thread.jumpToLatest')}
             </button>
           )}
         </div>
@@ -491,7 +495,7 @@ function ThreadConversation({
         {temporary && (
           <p className="flex items-center justify-center gap-1.5 px-4 pb-1.5 text-[var(--text-muted)] text-xs">
             <Clock className="size-3.5 text-[var(--accent-bright)]" aria-hidden="true" />
-            Temporary chat: kept out of history and deleted 24 hours after it started.
+            {t('chat.thread.temporaryNote')}
           </p>
         )}
         <Composer
@@ -537,6 +541,7 @@ export function ChatThreadPage({
 }
 
 function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScrollTarget }) {
+  const t = useT();
   // The message the conversation opens at; later search results load on demand.
   const [initialTarget] = useState(() => target?.messageId);
   // Read once on mount so a re-render cannot lose the handover.
@@ -604,7 +609,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
   }
   if (isLoading || !data || !rendererReady)
     return (
-      <div role="status" aria-label="Loading conversation" className="h-full">
+      <div role="status" aria-label={t('chat.thread.loading')} className="h-full">
         <FullPageSpinner />
       </div>
     );

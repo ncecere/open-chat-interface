@@ -3,6 +3,7 @@ import type { UIMessage } from 'ai';
 import { ChevronDown, ChevronRight, FileSearch } from 'lucide-react';
 import { useId, useState } from 'react';
 import { FOCUS_RING } from '~/components/ui/focus-ring';
+import { translate, useT } from '~/lib/i18n';
 
 /**
  * Reads the `data-project-search` part a reply carries when its project's
@@ -25,10 +26,10 @@ export function projectSearchOf(message: UIMessage): ProjectSearchData | null {
 
 function describeFiles(files: ProjectSearchData['files']): string {
   return files
-    .map(
-      (file) => `${file.name} (${file.passages} ${file.passages === 1 ? 'passage' : 'passages'})`,
+    .map((file) =>
+      translate('chat.projectSearch.fileEntry', { name: file.name, count: file.passages }),
     )
-    .join(', ');
+    .join(translate('chat.projectSearch.separator'));
 }
 
 /**
@@ -40,35 +41,31 @@ function withheldText(withheld: ProjectSearchData['withheld']): string | null {
   if (!withheld?.length) return null;
   const meaning = withheld.includes('embeddings');
   const reranking = withheld.includes('reranking');
-  const what =
-    meaning && reranking
-      ? 'Meaning-based search and reranking are'
-      : meaning
-        ? 'Meaning-based search is'
-        : 'Reranking is';
-  const result = meaning
-    ? 'project files were searched by keywords only'
-    : 'the passages kept their combined order';
-  return `${what} not approved for a data class this conversation carries, so ${result}.`;
+  if (meaning && reranking) return translate('chat.projectSearch.withheldBoth');
+  return translate(
+    meaning ? 'chat.projectSearch.withheldMeaning' : 'chat.projectSearch.withheldRerank',
+  );
 }
 
 function passageLabel(excerpt: { first: number; last: number }): string {
   return excerpt.first === excerpt.last
-    ? `Passage ${excerpt.first}`
-    : `Passages ${excerpt.first}–${excerpt.last}`;
+    ? translate('chat.projectSearch.passage', { n: excerpt.first })
+    : translate('chat.projectSearch.passages', { first: excerpt.first, last: excerpt.last });
 }
 
 function leadOf(search: ProjectSearchData): string | null {
   if (search.files.length === 0) return null;
-  const searched =
-    search.ranking === 'hybrid'
-      ? 'Searched project files by meaning and keywords'
-      : 'Searched project files';
-  const lead =
-    search.mode === 'opening'
-      ? 'Project files were too long to use in full and nothing matched. Used the opening passages of'
-      : `${searched}${search.reranked ? ' and reranked the results' : ''}. Used passages from`;
-  return `${lead} ${describeFiles(search.files)}.`;
+  const files = describeFiles(search.files);
+  if (search.mode === 'opening') return translate('chat.projectSearch.leadOpening', { files });
+  const hybrid = search.ranking === 'hybrid';
+  const key = hybrid
+    ? search.reranked
+      ? 'chat.projectSearch.leadHybridReranked'
+      : 'chat.projectSearch.leadHybrid'
+    : search.reranked
+      ? 'chat.projectSearch.leadReranked'
+      : 'chat.projectSearch.lead';
+  return translate(key, { files });
 }
 
 /** The passages a reply used, by file: the start of each and its section when known. */
@@ -88,8 +85,12 @@ function PassageList({ id, files }: { id: string; files: ProjectSearchData['file
                   className="min-w-0 border-s-2 border-[var(--border-subtle)] ps-2"
                 >
                   <p className="text-[var(--text-muted)]">
-                    {passageLabel(excerpt)}
-                    {excerpt.heading ? ` · ${excerpt.heading}` : ''}
+                    {excerpt.heading
+                      ? translate('chat.projectSearch.passageHeading', {
+                          label: passageLabel(excerpt),
+                          heading: excerpt.heading,
+                        })
+                      : passageLabel(excerpt)}
                   </p>
                   <p className="break-words text-[var(--text-secondary)]">{excerpt.snippet}</p>
                 </li>
@@ -108,6 +109,7 @@ function PassageList({ id, files }: { id: string; files: ProjectSearchData['file
  * passages used; replies stored earlier have no passages to list.
  */
 export function ProjectSearchNote({ message }: { message: UIMessage }) {
+  const t = useT();
   const listId = useId();
   const [open, setOpen] = useState(false);
   const search = projectSearchOf(message);
@@ -117,7 +119,9 @@ export function ProjectSearchNote({ message }: { message: UIMessage }) {
   const excluded = search.excluded ?? [];
   const leftOut =
     excluded.length > 0
-      ? `Left out of this message: ${excluded.map((file) => file.name).join(', ')}.`
+      ? t('chat.projectSearch.leftOut', {
+          files: excluded.map((file) => file.name).join(t('chat.projectSearch.separator')),
+        })
       : null;
   const listed = search.files.some((file) => file.excerpts?.length);
   const Chevron = open ? ChevronDown : ChevronRight;
@@ -146,7 +150,7 @@ export function ProjectSearchNote({ message }: { message: UIMessage }) {
             className={`mt-1 ms-5 inline-flex items-center gap-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${FOCUS_RING}`}
           >
             <Chevron className="size-3" aria-hidden="true" />
-            {open ? 'Hide passages used' : 'Show passages used'}
+            {open ? t('chat.projectSearch.hide') : t('chat.projectSearch.show')}
           </button>
           {open && <PassageList id={listId} files={search.files} />}
         </>

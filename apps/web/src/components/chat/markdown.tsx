@@ -21,8 +21,11 @@ import { TASK_LIST_COMPONENTS } from '~/components/chat/markdown-task-list';
 import {
   installStreamdownOverlayFocus,
   installStreamdownScrollRegions,
+  markStreamdownScrollRegions,
 } from '~/components/chat/streamdown-overlay-focus';
+import { streamdownTranslations } from '~/components/chat/streamdown-translations';
 import { readableCodePlugin } from '~/lib/code-contrast';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -126,38 +129,50 @@ function buildMarkdownRenderer([
   // A person's own message: text, not LaTeX, so every `$` is a dollar sign (#339).
   const pluginsWithoutMath = { code, mermaid };
 
-  return ({ children, className, math = true, skipHtml, urlTransform }: MarkdownProps) => (
-    <Streamdown
-      plugins={math ? plugins : pluginsWithoutMath}
-      className={cn(MARKDOWN_BASE, className)}
-      remarkPlugins={remarkPlugins}
-      translations={TRANSLATIONS}
-      // The reference interface shows plain code without a gutter.
-      lineNumbers={false}
-      // Links are real links that warn before leaving the instance (#174),
-      // not Streamdown's link-safety buttons; headings sit below the
-      // page's h1 (#212, #271); a task list's checkboxes are named (#240).
-      components={MESSAGE_COMPONENTS}
-      // Share pages pass their own URL policy and keep the visible marker.
-      rehypePlugins={
-        !skipHtml && !urlTransform && conversationPlugins ? conversationPlugins : defaultPlugins
-      }
-      {...(skipHtml ? { skipHtml } : {})}
-      {...(urlTransform
-        ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
-        : {})}
-    >
-      {math ? normalizeMathDelimiters(escapeCurrencyDollars(children)) : children}
-    </Streamdown>
-  );
+  return function MarkdownRenderer({
+    children,
+    className,
+    math = true,
+    skipHtml,
+    urlTransform,
+  }: MarkdownProps) {
+    const t = useT();
+    // Streamdown's own button titles follow the language; the names built from
+    // them (streamdown-control-names) are made again when it changes.
+    const translations = useMemo(() => streamdownTranslations(t), [t]);
+    useEffect(() => {
+      if (translations) markStreamdownScrollRegions();
+    }, [translations]);
+    return (
+      <Streamdown
+        plugins={math ? plugins : pluginsWithoutMath}
+        className={cn(MARKDOWN_BASE, className)}
+        remarkPlugins={remarkPlugins}
+        translations={translations}
+        // The reference interface shows plain code without a gutter.
+        lineNumbers={false}
+        // Links are real links that warn before leaving the instance (#174),
+        // not Streamdown's link-safety buttons; headings sit below the
+        // page's h1 (#212, #271); a task list's checkboxes are named (#240).
+        components={MESSAGE_COMPONENTS}
+        // Share pages pass their own URL policy and keep the visible marker.
+        rehypePlugins={
+          !skipHtml && !urlTransform && conversationPlugins ? conversationPlugins : defaultPlugins
+        }
+        {...(skipHtml ? { skipHtml } : {})}
+        {...(urlTransform
+          ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
+          : {})}
+      >
+        {math ? normalizeMathDelimiters(escapeCurrencyDollars(children)) : children}
+      </Streamdown>
+    );
+  };
 }
 
 const StreamdownMarkdown = lazy(() =>
   preloadMarkdownRenderer().then((loaded) => ({ default: loaded.markdown })),
 );
-
-/** "Copy Code" was the one title-cased tooltip among the reply's controls (#194). */
-const TRANSLATIONS = { copyCode: 'Copy code' };
 
 const MESSAGE_COMPONENTS = { a: MessageLink, ...DEMOTED_HEADINGS, ...TASK_LIST_COMPONENTS };
 
