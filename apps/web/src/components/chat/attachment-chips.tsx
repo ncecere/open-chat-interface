@@ -72,7 +72,7 @@ export function AttachmentChips({
                 </span>
               )}
 
-              <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
+              <span dir="auto" className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
                 {item.filename}
               </span>
 

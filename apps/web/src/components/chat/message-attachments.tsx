@@ -59,7 +59,7 @@ export function MessageAttachments({ message }: { message: UIMessage }) {
             className="flex items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-control-alt)] px-3 py-2.5 transition-colors hover:bg-[var(--bg-control-hover)]"
           >
             <FileText className="size-4 shrink-0 text-[var(--text-muted)]" />
-            <span className="max-w-52 truncate text-sm text-[var(--text-secondary)]">
+            <span dir="auto" className="max-w-52 truncate text-sm text-[var(--text-secondary)]">
               {card.filename}
             </span>
           </a>

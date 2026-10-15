@@ -74,16 +74,18 @@ function leadOf(search: ProjectSearchData): string | null {
 /** The passages a reply used, by file: the start of each and its section when known. */
 function PassageList({ id, files }: { id: string; files: ProjectSearchData['files'] }) {
   return (
-    <ul id={id} className="mt-1.5 flex flex-col gap-2 pl-5" data-testid="project-search-passages">
+    <ul id={id} className="mt-1.5 flex flex-col gap-2 ps-5" data-testid="project-search-passages">
       {files.map((file) =>
         file.excerpts?.length ? (
           <li key={file.name} className="min-w-0">
-            <p className="break-words font-medium text-[var(--text-secondary)]">{file.name}</p>
+            <p dir="auto" className="break-words font-medium text-[var(--text-secondary)]">
+              {file.name}
+            </p>
             <ul className="mt-1 flex flex-col gap-1.5">
               {file.excerpts.map((excerpt) => (
                 <li
                   key={excerpt.id}
-                  className="min-w-0 border-l-2 border-[var(--border-subtle)] pl-2"
+                  className="min-w-0 border-s-2 border-[var(--border-subtle)] ps-2"
                 >
                   <p className="text-[var(--text-muted)]">
                     {passageLabel(excerpt)}
@@ -141,7 +143,7 @@ export function ProjectSearchNote({ message }: { message: UIMessage }) {
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             onClick={() => setOpen((value) => !value)}
-            className={`mt-1 ml-5 inline-flex items-center gap-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${FOCUS_RING}`}
+            className={`mt-1 ms-5 inline-flex items-center gap-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${FOCUS_RING}`}
           >
             <Chevron className="size-3" aria-hidden="true" />
             {open ? 'Hide passages used' : 'Show passages used'}

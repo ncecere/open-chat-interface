@@ -84,7 +84,7 @@ function BackToChat() {
   return (
     <Button variant="ghost" size="sm" asChild>
       <Link to="/">
-        <ArrowLeft aria-hidden="true" />
+        <ArrowLeft className="rtl:-scale-x-100" aria-hidden="true" />
         Back to chat
       </Link>
     </Button>
@@ -118,7 +118,7 @@ export function AdminLayout() {
         <div className="flex h-dvh flex-col overflow-hidden lg:flex-row">
           <SkipLink />
 
-          <aside className="hidden w-64 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] bg-[image:var(--sidebar-gradient)] lg:flex">
+          <aside className="hidden w-64 shrink-0 flex-col border-e border-[var(--border-subtle)] bg-[var(--bg-sidebar)] bg-[image:var(--sidebar-gradient)] lg:flex">
             <div className="flex h-14 shrink-0 items-center px-3">
               <BackToChat />
             </div>
@@ -145,11 +145,11 @@ export function AdminLayout() {
               {navOpen && (
                 <DialogContent
                   className={cn(
-                    'left-0 top-0 flex h-dvh w-[min(20rem,85vw)] max-w-none translate-x-0 translate-y-0 flex-col',
-                    'rounded-none rounded-r-2xl border-y-0 border-l-0 p-0',
+                    'start-0 top-0 flex h-dvh w-[min(20rem,85vw)] max-w-none translate-x-0 translate-y-0 flex-col rtl:translate-x-0',
+                    'rounded-none rounded-e-2xl border-y-0 border-s-0 p-0',
                   )}
                 >
-                  <div className="flex h-14 shrink-0 items-center px-3 pr-12">
+                  <div className="flex h-14 shrink-0 items-center px-3 pe-12">
                     <BackToChat />
                   </div>
                   <div className="px-4 pb-3">

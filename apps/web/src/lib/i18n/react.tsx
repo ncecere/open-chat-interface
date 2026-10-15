@@ -16,6 +16,7 @@ import {
   activateLocale,
   getI18nState,
   type I18nState,
+  initialLocale,
   PSEUDO_STORAGE_KEY,
   rememberLocale,
   subscribeI18n,
@@ -83,6 +84,12 @@ function readPseudoChoice(): string | null {
  * choosing, staying in the language shown last time meanwhile, so a Spanish
  * reader does not see English, then Spanish. When the settings cannot be read
  * (an outage) it decides with what it has.
+ *
+ * Renders nothing until a catalog has been loaded (every catalog, English
+ * included, is a dynamic import): `main.tsx` awaits the first load before it
+ * renders, and this is the net under that for any other entry point, so the
+ * app is never shown as bare keys. If the load fails altogether the app is
+ * shown anyway (English, then the keys) rather than staying blank.
  */
 export function I18nProvider({ children }: { children: ReactNode }) {
   const status = useAuthStatus();
@@ -116,6 +123,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [ready, saved, language?.default, language?.enabled, pseudoChoice],
   );
 
+  const { ready: loaded } = useI18nState();
+  useEffect(() => {
+    if (!loaded) void activateLocale(initialLocale());
+  }, [loaded]);
+
   useEffect(() => {
     if (!locale) return;
     void activateLocale(locale).then(() => {
@@ -133,5 +145,5 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [language?.enabled, language?.default, setPseudoChoice],
   );
 
-  return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
+  return <LocaleContext.Provider value={value}>{loaded ? children : null}</LocaleContext.Provider>;
 }

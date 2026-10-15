@@ -51,7 +51,7 @@ function RoleSummary({ access }: { access: RoleAccess }) {
           <p className="mt-1 text-[var(--text-muted)] text-xs">
             Always true for this role; no setting changes them.
           </p>
-          <ul className="mt-3 list-disc pl-5 text-sm">
+          <ul className="mt-3 list-disc ps-5 text-sm">
             {access.fixedRules.map((rule) => (
               <li key={rule}>{rule}</li>
             ))}

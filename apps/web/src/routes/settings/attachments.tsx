@@ -270,7 +270,7 @@ export function SettingsAttachmentsPage() {
           <Button
             variant="accent"
             size="sm"
-            className="sm:ml-auto"
+            className="sm:ms-auto"
             locked={lock.title}
             disabled={selected.size > 0 && [...selected].every((id) => deletingIds.has(id))}
             onClick={() => setConfirming([...selected])}

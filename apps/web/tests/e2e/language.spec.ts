@@ -1,4 +1,6 @@
 import { type Browser, expect, type Page, test } from '@playwright/test';
+import { scan } from './accessibility.helpers';
+import { expectNoOverflow, SWEEP, shot, THREAD_TITLE, WIDTHS } from './rtl.helpers';
 
 /**
  * Languages (v0.14, #397) in a real browser against the real API: the picker in
@@ -100,8 +102,17 @@ test('the picker is not offered while only English is enabled', async ({ browser
   await signIn(page, user.email, user.password);
   await page.goto('/settings/customization');
   await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
-  // Nothing to choose between: no picker (pseudo-locales exist only in test builds).
-  await expect(page.getByRole('combobox', { name: 'Language' })).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
+  // Nothing to choose between: no picker in a production build, and in a build
+  // with the pseudo-locales (VITE_OCI_PSEUDO_LOCALES=1, which rtl.spec.ts needs)
+  // a picker that offers those and no real language but English.
+  const picker = page.getByRole('combobox', { name: 'Language' });
+  if ((await picker.count()) > 0) {
+    await picker.click();
+    const labels = await page.getByRole('option').allTextContents();
+    expect(labels.filter((label) => /Español|العربية/.test(label))).toEqual([]);
+    expect(labels.some((label) => /Pseudo-locale/.test(label))).toBe(true);
+  }
   await context.close();
 });
 
@@ -170,5 +181,67 @@ test('a language the administrator switches off falls back without an error', as
   await setEnabled(browser, ['en', 'es']);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Idioma' })).toBeVisible();
+  await context.close();
+});
+
+test('real Arabic mirrors every page: no overflow at 320, 768 and 1280 px, the sidebar on the right, axe clean', async ({
+  browser,
+}) => {
+  // The pages and the measurements are the ones rtl.spec.ts runs in the forced
+  // right-to-left pseudo-locale; here the language is real Arabic, chosen the
+  // way a person does: saved on the account, and for a visitor the browser's.
+  test.setTimeout(240_000);
+  await setEnabled(browser, ['en', 'ar']);
+  const user = await disposableUser(browser);
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await signIn(page, user.email, user.password);
+  const saved = await page.request.patch('/api/me/preferences', { data: { locale: 'ar' } });
+  expect(saved.ok(), await saved.text()).toBe(true);
+  const created = await page.request.post('/api/threads', { data: { title: THREAD_TITLE } });
+  expect(created.ok(), await created.text()).toBe(true);
+  const body = (await created.json()) as { id?: string; thread?: { id: string } };
+  const threadId = body.thread?.id ?? body.id ?? '';
+  expect(threadId).not.toBe('');
+  await page.request.post('/api/projects', { data: { name: 'مشروع المكتبة · Library project' } });
+
+  const visitor = await browser.newContext({ locale: 'ar-EG' });
+  const visitorPage = await visitor.newPage();
+
+  for (const width of WIDTHS) {
+    for (const entry of SWEEP) {
+      const target = entry.signedIn ? page : visitorPage;
+      await target.setViewportSize({ width, height: 900 });
+      await entry.open(target, { threadId });
+      expect(await html(target), `${entry.name} at ${width}`).toEqual({ lang: 'ar', dir: 'rtl' });
+      await expectNoOverflow(target, `${entry.name} at ${width} (ar)`);
+      await shot(target, `ar-${entry.name}`, width);
+    }
+  }
+
+  // The sidebar is on the right at a desktop width.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await expect(page.locator('textarea')).toBeVisible();
+  const box = (await page.locator('aside').first().boundingBox())!;
+  expect(Math.round(box.x + box.width)).toBe(1280);
+
+  // axe in Arabic: the sign-in page (a visitor) and the chat home.
+  await visitorPage.goto('/auth/login');
+  await expect(visitorPage.locator('input[type="email"]')).toBeVisible();
+  const signInResults = await scan(visitorPage);
+  expect(
+    signInResults.violations,
+    JSON.stringify(signInResults.violations.map((v) => v.id)),
+  ).toEqual([]);
+  const homeResults = await scan(page);
+  expect(homeResults.violations, JSON.stringify(homeResults.violations.map((v) => v.id))).toEqual(
+    [],
+  );
+
+  await page.request.delete(`/api/threads/${threadId}`);
+  await page.request.delete(`/api/threads/${threadId}/permanent`);
+  await visitor.close();
   await context.close();
 });

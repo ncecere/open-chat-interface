@@ -74,7 +74,7 @@ export function ModelPickerOption({
           if (!blocked) onSelect(model);
         }}
         className={cn(
-          'flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]',
+          'flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-lg py-2.5 pe-3 ps-3 text-start text-[var(--text-secondary)] outline-offset-[-2px]',
           blocked ? 'cursor-not-allowed' : 'cursor-pointer',
         )}
       >
@@ -88,7 +88,7 @@ export function ModelPickerOption({
           </span>
         </span>
 
-        <span className="w-full pl-6 text-xs font-medium leading-4 wrap-anywhere text-[var(--text-muted)]">
+        <span className="w-full ps-6 text-xs font-medium leading-4 wrap-anywhere text-[var(--text-muted)]">
           {modelDescription(model)}
         </span>
         {availability && availability.status !== 'ok' && (
@@ -96,7 +96,7 @@ export function ModelPickerOption({
           <span
             data-classification-note={availability.status}
             className={cn(
-              'flex w-full items-start gap-1.5 pl-6 text-xs font-semibold leading-4 wrap-anywhere',
+              'flex w-full items-start gap-1.5 ps-6 text-xs font-semibold leading-4 wrap-anywhere',
               warned ? 'text-[var(--warning)]' : 'text-[var(--text-secondary)]',
             )}
           >
@@ -116,7 +116,7 @@ export function ModelPickerOption({
        * column, so both line up down the list however long a model
        * name happens to be.
        */}
-      <span className="flex shrink-0 items-center gap-1 pr-2" aria-hidden="true">
+      <span className="flex shrink-0 items-center gap-1 pe-2" aria-hidden="true">
         {model.capabilities.map((capability) => (
           <CapabilityIcon key={capability} capability={capability} />
         ))}
@@ -129,7 +129,7 @@ export function ModelPickerOption({
             aria-expanded={detailsOpen}
             onClick={() => onDetails(model.id)}
             className={cn(
-              'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
+              'ms-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
               detailsOpen ? 'text-[var(--text-primary)]' : 'text-[var(--text-faint)]',
             )}
           >

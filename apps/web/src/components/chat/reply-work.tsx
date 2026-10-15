@@ -64,7 +64,7 @@ export function WorkDisclosure({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setChoice(!open)}
-        className="flex w-fit max-w-full items-center gap-2 text-left text-[0.8125rem] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
+        className="flex w-fit max-w-full items-center gap-2 text-start text-[0.8125rem] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Icon
           aria-hidden="true"
@@ -254,7 +254,7 @@ function WorkTimeline({
     <ol
       aria-label="Steps"
       data-work-timeline=""
-      className="mt-3 ml-2 space-y-3 border-l border-[var(--border-subtle)] pl-4"
+      className="mt-3 ms-2 space-y-3 border-s border-[var(--border-subtle)] ps-4"
     >
       {entries.map((entry) => {
         if (entry.type === 'reasoning')
@@ -309,7 +309,7 @@ function TimelineDot() {
   return (
     <span
       aria-hidden="true"
-      className="absolute top-2 -left-[1.3rem] size-2 rounded-full border border-[var(--border-strong)] bg-[var(--bg-app)]"
+      className="absolute top-2 -start-[1.3rem] size-2 rounded-full border border-[var(--border-strong)] bg-[var(--bg-app)]"
     />
   );
 }

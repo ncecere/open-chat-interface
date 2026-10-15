@@ -143,7 +143,7 @@ export function ArtifactPanel({
     // The default is a share of the layout; once the person resizes the
     // panel, its width is theirs (clamped to the window).
     const dockedSize = cn(
-      'mb-2 mr-2 mt-16 min-w-[22rem] shrink-0',
+      'mb-2 me-2 mt-16 min-w-[22rem] shrink-0',
       !panelWidth.custom && 'w-[45%] max-w-[56rem]',
     );
     const dockedStyle = panelWidth.custom ? { width: `${panelWidth.width}px` } : undefined;
@@ -232,10 +232,10 @@ export function ArtifactPanel({
           className={cn(
             'flex flex-col gap-0 overflow-hidden p-0',
             // Phones and full screen: the whole screen. Wider screens: a panel on the right.
-            'inset-0 h-dvh w-full max-w-none translate-x-0 translate-y-0 rounded-none',
+            'inset-0 h-dvh w-full max-w-none translate-x-0 translate-y-0 rounded-none rtl:translate-x-0',
             fullScreen
               ? 'border-0'
-              : 'md:left-auto md:right-0 md:w-[min(56rem,92vw)] md:rounded-none md:border-y-0 md:border-r-0',
+              : 'md:start-auto md:end-0 md:w-[min(56rem,92vw)] md:rounded-none md:border-y-0 md:border-e-0',
           )}
         >
           {body}

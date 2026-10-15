@@ -5,7 +5,7 @@ import {
   localeInfo,
   pseudoLocalesAvailable,
 } from '~/locales';
-import { type Catalog, type MessageKey, sourceCatalog } from './catalog';
+import type { Catalog, MessageKey } from './catalog';
 import { setFormatLocale } from './format';
 import { formatMessage, isValidMessage, type MessageParams } from './message';
 
@@ -25,12 +25,25 @@ export interface I18nState {
   /** The `Intl` tag for this locale. */
   intl: string;
   t: Translate;
+  /**
+   * The first load has finished, successfully or not. Until then `t` can only
+   * return keys (no catalog is in memory yet), so nothing renders; see
+   * `I18nProvider` and `main.tsx`.
+   */
+  ready: boolean;
 }
 
 export const LOCALE_STORAGE_KEY = 'oci.locale';
 export const PSEUDO_STORAGE_KEY = 'oci.pseudoLocale';
 
-const catalogs = new Map<LocaleTag, Catalog>([['en', sourceCatalog]]);
+// Kept on `globalThis` so a re-evaluated copy of this module (Vite hot reload,
+// or `vi.resetModules()` in a test) finds the catalogs already loaded instead
+// of showing keys until the next `activateLocale`. Nothing else is shared.
+const REGISTRY = '__ociI18nCatalogs';
+const registry = globalThis as unknown as { [REGISTRY]?: Map<LocaleTag, Catalog> };
+const catalogs = registry[REGISTRY] ?? new Map<LocaleTag, Catalog>();
+registry[REGISTRY] = catalogs;
+let settled = catalogs.has('en');
 const listeners = new Set<() => void>();
 const warned = new Set<string>();
 
@@ -48,7 +61,7 @@ function warnOnce(key: string, what: string): void {
 function translateIn(locale: LocaleTag, key: string, params?: MessageParams): string {
   const info = localeInfo(locale);
   const own = catalogs.get(locale)?.[key];
-  const english = sourceCatalog[key];
+  const english = catalogs.get('en')?.[key];
   let message: string | undefined = own;
   if (message === undefined) {
     if (locale !== 'en') warnOnce(key, 'missing key');
@@ -71,6 +84,7 @@ function makeState(locale: LocaleTag): I18nState {
     dir: info.rtl ? 'rtl' : 'ltr',
     intl: info.intl,
     t: (key, params) => translateIn(locale, key, params),
+    ready: settled,
   };
 }
 
@@ -94,33 +108,50 @@ function applyToDocument(next: I18nState): void {
 
 let latest = 0;
 
+/** Fetches one catalog once; a failure (offline, a stale chunk after a deploy) is `undefined`, never a throw. */
+async function load(tag: LocaleTag): Promise<Catalog | undefined> {
+  const loaded = catalogs.get(tag);
+  if (loaded) return loaded;
+  try {
+    const catalog = await localeInfo(tag).load();
+    catalogs.set(tag, catalog);
+    return catalog;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Shows the app in `locale`. The catalog is fetched first and the switch made
- * in one step, so nothing renders half in the old language. When two switches
- * overlap the last one asked for wins whichever load finishes first, and a
- * catalog that cannot be loaded (offline, a stale chunk after a deploy) leaves
- * the language as it was.
+ * Shows the app in `locale`. Every catalog is a dynamic import, English too,
+ * so this is what makes strings exist at all: `main.tsx` awaits it before the
+ * first render. The language's catalog is fetched together with English (the
+ * fallback for a key it lacks) and the switch is made in one step, so nothing
+ * renders half in the old language or as bare keys. When two switches overlap
+ * the last one asked for wins whichever load finishes first.
+ *
+ * A catalog that cannot be loaded never throws: a language already showing
+ * stays as it was; at the first load the app falls back to English, and when
+ * English cannot be fetched either `translate()` returns the key.
  */
 export async function activateLocale(locale: LocaleTag): Promise<void> {
   const ticket = ++latest;
-  const info = (isRealLocale(locale) || isPseudoLocale(locale)) && localeInfo(locale);
-  if (!info) return;
-  if (!catalogs.has(locale)) {
-    try {
-      catalogs.set(locale, await info.load());
-    } catch {
-      return;
-    }
-  }
-  if (ticket !== latest || state.locale === locale) {
-    // Still refresh the document: a first call may find the attributes unset.
-    if (ticket === latest) applyToDocument(state);
+  if (!isRealLocale(locale) && !isPseudoLocale(locale)) return;
+  const [own] = await Promise.all([load(locale), locale === 'en' ? undefined : load('en')]);
+  // A newer switch is in charge now and will finish the job.
+  if (ticket !== latest) return;
+
+  let target: LocaleTag = locale;
+  if (!own) target = catalogs.has(state.locale) ? state.locale : 'en';
+  if (state.locale !== target || !state.ready) {
+    settled = true;
+    state = makeState(target);
+    setFormatLocale(state.intl);
+    applyToDocument(state);
+    for (const listener of listeners) listener();
     return;
   }
-  state = makeState(locale);
-  setFormatLocale(state.intl);
+  // Nothing to switch, but the attributes may be unset on a first call.
   applyToDocument(state);
-  for (const listener of listeners) listener();
 }
 
 /** The non-React entry point: `translate('settings.language.title')`. */

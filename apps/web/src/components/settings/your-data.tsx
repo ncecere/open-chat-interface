@@ -80,7 +80,9 @@ function ImportRow({
     <li className="flex items-start gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate text-[var(--text-primary)] text-sm">{record.filename}</p>
+          <p dir="auto" className="truncate text-[var(--text-primary)] text-sm">
+            {record.filename}
+          </p>
           <Badge variant={STATUS_VARIANTS[record.status]}>{STATUS_LABELS[record.status]}</Badge>
         </div>
         <p className="mt-0.5 text-[var(--text-muted)] text-xs">

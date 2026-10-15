@@ -118,7 +118,10 @@ function ProjectGroup({
               >
                 <Folder className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-medium text-[var(--text-primary)] wrap-anywhere">
+                  <span
+                    dir="auto"
+                    className="block font-medium text-[var(--text-primary)] wrap-anywhere"
+                  >
                     {project.name}
                   </span>
                   <span className="block text-xs text-[var(--text-muted)]">

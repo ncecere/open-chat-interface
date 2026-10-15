@@ -482,7 +482,7 @@ export function AdminReportsPage() {
                 </div>
 
                 <EditOnly>
-                  <div className="-ml-2 flex flex-wrap items-center gap-1 sm:ml-0 sm:shrink-0">
+                  <div className="-ms-2 flex flex-wrap items-center gap-1 sm:ms-0 sm:shrink-0">
                     <Button
                       size="sm"
                       variant="ghost"

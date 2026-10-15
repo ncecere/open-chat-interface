@@ -61,7 +61,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
       {!sidebarOpen && (
         <div
           data-floating-controls
-          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
+          className="absolute start-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
         >
           <Button
             variant="ghost"
@@ -70,7 +70,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
             aria-label="Open sidebar"
             aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
           >
-            <PanelLeft />
+            <PanelLeft className="rtl:-scale-x-100" />
           </Button>
           <Button
             variant="ghost"
@@ -104,7 +104,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
 
       <div
         data-floating-controls
-        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
+        className="absolute end-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
       >
         {threadId && <RenameConversationControl threadId={threadId} />}
         {threadId && (
@@ -209,7 +209,7 @@ function MoveToProjectControl({ threadId }: { threadId: string }) {
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
-        <FolderInput />
+        <FolderInput className="rtl:-scale-x-100" />
       </Button>
       <MoveToProjectDialog
         threadId={threadId}

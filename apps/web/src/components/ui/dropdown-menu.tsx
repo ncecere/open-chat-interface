@@ -1,6 +1,7 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { useLocale } from '~/lib/i18n';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import { MENU_ITEM_FOCUS } from './item-focus';
@@ -8,7 +9,14 @@ import { MENU_ITEM_FOCUS } from './item-focus';
 // A modal menu hides the page; it is also made inert, so nothing hidden takes focus (#172).
 keepHiddenContentInert();
 
-export const DropdownMenu = DropdownMenuPrimitive.Root;
+/**
+ * The menu's arrow keys follow the page's direction (a submenu opens with Left
+ * in Arabic): Radix reads `dir` from its props, not from the document.
+ */
+export function DropdownMenu(props: ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  const { dir } = useLocale();
+  return <DropdownMenuPrimitive.Root dir={dir} {...props} />;
+}
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 export const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
@@ -96,7 +104,7 @@ export function DropdownMenuRadioItem({
   return (
     <DropdownMenuPrimitive.RadioItem className={cn(ITEM_CLASSES, className)} {...props}>
       {children}
-      <DropdownMenuPrimitive.ItemIndicator className="ml-auto">
+      <DropdownMenuPrimitive.ItemIndicator className="ms-auto">
         <Check className="text-[var(--accent-bright)]" />
       </DropdownMenuPrimitive.ItemIndicator>
     </DropdownMenuPrimitive.RadioItem>
@@ -112,7 +120,7 @@ export function DropdownMenuCheckboxItem({
   return (
     <DropdownMenuPrimitive.CheckboxItem className={cn(ITEM_CLASSES, className)} {...props}>
       {children}
-      <DropdownMenuPrimitive.ItemIndicator className="ml-auto">
+      <DropdownMenuPrimitive.ItemIndicator className="ms-auto">
         <Check className="text-[var(--accent-bright)]" />
       </DropdownMenuPrimitive.ItemIndicator>
     </DropdownMenuPrimitive.CheckboxItem>

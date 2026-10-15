@@ -133,7 +133,7 @@ export function ToolStepRow({
         aria-expanded={open}
         aria-controls={detailsId}
         onClick={() => setOpen(!open)}
-        className="flex w-full min-w-0 items-center gap-2 text-left text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+        className="flex w-full min-w-0 items-center gap-2 text-start text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Icon
           className={cn('size-4 shrink-0', step.state === 'running' && 'animate-pulse')}
@@ -157,7 +157,7 @@ export function ToolStepRow({
         >
           <div>
             <p className="mb-1 font-medium text-[var(--text-primary)]">Inputs</p>
-            <pre className="whitespace-pre-wrap break-words font-mono">
+            <pre dir="ltr" className="whitespace-pre-wrap break-words font-mono">
               {formatInput(part.input)}
             </pre>
           </div>
@@ -231,6 +231,7 @@ function ApprovalCard({
         It will run with these inputs:
       </p>
       <pre
+        dir="ltr"
         aria-describedby={inputsId}
         className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/15 p-2 font-mono text-xs text-[var(--text-secondary)]"
       >

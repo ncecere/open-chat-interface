@@ -179,7 +179,7 @@ export function SourceList({ sources }: { sources: Array<SourceLink & { snippet?
         <li key={source.url} className="min-w-0">
           <SafeExternalLink
             href={source.url}
-            className="group flex w-full min-w-0 items-start gap-2 rounded-md px-1 py-0.5 text-left hover:bg-[var(--bg-control)]"
+            className="group flex w-full min-w-0 items-start gap-2 rounded-md px-1 py-0.5 text-start hover:bg-[var(--bg-control)]"
           >
             <SourceMark url={source.url} />
             <span className="min-w-0 flex-1 leading-tight">
@@ -223,7 +223,7 @@ function StepDisclosure({
         aria-expanded={open}
         aria-controls={detailsId}
         onClick={() => setOpen(!open)}
-        className="flex w-full min-w-0 items-center gap-2 text-left text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+        className="flex w-full min-w-0 items-center gap-2 text-start text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Icon
           className={cn('size-4 shrink-0', muted && 'text-[var(--warning)]')}

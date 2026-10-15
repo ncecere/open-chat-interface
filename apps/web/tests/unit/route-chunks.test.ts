@@ -57,6 +57,23 @@ it.each([
   expect(result.stderr).toContain(source);
 });
 
+// Every message catalog, English included, is its own lazily loaded chunk
+// (v0.14, #397): about a thousand strings would not fit in the initial budget.
+it.each(['../../src/locales/en.json', '../../src/locales/es.json', '../../src/locales/ar.json'])(
+  'rejects a message catalog in the initial JavaScript: %s',
+  (source) => {
+    const result = check(fixture(source));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Message catalog in the initial JavaScript');
+    expect(result.stderr).toContain(source);
+  },
+);
+
+it('allows the catalogs as lazy chunks and the registry (locales/index.ts) in the entry', () => {
+  expect(check(fixture('../../src/locales/en.json', true)).status).toBe(0);
+  expect(check(fixture('../../src/locales/index.ts')).status).toBe(0);
+});
+
 it('does not silently pass incomplete source mapping evidence', () => {
   const dir = fixture('../../src/routes/admin/health.tsx', true);
   rmSync(join(dir, 'shared.js.map'));

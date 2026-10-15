@@ -214,7 +214,7 @@ function ChatHome({
       {/* On phones, room between the greeting and the centred composer (#102). */}
       <div className="flex-none px-4 pb-8 md:flex-1 md:overflow-y-auto md:pt-[11vh] md:pb-0">
         <div className="mx-auto w-full max-w-[41.75rem]">
-          <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-left md:text-[1.875rem]">
+          <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-start md:text-[1.875rem]">
             {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}
             {temporary ? (
               'Temporary chat'
@@ -232,7 +232,7 @@ function ChatHome({
             )}
           </h1>
           {temporary && (
-            <p className="mt-2 text-center text-sm text-[var(--text-muted)] md:text-left">
+            <p className="mt-2 text-center text-sm text-[var(--text-muted)] md:text-start">
               This conversation stays out of history and expires automatically after 24 hours.
             </p>
           )}
@@ -272,7 +272,7 @@ function ChatHome({
                   startThread(prompt).catch(() => undefined);
                 }}
                 className={cn(
-                  'block h-[3.0625rem] w-full pr-8 text-left text-[0.9375rem] text-[var(--text-secondary)]',
+                  'block h-[3.0625rem] w-full pe-8 text-start text-[0.9375rem] text-[var(--text-secondary)]',
                   'transition-colors hover:text-[var(--text-primary)]',
                   index < prompts.length - 1 && 'border-b border-[var(--border-subtle)]/45',
                 )}

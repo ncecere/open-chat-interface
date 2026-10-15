@@ -72,7 +72,7 @@ export function ComposerConnectHint({ selectedModel }: { selectedModel: CatalogM
     <div
       role="note"
       aria-label={`Connect ${connector.name}`}
-      className="mb-2 flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)] py-1.5 pl-3 pr-1.5 text-[0.8125rem] text-[var(--text-secondary)]"
+      className="mb-2 flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)] py-1.5 ps-3 pe-1.5 text-[0.8125rem] text-[var(--text-secondary)]"
       data-testid="composer-connect-hint"
     >
       <Plug className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />

@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { availabilityOf } from '~/lib/classification';
+import { useLocale } from '~/lib/i18n';
 import { ariaKeyShortcuts, OPEN_MODEL_PICKER_EVENT } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { labsFrom, matchesCapabilities, matchesSearch } from './model-picker-data';
@@ -50,6 +51,7 @@ export const ModelPicker = memo(function ModelPicker({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [detailsOnLeft, setDetailsOnLeft] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const rtl = useLocale().dir === 'rtl';
   const panelRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -68,9 +70,12 @@ export const ModelPicker = memo(function ModelPicker({
     // The card matches the panel's width, so that plus the gutter is exactly
     // what has to fit beside it.
     const width = panel.width + 8;
-    if (panel.right + width <= window.innerWidth) return 'right';
-    if (panel.left - width >= 0) return 'left';
-    return null;
+    const fitsRight = panel.right + width <= window.innerWidth;
+    const fitsLeft = panel.left - width >= 0;
+    // The side the text runs on to is preferred: right, or left in Arabic. The
+    // card is placed against what was measured, so it is physical.
+    if (rtl) return fitsLeft ? 'left' : fitsRight ? 'right' : null;
+    return fitsRight ? 'right' : fitsLeft ? 'left' : null;
   }
 
   function showDetails(modelId: string) {
@@ -246,7 +251,8 @@ export const ModelPicker = memo(function ModelPicker({
               } else if (
                 // Details for the highlighted model, from the keyboard: the
                 // row's Details button is for the pointer (#114).
-                event.key === 'ArrowRight' &&
+                // At the end of the text, the key that goes on: Right, or Left in Arabic.
+                event.key === (rtl ? 'ArrowLeft' : 'ArrowRight') &&
                 active &&
                 canShowDetails &&
                 event.currentTarget.selectionStart === event.currentTarget.value.length
@@ -269,7 +275,7 @@ export const ModelPicker = memo(function ModelPicker({
 
         <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-32 shrink overflow-hidden rounded-b-xl">
           {labs.length > 1 && (
-            <fieldset className="scrollbar-thin m-0 flex shrink-0 flex-col items-center gap-1 overflow-y-auto border-0 border-r border-[var(--border-subtle)] p-2">
+            <fieldset className="scrollbar-thin m-0 flex shrink-0 flex-col items-center gap-1 overflow-y-auto border-0 border-e border-[var(--border-subtle)] p-2">
               <legend className="sr-only">Filter by lab</legend>
               <button
                 type="button"

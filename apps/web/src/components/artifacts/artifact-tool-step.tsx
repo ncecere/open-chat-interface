@@ -311,7 +311,7 @@ export function ArtifactStepRow({
         type="button"
         data-artifact-step-row={draft.toolCallId}
         onClick={goToCard}
-        className="flex w-full min-w-0 items-center gap-2 text-left text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+        className="flex w-full min-w-0 items-center gap-2 text-start text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <FileCode2 className="size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 break-words">
@@ -334,7 +334,7 @@ export function ArtifactStepRow({
         aria-expanded={open}
         aria-controls={detailsId}
         onClick={() => setOpen(!open)}
-        className="flex w-full min-w-0 items-center gap-2 text-left text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+        className="flex w-full min-w-0 items-center gap-2 text-start text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Wrench className="size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 break-words">{summary}</span>
@@ -421,11 +421,17 @@ function ArtifactStepDetails({
             // biome-ignore lint/suspicious/noArrayIndexKey: the position is the edit's identity.
             <li key={index} className="space-y-1">
               <p className="text-[var(--text-muted)]">Change {index + 1}: replace</p>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/15 p-2 font-mono line-through decoration-[var(--text-muted)]/60">
+              <pre
+                dir="ltr"
+                className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/15 p-2 font-mono line-through decoration-[var(--text-muted)]/60"
+              >
                 {clip(edit.find, EDIT_SNIPPET)}
               </pre>
               <p className="text-[var(--text-muted)]">with</p>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/15 p-2 font-mono">
+              <pre
+                dir="ltr"
+                className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/15 p-2 font-mono"
+              >
                 {clip(edit.replace, EDIT_SNIPPET) || '(nothing)'}
               </pre>
             </li>
@@ -440,7 +446,7 @@ function ArtifactStepDetails({
             tabIndex={0}
             className="max-h-48 overflow-auto rounded bg-black/15 p-2 focus-visible:outline-2 focus-visible:outline-[var(--accent-bright)]"
           >
-            <pre className="m-0 whitespace-pre-wrap break-words font-mono">
+            <pre dir="ltr" className="m-0 whitespace-pre-wrap break-words font-mono">
               {draft.content.length > LIVE_TAIL
                 ? `…${draft.content.slice(-LIVE_TAIL)}`
                 : draft.content}

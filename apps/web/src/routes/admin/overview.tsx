@@ -126,7 +126,7 @@ export function AdminOverviewPage() {
 
       {/* Borders are drawn per cell: dividers between siblings misplace the
           vertical rule when four figures wrap into two rows on a phone. */}
-      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t lg:[&>*:nth-child(n+2)]:border-l lg:[&>*:nth-child(n+3)]:border-t-0">
+      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-s [&>*:nth-child(n+3)]:border-t lg:[&>*:nth-child(n+2)]:border-s lg:[&>*:nth-child(n+3)]:border-t-0">
         <Stat
           title="Users"
           value={String(data.users.total)}

@@ -79,7 +79,7 @@ export function ThreadRow({
           title="Go to parent conversation"
           // 24 × 24, the WCAG 2.2 target floor; it was the 14 px icon plus
           // padding, 22 × 22, right against the row's link (#193).
-          className="ml-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className="ms-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <GitFork className="size-3.5" aria-hidden="true" />
         </Link>
@@ -111,7 +111,7 @@ export function ThreadRow({
 
       <div
         className={cn(
-          'pointer-events-none absolute right-1 flex translate-x-3 items-center gap-0.5 rounded-lg bg-inherit pl-2 opacity-0',
+          'pointer-events-none absolute end-1 flex translate-x-3 items-center gap-0.5 rounded-lg bg-inherit ps-2 opacity-0 rtl:-translate-x-3',
           'transition-[transform,opacity] duration-200 ease-out',
           'group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100',
           'group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100',
@@ -226,7 +226,7 @@ export function ThreadList() {
                   onClick={() => setPinnedOpen((open) => !open)}
                   // min-h keeps the target at the 24px WCAG 2.2 floor; the label
                   // itself is deliberately small, so padding carries the height.
-                  className="flex min-h-6 w-full items-center gap-1 rounded px-2.5 pb-1 text-left text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
+                  className="flex min-h-6 w-full items-center gap-1 rounded px-2.5 pb-1 text-start text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
                 >
                   <ChevronDown
                     className={cn('size-3 transition-transform', !pinnedOpen && '-rotate-90')}

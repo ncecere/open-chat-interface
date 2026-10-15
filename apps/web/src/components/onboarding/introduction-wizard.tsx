@@ -97,7 +97,7 @@ export function IntroductionWizard() {
         <div className="grid min-h-[calc(100dvh-5rem)] grid-rows-[auto_1fr] md:min-h-[26rem] md:grid-cols-[1fr_1.15fr] md:grid-rows-none">
           {/* Context stays put while the question changes, so the wizard reads
               as one task rather than a series of unrelated screens. */}
-          <div className="flex flex-col justify-between gap-8 border-[var(--border-subtle)] border-b p-8 md:border-r md:border-b-0 md:p-10">
+          <div className="flex flex-col justify-between gap-8 border-[var(--border-subtle)] border-b p-8 md:border-e md:border-b-0 md:p-10">
             <div>
               <span className="flex size-12 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
                 <Icon className="size-6 text-[var(--accent-bright)]" aria-hidden="true" />
@@ -206,7 +206,7 @@ export function IntroductionWizard() {
             <div className="flex items-center justify-between gap-3">
               {step > 0 ? (
                 <Button variant="ghost" size="sm" onClick={() => setStep((value) => value - 1)}>
-                  <ArrowLeft />
+                  <ArrowLeft className="rtl:-scale-x-100" />
                   Back
                 </Button>
               ) : (

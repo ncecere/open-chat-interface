@@ -1,16 +1,20 @@
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@oci/shared';
 import type { Catalog } from '~/lib/i18n/catalog';
 import { pseudoCatalog } from '~/lib/i18n/pseudo';
-import en from './en.json';
+import type en from './en.json';
 
 /**
  * Every language the web app can show. Adding one is documented in
  * docs/dev/translations.md: a JSON catalog here, a line in this file, and the
  * tag in `SUPPORTED_LOCALES` (packages/shared/src/locales.ts).
  *
- * `en` is the source, always complete and in the base bundle. The others load
- * on demand (a dynamic import, so a person pays for one language only) and
- * are checked against `en` by `scripts/check-i18n.mjs`.
+ * Every catalog, `en` included, is a dynamic import: a chunk of its own that
+ * `activateLocale` fetches before the first render (`main.tsx`), so the strings
+ * are never in the initial JavaScript however many there are. `en` is the
+ * source, always complete, and is loaded next to any other language as the
+ * fallback for a key that language lacks. The catalogs are checked against `en`
+ * by `scripts/check-i18n.mjs`; the keys are typed from `en.json` through a
+ * type-only import, so nothing here pulls the file into a bundle.
  */
 
 export type PseudoLocale = 'en-XA' | 'ar-XB';
@@ -39,7 +43,13 @@ export interface LocaleInfo<Tag extends LocaleTag = LocaleTag> {
 type Complete = Record<keyof typeof en, string>;
 
 export const LOCALES: { [Tag in SupportedLocale]: LocaleInfo<Tag> } = {
-  en: { tag: 'en', intl: 'en', rtl: false, beta: false, load: async () => en },
+  en: {
+    tag: 'en',
+    intl: 'en',
+    rtl: false,
+    beta: false,
+    load: async (): Promise<Complete> => (await import('./en.json')).default,
+  },
   es: {
     tag: 'es',
     intl: 'es',
@@ -68,7 +78,7 @@ export const PSEUDO_LOCALES: { [Tag in PseudoLocale]: LocaleInfo<Tag> & { name: 
     intl: 'en',
     rtl: false,
     beta: false,
-    load: async () => pseudoCatalog(en, 'en-XA'),
+    load: async () => pseudoCatalog((await import('./en.json')).default, 'en-XA'),
   },
   'ar-XB': {
     tag: 'ar-XB',
@@ -76,7 +86,7 @@ export const PSEUDO_LOCALES: { [Tag in PseudoLocale]: LocaleInfo<Tag> & { name: 
     intl: 'ar',
     rtl: true,
     beta: false,
-    load: async () => pseudoCatalog(en, 'ar-XB'),
+    load: async () => pseudoCatalog((await import('./en.json')).default, 'ar-XB'),
   },
 };
 

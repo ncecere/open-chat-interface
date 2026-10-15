@@ -62,7 +62,7 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
         {pending && (
           <span
             aria-hidden="true"
-            className="absolute right-1 top-1 size-1.5 rounded-full bg-[var(--accent)]"
+            className="absolute end-1 top-1 size-1.5 rounded-full bg-[var(--accent)]"
           />
         )}
       </Button>

@@ -38,7 +38,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
       <DropdownMenuTrigger
         aria-label={compact ? 'Open user menu' : undefined}
         className={cn(
-          'flex items-center gap-3 rounded-lg text-left transition-colors hover:bg-[var(--bg-control)]',
+          'flex items-center gap-3 rounded-lg text-start transition-colors hover:bg-[var(--bg-control)]',
           compact ? 'rounded-full p-1' : 'w-full px-2 py-2',
         )}
       >
@@ -91,7 +91,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem onSelect={handleSignOut}>
-          <LogOut />
+          <LogOut className="rtl:-scale-x-100" />
           Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>

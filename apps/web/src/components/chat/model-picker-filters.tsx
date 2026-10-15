@@ -38,14 +38,14 @@ export function ModelPickerFilters({
       >
         <ListFilter className="size-4" aria-hidden="true" />
         {selected.length > 0 && (
-          <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[0.625rem] font-bold leading-none text-[var(--accent-foreground)]">
+          <span className="absolute -end-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[0.625rem] font-bold leading-none text-[var(--accent-foreground)]">
             {selected.length}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-2 top-12 z-20 w-56 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-1.5 shadow-[var(--shadow-popover)]">
+        <div className="absolute end-2 top-12 z-20 w-56 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-1.5 shadow-[var(--shadow-popover)]">
           <div className="flex items-center justify-between px-2 py-1">
             <span className="text-xs font-semibold text-[var(--text-primary)]">Capabilities</span>
             {selected.length > 0 && (
@@ -70,7 +70,7 @@ export function ModelPickerFilters({
                   type="button"
                   aria-pressed={active}
                   onClick={() => toggle(capability)}
-                  className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)] aria-pressed:bg-[var(--accent-soft)] aria-pressed:text-[var(--text-primary)]"
+                  className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-start text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)] aria-pressed:bg-[var(--accent-soft)] aria-pressed:text-[var(--text-primary)]"
                 >
                   {Icon && <Icon className="size-4" aria-hidden="true" />}
                   {CAPABILITY_LABELS[capability]}
@@ -85,7 +85,7 @@ export function ModelPickerFilters({
               aria-pressed={combine}
               disabled={selected.length < 2}
               onClick={() => onCombineChange(!combine)}
-              className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-control-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-start text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-control-hover)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Match every selected capability
               <span

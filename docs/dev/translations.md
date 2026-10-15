@@ -18,7 +18,7 @@ or reordered.
 
 | Tag | State | Direction |
 | --- | --- | --- |
-| `en` | The source. Always complete, always loaded (it is in the base bundle). | left to right |
+| `en` | The source. Always complete, and always loaded (as a lazy chunk, next to any other language, as its fallback). | left to right |
 | `es` | **Beta**: machine-drafted, not reviewed by a native reader. | left to right |
 | `ar` | **Beta**: machine-drafted, not reviewed by a native reader. | right to left |
 | `en-XA`, `ar-XB` | Pseudo-locales, generated from `en.json` when chosen (nothing to commit). Offered only outside production builds, or in a production build made with `VITE_OCI_PSEUDO_LOCALES=1`. | left to right, right to left |
@@ -48,8 +48,9 @@ function Greeting({ name, count }: { name: string; count: number }) {
 toast.success(translate('settings.language.saved'));
 ```
 
-`t(key, params)` types `key` from `apps/web/src/locales/en.json`, so a
-misspelt key fails `pnpm typecheck`. A key missing from the current language
+`t(key, params)` types `key` from `apps/web/src/locales/en.json` (through a
+type-only import, `import type en from './en.json'`: no strings reach the
+bundle through it), so a misspelt key fails `pnpm typecheck`. A key missing from the current language
 falls back to English, and a key missing everywhere shows the key; neither
 throws, and neither does a message that does not parse (the English message is
 used). Parameters are inserted as text and never read as message syntax, so
@@ -90,6 +91,36 @@ longer enables is skipped without any error and the saved choice is kept.
 settings are known, loads the catalog with a dynamic import, switches in one
 step, and sets `<html lang dir>`. The language shown last time is remembered
 in `localStorage` (`oci.locale`) so a reload does not flash English.
+
+### Loading
+
+**Every catalog, English included, is a dynamic import**: a chunk of its own,
+never part of the initial JavaScript, however many strings it holds. So that
+nothing is painted as keys, `main.tsx` awaits `activateLocale(initialLocale())`
+before the first `render` (one small request; nothing is shown meanwhile), and
+`I18nProvider` renders nothing until a catalog is loaded, as a net for any
+other entry point. A language is always fetched together with English (the
+fallback for a key it lacks). A catalog that cannot be fetched (offline, a
+stale chunk after a deploy) never throws: the first load falls back to
+English, a later switch keeps the language already showing, and if English is
+unreachable too `translate()` returns the key. `translate()` works anywhere
+once `activateLocale` has resolved; before that it returns the key.
+
+The loaded catalogs live in a map on `globalThis` (`__ociI18nCatalogs`), so a
+re-evaluated copy of `lib/i18n/state.ts` (hot reload, `vi.resetModules()`)
+finds them instead of showing keys.
+
+### In unit tests
+
+`tests/unit/setup.ts` (the vitest `setupFiles` in `vite.config.ts`) awaits
+`activateLocale('en')` before each test file, so **`useT()` and `translate()`
+return the real English strings in any test, with nothing to await and no
+provider to mount**. Assert on the English text. A test of another language
+awaits `activateLocale('es')` itself (and `activateLocale('en')` in
+`beforeEach`/`afterEach` if it must not leak). `<html lang dir>` is set by it,
+so a test that looks for "no `dir` on this element" must say
+`:not(html)`. A test of the loader itself (a cold start, a failed fetch) is
+`tests/unit/i18n-loading.test.tsx`.
 
 ## Adding a language
 
@@ -143,17 +174,65 @@ number ever selects. `=0` and other exact matches may be added freely.
 4. Add the keys to `es.json` and `ar.json` too (a draft is fine, it is beta),
    or `pnpm lint` fails.
 5. Convert physical Tailwind utilities in the same files to logical ones so the
-   page mirrors: `ml-`/`mr-` to `ms-`/`me-`, `pl-`/`pr-` to `ps-`/`pe-`,
-   `left-`/`right-` to `start-`/`end-`, `text-left`/`text-right` to
-   `text-start`/`text-end`, `border-l/r` to `border-s/e`, `rounded-l/r` to
-   `rounded-s/e`. Icons that point (chevrons, arrows, back, send) get
-   `rtl:-scale-x-100`; others do not. User text gets `dir="auto"`, code blocks
-   stay `dir="ltr"`.
+   page mirrors (see [Right to left](#right-to-left)); `pnpm lint` fails on one.
 6. Test the component rendered in `en`, `es`, `ar` and `en-XA` (`activateLocale`
    from `lib/i18n/state`).
 
 Do not translate: model names, the instance's branding text, server data, user
 text.
+
+## Right to left
+
+A page mirrors when its spacing, alignment and positions are **logical**
+(start and end), not physical (left and right). `scripts/check-logical-css.mjs`
+(in `pnpm lint`, tested by `scripts/check-logical-css.test.mjs`) fails on a new
+physical one anywhere under `apps/web/src`, the administration console included
+(it stays English but must not be half mirrored):
+
+| Not this | This |
+| --- | --- |
+| `ml-` `mr-` `pl-` `pr-` | `ms-` `me-` `ps-` `pe-` |
+| `left-` `right-` | `start-` `end-` |
+| `text-left` `text-right` | `text-start` `text-end` |
+| `border-l` `border-r` (and `-*`) | `border-s` `border-e` |
+| `rounded-l` `-r` `-tl` `-tr` `-bl` `-br` | `rounded-s` `-e` `-ss` `-se` `-es` `-ee` |
+| `float-left`, `scroll-ml-` | `float-start`, `scroll-ms-` |
+| `marginLeft`, `paddingRight`, `textAlign: 'left'`, `left` in a `style` | `marginInlineStart`, `paddingInlineEnd`, `'start'`, `insetInlineStart` |
+| `margin-left:` in CSS | `margin-inline-start:` |
+
+`space-x-*`, `divide-x-*` and `gap-*` are already logical in Tailwind 4.3.
+
+- **A translate** (`-translate-x-1/2` to centre, a slide in or out) needs an
+  `rtl:` counterpart in the same string: `start-1/2 -translate-x-1/2
+  rtl:translate-x-1/2`. `translate-x-0` is the same both ways. A gradient or
+  mask toward `left`/`right` gets an `rtl:` one turned round.
+- **Icons that point** mirror: `rtl:-scale-x-100` on a chevron, arrow, back,
+  send, sign-out, sidebar toggle or open-in-new (the list is `DIRECTION_ICONS` in
+  the check, which fails on one without an `rtl:` class). One that also
+  rotates (a disclosure chevron: `rotate-90` open) uses `rtl:rotate-180` for
+  the closed state instead: a flipped chevron turned 90 degrees points up. Icons
+  that do not point (plus, clock, play, refresh) are not mirrored.
+- **Do not use `:dir()`** in a class or a stylesheet: the CSS build (Tailwind's
+  browser floor is Chrome 111, `:dir()` is 120) rewrites it to `:lang()`, which
+  matches the language of the page, not the direction of the text. Use
+  `[dir=rtl]` (the app writes `dir` on lists and quotes) or `rtl:`. The check
+  fails on it.
+- **User text gets `dir="auto"`** where it is rendered (a title, a file name, a
+  project name, a memory, a snippet); inside a translated sentence wrap it in
+  `<bdi>` so the sentence is not reordered by it. **Code stays left to right**:
+  `<pre dir="ltr">`; Markdown code blocks and inline code are `dir="ltr"` and
+  `unicode-bidi: isolate` (`markdown.tsx`, `markdown-direction.ts`). Key
+  combinations (`Ctrl K`) are `dir="ltr"`. The composer is `dir="auto"`.
+- **Keys and geometry that mean a side** follow the page: in right-to-left Left
+  is "next" in a tab strip, the artifact panel is docked on the left and its
+  separator widens with Right, a submenu opens with Left (Radix reads `dir` from
+  a prop, so `DropdownMenu` and `SelectRoot` in `components/ui` pass it), and
+  `scrollLeft` is zero at the start and counts down. Use `useLocale().dir` or
+  `getComputedStyle(element).direction`.
+- **What must stay physical** is listed with a reason in
+  `scripts/i18n/physical-css-allowlist.json` (a card placed against a window
+  edge it was measured against; undoing Streamdown's own physical padding). The
+  count per file only goes down.
 
 ## Reviewing a beta catalog
 
@@ -179,10 +258,12 @@ and Arabic mixed with English in one message reads in order.
 
 ## Size
 
-The framework adds well under 8 kB gzip to the first load. `en.json` is part
-of the base bundle (it is the source and the fallback), the other catalogs
-load on demand. `apps/web/scripts/bundle-budget.json` holds the initial
-JavaScript to what v0.13.1 weighed plus 8,192 gzip bytes, checked by
-`check-route-chunks.mjs` at the end of `pnpm build`. English strings count: if
-the budget is reached, split the catalog by area and load the parts with the
-route, instead of raising it.
+The framework adds well under 8 kB gzip to the first load, and **no string is
+in the initial JavaScript**: `en`, `es` and `ar` are each a chunk of their own
+(about a thousand strings once the areas are converted would not fit the
+budget), fetched before the first render. `check-route-chunks.mjs` (the end of
+`pnpm build`) fails when a `locales/*.json` file shows up in the entry or in
+`initial-shared`, which is what a value import of a catalog does, and
+`apps/web/scripts/bundle-budget.json` still holds the initial JavaScript to what
+v0.13.1 weighed plus its allowance. Never `import en from '~/locales/en.json'`
+in `src`; use `t()`, `translate()`, or `import type` for the type.

@@ -129,7 +129,7 @@ export function MessageEditor({
               className="flex items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-control-alt)] px-2 py-1.5"
             >
               <FileText className="size-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-              <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
+              <span dir="auto" className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
                 {file.filename}
               </span>
               {isRemovedFile(file) && (

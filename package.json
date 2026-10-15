@@ -19,7 +19,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "lint": "biome check . && node scripts/check-i18n.mjs",
+    "lint": "biome check . && node scripts/check-i18n.mjs && node scripts/check-logical-css.mjs",
     "lint:fix": "biome check --write .",
     "lint:migrations": "node scripts/lint-migrations.mjs",
     "licenses:check": "node scripts/check-licenses.mjs",

@@ -102,7 +102,7 @@ export function UserTable({
     >
       <table className="w-full min-w-[40rem] text-sm">
         <thead>
-          <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <tr className="border-b border-[var(--border-subtle)] text-start text-xs uppercase tracking-wider text-[var(--text-muted)]">
             {canEdit && (
               <th className="w-10 px-2 py-3 xl:px-4">
                 <input
@@ -205,7 +205,7 @@ export function UserTable({
                 {formatRelativeTime(user.createdAt)}
               </td>
               {canEdit && (
-                <td className="whitespace-nowrap px-2 py-3 xl:px-4 text-right">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-4 text-end">
                   {/* Named for its account, as Select and Role beside it are (#260). */}
                   <Button
                     size="sm"

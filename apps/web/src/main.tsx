@@ -30,8 +30,10 @@ if (!container) throw new Error('Root element not found');
 const root = createRoot(container);
 
 // The language shown last time is loaded before the first render, so a person
-// who reads Spanish never sees English flash first. English is in the bundle,
-// so for most people this does not wait for anything.
+// who reads Spanish never sees English flash first, and nobody sees message
+// keys: every catalog, English included, is a chunk fetched here (one small
+// request, nothing painted meanwhile). It never rejects: a catalog that cannot
+// be loaded falls back to English, and then to the keys.
 void activateLocale(initialLocale()).finally(() =>
   root.render(
     <StrictMode>

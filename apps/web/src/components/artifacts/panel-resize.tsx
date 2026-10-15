@@ -56,20 +56,26 @@ function writePanelWidth(width: number | null) {
 
 /**
  * The width a key press asks for, or null for a key the separator ignores.
- * The separator is the panel's left edge, so Left widens and Right narrows.
+ * The separator is the panel's inner edge, the one facing the conversation:
+ * its left edge, so Left widens and Right narrows; in right-to-left the panel
+ * is docked on the left and the separator is its right edge, so it is the
+ * other way round.
  */
 export function widthForKey(
   key: string,
   shift: boolean,
   width: number,
   windowWidth: number,
+  rtl = false,
 ): number | null {
   const step = shift ? PANEL_KEY_STEP * 4 : PANEL_KEY_STEP;
+  const widen = rtl ? 'ArrowRight' : 'ArrowLeft';
+  const narrow = rtl ? 'ArrowLeft' : 'ArrowRight';
   switch (key) {
-    case 'ArrowLeft':
+    case widen:
     case 'ArrowUp':
       return clampPanelWidth(width + step, windowWidth);
-    case 'ArrowRight':
+    case narrow:
     case 'ArrowDown':
       return clampPanelWidth(width - step, windowWidth);
     case 'Home':
@@ -147,7 +153,7 @@ export function usePanelWidth(measured: number | null = null) {
 }
 
 /**
- * The drag handle on the docked panel's left edge: a focusable vertical
+ * The drag handle on the docked panel's inner edge (its left, in left-to-right): a focusable vertical
  * separator. Drag it, or use the arrow keys (Shift for larger steps), Home
  * (narrowest) and End (widest); Enter or a double click restores the default.
  */
@@ -181,7 +187,11 @@ export function PanelResizeHandle({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const start = drag.current;
     if (!start) return;
-    start.last = clampPanelWidth(start.width + (start.x - event.clientX), windowWidth);
+    // Dragging away from the panel's docked edge widens it: left in
+    // left-to-right, right in right-to-left (the panel is on the left there).
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const moved = rtl ? event.clientX - start.x : start.x - event.clientX;
+    start.last = clampPanelWidth(start.width + moved, windowWidth);
     onResize(start.last, false);
   };
   const endDrag = (event: PointerEvent<HTMLDivElement>) => {
@@ -199,7 +209,8 @@ export function PanelResizeHandle({
       onResize(null);
       return;
     }
-    const next = widthForKey(event.key, event.shiftKey, width, windowWidth);
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const next = widthForKey(event.key, event.shiftKey, width, windowWidth, rtl);
     if (next === null) return;
     event.preventDefault();
     onResize(next);
@@ -227,7 +238,7 @@ export function PanelResizeHandle({
       onLostPointerCapture={endDrag}
       onDoubleClick={() => onResize(null)}
       onKeyDown={onKeyDown}
-      className="group absolute inset-y-0 left-0 z-10 flex w-2 cursor-col-resize touch-none select-none justify-center focus-visible:outline-offset-[-2px]"
+      className="group absolute inset-y-0 start-0 z-10 flex w-2 cursor-col-resize touch-none select-none justify-center focus-visible:outline-offset-[-2px]"
     >
       <span
         aria-hidden="true"

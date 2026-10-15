@@ -49,7 +49,7 @@ export function CapacityWait({ wait, onStop }: { wait: CapacityWaitData; onStop?
           />
           <span className="min-w-0 break-words">{capacityWaitLabel(wait)}</span>
         </p>
-        <p className="mt-0.5 pl-6 text-xs text-[var(--text-muted)]">
+        <p className="mt-0.5 ps-6 text-xs text-[var(--text-muted)]">
           The model is busy, so messages take turns.
           {estimate ? ` Your reply should start in ${estimate}.` : ''}
         </p>

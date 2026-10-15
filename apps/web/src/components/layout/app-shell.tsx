@@ -125,7 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenCommandPalette={commandPalette.show}
           />
-          <main className="flex min-h-0 flex-1 flex-col rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
+          <main className="flex min-h-0 flex-1 flex-col rounded-ss-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
             {/*
              * The top bar's floating controls (absolute, top-6, about 2.6rem
              * tall) get a strip of their own, always: the page scrolls below

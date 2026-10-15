@@ -26,7 +26,7 @@ export function VersionList({
             onClick={() => onSelect(entry.version)}
             aria-current={entry.version === selected ? 'true' : undefined}
             className={cn(
-              'flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-[var(--bg-control)] sm:px-5',
+              'flex w-full items-center justify-between gap-3 px-4 py-3 text-start text-sm transition-colors hover:bg-[var(--bg-control)] sm:px-5',
               entry.version === selected && 'bg-[var(--bg-control)]',
             )}
           >

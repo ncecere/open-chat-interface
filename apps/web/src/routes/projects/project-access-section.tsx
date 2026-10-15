@@ -79,7 +79,7 @@ function LeaveSection({ project, canLeave }: { project: ProjectSummary; canLeave
       description="It disappears from your lists. Your conversations in it are kept."
     >
       <Button type="button" variant="danger" locked={lock.title} onClick={() => setOpen(true)}>
-        <LogOut aria-hidden="true" />
+        <LogOut className="rtl:-scale-x-100" aria-hidden="true" />
         Leave project
       </Button>
       <ConfirmDialog

@@ -61,7 +61,7 @@ export function SavedUserViews({ views: state }: { views: ReturnType<typeof useS
       {views?.map((view) => (
         <span
           key={view.id}
-          className="flex items-center gap-1 rounded-full bg-[var(--bg-control-alt)] pr-1 pl-3 text-sm"
+          className="flex items-center gap-1 rounded-full bg-[var(--bg-control-alt)] pe-1 ps-3 text-sm"
         >
           <button
             type="button"
