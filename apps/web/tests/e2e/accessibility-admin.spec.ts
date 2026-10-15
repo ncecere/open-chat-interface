@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { describeViolations, scan, signIn, storeThemeForProject } from './accessibility.helpers';
+import { withGroup } from './fixtures/groups';
 
 /**
  * WCAG 2.2 AA scans: administration pages and a dialog. What automation can
@@ -185,5 +186,57 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('admin groups has no violations, in the list, the new-group dialog and every tab of a group', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await withGroup(page, async (group) => {
+      await page.goto('/admin/groups');
+      await expect(page.getByRole('heading', { name: 'Groups', level: 1 })).toBeVisible();
+      await expect(page.getByRole('link', { name: group.name })).toBeVisible();
+      let results = await scan(page);
+      expect(describeViolations(results), `list\n${describeViolations(results)}`).toBe('');
+
+      await page.getByRole('button', { name: 'New group' }).click();
+      await expect(page.getByRole('dialog', { name: 'New group' })).toBeVisible();
+      results = await scan(page);
+      expect(describeViolations(results), `dialog\n${describeViolations(results)}`).toBe('');
+      await page.keyboard.press('Escape');
+
+      await page.goto(`/admin/groups/${group.id}`);
+      await expect(page.getByRole('heading', { name: group.name, level: 1 })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Members of this group' })).toBeVisible();
+      results = await scan(page);
+      expect(describeViolations(results), `members\n${describeViolations(results)}`).toBe('');
+
+      await page.getByRole('tab', { name: 'Budgets and models' }).click();
+      await expect(page.getByRole('checkbox').first()).toBeVisible();
+      results = await scan(page);
+      expect(describeViolations(results), `grants\n${describeViolations(results)}`).toBe('');
+
+      await page.getByRole('tab', { name: 'Usage' }).click();
+      await expect(page.getByText('current members').first()).toBeVisible();
+      results = await scan(page);
+      expect(describeViolations(results), `usage\n${describeViolations(results)}`).toBe('');
+
+      await page.getByRole('tab', { name: 'Settings' }).click();
+      await page.getByRole('button', { name: 'Delete group' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      results = await scan(page);
+      expect(describeViolations(results), `delete\n${describeViolations(results)}`).toBe('');
+    });
+  });
+
+  test('roles and access lists the groups without violations', async ({ page }) => {
+    await signIn(page);
+    await withGroup(page, async (group) => {
+      await page.goto('/admin/roles');
+      const section = page.getByRole('region', { name: 'Groups' });
+      await expect(section.getByRole('link', { name: group.name })).toBeVisible();
+      const results = await scan(page);
+      expect(describeViolations(results), describeViolations(results)).toBe('');
+    });
   });
 });

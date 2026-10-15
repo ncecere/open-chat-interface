@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { describeViolations, scan, signIn, storeThemeForProject } from './accessibility.helpers';
+import { withGroup } from './fixtures/groups';
 
 /**
  * WCAG 2.2 AA scans: sign-in, share, introduction, chat home and settings
@@ -139,5 +140,20 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
 
     const results = await scan(page);
     expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('settings groups (for a manager) has no violations', async ({ page }) => {
+    await signIn(page);
+    await withGroup(page, async (group) => {
+      await page.goto('/settings/groups');
+      await expect(page.getByRole('heading', { name: 'Groups', level: 1 })).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: group.name, level: 2, exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Members of this group' })).toBeVisible();
+
+      const results = await scan(page);
+      expect(describeViolations(results), describeViolations(results)).toBe('');
+    });
   });
 });
