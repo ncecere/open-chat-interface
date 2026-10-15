@@ -1,4 +1,4 @@
-import type { AdminUser } from '@oci/shared';
+import type { AdminMfaStatus, AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Ban, Scale } from 'lucide-react';
@@ -12,6 +12,7 @@ import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/ad
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { DeleteUserSection } from '~/components/admin/delete-user';
 import { UserLimitsSection } from '~/components/admin/user-limits';
+import { UserMfaSection } from '~/components/admin/user-mfa';
 import {
   ADMIN_USERS_QUERY_KEY,
   ROLE_LABELS,
@@ -42,6 +43,8 @@ interface ThreadRow {
 
 interface UserDetail {
   user: AdminUser;
+  /** Two-step verification (v0.14); absent from an older API. */
+  mfa?: AdminMfaStatus;
   /** Null (or absent, before v0.9) when the person is not on legal hold. */
   legalHold?: { reason: string; placedAt: string; placedByEmail: string | null } | null;
   storage: { bytesUsed: number; fileCount: number };
@@ -314,6 +317,8 @@ export function AdminUserDetailPage() {
       </Section>
 
       <UserLimitsSection user={user} />
+
+      {data.mfa && <UserMfaSection userId={user.id} name={name} mfa={data.mfa} />}
 
       <Section title="Recent conversations">
         {recentThreads.length === 0 ? (

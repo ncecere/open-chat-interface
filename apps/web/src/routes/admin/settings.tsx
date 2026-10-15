@@ -9,6 +9,7 @@ import { api, apiErrorMessage } from '~/lib/api-client';
 import { SsoProvidersSection } from '~/routes/admin/sso';
 import { AuthenticationSettingsForm } from './settings/authentication-settings';
 import { GeneralSettings } from './settings/general-settings';
+import { MfaRequirementSection } from './settings/mfa-requirement';
 import { SmtpSettingsForm } from './settings/smtp-settings';
 
 function authSettingsFromResponse(settings: InstanceSettings) {
@@ -137,6 +138,7 @@ export function AdminAuthenticationSettingsPage() {
               initialSettings={authSettingsFromResponse(settings)}
               smtpConfigured={settings.smtp.configured}
             />
+            <MfaRequirementSection requirement={settings.mfaRequirement} />
             <SsoProvidersSection />
           </div>
         </>
